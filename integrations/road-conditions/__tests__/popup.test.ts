@@ -473,6 +473,54 @@ describe("directionText", () => {
     );
   });
 
+  it("names the drawn direction where the line's ends do not describe it", () => {
+    // A U-shaped road: out east, back west, ending a little north of its start.
+    const uTurn: RoadConditionEvent["geometry"] = {
+      type: "LineString",
+      coordinates: [
+        [6.7, 51.2],
+        [6.8, 51.2],
+        [6.8, 51.21],
+        [6.7, 51.21],
+      ],
+    };
+    expect(say({ value: "positive", basis: "geometry" }, uTurn)).toBe(
+      "direction.geometry.positive",
+    );
+    // Two parts that do not join end to start are no one path.
+    const apart: RoadConditionEvent["geometry"] = {
+      type: "MultiLineString",
+      coordinates: [
+        [
+          [6.8, 51.2],
+          [6.9, 51.2],
+        ],
+        [
+          [6.7, 51.2],
+          [6.8, 51.2],
+        ],
+      ],
+    };
+    expect(say({ value: "negative", basis: "geometry" }, apart)).toBe(
+      "direction.geometry.negative",
+    );
+    // Parts joined end to start are one path, and keep their heading.
+    const joined: RoadConditionEvent["geometry"] = {
+      type: "MultiLineString",
+      coordinates: [
+        [
+          [6.7, 51.2],
+          [6.8, 51.2],
+        ],
+        [
+          [6.8, 51.2],
+          [6.9, 51.2],
+        ],
+      ],
+    };
+    expect(say({ value: "positive", basis: "geometry" }, joined)).toBe("direction.compass.E");
+  });
+
   it("says only one direction for an axis nobody identified", () => {
     expect(say({ value: "positive", basis: "unknown" })).toBe("direction.oneWay");
   });

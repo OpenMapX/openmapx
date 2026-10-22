@@ -1,6 +1,7 @@
 import {
   bearingBetween,
   getRoadConditionRoutingDecision,
+  haversineDistance,
   type LngLat,
   localizedTextFor,
   ROAD_CONDITION_BINDING_REASONS,
@@ -289,7 +290,18 @@ function compassOf(bearingDeg: number): string {
   return COMPASS_ORDER[Math.round((((bearingDeg % 360) + 360) % 360) / 45) % 8] as string;
 }
 
-/** The ends of a location's line, first coordinate to last, or undefined for no line. */
+/**
+ * The straight line from a heading's start to its end must cover at least
+ * this share of the path's length for that heading to describe the path: a
+ * loop or a U-shaped road runs every way, and its ends say nothing of that.
+ */
+const MIN_CHORD_SHARE = 0.5;
+
+/**
+ * The ends of a location's line, first coordinate to last, when the heading
+ * between them describes the line: a single path, its parts joined end to
+ * start, whose ends lie well apart along it. Undefined otherwise.
+ */
 function lineEnds(geometry: RoadConditionEvent["geometry"]): [LngLat, LngLat] | undefined {
   const lines =
     geometry.type === "LineString"
@@ -297,14 +309,25 @@ function lineEnds(geometry: RoadConditionEvent["geometry"]): [LngLat, LngLat] | 
       : geometry.type === "MultiLineString"
         ? geometry.coordinates
         : [];
-  const first = lines[0]?.[0];
-  const lastLine = lines[lines.length - 1];
-  const last = lastLine?.[lastLine.length - 1];
-  if (!first || !last || (first[0] === last[0] && first[1] === last[1])) return undefined;
-  return [
-    [first[0] as number, first[1] as number],
-    [last[0] as number, last[1] as number],
-  ];
+  const path: LngLat[] = [];
+  for (const line of lines) {
+    const points = line.map((p) => [p[0], p[1]] as LngLat);
+    const head = points[0];
+    const tail = path[path.length - 1];
+    if (!head) continue;
+    // Parts that do not join end to start are no one path to take a heading of.
+    if (tail && (tail[0] !== head[0] || tail[1] !== head[1])) return undefined;
+    path.push(...(tail ? points.slice(1) : points));
+  }
+  const first = path[0];
+  const last = path[path.length - 1];
+  if (!first || !last || path.length < 2) return undefined;
+  let length = 0;
+  for (let i = 1; i < path.length; i++) {
+    length += haversineDistance(path[i - 1] as LngLat, path[i] as LngLat);
+  }
+  const chord = haversineDistance(first, last);
+  return length > 0 && chord / length >= MIN_CHORD_SHARE ? [first, last] : undefined;
 }
 
 /**
