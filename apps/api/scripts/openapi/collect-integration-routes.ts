@@ -87,18 +87,41 @@ function literalText(node: ts.Node | undefined): string | null {
   return null;
 }
 
-function readRequireAuth(node: ts.Node | undefined): boolean {
-  if (!node || !ts.isObjectLiteralExpression(node)) return false;
+/** Read only unambiguous literal options; never guess that unresolved auth is public. */
+function readRequireAuth(node: ts.Node | undefined, registration: string): boolean {
+  if (!node) return false;
+  const fail: (reason: string) => never = (reason) => {
+    throw new Error(
+      `${registration}: cannot classify authentication statically. ${reason} ` +
+        "Use literal options with an omitted requireAuth or a literal true/false value.",
+    );
+  };
+  if (!ts.isObjectLiteralExpression(node)) fail("Options must be an object literal.");
+
+  let requireAuth = false;
+  let declared = false;
   for (const property of node.properties) {
-    if (!ts.isPropertyAssignment(property)) continue;
-    const name = ts.isIdentifier(property.name)
-      ? property.name.text
-      : ts.isStringLiteral(property.name)
-        ? property.name.text
-        : null;
-    if (name === "requireAuth") return property.initializer.kind === ts.SyntaxKind.TrueKeyword;
+    if (ts.isSpreadAssignment(property)) fail("Options spreads can change authentication.");
+    const name = property.name;
+    if (!name || ts.isComputedPropertyName(name)) {
+      fail("Computed option names can change authentication.");
+    }
+    const key =
+      ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)
+        ? name.text
+        : fail("Unsupported option name.");
+    if (key === "__proto__") fail("Options must not inherit authentication.");
+    if (key !== "requireAuth") continue;
+    if (declared) fail("Duplicate requireAuth declarations are ambiguous.");
+    declared = true;
+    if (!ts.isPropertyAssignment(property)) fail("requireAuth must be a property assignment.");
+    const value = property.initializer.kind;
+    if (value !== ts.SyntaxKind.TrueKeyword && value !== ts.SyntaxKind.FalseKeyword) {
+      fail("requireAuth must be a boolean literal.");
+    }
+    requireAuth = value === ts.SyntaxKind.TrueKeyword;
   }
-  return false;
+  return requireAuth;
 }
 
 interface RawRegistration {
@@ -132,7 +155,7 @@ function readRegistrations(repoRoot: string, file: string): RawRegistration[] {
     found.push({
       method: method as RouteMethod,
       routePath: routePath.startsWith("/") ? routePath : `/${routePath}`,
-      requireAuth: readRequireAuth(call.arguments[3]),
+      requireAuth: readRequireAuth(call.arguments[3], `${relativeFile}: ${method} ${routePath}`),
       sourceFile: relativeFile,
     });
   });

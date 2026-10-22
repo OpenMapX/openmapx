@@ -81,7 +81,13 @@ being declared.
 ## Declaring how a route authenticates
 
 Every operation carries `x-openmapx-auth`. For integration routes it is read
-from `registerRoute`'s `requireAuth` option. Core routes need it stated,
+from `registerRoute`'s `requireAuth` option. Omitted options or a literal options
+object without `requireAuth` mean public; an explicit `requireAuth` must be a
+literal `true` or `false`. The scanner rejects options identifiers, spreads,
+computed property names, prototype assignments, duplicate auth declarations and
+nonliteral auth values with the source file and route in its diagnostic. Keep
+these declarations literal rather than executing integration code during
+generation. Core routes need authentication stated,
 because guards run inside handlers or in a plugin `preHandler` hook and nothing
 about them is introspectable.
 
