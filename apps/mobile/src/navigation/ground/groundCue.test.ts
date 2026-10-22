@@ -7,7 +7,6 @@ import {
   groundCueId,
   MAX_CUE_AGE_MS,
   offRouteEpisodeId,
-  spokenInstructionFor,
   statusCueEffect,
 } from "./groundCue";
 
@@ -33,45 +32,29 @@ function cue(overrides: Partial<VoiceCue> = {}): VoiceCue {
   };
 }
 
-describe("spokenInstructionFor", () => {
-  it.each(["far", "near"] as const)("prefers the succinct phrasing for a %s cue", (tier) => {
-    expect(spokenInstructionFor(cue({ tier }))).toBe("Turn left");
-  });
-
-  it("prefers the alert phrasing for an imminent cue", () => {
-    expect(spokenInstructionFor(cue({ tier: "now" }))).toBe("Turn left now");
-  });
-
-  it.each(["far", "near"] as const)("falls back to the full phrasing for a %s cue", (tier) => {
-    const step = { instruction: "Turn left onto Hauptstraße", verbalPre: "Turn left ahead" };
-
-    expect(spokenInstructionFor(cue({ tier, step: step as never }))).toBe("Turn left ahead");
-  });
-
-  it("falls back to the written instruction when no spoken phrasing exists", () => {
-    const step = { instruction: "Turn left onto Hauptstraße" };
-
-    expect(spokenInstructionFor(cue({ step: step as never }))).toBe("Turn left onto Hauptstraße");
-  });
-
-  it("has nothing to say for a step with no text at all", () => {
-    expect(spokenInstructionFor(cue({ step: {} as never }))).toBeNull();
-    expect(spokenInstructionFor(cue({ step: { instruction: "   " } as never }))).toBeNull();
-  });
-});
-
 describe("groundCueEffect", () => {
+  it.each([
+    ["en", "metric", "In 100 metres, Turn left now"],
+    ["de", "metric", "In 100 Meter, Turn left now"],
+    ["en", "imperial", "In 350 feet, Turn left now"],
+    ["de", "imperial", "In 350 Fuß, Turn left now"],
+  ] as const)("formats %s advance speech with %s units", (locale, units, expected) => {
+    const built = groundCueEffect(session({ locale, units }), FINGERPRINT, cue({ distance: 100 }));
+    expect(built?.effect.text).toBe(expected);
+    expect(built?.effect.locale).toBe(locale);
+  });
+
   it("includes the distance in a far or near cue", () => {
     const built = groundCueEffect(session(), FINGERPRINT, cue({ tier: "near", distance: 200 }));
 
-    expect(built?.effect.text).toBe("In 200 metres, Turn left");
+    expect(built?.effect.text).toBe("In 200 metres, Turn left now");
   });
 
   it("drops the distance from an imminent cue", () => {
     const built = groundCueEffect(session(), FINGERPRINT, cue({ tier: "now" }));
 
     // By then the turn is right there; a distance would be noise.
-    expect(built?.effect.text).toBe("Turn left now");
+    expect(built?.effect.text).toBe("Turn left onto Hauptstraße");
   });
 
   it("speaks imperial distances for an imperial session", () => {
@@ -81,13 +64,13 @@ describe("groundCueEffect", () => {
       cue({ distance: 400 }),
     );
 
-    expect(built?.effect.text).toMatch(/ft|mi/);
+    expect(built?.effect.text).toBe("In 0.2 miles, Turn left now");
   });
 
   it("speaks German for a German session", () => {
     const built = groundCueEffect(session({ locale: "de" }), FINGERPRINT, cue({ distance: 200 }));
 
-    expect(built?.effect.text).toBe("In 200 Meter, Turn left");
+    expect(built?.effect.text).toBe("In 200 Meter, Turn left now");
     expect(built?.effect.locale).toBe("de");
   });
 

@@ -115,7 +115,6 @@ export {
   formatDistance,
   formatDuration,
   formatMeasurementDistance,
-  formatSpokenDistance,
   getInitials,
 } from "./formatting";
 export {
