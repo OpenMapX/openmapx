@@ -30,7 +30,7 @@ export interface I18nToken {
  * midnight wherever it is read.
  */
 export interface WallClockValue {
-  /** `YYYY-MM-DD`, or `YYYY-MM-DDTHH:mm` for a time of day. */
+  /** `YYYY-MM-DD`, `YYYY-MM-DDTHH:mm` for a time on that day, or `HH:mm` for a time of day alone. */
   $wallClock: string;
 }
 

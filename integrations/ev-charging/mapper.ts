@@ -425,8 +425,9 @@ function dayBefore(date: string): string {
 
 /**
  * A period as the site's clock reads it. One from midnight to midnight is
- * whole days, named by its first and last day; any other its start and end
- * times.
+ * whole days, named by its first and last day; one within a day names the
+ * day once ("Oct 25, 2026, 5:00 PM – 11:00 PM"); any other its start and
+ * end times.
  */
 function periodToken(
   exception: NonNullable<ChargingSite["openingHoursExceptions"]>[number],
@@ -442,22 +443,32 @@ function periodToken(
       ? token("hours.day", { date: wallClock(first) })
       : token("hours.days", { start: wallClock(first), end: wallClock(last) });
   }
-  return token("hours.period", { start: wallClock(start), end: wallClock(end) });
+  const sameDay = start.slice(0, 10) === end.slice(0, 10);
+  return token("hours.period", {
+    start: wallClock(start),
+    end: wallClock(sameDay ? end.slice(11) : end),
+  });
 }
 
 /**
  * The periods, current or to come, the opening hours do not describe, and
  * whether the site is open then: the soonest ones, in the site's own time.
+ * The rows use the pricing layout, which wraps a long period beside its
+ * open or closed state rather than pushing the state out of the panel.
  */
 function hoursExceptionsSection(site: ChargingSite): DataSourceDetailSection | null {
-  const rows = (site.openingHoursExceptions ?? []).flatMap((exception): Row[] => {
-    const period = periodToken(exception, site.timeZone);
-    return period ? [[period, exception.open ? sharedT.value.open : sharedT.value.closed]] : [];
-  });
+  const rows = (site.openingHoursExceptions ?? []).flatMap(
+    (exception): [Translatable, Translatable, Translatable][] => {
+      const period = periodToken(exception, site.timeZone);
+      const state = exception.open ? sharedT.value.open : sharedT.value.closed;
+      return period ? [[period, state, ""]] : [];
+    },
+  );
   if (rows.length === 0) return null;
   return {
     title: token("section.hoursExceptions"),
     type: "table",
+    rowLayout: "pricing",
     rows: rows.slice(0, MAX_HOURS_EXCEPTIONS),
     sectionIcon: "access_time",
   };

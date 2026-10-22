@@ -174,6 +174,8 @@ describe("resolveToken — wall-clock values", () => {
       "24.12.2026, 00:00 bis 24.12.2026, 23:30",
     );
     expect(resolve("en", "2026-12-24", "2027-01-01")).toBe("Dec 24, 2026 – Jan 1, 2027");
+    // A time of day alone ends a period on the day it starts.
+    expect(resolve("de", "2026-10-25T17:00", "23:00")).toBe("25.10.2026, 17:00 bis 23:00");
   });
 
   it("leaves text that is no wall clock as it is", () => {

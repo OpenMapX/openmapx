@@ -734,15 +734,20 @@ describe("mapChargingSiteToDetail", () => {
           // 31 December to 1 January, Berlin time: two whole days.
           { start: "2026-12-30T23:00:00Z", end: "2027-01-01T23:00:00Z", open: false },
           { start: "2026-12-27T10:00:00Z", end: "2026-12-27T14:00:00Z", open: true },
+          // Across midnight, Berlin time: both dates stay.
+          { start: "2026-12-28T20:00:00Z", end: "2026-12-29T05:00:00Z", open: true },
         ],
       }),
     );
     const exceptions = section(detail.sections, "Special Opening Hours");
     expect(exceptions?.sectionIcon).toBe("access_time");
+    // The pricing layout wraps the period beside its state, so neither leaves the panel.
+    expect(exceptions?.rowLayout).toBe("pricing");
     expect(exceptions?.rows).toEqual([
       [
         { $t: "hours.day", values: { date: { $wallClock: "2026-12-24" } } },
         { $t: "shared.value.closed" },
+        "",
       ],
       [
         {
@@ -750,31 +755,43 @@ describe("mapChargingSiteToDetail", () => {
           values: { start: { $wallClock: "2026-12-31" }, end: { $wallClock: "2027-01-01" } },
         },
         { $t: "shared.value.closed" },
+        "",
+      ],
+      [
+        {
+          $t: "hours.period",
+          values: { start: { $wallClock: "2026-12-27T11:00" }, end: { $wallClock: "15:00" } },
+        },
+        { $t: "shared.value.open" },
+        "",
       ],
       [
         {
           $t: "hours.period",
           values: {
-            start: { $wallClock: "2026-12-27T11:00" },
-            end: { $wallClock: "2026-12-27T15:00" },
+            start: { $wallClock: "2026-12-28T21:00" },
+            end: { $wallClock: "2026-12-29T06:00" },
           },
         },
         { $t: "shared.value.open" },
+        "",
       ],
     ]);
     // Read the same wherever the reader is: the client never shifts a wall clock.
     // ICU versions differ on the space before AM and PM.
     expect(rowsOf(exceptions).map((row) => row.map((cell) => cell.replaceAll(NNBSP, " ")))).toEqual(
       [
-        ["Dec 24, 2026", "Closed"],
-        ["Dec 31, 2026 – Jan 1, 2027", "Closed"],
-        ["Dec 27, 2026, 11:00 AM – Dec 27, 2026, 3:00 PM", "Open"],
+        ["Dec 24, 2026", "Closed", ""],
+        ["Dec 31, 2026 – Jan 1, 2027", "Closed", ""],
+        ["Dec 27, 2026, 11:00 AM – 3:00 PM", "Open", ""],
+        ["Dec 28, 2026, 9:00 PM – Dec 29, 2026, 6:00 AM", "Open", ""],
       ],
     );
     expect(rowsOf(exceptions, "de")).toEqual([
-      ["24.12.2026", "Geschlossen"],
-      ["31.12.2026 bis 01.01.2027", "Geschlossen"],
-      ["27.12.2026, 11:00 – 27.12.2026, 15:00", "Geöffnet"],
+      ["24.12.2026", "Geschlossen", ""],
+      ["31.12.2026 bis 01.01.2027", "Geschlossen", ""],
+      ["27.12.2026, 11:00 – 15:00", "Geöffnet", ""],
+      ["28.12.2026, 21:00 – 29.12.2026, 06:00", "Geöffnet", ""],
     ]);
     expect(section(mapChargingSiteToDetail(makeSite()).sections, "Special Opening Hours")).toBe(
       undefined,
@@ -791,8 +808,8 @@ describe("mapChargingSiteToDetail", () => {
       }),
     );
     expect(rowsOf(section(detail.sections, "Special Opening Hours"), "de")).toEqual([
-      ["24.12.2026", "Geschlossen"],
-      ["27.12.2026, 09:30 – 27.12.2026, 12:00", "Geöffnet"],
+      ["24.12.2026", "Geschlossen", ""],
+      ["27.12.2026, 09:30 – 12:00", "Geöffnet", ""],
     ]);
     const unknownZone = mapChargingSiteToDetail(
       makeSite({
@@ -803,7 +820,7 @@ describe("mapChargingSiteToDetail", () => {
       }),
     );
     expect(rowsOf(section(unknownZone.sections, "Special Opening Hours"), "de")).toEqual([
-      ["24.12.2026", "Geschlossen"],
+      ["24.12.2026", "Geschlossen", ""],
     ]);
   });
 
@@ -818,7 +835,7 @@ describe("mapChargingSiteToDetail", () => {
       "Special Opening Hours",
     );
     expect(exceptions?.rows).toHaveLength(10);
-    expect(rowsOf(exceptions, "de").at(-1)![0]).toBe("10.01.2027, 10:00 – 10.01.2027, 12:00");
+    expect(rowsOf(exceptions, "de").at(-1)![0]).toBe("10.01.2027, 10:00 – 12:00");
   });
 
   it("shows the energy mix: green, supplier, product, sources largest first and impacts", () => {

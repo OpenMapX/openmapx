@@ -39,8 +39,9 @@ export function money(amount: number, currency: string, minDigits?: number): I18
 }
 
 /**
- * A wall-clock date (`2026-12-24`) or date and time of day
- * (`2026-12-24T14:00`) as a placeholder value, formatted by the client in the
+ * A wall-clock date (`2026-12-24`), date and time of day
+ * (`2026-12-24T14:00`) or time of day alone (`14:00`, for the end of a period
+ * on the day it starts) as a placeholder value, formatted by the client in the
  * reader's locale but never moved into the reader's time zone. The caller
  * reads the instant in the place's own zone first.
  */
