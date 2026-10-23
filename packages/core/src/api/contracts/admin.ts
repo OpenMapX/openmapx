@@ -57,15 +57,7 @@ export const adminCommonResponses = {
   429: adminJson(adminRateLimitSchema, z.object({ "retry-after": z.string().regex(/^\d+$/) })),
   500: adminJson(httpErrorSchema),
 } as const;
-export type AdminResponseContract =
-  | { kind: "json"; schema: z.ZodType; headers?: z.ZodType }
-  | { kind: "text"; schema: z.ZodType<string>; mediaType: string; headers?: z.ZodType }
-  | { kind: "empty"; headers?: z.ZodType }
-  | { kind: "stream"; mediaType: string; headers?: z.ZodType };
-export interface AdminOperation {
-  method: "GET" | "POST" | "DELETE" | "PUT" | "PATCH";
-  path: `/api/${string}`;
+export type { ApiResponseContract as AdminResponseContract } from "./operation";
+export interface AdminOperation extends Omit<import("./operation").ApiOperation, "auth"> {
   auth: "service" | "admin";
-  request?: { body?: z.ZodType; query?: z.ZodType; params?: z.ZodType; headers?: z.ZodType };
-  responses: Record<number, AdminResponseContract>;
 }

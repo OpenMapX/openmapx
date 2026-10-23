@@ -1,3 +1,4 @@
+import type { FeatureCollection } from "geojson";
 import {
   parseSavedPlaceContributors,
   type SavedPlaceFieldContributors,
@@ -56,7 +57,7 @@ function captureForPlace(place: ExportPlace) {
  * caller stringifies). An empty input yields a valid empty FeatureCollection.
  * Point coordinates are `[lng, lat]`.
  */
-export function placesToGeoJson(places: ExportPlace[]): GeoJSON.FeatureCollection {
+export function placesToGeoJson(places: ExportPlace[]): FeatureCollection {
   return {
     type: "FeatureCollection",
     features: places.map((place) => {
@@ -151,7 +152,8 @@ export function placesToKml(places: ExportPlace[]): string {
 }
 
 /** The file formats we can export to (mirrors the import trio). */
-export type ExportFormat = "gpx" | "geojson" | "kml";
+export const SAVED_EXPORT_FORMATS = ["gpx", "geojson", "kml"] as const;
+export type ExportFormat = (typeof SAVED_EXPORT_FORMATS)[number];
 
 /** The file extension for each format. */
 export const EXPORT_EXTENSION: Record<ExportFormat, string> = {

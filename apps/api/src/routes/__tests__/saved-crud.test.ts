@@ -172,6 +172,7 @@ describe("saved lists", () => {
         icon: null,
         isPrivate: true,
         sortOrder: 0,
+        placeCount: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       },

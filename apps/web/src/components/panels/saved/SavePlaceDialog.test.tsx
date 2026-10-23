@@ -1,10 +1,4 @@
-import {
-  API_ENDPOINTS,
-  apiClient,
-  createPlace,
-  type SavedList,
-  type SavedPlace,
-} from "@openmapx/core";
+import { API_ENDPOINTS, createPlace, type SavedList, type SavedPlace } from "@openmapx/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -39,19 +33,31 @@ const row = {
 const clients: QueryClient[] = [];
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   clients.splice(0).forEach((c) => {
     c.clear();
   });
 });
 function setup(initial = false, savedPlace = place) {
   const rows: SavedPlace[] = initial ? [row] : [];
-  const lists = [{ id: "l1", name: "Trip", icon: null, isPrivate: true }] as SavedList[];
+  const lists: SavedList[] = [
+    {
+      id: "l1",
+      name: "Trip",
+      icon: null,
+      isPrivate: true,
+      sortOrder: 0,
+      placeCount: 0,
+      createdAt: "2026-10-03T00:00:00Z",
+      updatedAt: "2026-10-03T00:00:00Z",
+    },
+  ];
   let finishCreate: () => void = () => {};
   let rejectCreate: (error: Error) => void = () => {};
   let rejectPost: (error: Error) => void = () => {};
   let finishPost: () => void = () => {};
   let finishDelete: () => void = () => {};
-  const post = vi.spyOn(apiClient, "post").mockImplementation((url, data) => {
+  const post = vi.fn((url: unknown, data: unknown): Promise<unknown> => {
     if (url === API_ENDPOINTS.savedLists)
       return new Promise((resolve, reject) => {
         rejectCreate = reject;
@@ -61,7 +67,11 @@ function setup(initial = false, savedPlace = place) {
             name: (data as { name: string }).name,
             icon: null,
             isPrivate: true,
-          } as SavedList;
+            sortOrder: 0,
+            placeCount: 0,
+            createdAt: "2026-10-03T00:00:00Z",
+            updatedAt: "2026-10-03T00:00:00Z",
+          } satisfies SavedList;
           lists.push(list);
           resolve(list);
         };
@@ -80,7 +90,7 @@ function setup(initial = false, savedPlace = place) {
       };
     });
   });
-  const remove = vi.spyOn(apiClient, "delete").mockImplementation(async () => {
+  const remove = vi.fn().mockImplementation(async () => {
     rows.splice(0);
     return {};
   });
@@ -100,7 +110,31 @@ function setup(initial = false, savedPlace = place) {
       };
     return { places: [...rows] };
   };
-  const get = vi.spyOn(apiClient, "get").mockImplementation(read);
+  const get = vi.fn(read);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation(async (input: unknown, options: unknown) => {
+      const init = options as RequestInit;
+      const url = new URL(String(input));
+      if (init.method === "POST") {
+        const value = (await post(url.pathname, JSON.parse(String(init.body)))) as Record<
+          string,
+          unknown
+        >;
+        if (url.pathname === API_ENDPOINTS.savedLists) {
+          const { id, name, icon, isPrivate } = value;
+          return Response.json({ id, name, icon, isPrivate });
+        }
+        const { sortOrder: _sortOrder, createdAt: _createdAt, ...receipt } = value;
+        return Response.json(receipt);
+      }
+      if (init.method === "DELETE") {
+        await remove();
+        return Response.json({ ok: true });
+      }
+      return Response.json(await get(url.pathname, Object.fromEntries(url.searchParams)));
+    }),
+  );
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });

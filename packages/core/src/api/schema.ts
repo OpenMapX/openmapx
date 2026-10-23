@@ -3,6 +3,8 @@ import { z } from "zod/v4";
 export interface RouteJsonSchemaOptions {
   identity: string;
   io: "input" | "output";
+  /** Opt-in references for repeated structures; existing families retain inline emission. */
+  reused?: "ref" | "inline";
   registerDefinition?: (schema: Record<string, unknown> & { $id: string }) => void;
 }
 
@@ -30,7 +32,7 @@ export function routeJsonSchema(
     definitions,
     $defs,
     ...source
-  } = z.toJSONSchema(schema, { target: "draft-7", io: options.io });
+  } = z.toJSONSchema(schema, { target: "draft-7", io: options.io, reused: options.reused });
   if (!options.registerDefinition) {
     const result = {
       ...source,

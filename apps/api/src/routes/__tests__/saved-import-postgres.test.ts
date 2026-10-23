@@ -1,9 +1,12 @@
+import * as sdk from "@openmapx/core/saved-places-sdk";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { createApiClient } from "../../../../../packages/core/src/api/client";
 import { savedList, savedPlace, user } from "../../db/schema";
 import { buildTestApp } from "../../test/app";
 import { createMigratedPostgresFixture } from "../../test/postgres-fixture";
+import { administrationSdkFetch } from "./helpers/administration-sdk-fetch";
 
 const connection = vi.hoisted(() => ({
   db: null as unknown as Awaited<ReturnType<typeof createMigratedPostgresFixture>>["db"],
@@ -85,6 +88,86 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(
         await fixture.db.select().from(savedPlace).where(eq(savedPlace.name, "Reject")),
       ).toHaveLength(0);
+    });
+    it("validates persisted read records, receipts, icon clearing, captured edits and downloads through the SDK", async () => {
+      vi.stubGlobal("fetch", administrationSdkFetch(app));
+      const client = createApiClient({
+        baseUrl: "https://saved-db.example",
+        credentials: "include",
+      });
+      try {
+        const created = sdk.unwrapSavedResponse(
+          await sdk.createSavedList({ name: "SDK persisted", icon: "star" }, { client }),
+        );
+        const id = created.id;
+        expect(
+          sdk.unwrapSavedResponse(await sdk.updateSavedList(id, { icon: null }, { client })),
+        ).toEqual({ ok: true });
+        const lists = sdk.unwrapSavedResponse(await sdk.listSavedLists({ client })).lists;
+        expect(lists.find((list) => list.id === id)).toMatchObject({
+          icon: null,
+          placeCount: 0,
+          createdAt: expect.stringMatching(/^\d{4}-/),
+        });
+        const added = sdk.unwrapSavedResponse(
+          await sdk.createSavedPlace(id, { ...point, placeId: "osm:node:1" }, { client }),
+        );
+        expect(
+          sdk.unwrapSavedResponse(await sdk.checkSavedPlace({ placeId: "osm:node:1" }, { client })),
+        ).toEqual({ listIds: [id] });
+        const places = sdk.unwrapSavedResponse(
+          await sdk.listSavedListPlaces(id, { client }),
+        ).places;
+        expect(places).toEqual([
+          expect.objectContaining({
+            id: added.id,
+            fieldContributors,
+            sortOrder: 0,
+            createdAt: expect.any(String),
+          }),
+        ]);
+        expect(
+          sdk.unwrapSavedResponse(await sdk.updateSavedPlace(added.id, { lat: 53 }, { client })),
+        ).toEqual({ ok: true });
+        const changed = sdk.unwrapSavedResponse(await sdk.listSavedListPlaces(id, { client }))
+          .places[0];
+        expect(changed.fieldContributors).toEqual({ lat: [], lng: [] });
+        const written = sdk.unwrapSavedResponse(
+          await sdk.writeSavedLabel("SDK home", { ...point }, { client }),
+        );
+        const label = sdk
+          .unwrapSavedResponse(await sdk.listSavedLabels({ client }))
+          .labels.find((label) => label.id === written.id);
+        expect(label).toMatchObject({ label: "SDK home", fieldContributors });
+        expect(label).not.toHaveProperty("userId");
+        const imported = sdk.unwrapSavedResponse(
+          await sdk.importSavedPlaces(
+            { target: { listId: id }, places: [point, point] },
+            { client },
+          ),
+        );
+        expect(imported).toMatchObject({ imported: 1, skippedDuplicates: 1 });
+        for (const format of ["gpx", "geojson", "kml"] as const) {
+          const blob = sdk.unwrapSavedResponse(
+            await sdk.exportSavedList(id, { format }, { client }),
+          );
+          expect(await blob.text()).toContain("Cafe");
+        }
+        expect(sdk.unwrapSavedResponse(await sdk.deleteSavedLabel("SDK home", { client }))).toEqual(
+          { ok: true },
+        );
+        expect(sdk.unwrapSavedResponse(await sdk.deleteSavedPlace(added.id, { client }))).toEqual({
+          ok: true,
+        });
+        expect(sdk.unwrapSavedResponse(await sdk.deleteSavedList(id, { client }))).toEqual({
+          ok: true,
+        });
+        expect(
+          sdk.unwrapSavedResponse(await sdk.checkSavedPlace({ placeId: "osm:node:1" }, { client })),
+        ).toEqual({ listIds: [] });
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
     it("does not import into another account's list", async () => {
       await fixture.db

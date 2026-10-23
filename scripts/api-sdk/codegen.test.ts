@@ -182,6 +182,28 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
     `,
     );
   }
+  if (virtual.has(resolve(base, "src/api/generated/saved/saved-places.generated.ts"))) {
+    virtual.set(
+      resolve(base, "src/api/generated/saved/saved-consumer.typecheck.ts"),
+      `
+      import { createSavedList, updateSavedList, exportSavedList, createSavedPlace } from "./saved-places.generated";
+      async function savedConsumer() {
+        const result = await createSavedList({name: "Trip"});
+        if (result.status === 200) {
+          const id: string = result.data.id;
+          // @ts-expect-error A creation receipt is not a full saved-list read record.
+          result.data.createdAt;
+        }
+        await updateSavedList("list", {icon: null});
+        const exported = await exportSavedList("list", {format: "gpx"});
+        if (exported.status === 200) { const blob: Blob = exported.data; }
+        await createSavedPlace("list", {name: "Place", lat: 52, lng: 13, fieldContributors: {name: [{sourceId: "x", name: "X"}] as const}});
+        // @ts-expect-error The export selector is closed.
+        exportSavedList("list", {format: "csv"});
+      }
+    `,
+    );
+  }
   const host = ts.createCompilerHost(options);
   const fileExists = host.fileExists.bind(host),
     read = host.readFile.bind(host),
@@ -197,7 +219,18 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
       ? ts.createSourceFile(path, virtual.get(path), language, true)
       : source(path, language, ...rest);
   return ts
-    .getPreEmitDiagnostics(ts.createProgram([filename], options, host))
+    .getPreEmitDiagnostics(
+      ts.createProgram(
+        [
+          filename,
+          ...Array.from(virtual.keys()).filter((file) =>
+            file.endsWith("/saved-consumer.typecheck.ts"),
+          ),
+        ],
+        options,
+        host,
+      ),
+    )
     .map((diagnostic: { messageText: unknown }) =>
       ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
     );
@@ -425,7 +458,8 @@ describe("SDK artifact gate", () => {
     expect(bindings).toContain('bindAdminOperation("getApiDataManagerTransitState")');
     expect(bindings).not.toContain("/api/");
     const metadata = first.filter(
-      (file: { filename: string }) => !file.filename.startsWith("admin/"),
+      (file: { filename: string }) =>
+        !file.filename.startsWith("admin/") && !file.filename.startsWith("saved/"),
     );
     expect(metadata).toHaveLength(6);
     for (const file of metadata)
