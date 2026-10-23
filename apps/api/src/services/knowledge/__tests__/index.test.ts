@@ -272,6 +272,36 @@ describe("getPlaceKnowledge", () => {
     expect(result).toEqual({});
   });
 
+  it("forwards the caller's request-local JSON scope to every enabled source, and only when supplied", async () => {
+    wikidataLookup.mockResolvedValue(null);
+    wikipediaLookup.mockResolvedValue(null);
+    const { createRequestJsonScope } = await import("@openmapx/core");
+    const { getPlaceKnowledge } = await import("../index.js");
+    const jsonScope = createRequestJsonScope();
+
+    await getPlaceKnowledge(makePlace({ wikidata: "Q42" }), "en", { jsonScope });
+    for (const lookup of [wikidataLookup, wikipediaLookup]) {
+      expect(lookup.mock.calls[0]?.[2].jsonScope).toBe(jsonScope);
+    }
+
+    wikidataLookup.mockClear();
+    await getPlaceKnowledge(makePlace({ wikidata: "Q42" }), "en");
+    expect(wikidataLookup.mock.calls[0]?.[2]).not.toHaveProperty("jsonScope");
+  });
+
+  it("does not hand the JSON scope to a policy-disallowed integration", async () => {
+    gatedIntegrationsMock.mockResolvedValueOnce(new Set(["knowledge-wikipedia"]));
+    wikidataLookup.mockResolvedValueOnce(null);
+    const { createRequestJsonScope } = await import("@openmapx/core");
+    const { getPlaceKnowledge } = await import("../index.js");
+    const jsonScope = createRequestJsonScope();
+
+    await getPlaceKnowledge(makePlace({ wikipedia: "en:Article" }), "en", { jsonScope });
+
+    expect(wikipediaLookup).not.toHaveBeenCalled();
+    expect(wikidataLookup.mock.calls[0]?.[2].jsonScope).toBe(jsonScope);
+  });
+
   it("skips knowledge sources from policy-disallowed integrations", async () => {
     // Gate the wikidata integration; only wikipedia should be consulted + merged.
     gatedIntegrationsMock.mockResolvedValueOnce(new Set(["knowledge-wikidata"]));

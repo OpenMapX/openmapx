@@ -975,7 +975,9 @@ describe("GET /places/:id", () => {
       }),
     );
     expect(mockLookupByOsmRef).toHaveBeenCalledWith("node", "12345", "osm:node/12345", undefined);
-    expect(mockGetPlaceKnowledge).toHaveBeenCalledWith(MOCK_PLACE, undefined);
+    expect(mockGetPlaceKnowledge).toHaveBeenCalledWith(MOCK_PLACE, undefined, {
+      jsonScope: expect.objectContaining({ getJson: expect.any(Function) }),
+    });
     expect(mockBuildReviewLinks).toHaveBeenCalledWith(
       expect.objectContaining({ id: "osm:node/12345" }),
     );
@@ -1524,7 +1526,9 @@ describe("GET /places/:id", () => {
     });
 
     expect(mockLookupByOsmRef).toHaveBeenCalledWith("node", "12345", "osm:node/12345", "de");
-    expect(mockGetPlaceKnowledge).toHaveBeenCalledWith(MOCK_PLACE, "de");
+    expect(mockGetPlaceKnowledge).toHaveBeenCalledWith(MOCK_PLACE, "de", {
+      jsonScope: expect.objectContaining({ getJson: expect.any(Function) }),
+    });
   });
 
   it("handles way/ and relation/ OSM refs", async () => {
@@ -1624,7 +1628,9 @@ describe("GET /places/:id", () => {
     try {
       await vi.waitFor(() => expect(mockGetPlaceKnowledge).toHaveBeenCalledTimes(1));
       expect(mockFetchOsmBoundary).toHaveBeenCalledWith("relation/62422", undefined);
-      expect(mockSearchHeroPhotos).toHaveBeenCalledWith(adminPlace.osmTags, []);
+      expect(mockSearchHeroPhotos).toHaveBeenCalledWith(adminPlace.osmTags, [], {
+        getJson: expect.any(Function),
+      });
       expect(mockFetchAggregate).toHaveBeenCalled();
     } finally {
       releaseKnowledge({
@@ -1642,6 +1648,55 @@ describe("GET /places/:id", () => {
       description: "Knowledge description",
       photos: [heroPhoto, knowledgePhoto],
     });
+  });
+
+  it("shares one Wikimedia JSON scope between knowledge and hero photos per full enrichment", async () => {
+    mockLookupByOsmRef.mockResolvedValue(MOCK_PLACE);
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
+    mockBuildReviewLinks.mockReturnValue([]);
+    for (const id of ["osm:node/12345", "osm:node/12346"]) {
+      const res = await app.inject({ method: "GET", url: `/places/${encodeURIComponent(id)}` });
+      expect(res.statusCode).toBe(200);
+    }
+
+    const scopes = mockGetPlaceKnowledge.mock.calls.map(([, , options]) => options.jsonScope);
+    const heroGetters = mockSearchHeroPhotos.mock.calls.map(([, , options]) => options.getJson);
+    expect(scopes).toHaveLength(2);
+    expect(heroGetters).toHaveLength(2);
+    // The hero getter is the very scope handed to knowledge, and scopes never outlive a call.
+    expect(heroGetters[0]).toBe(scopes[0].getJson);
+    expect(heroGetters[1]).toBe(scopes[1].getJson);
+    expect(scopes[0]).not.toBe(scopes[1]);
+    expect(heroGetters[0]).not.toBe(heroGetters[1]);
+  });
+
+  it("never gives the strict card-photo path a shared Wikimedia JSON scope", async () => {
+    mockGetPlaceKnowledge.mockResolvedValueOnce({ photos: [] });
+    const response = await app.inject({
+      method: "POST",
+      url: "/places/card-enrichment",
+      payload: {
+        places: [
+          {
+            id: "osm:node/999902",
+            name: "Scope-free card",
+            coordinates: [6.08, 50.77],
+            photoTags: { wikidata: "Q1", wikimedia_commons: "File:Card.jpg" },
+            fields: ["photo"],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockGetPlaceKnowledge).toHaveBeenCalledTimes(1);
+    expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(1);
+    const knowledgeOptions = mockGetPlaceKnowledge.mock.calls[0]?.[2];
+    const heroOptions = mockSearchHeroPhotos.mock.calls[0]?.[2];
+    expect(knowledgeOptions).toMatchObject({ cardPhoto: true });
+    expect(knowledgeOptions).not.toHaveProperty("jsonScope");
+    expect(heroOptions).toMatchObject({ strict: true });
+    expect(heroOptions).not.toHaveProperty("getJson");
   });
 
   it("runs boundary, photo, and review calls in parallel within enrichPlace", async () => {

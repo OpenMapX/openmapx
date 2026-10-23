@@ -6,6 +6,7 @@ import {
   type PlacePhoto,
   parseId,
   parseRetryAfterMs,
+  type RequestJsonScope,
 } from "@openmapx/core";
 import type { IntegrationContext, LoadedIntegration } from "@openmapx/integration-framework";
 import {
@@ -23,6 +24,8 @@ interface ImageTagOptions {
   signal?: AbortSignal;
   onError?: (error: unknown) => void;
   onPhotos?: (photos: PlacePhoto[]) => void;
+  /** Request-local public JSON acquisition; never replaces the host-bound `commons` transport. */
+  getJson?: RequestJsonScope["getJson"];
   commons?: {
     getJson: NonNullable<NonNullable<Parameters<typeof fetchCommonsMetadata>[1]>["getJson"]>;
     allowed: () => Promise<boolean>;

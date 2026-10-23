@@ -14,6 +14,7 @@ import {
   type CategoryCardEnrichmentRequest,
   type CategoryCardEnrichmentResponse,
   categoryPlaceToPlace,
+  createRequestJsonScope,
   isDisplayablePhoto,
   type KnowledgeResult,
   openingHoursSourceFromOsm,
@@ -643,16 +644,21 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
   const photoProviders = getPhotoProviders(allIntegrations);
   const reviewProviders = getReviewProviders(allIntegrations);
   const [plng, plat] = place.coordinates;
+  // One scope per full enrichment: knowledge and hero photos share identical
+  // Wikimedia JSON, and it is released with this call. Never wired into card mode.
+  const jsonScope = createRequestJsonScope();
 
   // These inputs do not depend on knowledge's auxiliary IDs. Start all four
   // branches together, then fold those IDs into the final response.
   const [knowledgeResult, adminBoundary, heroPhotos, reviewStats] = await Promise.all([
-    getPlaceKnowledge(place, lang),
+    getPlaceKnowledge(place, lang, { jsonScope }),
     // Only administrative areas get a boundary highlight.
     place.osmTags?.boundary === "administrative" && place.ids?.osm
       ? fetchOsmBoundary(place.ids.osm, lang)
       : Promise.resolve(null),
-    place.osmTags ? searchHeroPhotos(place.osmTags, photoProviders) : Promise.resolve([]),
+    place.osmTags
+      ? searchHeroPhotos(place.osmTags, photoProviders, { getJson: jsonScope.getJson })
+      : Promise.resolve([]),
     safeAggregate(plat, plng, place.name, place.ids?.osm, reviewProviders),
   ]);
   const {
