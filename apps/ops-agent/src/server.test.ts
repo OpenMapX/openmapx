@@ -732,7 +732,7 @@ it("observer abort leaves the admitted backend running until its real completion
 });
 
 it.each([0, 1])(
-  "fix2 retains safe credential continuations, truncation and final diagnostics through the real CLI/server boundary (exit %s)",
+  "fix3 retains safe credential continuations, truncation and final diagnostics through the real CLI/server boundary (exit %s)",
   async (exitCode) => {
     const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");
@@ -760,6 +760,10 @@ it.each([0, 1])(
         const ending = ["\n", "\r\n", "\r"][index];
         return [`Authorization: ${scheme}${ending}`, `synthetic-auth-value-${index}${ending}`];
       }),
+      "Authorization: Bea\r",
+      "rer synthetic-review-r3-continuation\n",
+      "Authorization: To\r\n",
+      "ken synthetic-review-r3-crlf-continuation\n",
       `${"x".repeat(4096 - Buffer.byteLength(suffix))}${suffix}@host.invalid/path\n`,
       `${"x".repeat(6000)}\n`,
       "last-diagnostic\n",
@@ -842,6 +846,7 @@ it.each([0, 1])(
         "synthetic-access-first-",
         "synthetic-access-second-",
         "synthetic-auth-value-",
+        "synthetic-review-r3-",
       ])
         expect(all).not.toContain(secret);
       if (exitCode !== 0)

@@ -261,8 +261,12 @@ export function createBoundedProcessOutput(options: OutputOptions): {
     for (const decoded of text) {
       const character = controlFree(state, decoded);
       if (!character) continue;
+      // Preserve CR carry before scheme scanning can discard an incomplete prefix.
       const progressSecret =
-        character === "\r" && (state.scan.phase === "bare" || state.scan.inlineAuthorization);
+        character === "\r" &&
+        (state.scan.phase === "bare" ||
+          state.scan.phase === "scheme" ||
+          state.scan.inlineAuthorization);
       scanCredential(state.scan, character);
       if (character === "\n" || character === "\r") {
         if (!(character === "\n" && state.cr)) {

@@ -258,3 +258,55 @@ it("fix2 still tracks a quoted assignment used as an authorization value", () =>
     expect(seen).toContain("last-diagnostic");
   }
 });
+
+it.each(["Bearer", "Basic", "Token"])(
+  "fix3 protects every nonempty proper %s prefix at CR and CRLF and releases following diagnostics",
+  (scheme) => {
+    const failures: string[] = [];
+    const secret = "synthetic-review-r3-continuation";
+    for (let split = 1; split < scheme.length; split++) {
+      for (const ending of ["\r", "\r\n"]) {
+        for (const splitBytes of [false, true]) {
+          for (const stream of ["stdout", "stderr"] as const) {
+            const otherStream = stream === "stdout" ? "stderr" : "stdout";
+            const seen: { stream: "stdout" | "stderr"; message: string }[] = [];
+            const output = createBoundedProcessOutput({
+              onLine: (stream, message) => seen.push({ stream, message }),
+              redact: (x) => x,
+            });
+            const write = (target: "stdout" | "stderr", frame: string) => {
+              const bytes = Buffer.from(frame);
+              if (splitBytes) for (const byte of bytes) output.write(target, Uint8Array.of(byte));
+              else output.write(target, bytes);
+            };
+            write(stream, `Authorization: ${scheme.slice(0, split)}${ending}`);
+            write(otherStream, "independent-diagnostic\n");
+            write(stream, `${scheme.slice(split)} ${secret}\n`);
+            write(stream, "last-diagnostic\n");
+            const diagnostics = output.end();
+            const callbackWithheld = !seen.some((entry) => entry.message.includes(secret));
+            const tailWithheld = !diagnostics.tail.some((entry) => entry.message.includes(secret));
+            const finalEntry = { stream, message: "last-diagnostic" };
+            const independentEntry: typeof finalEntry = {
+              stream: otherStream,
+              message: "independent-diagnostic",
+            };
+            const includes = (entries: typeof seen, expected: typeof finalEntry) =>
+              entries.some(
+                (entry) => entry.stream === expected.stream && entry.message === expected.message,
+              );
+            const finalVisible =
+              includes(seen, finalEntry) && includes(diagnostics.tail, finalEntry);
+            const independentVisible =
+              includes(seen, independentEntry) && includes(diagnostics.tail, independentEntry);
+            if (!callbackWithheld || !tailWithheld || !finalVisible || !independentVisible)
+              failures.push(
+                `${scheme.slice(0, split)} + ${scheme.slice(split)}, ${JSON.stringify(ending)}, bytes=${splitBytes}, ${stream}: callbackWithheld=${callbackWithheld}, tailWithheld=${tailWithheld}, finalVisible=${finalVisible}, independentVisible=${independentVisible}`,
+              );
+          }
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  },
+);
