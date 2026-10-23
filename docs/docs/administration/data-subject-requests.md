@@ -1,75 +1,17 @@
 ---
+description: Configure privacy operations, handle access and portability requests, and verify export readiness.
 sidebar_position: 4
 title: Data-subject requests
 ---
 
 # Data-subject requests
 
-OpenMapX provides a self-service Article 15 access and Article 20 portability
-workflow. It is an operational process, not an automatic legal-compliance
-claim: the deployment owner remains responsible for the controller record,
-processor instructions, deadlines and human review.
-
-## Intake and response
-
-An authenticated person starts a request from Account settings or contacts the
-published privacy address. The API records receipt time, locale, time zone,
-request type and a response deadline. A request creates an immutable case,
-source tasks and preservation records. Minimal safe receipt projections may be
-preserved before identity review; disclosure and broader collection require
-verified identity. Staff must record any clarification,
-restriction, extension or refusal with a reason code.
-
-Short-lived authentication and offline-control metadata is captured into bounded
-encrypted source snapshots at registration. Credentials and usable tokens are
-excluded. Missing capture dependencies create review tasks; later live data is
-not substituted for an expired receipt snapshot.
-
-The remaining live OpenMapX export uses one repeatable-read snapshot. It includes explicit,
-ownership-filtered OpenMapX projections and requests data from a connected
-managed Dawarich instance when that processor is configured. Independent
-controllers, off-host systems and operator-controlled sources become visible
-review tasks; they are never silently represented as searched or complete.
-
-## Delivery controls
-
-Archives are encrypted at rest with an envelope-encrypted data key. The
-download is not a bearer link: the subject must complete a fresh sign-in (and
-configured second factor), and a successful authorization is consumed once.
-The response rejects range requests, sets `Cache-Control: no-store`, and the
-artifact is automatically expired and physically removed by the privacy
-cleanup job. If a download is interrupted, the subject starts a new
-reauthentication challenge.
-
-No archive, nonce, credential or personal-data summary is sent by email.
-Status notifications invite the recipient to sign in. Identity-verification
-messages contain a short-lived, case-bound code sent only to the authoritative
-contact. The service records delivery after the HTTP response finishes; an
-interrupted stream does not count as successful delivery. Each subsequent
-download requires fresh authentication. Close the case after confirming the
-response channel.
-
-## Assisted and representative requests
-
-Use the privacy-admin intake form for inaccessible or deleted accounts. Supply
-an exact protected locator and the actual receipt time; do not create a
-replacement account. Prefer a fresh authenticated account proof, followed by a
-verified email challenge. Codes are rate-limited, expire, and cannot be reused
-for another case or party. Failed delivery remains visible for retry; operators
-cannot choose a different destination while issuing a challenge.
-
-A representative must prove their own delivery identity and have their
-authority reviewed separately. Review exceptional identity evidence only when
-recorded reasonable doubt justifies it. Case updates use versions and
-idempotency keys; reload after a conflict rather than applying a stale decision.
-An unavailable exact account match requires explicit manual source outcomes
-and reviewed supplements, never an invented user ID.
-
-Backup extraction warnings require a separate decision bound to that exact
-review and manifest. Read the proposed omissions before accepting them. A
-changed backup or warning set requires a new review. Unknown off-host copies,
-processor responses and generic text logs remain operator tasks. Do not use
-free-text scans to match a person.
+People start Article 15 access and Article 20 portability requests from Account
+settings or the published privacy contact. Operators handle cases at
+`/admin/privacy`, which requires an `admin` or `privacy_admin` account; deployment configuration requires a full administrator. The deployment
+owner remains responsible for controller facts, processor instructions,
+deadlines and independent review. A working export is not a compliance
+certificate.
 
 ## Initial setup
 
@@ -128,7 +70,7 @@ file cannot enable the release. Set `PRIVACY_EXPORT_EVIDENCE_VERSION` to an
 attributable review label and `PRIVACY_EXPORT_IMPLEMENTATION_ACTOR_IDS` to the
 actual implementation owners' user IDs.
 
-A full administrator records independent human reviews for `legal-content`,
+Independent signed-in full administrators record human reviews for `legal-content`,
 `dsar-process` and `security-review` against the evidence version returned by
 `GET /api/privacy/admin/readiness`. Do not copy an approval from another build
 or deployment, enter one on another person's behalf, or treat an environment
@@ -141,9 +83,7 @@ supervisory authority, privacy sources and retention settings before generation.
 Keep encrypted artifact storage excluded from backups and protect the managed
 key file. Investigate failed storage/key probes, stale cleanup or notifications,
 unsupported collectors and overdue cases in readiness. Cleanup runs hourly;
-physical deletion failures must remain visible until resolved. Key loss makes
-existing ciphertext unrecoverable, so follow the managed key recovery procedure
-without copying keys into a request or its evidence.
+physical deletion failures must remain visible until resolved. Key loss makes existing ciphertext unrecoverable. Recover the original ring from a separately protected copy, preserving owner and permissions, then recreate the API and inspect readiness. If no valid copy exists, record the affected source/artifact as unavailable and use reviewed casework; do not invent a replacement key and claim recovery.
 
 ## Export-key provisioning and rotation
 
@@ -156,8 +96,11 @@ key files are rejected. Production requires
 `OPENMAPX_EXPORTS_KEY_FILE`; the raw `OPENMAPX_EXPORTS_KEY` fallback is for
 explicit development environments only.
 
-For overlapping rotation, add the new key to the JSON ring, for example: The file must be compact JSON without a trailing newline; replace
-the descriptions with securely generated key material:
+For overlapping rotation, add a new version while retaining the existing key.
+The following shows the structure only. Replace descriptions with canonical
+32-byte base64url key material, then serialize the object as compact JSON with
+no trailing newline. A pretty-printed file copied directly from this example is
+rejected:
 
 ```json
 {
@@ -187,6 +130,63 @@ There is no automatic database-wide rewrapping command in this release. Keep
 necessary key recovery copies separately protected and outside ordinary
 application/database backups. Never put keys into a case attachment, log,
 command argument or release-evidence document.
+
+## Intake and response
+
+An authenticated person starts a request from Account settings or contacts the
+published privacy address. The API records receipt time, locale, time zone,
+request type and a response deadline. A request creates a case with its receipt details, source tasks and preservation records. Minimal safe receipt projections may be
+preserved before identity review; disclosure and broader collection require
+verified identity. Staff must record any clarification,
+restriction, extension or refusal with a reason code.
+
+Short-lived authentication and offline-control metadata is captured into bounded
+encrypted source snapshots at registration. Credentials and usable tokens are
+excluded. Missing capture dependencies create review tasks; later live data is
+not substituted for an expired receipt snapshot.
+
+The remaining live OpenMapX export uses one repeatable-read snapshot. It includes explicit,
+ownership-filtered OpenMapX projections and requests data from a connected
+managed Dawarich instance when that processor is configured. Independent
+controllers, off-host systems and operator-controlled sources become visible
+review tasks; they are never silently represented as searched or complete.
+
+## Delivery controls
+
+Archives are encrypted at rest with an envelope-encrypted data key. The subject must complete a fresh sign-in (including their configured second factor) for each download. Authorization is consumed once; a link alone does not grant access.
+The response rejects range requests, sets `Cache-Control: no-store`, and the
+artifact expires under its retention policy. The hourly privacy cleanup job removes ciphertext; failed physical deletion remains visible for retry. If a download is interrupted, the subject starts a new
+reauthentication challenge.
+
+No archive, nonce, credential or personal-data summary is sent by email.
+Status notifications invite the recipient to sign in. Identity-verification
+messages contain a short-lived, case-bound code sent only to the authoritative
+contact. The service records delivery after the HTTP response finishes; an
+interrupted stream does not count as successful delivery. Each subsequent
+download requires fresh authentication. Close the case after confirming the
+response channel.
+
+## Assisted and representative requests
+
+Use the privacy-admin intake form for inaccessible or deleted accounts. Supply
+an exact protected locator and the actual receipt time; do not create a
+replacement account. Prefer a fresh authenticated account proof, followed by a
+verified email challenge. Codes are rate-limited, expire, and cannot be reused
+for another case or party. Failed delivery remains visible for retry; operators
+cannot choose a different destination while issuing a challenge.
+
+A representative must prove their own delivery identity and have their
+authority reviewed separately. Review exceptional identity evidence only when
+recorded reasonable doubt justifies it. Case updates use versions and
+idempotency keys; reload after a conflict rather than applying a stale decision.
+An unavailable exact account match requires explicit manual source outcomes
+and reviewed supplements, never an invented user ID.
+
+Backup extraction warnings require a separate decision bound to that exact
+review and manifest. Read the proposed omissions before accepting them. A
+changed backup or warning set requires a new review. Unknown off-host copies,
+processor responses and generic text logs remain operator tasks. Do not use
+free-text scans to match a person.
 
 ## Browser-only supplement
 

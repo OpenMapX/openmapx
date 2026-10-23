@@ -1,5 +1,6 @@
 ---
-title: Air quality — ECCC named-community evidence
+description: Recorded release evidence and limits for ECCC named-community air-quality data.
+title: "Air quality: ECCC named-community evidence"
 air_quality_component: eccc
 status: shipped
 code_path: "integrations/air-quality-eccc,integrations/air-quality/current.ts,integrations/air-quality/forecast.ts,packages/air-quality/src/types.ts,packages/air-quality/src/api.ts,apps/web/src/components/panels/place/PlaceAirQuality.tsx"
@@ -16,8 +17,7 @@ blocker: "none"
 
 # ECCC named-community evidence
 
-**Status:** shipped
-**Owner:** safe optional-provider addendum
+Shipped as secondary named-community evidence; review recorded 30 August 2026.
 
 The bounded GeoMet current and forecast collections are shipped as official
 named-community evidence. OpenMapX reports distance, sets
@@ -25,5 +25,4 @@ named-community evidence. OpenMapX reports distance, sets
 and leaves the standard and AQHI/AQHI+ method unclaimed. These values cannot
 activate Canada's local AQHI resolver or become a headline index. The evidence
 card explicitly warns that the community value does not establish coverage for
-the selected point. This shipped scope therefore preserves useful official
-evidence without pretending that the two missing upstream associations exist.
+the selected point. A community value remains secondary until upstream evidence establishes both its coverage relationship and method identity.

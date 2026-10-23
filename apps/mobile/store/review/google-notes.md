@@ -1,71 +1,77 @@
-# Review notes and declarations — Google Play
+# Review notes and declarations: Google Play
+
+<a id="review-notes-and-declarations--google-play"></a>
+
+Preparation status: **not ready to submit**. The current foreground shell has no
+native navigation/auth dispatcher and advertises no navigation capabilities.
+Signing identities are placeholders and no physical beta reports are committed.
+Complete composition, artifact inspection and beta qualification before supplying
+declarations or reviewer steps.
 
 ## Background location declaration
 
-Copy verbatim into Play Console → App content → Location permissions.
+Before entering a declaration in Play Console, confirm the exact candidate:
 
-> OpenMapX uses background location so that turn-by-turn navigation the user has
-> explicitly started can keep guiding them while the screen is locked or the app
-> is minimised. This is core functionality: without it, guidance stops the moment
-> the phone is put in a pocket, which is how people actually navigate.
->
-> It is active only during a navigation session the user started by planning a
-> route and pressing Start. Arriving, or ending navigation, stops it immediately.
-> The user can instead grant foreground-only location; the app then works and
-> tells them plainly that guidance pauses when the screen locks.
->
-> Position is processed on the device. Coordinates are transmitted only to
-> compute a route the user requested, or to compute a new one after they have
-> left the route. No location history is kept, and there is no analytics,
-> advertising or tracking of any kind.
+- Uses background location only for a navigation session the user starts.
+- Stops tracking on End and arrival.
+- Offers foreground-only use with its background limitation explained.
+- Processes progress on the device and transmits position only for the declared
+  route/reroute/replan flows.
+- Keeps the disclosure, purpose strings, privacy policy, listing, video and
+  console answers consistent with the actual behavior.
+
+The generated `compliance/background-location-declaration.md` describes intended
+navigation behavior. Its existence does not establish that the installed app
+implements it. Review the data-practice registry and generated worksheets against
+the candidate before transcribing them.
 
 ## Foreground service
 
-Type: `location`. Shown for the duration of an active navigation session, with
-an ongoing notification the user can see and use to return to the app. Started
-only on an explicit Start, stopped on arrival or End.
+The reviewed Android service type is `location`. On a qualified build, verify
+that an explicit Start creates the ongoing notification and that End/arrival
+stops the service and removes it. Test the Android 14+ foreground-start restriction
+and notification-permission denial separately. Do not infer service behavior from
+manifest declarations alone.
 
 ## The in-app prominent disclosure
 
-Shown full-screen immediately before the OS prompt, and worded to match this
-declaration and the privacy policy:
-
-> **OpenMapX needs your location in the background**
->
-> To keep guiding you on the route you just started — including when the screen
-> is locked or the app is not in use.
->
-> Your position is processed on this device. Coordinates are only sent when you
-> ask for a route, or when you have left the route and need a new one.
->
-> You can choose "While using the app" instead. Guidance will then pause when
-> the screen locks. You can end navigation at any time.
+Verify the disclosure appears before the OS prompt, explains background use and
+on-device progress, describes route-request transmission, and offers a clear
+foreground-only choice and End control. Record grant and denial paths. Use the
+actual localized copy from the candidate in submission material; do not maintain
+a separately paraphrased permission promise here.
 
 ## Data safety
 
-Answers are generated from `apps/mobile/compliance/data-practices.json`; see
-`apps/mobile/compliance/google-data-safety-worksheet.md`. Summary: location and
-account data are collected; navigation location is processed on-device and not
-collected; nothing is shared for advertising; deletion is available in the app
-and at https://openmapx.com/delete-account.
+Use `compliance/data-practices.json` and
+`compliance/google-data-safety-worksheet.md` as preparation inputs. The account
+holder must confirm current console categories and collection/sharing/retention
+answers against actual app and server behavior. Check the public deletion page at
+`https://openmapx.com/delete-account` from an external network without signing in.
 
 ## App access
 
-No account required. Every feature including navigation works signed out.
+Verify browsing, search and the qualified navigation flow while signed out.
+Account-specific features may require sign-in. Enter any reviewer credentials
+directly in Play Console, never in the repository.
 
 ## Reviewer steps
 
-1. Open the app — no permission is requested.
-2. Search a destination, choose Directions, tap Start.
-3. Read the disclosure, accept, grant the OS prompt.
-4. Minimise the app and lock the screen; guidance continues and speaks.
-5. The ongoing notification is visible throughout.
-6. Return and tap End; location and the notification both stop.
+Test these on the exact candidate before providing them:
+
+1. Open the app; confirm no permission request at launch.
+2. Search a public destination, choose Directions and tap Start.
+3. Read the disclosure, test the grant/denial choices and OS permission flow.
+4. Minimize and lock the device; record actual guidance and the ongoing
+   notification.
+5. Return and tap End; confirm location, alerts and the notification stop.
+
+Record physical OS/callback/audio limitations. Do not describe unrun steps as
+working behavior.
 
 ## Other declarations
 
-- Ads: **no**.
-- Content rating: completed for a maps and navigation utility.
-- Target audience: not directed at children.
-- Video demonstrating background location: see
-  `background-location-video-script.md`.
+Confirm ads, target audience, content rating and production-access testing in the
+actual console. The repository does not establish completion of those forms.
+Prepare the video using `background-location-video-script.md` only after the
+flow is implemented and qualified.

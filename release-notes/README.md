@@ -31,7 +31,7 @@ Fragments remain pending until the release process deliberately incorporates the
 
 ## Preparing product release notes
 
-These files are pending inputs, not the published release history. During release preparation, maintainers should assemble a version-specific page under `docs/docs/releases/` with:
+Fragments remain pending until incorporated into a version-specific release page. During release preparation, maintainers should assemble a version-specific page under `docs/docs/releases/` with:
 
 - Highlights that explain the most useful changes to users.
 - Breaking changes and the installations or users they affect.
@@ -40,6 +40,10 @@ These files are pending inputs, not the published release history. During releas
 
 Review every pending fragment against the selected release commit. Incorporate only changes included in that release, preserve the instructions and leave fragments for unreleased changes pending. Remove incorporated fragments in the same preparation PR that adds the release page. Package changelogs remain separate and are produced by Changesets.
 
-This combines the curated release pages and upgrade guidance used by [Authentik](https://github.com/goauthentik/authentik/blob/main/website/docs/releases/_template.mdx) with the PR-based change lists used by [Immich](https://github.com/immich-app/immich/blob/main/packages/scripts/src/commands/notes.ts). Collecting separate pending files follows the established [news-fragment approach](https://towncrier.readthedocs.io/en/stable/); the frontmatter and headings above are OpenMapX's own convention. No additional fragment tool is required.
-
-Release-page generation and publication are not implemented by this contribution gate. The release workflow must assemble and verify the selected release before anything is published.
+Use `node scripts/prepare-product-release.mjs --version <version> [selected-fragments...]`
+from the repository root to prepare local metadata and notes. Existing release
+pages require deliberate editing; the helper does not overwrite them, create a
+commit or publish a release. Review the selected source, rehearse the exact
+candidate and follow the [product release workflow](../docs/docs/developer/product-releases.md)
+for approval and publication. The contribution gate only validates release
+information; merging a fragment does not publish it.

@@ -1,30 +1,31 @@
 # Web / native protocol matrix
 
-There is no deployed OpenMapX mobile release yet, so the first shell and web app
-implement protocol v3 only. A page advertising any other range must fail
+The committed shell, web protocol constants and release descriptor support v3
+only. This repository matrix does not establish live deployment history. A page advertising any other range must fail
 honestly, and no refused pairing may ever let the browser start a second
 navigation engine. A future release may introduce an overlap window once an
 older deployed binary actually exists.
 
 ## Where this is enforced
 
-Most of this matrix is executable rather than a table somebody checks by hand:
+The protocol contracts are covered by:
 
-- `apps/web/src/lib/mobile/runtimeCompatibility.test.ts` — the web app's view of
+- `apps/web/src/lib/mobile/runtimeCompatibility.test.ts` covers the web app's view of
   current, previous-only, and future-only ranges.
-- `apps/mobile/src/bridge/compatibility.e2e.test.ts` — the current native binary
+- `apps/mobile/src/bridge/compatibility.e2e.test.ts` covers the native bridge implementation
   against current and non-overlapping web ranges, through the real bridge.
-- `packages/core/src/navigation/mobileProtocol.test.ts` — the current vocabulary
+- `packages/core/src/navigation/mobileProtocol.test.ts` covers the current vocabulary
   and exact request/reply correlation contract.
 
-The rows below are the same matrix stated once in prose, for review. Run the
-manual column on a virtual device when changing the protocol.
+Run the manual checks on a composed virtual-device build when changing the
+protocol. A compatible handshake does not establish that navigation is available:
+`src/App.tsx` currently reports every navigation capability false.
 
 ## The matrix
 
-| Native | Web             | Navigation  | Notes                                                   |
+| Native | Web             | Handshake   | Notes                                                   |
 | ------ | --------------- | ----------- | ------------------------------------------------------- |
-| v3     | v3              | Works       | The first release pairing.                              |
+| v3     | v3              | Negotiates  | Navigation also requires composed capabilities.         |
 | v3     | Previous-only   | **Refused** | Update required. No browser engine, no partial session. |
 | v3     | Future-only     | **Refused** | Update required. No browser engine, no partial session. |
 | v3     | Malformed hello | **Refused** | Channel stays unhandshaken rather than half-open.       |
@@ -37,11 +38,15 @@ deployment order from the capabilities of those real releases.
 
 ## Manual checks on a virtual device
 
-Run these when the protocol changes, on a local Release build.
+Run these when the protocol changes. Use a development identity for alternate
+local origins; the official release identity is bound to the official origin.
+Active-session checks require a composed dispatcher and remain blocked in the
+current app.
 
 - [ ] Point the app at a web build advertising a range below v3. Confirm the
       update-required copy appears and that Start is disabled.
-- [ ] Point it at the current v3 web build. Confirm the full native feature set.
+- [ ] Point it at the current v3 web build. Confirm v3 is selected and the advertised capabilities match actual
+      composition. The current app must report navigation unavailable.
 - [ ] Point it at a web build advertising a range above v3. Confirm the
       update-required copy appears, that Start is disabled, and that browsing and
       route planning still work.

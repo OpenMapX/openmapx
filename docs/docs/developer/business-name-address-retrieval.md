@@ -5,13 +5,32 @@ description: Source identities, reusable regressions and a bounded local lexical
 
 # Business name/address retrieval: decision and next steps
 
-**2026-10-08: GO for staged local lexical development over existing Overture
-data; NO-GO for production adoption yet.** The disposable PostgreSQL probe
-retrieves Moch without another ingestion source. Combined with saved geocoder
-results, verified Hit@3 rises **4/9→8/9**. A mall association gap, three weak
-address-query Enter decisions, unknown deployed generations and unmeasured
-regional/cold performance remain gates. No application provider/schema,
-production data/cache/configuration, ingestion or deployment changed.
+The October 8, 2026 investigation supported further local lexical development
+over existing Overture data. It did not qualify production adoption. The
+disposable PostgreSQL probe retrieved Moch without another ingestion source;
+combining it with the saved geocoder results raised verified Hit@3 from 4/9
+to 8/9. Mall association, three weak address-query Enter decisions, unknown
+deployed generations, and unmeasured regional/cold costs remained unresolved.
+
+These are dated findings. The probe changed no application provider/schema,
+production data/cache/configuration, ingestion, or deployment. Run the replay
+below to inspect current ranking over those fixed inputs; recapture sources
+and inspect current code before proposing production work.
+
+## Reproduce the fixed-input checks
+
+Run from the repository root:
+
+```bash
+pnpm exec vitest run scripts/discovery-eval/business-name-address/evidence.test.ts
+pnpm exec tsc -p scripts/discovery-eval/business-name-address/tsconfig.json
+pnpm -C packages/cli exec tsx ../../scripts/discovery-eval/business-name-address/replay.ts \
+  --out /tmp/business-retrieval-replay.json
+```
+
+The tests check adapter and term-extractor contracts. The replay uses the
+current checkout's ranking/Enter policy with the October 7 projections. It
+makes no live provider request and implements no lexical search provider.
 
 ## Reusable inputs and external evidence
 
@@ -23,21 +42,21 @@ provides commands, recapture conditions and rights. Inputs were captured on
 
 Dated dropdowns/status snapshots, timings, repeated per-query lists, historical
 rank/Enter outputs and the original report are in the [October 7 capture archive](https://gist.github.com/Medformatik/c36d8b8f44c88971277659512a533a51/8b33cd9238ba743f54f3235f2831470cf3bb5972).
-The throwaway code, 3,255-row source projection, SQL plans/costs, current-main
+The throwaway code, 3,255-row source projection, SQL plans/costs, October 8 main
 replay/composition and reproduction instructions are in the [October 8 lexical
 probe archive](https://gist.github.com/Medformatik/3fdd91df857e72bf3a492836324f3c69/4f458cce9bdcce34cb335881e91c56a5bbf781e1). Both commit permalinks have checksum manifests and
 attribution. Full raw operator files/screenshots/test logs were temporary; no
 public durable archive is claimed for them. Prior Git history is preserved.
 
-| Input/condition                  | Pin or limitation                                                                                                                                                                                       |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Initial source/replay            | Main `3c80939d26a09f131b16d849895255436b5e5798`                                                                                                                                                         |
-| Current-main replay/composition  | Freshly fetched `fe6b7969979ae024655e38d3b4f605295e757f93`, clean source export; #432 included; #429/#438 evaluated separately below                                                                    |
-| Captured query context           | EN, Berlin `[13.416,52.5194]`, zoom 15; upstream rounded `[13.42,52.52]`, MapTiler limit 6/autocomplete/types including POI, aggregate limit 8                                                          |
-| Public deployment/provider/cache | Unknown deployment SHA, provider generation/chain, OSM extract, active Overture generation and cache history; authenticated status 401. Enabled registry does not prove health/data/capability bindings |
-| OSM                              | API bbox/direct versioned elements, not deployed data or a regional PBF; Overpass failed before API fallback                                                                                            |
-| Overture                         | Dated release `2026-09-23.1`, bbox `[13.408,52.513,13.426,52.527]`, 3,255 rows; export SHA256 `a9ec6402ecd390d6200151ace4d5a5a7106d1ca8641652e19dd336211684ba93`; STAC 403, explicit release readable   |
-| Live UI                          | Separate dated anonymous capture, 1280×800/DPR1/dark/fixed Berlin camera; 13 lists/two Enter observations. No prototype UI or application-only comparison                                               |
+| Input/condition                   | Pin or limitation                                                                                                                                                                                       |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Initial source/replay             | Main `3c80939d26a09f131b16d849895255436b5e5798`                                                                                                                                                         |
+| October 8 main replay/composition | Freshly fetched `fe6b7969979ae024655e38d3b4f605295e757f93`, clean source export; #432 included; #429/#438 evaluated separately below                                                                    |
+| Captured query context            | EN, Berlin `[13.416,52.5194]`, zoom 15; upstream rounded `[13.42,52.52]`, MapTiler limit 6/autocomplete/types including POI, aggregate limit 8                                                          |
+| Public deployment/provider/cache  | Unknown deployment SHA, provider generation/chain, OSM extract, active Overture generation and cache history; authenticated status 401. Enabled registry does not prove health/data/capability bindings |
+| OSM                               | API bbox/direct versioned elements, not deployed data or a regional PBF; Overpass failed before API fallback                                                                                            |
+| Overture                          | Dated release `2026-09-23.1`, bbox `[13.408,52.513,13.426,52.527]`, 3,255 rows; export SHA256 `a9ec6402ecd390d6200151ace4d5a5a7106d1ca8641652e19dd336211684ba93`; STAC 403, explicit release readable   |
+| Live UI                           | Separate dated anonymous capture, 1280×800/DPR1/dark/fixed Berlin camera; 13 lists/two Enter observations. No prototype UI or application-only comparison                                               |
 
 ## Identity and source presence
 
@@ -74,12 +93,12 @@ name without address decomposition. Code: `integrations/geocoding-maptiler/provi
 `integrations/poi-overture/index.ts`, `packages/core/src/utils/overpass.service.ts`,
 `integrations/search-suggestions/orchestrator.ts`, shared `suggestionRanking.ts`.
 
-| Offline layer/run                         | Verified Hit@3                 | Interpretation                                                                                                                                                   |
-| ----------------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Saved raw/adapted/combined                | 4/9                            | Five Moch variants have no confirmed exact tenant; three have unresolved possible matches                                                                        |
-| Same pool, initial/current-main ranker    | 4/9→4/9                        | #432 puts Berlin MediaMarkt above Rijswijk; Enter becomes weak/search instead of opening Rijswijk. EDEKA Alexa also becomes weak/search. Total 65 rows unchanged |
-| Local lexical candidates                  | 7/8 inspected-source positives | Four Moch variants, two MediaMarkt variants and Schaaf; REWE outside bbox excluded from this denominator, not called absent                                      |
-| Lexical+saved adapter/current-main ranked | 8/9                            | Combined 90→ranked 75; EDEKA Alexa stays missing. Both lexical negatives return 0; geocoder address/area fallback remains                                        |
+| Offline layer/run                           | Verified Hit@3                 | Interpretation                                                                                                                                                   |
+| ------------------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Saved raw/adapted/combined                  | 4/9                            | Five Moch variants have no confirmed exact tenant; three have unresolved possible matches                                                                        |
+| Same pool, initial/October 8 main ranker    | 4/9→4/9                        | #432 puts Berlin MediaMarkt above Rijswijk; Enter becomes weak/search instead of opening Rijswijk. EDEKA Alexa also becomes weak/search. Total 65 rows unchanged |
+| Local lexical candidates                    | 7/8 inspected-source positives | Four Moch variants, two MediaMarkt variants and Schaaf; REWE outside bbox excluded from this denominator, not called absent                                      |
+| Lexical+saved adapter/October 8 main ranked | 8/9                            | Combined 90→ranked 75; EDEKA Alexa stays missing. Both lexical negatives return 0; geocoder address/area fallback remains                                        |
 
 Moch ranks first for four retrieved variants. Enter opens it for `EDEKA Moch`,
 but remains weak/search for `EDEKA Moch Grunerstraße 20`, `EDEKA Grunerstraße 20
@@ -94,7 +113,8 @@ unjudged. Offline outputs are not observed new live navigation.
 ancestor `5f07b70967319b4b2c86769b542b551b93f98e02`, using clean task-owned source
 exports and identical input pools. Fresh main
 `9b212363ba891e97ac4a19c080a10bbc0e343cbd` produces the same traces as that base.
-No other task's branch/worktree was changed; #438 is unmerged in this comparison.
+The comparison treats #438 as an unmerged candidate at those revisions. It
+does not describe the PR's current status.
 
 Geocoder candidates stay78 but ranked rows rise65→78; lexical+geocoder candidates
 stay90 but ranked rows rise75→90. All candidates survive shared ranking in these
@@ -103,7 +123,7 @@ unchanged. This is deduplication preservation, not new upstream/local retrieval.
 The two MediaMarkt GERS rows and MapTiler branch now remain separate until
 corroborated cross-source identity. Duplicate handling remains an integration
 gate; the missing Alexa association and three weak Moch address selections remain.
-The archive contains separate base/head/current-main traces and recomputed counts.
+The archive contains separate base/head/October 8 main traces and recomputed counts.
 
 ## Local probe and bounded integration rules
 
@@ -126,8 +146,8 @@ brand+city without street, multilingual matching and mall associations remain in
 | Import/index build  | 1.60s/0.16s including Docker/psql overhead; 3,255 places+3,255 addresses                                                                                                                              |
 | Table/index bytes   | 2,392,064/1,056,768 across both tables                                                                                                                                                                |
 | Memory              | Whole-container cgroup peak 300,068,864 bytes over probe session, not process peak RSS                                                                                                                |
-| Warm SQL p95        | 0.205–3.396ms per-query range; 20 EXPLAIN ANALYZE/BUFFERS repeats/query, nearest-rank p95; warmed by import/earlier calls                                                                             |
-| Warm command p95    | 67.8–94.0ms including Docker exec/psql startup; not application/provider latency                                                                                                                      |
+| Warm SQL p95        | 0.205 to 3.396ms per-query range; 20 EXPLAIN ANALYZE/BUFFERS repeats/query, nearest-rank p95; warmed by import/earlier calls                                                                          |
+| Warm command p95    | 67.8 to 94.0ms including Docker exec/psql startup; not application/provider latency                                                                                                                   |
 | Plans/cold/scale    | Selective bitmap indexes; broad EDEKA includes sequential scans. LIMIT caps candidates, not scanned rows. OS-cold/regional/production costs unknown; shared host load uncontrolled                    |
 
 Follow-up: an isolated regional lexical index over existing imports, retaining the
@@ -158,10 +178,10 @@ epoch/publication/staleness. Fingerprint is available in authenticated status,
 not the card summary. Ready alias-index/healthy Overture does not establish business
 lexical coverage. Documentation corrected; no admin behavior/shared caches changed.
 
-Next: review separately owned #438/#429;
-address verified name+address Enter intent while retaining unknown-identity guards;
-resolve or retain the EDEKA Alexa gap; inspect intended generation/resolver and
+At the time of the investigation, follow-up work was to compare #438/#429,
+address verified name+address Enter intent while retaining unknown-identity guards,
+resolve or retain the EDEKA Alexa gap, inspect the intended generation/resolver, and
 measure regional/cold/warm resource costs. Promotion requires 9/9 verified positives
 in top 3, zero wrong-branch/false exact negatives, branch preservation and controlled
-fallback/latency. No production feature, embeddings, ATP pipeline, global rollout,
-merge or deployment is authorized by this evaluation.
+fallback/latency. This evaluation does not qualify a production feature, embeddings, an ATP
+pipeline, or a global rollout.

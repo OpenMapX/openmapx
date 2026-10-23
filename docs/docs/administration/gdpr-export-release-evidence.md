@@ -6,59 +6,78 @@ sidebar_position: 9
 
 # GDPR export release evidence
 
-This page is an evidence record for the technical data-subject access and
-portability workflow. It is deliberately not a compliance certificate. The
-deployment controller must complete and approve the human legal and security
-review before enabling wording that describes the workflow as verified.
+Generation requires current machine evidence, healthy runtime checks and
+independent human reviews. Use [Data-subject requests](./data-subject-requests.md)
+for deployment setup. `GET /api/privacy/admin/readiness` reports the current
+gate; this page cannot enable it.
+
+The dated sections below are saved technical review receipts. Their counts,
+fingerprints, branch descriptions and “uncommitted” states belong to those
+checkpoints. They are not fresh checks of the current checkout or approval for
+a running deployment. No human legal/security approval is asserted here.
 
 ## Release identity and compatibility
 
-The release pipeline must replace the values below with the exact source
-revision and generated evidence version before recording an approval:
+Record the immutable release revision and the evidence version returned by readiness. Confirm compatibility against the current source contracts:
 
-| Item                                | Required value                                                                                      |
-| ----------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Evidence version                    | `gdpr-release-v1.<sha256>` derived from the review label, source fingerprint and deployment facts   |
-| Repository revision                 | the immutable release commit                                                                        |
-| Privacy migration range             | `0020`–`0036` (receipt snapshots, assisted identity, email challenges and delivery leases included) |
-| Catalogue version                   | the `version` field of every registration in `apps/api/src/privacy/catalogue.ts`                    |
-| Managed Dawarich image              | `freikin/dawarich:1.15.3`                                                                           |
-| Managed Dawarich application commit | `e32b70701b2467b862d4b5bc27ac428999997c1b`                                                          |
-| Managed Dawarich image digest       | `sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498`                           |
-| Managed Dawarich schema fingerprint | `4ae830ea67dc4894d814d4e2e2d19cb92571c30f2df1df017417f671e26a1e09`                                  |
-| Backup manifest contract            | format `2`, regular files, size and lowercase SHA-256 verified immediately before extraction        |
+| Item                                | Required value                                                                                                                                                                  |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Evidence version                    | `gdpr-release-v1.<sha256>` derived from the review label, source fingerprint and deployment facts                                                                               |
+| Repository revision                 | the immutable release commit                                                                                                                                                    |
+| Privacy migrations                  | Review all committed production migrations in `apps/api/src/db/migrations`; `0020` through `0036` identify the original privacy implementation, not the complete current schema |
+| Catalogue version                   | the `version` field of every registration in `apps/api/src/privacy/catalogue.ts`                                                                                                |
+| Managed Dawarich image              | `freikin/dawarich:1.15.3`                                                                                                                                                       |
+| Managed Dawarich application commit | `e32b70701b2467b862d4b5bc27ac428999997c1b`                                                                                                                                      |
+| Managed Dawarich image digest       | `sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498`                                                                                                       |
+| Managed Dawarich schema fingerprint | `4ae830ea67dc4894d814d4e2e2d19cb92571c30f2df1df017417f671e26a1e09`                                                                                                              |
+| Backup manifest contract            | format `2`, regular files, size and lowercase SHA-256 verified immediately before extraction                                                                                    |
 
-An image, application commit, schema relation, collector contract, catalogue
-copy, legal setting or archive schema change invalidates the previous evidence
-and requires a new review. Only current format-2 backup manifests are accepted for restore and privacy
+Readiness derives review identity from source/build, catalog/contracts, canonical copy and deployment facts. A changed identity requires matching machine evidence and fresh approvals; do not reuse a fingerprint from the history below. Only current format-2 backup manifests are accepted for restore and privacy
 extraction; size-only manifests are unsupported.
 
 ## Automated evidence
 
-Run these commands from the repository root on the exact release revision and
-attach their machine-readable output to the release record:
+Follow the current [Contributing quality bar](https://github.com/OpenMapX/openmapx/blob/main/CONTRIBUTING.md#quality-bar)
+on the exact release checkout. The portable suite alone excludes database and
+Docker qualification. Install both locked dependency sets and run the release's
+required checks, including:
 
 ```bash
-pnpm check:policy
-pnpm openapi:generate && pnpm check-openapi
-pnpm check-types
-pnpm lint
-pnpm exec biome check . --max-diagnostics=1000 --reporter=summary
-pnpm exec vitest run
+pnpm verify:full
+pnpm test:database api-privacy
+pnpm test:database ingestion
+pnpm test:database export-restore
 git diff --check
 ```
 
-The Docker gate is required whenever managed Dawarich or isolated
-backup extraction is enabled. It must run against the exact pinned image and
-exercise the populated-account fixture, foreign-row isolation, credential
-sentinels, attachment validation, cancellation and deterministic archive
-semantics. If the image or fixture is unavailable, the readiness result remains
-false and the release record must say `unavailable` rather than infer success.
-For the managed Dawarich fixture, run:
+Database runs require an owned disposable PostgreSQL/PostGIS database with all
+production migrations. The export/restore group additionally requires the real
+retained-backup archive from
+`services/ops-agent/privacy-backup/test-fixture.mjs`. Follow CONTRIBUTING for its
+pinned-image preparation and `OPENMAPX_REAL_BACKUP_FIXTURE`; a missing fixture
+must fail qualification rather than count as a skip.
+
+The exact-image managed Dawarich fixture is a separate check:
 
 ```bash
 OPENMAPX_RUN_DAWARICH_EXPORT_TESTS=1 pnpm exec vitest run --project node --maxWorkers=1 apps/ops-agent/src/dawarich-subject-export.integration.test.ts
 ```
+
+Required production image/build/runtime checks remain separate. Record the
+revision, fixture/image digests, command outcomes and unperformed checks.
+Unavailable Docker images or fixtures remain unavailable evidence.
+
+After the checks, generate machine evidence on the unchanged checkout:
+
+```bash
+pnpm validate:privacy-release /absolute/path/privacy-release-validation.json
+```
+
+This command runs translation, OpenAPI and policy validators and binds them to
+the source/build fingerprint. It does not run the full suite, database fixtures,
+production build or human review. Official release publication carries matching
+evidence and the immutable collector pin; custom deployments must mount the
+file read-only as described in the setup guide.
 
 ## Machine readiness
 
@@ -67,15 +86,14 @@ must be false when any of the following is missing, stale or mismatched:
 
 - the export key and private, backup-excluded artifact storage;
 - cleanup, SLA/escalation and notification health;
-- every catalogue registration and required operator task;
+- availability of every catalogue collector or explicit operator-review workflow;
 - managed-service and backup collector compatibility;
 - policy, OpenAPI and bilingual legal-copy checks;
 - current, unexpired approvals scoped to this evidence version.
 
 Readiness is not a substitute for the controller's Article 12/15/20 analysis,
 processor instructions, rights-of-others balancing, off-host review or
-jurisdiction-specific restrictions. It only prevents the application from
-presenting an incomplete technical result as complete.
+jurisdiction-specific restrictions. Inspect individual case tasks and omissions as well as release readiness; release capability does not mean that every source was collected for a particular person.
 
 ## Human approvals and unresolved work
 
@@ -105,10 +123,10 @@ boundaries or separate tasks. The browser supplement is generated locally and
 is never uploaded. Cryptographic deletion protects expired export ciphertext;
 it does not erase a copy held by an uncontrolled backup or external controller.
 
-## Implementation review — 2026-09-04
+## Implementation review: 2026-09-04 {/* #implementation-review--2026-09-04 */}
 
-The review started from `1fe0d410` on `main` with a clean working tree. Review
-fixes are intentionally uncommitted. This record is technical evidence, not a
+The review started from `1fe0d410` on `main` with a clean working tree. At that checkpoint, review
+fixes were uncommitted. This record is technical evidence, not a
 legal approval or a sign-off that all six implementation plans are complete.
 
 The review corrected:
@@ -175,11 +193,11 @@ Validation recorded during the review:
 The isolated database container and its test volume were removed. No worktree,
 staging, commit, or push was performed.
 
-## Release-readiness follow-up — 2026-09-05
+## Release-readiness follow-up: 2026-09-05 {/* #release-readiness-follow-up--2026-09-05 */}
 
-The follow-up remains on `main`, based on
-`1fe0d41066fa0a83572216f16078f0d658f313a0`, with all implementation changes
-uncommitted. A source fingerprint identifies the reviewed bytes; the base
+The saved follow-up ran on `main`, based on
+`1fe0d41066fa0a83572216f16078f0d658f313a0`, with implementation changes
+uncommitted at that checkpoint. A source fingerprint identifies the reviewed bytes; the base
 revision alone does not identify these changes. No deployment approval has been
 entered by the implementing agents.
 
@@ -241,7 +259,7 @@ and cover the added achievement, route-video, service-setting, trip-source,
 planned-itinerary, and point-dimension surfaces. Credential, API-key, claim-token,
 and selection-token sentinels remain excluded.
 
-The CI database job runs those Docker fixtures and passes the verified tar to
+The CI database qualification runs those Docker fixtures and passes the verified tar to
 the serial database suite. Tests that intentionally run concurrent operations
 continue to exercise those races; file-level serialization prevents global
 retention fixtures from deleting another suite's test cases.
@@ -286,12 +304,12 @@ runtime readiness and controller configuration, and obtain the independent
 human approvals. No registry publication or deployment approval was performed
 in this review.
 
-All review changes remain uncommitted on `main`. No worktree, staging, commit,
+At this checkpoint, all review changes remained uncommitted on `main`. No worktree, staging, commit,
 push, production notification or deployment approval was performed. The
 disposable verification database/container volume and the root-owned API build
 tag were removed after verification.
 
-## Restore-erasure alignment — 2026-09-05
+## Restore-erasure alignment: 2026-09-05 {/* #restore-erasure-alignment--2026-09-05 */}
 
 A subsequent review of the preceding erasure implementation found that a valid
 but incorrect journal key silently matched no erased accounts. It also found
@@ -329,8 +347,7 @@ an API sentinel. Six scenarios passed: erasure and cleanup parity; wrong-key
 rejection with no users; identifiers containing COPY/SQL metacharacters; mixed
 database/filesystem restore; rejection of an unsupported schema; and replay
 failure preserving API isolation. Failed/missing/unsafe physical storage is
-also exercised before successful cleanup. CI now runs this fixture in the
-database job.
+also exercised before successful cleanup. The current database group inventory includes this restore fixture.
 
 Verification for the follow-up:
 
@@ -359,16 +376,16 @@ Matching machine evidence was regenerated. Earlier implementation approvals
 and evidence must not be reused for these changed source bytes. Human review
 and deployment prerequisites remain as documented above.
 
-These follow-up changes are uncommitted on top of `2f4078d5` on `main`.
+These follow-up changes were uncommitted on top of `2f4078d5` on `main`.
 No production data, production journal, deployment approval or remote Git
 reference was changed.
 
 The disposable verification database and every fixture Compose container and
 volume were removed after testing. Existing user containers were untouched.
 
-## Current formats only — 2026-09-05
+## Current formats only: 2026-09-05 {/* #current-formats-only--2026-09-05 */}
 
-The operator confirmed that no OpenMapX instances have been deployed. The
+At that checkpoint, the operator reported no deployed OpenMapX instances. The
 feature therefore has no backward-compatibility or migration workflow for
 pre-release data. Journal versions other than the current bound format use
 ordinary validation errors; the special recovery branch and runbook were
@@ -392,14 +409,14 @@ Final verification after removal:
 | Repository type checking                               | All 29 tasks passed                                            |
 | Release validation                                     | Translation, policy and OpenAPI checks passed; 368 operations  |
 
-The current source fingerprint is
+The checkpoint source fingerprint is
 `cd0a7c4e850008885b2fe290e77eda54d125a480544bc136891f51caacae24ea`.
 Matching validation evidence was regenerated. Earlier fingerprints in this
 report describe previous review checkpoints and must not be used for this
-source. These changes remain uncommitted on `main`; no deployed data was
+source. At that checkpoint these changes were uncommitted on `main`; no deployed data was
 converted or removed and nothing was pushed.
 
-## Deployment setup — 2026-09-05
+## Deployment setup: 2026-09-05 {/* #deployment-setup--2026-09-05 */}
 
 The setup follow-up is based on `0c315c63` on `main`. The earlier uncommitted
 checkpoint descriptions above refer to their original review dates; the export
@@ -459,8 +476,8 @@ was added and the guard plus the UI slice passed; no production source was
 changed to satisfy the guard.
 
 The disposable runtime probe containers and API build tag were removed.
-Existing user containers were untouched. These changes are uncommitted on
-`main`; no release was published, approval recorded, email sent or Git change
+Existing user containers were untouched. These changes were uncommitted on
+`main` at that checkpoint; no release was published, approval recorded, email sent or Git change
 pushed.
 
 ### Commit-time legal date update

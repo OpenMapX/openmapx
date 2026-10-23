@@ -1,31 +1,41 @@
-# Overture ↔ OSM Conflation Evaluation
+# Overture and OSM conflation evaluation
 
-This directory contains the threshold-sweep evaluation harness for tuning the
-Overture Places ↔ OpenStreetMap POI conflation parameters.
+Use this harness to compare Overture Places and OpenStreetMap POI conflation
+thresholds against human-labelled candidate pairs. The harness reads the entire
+installed source tables into memory, so use a small, disposable regional dataset.
+Do not run the preparation or threshold experiments against a live production
+database.
+
+The preparation commands below run from the repository root through a
+data-manager configured for that disposable environment. The evaluation commands
+run from `services/data-manager/` and require `DATABASE_URL` for the same database
+in the shell. See the [Overture guide](../../../../../../docs/docs/features/overture-places.md)
+for source preparation and publication requirements.
 
 ## Workflow
 
 ### 1. Pull Overture data
 
 ```sh
-pnpm openmapx data download overture --region europe/berlin
+pnpm openmapx data overture-pull europe/germany/berlin
+pnpm openmapx data overture-ingest europe/germany/berlin
 ```
 
 ### 2. Extract OSM POIs
 
 ```sh
-pnpm openmapx data download osm --region europe/berlin
-pnpm openmapx data build overture-extract --region europe/berlin
+pnpm openmapx data download osm europe/germany/berlin
+pnpm openmapx data overture-extract europe/germany/berlin
 ```
 
 ### 3. Generate candidates.tsv
 
-Run the harness **without** `--labeled`. It reads both tables from the DB,
+Change to `services/data-manager/` and run the harness without `--labeled`. It reads both tables from the DB,
 generates up to 300 stratified candidate pairs, and writes `candidates.tsv`:
 
 ```sh
 node --import tsx/esm src/jobs/overture/eval/run.ts \
-  [--output candidates.tsv]
+  --output candidates.tsv
 ```
 
 Pairs are stratified across four name-similarity bands to avoid oversampling
@@ -40,7 +50,7 @@ near-identical matches:
 
 ### 4. Label the pairs
 
-Open `candidates.tsv` and add a fifth column `isMatch` (`true`/`false`) for each
+Open `candidates.tsv` and add an `isMatch` column (`true`/`false`) for each
 row: `true` if the OSM POI and Overture place refer to the same real-world place,
 `false` for coincidental proximity.
 

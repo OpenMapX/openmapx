@@ -2,7 +2,10 @@
 
 Standalone Apache-2.0 CLI for scaffolding, validating, packaging and bundling declarative OpenMapX extensions. It shares its portable contracts with the host through `@openmapx/extension-contracts`.
 
-This package is being qualified for its first public release; this change does not publish it. For local evaluation, use `pnpm --filter @openmapx/extension-cli pack --out /tmp/extension-cli.tgz` and install that tarball in your authoring project. The registry commands below apply once the release is published. Node.js 24 or newer is required.
+Node.js 24 or newer is required. For local qualification or an unpublished
+version, run `pnpm --filter @openmapx/extension-cli pack --out /tmp/extension-cli.tgz`
+and install that tarball in your authoring project. Use registry installation
+only after confirming the desired version is published.
 
 ## Install
 
@@ -36,7 +39,10 @@ Scaffold a `service.json` for a new community service:
 openmapx-ext scaffold service my-data-service --out ./services/my-data-service
 ```
 
-Creates `service.json` with the id substituted, ready to be filled in and registered with the OpenMapX service registry.
+Creates `service.json` with the id and owned-schema name substituted. Fill in
+the service definition, validate it as a community service, then reference it
+from an extension bundle. Scaffolding does not install or register the service
+in a running host.
 
 ### validate
 

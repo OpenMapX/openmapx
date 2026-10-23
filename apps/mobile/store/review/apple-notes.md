@@ -1,64 +1,61 @@
-# App Review notes — Apple
+# App Review notes: Apple
 
-Paste into App Store Connect → App Review Information. No credential goes in
-this file; reviewer credentials, if any are ever needed, are entered directly in
-App Store Connect. The text below is what gets pasted.
+<a id="app-review-notes--apple"></a>
 
-**No account is required.** Search, directions and full turn-by-turn navigation
-all work signed out. There is nothing to log into to review this app.
+Preparation status: **not ready to submit**. `src/App.tsx` does not connect
+navigation or system-authentication commands to native implementations. The
+bridge reports all navigation capabilities false. Public signing identities are
+placeholders, and no physical beta report is committed. Do not paste proposed
+background-navigation claims into App Store Connect until the candidate passes
+those requirements.
 
-**The interface is a web app inside a WebView, and that is deliberate.** The
-same interface runs at https://openmapx.com. What the native code provides is
-everything a browser cannot do:
+Keep reviewer credentials in the password manager and enter them directly in
+App Store Connect. Never put them in this file or a public report.
 
-- Background location, so guidance continues with the screen locked.
-- The navigation engine itself — progress along the route, off-route detection,
-  and cue timing — running headlessly, so it keeps working when the WebView is
-  suspended or killed.
-- A native SQLite session, so a trip survives a crash or a process restart.
-- Audio focus and speech, so directions are spoken over other audio.
-- Locally scheduled alerts for public transport, so a rider is woken before
-  their stop with no network and no push service.
-- Verified link handling and the recovery UI shown when the page cannot load.
+## Confirm before writing the submission notes
 
-The WebView is restricted to one compiled-in origin, enforced by both the
-navigation allowlist and WebKit App-Bound Domains. There is no server picker.
+- Record the exact IPA, source commit, installed version/build and frozen web
+  build. Inspect actual signing, permissions, entitlements and version fields.
+- Verify map browsing, search and the qualified navigation flow while signed out.
+  Account settings and saved account data can require sign-in.
+- Describe the WebView as the product UI at the compiled origin. List only native
+  capabilities that are composed and observed on the candidate.
+- Check the generated privacy worksheet against the current console questions
+  and actual data flows, including route requests, accounts and saved places.
+- Verify the iOS sign-in policy: no third-party primary sign-in, with
+  OpenStreetMap/Mapillary linking available only after account sign-in.
+- Complete physical background, audio, alert and recovery qualification. Link the
+  resulting sanitized evidence in the private review submission where appropriate.
 
-**To see background location working:**
+## Reviewer steps to verify on the candidate
 
-1. Open the app. No permission is requested at launch.
-2. Search for any destination and choose Directions.
-3. Tap Start. A full-screen disclosure explains that location is used in the
-   background to keep guiding you while the screen is locked, that progress is
-   computed on the device, and that you can choose foreground-only instead.
-4. Accept, then grant the OS prompt.
-5. Lock the screen. Guidance continues and speaks.
-6. Return and tap End. Location stops immediately.
+After composition and qualification, test these steps before supplying them:
 
-Choosing foreground-only at step 3 is fully supported: the app works and says
-plainly that guidance pauses when the screen locks.
+1. Open the app and confirm no location permission request appears at launch.
+2. Search a public destination, choose Directions and tap Start.
+3. Read the prominent disclosure before granting location. Check both the
+   background and foreground-only choices.
+4. Lock the screen and record actual location delivery and spoken guidance.
+5. Return and tap End. Confirm location and scheduled alerts stop and storage is
+   cleaned.
 
-**Privacy.** Position while navigating is processed on the device and is not
-transmitted. Coordinates leave the device only to compute a route the user asked
-for, or a new one after they have left the route. There is no location history,
-no analytics SDK, no crash reporter, and no advertising identifier.
+Do not claim these steps work from helper tests alone. A foreground-only grant
+must report its background limitation. Force quit ends guidance; do not promise
+that iOS relaunches it automatically.
 
-**Sign-in.** Email, password, email OTP and two-factor all run in the app. OAuth
-and passkeys open the system browser, per RFC 8252, because embedded user agents
-are not a durable contract for either. No third-party provider is offered as a
-way to create or enter an account on iOS; OpenStreetMap and Mapillary can only
-be linked to an account that already exists.
+## Security and offline wording
 
-**No remote code.** The app executes no downloadable native bundle and no
-over-the-air update. Administrator-installed community integrations, which the
-website supports, are disabled entirely in the app. The bridge between the page
-and the native side speaks a fixed, versioned, schema-validated vocabulary — it
-cannot invoke arbitrary native functionality.
+The source restricts WebView navigation to the compiled origin, disables camera,
+microphone and WebView geolocation, and exposes a bounded bridge vocabulary.
+Community frontend runtime code is disabled in both the installed app and the web
+host. There is no native OTA update channel in the release design. The remotely
+served web UI still changes when that web build is deployed, so freeze it during
+review.
 
-**Offline, honestly.** A trip started while online continues through complete
-loss of connectivity, including through the WebView being killed. A cold start
-with no cached page cannot show the map, and the app says so rather than showing
-a blank screen. The listing does not claim offline maps.
+Captured-route processing tests do not establish installed offline guidance.
+After qualification, describe only observed continuity and callback limits.
+There is no guaranteed offline cold-start map when the remote page is uncached.
+Check native recovery controls in that state and avoid claims of fully offline
+maps or force-quit survival.
 
-**Force quit** ends guidance. iOS does not relaunch the app for us and the app
-does not pretend otherwise.
+Use `qa/release/store-review-checklist.md` for the final submission review.

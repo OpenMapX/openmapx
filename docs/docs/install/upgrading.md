@@ -1,21 +1,17 @@
 ---
 title: Upgrading
-description: Keep a self-hosted OpenMapX deployment current — optionally back up, pull new code and images, re-render the stack, and replace containers.
+description: Update the host checkout and pinned application release, verify migrations, and preserve recovery options.
 sidebar_position: 6
 ---
 
 # Upgrading
 
-Upgrading an OpenMapX deployment means moving the checkout to newer code and the
-running containers to newer images. The same `openmapx` CLI that brought the
-stack up drives the upgrade: you pull the latest code, re-render the compose
-stack if anything structural changed, fetch the newer images, and replace the
-containers. Database migrations apply themselves on the next API boot, so there
-is no separate migration step to run.
+Update both the host checkout and the selected container images. API startup
+applies pending database migrations from its image. Plan a maintenance window
+and preserve recovery state before replacing services.
 
-This page covers a normal code/image upgrade. Refreshing the _data_ a deployment
-serves — new OSM extracts, GTFS feeds, rebuilt indexes — is a different cadence
-and lives in [Preparing data](./preparing-data.md).
+Refresh source datasets and indexes separately, following
+[Preparing data](./preparing-data.md).
 
 :::tip[Backup recommended]
 A pre-update backup is optional, but recommended when the deployment contains
@@ -25,45 +21,18 @@ this choice with the operator and enables it by default.
 
 ## How an OpenMapX upgrade works
 
-Two things move during an upgrade, and they move independently:
+The host checkout supplies the CLI, service definitions, and configuration used
+to operate the stack. Application images are prebuilt and selected through a
+release manifest. A Git pull updates the checkout but leaves running containers
+unchanged; a release selection writes image pins but does not replace containers.
+Both operations are followed by an explicit service update.
 
-- **The code** — the monorepo checkout, including the service and integration
-  manifests, the `openmapx` CLI, and the database migrations. This advances with
-  `git pull`.
-- **The images** — the application containers. The core app services
-  (`app-api`, `app-web`, `data-manager`) run **prebuilt images published to the
-  GitHub Container Registry** (`ghcr.io/openmapx/*`). A complete release is
-  selected through the single `ghcr.io/openmapx/release-manifest:main`
-  pointer, which maps every application image to an immutable digest. They are
-  **not built on your host**.
-
-Because of that split, `git pull` alone does **not** update the running app: it
-updates the manifests and the CLI, but the containers keep running whatever image
-they already pulled. You get the new app version by resolving the complete
-release manifest, then pulling and replacing the exact image set. The steps
-below do both, in the right order.
-
-A complete release can reuse images from earlier releases: CI rebuilds only images
-whose inputs changed, then scans all seven selected application digests before publishing.
-Each image copies only the workspace packages it uses, and a lockfile change counts
-only for the dependencies that image installs. Changes to a package every image
-uses, such as `@openmapx/core`, and privacy changes still rebuild several images.
-Unchanged images retain their digest and original build revision; the release
-identifier describes the complete selected set. Daily CI catches up with `main`,
-including automated merges that do not trigger push workflows. Each image gets an
-uncached security refresh when its last published cold refresh is at least seven
-days old. Cached source rebuilds preserve that clock; failed releases leave it due
-for the next daily attempt. Existing releases without cold-refresh metadata get
-one uncached rebuild. Every selected image is scanned, including reused digests.
-
-A previously green commit can fail a later release scan when the vulnerability
-database learns about a dependency already present in its images. Passing PR
-builds and tests does not prove the main release's vulnerability gate will pass.
-For a fixed library advisory, update the dependency and any workspace security
-minimum in `pnpm-workspace.yaml`, regenerate the root lockfile, and verify the
-selected images. Updating only a direct dependency can leave an older transitive
-copy in another image. A failed scan leaves the previously published release
-selected; rerunning unchanged inputs is not a dependency remediation.
+Application release metadata selects seven digest-pinned images, including the
+running API, web, data-manager, ops-agent, and Transitous runner plus matching
+helper images. Some digests can be reused from an earlier release. Do not infer
+the selected release from one image's source revision or a mutable tag. See
+[Product releases](../developer/product-releases.md) for publication and security
+scan behavior.
 
 For a reproducible rollback reference, use the run-qualified manifest tag
 `ghcr.io/openmapx/release-manifest:<commit>-<run-id>-<attempt>` (the identifier is
@@ -78,32 +47,39 @@ and is not part of this application update.
 
 ## 1. Optional: create a backup
 
-When selected, the CLI snapshots every backup-enabled service volume — the PostGIS database
-(streamed `pg_dump | gzip`) and the other small stateful volumes (`tar`) — into
-`infra/docker/backups/`:
+The backup command captures declared backup targets under
+`infra/docker/backups/`: PostgreSQL as a compressed logical dump and other
+included volumes as tar archives.
 
 ```bash
 pnpm openmapx backup create --name pre-upgrade
 ```
 
 Heavy region-derived index volumes (Nominatim, Pelias/Elasticsearch, Valhalla,
-MOTIS, Photon, TileServer, Overpass) are intentionally **excluded** — they rebuild
-from source data and would dominate the snapshot for no recovery benefit. What
-the backup captures is the irreplaceable state: your database (users, admin
-config, integration settings, imported place data).
+MOTIS, Photon, TileServer, Overpass) are excluded from ordinary volume backups.
+Rebuilding them can take substantial time; keep an independent artifact strategy
+if recovery time requires it. Backups also include declared managed Dawarich state when selected; its
+location history and attachments require special care. Do not assume every
+bind-mounted file or generated secret is captured.
 
-You may also copy your environment file aside, since it holds the secrets the
-whole stack depends on and is never part of a code pull:
+Preserve deployment configuration, generated secret files, and required recovery
+state separately under a protected operator backup policy. A copy of `.env` alone
+is not sufficient for recovery; keep encryption keys and the erasure journal
+needed by restore. Do not include private subject-export artifacts. For a local
+configuration safety copy:
 
 ```bash
-cp infra/docker/.env infra/docker/.env.bak
+cp -p infra/docker/.env infra/docker/.env.bak
+chmod 600 infra/docker/.env.bak
 ```
 
-If an upgrade goes wrong, restore the snapshot:
+A restore overwrites data and has version and erasure-journal checks. Inspect
+the snapshot and follow [Backup and restore](../administration/backup-and-restore.md)
+before restoring. When appropriate, stop clients through the restore workflow:
 
 ```bash
 pnpm openmapx backup list                      # show available snapshots
-pnpm openmapx backup restore pre-upgrade       # restore everything
+pnpm openmapx backup restore pre-upgrade --stop-running
 ```
 
 See [Backup & restore](../administration/backup-and-restore.md) for per-service
@@ -111,13 +87,15 @@ restore, the version-compatibility check, and `--stop-running`.
 
 ## 2. Pull the latest code
 
-From the repo root, fetch the new code and reinstall the workspace. A new release
+From the repo root, inspect `git status` and preserve local customizations before
+fetching code. Use a fast-forward pull so unexpected branch divergence stops for
+review, then reinstall the locked workspace. A new release
 can change dependencies, the CLI, or the manifests, so always reinstall after a
 pull:
 
 ```bash
-(umask 022 && git pull)
-pnpm install
+(umask 022 && git pull --ff-only)
+pnpm install --frozen-lockfile
 ```
 
 The ops-agent refuses to start while a service manifest, an integration
@@ -133,12 +111,11 @@ git ls-files -z | xargs -0 chmod go-w
 git ls-tree -rd --name-only -z HEAD | xargs -0 chmod go-w
 ```
 
-At this point your checkout is current — new manifests, new CLI behavior, and any
-new database migrations are now on disk — but the running containers are
-unchanged. The next steps roll the running stack forward to match.
+The checkout has changed, but running containers still use their existing
+images. Continue with release selection and replacement.
 
 :::note[Read the release notes]
-Before a major upgrade, skim the project's release notes for breaking changes —
+Before upgrading, read the release notes for breaking changes, including
 a renamed environment variable, a new required secret, or a manifest change that
 needs attention. OpenMapX is under active development, so an occasional manual
 step between versions is expected.
@@ -146,9 +123,8 @@ step between versions is expected.
 
 ## 3. Re-render the compose stack
 
-If the upgrade changed any service manifest (a new image tag, a new volume, a
-changed port, an added core service), the generated compose file needs to be
-regenerated from the updated manifests:
+Review changes to `infra/docker/.env.example` and your selected service manifests,
+then render the new configuration:
 
 ```bash
 pnpm openmapx compose render
@@ -157,9 +133,8 @@ pnpm openmapx compose render
 This applies a new configuration generation (compose file and hardlink plan)
 from your current manifests, `infra/docker/.env` and the settings saved in the
 admin panel. The output is deterministic, and re-rendering when nothing changed
-is harmless — so when in doubt, render. The
-update command in the next step also re-renders for you, so you can skip this
-as a standalone step unless you want to inspect the diff first.
+preserves the same stack content. The update command also renders, but this
+separate step lets you inspect configuration before replacement.
 
 ## 4. Resolve the complete release and replace containers
 
@@ -179,9 +154,9 @@ and writes the selected lockfile as the Compose overlay. An existing overlay
 continues to apply even if release resolution is disabled with
 `OPENMAPX_RELEASE=local`; the status command reports that explicitly.
 
-This is the step that actually swaps in the new app version. The short form
-resolves the aggregate release pointer, writes the overlay, and replaces the
-core containers:
+Select the release explicitly, then replace the five running application
+services. This operation can interrupt requests; it is not a database rollback
+transaction:
 
 ```bash
 pnpm openmapx compose release
@@ -191,7 +166,8 @@ pnpm openmapx services update app-api app-web data-manager ops-agent transitous-
 `compose up`, `services start`, and `services update` refuse to run release
 services when no overlay exists and the release manifest cannot be resolved.
 
-The shared CLI validates all seven pins and privacy evidence and extracts the frozen metadata image identity. Keep using it rather than writing a partial overlay by hand. `main` is the automatic development pointer; `preview` is the latest deliberately published named prerelease. Exact versions or metadata digests pin a specific selection. A missing preview or pin fails without choosing main.
+The CLI validates all seven image pins and matching privacy evidence. Use it
+instead of writing a partial overlay by hand. `main` is the automatic development pointer; `preview` is the latest deliberately published named prerelease. Exact versions or metadata digests pin a specific selection. A missing preview or pin fails without choosing main.
 
 All seven development aliases are verified before the main manifest pointer advances. Individual aliases can move separately; use the manifest for coherent updates. Named publication promotes the selected image digests without rebuilding them and advances preview only after immutable GitHub publication is verified. See [Product releases](../developer/product-releases.md).
 
@@ -292,7 +268,7 @@ dedicated hostname or port.
 OpenMapX does not have a separate "run migrations" command for a self-host
 upgrade. The `app-api` container **applies pending Drizzle migrations on every
 boot**: at startup it runs the migration files bundled in the image against the
-database, and the migrator is **idempotent** — it skips migrations that are
+database, and the migrator is **idempotent**; it skips migrations that are
 already applied and only runs the new ones.
 
 So once the new `app-api` image starts (step 4), any schema changes that shipped
@@ -308,7 +284,7 @@ the error is logged there. If you created an optional
 [pre-upgrade backup](#1-optional-create-a-backup), restore it before attempting a rollback.
 
 :::caution[Migrations move forward only]
-Drizzle migrations are forward-only — there is no automatic down-migration. Once a
+Drizzle migrations are forward-only. There is no automatic down-migration. Once a
 new `app-api` has migrated the database, rolling back to an older app image is not
 supported unless you also restore the matching database backup. For upgrades
 that cross a schema change, consider taking the optional backup in step 1 when
@@ -321,10 +297,16 @@ Check that every container came back healthy and the API is serving:
 
 ```bash
 pnpm openmapx services status                  # container + health state for all services
-curl -s https://${DOMAIN}/api/status           # API + integration health JSON (via Traefik)
+curl --fail --silent --show-error https://maps.example.com/api/status
 ```
 
-Then load the app in a browser and exercise the core paths — search, directions,
+Replace `maps.example.com` with the actual domain. The CLI loads `.env` only into
+its own process, so `${DOMAIN}` is not automatically available in your shell.
+`compose release --status` reports local pins, while `services status` reports
+container/health state; neither alone proves matching running digests. Inspect
+the running image identity when verifying an exact release.
+
+Then load the app in a browser and exercise the core paths; search, directions,
 and any self-hosted engines you run. If a service is stuck, tail its logs:
 
 ```bash
@@ -332,7 +314,7 @@ pnpm openmapx services logs <id> --follow
 ```
 
 For per-engine checks after an upgrade, see the verification steps in the
-relevant guides — [routing engines](../guides/routing-engines.md),
+relevant guides; [routing engines](../guides/routing-engines.md),
 [geocoders](../guides/geocoders.md), [transit engines](../guides/transit-engines.md),
 and [OSM data queries](../guides/osm-data-queries.md).
 
@@ -348,7 +330,7 @@ until you set them.
 
 Keep `BETTER_AUTH_SECRET` **stable and protected**. It is now the key material
 for stored provider tokens as well as sessions. Rotating it deliberately is
-supported, but every linked OAuth account will need to be re-linked afterwards —
+supported, but every linked OAuth account will need to be re-linked afterwards;
 Better Auth does not re-encrypt existing tokens under a new secret.
 
 ## Martin's own database login
@@ -370,29 +352,32 @@ Without the password, rendering fails with `MARTIN_DB_PASSWORD must be set`.
 
 ## Reclaiming disk after an upgrade
 
-Pulling a new release leaves the previous images on disk as dangling layers.
-Once you've confirmed the upgrade is healthy, prune them:
+Keep prior image digests and the matching database/configuration backup until
+you have verified the release and completed your rollback window. The normal
+prune command removes dangling images only:
 
 ```bash
 docker image prune
 ```
 
-This removes only unreferenced images, so it won't touch what the running stack
-uses.
+It preserves images used by containers, but can remove untagged older images you
+might want for rollback. It does not remove all unused tagged releases or clean
+engine data. Avoid `docker system prune --volumes` as an upgrade cleanup step.
 
 ## Upgrading community extensions
 
-Third-party [extensions](../administration/community-extensions.md) upgrade on
-their own cadence rather than with the monorepo. When a newer version is in the
-catalog, update from the **Extensions** admin page, or on the CLI:
+Community extensions have their own versions and update workflow. Use
+**Admin → Extensions** to preview and apply an update. The CLI also provides
+`ext list`, `ext preview`, and `ext update`, including explicit confirmation of
+reviewed host ports. Those commands need an authenticated admin API endpoint;
+their default `http://localhost:3001` is not host-published by the managed
+`app-api` manifest. A public HTTPS URL alone does not grant loopback admin
+access. Follow [Community extensions](../administration/community-extensions.md)
+for the supported access and confirmation workflow instead of assuming host CLI
+invocation authenticates through the public proxy.
 
-```bash
-pnpm openmapx ext list            # shows which installed extensions have updates
-pnpm openmapx ext update <id>     # re-pin every part to the catalog's current version
-```
-
-An update re-pins the bundle's service(s) and integration(s) together and
-re-renders the stack as one orchestrated step.
+An accepted request queues work; check admin activity for completion before
+retrying an interrupted request.
 
 ### After an interrupted extension update
 
@@ -427,21 +412,21 @@ The route sends `Deprecation: true`, `Sunset: Mon, 01 Mar 2027 00:00:00 GMT`, an
 `rel="successor-version"` link to `/api/integrations/air-quality/stations`. Operators should migrate map
 and API consumers to that canonical route. During the compatibility window, clients must accept
 `aqi: null`, retain the per-station attribution/license, and treat 429/5xx responses as unavailable data,
-not as zero or “good” air quality.
+not as zero or "good" air quality.
 
 The legacy Open-Meteo route
-`GET /api/integrations/weather-open-meteo-air-quality/aqi` has the same 1 March 2027 sunset. Migrate point
+`GET /api/integrations/weather-open-meteo-air-quality/aqi` sends a 28 February 2027 sunset (`Sun, 28 Feb 2027 00:00:00 GMT`). Migrate point
 consumers to `GET /api/integrations/air-quality/current`; the canonical response preserves model provenance,
 the locally selected standard, nullable primary evidence/index fields, raw pollutant values, and explicit
 partial or unavailable status. Do not translate a missing canonical primary into the legacy route's
-normalised scalar. The compatibility response sends the same `Deprecation` and `Sunset` headers and a
+normalised scalar. The compatibility response sends `Deprecation: true`, that route-specific `Sunset`, and a
 `rel="successor-version"` link to the canonical current route.
 
 ## Where to go next
 
-- **[Preparing data](./preparing-data.md)** — refreshing OSM extracts, GTFS
+- [Preparing data](./preparing-data.md): refreshing OSM extracts, GTFS
   feeds, and rebuilding engine indexes (a separate cadence from code upgrades).
-- **[Managing services](./managing-services.md)** — restarting, rebuilding, and
+- [Managing services](./managing-services.md): restarting, rebuilding, and
   the staggered-startup order for heavy engines.
-- **[Configuration](./configuration.md)** — the `infra/docker/.env` reference, in
+- [Configuration](./configuration.md): the `infra/docker/.env` reference, in
   case an upgrade introduces a new required variable.

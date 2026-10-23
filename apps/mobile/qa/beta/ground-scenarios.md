@@ -1,8 +1,12 @@
-# Ground navigation — scenarios that need a physical device
+# Ground navigation: scenarios that need a physical device
 
-Everything here is **unverified**. Automated traces prove the engine, the
-persistence and the effect ordering; none of them prove what a phone does in a
-pocket, in a tunnel, on a cold morning, with a call coming in.
+<a id="ground-navigation--scenarios-that-need-a-physical-device"></a>
+
+All physical cases remain unverified in committed evidence. First compose the
+foreground navigation dispatcher: `src/App.tsx` currently advertises ground
+navigation as unavailable. Then qualify the candidate locally before beta upload.
+Automated traces cover engine, persistence and effect-ordering contracts with
+external ports replaced; physical runs must qualify OS delivery and effects.
 
 A scenario becomes verified only when a named volunteer reports it from a
 physical device against an exact beta artifact, with the device, OS version and
@@ -11,7 +15,8 @@ evidence and must not be entered here.
 
 ## What the automated suite already covers
 
-These are settled and need no physical confirmation:
+The deterministic suite covers these contracts. Physical testing must still
+confirm their integration with the installed candidate:
 
 - one committed revision per batch, and revisions strictly increasing;
 - progress that never regresses along a route;
@@ -24,16 +29,16 @@ These are settled and need no physical confirmation:
 
 ## Driving
 
-| #   | Scenario                                        | Expected                                                                            | Status     |
-| --- | ----------------------------------------------- | ----------------------------------------------------------------------------------- | ---------- |
-| D-1 | 30 minutes of motorway driving, screen locked   | Cues arrive on time; no gap longer than the beta threshold                          | unverified |
-| D-2 | Urban driving with tall buildings               | Weak-GPS flagged; no phantom off-route; no reroute storm                            | unverified |
-| D-3 | Tunnel of 30–120 seconds                        | Coasting bridges the gap, then reanchors on the first real fix                      | unverified |
-| D-4 | Deliberate missed turn                          | One off-route warning, one reroute, one replacement                                 | unverified |
-| D-5 | Missed turn with no network                     | Captured route keeps guiding; no route is invented; reroute fires once on reconnect | unverified |
-| D-6 | Arrival at destination                          | One arrival cue, tracking stops promptly, storage cleaned                           | unverified |
-| D-7 | 60-minute journey, battery and thermal recorded | Numbers recorded, not judged; a regression threshold comes later                    | unverified |
-| D-8 | Phone in a pocket, screen off, whole journey    | Guidance continues; this is the single most important case                          | unverified |
+| #   | Scenario                                        | Expected                                                                               | Status     |
+| --- | ----------------------------------------------- | -------------------------------------------------------------------------------------- | ---------- |
+| D-1 | 30 minutes of motorway driving, screen locked   | Cues arrive on time; no gap longer than the beta threshold                             | unverified |
+| D-2 | Urban driving with tall buildings               | Weak-GPS flagged; no phantom off-route; no reroute storm                               | unverified |
+| D-3 | Tunnel of 30 to 120 seconds                     | Foreground coasting stays bounded; suspended delivery catches up only after a real fix | unverified |
+| D-4 | Deliberate missed turn                          | One off-route warning, one reroute, one replacement                                    | unverified |
+| D-5 | Missed turn with no network                     | Captured route keeps guiding; no route is invented; reroute fires once on reconnect    | unverified |
+| D-6 | Arrival at destination                          | One arrival cue, tracking stops promptly, storage cleaned                              | unverified |
+| D-7 | 60-minute journey, battery and thermal recorded | Numbers recorded, not judged; a regression threshold comes later                       | unverified |
+| D-8 | Phone in a pocket, screen off, whole journey    | Record delivery gaps and audible cues against the agreed beta budget                   | unverified |
 
 ## Walking, cycling, motorcycle
 
@@ -70,12 +75,11 @@ These are settled and need no physical confirmation:
 A gap that makes essential guidance unreliable is a **location-driver
 qualification failure**, not permission to add an unproven background timer. If
 the same driver-specific background-survival, delivery-gap, duplicate-stream or
-teardown failure reproduces **twice** on the same beta build, the narrow native
-`LocationDriver` fallback is activated — and only the driver is replaced.
+teardown failure reproduces **twice** on the same beta build, maintainers evaluate and record the narrow native `LocationDriver` replacement.
+There is no automatic switch; keep changes confined to the failed subsystem.
 
 An audio, WebView, configuration or navigation-engine failure is fixed in its own
 subsystem and does not justify replacing the location module.
 
-Any of these blocks Plan 05 integration if it appears in the automated suite
-instead: a duplicate cue, a progress regression, a mutation after stop, a route
+Any of these blocks candidate qualification if it appears in the automated suite: a duplicate cue, a progress regression, a mutation after stop, a route
 lost while offline, or a stale reroute result resurrecting a session.

@@ -1,397 +1,270 @@
 ---
-title: Self-hosting routing (Valhalla & OSRM)
-description: Run your own Valhalla and OSRM routing engines — when to use each, how to download data, build the graph, and wire it into the routing integration.
+title: Self-hosting routing engines
+description: Prepare and run Valhalla, OSRM, and optional BRouter bicycle routing.
 sidebar_position: 1
 ---
 
 # Self-hosting routing engines
 
-OpenMapX computes driving, motorcycle, cycling, and walking directions by delegating the
-path-finding to a routing **engine**. Two engines ship in the box, and you can
-run either or both as backend services on your own host:
-
-- **Valhalla** — the general-purpose engine. It routes for all four ground
-  modes, scales to a planet extract, and is the only one that produces elevation
-  profiles, honors departure/arrival times, and does map matching.
-- **OSRM** — a region-scoped, driving-only engine optimized for speed.
-
-This guide is the operator's view: deciding which to run, getting the data,
-building the graph, and pointing the routing integration at it. For the
-user-facing behavior — route options, navigation, the elevation chart — see
-[Directions & navigation](../features/directions.md). For the service and
-integration model underneath all of this, see [How it works](../overview/how-it-works.md).
+Complete [Getting started](../install/getting-started.md) before preparing routing
+data. The examples assume a healthy data-manager, local Docker access, and enough
+space for the input and prepared graph. Diagnostic commands run on the Docker
+host; published engine ports bind to loopback.
 
 ## Choosing an engine
 
-The two engines are complementary, not redundant, and the routing orchestrator
-picks between them by capability rather than hard-wiring either one:
+| Engine   | Use                                                                                   | Preparation                                                    |
+| -------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Valhalla | Driving, motorcycle, cycling, walking, elevation, time-aware routes, and map matching | Imports OSM and auxiliary data on startup                      |
+| OSRM     | Regional driving routes                                                               | Explicit graph build; `planet` and PBFs over 50 GB are refused |
+| BRouter  | Optional cycling routes with bicycle profiles                                         | Downloads prebuilt regional segments; no PBF build             |
 
-|                    | Valhalla                              | OSRM                             |
-| ------------------ | ------------------------------------- | -------------------------------- |
-| Modes              | driving, motorcycle, cycling, walking | driving only                     |
-| Scale              | region or **planet**                  | **region only**                  |
-| Speed              | fast                                  | fastest                          |
-| Elevation profiles | yes (SRTM)                            | no                               |
-| Time-aware routing | yes (departure/arrival)               | no                               |
-| Map matching       | yes                                   | no                               |
-| Build step         | none (builds on first start)          | required (`services build osrm`) |
-
-A useful way to think about it:
-
-- **Run Valhalla if you run anything.** It serves driving, motorcycle, cycling,
-  and walking on its own, so a Valhalla-only deployment is complete. It is also your only option for
-  worldwide coverage — OSRM can't load a planet graph.
-- **Add OSRM when driving volume matters and you're region-scoped.** Where a
-  regional OSRM build exists, the orchestrator routes car requests through it for
-  the fastest possible response, and still falls back to Valhalla whenever OSRM
-  is absent or briefly unreachable.
-
-Because providers are selected per request, running both never hurts: cycling
-and walking always go to Valhalla, driving prefers OSRM and degrades gracefully.
+Valhalla can serve all supported ground modes. OSRM adds a driving provider;
+BRouter adds cycling preferences. Request features and provider availability
+affect selection, so verify the modes you use after setup. A selected provider
+that cannot answer may fall back to another configured provider.
 
 :::tip[Planet deployments use Valhalla alone]
-OSRM loads its entire graph into RAM and can't handle a planet extract (the build
-command refuses one outright). For worldwide routing, enable only Valhalla and
-let it serve driving too. See the [routing rows in Requirements](../install/requirements.md#engine-sizing)
-for the sizing that drives this.
+For worldwide general ground routing, use Valhalla rather than an OSRM graph.
+Optional BRouter planet coverage is a separate segment download. Neither choice
+establishes that the host has enough build memory or disk; see
+[Requirements](../install/requirements.md#engine-sizing).
 :::
 
 ## Enabling the service
 
-Routing engines are backend services, managed with the `openmapx` CLI. Add the
-engine(s) you want to your selection — Valhalla, OSRM, or both:
-
 ```bash
-pnpm openmapx services enable valhalla        # planet-capable, all ground modes
-pnpm openmapx services enable osrm            # fast region-only driving (optional)
+pnpm openmapx services enable valhalla
+# Optional regional driving engine:
+pnpm openmapx services enable osrm
 ```
 
-There's a `routing` preset that bundles both, handy on the lifecycle commands:
-
-```bash
-pnpm openmapx services start --preset routing
-```
-
-Enabling only changes the selection; it doesn't start anything yet — you still
-need data and (for OSRM) a build. The full vocabulary of enable, render, start,
-and configure lives in [Managing services](../install/managing-services.md).
+Enable changes the desired selection without starting containers. The `routing`
+preset targets Valhalla and OSRM together; it does not enable or prepare either
+one. Start only the engines whose inputs are ready.
 
 ## Downloading the OSM extract
 
-Both engines build from an OpenStreetMap extract. Download one for your region
-through the data-manager; OpenMapX uses Geofabrik's path naming, so a region is a
-slash-separated path like `europe/germany`, or the literal `planet`:
-
 ```bash
-pnpm openmapx data download osm europe/germany   # or "planet" for Valhalla
+pnpm openmapx data download osm europe/germany
 ```
 
-This lands the region's `.osm.pbf` in `data/osm/`. A single country is modest; a
-continent is several times larger; the planet is an order of magnitude bigger
-again — and only Valhalla can consume it. Pick the smallest region that covers
-the area you need to route across (a route can't cross the edge of its extract).
-See [Preparing data](../install/preparing-data.md) for the full data workflow,
-region naming, and the one-command `data update` refresh.
+Use a Geofabrik path covering both endpoints and the corridor between them.
+`planet` is available for Valhalla. Files appear under
+`infra/docker/data/osm/`; `OPENMAPX_REGION` sets the shared region default.
+[Preparing data](../install/preparing-data.md) covers selection when more than
+one extract exists and how hardlinks reach engine inputs.
 
 ## Valhalla: no build step, builds on first start
 
-Valhalla is unusual among the heavy engines: it has **no separate build
-command**. The scripted image (`ghcr.io/valhalla/valhalla-scripted`) reads the
-OSM extract and builds its routing tiles inside the container the first time it
-starts, then begins serving on port `8002`.
-
-After the extract is downloaded, render the stack, link the data into place, and
-start the service:
-
 ```bash
-pnpm openmapx compose render
 pnpm openmapx data link
 pnpm openmapx services start valhalla
-```
-
-The first start is the slow one — the container builds tiles, and by default
-also downloads SRTM elevation data and builds admin-boundary and time-zone
-databases. Watch progress in the logs; the service goes healthy once tiles are
-loaded:
-
-```bash
 pnpm openmapx services logs valhalla --follow
 ```
 
-Subsequent starts reuse the built tiles and come up quickly. To rebuild against a
-newer extract, re-download, re-link, and restart — the container rebuilds tiles
-from the fresh data.
+The scripted Valhalla image prepares routing tiles and, by default, elevation,
+administrative boundaries, and time zones. Its internal endpoint is
+`http://valhalla:8002`, published as `127.0.0.1:8002`. Initial preparation can take
+hours. Follow logs rather than treating a running container as a loaded graph.
+
+Existing tiles are reused on later starts. When refreshing OSM, download the new
+extract, re-link, and restart the service during a maintenance window. Inspect
+logs to confirm the image detected the changed input and completed rebuilding;
+verify a route afterward.
 
 ### Tuning the Valhalla build
 
-Valhalla's manifest exposes two operator toggles through its `configSchema`, both
-on by default:
+The schema exposes `build_elevation` and `build_admins`, both enabled by default:
 
-- **`build_elevation`** — download SRTM elevation tiles during the build. This is
-  what powers the [elevation profiles](../features/directions.md#elevation) on
-  cycling and walking routes. Elevation data adds meaningful disk and build time;
-  turn it off if you don't need profiles.
-- **`build_admins`** — build admin-boundary data, used for country-specific
-  routing rules (driving side, access restrictions). Recommended on.
-
-A third, related toggle isn't in the `configSchema` but is set in the manifest's
-container environment: **`build_time_zones`** (also on by default) builds the
-timezone database that backs time-aware departure/arrival routing. Leave it on
-unless you're certain you never pass departure or arrival times. All three
-auxiliary databases are built once during the first-start tile build and reused
-on subsequent starts.
-
-Set these like any service config — environment variable wins, then the admin
-panel, then the schema default. The env-var form is `SERVICE_VALHALLA_<KEY>`:
-
-```bash
-# infra/docker/.env
+```dotenv
 SERVICE_VALHALLA_BUILD_ELEVATION=false
 ```
 
-Because config resolves at render time, re-render and apply after a change:
+Apply changes with `pnpm openmapx services start valhalla`. Disabling elevation
+removes the data needed for local elevation profiles. Time-zone preparation is
+enabled in the manifest environment, independently of those two schema fields.
 
-```bash
-pnpm openmapx compose render
-pnpm openmapx services start valhalla
-```
-
-The deeper tuning knobs live in the bind-mounted config file at
-`services/valhalla/config/valhalla.json`:
-
-- **`mjolnir.concurrency`** (default `8`) — tile-build thread count. Lower it to
-  cap peak memory on a constrained build host; the build slows but uses less RAM.
-- **`service_limits`** — per-mode request ceilings that bound resource use:
-  `auto` max 5,000 km / 20 locations, `bicycle` 500 km, `pedestrian` 250 km,
-  `isochrone` 4 contours up to 120 min. Raise these only if you intend to serve
-  larger queries — they're the guardrails against a single request eating CPU.
-
-The [config cascade](../install/managing-services.md#configuring-a-service)
-explains how all of this resolves.
+`services/valhalla/config/valhalla.json` sets build concurrency to 8 and bounds
+request sizes. Current limits include 5,000 km/20 locations for driving,
+500 km for cycling, 250 km for walking, and four isochrone contours up to
+120 minutes. Change tracked engine configuration only as a deliberate custom
+configuration and verify the generated result. Larger limits increase resource
+exposure; they do not enlarge geographic data coverage.
 
 ## OSRM: build the graph first
 
-OSRM can't read a raw `.osm.pbf` — it needs a graph prepared by its three-stage
-pipeline (`osrm-extract` → `osrm-partition` → `osrm-customize`). OpenMapX runs
-those stages for you, in a Dockerized helper, through the service build hook.
-
-After downloading the extract, build the graph for your region. On
-`services build`, the region is the `--region` flag:
-
 ```bash
 pnpm openmapx services build osrm --region europe/germany
+pnpm openmapx services start osrm
 ```
 
-The `data` namespace offers the same thing as a compatibility alias, where the
-region is a **positional** argument instead:
+The build runs extract, partition, and customize in Docker, then publishes
+`data/osrm-graph/region.osrm` and companion files. It renders and links the
+result. The equivalent positional-region alias is:
 
 ```bash
 pnpm openmapx data build osrm europe/germany
 ```
 
-Either form stages the prepared graph (`region.osrm` and its companion files)
-into `data/osrm-graph/`. The build is cached on a hash of the input PBF, so
-re-running it when nothing changed is essentially free.
+The runtime uses `osrm-routed --algorithm mld` and listens internally at
+`http://osrm:5000`, published as `127.0.0.1:5000`.
 
 :::caution[Stop OSRM before rebuilding]
-The build stages new files into the directory the running container reads from.
-To avoid a half-swapped state, the build **refuses to run while `osrm` is up** —
-stop it first, build, then start it again:
+Preparation refuses a running OSRM consumer. New output is staged separately,
+but the build is an offline operation with downtime:
 
 ```bash
+pnpm openmapx data download osm europe/germany
 pnpm openmapx services stop osrm
 pnpm openmapx services build osrm --region europe/germany
 pnpm openmapx services start osrm
 ```
 
+A failed build preserves the previous graph. Correct the failure or restart the
+previous graph; do not assume the container kept serving during preparation.
 :::
 
-Once the graph exists, render, link, and start as usual:
-
-```bash
-pnpm openmapx compose render
-pnpm openmapx data link
-pnpm openmapx services start osrm
-```
-
-The container serves on port `5000` using the Multi-Level Dijkstra algorithm
-(`--algorithm mld`), a good balance of preprocessing cost, RAM, and query speed.
-The alternative, Contraction Hierarchies (`ch`), queries faster but costs far
-more RAM and preprocessing time and forfeits the live segment-speed updates MLD
-allows — which is why OpenMapX standardizes on `mld`.
-
-:::note[Planet is refused]
-`services build osrm --region planet` fails by design — a planet OSRM build needs
-on the order of 200 GB of RAM. The error points you at Valhalla, which handles
-worldwide driving on a fraction of that.
-:::
-
-OSRM has no incremental update path: to pick up newer OSM data, re-download the
-extract, rebuild the graph, re-link, and restart. While the rebuild runs, the
-live container keeps serving the old data from memory; there's only a brief gap
-during the restart, and driving falls back to Valhalla in the meantime.
+The cache includes the PBF hash, runtime image, profile path, and traffic CSV
+content. An unchanged build can be skipped. A planet filename or PBF larger
+than 50 billion bytes fails before preprocessing.
 
 ### Optimizing waypoint order
 
-OpenMapX keeps the first and last waypoints fixed when optimizing an OSRM trip.
-It converts OSRM's per-input trip positions into `optimizedOrder`: original
-input indexes in visit order. The result's `waypoints` stay in request order. Invalid
-or incomplete orders, changed endpoints, and responses spanning multiple trips
-are rejected.
+OpenMapX keeps the first and last waypoints fixed. `optimizedOrder` contains
+original input indexes in visit order; returned waypoints remain in request
+order. Incomplete orders and responses spanning multiple trips are rejected.
 
 ### Customizing the car profile
 
-OSRM's routing behavior — speed assumptions per road class, turn penalties,
-access rules — comes entirely from the `car.lua` profile baked into the image at
-`/opt/car.lua`. To change it, mount your own Lua over that path during the build
-(the speed file flag is already wired for traffic overrides):
+The supported CLI build uses the image's `/opt/car.lua` profile. It has no
+custom-profile flag or host-file mount. A manual build with a different profile
+must use the exact runtime image and its own provenance/rebuild procedure;
+it is outside the managed artifact workflow. The standard cache records the
+profile **path**, not the contents of an arbitrary custom Lua file. Do not
+assume editing a host `car.lua` changes `services build osrm`.
+
+## Optional BRouter bicycle routing
 
 ```bash
-docker run --rm \
-  -v "$(pwd)/infra/docker/data/osrm-graph:/data" \
-  -v "$(pwd)/services/osrm/car.lua:/opt/car.lua:ro" \
-  ghcr.io/project-osrm/osrm-backend:latest \
-  /bin/sh -c "osrm-extract -p /opt/car.lua /data/region.osm.pbf && \
-              osrm-partition /data/region.osrm && \
-              osrm-customize /data/region.osrm"
+pnpm openmapx services enable brouter
+pnpm openmapx services start brouter
+pnpm openmapx services logs brouter --follow
 ```
 
-The profile is hashed into the build cache key alongside the PBF, so changing it
-forces a rebuild even when the data is unchanged. Re-link and restart afterwards.
+Set `SERVICE_BROUTER_REGION` to a Geofabrik extract path or `planet` before
+starting; `europe/germany` is the default and `germany` is an accepted alias.
+This region is independent of the PBF downloaded for other engines.
+
+BRouter downloads prebuilt elevation-aware `.rd5` files from its
+[official segment server](https://brouter.de/brouter/segments4/). It selects
+existing 5-degree tiles overlapping the extract's bounding rectangle, including
+neighboring areas. No separate elevation download or OSM graph build is needed.
+
+| Setting                                   | Default                     |
+| ----------------------------------------- | --------------------------- |
+| `BROUTER_MEMORY`                          | `2g` container limit        |
+| `SERVICE_BROUTER_JAVA_HEAP_MB`            | `1024`                      |
+| `SERVICE_BROUTER_MAXTHREADS`              | `2` concurrent calculations |
+| `SERVICE_BROUTER_REQUEST_TIMEOUT_SECONDS` | `30`, maximum `300`         |
+| `SERVICE_BROUTER_UPDATE_INTERVAL_HOURS`   | `168`                       |
+
+The pinned BRouter 1.7.10 software and segments live in the `openmapx-brouter`
+volume, which is excluded from backups. Refresh prepares and checks a complete
+replacement generation before publishing. Keep enough disk for both generations
+plus the 1 GB reserve. A failed refresh retains the active generation and retries
+after one hour. A changed region must prepare successfully before serving;
+cached coverage for another region is not silently used. Startup has a 30-minute
+health grace; large downloads may still require longer.
+
+BRouter listens internally and on host loopback at `17777`;
+`BROUTER_HOST_PORT` relocates the latter. Enable the `routing-brouter` integration
+to use it for cycling. Touring/city, road, gravel, mountain-bike, hill, and quiet-road
+preferences are routing preferences, not guarantees about conditions. Timed
+routes and stop optimization use Valhalla. Gravel with ferry avoidance or strong
+hill avoidance also uses Valhalla. Unavailable or out-of-coverage BRouter requests
+can fall back to the configured Valhalla chain; no public BRouter endpoint is
+selected automatically.
+
+Preserve OpenStreetMap and elevation-data attribution when exposing or
+redistributing results. The engine is MIT licensed; the routing data has its own
+source notices, described in the [BRouter credits](https://brouter.de/).
 
 ## Verifying the engine
 
-Once a service reports healthy, probe it directly to confirm it actually routes.
-Both engines bind their host port to `127.0.0.1`, so these run from the Docker
-host itself: Valhalla on `8002`, OSRM on `5000`.
-
-**Valhalla.** The cheapest liveness check is the `/status` endpoint the manifest
-health check already uses — it answers as soon as tiles are loaded:
+For Valhalla, check health and a real route in the prepared area:
 
 ```bash
-curl -s http://localhost:8002/status | jq
-```
-
-For an end-to-end check, ask for a real route. Valhalla accepts the request as
-JSON on a `GET ?json=` query or a `POST` body; `.trip.summary` carries the
-distance and time:
-
-```bash
-curl -s -X POST http://localhost:8002/route \
+curl --fail --silent --show-error http://localhost:8002/status
+curl --fail --silent --show-error http://localhost:8002/route \
   -H 'Content-Type: application/json' \
   -d '{"locations":[{"lat":52.52,"lon":13.405},{"lat":48.137,"lon":11.575}],"costing":"auto"}' \
   | jq '.trip.summary'
 ```
 
-Swap `costing` to `bicycle` or `pedestrian` to confirm the non-driving modes,
-and hit `/isochrone` or `/height` the same way if you rely on travel-time
-polygons or elevation profiles.
+Repeat with `bicycle` and `pedestrian` if needed. Check `/height` or `/isochrone`
+if you rely on those capabilities. Alternative-route counts vary with geography
+and overlap; two alternatives is a maximum, not an expected count for every trip.
+`pnpm check-routing-canaries` exercises the application endpoint against its
+configured live host; it is not an offline unit check.
 
-For the routing API's alternate-route behavior, OpenMapX asks Valhalla for up to
-two alternatives (three routes total including the primary). This is a maximum,
-not a promise: Valhalla filters alternatives by their cost and overlap with the
-primary, so a valid request can return only one route. Run
-`pnpm check-routing-canaries` from the application host to verify the public
-directions endpoint without depending on a historical route count or assuming
-that a live duration must exceed its baseline.
-
-**OSRM.** OSRM takes coordinates inline as semicolon-separated `lng,lat` pairs.
-A healthy instance returns `"code": "Ok"` with a distance and duration:
+OSRM has no Docker health check in its manifest. Verify the route response:
 
 ```bash
-curl -s 'http://localhost:5000/route/v1/driving/13.405,52.52;11.575,48.137?overview=false' \
+curl --fail --silent --show-error \
+  'http://localhost:5000/route/v1/driving/13.405,52.52;11.575,48.137?overview=false' \
   | jq '.code, .routes[0].distance, .routes[0].duration'
 ```
 
-:::note[OSRM has no built-in health check]
-Unlike Valhalla, the OSRM manifest declares no `healthcheck`, so `services status`
-can't tell you whether it's actually serving — only that the container is up. The
-`/route` probe above is the real readiness signal; in the logs, `running and
-waiting for requests` marks the server as ready. To get a Docker-native health
-state, add a `healthcheck` block to `services/osrm/service.json` and re-render.
-:::
-
-A `NoRoute` / `NoSegment` from OSRM, or `No path could be found` from Valhalla,
-almost always means a waypoint fell outside the extract or off a routable road —
-not an engine fault. Widen the region (or use the planet extract on Valhalla) and
-make sure both endpoints sit on a drivable road.
+Expect `"Ok"` and route distance/duration. `NoRoute`, `NoSegment`, or Valhalla's
+no-path error can indicate missing coverage, disconnected roads, or an
+unroutable endpoint. Check coordinates and logs before widening the region.
+Finally test the corresponding route modes in OpenMapX and inspect attribution.
 
 ## How the routing integration finds your engine
 
-The routing integrations don't hold a hard-coded address for their engine; they
-resolve it through the **`routing-engine` capability**. Both `valhalla` and
-`osrm` services declare `provides: ["routing-engine"]`, and the engine adapters
-(`routing-valhalla`, `routing-osrm`) declare an _optional_ requirement on the
-matching service. At startup each adapter is bound to its local service and
-reaches it over the private Docker network — `http://valhalla:8002`,
-`http://osrm:5000` — with no configuration on your part.
+Enable the matching `routing-valhalla`, `routing-osrm`, or `routing-brouter`
+integration. These adapters resolve a selected local service first, then their
+configured `endpoint`, then a provider-specific default. Integration environment
+settings override admin values within config; they do **not** supersede the
+selected-service lookup in these adapters.
 
-Each adapter also exposes an **endpoint** setting in its manifest and the admin
-panel, resolved through the standard config cascade. Leave it blank to use the
-self-hosted service resolved by capability. Set it to point at a
-Valhalla- or OSRM-compatible host elsewhere instead:
+To use an external endpoint, stop and remove the corresponding local service
+from the selection, configure the integration endpoint, and recreate `app-api`
+so its applied service selection is current. Valhalla's hosted Stadia fallback
+requires its provider API key; self-hosted Valhalla does not. The OSRM public demo
+is an external dependency with its own usage policy. Review permitted use before
+sending application traffic. BRouter has no automatic public fallback.
 
-- **`routing-valhalla`** — a Valhalla endpoint URL and optional API key. Left
-  blank, it uses your local `valhalla` service; with no local service and no
-  override it falls back to a hosted Valhalla (which needs a key).
-- **`routing-osrm`** — an OSRM endpoint URL. Left blank, it uses your local
-  `osrm` service, or falls back to the public OSRM demo (rate-limited, for
-  evaluation only — not production).
-
-The practical upshot: enabling and starting the service is all the wiring most
-deployments need. The capability binding does the rest. Read more about exposure
-and the capability model in [How it works](../overview/how-it-works.md) and the
-[service-manifest reference](../developer/service-manifest.md).
+The direct API helpers using `VALHALLA_URL` or `OSRM_URL` have separate endpoint
+configuration. See [Configuration](../install/configuration.md#backend-endpoint-overrides)
+when moving an engine outside this stack.
 
 ## Resource expectations
 
-Both engines hold their routing data in memory, so RAM scales with the region you
-build. The manifest memory ceilings are **16 GB for Valhalla** (sized for planet)
-and **8 GB for OSRM** (region-scale); steady-state runtime use for a single
-country is well under those limits. The expensive moments are the _builds_ —
-Valhalla's first-start tile build and OSRM's `osrm-extract` stage are both CPU-
-and memory-hungry, and want a few GB to tens of GB of headroom depending on
-region size.
-
-For concrete RAM and disk figures by engine and geographic scale, see the
-[engine-sizing table in Requirements](../install/requirements.md#engine-sizing).
-Plan disk before you download: a planet extract plus Valhalla tiles and elevation
-data is in the tens-of-GB-and-up range.
+Default runtime ceilings are 16 GiB for Valhalla, 8 GiB for OSRM, and 2 GiB for
+BRouter. Builds and replacement generations have separate peaks. Measure the
+chosen region and preserve disk headroom; these limits are not minimum host
+requirements or guarantees that a planet import fits.
 
 ## Quick reference
 
-A region-scale deployment running both engines, from nothing:
+For a new regional deployment with core services already running:
 
 ```bash
-# Enable the routing stack
 pnpm openmapx services enable valhalla osrm
-
-# Get the OSM extract
 pnpm openmapx data download osm europe/germany
-
-# Build OSRM's graph (Valhalla needs no build step)
 pnpm openmapx services build osrm --region europe/germany
-
-# Render, link, and bring routing up
-pnpm openmapx compose render
-pnpm openmapx data link
 pnpm openmapx services start --preset routing
+pnpm openmapx services start app-api
 ```
 
-Valhalla builds its tiles on that first start (tail the logs); OSRM comes up
-immediately on the graph you just built. From there, cycling and walking route
-through Valhalla, driving prefers OSRM, and both fall back to Valhalla when
-needed.
+For an existing deployment, stop OSRM before rebuilding. Valhalla prepares its
+tiles on startup; OSRM needs the completed graph. Verify each engine directly
+and then exercise directions in the application.
 
 ## Where to go next
 
-- **[Directions & navigation](../features/directions.md)** — what users get from
-  these engines: route options, elevation, turn-by-turn.
-- **[Managing services](../install/managing-services.md)** — enabling, rendering,
-  building, configuring, and exposing services in depth.
-- **[Preparing data](../install/preparing-data.md)** — the download/build/link
-  pipeline and region naming.
-- **[Requirements](../install/requirements.md)** — RAM and disk sizing before you
-  commit to a region.
-- **[Self-hosting transit engines](./transit-engines.md)** — the MOTIS/OTP
-  counterpart for public-transit journey planning.
+See [Directions and navigation](../features/directions.md) for user behavior,
+[Preparing data](../install/preparing-data.md) for artifact transfer, and
+[Requirements](../install/requirements.md) for capacity planning.

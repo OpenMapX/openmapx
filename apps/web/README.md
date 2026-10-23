@@ -1,20 +1,15 @@
 # OpenMapX web application
 
 This workspace contains the OpenMapX map UI. It is a Next.js 16 App Router
-application built with React 19, MapLibre GL JS 5, MUI 9, Zustand, TanStack
+application built with React 19, MapLibre GL JS 6, MUI 9, Zustand, TanStack
 Query, next-intl, and Serwist. It is designed to run with `apps/api`;
 browser-facing provider requests normally go through that API.
 
 ## Develop
 
-Run setup from the repository root:
-
-```bash
-pnpm install
-cp apps/api/.env.example apps/api/.env
-cp apps/web/.env.example apps/web/.env.local
-pnpm dev
-```
+Follow the [development setup guide](../../docs/docs/developer/development-setup.md)
+from the repository root. It covers the database and cache, environment files,
+schema initialization, and both application processes.
 
 To run only this app, use `pnpm --filter web dev`. The web app defaults to
 `NEXT_PUBLIC_API_URL=http://localhost:3001`; see `.env.example` for map style,

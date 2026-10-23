@@ -1,5 +1,6 @@
 ---
-title: Air quality — EEA raster
+description: The outstanding permission requirements for EEA raster proxying and derived images.
+title: "Air quality: EEA raster"
 air_quality_component: eea-raster
 status: blocked
 code_path: "none"
@@ -16,9 +17,7 @@ blocker: "No dataset-specific maintainer approval covers server proxying, deriva
 
 # EEA raster
 
-**Status:** blocked
-**Owner:** optional EEA raster implementation plan
+Blocked pending dataset-specific permission; review recorded 30 August 2026.
 
-The mandatory legal gate failed before code. Live ArcGIS service availability
-is not affirmative permission to proxy and cache derivative images. See the
+Implementation stopped at the legal gate. Reachable ArcGIS service metadata does not grant permission for proxying, retention or derivative images. See the
 [data-use decision](../air-quality-eea-data-use.md).

@@ -6,15 +6,15 @@ sidebar_position: 12
 
 # Air quality
 
-OpenMapX treats air quality as evidence, not as one universal score. A location
-is matched to its regional program and evaluated with that program's reviewed
-method when enough suitable evidence exists. You can also request another
-standard for comparison, but it remains secondary to the location's standard.
+OpenMapX shows air-quality observations and forecasts with their source,
+freshness, and calculation method. It selects a location's regional index when
+enough suitable evidence is available. You can request another supported
+standard for comparison without replacing that local headline.
 
-The initial canonical service supports the US EPA 2024 AQI, current EEA
-European AQI, UK DAQI, India NAQI, China's HJ 633-2026, and published Canadian
-AQHI. Canada requires a matching ECCC community report; a country boundary alone
-is not enough to claim that community index.
+Supported methods include US EPA 2024 AQI, European AQI, UK DAQI, India NAQI,
+China's HJ 633-2026, and published Canadian AQHI. Availability depends on evidence
+that meets each method's requirements. A supported method does not establish
+local coverage or a calculable index at every point in that country.
 
 ## What a result means
 
@@ -25,11 +25,10 @@ A result can contain several evidence records:
 - modeled grid evidence, currently including Open-Meteo/CAMS;
 - raw pollutant values when a complete regional index cannot be calculated.
 
-`primaryEvidenceId` identifies the record selected for the headline.
-`primaryIndexId` identifies the regional index inside it. When the best honest
-answer is a raw concentration, the evidence ID is present and the index ID is
-null. OpenMapX does not turn a partial window into a different index merely to
-avoid an empty badge.
+The headline identifies the selected local index when it can be calculated or
+accepted from a qualifying publication. If only raw concentrations qualify,
+OpenMapX shows those without assigning an index category. Incomplete observation
+windows can prevent an index from being available.
 
 In the UK, an official UK-AIR station DAQI can headline only when the station is
 within 25 km. In Canada, ECCC's nearest named-community values are retained as
@@ -76,24 +75,23 @@ The separate [air-quality monitor map](./air-quality-map.md) plots raw station
 concentrations with freshness, quality, and provenance signals. Its continuous
 colors are deliberately not AQI health categories.
 
-Category names and status text are always printed alongside color. The section
-uses native or semantic keyboard controls, exposes disclosure state to assistive
-technology, retains visible focus, and removes nonessential transition motion
-when reduced motion is requested.
+Category names and status text accompany color so you can read the result
+without interpreting the color scale alone.
 
 ## Availability and degraded results
 
-`ok` means the available result is internally complete for what it reports.
-Fresh raw evidence can therefore be `ok` even without a regional index.
-`partial` means useful data remains but a provider, requested comparison,
-freshness, source policy, conflict, or bounded-response condition degraded it.
-`unavailable` means no eligible evidence was found. Missing data is not returned
-as an unlabeled 204 response.
+A complete response can contain fresh raw concentrations without a regional
+index. A partial result can retain useful evidence while a provider, comparison,
+source restriction, or freshness problem prevents a complete answer. Unavailable
+means no eligible evidence was found; it does not mean the air is clean.
 
-Forecast frames follow provider-declared validity intervals. OpenMapX does not
-interpolate an official daily category into invented hourly categories. Station
-maps expose only bounded GeoJSON summaries—never internal pollutant time
-series—and deterministically thin dense viewports.
+Forecasts follow the source's validity intervals. A daily published category is
+not expanded into invented hourly categories. Check each evidence card's method,
+time, and spatial coverage, especially when comparing a modeled grid with a
+ground monitor.
+
+Developers should use the [air-quality integration reference](../developer/air-quality-integrations.md)
+for evidence selection, response fields, and standard validation.
 
 :::caution[Informational, not regulatory advice]
 Air-quality readings and modeled forecasts can be delayed, incomplete, or

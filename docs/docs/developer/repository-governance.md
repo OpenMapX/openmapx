@@ -1,11 +1,16 @@
 ---
+description: Inspect repository protection and follow the incident recovery procedure using current hosted settings.
 title: Repository protection and recovery
 ---
 
 # Repository protection and recovery
 
-The `main protection` repository ruleset (ID `17765533`) targets the default
-branch. This policy replaces the earlier direct-administrator-push convention.
+Use pull requests for routine changes to the default branch. The recorded
+`main protection` ruleset is ID `17765533`. Hosted settings and observations below
+were recorded on 17 and 18 October 2026; workflow source can confirm producer
+names and token permissions, but cannot establish that those hosted settings
+remain active. Read back the current ruleset before changing protection or relying
+on incident recovery.
 
 ## Normal contribution path
 
@@ -90,7 +95,8 @@ auto-merge after applicable checks and merge conditions pass; major updates
 remain manual. Bot authorship does not waive review-thread resolution or the
 release-information policy applicable to a change.
 
-Private vulnerability reporting is enabled. Keep the public reporting route
+The recorded repository configuration enables private vulnerability reporting.
+Read back its current setting when checking the reporting route. Keep the public reporting route
 and email fallback in the repository's
 [security policy](https://github.com/OpenMapX/openmapx/security/policy)
 discoverable. Verify the reporter-facing entry separately from administrator
@@ -124,7 +130,7 @@ read back the result. Do not create an unprotected interval to make progress.
 
 ## Readback and maintenance
 
-The CLI can configure and read back these repository settings:
+These commands read the current repository settings without changing them:
 
 ```bash
 gh api repos/OpenMapX/openmapx/rulesets/17765533

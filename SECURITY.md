@@ -100,8 +100,10 @@ If you self-host OpenMapX, a few recommendations:
 - Terminate TLS at Traefik (the default config provisions Let's Encrypt
   certificates).
 - Restrict admin routes to a trusted network or VPN where possible.
-- Treat community integrations as untrusted code — review the manifest and
-  source before installing.
+- Review community extension manifests, source, requested network access, and
+  host ports before installing. Installed integration artifacts are declarative;
+  service components run container code. See the
+  [extension trust boundary](docs/docs/developer/building-an-external-extension.md).
 - Keep generated credentials and mobile signing output out of the repository's
   root Docker build context. Run `pnpm check-docker-context-secrets` after
   changing `.dockerignore`, Dockerfiles, or build contexts; the check enumerates

@@ -1,125 +1,90 @@
 ---
 title: Preparing data
-description: How OpenMapX downloads and prepares OSM extracts, GTFS transit feeds, tile data, and map glyphs with the data-manager service and CLI.
+description: Download source data, build regional artifacts, refresh transit datasets, and move prepared data between hosts.
 sidebar_position: 5
 ---
 
 # Preparing data
 
-OpenMapX's backend engines don't ship with data — they build their indexes from
-open sources you provide. A routing engine needs an OpenStreetMap extract, a
-transit engine needs GTFS feeds, and a self-hosted tile server needs vector data
-and glyphs. This page covers how OpenMapX obtains that data and shapes it into the
-form each engine expects.
+Complete [Getting started](./getting-started.md) before running network downloads.
+The data-manager must be healthy for downloads, transit sync, and hardlink
+application. Build helpers also need local Docker access.
 
-All of it runs through one service, the **data-manager**, and one CLI namespace,
-`openmapx data`. If you've already read [How it works](../overview/how-it-works.md),
-this is the part where "OpenMapX runs on open data" becomes a set of concrete
-commands.
+Choose explicit service IDs and the smallest useful region. `build-all` and
+`data update` build every installed buildable service, including engines that
+are not enabled.
 
 ## The data-manager
 
-The data-manager is a small built-in service that owns the shared data tree at
-`infra/docker/data/` (mounted as `/data` inside the container). It does three
-things:
+The data-manager owns `infra/docker/data/`, mounted as `/data`. It downloads
+source files, records dataset inventory, and applies hardlinks to consumer paths.
+Transit source/job/promotion metadata lives in PostgreSQL; compiled timetable
+rows live in MOTIS artifacts.
 
-- **Downloads** source data — OSM extracts from Geofabrik, transactional transit
-  sources from Transitous or operator URLs, and map glyph fonts —
-  over the network. Partial transfers never replace good files.
-- **Tracks** ordinary downloaded artifacts in its state file and transit source,
-  job, validation, manifest, and promotion metadata in Postgres. Postgres does
-  not contain GTFS schedule rows.
-- **Hardlinks** files into place so that every consumer service sees its own copy
-  of the input data while the bytes live on disk exactly once.
-
-That last point is the reason a single OSM extract can feed routing, tiles, and
-geocoding without being copied three times. More on it under
-[Sharing data with hardlinks](#sharing-data-with-hardlinks).
-
-The data-manager is part of the always-on core, so once your stack is up it's
-already running. In a typical deployment it listens only on the internal Docker
-network; the CLI reaches it at `http://localhost:4000` by default (override with
-`DATA_MANAGER_URL`). Every command below talks to it on your behalf — you rarely
-call its HTTP API directly.
-
-:::note[Authentication]
-The data-manager's download and link endpoints require the
-`DATA_MANAGER_AUTH_TOKEN` shared secret. The CLI attaches it automatically from
-the environment, so as long as the same token is set in your shell and on the
-service (both read it from `infra/docker/.env`), the commands below just work.
-:::
+The host CLI reaches the published loopback port `http://localhost:4000`.
+`DATA_MANAGER_HOST_PORT` relocates it; `DATA_MANAGER_URL` can specify an explicit
+endpoint. API-to-data-manager traffic uses Docker DNS instead. Mutation endpoints
+require `DATA_MANAGER_AUTH_TOKEN`, which the CLI reads from `.env` and attaches
+automatically. Keep the loopback port private.
 
 ## How regions are named
 
-Most data is downloaded and built per region. OpenMapX uses Geofabrik's path
-naming directly: a region is a slash-separated path like `europe/germany`,
-`north-america/us/california`, or the special value `planet` for the whole world.
+OSM downloads use Geofabrik paths, such as `europe/germany` or
+`north-america/us/california`. `planet` selects the worldwide source. Slashes
+become hyphens on disk: `europe/germany` becomes
+`infra/docker/data/osm/europe-germany.osm.pbf`.
 
-- `openmapx data download osm europe/germany` fetches
-  `https://download.geofabrik.de/europe/germany-latest.osm.pbf`.
-- On disk the slashes become hyphens: `europe/germany` is stored as
-  `data/osm/europe-germany.osm.pbf`, and `planet` as `data/osm/planet.osm.pbf`.
+Set `OPENMAPX_REGION` in `.env` to avoid repeating a region. Explicit arguments
+win, followed by an engine-specific variable such as `OSRM_REGION`, then the
+shared default. A build can use the sole PBF on disk when no region is specified;
+it refuses ambiguity when several candidates exist.
 
-You can avoid repeating the region on every command by setting `OPENMAPX_REGION`
-in `infra/docker/.env`; the download and build commands fall back to it when you
-omit the argument. (Individual engines also honor service-specific overrides such
-as `OSRM_REGION` or `MOTIS_REGION` when you want one engine built for a different
-area.)
-
-:::tip[Pick the smallest region that covers you]
-Region size drives almost everything downstream — download time, build time, RAM,
-and disk. A single country is modest; a continent is several times larger; the
-planet is an order of magnitude more. The [Requirements](./requirements.md) page
-breaks down the sizing. Region-scale engines like OSRM and OTP can't handle a
-planet extract at all — use Valhalla and MOTIS for worldwide coverage.
-:::
+Download scope does not filter every other dataset. Photon and BRouter select
+their own regional downloads, and transit scope uses country codes or feed IDs.
 
 ## Downloading source data
-
-The `openmapx data download` command pulls each kind of raw source data. Run it
-after the core stack (including the data-manager) is up.
 
 ### OpenStreetMap extracts
 
 ```bash
 pnpm openmapx data download osm europe/germany
-# or, with OPENMAPX_REGION set in .env:
+# With OPENMAPX_REGION set:
 pnpm openmapx data download osm
 ```
 
-This downloads the region's `.osm.pbf` from Geofabrik into `data/osm/`. It's the
-foundational dataset: routing engines, the tile builder, and the geocoders all
-read from it. Use `planet` for the full world (a large, slow download — plan disk
-accordingly).
+A successful transfer publishes the PBF under `data/osm/`. Interrupted downloads
+do not replace the previous good file. Check disk space before downloading a
+larger extract; serving multiple PBFs does not automatically give each consumer
+the correct region. Inspect the generated hardlink plan when several inputs exist.
 
 ### Transit schedule sources
 
-MOTIS is the only compiled static-schedule runtime. A sync builds the complete
-requested source set in an inactive MOTIS slot, validates it, probes its static
-capabilities, and promotes it atomically. The requested and active source sets
-can therefore differ while a job runs or when a candidate fails; failure keeps
-the previous live dataset untouched.
+For a configured MOTIS deployment, sync the requested country subset:
 
 ```bash
-# Sync the pinned catalog subset for these countries
 pnpm openmapx data sync --countries de,at,ch
-
-# Inspect requested, active, and lifecycle state
 pnpm openmapx data source list
 ```
 
-The catalog is the pinned community-curated
-[Transitous](https://github.com/public-transport/transitous) source. A catalog
-entry can be disabled and later re-enabled:
+Sync queues an asynchronous job. It builds a complete candidate dataset in an
+inactive MOTIS slot, validates and probes it, then promotes it. The command
+returning a job ID does not mean the import has completed. Track the job in the
+admin activity/data workflow view and compare requested and active source state.
+
+The lifecycle needs selected MOTIS/staging services, sufficient capacity, and
+prepared configuration. Follow [Transit engines](../guides/transit-engines.md)
+and [MOTIS operations profiles](../administration/motis-operations-profiles.md)
+before the first sync. Do not replace an operating dataset with a manual
+stop/build/start sequence for routine feed updates.
+
+Use IDs from `data source list` to disable or re-enable catalog entries:
 
 ```bash
 pnpm openmapx data source remove catalog:de:vbb
 pnpm openmapx data source enable catalog:de:vbb
 ```
 
-Add a private or one-off operator source by declaring all provenance fields. The
-name must be a safe display name and the license must be identified by SPDX id
-or URL:
+Add an operator source with its provenance and license:
 
 ```bash
 pnpm openmapx data source add https://example.org/agency-gtfs.zip \
@@ -129,45 +94,35 @@ pnpm openmapx data source add https://example.org/agency-gtfs.zip \
   --license-spdx CC-BY-4.0
 ```
 
-Add, remove, enable, and sync commands queue asynchronous jobs. Use the returned
-job id in the admin activity view. The source list shows when desired and active
-state differ. Backing up before a routine update is optional because promotion
-retains the prior healthy MOTIS slot for automatic rollback; use the separate
-backup workflow when your operating policy requires an independent copy.
+The URL above is a placeholder; supply a real feed you may use and its actual
+license. `--license-url` is available instead of an SPDX identifier. Add, remove,
+and enable changes queue a new candidate; failure retains the previous live
+sources. Independent backups remain useful for disaster recovery.
 
-Operator feed URLs stay in the data-manager's protected desired-state store.
-During a sync, upstream Transitous receives only an unguessable, one-use relay
-URL bound to that run; it never receives the remote URL, query string, or
-credential headers. The relay accepts public HTTP(S) endpoints on their default
-ports, follows at most five redirects, revalidates and DNS-pins every hop, and
-rejects a hop if any resolved address is private, loopback, link-local, or
-reserved. A feed is limited to 512 MiB of compressed bytes and a five-minute
-remote-download deadline. An unused relay capability expires after ten minutes.
-Once claimed, one ten-minute total deadline covers download and response
-streaming, and a client that makes no byte progress for 30 seconds is
-disconnected. Run termination and client disconnects also abort the stream and
-delete the private archive. A failed use cannot be retried or fall back to the
-remote URL. Audit records contain only the source kind, hostname, duration,
-byte count, outcome, and successful SHA-256 digest.
-
-Do not embed credentials in an operator URL. Authenticated catalog feeds keep
-using the API-key file below. If an operator source is extended with configured
-headers, redirects must retain the exact scheme, hostname, and effective port;
-credentials are never forwarded cross-origin.
-
-:::note[Authenticated Transitous feeds]
-Some Transitous sources require API keys. Generate a key template, fill in the
-values you have, then sync:
+Operator URLs must be public HTTP(S) endpoints on default ports and contain no
+credentials. Private, loopback, link-local, and reserved targets are rejected,
+including after redirects or DNS resolution. Acquisition allows at most five redirects, revalidating and DNS-pinning each hop.
+A feed has a 512 MiB compressed limit and a five-minute remote-download deadline.
+An unused relay capability expires after ten minutes; once claimed, a ten-minute
+total deadline covers download and streaming, and 30 seconds without byte
+progress aborts it. Client disconnect or run termination also aborts and deletes
+the private archive. The capability is single-use even after failure, and cannot
+fall back to exposing the remote URL to the runner. Audit records are limited to
+source kind, hostname, duration, byte count, outcome, and successful SHA-256.
+Credential headers, where supported, cannot follow cross-origin redirects.
+Configure authenticated catalog feeds
+through the API-key file:
 
 ```bash
 pnpm openmapx data generate-api-keys
-# edit services/motis/tools/transitous/api-keys.json
-pnpm openmapx data sync
+# Edit services/motis/tools/transitous/api-keys.json, then:
+pnpm openmapx data sync --countries de
 ```
 
-Existing values are preserved on regeneration; keys no longer required by the
-current catalog are dropped.
-:::
+Regeneration keeps existing required values and removes obsolete keys. Keep
+this file private; it is mounted into data-manager and the private runner,
+not distributed as ordinary source data. An optional age key is described in
+`infra/docker/secrets/README.md`.
 
 ### Map glyphs
 
@@ -175,252 +130,205 @@ current catalog are dropped.
 pnpm openmapx data download fonts
 ```
 
-This atomically installs the OpenMapTiles glyph PBF tree in `data/tile-fonts/`.
-Set `OPENMAPTILES_FONTS_URL` to use a pinned or internally mirrored archive.
-The OpenMapX light/dark styles and sprites already ship in the web app; the data
-pipeline does not download or rewrite a duplicate style bundle. Online
-self-hosting and offline packages reuse those same web assets and only source
-glyph PBFs from `data/tile-fonts/`.
-
-You need the glyph tree when running TileServer GL or generating offline map
-packages from the self-hosted OpenMapX dataset. Hosted-only deployments can
-skip it.
+This installs OpenMapTiles glyph PBFs atomically under `data/tile-fonts/`.
+`OPENMAPTILES_FONTS_URL` selects a pinned or mirrored archive. Download glyphs
+for TileServer GL or local offline-package generation. Hosted-only maps do not
+need this step. OpenMapX styles and sprites already ship with the web app.
 
 ## Building prepared artifacts
 
-Downloading is only half the story for the heavy engines. A routing engine can't
-read a raw `.osm.pbf` directly — it needs a precompiled graph. A self-hosted tile
-server needs the extract baked into an MBTiles archive. These **prepared
-artifacts** are produced by a separate build step that runs the engine's own
-tooling (in a Docker helper image) over the data you downloaded.
-
-Builds are per service. Each engine that needs preparation declares a build in its
-manifest, and you trigger it with `openmapx services build`:
-
 ```bash
-# Build one or more engines' artifacts for a region
-pnpm openmapx services build osrm motis --region europe/germany
-
-# Build every buildable engine in the current selection, in order
-pnpm openmapx services build-all --region europe/germany
+pnpm openmapx services build osrm --region europe/germany
+# Equivalent positional-region alias:
+pnpm openmapx data build osrm europe/germany
 ```
 
-The `data` namespace offers a thin alias for the same thing, handy when you're
-thinking in terms of data rather than services:
+The build prepares files, records provenance, renders configuration, and applies
+hardlinks. Stop **all** consumers before building or importing:
+
+| Build target | Consumers that must be stopped                                | Output below `data/`               |
+| ------------ | ------------------------------------------------------------- | ---------------------------------- |
+| `osrm`       | `osrm`                                                        | `osrm-graph/`                      |
+| `otp`        | `otp`                                                         | `otp-graph/`                       |
+| `pelias`     | `pelias`, `pelias-pip`, `pelias-placeholder`, `elasticsearch` | `pelias/`                          |
+| `tileserver` | `tileserver`                                                  | `tile-mbtiles/`                    |
+| `motis`      | `motis`, `motis-staging`                                      | `motis/live/`, `motis-feed-proxy/` |
+
+For example:
 
 ```bash
-pnpm openmapx data build motis europe/germany
+pnpm openmapx services stop osrm
+pnpm openmapx services build osrm --region europe/germany
+pnpm openmapx services start osrm
 ```
 
-The build kinds that prepare artifacts are:
+OSRM, OTP, Pelias, and TileServer builds stage into sibling `.next` directories
+and swap only after success. Budget space for old and new artifacts together,
+including both Pelias Elasticsearch indexes. OSRM skips an unchanged input/image/
+profile/traffic build. Other build targets do not all share that cache behavior.
 
-| Kind         | Engine        | Output                                                                      |
-| ------------ | ------------- | --------------------------------------------------------------------------- |
-| `osrm`       | OSRM          | Routing graph (`data/osrm-graph/`) — region scale only                      |
-| `otp`        | OTP           | Transit graph (`data/otp-graph/`) — region scale only                       |
-| `motis`      | MOTIS         | Prepared inputs for the MOTIS slot lifecycle (`--import` also imports them) |
-| `pelias`     | Pelias        | Geocoding data and Elasticsearch index (`data/pelias/`)                     |
-| `tileserver` | TileServer GL | MBTiles archive (`data/tile-mbtiles/`) from the OSM extract                 |
+MOTIS's low-level build prepares initial/off-host data in place; `--import` also
+runs the runtime import. It is distinct from transactional live transit sync.
+Valhalla, Nominatim, and Overpass import within their service containers; they
+have no CLI build hook.
 
-Engines that read raw source data directly — Valhalla, Nominatim, Overpass — have
-no build step here; they consume the downloaded extract as-is (Overpass needs a
-one-time format conversion, covered [below](#deriving-secondary-formats)).
-
-OSRM, OTP, Pelias, and TileServer builds write into a sibling `<dir>.next` and
-only replace the live directory once the build has succeeded, so a failed or
-interrupted build leaves the previous artifact in place. The old and the new
-copy coexist for the whole build, so budget disk for both: for Pelias that is
-two Elasticsearch indexes. MOTIS keeps building in place; its data-manager
-pipeline owns the staged swap for that engine.
-
-:::caution[Stop the consumer before rebuilding]
-A running engine keeps reading the old files through its hardlinked mount until
-it restarts, so the build refuses to run while the consuming service is up — stop
-it first (`pnpm openmapx services stop <id>`), build, then start it again. The
-OSRM build skips its work entirely when the input data is unchanged, so
-re-running it is cheap.
-:::
+`services build-all --region europe/germany` currently plans OSRM, OTP, MOTIS,
+Pelias, and TileServer GL even when only one is selected. It continues after
+individual failures unless given `--fail-fast`. Explicit `services build <ids>`
+stops on the first failure unless given `--continue-on-error`. Inspect failures
+before starting consumers; a successful later target does not repair an earlier
+failure.
 
 ### Deriving secondary formats
 
-Overpass wants its OSM input as bzip2 rather than PBF. Convert a downloaded extract
-in place:
+Overpass needs bzip2-compressed OSM XML:
 
 ```bash
 pnpm openmapx data convert overpass europe/germany
+pnpm openmapx data link
 ```
 
-This produces the bz2 variant in `data/osm-bz2/` from the matching PBF, in
-parallel across CPU cores.
+Conversion reads the matching PBF and writes `data/osm-bz2/data.osm.bz2`.
+It is a separate step, including after refreshing the PBF; `data update` does
+not run this conversion. See [OSM data queries](../guides/osm-data-queries.md).
 
 ### Search index and Overture Places
 
-The CLI provides dedicated commands for managing regional search indexes and
-Overture Maps POI datasets:
+The following examples use Germany; replace it with your prepared region:
 
 ```bash
-# Build or check status of the local search index
-pnpm openmapx data search-index build [region]
+pnpm openmapx data search-index build europe/germany
 pnpm openmapx data search-index status
-
-# Rebuild or check the Wikidata index of famous places (refreshed monthly on its own)
 pnpm openmapx data notable-places build
 pnpm openmapx data notable-places status
-
-# Regional or planet Overture Places synchronization and conflation
-pnpm openmapx data overture-sync [region]     # end-to-end pull, ingest, and conflation
-pnpm openmapx data overture-pull [region]     # pull Parquet partitions from STAC catalog
-pnpm openmapx data overture-ingest [region]   # ingest raw Places into database staging
-pnpm openmapx data overture-conflate [region] # rebuild OSM <-> Overture GERS entity links
-pnpm openmapx data overture-status            # inspect active and staging Overture snapshots
-pnpm openmapx data overture-extract           # extract regional boundaries from OSM PBF
+pnpm openmapx data overture-sync europe/germany
+pnpm openmapx data overture-status
 ```
 
-For global ambient maps, explicitly prepare `planet` with the OSM download,
-format 2 search-index build and `overture-sync planet` commands before selecting
-**Planet** in the admin publication card. Keep the same planet PBF across both
-source builds. This is a sized preparation workload, not a boot-time task. See the
+`overture-sync` runs the pull, ingest, and conflation sequence. Individual
+`overture-pull`, `overture-ingest`, `overture-conflate`, and `overture-extract`
+commands are available for troubleshooting. `overture-conflate --restart`
+discards saved phases; use it only when a full restart is intended.
+
+For global ambient maps, prepare `planet` explicitly with the same PBF for the
+format 2 search index and Overture conflation before publishing Planet in the
+admin panel. This is a substantial preparation workload. The
 [global publication runbook](../developer/ambient-places-publication.md#planet-preparation-restart-and-deployment)
-for ordered commands, persistent checkpoints, resource budgets and recovery.
+covers checkpoints, capacity, and recovery.
 
 ## Sharing data with hardlinks
 
-Several services consume the same files. Rather than copy a multi-gigabyte extract
-into each one's directory, OpenMapX uses **hardlinks**: every consumer gets its own
-path that points at the same bytes on disk.
-
-When you run `openmapx compose render`, alongside the generated compose file it
-writes a _hardlink plan_ — one entry per `consumes`/`produces` match across your
-enabled services. Apply that plan so each consumer's input directory points at the
-producer's data:
+`data link` renders the current selection and applies its producer/consumer plan:
 
 ```bash
 pnpm openmapx data link
 ```
 
-This re-renders the plan from your current service selection first (so it never
-links directories you no longer want), then applies it: existing correct links are
-left alone, stale ones are replaced, and dropped ones are pruned. It reports how
-many links it created, skipped, and pruned. The links are filesystem-level — no
-copying, no Docker volume juggling, and the data exists exactly once regardless of
-how many services read it.
-
-You run `data link` after any change that affects what consumes what: after a fresh
-download or build, or after changing your enabled services. The all-in-one
-[update](#a-full-refresh-in-one-command) command does it for you at the end.
+Correct existing links are kept; stale links are replaced and removed mappings
+are pruned. Producer and consumer paths must be on the same filesystem. A
+hardlink shares input bytes, while every derived graph or index adds storage.
+Replacing a producer file does not update an existing consumer inode until links
+are refreshed. Restart consumers after a completed refresh where required.
 
 ## Building on another host
 
-The build peak is much larger than what an engine needs to serve, so you can run
-`services build` on a big machine (a workstation, or a server rented by the hour)
-and serve from a smaller one. Every build records what it produced in
-`data/.openmapx-builds/<service>.json`: the region, the source PBF, the OpenMapX
-commit, and the runtime images the output is bound to. `data export` packs the
-built directories together with that record and a SHA-256 for every file.
-`data import` on the other host verifies all of it before swapping anything in.
-
-Both hosts need a checkout of the same OpenMapX revision. OSRM graphs, OTP
-graphs, the Pelias index, and imported MOTIS data only load in the exact image
-version that built them, and the import refuses a bundle whose runtime images
-don't match the serving host's manifests.
+Prepare artifacts on a larger machine with the same OpenMapX revision and
+runtime image pins. Build records under `data/.openmapx-builds/` record inputs,
+images, and revision. Bundles include file checksums; import verifies them and
+runtime image compatibility before swapping data.
 
 ```bash
-# On the build host
-pnpm openmapx data download osm europe/germany
+# Build host, with source data already downloaded:
 pnpm openmapx services build tileserver --region europe/germany
-
-# Stream straight to the serving host (stop the consumer there first)
-pnpm --silent openmapx data export tileserver - \
-  | ssh serve-host 'cd openmapx && pnpm --silent openmapx data import -'
-
-# Or go through a file
 pnpm openmapx data export tileserver tiles-germany.tar
+
+# Serving host, after transferring the bundle:
+pnpm openmapx services stop tileserver
 pnpm openmapx data import tiles-germany.tar
+pnpm openmapx services start tileserver
 ```
 
-The import extracts into `data/.openmapx-import/` on the same filesystem, so the
-serving host briefly needs room for both the old and the new artifact. Files are
-owned by whoever runs the import, so a different UID on the two hosts needs no
-`chown`, as long as you run the import as the user whose id is `UID` in
-`infra/docker/.env` (Elasticsearch and MOTIS run as that user and write to their
-data). Relative bundle paths are taken from the directory you run the command
-in. After the swap the import re-renders and re-links; start the consumers it
-names when it finishes.
+For direct streaming, both hosts need SSH and the remote checkout path:
 
-What travels for each service:
+```bash
+pnpm --silent openmapx data export tileserver - \
+  | ssh serve-host 'cd openmapx && pnpm --silent openmapx data import -'
+```
 
-| Service      | Bundled directories                | Left out                                  |
-| ------------ | ---------------------------------- | ----------------------------------------- |
-| `tileserver` | `tile-mbtiles/`                    | nothing                                   |
-| `osrm`       | `osrm-graph/`                      | the staged `region.osm.pbf`               |
-| `otp`        | `otp-graph/`                       | the staged PBF and GTFS archives          |
-| `pelias`     | `pelias/` (Elasticsearch included) | the staged `openstreetmap/` extract       |
-| `motis`      | `motis/live/`, `motis-feed-proxy/` | nothing (the import re-checks its inputs) |
+Stop the target consumers before streaming. Export also refuses running
+consumers on the build host. Import needs temporary space on the same filesystem
+for `data/.openmapx-import/` plus old and new outputs. Run it as the serving
+owner whose UID/GID match the containers. Relative paths are resolved from the
+invocation directory.
 
-For MOTIS, build with `--import` so the heavy `motis import` runs on the build
-host, using the same image and paths as the runtime container. On the serving
-host, the container's own `motis import` at start-up then only re-verifies the
-inputs before serving. Export refuses MOTIS import output from a build that ran
-without `--import`, since nothing ties it to an image. Stop both `motis` and
-`motis-staging` before exporting or importing:
+| Service      | Bundled directories                | Excluded inputs        |
+| ------------ | ---------------------------------- | ---------------------- |
+| `tileserver` | `tile-mbtiles/`                    | None                   |
+| `osrm`       | `osrm-graph/`                      | Staged PBF             |
+| `otp`        | `otp-graph/`                       | PBF and ZIP inputs     |
+| `pelias`     | `pelias/`, including Elasticsearch | `openstreetmap/` input |
+| `motis`      | `motis/live/`, `motis-feed-proxy/` | None                   |
+
+MOTIS export requires a build performed with `--import`, tying its import output
+to the runtime image. Stop both MOTIS slots on each host:
 
 ```bash
 pnpm openmapx services build motis --region europe/germany --import
 pnpm openmapx data export motis motis-germany.tar
 ```
 
-Valhalla, Nominatim, and Overpass build inside their own containers on first
-start, so they have no bundle. Run them where they serve.
+Valhalla, Nominatim, and Overpass have no supported artifact-bundle workflow.
+If import reports that the artifact was installed but linking failed, fix the
+reported cause and run `data link` before starting its consumers.
 
 ## Checking what you have
 
-Inspect the downloaded inventory at any time:
-
 ```bash
-# Query the data-manager for the dataset inventory it tracks
 pnpm openmapx data status
-
-# Or scan infra/docker/data directly, without the data-manager running
 pnpm openmapx data status --offline
 ```
 
-The default view lists each dataset's type, id, size, and download time as recorded
-by the data-manager. The `--offline` scan walks the data directory on disk instead —
-useful before the stack is up, or to see exactly what's on the filesystem (OSM PBFs,
-transit artifacts, and per-directory usage).
+The default view reads data-manager inventory. `--offline` scans local storage
+without the daemon; filesystem presence does not establish engine readiness.
+For transit desired versus active state, also use `data source list`.
 
 ## A full refresh in one command
 
-For a from-scratch or routine refresh, `data update` runs the whole sequence —
-download, build, render, link — in order:
-
 ```bash
-pnpm openmapx data update europe/germany
+pnpm openmapx data update europe/germany --countries de --fail-fast
 ```
 
-This downloads the OSM extract, transactionally syncs transit sources, downloads
-map glyphs, builds every buildable engine's artifacts, re-renders the compose plan,
-and applies the hardlinks. It's
-the convenient front door once you know which region you want; the individual
-commands above are there for when you want to refresh just one piece.
+This downloads OSM, queues a transit sync, downloads glyphs, builds all installed
+prepared-artifact targets, renders, and links. The transit job is asynchronous;
+this command is not a wait-for-promotion operation. It does not stop or restart
+consumers, filter builds to selected engines, or convert Overpass input. It can
+fail if any planned consumer is running, including MOTIS while the queued sync
+is active. Prefer the targeted procedures above for routine operating updates.
 
 ## Cleaning up
 
-To reclaim space, remove the local data for a given type (or everything):
+:::danger[Cleanup deletes local files immediately]
+`data clean` has no confirmation or dry-run flag and does not stop consumers.
+`data clean all` recursively deletes **the entire `infra/docker/data/` tree**,
+including operational state and journals, not just reproducible downloads.
+Do not use it as routine disk maintenance on an operating instance.
+:::
+
+After stopping affected consumers and verifying backups, remove a specific
+reproducible data type if needed:
 
 ```bash
-pnpm openmapx data clean osm
 pnpm openmapx data clean fonts
-pnpm openmapx data clean all
 ```
 
-Cleanup also prunes the matching entries from the data-manager's state file. Most
-downloads and build outputs are reproducible — you can always re-fetch and rebuild
-— so cleaning is safe as long as you're prepared to download again.
+Type cleanup removes matching producer and consumer paths and prunes dataset
+inventory. Re-download, re-link, and verify consumers before returning them to
+service. Inspect [backup and restore](../administration/backup-and-restore.md)
+before deleting anything you cannot regenerate.
 
 ## Where to go next
 
-- **[Requirements](./requirements.md)** — how region size and engine choice drive
-  the RAM and disk you'll need before you start downloading.
-- **[How it works](../overview/how-it-works.md)** — the service/integration model
-  and how the data-manager fits into a running deployment.
+Use [Requirements](./requirements.md) for capacity planning and the individual
+[routing](../guides/routing-engines.md), [geocoding](../guides/geocoders.md),
+[transit](../guides/transit-engines.md), and [tile](../guides/map-tiles.md) guides
+for readiness checks.

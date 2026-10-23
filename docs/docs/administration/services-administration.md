@@ -1,299 +1,232 @@
 ---
 title: Services administration
-description: Manage backend services from the admin panel — status, config, logs, the generated compose preview, and the data inventory.
+description: Select services, apply configuration, inspect logs and operate data workflows from the admin panel.
 sidebar_position: 2
 ---
 
 # Services administration
 
-Everything you can do to a backend service from the command line, you can also
-do from the admin panel — in a browser, behind the same login. The admin pages
-under `/admin/services` are a window onto the service registry: they list what's
-installed, show each service's manifest and live container status, let you edit
-config and stream logs, preview the compose file the renderer would write, and
-take stock of the data on disk. Under the hood these are the same operations the
-CLI exposes, so reach for whichever surface fits the moment.
-
-If you haven't met the service model yet, start with
-[How it works](../overview/how-it-works.md): a _service_ is a backend daemon
-described by a `service.json` manifest, _capabilities_ tie services to the
-integrations that need them, and the compose renderer turns your enabled
-manifests into a running stack. This page assumes that picture and focuses on the
-web UI.
-
-:::note[Two surfaces, one behavior]
-The admin panel and the `openmapx` CLI act on the same registry and produce the
-same effects. The full command reference — selection files, presets, rendering,
-builds, exposure — lives in
-[Managing services](../install/managing-services.md). When this page says "the
-equivalent CLI command," that's where to find it.
-:::
+Use `/admin/services` with a full administrator account and an available
+operations agent. The API submits typed operations to the agent; the agent owns
+Docker access, registry credentials, community repositories and generated host
+configuration. See [Managing services](../install/managing-services.md) for CLI
+commands and deployment prerequisites.
 
 ## The service catalog
 
-`/admin/services` is the catalog. It lists every service the registry has
-discovered — first-party services shipped in the repo and any community services
-you've installed — in one table:
+The catalog lists discovered built-in and community services, their manifest
+version, quality tier, capabilities and container state. Search by name, ID or
+capability, then open a service to inspect its configuration and logs.
 
-| Column   | What it shows                                                              |
-| -------- | -------------------------------------------------------------------------- |
-| Service  | The display name and its manifest `id`                                     |
-| Version  | The manifest version                                                       |
-| Quality  | A badge: **Built-in**, **Verified** (community-verified), or **Community** |
-| Provides | The capabilities the service offers (`routing-engine`, `geocoder`, …)      |
-| Status   | The container's Docker state — running, exited, restarting, not running    |
-
-A summary across the top counts the total, running, and stopped services, and
-you can narrow the list with the search box (by name, id, or capability) and the
-quality-tier filter. Click a service name to open its detail page.
+Container state is not a functional health check. Use **Run Service Check** or
+[Monitoring](./monitoring.md) when a running container does not serve requests.
 
 ### Service selection
 
-The catalog also surfaces the **selection** — the set of root services that
-participate in your deployment. The selection panel shows the requested roots,
-the effective count after the renderer expands dependencies, and where the
-selection is coming from. You can edit the comma-separated list of root ids and
-**Save Selection** to persist it. It is the CLI's selection too: saving writes
-`infra/docker/service-selection.json`, the file `pnpm openmapx services enable`
-edits, and the panel shows what `pnpm openmapx services selected` shows.
+The selection contains the requested root services and their expanded
+dependencies. It is shared with `openmapx services selected` and the CLI's
+`services enable` workflow.
 
-When the selection is being driven by the `OPENMAPX_ENABLED_SERVICES` environment
-variable, the panel says so and disables editing — the environment variable wins,
-and the UI keeps that unambiguous rather than letting you save a file that won't
-be read. Saving the selection changes what _will_ be rendered and started; it
-doesn't touch running containers until you start or update them.
+1. Inspect the selection source and current roots.
+2. Enter the required root IDs and choose **Save Selection**.
+3. Review **Compose preview**, then start or update the affected services.
+
+Saving publishes a generated configuration; it does not start or stop containers.
+The selection file is `infra/docker/service-selection.json`.
+A nonempty `OPENMAPX_ENABLED_SERVICES` override takes precedence and disables
+editing. Empty, whitespace-only or comma-only overrides are treated as unset.
+
+Requested selection, the published host configuration generation and running
+containers can differ. Check all three after a failed apply instead of assuming
+that an error restored the previous state.
 
 ### Bulk actions
 
-Tick the checkboxes beside one or more services and the bulk-action bar lets you
-**Start**, **Stop**, **Restart**, **Update**, or **Build** the selection in one
-go, plus **Build All** and a **Run Service Check** that refreshes container
-states. Builds take an optional region and a "continue on errors" toggle. Each
-action is queued as a background job — the toast names the job id, and the
-**View Jobs** link opens the activity view where the job's log streams.
+Select services for **Start**, **Stop**, **Restart**, **Update** or **Build**.
+Builds accept a region and a continue-on-errors option; **Build All** is
+explicit. Follow the returned job in **Activity** until it reaches a terminal
+state. Acceptance alone does not establish completion.
 
 ## A single service in detail
 
-`/admin/services/<id>` is the per-service page. A header shows the name, quality
-badge, live container status, and whether the service is in the current
-selection, alongside the action buttons. Below that, four tabs:
+Open `/admin/services/<id>`. Its header shows container state, selection and
+lifecycle actions. The detail page has **Overview**, **Configuration**, **Credentials**,
+**Logs** and **Manifest** tabs.
 
 ### Overview
 
-A read-only digest of the manifest: id, version, author, license, platform,
-homepage, and the directory it was loaded from, plus its description and the
-capability and data wiring that make it swappable —
+Review the service ID, version, author, licence, platform and source directory.
+The page also shows:
 
-- **Provides** — the capabilities this service offers to integrations.
-- **Consumes** — the shared data it mounts (an OSM extract, a prepared graph,
-  map glyphs), with the mount path and whether it's read-only or optional.
-- **Environment variables** — the env vars the manifest declares, each marked
-  required or optional, with its description and default.
-- **Exposure** — how, if at all, the service is reachable from outside the
-  private Docker network: any host-port bindings and the reverse-proxy path
-  prefix. By default a service is reachable only by other containers; see
-  [Managing services](../install/managing-services.md) for what exposure means
-  in practice.
+| Field                 | Operator use                                           |
+| --------------------- | ------------------------------------------------------ |
+| Provides              | Capabilities available for integration bindings        |
+| Consumes              | Shared data mounts, including optional/read-only state |
+| Environment variables | Declared variables and defaults                        |
+| Exposure              | Host-port bindings and declared proxy routes           |
+
+Community services receive a separate network and no platform proxy route.
+Host-port publication still creates exposure: inspect its effective bind address
+and protocol in the extension preview.
 
 ### Config
 
-If the manifest declares a `configSchema`, this tab renders it as a form — one
-field per operator-tunable setting, typed from the schema (toggles for booleans,
-dropdowns for enums, text and number inputs otherwise). Services without a
-schema show a note instead; those are configured through environment variables or
-bind-mounted config files.
+Open the **Configuration** tab. A manifest's `configSchema` supplies the form. Services without one use their
+documented environment or mounted configuration.
 
-Each field carries a **source** chip telling you where its current value comes
-from, following the three-layer cascade that resolves at render time:
+| Source     | Priority                               |
+| ---------- | -------------------------------------- |
+| `env`      | Highest; `SERVICE_<ID>_<KEY>` override |
+| `database` | Value saved in the administration form |
+| `default`  | Manifest default                       |
 
-| Source     | Meaning                                                             |
-| ---------- | ------------------------------------------------------------------- |
-| `default`  | The schema's default — nothing has overridden it.                   |
-| `database` | A value you saved here, stored in the database.                     |
-| `env`      | A host environment variable (`SERVICE_<ID>_<KEY>`) is dictating it. |
+Environment-driven fields are disabled. Use the exact variable name shown in the
+form; hyphens become underscores and names are upper-cased.
 
-Environment variables always win, so any field driven by one is shown **disabled**
-— you can see the effective value but can't edit it from the UI, because the host
-environment would override your edit anyway. The form header repeats the env-var
-prefix so the override convention is discoverable. Two buttons commit changes:
+- **Save** validates and stores the patch, then publishes a full trusted host
+  configuration generation. It does not recreate the container.
+- **Save & apply** performs the save, then queues a service start/apply job to
+  recreate the container with the generated configuration.
 
-- **Save** persists the edited fields to the database. The new value takes effect
-  on the next render and container restart — saving alone doesn't restart
-  anything.
-- **Save & Apply** saves and then immediately queues an apply so the
-  change is picked up without a manual step. Service config lands in the
-  generated compose environment, so applying a new value goes through a compose
-  re-render under the hood.
+A host CLI render preserves settings and service secrets from the last published
+configuration generation, then applies the host environment. It cannot read a
+new database edit that failed before publication. If a save reports a conflict,
+unknown outcome or cleanup failure, inspect current configuration and job state
+before retrying. See [Configuration](../install/configuration.md).
 
-For the broader story of where settings live — the `.env` file, secrets, and how
-the panel relates to environment variables — see
-[Configuration](../install/configuration.md).
+### Credentials
+
+Set declared secret fields here, with `OPENMAPX_SECRETS_KEY` configured for the
+API vault. Values are encrypted in the database and rendered as private files;
+containers receive `<KEY>_FILE=/run/secrets/<KEY>`. The API returns status and
+masked values instead of the credential body.
+
+A credential change queues an apply when host control is available. Follow that
+job. A `needsRender` response requires host render/apply work; storing the
+credential alone does not prove the container received it.
 
 ### Logs
 
-Opening the Logs tab (or the **Logs** button) slides out a drawer that streams
-the service's container logs live, tailing the most recent lines. It's the same
-output as the equivalent `services logs` CLI command, in the browser — handy for
-watching a build finish or diagnosing a service that won't come up.
+Open the drawer to tail container output. Use it to diagnose startup, import or
+build failures. Container logs can contain upstream diagnostics or personal data;
+review and redact them before sharing.
 
 ### Manifest
 
-The full `service.json`, pretty-printed. This is the raw source of truth behind
-the Overview tab — useful when you're verifying exactly what a community service
-declares before trusting it.
+Inspect the full `service.json` before changing configuration or trusting a
+community service. The manifest declares intended behavior, not a security audit
+of the container's executable code.
 
 ### Lifecycle actions
 
-The header buttons drive the container, each queued through the job runner:
+| Action                | Effect                                                                 |
+| --------------------- | ---------------------------------------------------------------------- |
+| Start / Apply changes | Render current configuration, apply hardlinks and bring the service up |
+| Stop                  | Stop the service container                                             |
+| Restart               | Restart in place with the existing container configuration             |
 
-- **Start / Apply changes** — the primary button. It re-renders from the current
-  manifests and config and brings the container up, so it picks up changes. The
-  label reads **Apply changes** when the service is already running and **Start** when
-  it isn't.
-- **Stop** — stops the container.
-- **Restart** — an _in-place_ reboot. It does not re-render, so it won't pick up a
-  changed manifest, `.env`, or config — use it to bounce a service whose image
-  and config are unchanged.
-
-The distinction between Start/Apply changes and Restart matters: if you've just changed
-config or the manifest, use Apply changes, not Restart. The same nuance applies
-on the CLI and is spelled out in
-[Managing services](../install/managing-services.md). Every lifecycle and config
-action is rate-limited and recorded in the audit log.
+Use **Apply changes** after changing configuration, manifests or environment.
+A restart does not recreate the container. Administrative host operations have
+safety restrictions; use **Maintenance** for the coordinated core-release update
+rather than trying to update the running API as an ordinary service job.
 
 ## Compose preview
 
-`/admin/services/compose` renders the `docker-compose` YAML the renderer _would_
-write for your currently enabled services, regenerated on each request. It
-follows the same selection and config resolution as the CLI render, so it's a
-faithful preview — a good last look before you bring the stack up, especially
-after changing the selection or a service's config.
+Open `/admin/services/compose` to inspect the generated Compose YAML for the
+current selection and resolved configuration. Do not edit generated files.
+Use the form or source configuration, then render again.
 
-The page also offers **Compose Up** and **Compose Down** buttons that render,
-apply the data hardlink plan, and start or stop the whole enabled stack. There's
-no compose file to hand-edit anywhere — it's generated, every time. To re-render
-from the CLI, run `pnpm openmapx compose render`.
+**Compose Up** applies the enabled stack; **Compose Down** stops it. These are
+stack-wide operations, so check the selection and schedule any downtime first.
+On the host, `pnpm openmapx compose render` publishes a generated configuration.
 
 ## Data inventory
 
-`/admin/services/data` is the inventory and control surface for the open data the
-stack runs on. It pulls together the active engine data and the operational
-metadata tracked by the data-manager:
+Open `/admin/services/data` to inspect OSM downloads, engine build directories,
+transit source state and specialized publication workflows. Follow the linked
+jobs for failures and progress. Operation forms, previews and risk levels come
+from the API's operation catalog.
 
-- **OSM planet data** — whether an OSM extract is present, its filename, region,
-  size, and download date.
-- **Service build inventory** — a read-only grid showing which engines have
-  populated their data directories (Valhalla, OSRM, OTP, MOTIS, Pelias, the tile
-  server, and so on) and when they were built.
-- **Transit sources** — one lifecycle row per catalog or operator source. The
-  row shows its origin, desired and active state, archive format/size,
-  validation result, last fetch and promotion times, and available actions.
-  Desired and active state can differ while a job is running or after a failed
-  candidate: the prior healthy MOTIS dataset stays live until the complete
-  candidate passes validation and promotion.
+For a transit source:
 
-Catalog sources can be disabled and later re-enabled. An operator source is
-defined by a region, a safe display name, its HTTPS URL, attribution text, and
-either an SPDX license identifier or license URL. Adding, disabling, enabling,
-or manually syncing a source queues an asynchronous job; the row links to the
-activity log and disables conflicting actions while that job is active.
+1. Inspect its desired and active state, archive validation and last promotion.
+2. Add an operator source with a region, safe display name, HTTPS URL,
+   attribution and either an SPDX licence ID or licence URL; or select an
+   existing catalog source.
+3. Queue sync, enable or disable and follow its job.
+4. Confirm the active source set and MOTIS promotion after the job finishes.
 
-MOTIS is the only compiled static-schedule runtime. Postgres stores the
-data-manager's source, job, validation, manifest, and promotion metadata; it
-does not contain imported GTFS schedules.
+A failed candidate preserves the prior healthy dataset. Desired source changes
+do not prove active publication. MOTIS compiles and serves static schedules;
+Postgres holds source/job/validation/promotion metadata, not imported GTFS
+schedule tables. See [MOTIS operations profiles](./motis-operations-profiles.md).
 
-A **Data Operations** panel queues the same data jobs the CLI runs — downloading
-OSM and map glyphs, transactional transit sync, the full update pipeline, the
-Overpass conversion, hardlink sync, cleanup, and the Transitous API-key
-template. Each queues a background job whose log you can follow in the activity
-view. The destructive cleanup operation asks for confirmation first. The full
-data workflow is documented in [Preparing data](../install/preparing-data.md).
+Other operations include OSM/glyph acquisition, full update, Overpass conversion,
+hardlink sync, cleanup, Transitous key-template generation and Overture full
+sync/resume. Destructive cleanup requires confirmation. See
+[Preparing data](../install/preparing-data.md).
 
 ### OSM code and alias search index
 
-The data workflow also operates the local OSM code/alias/acronym index used by
-consumer autocomplete. It shows the source region, current
-build stage, place and term counts, publication epoch and time, whether a newer
-PBF has made the index stale, and the last error. Building is explicit: select
-the downloaded region and confirm the operation, or run
-`openmapx data search-index build [region]`. A new PBF never triggers a
-country- or planet-scale rebuild during API boot.
+Choose a downloaded region and build explicitly, or run:
 
-A ready index covers the documented aliases/codes/acronyms; it does not establish
-ordinary business-name/address coverage. For an investigation, record the
-authenticated `/api/data-manager/search-index/status` response's
-`sourceFingerprint` and `epoch` as well as the Overture status response's release
-and region. The search card's summary does not display the source fingerprint.
-Keep unavailable generations unknown and do not rebuild or flush shared caches
-to diagnose a query. See the
-[business retrieval investigation](../developer/business-name-address-retrieval.md)
-for the distinction between source presence and searchable candidates.
+```bash
+pnpm openmapx data search-index build [region]
+```
 
-The job requires PostGIS and Osmium Tool. It streams records in bounded batches
-into `osm_search__staging`, builds exact/prefix and geographic indexes, validates
-counts and referential integrity, then swaps schemas in one database
-transaction. Extraction, validation, or publication failure keeps the prior
-snapshot live. During a rebuild the existing snapshot remains searchable;
-after a new PBF the stale snapshot also remains available until replaced.
+The job requires PostGIS and Osmium Tool. It streams into staging, builds
+indexes, validates and publishes in one database transaction. Failure preserves
+the prior snapshot; a newer PBF marks that snapshot stale without triggering a
+large rebuild during API boot.
+
+Inspect stage, counts, publication epoch/time and last error. A ready code/alias
+index does not prove ordinary business-name/address coverage. For investigation,
+record `sourceFingerprint` and `epoch` from the authenticated
+`/api/data-manager/search-index/status`, plus Overture's release and region.
+The summary card does not show the fingerprint. See
+[Business-name/address retrieval](../developer/business-name-address-retrieval.md).
+
+Plan disk for the PBF, staging tables/indexes and prior live schema. One active
+extract or `planet` is supported, without overlapping regional unions. Derived
+OSM rows stay in `osm_search` with ODbL attribution, separate from Overture.
 
 ### Nearby places publication
 
 The **Nearby places on the map** card publishes existing OSM/Overture sources
-for a custom region, Germany or the planet. It displays the active generation,
-source coverage/releases and eligible counts separately from staged progress.
-Global builds require a ready format 2 OSM snapshot for `planet` and, when
-Overture is initialized, a matching completed Overture snapshot; selecting a
-preset does not ingest them. Interrupted global
-candidates persist across restarts and offer **Resume planet build** or
-**Discard candidate**. Resume requires unchanged sources and policy. Disable and
-rollback preserve retained immutable tiles. See the
-[publication runbook](../developer/ambient-places-publication.md) for preparation,
-capacity, deployment scenarios and recovery.
+for a custom region, Germany or the planet. Inspect active generation and source
+coverage separately from staged progress. A preset does not ingest missing data.
+
+Planet builds require a ready format-2 `planet` OSM snapshot and, when Overture
+is initialized, a matching completed Overture snapshot. Interrupted candidates
+can be resumed only with unchanged sources and policy, or discarded. Disable
+and rollback preserve retained immutable tiles. Follow the
+[publication runbook](../developer/ambient-places-publication.md) for capacity
+and recovery.
 
 ### Notable places index
 
-The **Notable places** card shows the Wikidata index that tells search which
-of several namesakes is famous: place and name counts, the sitelink threshold,
-when it was published, and the last error. Unlike the OSM index it needs no
-download: the data-manager builds it from a Wikidata SPARQL endpoint the first
-time it starts without one, then refreshes it monthly (see
-[configuration](../install/configuration.md#notable-places-for-search)).
-**Rebuild now**, or `openmapx data notable-places build`, refreshes it at once.
-A build takes about two minutes and stages, validates, and swaps the
-`notable_places` schema in one transaction, so a failed refresh keeps the
-previous snapshot searchable.
+Inspect the Wikidata place/name counts, sitelink threshold, publication time and
+last error. Data Manager builds a missing index on startup and refreshes monthly.
+Choose **Rebuild now**, or run:
 
-Plan temporary disk for the source PBF, staging tables and indexes, and the
-previous live schema during publication. The feature initially supports one
-active extract or `planet`, not overlapping regional unions. All derived rows
-remain isolated in `osm_search` and retain OpenStreetMap's ODbL attribution;
-they are never mixed into the independently licensed Overture schema.
+```bash
+pnpm openmapx data notable-places build
+```
+
+The job queries SPARQL, stages and validates the result, then swaps the
+`notable_places` schema transactionally. A failed refresh preserves the prior
+index. Runtime depends on the endpoint and dataset; no fixed completion time is
+guaranteed. See [Notable places configuration](../install/configuration.md#notable-places-for-search).
 
 ## Related admin surfaces
 
-A few service-adjacent pages sit alongside this one:
-
-- **[Backups](./backup-and-restore.md)** (`/admin/services/backups`) — list,
-  create, restore, and delete the on-disk snapshots under
-  `infra/docker/backups/`. Backups with a missing or malformed manifest are still
-  listed and flagged as corrupt, with restore disabled but delete available so
-  you can clean them up.
-- **[Community extensions](./community-extensions.md)** (`/admin/extensions`) —
-  browse, install, update, and remove third-party extensions (integrations,
-  services, and bundles of both) from the unified Extensions store. Installing a
-  bundle's service adds it to the catalog you operate from this page.
-
-For configuring the _features_ that run on top of these services — the geocoding
-and routing orchestrators, transit providers, overlays, and external data
-sources — see [Integrations & bindings](./integrations-administration.md). For
-health snapshots and the running job log, see [Monitoring](./monitoring.md).
+Use [Backups](./backup-and-restore.md) for recovery snapshots and
+[Extensions](./community-extensions.md) for installing or removing community
+components. Configure the features using those services under
+[Integrations & bindings](./integrations-administration.md).
 
 ## Where to go next
 
-- **[Managing services](../install/managing-services.md)** — the full CLI
-  reference for everything on this page, plus selection files, presets, builds,
-  and exposure.
-- **[Preparing data](../install/preparing-data.md)** — downloading OSM, GTFS, and
-  styles, and the build/link pipeline behind the data inventory.
-- **[Configuration](../install/configuration.md)** — the `.env` file, secrets,
-  and how the admin config forms relate to environment variables.
+See [Managing services](../install/managing-services.md) for CLI operations,
+[Preparing data](../install/preparing-data.md) for source preparation, and
+[Monitoring](./monitoring.md) for health and jobs.

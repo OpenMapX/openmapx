@@ -1,46 +1,36 @@
 # Background-location video script
 
-Google asks for a video showing background location in use. The point is to show
-a reviewer the whole path, including the parts that are easy to leave out — the
-denial path, and the cleanup at the end.
+Record this only after foreground navigation composition and physical candidate
+qualification. The current `src/App.tsx` cannot run the proposed Start flow. This
+script is preparation material, not a recording or evidence of background use.
 
-Around 90 seconds. No narration is required; captions are enough and they
-survive translation.
-
-**Never use a real home or work address, a real account, or a real notification.
-Use a public route between public places.**
+Use the exact signed candidate and frozen web build. Aim for about 90 seconds,
+with captions readable long enough to understand each permission choice. Use a
+public route between public places. Exclude home/work addresses, personal
+accounts, unrelated notifications and debug overlays.
 
 ## Shots
 
-1. **Cold open** (0:00–0:05). The app launching. Caption: _No permission is
-   requested at launch._
-
-2. **Planning** (0:05–0:20). Search a public destination, open Directions, show
-   the ground and transit options. Caption: _Plan a route._
-
-3. **The disclosure** (0:20–0:35). Tap Start. Hold on the full-screen disclosure
-   long enough to read it. Caption: _Before any permission is requested._
-
-4. **The denial path** (0:35–0:45). Choose "While using the app". Show guidance
-   running, then lock the screen, then unlock to show it paused with its honest
-   message. Caption: _Foreground-only works, and says what it cannot do._
-
-5. **Grant** (0:45–0:55). End, start again, this time granting background
-   location at the OS prompt. Caption: _Allow all the time._
-
-6. **Locked-screen guidance** (0:55–1:15). Minimise, then lock. Show the ongoing
-   notification on the lock screen. Let a spoken instruction play. Caption:
-   _Guidance continues with the screen locked. This is why the permission is
-   needed._
-
-7. **Cleanup** (1:15–1:30). Return to the app, tap End. Show the notification
-   disappearing and the map returning to its ordinary state. Caption:
-   _Ending navigation stops location immediately._
+1. Launch the app (about 5 seconds). Show that no permission request appears.
+2. Plan a public route (about 15 seconds). Show the navigation mode being tested.
+3. Tap Start and show the full disclosure (about 15 seconds), before the OS prompt.
+4. Choose foreground-only (about 10 seconds). Show guidance, lock/unlock, then
+   show its paused/limited state. This tests the limited choice; separately capture
+   explicit denial if the console requires it.
+5. End and start again (about 10 seconds). Grant background location through the
+   platform's actual prompt or Settings route. Do not label an Android 11+ Settings
+   transition as an in-app background-permission dialog.
+6. Minimize and lock (about 20 seconds). Show the ongoing notification and record
+   actual spoken guidance. Leave failed delivery visible in the test evidence and
+   fix it before submission; do not add a success caption over a failure.
+7. Return and tap End (about 15 seconds). Show the notification disappearing and
+   verify tracking and alerts stop.
 
 ## Before publishing
 
-- Watch it once at full size looking only for text: an address, an email, a
-  token, a debug overlay.
-- Host it on the official OpenMapX HTTPS site. If Play Console accepts only its
-  own listed hosts, an unlisted upload on a Google-supported host is an
-  unavoidable submission artefact — never a paid service.
+- Inspect every frame for addresses, emails, credentials, tokens, notifications
+  and debug output. Keep the source recording and its candidate identity privately.
+- Confirm the video matches the declaration, disclosure and privacy policy.
+- Use a host accepted by the current Play Console form. Do not assume a URL on
+  the project site will be accepted. Review the final hosted video and access
+  settings from an external session before submitting its link.

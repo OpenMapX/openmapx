@@ -1,5 +1,6 @@
 ---
-title: Air quality — base platform
+description: Recorded release evidence for the shared air-quality platform and its deployment checks.
+title: "Air quality: base platform"
 air_quality_component: base
 status: shipped
 code_path: "integrations/air-quality,integrations/overlay-air-quality,integrations/weather-open-meteo-air-quality,packages/air-quality"
@@ -16,8 +17,7 @@ blocker: "none"
 
 # Base platform
 
-**Status:** shipped
-**Owner:** plans 01–06 and closeout plan 11
+Shipped source; review recorded 30 August 2026. Deployment health and permissions still need operator verification.
 
 The governed provider runtime, evidence/standards domain, jurisdiction artifact,
 OpenAQ ground evidence, canonical current/forecast/station APIs, Open-Meteo/CAMS

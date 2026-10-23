@@ -1,6 +1,11 @@
 ---
+description: Declare source terms, capture immutable licensing receipts, and render required attribution.
 title: Licence metadata
 ---
+
+Use this contract when declaring provider terms, capturing result credits, or
+rendering attribution. For the repository's own code licences, see
+[LICENSING.md](https://github.com/OpenMapX/openmapx/blob/main/LICENSING.md).
 
 Data-source declarations and captured result receipts use the same portable
 `Licensing` contract from `@openmapx/mobility-core/licensing`. A manifest source
@@ -107,6 +112,26 @@ canonical `contributors` and `fieldContributors` for the actual items/fields;
 licensing metadata does not substitute for contribution provenance. Presentation
 must still credit only retained items and rendered geometry after filters,
 viewport and zoom rules. Placement follows the reviewed contract below.
+
+## Implementation checklist
+
+1. Declare each source and its data, imagery, style, software, or service
+   obligations in the manifest. Use an explicit unknown descriptor where rights
+   are unresolved.
+2. Capture the declaration and the actual item/field contributors before
+   acquisition and caching. Preserve explicit empty receipts.
+3. Project receipts for retained records, fields, and rendered geometry. Do not
+   credit a discarded item or borrow another image's licence.
+4. Render through the shared host helpers and test full notices, unsafe URLs,
+   unknown terms, and required branding on the affected surface.
+5. Run `pnpm check-license-metadata` for declarations and the affected attribution
+   tests from the repository root. Metadata validation does not establish that
+   provider terms permit a proposed use.
+
+The portable implementation is in `packages/extension-contracts/src/licensing.ts`
+and `attribution.ts`; `@openmapx/mobility-core` re-exports the licensing contract.
+Placement defaults live in `packages/mobility-core/src/attribution-placement.ts`,
+and host HTML rendering lives in `packages/core/src/utils/attribution.ts`.
 
 ## Location tables
 

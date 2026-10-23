@@ -1,4 +1,6 @@
-# **ID** companion response contract
+# `__ID__` companion response contract
+
+<a id="id-companion-response-contract"></a>
 
 This integration artifact is declarative. Keep executable behavior in a
 companion service and connect it through an existing versioned host protocol or

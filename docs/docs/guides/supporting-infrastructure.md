@@ -1,297 +1,201 @@
 ---
 title: Supporting infrastructure
-description: The always-on core services every deployment runs — the PostGIS database, the Valkey cache, and the Traefik reverse proxy.
+description: Operate the main PostgreSQL database, authenticated Valkey cache, and Traefik proxy.
 sidebar_position: 6
 ---
 
 # Supporting infrastructure
 
-Most of what OpenMapX runs is optional. Routing engines, geocoders, transit
-engines, the OSM query backend, and the tile server are all opt-in — you enable
-the ones you want and leave the rest off. Three services are different: they are
-selected by default and start with every deployment, because the rest of the
-stack assumes they're there. This page covers those three.
+The default application stack includes PostGIS, Valkey (service ID `redis`), and
+Traefik, alongside API, web, data-manager, ops-agent, well-known files, and the
+private Transitous runner. Optional engines can have separate databases and
+volumes. See [Managing services](../install/managing-services.md) for selection
+and [Requirements](../install/requirements.md) for capacity planning.
 
-- **PostGIS** — the primary datastore. Every container that persists anything
-  writes here.
-- **Valkey** — the cache, a drop-in Redis replacement. Everything in it is
-  derived and expendable.
-- **Traefik** — the reverse proxy, and the only service that faces the public
-  internet.
+## PostGIS {/* #postgis--the-database */}
 
-They sit alongside `app-api`, `app-web`, `well-known`, `data-manager`, and `ops-agent` in the
-always-on core; [Managing services](../install/managing-services.md) explains how
-the core is selected and rendered, and [How it works](../overview/how-it-works.md)
-covers the service model these three plug into. None of them needs a build step
-or any source data — they boot from their image and are ready.
+The main database stores accounts, settings, saved places, audit records, and
+imported place data. MOTIS stores compiled transit schedules on disk; PostgreSQL
+holds transit lifecycle metadata. Managed Dawarich has its own database.
 
-## PostGIS — the database
-
-The `postgis` service is PostgreSQL with the PostGIS spatial extension, and it is
-the system of record for everything an instance can't regenerate from source
-data. User accounts and sessions, admin and integration settings, the audit log,
-saved places, and the place data the data-manager imports all live here. `app-api`, `data-manager`, and `martin` (when the
-tile stack is enabled) all connect to it over the private Docker network.
-
-| Property         | Value                                                            |
-| ---------------- | ---------------------------------------------------------------- |
-| Image            | `ghcr.io/baosystems/postgis:18-3.6` (PostgreSQL 18, PostGIS 3.6) |
-| Database / user  | `openmapx` / `postgres`                                          |
-| Memory limit     | `2g`                                                             |
-| Volume           | `openmapx-pgdata` at `/var/lib/postgresql` (backed up)           |
-| Internal address | `postgis:5432`                                                   |
-| Host binding     | `127.0.0.1:5432` (loopback only)                                 |
-
-Other containers reach the database by service name — `app-api`, for instance, is
-handed `postgresql://postgres:${POSTGRES_PASSWORD}@postgis:5432/openmapx`. The
-host port is published on loopback only, so you can run `psql` from the host but
-nothing outside the machine can connect.
+| Property          | Current manifest value                                 |
+| ----------------- | ------------------------------------------------------ |
+| Image             | `ghcr.io/baosystems/postgis:18-3.6`, pinned by digest  |
+| Database / user   | `openmapx` / `postgres`                                |
+| Memory limit      | `POSTGIS_MEMORY`, default `2g`                         |
+| Named volume      | `openmapx-pgdata` at `/var/lib/postgresql`             |
+| Internal endpoint | `postgis:5432`                                         |
+| Host endpoint     | `127.0.0.1:5432`, relocatable with `POSTGIS_HOST_PORT` |
 
 ### Image provenance and release gate
 
-The platform deliberately uses the multi-architecture Bao Systems rebuild of
-the upstream Debian PostGIS image. Bao rebuilds upstream weekly for linux/amd64
-and linux/arm64, but explicitly provides **no support** for these images. The
-human-readable `18-3.6` tag is mutable; its reviewed provenance lives beside the
-service manifest in `services/postgis/image-provenance.json`.
+The manifest pins the reviewed OCI index; `services/postgis/image-provenance.json`
+records its source and architecture evidence. The tag alone is mutable. A newer
+tag does not override the committed digest.
 
-On 2026-08-09, the reviewed OCI index was
-`sha256:8784f86b3e0e046859c96ea25eb8b10f0b801fd891b99a82b82f28ac4a643db8`.
-Its platform manifests were:
-
-- linux/amd64:
-  `sha256:52edddd0a2cd4451bafc5772b83646c8c2f787a90c21bf1ce98c95113fdbf431`;
-- linux/arm64:
-  `sha256:a6eb9820bd66eea92cb7ccbd9f9e0f36d6768678b65f9f02d2a6353c382caa4c`.
-
-The image was created on 2026-08-04 from Bao source revision
-`603ccfa15a094bf677524275bdf7e8a7478885ce`. Native Apple-arm64 validation
-reported PostgreSQL 18.4, PostGIS 3.6.4, `PGDATA=/var/lib/postgresql/18/docker`,
-and the declared `/var/lib/postgresql` volume used by OpenMapX.
-
-Before every OpenMapX release, compare the live tag with the reviewed record:
-
-```bash
-docker buildx imagetools inspect ghcr.io/baosystems/postgis:18-3.6
-```
-
-Stop the release for dependency review if the index digest moved or either
-required architecture disappeared. Do not silently select a substitute image
-or force emulation. Because the tag is mutable and the rebuild has no support
-guarantee, repeat the native startup, existing-volume compatibility, and full
-synthetic backup/restore rehearsal before accepting changed image bytes. See
-the [Bao Systems image repository](https://github.com/baosystems/docker-postgis)
-for its build and support policy.
+When deliberately updating the database image, compare its linux/amd64 and
+linux/arm64 manifests and repeat native startup, existing-volume compatibility,
+and synthetic backup/restore checks before deployment. Bao Systems provides no
+support guarantee for its rebuilds. See the
+[image repository](https://github.com/baosystems/docker-postgis). Do not substitute
+an image or rely on emulation without reviewing volume compatibility.
 
 ### The password
 
-`POSTGRES_PASSWORD` is the one secret PostGIS can't start without. The rendered
-compose file writes it as `${POSTGRES_PASSWORD:?...}`, so Compose refuses to come
-up if it's unset — production can't accidentally ship with the default. Generate
-a strong value and put it in `infra/docker/.env`:
+Set a unique `POSTGRES_PASSWORD` in `infra/docker/.env` before the first render.
+Generate one with `openssl rand -hex 32`; production rejects known placeholders,
+username matches, and values shorter than 24 characters. Use hexadecimal output
+to avoid database-URL escaping issues.
 
-```bash
-openssl rand -hex 32
-```
+OpenMapX's PostGIS wrapper synchronizes this password on every start, including
+an initialized volume. Its health check waits for synchronization. To rotate,
+choose a maintenance window, stop database clients, edit the secret, recreate
+PostGIS, verify health, then recreate clients with the same value. Restarting
+only existing client containers does not reload their environment.
 
-The same value feeds the `DATABASE_URL` that `app-api` and `data-manager` use, so
-there is nothing to keep in sync by hand — they all read it from the one
-variable. See [Configuration](../install/configuration.md) for the full `.env`
-reference.
-
-:::caution[Rotating the password]
-PostgreSQL only reads `POSTGRES_PASSWORD` when it first initializes an empty data
-directory; once the volume holds a database, the password baked into the cluster
-is authoritative and a later change to `.env` would normally be silently ignored.
-OpenMapX works around this with an entrypoint wrapper that re-applies the password
-from the environment on every start, so rotating the secret and recreating the
-container actually takes effect. The healthcheck only reports healthy once that
-sync has run, which is why dependents that wait on `service_healthy` never race a
-stale password.
-:::
+The wrapper forwards stop signals and allows PostgreSQL a five-minute grace
+period. Do not force-kill a slow shutdown without investigating it.
 
 ### Sizing and tuning
 
-The 2 GB memory limit is comfortable for the application workload — accounts,
-settings, and POI rows stay well under a few hundred megabytes even on busy instances.
-(GTFS transit schedules are compiled directly into binary routing artifacts by MOTIS
-on disk rather than stored in PostgreSQL, so the database volume does not bloat from
-transit feeds). If you run extensive spatial queries or heavy POI conflation, you
-can raise the limit by setting a per-service override and re-rendering:
+Set the container limit with the variable the manifest actually reads:
 
-```bash
-# infra/docker/.env
-SERVICE_POSTGIS_MEMORY_LIMIT=4g
+```dotenv
+POSTGIS_MEMORY=4g
+POSTGIS_MAX_WAL_SIZE=4GB
+POSTGIS_CHECKPOINT_TIMEOUT=15min
 ```
 
+Apply during a database maintenance window:
+
 ```bash
-pnpm openmapx compose render
 pnpm openmapx services start postgis
 ```
 
-Schema migrations are automatic: `app-api` applies pending Drizzle migrations on
-every boot, so a freshly initialized or freshly restored database is brought up to
-the running code's schema with no manual SQL.
+The wrapper derives memory tuning from the container limit. Spatial imports,
+Overture conflation, and extensions can make the default inadequate; measure the
+workload. Larger WAL and checkpoint intervals can reduce repeated writes but
+increase disk use and crash-recovery work. See
+[PostgreSQL workload diagnostics](../install/managing-services.md#postgresql-workload-diagnostics)
+for the separate diagnostics opt-ins and their staging requirements.
+
+API startup applies pending schema migrations. This does not make arbitrary
+older images compatible with a newer database. Preserve a matching backup when
+planning rollback.
+
+Martin uses the restricted `openmapx_tiles` login, configured with
+`MARTIN_DB_PASSWORD`; it does not use the database superuser. See
+[Martin overlays](./map-tiles.md#martin-overlays).
 
 ### Backups
 
-The `openmapx-pgdata` volume is flagged for backup, and it is the centerpiece of
-every snapshot — the backup tooling captures it with a streamed `pg_dump` while
-the database keeps running. Restores drop and replay the dump through `psql`.
-Because the dump is what's irreplaceable, treat the database backup as the thing
-you must not lose. The full workflow, including the caveat that `.env` (and with
-it `POSTGRES_PASSWORD`) is **not** part of a snapshot, is in
-[Backup & restore](../administration/backup-and-restore.md).
+`backup create` streams a PostgreSQL dump; restore replays it through a live
+database server. Treat this data as irreplaceable and keep an independent
+protected copy. Ordinary volume backups omit `.env`, secret files, and other
+host recovery state. Follow [Backup and restore](../administration/backup-and-restore.md)
+for version checks, erasure-journal validation, retention, and restore isolation.
 
-## Valkey — the cache
+## Valkey {/* #valkey--the-cache */}
 
-The `redis` service runs [Valkey](https://valkey.io/) 8, the open-source,
-Redis-compatible fork maintained under the Linux Foundation. It speaks the Redis
-wire protocol exactly, so `app-api` connects with an ordinary Redis client at
-`redis://redis:6379` and `redis-cli` works unchanged. The service id stays
-`redis` for compatibility even though the image is Valkey.
+The `redis` service runs Valkey `9.1.2-alpine`, pinned by digest. It retains the
+Redis-compatible service ID and protocol.
 
-| Property         | Value                                       |
-| ---------------- | ------------------------------------------- |
-| Image            | `valkey/valkey:9.1.2-alpine`                |
-| Memory limit     | `512m`                                      |
-| Volume           | `openmapx-redisdata` at `/data` (backed up) |
-| Internal address | `redis:6379`                                |
-| Host binding     | `127.0.0.1:6379` (loopback only)            |
+| Property          | Current manifest value                            |
+| ----------------- | ------------------------------------------------- |
+| Memory ceiling    | `512m`                                            |
+| Named volume      | `openmapx-redisdata` at `/data`, backed up as tar |
+| Internal endpoint | `redis:6379`                                      |
+| Host endpoint     | `127.0.0.1:6379`                                  |
+| Authentication    | Renderer-generated password and hashed ACL files  |
 
-Everything in the cache is derived from somewhere else and carries a time-to-live,
-so it expires and repopulates on its own. `app-api` caches upstream provider
-responses here — geocoding and transit results, weather and air-quality readings,
-photo lookups, per-integration namespaced entries, and integration health — and
-the dynamic transit registry it fetches from GitHub is stored under
-`transit:registry` with a 48-hour TTL.
+`compose render` creates `infra/docker/secrets/redis-password` and
+`redis-acl.conf`. API receives the password through a read-only file mount.
+Unauthenticated `redis-cli` calls fail with `NOAUTH`; publishing only on loopback
+does not remove the authentication requirement.
 
-512 MB is generous for this; real usage is typically well under half that, since
-entries expire rather than accumulate. The `openmapx-redisdata` volume is flagged
-for backup and captured in snapshots, but because the contents are reconstructible,
-losing the cache only costs a brief warm-up of cold requests — never information.
-If a release changes how something is serialized and you see stale shapes, it's
-safe to clear:
+For a health check without printing the password:
 
 ```bash
-pnpm openmapx cache clear --all
+docker compose --env-file infra/docker/.env \
+  -f infra/docker/.trusted-config-current/docker-compose.generated.yml \
+  exec -T redis sh -c 'REDISCLI_AUTH="$(cat /run/secrets/redis-password)" exec redis-cli ping'
 ```
 
-You can also inspect active cache keys and memory stats with:
+Expect `PONG`. The current `openmapx cache` command implementation does not load
+this password file, so it can fail authentication on the managed stack. Do not
+disable authentication to make it work.
+
+Valkey holds provider caches and short-lived coordination, rate-limit, and
+idempotency state. Treating every key as disposable can weaken those controls.
+Avoid blanket `FLUSHDB`/`FLUSHALL` during operation; investigate a specific stale
+namespace and its owner before deleting it.
+
+To rotate the generated password, stop its clients, rotate, recreate Redis, and
+restart the clients:
 
 ```bash
-pnpm openmapx cache list
+pnpm openmapx services stop app-api data-manager
+pnpm openmapx compose rotate-redis-password --confirm-clients-stopped
+pnpm openmapx services update redis --no-deps
+pnpm openmapx services start app-api data-manager
 ```
 
-The cache refills from upstream on the next request.
+Also stop any extension using the shared Redis credential. If rotation reports a
+post-commit ACL failure, keep clients stopped, repair the reported file integrity
+issue, run `compose render` to reconcile, then recreate Redis. Do not generate a
+second unrelated password manually.
 
-## Traefik — the reverse proxy
+## Traefik {/* #traefik--the-reverse-proxy */}
 
-The `traefik` service is the front door. It terminates TLS, redirects HTTP to
-HTTPS, obtains and renews Let's Encrypt certificates automatically, and routes
-each request to the right container by hostname and path. It is the **only**
-service published to the public internet — everything else binds to loopback or
-stays on the private network.
+Bundled Traefik `v3.7.14` is digest pinned. It publishes TCP 80/443 and UDP 443,
+terminates TLS, and routes requests by hostname and path. Most other published
+ports bind only to loopback; review community-service exposure independently.
 
-| Property        | Value                                                                          |
-| --------------- | ------------------------------------------------------------------------------ |
-| Image           | `traefik:v3.7.14`                                                              |
-| Memory limit    | `256m`                                                                         |
-| Volume          | `openmapx-traefik-acme` at `/etc/traefik` (backed up — holds the certificates) |
-| Published ports | TCP `80`, TCP `443`, UDP `443` (HTTP/3 / QUIC)                                 |
-
-Traefik holds **no Docker socket**: an internet-facing reverse proxy with host
-authority is an architectural risk OpenMapX explicitly removes. Instead, Traefik
-uses its file provider (`providers.file.directory: /etc/traefik/dynamic, watch: true`).
-Its static configuration (`services/traefik/config/traefik.yml`) defines two entry
-points: `web` on port 80, which redirects everything to HTTPS, and `websecure` on port
-443, which terminates TLS using the `letsencrypt` certificate resolver. UDP/443
-carries HTTP/3.
+Traefik uses a file provider and has no Docker socket. The ops-agent owns
+privileged Docker authority. ACME state lives in the backed-up
+`openmapx-traefik-acme` volume at `/etc/traefik`.
 
 ### TLS and the two variables that drive it
 
-Two `.env` values configure the public surface:
+Set `DOMAIN` and `ACME_EMAIL` before rendering. DNS and inbound TCP port 80 must
+reach Traefik for the ACME HTTP challenge; TCP 443 serves HTTPS. Publish IPv6 DNS
+only when it reaches the same service correctly. HTTP/3 also needs UDP 443.
 
-- **`DOMAIN`** — your public hostname. The renderer bakes it into every routing
-  rule, so a service is reachable at `https://${DOMAIN}/<its-prefix>`. Point both
-  an A and an AAAA record at the host.
-- **`ACME_EMAIL`** — the contact address Traefik registers with Let's Encrypt.
-  It's injected into the container as
-  `TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL` and receives expiry
-  notices.
+If certificates fail, inspect DNS, firewall rules, port conflicts, and proxy
+logs before retrying. Repeated ACME attempts can hit upstream limits.
 
-Certificates are obtained via the Let's Encrypt HTTP challenge, which means your
-domain must resolve to the host and inbound port 80 must be open — that's how the
-challenge is answered before the redirect to HTTPS takes over. Issued
-certificates are written to `acme.json` inside the `openmapx-traefik-acme` volume
-and renewed automatically ahead of expiry; the volume is backed up so a restore
-brings the certificates back with it. There is nothing to run by hand.
-
-:::note[Default exposure]
-A fresh deployment serves the stack publicly. The static config ships a
-commented-out basic-auth hook (`dynamic/auth.yml.example`) you can enable to gate
-the whole site behind a username and password while you set things up; without it,
-anything routed is reachable by anyone who can resolve your domain. Plan your
-exposure before pointing DNS at the host.
-:::
+A default deployment exposes routed pages publicly. For staging basic auth,
+copy `services/traefik/config/dynamic/auth.yml.example` to `auth.yml`, replace
+its example hash, and append `basic-auth@file` to the existing middleware list
+in `services/traefik/config/traefik.yml`. Recreate Traefik after changing static
+configuration; copying the middleware file alone does not activate it.
 
 ### Generated dynamic routing
 
-There is no hand-maintained route table and no Docker socket polling. When you
-run `openmapx compose render` (or any command that triggers a render), the Compose
-renderer evaluates the `exposure.proxy` block of every enabled service manifest and
-generates `services/traefik/config/dynamic/generated-routes.yml`.
+Rendering writes `services/traefik/config/dynamic/generated-routes.yml` from
+validated service exposure declarations. Traefik watches this directory. Do not
+edit generated routes directly.
 
-From a manifest like:
+| Public path         | Target                       |
+| ------------------- | ---------------------------- |
+| `/api/*`, `/health` | `app-api`                    |
+| `/api/internal/*`   | Explicit deny middleware     |
+| `/.well-known/*`    | `well-known`                 |
+| `/tiles/*`          | TileServer GL, when selected |
+| `/martin/*`         | Martin, when selected        |
+| Other paths         | `app-web`                    |
 
-```json
-{
-  "exposure": {
-    "proxy": {
-      "enabled": true,
-      "pathPrefix": "/tiles",
-      "stripPrefix": true
-    }
-  }
-}
-```
+Managed Dawarich has a separate `timeline.<DOMAIN>` hostname. Community services
+do not automatically receive a platform route.
 
-the renderer emits the equivalent Traefik dynamic router and service configuration —
-a `Host` + `PathPrefix` rule against `DOMAIN`, the `websecure` entry point, the
-`letsencrypt` resolver, the backend container port, and (here) a `stripprefix`
-middleware. The result is that the tile server answers at `https://${DOMAIN}/tiles/`,
-with the `/tiles` prefix stripped before the request reaches it. A service with
-no `pathPrefix` — the web app — gets the catch-all rule at the lowest priority, so it
-handles every path no more specific rule claimed. The core layout that ships today:
-
-| Path             | Service                                |
-| ---------------- | -------------------------------------- |
-| `/api/*`         | `app-api`                              |
-| `/.well-known/*` | `well-known`                           |
-| `/tiles/*`       | `tileserver` (prefix stripped)         |
-| `/martin/*`      | `martin` (prefix stripped)             |
-| `/*`             | `app-web` (catch-all, lowest priority) |
-
-Because routes come from manifests, exposing a service is a render-time decision,
-not a manual Traefik edit: add the `exposure.proxy` block, re-render, and the routes
-are written to disk. Because Traefik watches its dynamic configuration directory,
-changes take effect immediately on file write without restarting the proxy. After
-editing a manifest:
-
-```bash
-pnpm openmapx compose render
-pnpm openmapx services start <service>
-```
+For an operator-run Traefik, use the
+[external proxy procedure](../install/managing-services.md#behind-an-existing-reverse-proxy).
+That mode uses Docker labels on the external network and requires the referenced
+file middlewares, including the internal-API deny rule. Match encoded-path
+settings so opaque place and stop IDs continue to work.
 
 ## Where to go next
 
-- **[Managing services](../install/managing-services.md)** — selecting the core,
-  rendering the stack, and the full exposure model.
-- **[Configuration](../install/configuration.md)** — `DOMAIN`, `ACME_EMAIL`,
-  `POSTGRES_PASSWORD`, and the rest of `infra/docker/.env`.
-- **[Backup & restore](../administration/backup-and-restore.md)** — snapshotting
-  the database, the cache, and the ACME certificates.
-- **[Requirements](../install/requirements.md)** — host sizing, including disk for
-  the database volume.
-- **[Service manifest](../developer/service-manifest.md)** — the `exposure`,
-  `volumes`, and `container` fields these services are built from.
+See [Configuration](../install/configuration.md) for deployment variables,
+[Upgrading](../install/upgrading.md) for image changes, and
+[Backup and restore](../administration/backup-and-restore.md) for recovery.

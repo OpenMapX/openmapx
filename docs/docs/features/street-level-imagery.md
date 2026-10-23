@@ -6,33 +6,27 @@ sidebar_position: 6
 
 # Street-level imagery
 
-Street-level imagery lets you drop down to the ground and look around. A
-coverage layer paints the streets where photos exist, and clicking a covered
-spot opens an immersive, pannable viewer — the open-data equivalent of dragging
-a little figure onto the map to see what a place actually looks like.
+Turn on **Street-level imagery** to see streets with photo coverage, then select
+a covered point to open the viewer. You can look around and follow available
+arrows to nearby images. Coverage, image age, and available directions vary.
 
-The default provider is [Panoramax](https://panoramax.xyz/), an open, federated
-street-level imagery network run by IGN and OpenStreetMap France. It needs no
-credentials, so the feature works out of the box. OpenMapX never hosts the
-photos itself; it reads coverage and imagery from the configured provider on
-demand, proxied through its own API.
-
-Several providers can be enabled at once. Their coverage renders together on one
-layer, colour-coded per provider, and the viewer moves between them seamlessly.
+Panoramax is enabled by default and needs no credentials. An operator can add
+Mapillary separately. Enabled providers share one coverage layer and retain
+their own colors and credits.
 
 ## What you get
 
-- **A coverage overlay** — a "street-level imagery" layer you toggle from the
+- **A coverage overlay**: a "street-level imagery" layer you toggle from the
   [layer selector](./map-layers.md). It draws photo sequences as lines and
   individual photos as dots, with a separate marker style for 360° panoramas, so
   you can see at a glance where imagery is available. Each enabled provider gets
   its own colour.
-- **An immersive viewer** — click any covered point and a full-screen viewer
+- **An immersive viewer**: click any covered point and a full-screen viewer
   opens over the map. You can pan and look around, follow the clickable arrows
   to move down the street, and read the reverse-geocoded address, capture date
   and licence of the current photo. A small synchronized map keeps the current
   image and nearby coverage in view while you move.
-- **Photos on place panels** — companion integrations surface nearby
+- **Photos on place panels**: companion integrations surface nearby
   street-level photos directly in a place's detail panel, alongside the rest of
   the [place information](./places.md). This is independent of the coverage
   overlay and can be enabled on its own.
@@ -42,10 +36,10 @@ layer, colour-coded per provider, and the viewer moves between them seamlessly.
 | Provider  | Default  | Credentials  | Notes                                                                   |
 | --------- | -------- | ------------ | ----------------------------------------------------------------------- |
 | Panoramax | Enabled  | None         | Open STAC API. Self-hostable. Imagery under CC BY-SA 4.0 or Etalab 2.0. |
-| Mapillary | Disabled | Access token | Opt-in. Review its Terms before enabling — see below.                   |
+| Mapillary | Disabled | Access token | Opt-in. Review the provider terms before enabling it.                   |
 
-Every enabled provider is active. Enabling one in the admin panel is all it
-takes — its coverage joins the layer in its own colour.
+Enabled providers contribute coverage in their own colors, subject to their
+credentials and any explicit provider-order setting.
 
 To pin the set and its priority order explicitly, set:
 
@@ -62,9 +56,9 @@ prohibit use "in connection with real-time navigation or route guidance" and
 require applications to materially supplement Mapillary rather than replicate it.
 OpenMapX is a navigation product, so Mapillary ships **disabled by default**,
 and even when enabled its imagery is never used for the junction photo shown
-while navigating — only in the viewer and on place panels.
-Review those terms against your own deployment before enabling it. Mapillary is
-also API-only — there is no self-hostable fallback.
+while navigating. It remains available in the viewer and on place panels.
+Review [Mapillary's terms](https://www.mapillary.com/terms) for your deployment before enabling it. Mapillary is
+API-only and has no self-hosted fallback.
 :::
 
 ### Enabling Mapillary
@@ -76,8 +70,8 @@ value):
 ```bash
 # infra/docker/.env
 INTEGRATION_STREET_LEVEL_IMAGERY_MAPILLARY_ENABLED=true
-INTEGRATION_STREET_LEVEL_IMAGERY_MAPILLARY_ACCESSTOKEN=MLY|<app_id>|<token>
-INTEGRATION_PHOTOS_MAPILLARY_ACCESSTOKEN=MLY|<app_id>|<token>
+INTEGRATION_STREET_LEVEL_IMAGERY_MAPILLARY_ACCESSTOKEN="MLY|<app_id>|<token>"
+INTEGRATION_PHOTOS_MAPILLARY_ACCESSTOKEN="MLY|<app_id>|<token>"
 ```
 
 The overlay/viewer and photos on place panels are separate integrations. They
@@ -103,61 +97,31 @@ depending on a public instance, run your own and set the integration's
 https://your-panoramax-instance.example/api
 ```
 
-Any STAC-compatible Panoramax instance works. The licence of the imagery you get
+Use a Panoramax instance compatible with the supported API. The licence of the imagery you get
 depends on the instance you point at.
 
 ## How it works
 
-Every provider is an integration implementing a shared `StreetLevelProvider`
-contract and exposing the same routes under
-`/api/integrations/street-level-imagery-<provider>/`:
-
-| Route                | Purpose                                            |
-| -------------------- | -------------------------------------------------- |
-| `/capabilities`      | Coverage tile descriptor, colour, licence, privacy |
-| `/tiles/{z}/{x}/{y}` | Coverage vector tiles, proxied                     |
-| `/nearest`           | Nearest image to a coordinate                      |
-| `/search`            | Area/point search (heading, age, radius filters)   |
-| `/images/:id`        | One image's metadata and assets                    |
-| `/images/:id/links`  | Navigable neighbours for the viewer's arrows       |
+The viewer uses provider-qualified image references, including links such as
+`?sli=panoramax:<id>`. A link can stop working if its source removes the image
+or the instance disables that provider.
 
 ### During navigation
 
-While driving, the [junction view](./directions.md#turn-by-turn-navigation) can
-show a recent street-level image of an exit's approach, taken 30–200 m upstream
-and facing along the road — preferably where OpenStreetMap says the exit lanes
-already exist, so every lane to choose from is in the picture. It is prefetched when the route starts (never per GPS
-fix), the road ahead is projected onto it as a ribbon that narrows with distance
-and bends into the ramp — moving over from the lane the picture was taken in to
-the exit lane the overhead gantry names, and scaled to the frame's own shape,
-taken from the picture's sensor dimensions and the loaded image. The lens's
-field of view comes from Panoramax, else from the photo's focal length, else is
-assumed to be a phone's; for a dashcam or action camera with no lens data the
-road is not drawn at all, since a wide lens would put it off the road. For a regular photo
-the provider's thumbnail is used rather than the full frame, to keep mobile data low; a
-360° photo loads its reduced full frame, since its thumbnail is only a crop from the
-middle. Switching junction photos off hides them at once, including ones already
-loaded. A caption below the
-image names the author, the licence, and the capture month — no links, so nothing
-pulls attention off the road while the trip is live. Only providers whose terms allow
-use during navigation are searched, which today means Panoramax. With no
-qualifying image the junction view shows its schematic instead.
+The [junction view](./directions.md#turn-by-turn-navigation) can show an available
+approach photo while driving. Only providers permitted for navigation are
+searched, currently Panoramax. The caption retains author, license, and capture
+month. An old photo is not evidence of current lane layout or road conditions.
 
-The web app talks only to these routes, so it never needs to know which provider
-is behind them.
-
-Images are addressed by a provider-qualified reference — `panoramax:<id>` — which
-is also what deep links carry (`?sli=panoramax:<id>`). Because the viewer's
-internal node ids use the same form, an arrow can lead from one provider's
-imagery straight into another's.
+Junction photos can be disabled in navigation settings. Where no suitable image
+exists, navigation keeps its schematic junction view. This is separate from
+opening the imagery viewer to browse photos.
 
 ### Navigation arrows
 
-The viewer places up to six arrows, one per compass sector, computed the same
-way for every provider: sequence continuations win over neighbouring sequences,
-and between two neighbours the more recent capture wins, falling back to the
-nearer one on the same day. Providers that expose no cross-sequence neighbours
-simply yield fewer arrows — the interaction is identical.
+The viewer shows up to six directional arrows. Sequence continuations take
+priority; nearby sequences can add other directions. An absent arrow can mean
+that the provider has no suitable neighboring image, even where a road continues.
 
 ## Privacy
 

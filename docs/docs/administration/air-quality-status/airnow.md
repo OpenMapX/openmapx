@@ -1,5 +1,6 @@
 ---
-title: Air quality — AirNow
+description: Why the AirNow provider remains blocked and which source and permission checks are missing.
+title: "Air quality: AirNow"
 air_quality_component: airnow
 status: blocked
 code_path: "none"
@@ -16,8 +17,7 @@ blocker: "The bulk files expose reporting-area name/state but no stable reportin
 
 # AirNow
 
-**Status:** blocked
-**Owner:** optional AirNow implementation plan
+Blocked at the source-contract and governance gate on 30 August 2026. Do not enable an unofficial endpoint as a substitute.
 
 Official `reportingarea.dat` and `cityzipcodes.csv` were reviewed on 30 August 2026. They avoid retiring coordinate services, but cannot satisfy the approved
 stable-code identity and governance design without an approved AirNow account.

@@ -2,7 +2,8 @@
 
 Portable manifest types, validators and compatibility rules for OpenMapX extension authors. OpenMapX and its authoring CLI use these same implementations.
 
-This package is being qualified for its first public release. This change does not publish it to npm. Until publication, build and install the exact package tarball rather than relying on an unavailable registry version:
+For local qualification or a version not available on npm, build and install
+the exact package tarball in a separate consumer project:
 
 ```sh
 pnpm --filter @openmapx/extension-contracts pack --out /tmp/extension-contracts.tgz
@@ -26,6 +27,8 @@ The delivered package contains compiled ESM JavaScript, TypeScript declarations,
 | `/identifiers`, `/media-hosts`, `/capabilities`                                                           | Source identifiers, media-host matching and capability names              |
 | `/schemas`                                                                                                | Structural authoring schemas from `createAuthoringSchemas()`              |
 | `/schemas/integration.json`, `/schemas/service.json`, `/schemas/extension.json`, `/schemas/artifact.json` | Packaged editor schemas                                                   |
+
+`/licensing-schema` also exports the portable structural licensing schema.
 
 Subpaths are supported interfaces. Files outside these exports are implementation details.
 

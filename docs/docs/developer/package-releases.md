@@ -1,11 +1,14 @@
 ---
+description: Prepare, qualify, and publish independent Changesets batches for the public extension packages.
 title: Independent package releases
 ---
 
+# Independent package releases
+
 OpenMapX packages use deliberate Changesets batches, independently of product
 versions, Docker images and preview. Only `@openmapx/extension-contracts` and
-`@openmapx/extension-cli` in `scripts/public-packages.json` are qualified. Their
-initial declared versions remain `0.1.0` until an explicitly prepared batch.
+`@openmapx/extension-cli` in `scripts/public-packages.json` are qualified. Both currently declare `0.1.0` in source; that is not a statement of public
+registry availability.
 Private workspaces are never published or tagged.
 
 ## Prepare and review a batch
@@ -64,8 +67,9 @@ First publication is a **separate authorization**, using exact reviewed real
 package tarballs/versions from qualification, never placeholders or synthetic
 Changesets. This source workflow deliberately refuses ordinary publication when
 the entire npm package record is absent. There is no first-publication switch or
-stored-token fallback. Initial account setup, publication and acceptance have not
-been executed by this implementation.
+stored-token fallback. The repository workflow and qualification receipts do not establish live npm
+account setup, first publication or owner acceptance. Verify those separately
+with the authorized npm owner.
 
 After the real package exists, configure its npm Trusted Publisher separately for:
 
@@ -121,9 +125,8 @@ Sources: [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/),
    for its verified attestation-bundle audit output. No global local tool upgrade
    is performed. No dependency build cache is used in qualification/publication.
 6. For each package, public registry bytes and integrity must match the candidate.
-   An isolated exact-version install disables scripts; `npm audit signatures
---json --include-attestations` must cryptographically verify registry signatures
-   and provenance. The **verified** SLSA bundle must name the exact subject digest,
+   An isolated exact-version install disables scripts; `npm audit signatures --json --include-attestations` must cryptographically verify registry signatures
+   and provenance. The verified SLSA bundle must name the exact subject digest,
    repository, workflow on main, dispatch event and source SHA. An attestation URL
    alone is insufficient. npm/registry/provenance failure remains a failed run.
 7. Only after all selected packages verify, create package tags such as

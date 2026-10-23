@@ -42,7 +42,7 @@ private account data were inspected or recorded.
 Treat it as generator build metadata, not an established date for this tile
 archive. An archive checksum/build date and deployment commit are unavailable
 from these public responses; record them when doing an operator-controlled run.
-Native zoom 14 means maps at zooms 15–18 overzoom the same dataset.
+Native zoom 14 means maps at zooms 15 to 18 overzoom the same dataset.
 
 ## Fixed map cases
 
@@ -75,7 +75,7 @@ not increase monotonically.
 | Neuss    | 4 / 5 / 11 / 8 / 16                 | 0 / 0 / 5 / 4 / 13                       |
 | Monschau | 5 / 5 / 13 / 17 / 10                | 0 / 0 / 5 / 10 / 5                       |
 
-At zooms 14–15 the initial policy excludes ordinary businesses. At zoom 15,
+At zooms 14 to 15 the initial policy excludes ordinary businesses. At zoom 15,
 Berlin shows Berlin Cathedral, Berlin Dungeon and Hackescher Markt; Aachen
 keeps Aachen Cathedral; Monschau shows Burg Monschau and Haller. Businesses
 appear at closer zooms. This is an eligibility decision, not evidence that the
@@ -85,7 +85,8 @@ dataset lacks restaurants or shops.
 
 Search from each fixed centre at zoom 15, without moving the map. Record the
 complete visible suggestion order and provider credits before selecting a row.
-These observations capture current behavior; they are not desired rankings.
+These observations describe the October 6 capture; they are not desired
+rankings or a claim about the current deployment.
 
 | Query / centre               | Reference observation                                                                                 | Evidence                                                     |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
@@ -98,7 +99,7 @@ Open Aachen Cathedral by tapping its basemap symbol at zoom 17. The
 [landmark sheet](/img/map-baseline/2026-10-06/place-aachen-cathedral.png) includes
 a credited Wikimedia photo, address, phone, website, Wikipedia summary,
 foundation/architect facts, and accessibility information. Search Schloss-Café
-from Monschau, then select the Stadtstraße 4–6 result. The
+from Monschau, then select the Stadtstraße 4 to 6 result. The
 [business sheet](/img/map-baseline/2026-10-06/place-monschau-cafe.png) has address,
 phone, website, menu/order actions and outdoor seating, without a visible photo.
 Their different entry paths and content availability are intentional fixture
@@ -123,15 +124,15 @@ For offline search-ranking regressions, use the existing
    Wait for MapLibre `idle`, verify style and tiles are loaded, then allow label
    fades to settle before capturing. A ready check immediately after a camera
    jump can describe the **previous** frame; discard blank/loading captures.
-3. Save one image per case/zoom with a new dated directory and evidence JSON.
+3. Save one image per case/zoom in an external dated archive with evidence JSON.
    Keep the reference immutable. Compare current and changed styles against
    the same source tile URLs; a live dataset update invalidates a strict A/B.
 4. Repeat the four searches and two place entry paths. Record missing provider
    credentials, failed requests, absent photos and incomplete coverage separately.
-5. For cartography changes also repeat z14–15 in dark theme and a fixed desktop
+5. For cartography changes also repeat z14 to 15 in dark theme and a fixed desktop
    viewport. Assess readable business names, road-name retention, landmark and
    station prominence, overlapping symbols, clipped names, and duplicate labels.
-   Check z16–18 for unintended changes and unnamed/non-ground-level points for leakage.
+   Check z16 to 18 for unintended changes and unnamed/non-ground-level points for leakage.
 
 For the early-POI experiment, success means a restrained selection of named
 businesses is discoverable at neighborhood zooms, landmarks remain prominent,
@@ -145,8 +146,11 @@ with [navigation performance measurement](./navigation-performance.md).
 
 ## Neighborhood POI follow-up
 
+This is the October 6, 2026 comparison against the initial reference. Inspect
+the current policy module before changing its thresholds.
+
 The first change against this baseline introduces named, ground-level food
-destinations and shops at z14–15. The maximum **local tile rank** is 8 / 24 for
+destinations and shops at z14 to 15. The maximum **local tile rank** is 8 / 24 for
 restaurant, cafe, bar, beer, bakery and ice_cream, and 4 / 12 for shop, grocery,
 clothing_store and alcohol_shop. Parking is a separate policy group with its
 original later introduction. These values do not claim popularity or fame.
@@ -175,7 +179,7 @@ isolate the style change against the same live instance and source URLs.
 | Monschau | 0 → 2                             | 0 → 1                             |
 
 Every baseline POI remained in the 20 light views, road-label counts were
-unchanged, and z16–18 POI results were unchanged. Dark views matched the light
+unchanged, and z16 to 18 POI results were unchanged. Dark views matched the light
 POI counts. The lower priority matters: an initial trial in the ordinary POI
 layers displaced three smaller Berlin cultural labels; the final layer avoids
 that in these fixtures. This is observed fixture coverage, not a guarantee for
@@ -207,7 +211,7 @@ images directly to the PR.
 
 ## Regional ambient-place acceptance (#399)
 
-The October 8–9 acceptance run repeats the four fixed cameras at zooms 14–18
+The October 8 to 9 acceptance run repeats the four fixed cameras at zooms 14 to 18
 against the same public basemap TileJSON and the same policy-2 regional publication.
 Neuss lies inside the published Rhine bbox; Berlin, Aachen and Monschau are
 outside-region controls. Cologne and a rural Rhine camera add dense/sparse
@@ -229,8 +233,8 @@ read/fallback/rollback evidence and desktop/Safari simulator frame samples.
 The October 9 cartographic correction borrows the active basemap's POI badges,
 category colors, typography and halos, replacing the separate teal dot/label
 renderer. Ordinary names sit below their badges; landmark names use compact
-wrapping and may remain when only the badge collides. Icons and text retain
-normal collision checks. The new matrix, runtime and screenshots are recorded
+wrapping. The icon and text must fit together; both retain normal collision
+checks. The new matrix, runtime and screenshots are recorded
 separately under `visualCartographyFollowup` in the aggregate artifact.
 Before/after screenshots are PR attachments outside git. Simulated Safari results
 must not be presented as physical-device battery, thermal or fleet certification.
