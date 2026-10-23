@@ -33,16 +33,20 @@ function createAdvisoryOperationLock(
         await connection.unsafe(`SELECT pg_advisory_lock(${SEARCH_INDEX_LOCK_NAMESPACE}, ${key})`);
         return await operation();
       } finally {
-        if (connection) {
-          try {
-            await connection.unsafe(
-              `SELECT pg_advisory_unlock(${SEARCH_INDEX_LOCK_NAMESPACE}, ${key})`,
-            );
-          } finally {
-            connection.release();
+        // Admission stays held until cleanup settles, and clears even if it throws.
+        try {
+          if (connection) {
+            try {
+              await connection.unsafe(
+                `SELECT pg_advisory_unlock(${SEARCH_INDEX_LOCK_NAMESPACE}, ${key})`,
+              );
+            } finally {
+              connection.release();
+            }
           }
+        } finally {
+          inFlight = false;
         }
-        inFlight = false;
       }
     },
   };
