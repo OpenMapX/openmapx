@@ -28,6 +28,7 @@ interface CredentialScan {
     | "key"
     | "value"
     | "scheme"
+    | "framedScheme"
     | "schemeValue"
     | "framedSchemeValue"
     | "bare"
@@ -46,10 +47,20 @@ function scanCredential(scan: CredentialScan, character: string): void {
     else if (character === scan.quote) scan.phase = "word";
     return;
   }
-  if (scan.phase === "scheme") {
+  if (scan.phase === "scheme" || scan.phase === "framedScheme") {
     if (/\s/.test(character)) {
+      const complete = AUTHORIZATION_SCHEMES.includes(scan.word);
+      if (character === "\r" && !complete) {
+        // Retain only the known prefix while it resumes across progress frames.
+        scan.phase = "framedScheme";
+        return;
+      }
       // A complete scheme followed by a real frame boundary still awaits its credential.
-      scan.phase = AUTHORIZATION_SCHEMES.includes(scan.word) ? "schemeValue" : "word";
+      scan.phase = complete
+        ? scan.phase === "framedScheme"
+          ? "framedSchemeValue"
+          : "schemeValue"
+        : "word";
       scan.word = "";
     } else {
       const candidate = scan.word + character.toLowerCase();
@@ -261,13 +272,11 @@ export function createBoundedProcessOutput(options: OutputOptions): {
     for (const decoded of text) {
       const character = controlFree(state, decoded);
       if (!character) continue;
-      // Preserve CR carry before scheme scanning can discard an incomplete prefix.
+      // Bare/inline values need CR carry captured before scanning the delimiter.
       const progressSecret =
-        character === "\r" &&
-        (state.scan.phase === "bare" ||
-          state.scan.phase === "scheme" ||
-          state.scan.inlineAuthorization);
-      scanCredential(state.scan, character);
+        character === "\r" && (state.scan.phase === "bare" || state.scan.inlineAuthorization);
+      // Coalesce CRLF for recognition as well as emission, even across byte writes.
+      if (!(character === "\n" && state.cr)) scanCredential(state.scan, character);
       if (character === "\n" || character === "\r") {
         if (!(character === "\n" && state.cr)) {
           if (!state.dropping) emit(stream);
@@ -278,6 +287,7 @@ export function createBoundedProcessOutput(options: OutputOptions): {
           state.protected =
             state.scan.phase === "quote" ||
             state.scan.phase === "value" ||
+            state.scan.phase === "framedScheme" ||
             state.scan.phase === "schemeValue" ||
             state.scan.phase === "framedSchemeValue" ||
             state.scan.phase === "key" ||

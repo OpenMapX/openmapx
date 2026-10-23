@@ -310,3 +310,133 @@ it.each(["Bearer", "Basic", "Token"])(
     expect(failures).toEqual([]);
   },
 );
+
+describe("fix4 bounded multi-CR authorization recognition", () => {
+  it("withholds the credential after a second CR while Bearer is still resuming", () => {
+    const seen: string[] = [];
+    const output = createBoundedProcessOutput({
+      onLine: (_stream, message) => seen.push(message),
+      redact: (x) => x,
+    });
+    for (const frame of [
+      "Authorization: B\r",
+      "ea\r",
+      "rer synthetic-review-r4-continuation\n",
+      "last-diagnostic\n",
+    ])
+      output.write("stdout", Buffer.from(frame));
+    const diagnostics = output.end();
+    expect(JSON.stringify({ seen, diagnostics })).not.toContain("synthetic-review-r4-continuation");
+    expect(seen).toContain("last-diagnostic");
+    expect(diagnostics.tail).toContainEqual({ stream: "stdout", message: "last-diagnostic" });
+  });
+
+  it.each(["Bearer", "Basic", "Token"])(
+    "withholds every nonempty %s partition across CR/CRLF and releases subsequent diagnostics",
+    (scheme) => {
+      const failures: string[] = [];
+      let failureCount = 0;
+      // Each bit cuts one character boundary; include every partition with at least one cut.
+      for (let cuts = 1; cuts < 2 ** (scheme.length - 1); cuts++) {
+        const parts: string[] = [];
+        let start = 0;
+        for (let index = 1; index < scheme.length; index++) {
+          if (cuts & (1 << (index - 1))) {
+            parts.push(scheme.slice(start, index));
+            start = index;
+          }
+        }
+        parts.push(scheme.slice(start));
+        for (const endings of [["\r"], ["\r\n"], ["\r", "\r\n"]]) {
+          for (const valueEnding of ["\n", "\r", "\r\n"]) {
+            for (const pendingValue of [false, true]) {
+              for (const splitBytes of [false, true]) {
+                for (const stream of ["stdout", "stderr"] as const) {
+                  const otherStream = stream === "stdout" ? "stderr" : "stdout";
+                  const seen: { stream: "stdout" | "stderr"; message: string }[] = [];
+                  const projected: string[] = [];
+                  const output = createBoundedProcessOutput({
+                    onLine: (stream, message) => seen.push({ stream, message }),
+                    redact: (message) => {
+                      projected.push(message);
+                      return message;
+                    },
+                  });
+                  const write = (target: "stdout" | "stderr", frame: string) => {
+                    const bytes = Buffer.from(frame);
+                    if (splitBytes)
+                      for (const byte of bytes) output.write(target, Uint8Array.of(byte));
+                    else output.write(target, bytes);
+                  };
+                  for (let index = 0; index < parts.length; index++) {
+                    const prefix = index === 0 ? "Authorization: " : "";
+                    const ending = endings[index % endings.length];
+                    if (index < parts.length - 1) {
+                      write(stream, `${prefix}${parts[index]}${ending}`);
+                      write(otherStream, "independent-diagnostic\n");
+                    } else {
+                      const separator = pendingValue ? ending : " ";
+                      write(
+                        stream,
+                        `${prefix}${parts[index]}${separator}synthetic-review-r4-value${valueEnding}`,
+                      );
+                    }
+                  }
+                  write(stream, "last-diagnostic\n");
+                  const diagnostics = output.end();
+                  const withheld = !JSON.stringify({ seen, diagnostics, projected }).includes(
+                    "synthetic-review-r4-value",
+                  );
+                  const includes = (
+                    entries: typeof seen,
+                    target: "stdout" | "stderr",
+                    message: string,
+                  ) =>
+                    entries.some((entry) => entry.stream === target && entry.message === message);
+                  const finalVisible =
+                    includes(seen, stream, "last-diagnostic") &&
+                    includes(diagnostics.tail, stream, "last-diagnostic");
+                  const independentVisible =
+                    includes(seen, otherStream, "independent-diagnostic") &&
+                    includes(diagnostics.tail, otherStream, "independent-diagnostic");
+                  if (!withheld || !finalVisible || !independentVisible) {
+                    failureCount++;
+                    if (failures.length < 10)
+                      failures.push(
+                        `${parts.join(" + ")}, ${JSON.stringify(endings)}, valueEnding=${JSON.stringify(valueEnding)}, pending=${pendingValue}, bytes=${splitBytes}, ${stream}: withheld=${withheld}, finalVisible=${finalVisible}, independentVisible=${independentVisible}`,
+                      );
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      expect({ failureCount, examples: failures }).toEqual({ failureCount: 0, examples: [] });
+    },
+  );
+
+  it.each(["\r", "\r\n"])(
+    "releases a rejected scheme prefix instead of latching over later diagnostics (%j)",
+    (ending) => {
+      const seen: string[] = [];
+      const output = createBoundedProcessOutput({
+        onLine: (_stream, message) => seen.push(message),
+        redact: (x) => x,
+      });
+      for (const frame of [
+        `Authorization: B${ending}`,
+        `ea${ending}`,
+        "not-a-scheme\n",
+        "last-diagnostic\n",
+        "another-diagnostic\n",
+      ])
+        output.write("stdout", Buffer.from(frame));
+      const diagnostics = output.end();
+      for (const message of ["last-diagnostic", "another-diagnostic"]) {
+        expect(seen).toContain(message);
+        expect(diagnostics.tail).toContainEqual({ stream: "stdout", message });
+      }
+    },
+  );
+});
