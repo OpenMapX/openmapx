@@ -131,6 +131,7 @@ describe("list snapshot + public projections", () => {
 
   it("snapshot keeps only public place fields — no ids", () => {
     const snap = listSnapshotFrom({ name: "$favorites", icon: "heart" }, [dbPlace]);
+    if (!snap) throw new Error("Snapshot rejected");
     expect(snap.places[0]).toEqual({
       name: "Cafe",
       address: "Street 1",
@@ -155,6 +156,7 @@ describe("list snapshot + public projections", () => {
 
   it("toPublicListShare / toPublicRouteShare carry the discriminant", () => {
     const snap = listSnapshotFrom({ name: "Trip", icon: null }, []);
+    if (!snap) throw new Error("Snapshot rejected");
     expect(toPublicListShare("live", snap)).toEqual({
       type: "list",
       mode: "live",
@@ -275,6 +277,7 @@ it("retains cloned per-field acquisition receipts through snapshot and public pa
       fieldContributors,
     },
   ]);
+  if (!snapshot) throw new Error("Snapshot rejected");
   const parsed = parseStoredListSnapshot(JSON.parse(JSON.stringify(snapshot)));
   expect(parsed?.places[0].fieldContributors).toEqual(fieldContributors);
   if (!parsed) throw new Error("Snapshot rejected");

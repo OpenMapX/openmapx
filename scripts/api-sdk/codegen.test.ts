@@ -231,6 +231,28 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
     `,
     );
   }
+  if (virtual.has(resolve(base, "src/api/generated/sharing/sharing.generated.ts"))) {
+    virtual.set(
+      resolve(base, "src/api/generated/sharing/sharing-consumer.typecheck.ts"),
+      `
+      import { createShare, resolvePublicShare, rotateShareToken, revokeShare, listOwnerShares } from "./sharing.generated";
+      async function sharingConsumer() {
+        const created = await createShare({ targetType: "list", targetId: "list", mode: "live" });
+        if (created.status === 201) { const token: string = created.data.token;
+          // @ts-expect-error Token hashes are never wire fields.
+          created.data.share.tokenHash;
+        }
+        const resolved = await resolvePublicShare("A".repeat(43));
+        if (resolved.status === 200 && resolved.data.type === "list") { const lat: number = resolved.data.places[0].lat; }
+        await listOwnerShares(); await rotateShareToken("share / café"); await revokeShare("share");
+        // @ts-expect-error List creation requires a mode.
+        createShare({ targetType: "list", targetId: "list" });
+        // @ts-expect-error Coordinates are numeric.
+        createShare({ targetType: "route", route: {mode: "walking", waypoints: [{lat: "52", lng: 13}, {lat: 53, lng: 14}]} });
+      }
+    `,
+    );
+  }
   const host = ts.createCompilerHost(options);
   const fileExists = host.fileExists.bind(host),
     read = host.readFile.bind(host),
@@ -253,7 +275,8 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
           ...Array.from(virtual.keys()).filter(
             (file) =>
               file.endsWith("/saved-consumer.typecheck.ts") ||
-              file.endsWith("/garage-consumer.typecheck.ts"),
+              file.endsWith("/garage-consumer.typecheck.ts") ||
+              file.endsWith("/sharing-consumer.typecheck.ts"),
           ),
         ],
         options,
@@ -490,7 +513,8 @@ describe("SDK artifact gate", () => {
       (file: { filename: string }) =>
         !file.filename.startsWith("admin/") &&
         !file.filename.startsWith("saved/") &&
-        !file.filename.startsWith("garage/"),
+        !file.filename.startsWith("garage/") &&
+        !file.filename.startsWith("sharing/"),
     );
     expect(metadata).toHaveLength(6);
     for (const file of metadata)

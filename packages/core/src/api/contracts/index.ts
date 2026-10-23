@@ -7,3 +7,4 @@ export * from "./operation";
 export * from "./runtime-metadata";
 export * from "./saved/index";
 export * from "./service-admin/index";
+export * from "./sharing";

@@ -187,6 +187,7 @@
       "default": "./src/api/schema.ts"
     },
     "./garage-sdk": "./src/api/garage-sdk.ts",
+    "./sharing-sdk": "./src/api/sharing-sdk.ts",
     "./saved-places-sdk": {
       "types": "./src/api/saved-sdk.ts",
       "default": "./src/api/saved-sdk.ts"
