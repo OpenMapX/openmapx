@@ -3,6 +3,7 @@ import type { AddressEvidence } from "../types/address";
 import type { LngLat } from "../types/geometry";
 import type { Ids } from "../types/identified";
 import type { AirportInfo, PlaceFact, PlacePhoto, PlaceProvenance } from "../types/place";
+import type { RequestJsonScope } from "../utils/requestJsonScope";
 
 export interface KnowledgeResult extends ContributingRecord {
   /** Exact captured suppliers for each scalar or externalIds.<key>. */
@@ -50,6 +51,13 @@ export interface KnowledgeContext {
   /** Optional card-photo lookup: report transport failures and skip unrelated lookups. */
   cardPhoto?: boolean;
   signal?: AbortSignal;
+  /**
+   * Request-local acquisition scope owned by the caller for one full place
+   * enrichment. A provider may route identical, uncancelled public JSON through
+   * it; it never carries source permission, so the provider still passes its own
+   * policy and builds its own receipts. Absent for card-photo and signalled work.
+   */
+  jsonScope?: RequestJsonScope;
 }
 
 export interface KnowledgeProvider {

@@ -35,18 +35,23 @@ export const wikipediaSource: KnowledgeProvider = {
     const encodedTitle = encodeURIComponent(title.replace(/ /g, "_"));
     const url = `https://${tagLang.toLowerCase()}.wikipedia.org/api/rest_v1/page/summary/${encodedTitle}`;
 
-    const data = await fetchJson<{
+    type Summary = {
       description?: string;
       extract?: string;
       thumbnail?: { source: string; width: number; height: number };
       originalimage?: { source: string; width: number; height: number };
       content_urls?: { desktop?: { page?: string } };
-    }>(url, {
-      headers: HEADERS,
-      timeoutMs: 3000,
-      ...(context?.cardPhoto ? {} : { nullOnError: true as const }),
-      signal: context?.signal,
-    });
+    };
+    // Share identical Wikimedia JSON only within one uncancelled full enrichment.
+    const scope = context?.cardPhoto || context?.signal ? undefined : context?.jsonScope;
+    const data = scope
+      ? await scope.getJson<Summary>(url, { headers: HEADERS, timeoutMs: 3000 }).catch(() => null)
+      : await fetchJson<Summary>(url, {
+          headers: HEADERS,
+          timeoutMs: 3000,
+          ...(context?.cardPhoto ? {} : { nullOnError: true as const }),
+          signal: context?.signal,
+        });
     if (!data) return null;
 
     const result: KnowledgeResult = {};
@@ -72,7 +77,9 @@ export const wikipediaSource: KnowledgeProvider = {
       if (filename) {
         const metadata = context?.cardPhoto
           ? await fetchCommonsMetadata([filename], { strict: true, signal: context.signal })
-          : await fetchCommonsMetadata([filename]);
+          : scope
+            ? await fetchCommonsMetadata([filename], { getJson: scope.getJson })
+            : await fetchCommonsMetadata([filename]);
         const richPhoto = metadata.get(filename.replace(/_/g, " "));
         if (richPhoto) result.photos = [richPhoto];
       }

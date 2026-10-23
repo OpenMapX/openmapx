@@ -124,6 +124,9 @@ export const wikidataSource: KnowledgeProvider = {
     url.searchParams.set("sitefilter", `${effectiveLang}wiki`);
     url.searchParams.set("format", "json");
 
+    // Share identical Wikimedia JSON only within one uncancelled full enrichment.
+    const scope = context?.cardPhoto || context?.signal ? undefined : context?.jsonScope;
+
     const data = await fetchJson<{ entities?: Record<string, WdEntity> }>(url.toString(), {
       headers: HEADERS,
       timeoutMs: 4000,
@@ -205,10 +208,19 @@ export const wikidataSource: KnowledgeProvider = {
           const encodedTitle = encodeURIComponent(wikiTitle.replace(/ /g, "_"));
           result.wikipediaUrl = `https://${effectiveLang}.wikipedia.org/wiki/${encodedTitle}`;
 
-          const wpData = await fetchJson<{ extract?: string }>(
-            `https://${effectiveLang}.wikipedia.org/api/rest_v1/page/summary/${encodedTitle}`,
-            { timeoutMs: 3000, headers: { Accept: "application/json" }, nullOnError: true },
-          );
+          const summaryUrl = `https://${effectiveLang}.wikipedia.org/api/rest_v1/page/summary/${encodedTitle}`;
+          const wpData = scope
+            ? await scope
+                .getJson<{ extract?: string }>(summaryUrl, {
+                  timeoutMs: 3000,
+                  headers: { Accept: "application/json" },
+                })
+                .catch(() => null)
+            : await fetchJson<{ extract?: string }>(summaryUrl, {
+                timeoutMs: 3000,
+                headers: { Accept: "application/json" },
+                nullOnError: true,
+              });
           if (wpData?.extract) {
             result.wikipediaExtract = wpData.extract;
             result.wikipediaExtractSource = ["knowledge-wikidata", "knowledge-wikipedia"];
@@ -222,7 +234,9 @@ export const wikidataSource: KnowledgeProvider = {
           const p18Filename = p18.mainsnak.datavalue.value as string;
           const metadata = context?.cardPhoto
             ? await fetchCommonsMetadata([p18Filename], { strict: true, signal: context.signal })
-            : await fetchCommonsMetadata([p18Filename]);
+            : scope
+              ? await fetchCommonsMetadata([p18Filename], { getJson: scope.getJson })
+              : await fetchCommonsMetadata([p18Filename]);
           const richPhoto = metadata.get(p18Filename.replace(/_/g, " "));
           if (richPhoto) result.photos = [richPhoto];
         }
