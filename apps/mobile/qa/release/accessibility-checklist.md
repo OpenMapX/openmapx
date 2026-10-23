@@ -1,11 +1,10 @@
 # Accessibility checklist
 
-The app is a WebView plus a handful of native overlays, so accessibility is
-mostly the website's — with one exception that matters: the native overlays
-appear exactly when something has gone wrong, and they are the only thing on
-screen. If they are unreachable, the user is stuck with no way out.
-
-Run on both platforms, on the local Release build.
+Run on both platforms against the identified local Release build and web build.
+Test the WebView and native overlays separately, including loading/error states
+where the overlay may be the only usable UI. Record actual results; this file
+contains no completed acceptance evidence. Navigation/notification cases require
+the foreground composition currently missing from `src/App.tsx`.
 
 ## Screen readers
 
@@ -30,7 +29,8 @@ Run on both platforms, on the local Release build.
 
 - [ ] Off-route, weak GPS, and degraded-capture states are conveyed by text or
       icon as well as colour.
-- [ ] Every interactive target is at least 44 pt (iOS) or 48 dp (Android).
+- [ ] Every interactive target meets the project targets of 44 pt (iOS) or 48 dp
+      (Android).
 
 ## Input
 

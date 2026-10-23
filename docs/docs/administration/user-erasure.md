@@ -6,19 +6,25 @@ sidebar_position: 8
 
 # User erasure operations
 
+Use this runbook after an authorized account deletion. For a self-service
+request, the person deletes their account in settings; for an administrator-led
+request, verify identity and scope before using **Users → Delete**. Keep a
+separate record of processor and off-host work that OpenMapX cannot perform.
+
 OpenMapX account deletion removes live account-owned rows through database
 cascades and explicitly scrubs verification challenges, system-setting updater
-IDs, matching persisted logs, and identifiers in audit records. Audit events may
+IDs, exactly matched persisted log references, and identifiers in audit records. Audit events may
 remain for accountability, but the deleted actor's ID, IP address, user agent,
 target ID, and matching details are cleared. Before that transaction starts, the API
 durably appends an HMAC-pseudonymised request to the erasure journal. If the
 journal is unavailable, deletion fails without pretending that it succeeded.
 
-The browser that performs self-service deletion clears its React Query state,
-OpenMapX IndexedDB data, downloaded offline packages, Cache Storage, and local
-and session storage after the server confirms deletion. The operator cannot
-remotely erase browser storage on other devices; tell the user to clear the app
-or site data there.
+After the server confirms self-service deletion, the browser attempts to clear
+React Query state, OpenMapX IndexedDB data, offline packages, Cache Storage and
+local/session storage. Browser restrictions or storage errors can prevent parts
+of that cleanup; manually clear the app or site data when verification is needed.
+The operator cannot remotely erase storage on other devices, which also need
+local cleanup.
 
 ## Access and portability requests
 
@@ -111,9 +117,17 @@ OpenMapX.
 
 1. Confirm the account can no longer authenticate and no `user` row remains.
 2. Confirm account-owned API resources return no records.
-3. Confirm the erasure journal contains a request and completion pair (never a
-   raw user ID or email).
+3. Confirm journal append/completion succeeded without exposing its protected
+   contents. An incomplete pair requires investigation; do not insert completion
+   records by hand. Journal identifiers are HMAC-pseudonyms, not raw user IDs or
+   emails.
 4. Run `pnpm openmapx backup prune --retention-days <configured-days>` and verify
    off-host lifecycle rules.
 5. Complete any Dawarich/processor action and communicate the external Mangrove
    boundary.
+
+For a recovery drill, restore a retained backup in a disposable deployment and
+verify that replay removes the erased account before the API resumes. This is a
+runtime check; inspecting the journal or reading a saved test receipt does not
+establish restore safety for the current deployment. See
+[Backup and restore](./backup-and-restore.md#restoring).

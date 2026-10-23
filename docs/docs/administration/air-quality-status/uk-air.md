@@ -1,5 +1,6 @@
 ---
-title: Air quality — UK-AIR
+description: Recorded release evidence and limits for preliminary UK-AIR current-site levels.
+title: "Air quality: UK-AIR"
 air_quality_component: uk-air
 status: shipped
 code_path: "integrations/air-quality-uk-air,packages/air-quality/src/standards/uk-daqi-current.ts"
@@ -16,8 +17,7 @@ blocker: "none"
 
 # UK-AIR
 
-**Status:** shipped
-**Owner:** safe optional-provider addendum
+Shipped current-site evidence; review recorded 30 August 2026.
 
 OpenMapX consumes UK-AIR's explicit current-site DAQI publication and validates
 its value, category, station identity, and time contract. The nearest station

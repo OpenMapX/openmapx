@@ -1,66 +1,62 @@
 ---
-title: Introduction
-description: OpenMapX is a self-hosted, open-data platform for maps, search, navigation, and public transit.
+title: OpenMapX documentation
+description: Use OpenMapX, host your own map, or build an integration.
 slug: /
 sidebar_position: 1
 ---
 
-# OpenMapX
+# OpenMapX documentation
 
-OpenMapX is a fully self-hostable mapping platform, assembled from
-open-source services and open data. It gives you a
-modern map application — place and voice search, traffic-aware and EV
-directions, public-transit planning and navigation, map layers, crowd reports,
-and street-level imagery — that runs on infrastructure you control.
+OpenMapX is a map application for place search, directions, public transit, and
+map layers. You can use an existing instance or host it on your own infrastructure.
+The features and geographic coverage available on an instance depend on its
+enabled integrations, data sources, and services.
 
-The lightweight application, proxy, database, cache, data-manager, and ops-agent
-form the core deployment. Heavy or provider-specific engines are not locked in:
-routing, geocoding, transit, tiles, and most user-facing features are plugins,
-and the whole Docker deployment is generated from their manifests. You decide
-which optional engines and data sources to run.
+<div className="docs-paths">
+  <a className="docs-path" href="/overview/using-openmapx">
+    <strong>Use the map</strong>
+    <span>Find a place, plan a journey, and save the places you want to return to.</span>
+  </a>
+  <a className="docs-path" href="/install/getting-started">
+    <strong>Host OpenMapX</strong>
+    <span>Prepare a server, configure the application, and start your deployment.</span>
+  </a>
+  <a className="docs-path" href="/administration/admin-panel">
+    <strong>Administer an instance</strong>
+    <span>Manage services and integrations, look after accounts, and protect your data.</span>
+  </a>
+  <a className="docs-path" href="/developer/development-setup">
+    <strong>Contribute and develop</strong>
+    <span>Run the code locally, understand the architecture, and build extensions.</span>
+  </a>
+</div>
 
-## What you get
+## What runs on your server
 
-- **A complete mapping app** — geocoding and autocomplete, turn-by-turn
-  directions and EV charge planning, public-transit journey planning and live
-  navigation, points of interest, map overlays, crowd reports, weather,
-  reviews, and place enrichment.
-- **A pluggable backend** — each daemon (the routing engine, the geocoder, the
-  transit engine, the tile server, …) is described by a manifest and runs as a
-  container.
-- **A pluggable feature set** — 106 built-in _integrations_ span search,
-  routing, transit, live mobility, places, overlays, weather, and more.
-  Community extensions — integrations, services, or bundles of both —
-  install from one unified **Extensions** store.
-- **Open data throughout** — OpenStreetMap, GTFS (via Transitous), Wikidata,
-  Wikipedia, Mapillary, and a long list of public agency feeds.
-- **Privacy by default** — no third-party analytics, and provider API and image
-  requests are normally proxied through your server. Explicit link-outs and
-  browser capabilities such as Web Speech follow the browser/provider privacy
-  model and are called out in the relevant feature documentation.
-- **A modern stack** — Next.js, Fastify, MapLibre GL JS, MUI, PostgreSQL +
-  PostGIS, Valkey (Redis-compatible), Drizzle ORM, and TypeScript end to end.
+The core deployment includes the web app, API, PostgreSQL/PostGIS database, Valkey
+cache, reverse proxy, data-manager, and operations agent. You can add routing,
+geocoding, transit, and map-tile engines as needed. Some integrations use hosted
+providers; check their credentials, coverage, licences, and privacy requirements
+before enabling them.
 
-## Two kinds of plugins
+OpenMapX has two kinds of plugins:
 
-Almost everything in OpenMapX is one of two plugin types. Knowing which is which
-makes the rest of the documentation easier to follow.
+| Plugin      | Purpose                                                      | Examples                                         |
+| ----------- | ------------------------------------------------------------ | ------------------------------------------------ |
+| Service     | A container that supplies infrastructure or a backend engine | PostgreSQL, Valhalla, MOTIS, Photon              |
+| Integration | An application feature or a provider of data for one         | Routing, transit planning, weather, place photos |
 
-|                  | Services                                                                                                      | Integrations                                                                                         |
-| ---------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| **Live in**      | `services/<slug>/`                                                                                            | `integrations/<id>/`                                                                                 |
-| **Described by** | `service.json`                                                                                                | `manifest.json`                                                                                      |
-| **Are**          | Backend daemons that run as containers — databases, routing engines, geocoders, transit engines, tile servers | App-level features that consume services and external APIs to deliver functionality to users         |
-| **Declare**      | Image, ports, volumes, the capabilities they _provide_, the data they _consume_, host/proxy exposure          | Domain, frontend components, backend routes, config schema, attribution, the services they _require_ |
+The CLI renders the Docker Compose deployment from service manifests. Integrations
+connect application features to those services and to external providers. Read
+[How it works](./how-it-works.md) for the deployment model.
 
-The compose renderer turns the enabled **services** (29 built-in plus community additions) into a generated
-`docker-compose` stack — there is no hand-maintained compose file. The API
-server hosts the **integrations** and resolves each integration's `requires:`
-against the running services.
+## Before you choose an instance
 
-## Where to go next
+Saved places and other synchronized account data are readable by the instance's
+server and operator. They are not end-to-end encrypted. External providers also
+have their own data-use terms. The [user-data trust model](../developer/user-data-trust-model.md)
+describes these boundaries; the instance's privacy page identifies its operator
+and configured sources.
 
-- **[How it works](./how-it-works.md)** — the architecture, and how services and
-  integrations fit together.
-- **[Getting started](../install/getting-started.md)** — running the stack with
-  Docker Compose.
+For a problem with the map or a documentation question, see
+[Troubleshooting and help](./troubleshooting.md).

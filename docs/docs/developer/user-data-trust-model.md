@@ -1,4 +1,5 @@
 ---
+description: Understand server-readable account data, protected credentials, exports, sharing, and erasure boundaries.
 sidebar_position: 8
 title: User-data trust model
 ---
@@ -26,8 +27,7 @@ client encryption. Use the following classes when reviewing a new field.
 | Transient private inputs        | Processing needs the input, but durable retention is not part of the feature.       | Search queries, route endpoints, navigation fixes and timeline requests. Minimize processing and retention; justify any persistence or cache separately. A persisted share snapshot is server-readable private content.                            |
 | Client-encrypted content        | Content keys remain on client devices; the server stores ciphertext.                | Mangrove signing keys in the existing encrypted modes. Its explicit unencrypted mode is server-readable. Extending this class to ordinary saved content requires the ADR's key management, recovery, sharing, migration and security-review gates. |
 
-Classify the **field and its purpose**, rather than assigning one class to a whole
-feature: an OSM edit has public content, a server-required credential and a
+Classify each field by its purpose: an OSM edit has public content, a server-required credential and a
 transient draft. Record any transition between classes, such as deliberately
 publishing a private snapshot through a bearer link. Anyone holding that link is
 an intended reader until expiry or revocation.
@@ -59,7 +59,7 @@ meet the ADR's review gates before introducing stronger guarantees.
 
 ## Privacy export boundary
 
-The privacy export boundary is intentionally narrower than the database. A
+Privacy exports use reviewed projections of controller-held data. A
 registry entry declares the purpose, legal basis, origin, recipients,
 retention, portability decision and secret policy. A collector must then use
 an ownership-first projection and a bounded, repeatable-read snapshot. It may
@@ -100,5 +100,7 @@ accept paths, SQL, image names or Docker flags from the browser.
 `GdprExportReadiness` is fail-closed. It reports registry coverage, encryption,
 retention cleanup, backup review, monitoring, notification, OpenAPI/policy and
 current human approvals. A failed check permits intake and an honest partial
-response, but prevents wording that the deployment is automatically “GDPR
-compliant.”
+response. It does not establish deployment readiness or authorize an automatic
+GDPR-compliance claim. See the
+[export release status](../administration/gdpr-export-release-evidence.md) for
+recorded qualification and deployment prerequisites.

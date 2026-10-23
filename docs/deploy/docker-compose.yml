@@ -13,8 +13,9 @@
 #   docker compose -f docs/deploy/docker-compose.yml -p openmapx-docs pull
 #   docker compose -f docs/deploy/docker-compose.yml -p openmapx-docs up -d
 #
-# DNS docs.openmapx.org already points at the host; Traefik issues the
-# Let's Encrypt cert automatically (HTTP-01 challenge, "letsencrypt" resolver).
+# This example requires an existing Docker-discovery Traefik proxy. The
+# application's bundled file-provider proxy does not discover these labels.
+# Configure DNS for docs.openmapx.org and the proxy's ACME challenge first.
 services:
   docs:
     image: ${OPENMAPX_DOCS_IMAGE:?Resolve docs:latest to a digest before deploying docs}

@@ -1,3 +1,8 @@
+---
+title: Transit reachability
+description: Assumptions, limits, and deployment checks for estimated surfaces, exact point checks, and sampled polygons.
+---
+
 # Transit reachability
 
 OpenMapX provides three public-transit reachability paths:
@@ -6,11 +11,15 @@ OpenMapX provides three public-transit reachability paths:
 - an **exact finite point check**, used to filter the currently displayed Explore results against a verified self-hosted MOTIS instance;
 - **sampled exportable polygons**, computed by sampling a spatial lattice over MOTIS one-to-many queries.
 
-MOTIS 2.11 natively does not return isochrone polygons from its one-to-all endpoint — it returns reachable stops and their travel times. OpenMapX renders those seeds as an estimated WebGL field: from every reached stop it adds the remaining walking budget in a straight line. The result is fast and visually informative, but barrier-blind; for GIS-grade polygon exports, OpenMapX provides the sampled isochrone pipeline detailed below.
+MOTIS one-to-all returns reachable stops and travel times. OpenMapX adds the
+remaining walking budget in a straight line around those stops to draw the map
+surface. That estimate ignores barriers. Exportable sampled polygons use routed
+lattice points, but their interpolated boundaries also have uncertainty. Verify
+the result against your dataset before using it for analysis.
 
 ## Fixed assumptions
 
-Both paths use profile `foot-1.2-cap-900-v1`:
+The reachability paths use profile `foot-1.2-cap-900-v1`:
 
 - MOTIS pedestrian profile `FOOT`;
 - walking speed 1.2 metres per second;
@@ -49,9 +58,7 @@ single-origin one-to-all query used for the estimated display.
 Exact requests accept at most 200 destinations. The adapter uses sequential
 batches of `min(advertised limit, 128)`, preserves destination order and IDs,
 and has one 30-second deadline covering the entire operation. A response is
-released only after every batch succeeds. While a check is pending—or when it
-is unavailable, malformed, cancelled, or failed—the browser keeps every Explore
-result visible. There is no partial mask.
+released only after every batch succeeds. While a check is pending, unavailable, malformed, cancelled or failed, the browser keeps every Explore result visible. There is no partial mask.
 
 ## Caching, limits, and fallback
 
@@ -78,10 +85,11 @@ should still coordinate with Transitous.
 
 ## Benchmark and rollout
 
-Run against a small local dataset first:
+After promoting a small local dataset and verifying its capability snapshot, run
+from the repository root with the pinned Node 24 runtime:
 
 ```bash
-pnpm exec tsx scripts/benchmark-motis-reachability.ts \
+node scripts/benchmark-motis-reachability.ts \
   --base-url http://127.0.0.1:8081 \
   --lat 52.525 --lng 13.369
 ```
@@ -106,17 +114,17 @@ they never include origins, destination coordinates, or result IDs.
 
 ## Exportable polygons
 
-There is a third artifact, and the three make different accuracy claims. Keeping
-them distinct is what stops an export from being read as more authoritative than
-it is:
+Use the artifact whose accuracy and cost fit the task. “Exact” describes a
+finite MOTIS query under the fixed profile and active dataset, not a guarantee
+about real-world service availability.
 
-| Artifact              | Egress model                                              | Claim                                                                   | Cost                      |
-| --------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------- |
-| **Estimated** field   | straight line from each reached stop                      | barrier-blind visual estimate                                           | one MOTIS request         |
-| **Sampled** polygons  | street-routed at each lattice point, interpolated between | accurate at the sample points; boundary uncertain within about one cell | 8–32 MOTIS requests       |
-| **Exact** point check | street-routed at that coordinate                          | authoritative for that coordinate                                       | one or two MOTIS requests |
+| Artifact              | Egress model                                              | Claim                                                                   | Cost                                           |
+| --------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------- |
+| **Estimated** field   | straight line from each reached stop                      | barrier-blind visual estimate                                           | one MOTIS request                              |
+| **Sampled** polygons  | street-routed at each lattice point, interpolated between | accurate at the sample points; boundary uncertain within about one cell | multiple sequential MOTIS batches              |
+| **Exact** point check | street-routed at that coordinate                          | routed result for that coordinate and dataset                           | sequential batches of at most 128 destinations |
 
-Sampled polygons are downloadable RFC 7946 GeoJSON. The file carries an
+Sampled polygons are downloadable RFC 7946 GeoJSON. The file contains an
 `openmapx` member holding the origin, departure minute, walk profile, source,
 dataset epoch, sampling metadata, attribution, and an explicit accuracy note, so
 it stays self-describing after it leaves OpenMapX. It is **not** an exact
@@ -132,25 +140,27 @@ must already pass, plus this switch. A closed gate reports
 
 ### Sampling budget
 
-A request supplies a bbox, which the server clamps to 900 km² of **ground** area
-(about 30 × 30 km) and reports `clippedToBbox` when it does. The lattice spacing
-is `max(100 m, sqrt(area / 2048))`, rounded up onto a fixed ladder so a nudged
-viewport reuses the same lattice and the same cached field. A 30 × 30 km request
-resolves to roughly 660 m; a 10 × 10 km request to roughly 220 m.
+A request supplies a bbox, clamped to 900 km² of ground area. The result reports
+`clippedToBbox`, sample count and actual resolution. The fixed budget is at most
+2,048 lattice points. Grid spacing is computed in Web Mercator, rounded onto a
+fixed ladder and widened until the snapped grid fits that budget. `gridMetres`
+is projected spacing; `resolutionMetres` reports approximate ground spacing at
+the bbox's centre latitude. Do not interpret the 100-metre minimum projected
+spacing as a universal 100-metre ground resolution.
 
-Lattice points are sampled through `one-to-many-intermodal` in sequential
-batches of `min(advertised maxOneToManySize, 128)`, with a per-batch 30-second
-timeout and a 60-second budget across the run. Sampling is all-or-nothing: a
-field missing a failed batch would contour that region as unreachable, which is
-silently wrong rather than visibly broken.
+Lattice points use sequential `one-to-many-intermodal` batches of
+`min(advertised maxOneToManySize, 128)`, under one 60-second sampling deadline.
+Every batch must succeed before the field is released. An incomplete field
+would incorrectly turn a failed query region into unreachable space.
 
-Because MOTIS performs **one** timetable search per request and reuses it for
-the whole batch, cost is roughly `batches × timetableSearch + samples ×
-streetOffset`. Raising MOTIS `limits.onetomany_max_many_` above its default of
-128 therefore cuts the dominant term; OpenMapX reads the advertised value, so
-that tuning takes effect with no code change. If a run does not fit the
-60-second budget on your hardware, lower the sample budget: resolution degrades,
-correctness does not.
+Each batch repeats timetable-search work and adds street offsets for its sample
+points. OpenMapX currently caps batches at 128 destinations even when MOTIS
+advertises more; increasing `onetomany_max_many_` above 128 does not increase the
+OpenMapX batch size. The integration uses a fixed sample budget, not an exposed
+operator setting. If the workload misses its 60-second budget, keep exportable
+polygons disabled and investigate capacity or use a smaller bbox. Reducing the
+bbox improves local resolution but does not necessarily reduce the number of
+samples.
 
 ### Load and caching
 
@@ -160,15 +170,20 @@ could issue hundreds of sequential MOTIS batches and starve ordinary journey
 planning. The route is also in the expensive rate-limit tier.
 
 The **sampled field** is cached for 900 seconds under a key that deliberately
-excludes the thresholds. Contouring a cached field costs milliseconds, so
-changing a threshold re-contours instantly instead of re-sampling for a minute.
+excludes the thresholds. Changing a threshold can reuse the cached field without new MOTIS sampling; contouring latency still depends on the field and host.
 
 A bbox spanning the antimeridian is rejected rather than split.
 
 ### Accuracy benchmark
 
+Run from the repository root against the OpenMapX API, not directly against
+MOTIS. The following example uses a development API listening on host port 3001.
+The managed API does not publish that port; choose a reachable instance origin
+instead. For a deliberately selected public HTTPS origin, also pass
+`--allow-remote`. Use a disposable or approved test deployment for this workload.
+
 ```bash
-pnpm exec tsx scripts/benchmark-transit-isochrone-accuracy.ts \
+node scripts/benchmark-transit-isochrone-accuracy.ts \
   --base-url http://127.0.0.1:3001 \
   --lat 52.525 --lng 13.369 --minutes 30
 ```
@@ -176,7 +191,7 @@ pnpm exec tsx scripts/benchmark-transit-isochrone-accuracy.ts \
 The script generates polygons, draws deterministic sample points across the
 sampled bbox, and compares polygon inclusion against exact one-to-many checks.
 Disagreements within two cells of the boundary are expected and reported, not
-gated — the polygon interpolates between lattice points there. Disagreements
+gated, because the polygon interpolates between lattice points there. Disagreements
 further than two cells from the boundary have no sampling explanation and exit
 non-zero.
 

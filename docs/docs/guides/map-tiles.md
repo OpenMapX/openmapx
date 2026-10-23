@@ -6,11 +6,13 @@ sidebar_position: 5
 
 # Self-hosting map tiles
 
-OpenMapX always owns the base-map presentation. The light and dark style JSON,
-sprites, layer order, and expressions ship with the web app. A deployment only
-chooses where that style reads its OpenMapTiles vector data and font glyphs.
-This keeps the online map, downloaded areas, previews, and dark-mode switches on
-one visual definition.
+The default OpenMapX light/dark styles, sprites, and layers ship with the web
+app. Choose where they obtain OpenMapTiles-compatible vectors and glyphs. A
+separate optional MapTiler full-style mode is described below.
+
+Complete [Getting started](../install/getting-started.md) first. Local tile
+preparation needs a healthy data-manager, Docker, and room for the source PBF,
+Planetiler workspace, active archive, and staged replacement.
 
 Enabled TileServer GL is selected automatically; explicit `NEXT_PUBLIC_TILES_URL`
 also always takes priority. Without local tiles, `BASEMAP_PROVIDER=auto` uses
@@ -117,7 +119,10 @@ curl -sf -o /dev/null 'http://localhost:8080/fonts/Noto%20Sans%20Regular/0-255.p
 
 ### 4. Configure the web app
 
-```bash
+For the built-in TileServer GL, automatic discovery supplies these URLs. Set
+explicit values only for a different origin or a deliberate override:
+
+```dotenv
 # infra/docker/.env
 NEXT_PUBLIC_STYLE_PROVIDER=openmapx
 NEXT_PUBLIC_TILES_URL=https://maps.example.com/tiles/data/openmapx.json
@@ -129,8 +134,8 @@ source. `NEXT_PUBLIC_MAP_STYLE_URL` supplies `/fonts`; despite its historical
 name, it is not a style JSON endpoint. The sprites remain same-origin web-app
 assets. Offline package preparation, polling, archives, and glyph downloads use
 `NEXT_PUBLIC_API_URL` as well; this matters in local development where the web
-app and API normally use different origins. Restart `app-web` after changing
-these values.
+app and API normally use different origins. Apply changed container values with `pnpm openmapx services start app-web`,
+then reload the page. An in-place restart does not reload environment values.
 
 `NEXT_PUBLIC_STYLE_PROVIDER=maptiler` selects MapTiler's complete hosted style
 through the API only when MapTiler is the resolved vector provider. Self-hosted
@@ -182,6 +187,14 @@ URL to skip that extra TileJSON request. Alternatively, set
 `NEXT_PUBLIC_TERRAIN_ATTRIBUTION_NAME` and
 `NEXT_PUBLIC_TERRAIN_ATTRIBUTION_URL` to the data provider's required credit.
 
+The web runtime reads `NEXT_PUBLIC_TERRAIN_DEM_TILE_URL_TEMPLATE` and
+`NEXT_PUBLIC_TERRAIN_DEM_ENCODING`, but the current `app-web` service manifest
+does not forward those two variables. Setting them only in the managed `.env`
+therefore does not apply them to that container. Verify the effective web
+container environment before relying on a custom encoding/template; the
+forwarded TileJSON and attribution settings remain available. A custom manifest
+or non-Compose runtime must supply the missing variables explicitly.
+
 Downloaded browser packages currently contain OpenMapTiles vectors and glyphs,
 but no elevation or contour tiles. While an offline package is active, Default
 and Terrain therefore show the flat vector style and make no terrain tile
@@ -219,22 +232,24 @@ pnpm openmapx data link
 pnpm openmapx services start tileserver
 ```
 
-`openmapx data update` includes the font download and builds enabled prepared
-artifacts. Existing browser packages remain immutable; preparing the same area
+`openmapx data update` includes glyphs but builds every installed buildable
+engine, including unselected ones; use targeted commands for a tile-only refresh. Existing browser packages remain immutable; preparing the same area
 against refreshed source data produces a new content-addressed identity.
 
 ## Martin overlays
 
 Martin serves PostGIS tile functions as dynamic vector tile endpoints. It
 serves only the sources declared in `services/martin/config/martin.yaml`,
-today the traffic-flow overlay's `segment_flow`, and logs in as
+the traffic-flow overlay's `segment_flow`, and logs in as
 `openmapx_tiles`, a role that can call the functions in the `tiles` schema and
 read no table. Set its password before enabling Martin; PostGIS applies it on
 its next start:
 
 ```bash
-echo "MARTIN_DB_PASSWORD=$(openssl rand -hex 32)" >> infra/docker/.env
-pnpm openmapx services update postgis --no-deps
+# Generate a value, then set MARTIN_DB_PASSWORD once in infra/docker/.env:
+openssl rand -hex 32
+# In a planned database maintenance window:
+pnpm openmapx services start postgis
 pnpm openmapx services enable martin
 pnpm openmapx compose render
 pnpm openmapx services start martin

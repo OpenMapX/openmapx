@@ -6,24 +6,11 @@ sidebar_position: 3
 
 # Integrations & capability bindings
 
-An **integration** is an app-level feature — the geocoding orchestrator, the
-routing orchestrator, a transit provider, a map overlay, an external data
-source, photos, reviews, place enrichment. Each one ships a `manifest.json` that
-declares its config schema, the secrets it needs, and the backend services it
-requires. The admin panel under `/admin/integrations` is where you turn those
-declarations into a working configuration: enable the features you want, fill in
-their settings and credentials, and — when a feature needs a backend that more
-than one service can supply — pick which one it uses.
-
-If the service/integration/capability model is new to you, read
-[How it works](../overview/how-it-works.md) first. This page assumes it and
-focuses on the admin side. The panel and the API behind it are mapped in the
-[Admin panel tour](./admin-panel.md); installing third-party integrations is
-covered in [Community extensions](./community-extensions.md).
-
-Community integrations configure, bind, and probe exactly like the built-in ones
-described here once installed; see [Community extensions](./community-extensions.md)
-for how to install them.
+Use `/admin/integrations` with a full administrator account to enable features,
+set credentials and choose backend bindings. Integrations declare their settings
+and dependencies in `manifest.json`. Backend containers are managed separately
+under [Services](./services-administration.md); install community components
+through [Extensions](./community-extensions.md).
 
 ## The integration list
 
@@ -32,41 +19,41 @@ domains it serves, whether it's enabled, its health, and whether its credentials
 and required services are satisfied. Click into one to open its detail page,
 which is organized into tabs:
 
-- **Overview** — metadata, the services and other integrations it depends on,
+- **Overview**: metadata, the services and other integrations it depends on,
   and the capability-binding picker.
-- **Config** — the per-integration settings form, plus a read-only table showing
+- **Configuration**: the per-integration settings form, plus a read-only table showing
   every resolved value and where it came from.
-- **Credentials** — the secret fields the integration declares, and their status.
-- **Health** — the current probe result, with a button to re-run it.
+- **Credentials**: the secret fields the integration declares, and their status.
+- **Health**: the current probe result, with a button to re-run it.
+- **Data Sources**: source declarations, licensing and privacy metadata.
 
-Two controls sit outside the tabs. An **enable / disable** toggle flips whether
-the integration loads at all, and a **Reload** action re-runs the integration's
-setup so a config or binding change takes effect. Reload is queued as a
-background job — watch it finish under the panel's Activity view
-([Monitoring](./monitoring.md)).
+To configure a feature:
+
+1. Open the integration and check its required services and credentials.
+2. Set non-secret values on **Configuration** and secrets on **Credentials**.
+3. Save, then inspect health and run a request using that feature.
+
+The enable/disable toggle controls whether the integration participates in the
+runtime. Config and credential saves reload integrations. An explicit **Reload**
+queues a background job; follow its terminal result in
+[Activity](./monitoring.md). Reloads can rebuild the shared integration host, so
+inspect the result for failures beyond the selected feature.
 
 ## Configuring an integration
 
-If an integration's manifest declares a `configSchema`, the **Config** tab
-renders it as a form: one input per setting, typed from the schema — toggles for
-booleans, dropdowns for enumerations, text and number inputs otherwise. An
-integration with no schema (or one that exposes nothing beyond the on/off
-switch) shows a note instead.
+The Configuration form uses the manifest's schema for booleans, enumerations, numbers
+and text. An integration without configurable fields shows a note.
 
-Saving writes your edits to the database and reloads the integration so the new
-values apply right away — there's no separate restart step for integration
-config, unlike backend services. The form rejects unknown keys and type
-mismatches against the schema, and it refuses two kinds of field: secret fields
-(those go through the Credentials tab) and the `enabled` switch (use the
-enable / disable toggle). Every change is written to the audit log.
+Saving validates writable non-secret keys, publishes the trusted configuration
+and reloads integrations. Use Credentials for secrets and the enable/disable
+control for `enabled`. An API save failure can leave an unknown host outcome;
+inspect the returned error and current state before trying again.
 
 ### The config cascade
 
 Each setting's effective value is resolved through a layered cascade. The
-**Config** tab shows a `source` chip next to every field naming the layer that
-won, and a field pinned by an environment variable is rendered **disabled** —
-you can see the value but not edit it, because the environment would override
-your edit anyway.
+**Configuration** tab shows a `source` chip next to every field naming the layer that
+won. An environment-driven field is disabled because a saved value cannot override it.
 
 There are five layers. Highest priority wins:
 
@@ -76,23 +63,17 @@ There are five layers. Highest priority wins:
 |    4     | `config.json` | A `config.json` file in the integration's own directory. |
 |    3     | `vault`       | An admin-set secret in the encrypted vault.              |
 |    2     | `database`    | A value you saved in the Config form.                    |
-|    1     | `default`     | The `configSchema` default — nothing has overridden it.  |
+|    1     | `default`     | The schema default.                                      |
 
-So an environment variable beats a local `config.json`, which beats a vaulted
-secret, which beats a value saved in the admin panel, which beats the schema
-default. Environment variables always win, which keeps a Docker deployment
-predictable: a value pinned in `infra/docker/.env` can't be silently changed
-from the UI, and the disabled field plus its `env` chip make that visible.
-
-:::note[Why a saved value sometimes "won't stick"]
-If you save a field in the form and it doesn't change, look at its source chip.
-A higher layer — almost always an `env` override in `infra/docker/.env` — is
-taking precedence. Remove that override (or change it there) to let the admin
-value through. The same logic governs every layer of the cascade.
-:::
+If a saved value does not take effect, inspect its source. An environment or
+`config.json` override can hide a database or vault value. Change the winning
+layer or remove the override, then reload. Empty environment strings are treated
+as unset. The environment must reach the API process: adding a line to
+`infra/docker/.env` requires the relevant container to be recreated before the
+process can read it.
 
 The environment-variable name follows a fixed pattern: `INTEGRATION_`, then the
-integration's id, then `_`, then the config key — both the id and the key are
+integration's id, then `_`, then the config key. Both the id and the key are
 hyphen-normalized (hyphens become underscores) and upper-cased. A camelCase
 schema key like `apiKey` has no hyphens to normalize, so it is set by
 `INTEGRATION_<ID>_APIKEY`:
@@ -110,76 +91,67 @@ Hyphenated keys are normalized the same way. For example, the
 INTEGRATION_BIKE_SHARING_DB_BIKE_API_KEY=your-key-here
 ```
 
-For the bigger picture of where settings live — `.env`, the admin panel, and how
-they relate — see [Configuration](../install/configuration.md). The parallel
-cascade for _backend services_ uses the `SERVICE_<ID>_<KEY>` prefix and only
-three layers; see [Managing services](../install/managing-services.md).
+See [Configuration](../install/configuration.md) for deployment settings.
+Backend service settings use the separate `SERVICE_<ID>_<KEY>` cascade described
+in [Services administration](./services-administration.md#config).
 
 ### Secrets
 
-A config field marked `"x-openmapx-secret": true` in the manifest is a secret —
-an API key, a token, a password. Secrets are never shown in the Config form or
-returned in API responses; they live on the **Credentials** tab instead, where
-each declared secret is listed with its status: stored in the **vault**,
-supplied by an **env** override, or **missing**.
+A field marked `"x-openmapx-secret": true` belongs on **Credentials**.
+The Configuration view masks its value, and administrative responses do not return the
+credential body. Credential status reports the effective source, which can be
+`env`, `config.json`, `vault`, `database` or `default`, or `missing`. Vault update
+metadata is separate from the layer currently supplying the value.
 
 Set or rotate a secret from that tab. Its value is encrypted at rest in the
 database vault, which requires `OPENMAPX_SECRETS_KEY` to be set on the API host
 (generate one with `openssl rand -hex 32`). Without that key the vault is
 unavailable and the panel says so; an integration that _declares_ secret fields
-will refuse to load at startup until the key is present, so this is a hard
-requirement rather than a silent degrade.
+will refuse to load at startup until the key is present, so configure it before starting the API even when credentials will come from environment overrides.
 
 You can also supply a secret entirely through the environment, with the same
-`INTEGRATION_<ID>_<KEY>` variable used for any other setting — handy when you'd
-rather keep credentials in `infra/docker/.env` than in the database. As always,
-the env value wins over a vaulted one. An integration whose every required
-secret is still missing is flagged as unconfigured in the list and on the
-Overview dashboard.
+`INTEGRATION_<ID>_<KEY>` naming convention. Protect the deployment environment as secret material. As always,
+the env value wins over a vaulted one. The credential summary is configured only when every declared secret has an effective nonempty value. A missing optional credential may therefore keep that summary incomplete even when the feature can serve some requests.
 
 Where an integration's manifest provides it, each credential also shows a short
-**setup guide** inline — a "Get API key" button linking straight to the
+**setup guide** with a "Get API key" link to the
 provider's registration page, an optional pre-filled request email for providers
 that grant access by hand, a free-tier/pricing hint, and a collapsible list of
 steps to obtain the value. It appears next to the field on the Credentials tab,
-on the bulk-configure page, and in the Set-credential dialog, so you rarely need
-to leave the panel to hunt down where a key comes from.
+on the bulk-configure page, and in the Set-credential dialog, with the provider-specific registration instructions.
 
 ## Capability bindings
 
-Integrations don't name a specific backend; they ask for a **capability**. The
-routing integration requires a `routing-engine`; the geocoding providers require
-a `geocoder`. Whether that capability is satisfied by Valhalla or OSRM, Photon or
-Nominatim, is a deployment choice — and when more than one installed service can
-satisfy a requirement, you choose which one, by setting a **binding**.
+Integrations can require a named service or a capability such as
+`routing-engine` or `geocoder`. When several enabled services provide the same
+capability, choose one with a binding. A requirement for a named service has no
+provider choice.
 
 How a requirement resolves at load time:
 
 - **A `service:` requirement** names one specific service. It's satisfied if that
-  service is installed and enabled — no choice to make.
+  service is installed and enabled.
 - **A `capability:` requirement with exactly one provider** is auto-selected.
   Nothing to do; the single matching service is used.
 - **A `capability:` requirement with multiple providers** is _ambiguous_. The
-  integration won't resolve that requirement until you pick a binding — until
-  then it logs a warning and the requirement is left unsatisfied.
-- **An optional requirement** with no provider falls back to the integration's
-  public default (for example, a public routing endpoint) rather than failing.
+  integration won't resolve that requirement until you pick a binding. Until then the requirement remains unsatisfied.
+- **An optional requirement** can remain unresolved without a required-dependency warning. Any public fallback is integration-specific; optionality alone does not provide one.
 
 You choose a binding on the integration's **Overview** tab. Each `capability:`
 requirement shows a dropdown listing every installed service that provides it;
-pick one to bind it, or choose _(none — use fallback)_ to clear the binding and
-let auto-select or the public fallback take over. The picker only offers
-services that genuinely provide the capability — a service that doesn't is
-rejected.
+pick one to bind it, or choose the clear-binding option to clear the binding and
+let requirement resolution run again. A fallback exists only when that integration implements one. The picker only offers
+services that declare the capability; the API rejects a service that does not provide it.
 
-A binding is a stored `(integration, capability) → service` mapping. The
-integration host loads all bindings once at startup and re-reads them on reload,
-so after changing a binding, reload the integration (or restart the API) for it
-to take effect. Like every admin action, setting a binding is audit-logged.
+After changing a binding, reload integrations or restart the API. Bindings are
+stored per integration and read when the host loads. A saved binding does not
+start its service. The provider must be enabled and offer that capability; a
+stale binding can leave resolution ambiguous when several enabled providers
+remain.
 
 :::note[Bindings are per integration, not global]
 The same capability can be bound to different services for different
-integrations. Binding is also the _only_ step you take in the panel — you still
+integrations. You must also
 [enable the backing service](./services-administration.md) and render the stack
 separately; the binding just tells the integration which of the running
 providers to call.
@@ -195,26 +167,24 @@ demand.
 
 A check resolves to one of three states:
 
-- **up** — the probe succeeded.
-- **down** — the probe failed (connection refused, a timeout, an HTTP error);
+- **up**: the probe succeeded.
+- **down**: the probe failed (connection refused, a timeout, an HTTP error);
   the last error is shown.
-- **unconfigured** — a required config key or secret is unset, or a self-hosted
+- **unconfigured**: a required config key or secret is unset, or a self-hosted
   service the check points at isn't enabled. This is treated as "not set up yet,"
   not a failure, so a feature you haven't configured doesn't show up as broken.
 
-An integration with no health check is simply assumed healthy. Some integrations
+The summary treats an integration without a health check as healthy, but its Health endpoint reports `unconfigured` with “No health check defined”. Neither establishes runtime availability. Some integrations
 run several sub-checks (for example, one per country or per upstream); those
-roll up into a single signal — any sub-check down makes the integration down,
+roll up into a single signal: any sub-check down makes the integration down,
 otherwise any up makes it up. Probe history is retained, so the
 [Monitoring](./monitoring.md) view can show trends rather than just the current
 state.
 
 :::note[Health checks must target public hosts]
-The integration-health endpoint can be reached anonymously, so a manifest's
-`healthCheck` URL or TCP target must resolve to a public host. A check pointed at
+Public status uses the scheduled health snapshot. To prevent server-side requests to arbitrary internal targets, a manifest's external `healthCheck` URL or TCP target must resolve to a public host. A check pointed at
 a loopback, link-local, or private-range address (`127.0.0.1`, `169.254.169.254`,
-…) is rejected and reported as down. Built-in `service:` targets are exempt —
-they're meant to be internal.
+…) is rejected and reported as down. Built-in `service:` targets use the internal service resolution exception.
 :::
 
 ## Data-use policy
@@ -223,19 +193,19 @@ Some data sources carry licence terms a commercial deployment may not be able to
 honour. Each source declares a `commercialUse` stance in its manifest, and
 OpenMapX lets an operator gate the two restrictive classes:
 
-- **Non-commercial sources** (`commercialUse: "no"`) — for example Open-Meteo's
+- **Non-commercial sources** (`commercialUse: "no"`): for example Open-Meteo's
   free tier.
-- **Grey-area sources** (`commercialUse: "unknown"`) — public APIs whose terms
+- **Grey-area sources** (`commercialUse: "unknown"`): public APIs whose terms
   are merely undocumented.
 
-Both are **allowed by default**, since the project's reference deployment is
-non-commercial. A commercial operator can disallow either class from
+Both are allowed by default. Review the terms for your deployment and disallow either class from
 `/admin/settings`, or with the `OPENMAPX_ALLOW_NONCOMMERCIAL` /
-`OPENMAPX_ALLOW_GREY_AREA` environment variables (env wins over the panel, and a
-change takes effect immediately). When a class is disallowed, orchestrators skip
-the affected providers and a response filter strips any data that came solely
-from a gated source — so a gated source is never queried and never reaches the
-map.
+`OPENMAPX_ALLOW_GREY_AREA` environment variables (environment takes precedence). The policy cache refreshes at a 30-second
+interval and is invalidated by relevant settings changes. Orchestrators use the
+excluded provider/source sets, and the response filter removes tagged excluded
+data. Mixed-source integrations need source-level handling; these controls are
+not a general licence validator or proof that no upstream traffic occurred.
+Sources marked `conditional` still require review of their conditions.
 
 :::note[Disclosure tables still list every source]
 Disabling a source removes its _data_ from results, but the `/privacy` and
@@ -258,8 +228,9 @@ guess at remaining quota. Operator logs report `store_unavailable`, corrupt
 records are discarded, and cache keys hash coordinate-derived material.
 
 Provider circuits have `healthy`, `degraded`, and `open` states. Two consecutive
-counted failures or a 25% recent failure rate degrades a provider; five
-consecutive failures or a failure rate above 50% opens it. Cooldowns increase
+counted failures or a failure rate of at least 25% over at least four samples
+degrades a provider. Five consecutive counted failures or a failure rate above
+50% over at least ten samples opens it. Cooldowns increase
 through 5, 10, 20, 40, and 60 minutes. Exactly one process owns the half-open
 probe. Timeouts, connection errors, upstream 5xx responses, authentication
 failures, and invalid payloads count; valid empty results, policy/input
@@ -274,12 +245,12 @@ that external terms can never change.
 
 Integration routes consume one host rate-limit tier. Ordinary routes use
 `public`; upstream-heavy point or list work declares `expensive`; bursty tile
-proxies declare `tile`. Metrics expose only closed aggregate labels—never
+proxies declare `tile`. Metrics expose only closed aggregate labels; never
 coordinates, station names, credentials, or arbitrary error text.
 
 ### Air-quality metrics
 
-The existing authenticated/internal `GET /api/internal/metrics` endpoint exports
+The internal `GET /api/internal/metrics` endpoint exports
 the canonical air-quality instruments through the shared Prometheus renderer:
 
 | Instrument                              | Important bounded labels                                                                           | Meaning                                                |
@@ -309,8 +280,7 @@ Suggested starting alerts (tune them to local traffic and maintenance windows):
 - if a raster addendum is eventually shipped, warn when its current-frame age
   exceeds twice the provider's documented update cadence.
 
-These are documentation examples only. OpenMapX does not create an external
-dashboard, notification channel, or alert rule without operator authorization.
+Configure alert rules and notification channels in your monitoring system. Keep the scrape endpoint network-restricted; it has no application authentication guard. See [Metrics](./monitoring.md#metrics).
 
 ## AI-assisted search disclosure
 
@@ -333,20 +303,16 @@ processor IDs are collapsed in the rendered table.
 
 ## Bulk operations
 
-Configuring features one page at a time is tedious on a fresh deployment, so the
-list's toolbar links to **Bulk configure** (`/admin/integrations/bulk`), a single
-page that consolidates the same workflow. It renders every configurable
-integration's settings form and credentials table inline, expanding on demand,
-and drives the _same_ save and credential endpoints as the per-integration pages
-— so there's no separate "bulk" behavior to learn, just every form in one place.
+Open **Bulk configure** (`/admin/integrations/bulk`) to edit several integrations
+on one page. Each form uses the same save and credential endpoints as the
+individual detail page. Review the result of each save.
 
 The bulk page also publishes the complete **environment-variable catalogue** for
 your installation: for each integration, the exact `INTEGRATION_<ID>_<KEY>`
 variable name behind every setting and secret, with present / missing flags and
 non-secret defaults. Copy the block you need into `infra/docker/.env` when you'd
 rather pin configuration in the environment than click through forms. Secret
-_values_ are never exposed here — only their variable names and whether each is
-currently set.
+values are excluded; only variable names and present/missing flags are shown.
 
 For acting on backend services in bulk (start, stop, or update selected services),
 see [Services administration](./services-administration.md) and
@@ -357,13 +323,13 @@ see [Services administration](./services-administration.md) and
 Four integrations make up the ride mode, and only one of them needs any
 configuration to be useful:
 
-- **Ride Hailing** — the orchestrator. Holds the default provider and the
+- **Ride Hailing**: the orchestrator. Holds the default provider and the
   fare-comparison setting.
-- **Ride Apps** — handoffs to Uber, Lyft, Bolt, FREENOW and Yango. Works out of
+- **Ride Apps**: handoffs to Uber, Lyft, Bolt, FREENOW and Yango. Works out of
   the box; the affiliate ids are optional.
-- **GOFS On-Demand Rides** — open on-demand feeds. Reads a community registry by
+- **GOFS On-Demand Rides**: open on-demand feeds. Reads a community registry by
   default, and takes your own feeds on top.
-- **Ride Partners** — credential fields and setup guides only, for vendors that
+- **Ride Partners**: credential fields and setup guides only, for vendors that
   need a commercial agreement. No provider appears from it.
 
 ### Where feeds come from
@@ -377,7 +343,7 @@ failing silently.
 
 ### Adding a feed by hand
 
-1. Find the operator's discovery URL — their own site, or the
+1. Find the operator's discovery URL on its site or in the
    `<link rel="gofs">` autodiscovery tag on it. Many feeds serve it at a bare
    base URL such as `https://api.example.com/gofs/11` rather than a path ending
    in `gofs.json`.
@@ -391,8 +357,7 @@ the same id, which is how you point at a private or staging deployment.
 
 ### Giving a feed an API key
 
-For a feed OpenMapX ships named support for — the Montreal taxi registry today —
-paste the key into its own field and follow the setup guide shown beside it.
+For the Montreal taxi registry, paste the key into its named credential field and follow its setup guide.
 
 For any other keyed feed, set the row's **API key slot** to 1, 2 or 3, choose
 whether the key goes in a header or a query parameter and what it is called, then
@@ -408,31 +373,19 @@ feed that was showing as needing a credential re-checks immediately.
 **Allow side-by-side fare comparison** is off by default, and turning it on is an
 assertion about the terms you operate under: several ride-hailing providers' API
 terms forbid presenting them in an aggregated view alongside competitors.
-Providers that forbid it are never added to the list whatever this setting says —
-they stay as separate options — so switching it on affects only open feeds that
-have declared comparison permitted.
+The setting permits comparison only for providers that declare it allowed. A provider that forbids comparison remains a separate option.
 
 ### Privacy
 
-Quote requests send the rider's pickup and destination to the configured feed,
-from your server rather than the rider's browser. Nothing is cached or stored,
-and which feeds are contacted is entirely your choice. Storing a Yango or Karhoo
+Quote requests can send pickup, destination and optional addresses to a configured feed from the server. Quote responses use `Cache-Control: no-store`; static feed discovery and upstream retention have separate behavior. Review the feed's privacy terms before enabling it. Storing a Yango or Karhoo
 credential does not yet enable a provider; the API log says so on startup.
 
 ## Where to go next
 
-- **[Admin panel](./admin-panel.md)** — the full tour of `/admin` and how access
-  is gated.
-- **[Ride integrations](../developer/ride-integrations.md)** — writing a ride
-  provider against the `RideProvider` contract.
-- **[Services administration](./services-administration.md)** — enabling and
-  operating the backends that satisfy capability requirements.
-- **[Community extensions](./community-extensions.md)** — installing additional
-  integrations and services from the unified Extensions store.
-- **[Configuration](../install/configuration.md)** — `.env`, secrets, and how the
-  cascade fits the wider deployment.
-- **[Monitoring](./monitoring.md)** — health history, background jobs, and the
-  audit log.
+See [Services](./services-administration.md) for backends,
+[Extensions](./community-extensions.md) for additional components, and
+[Monitoring](./monitoring.md) for health and jobs. Provider authors can use
+[Ride integrations](../developer/ride-integrations.md).
 
 ## Importing saved integration configuration
 

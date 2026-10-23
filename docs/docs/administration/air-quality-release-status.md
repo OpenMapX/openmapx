@@ -6,9 +6,14 @@ sidebar_position: 20
 
 # Air-quality release status
 
-This ledger separates implemented code from operator-ready release status. Its
-rows are checked against the structured front matter in each linked record by
-`pnpm check-air-quality-release-gates`.
+Use the component records to distinguish shipped source from optional providers
+that stopped at a source-contract or permission gate. `shipped` does not mean
+that credentials, quota, source policy or live availability have been verified
+for your deployment. The saved source reviews are dated 30 August 2026.
+
+`pnpm check-air-quality-release-gates` checks matrix/record consistency, source
+paths, fixture metadata and review age. It does not call live providers, verify
+new permissions or approve a blocked provider.
 
 | Component                                     | Status  | Record                                           |
 | --------------------------------------------- | ------- | ------------------------------------------------ |
@@ -19,7 +24,7 @@ rows are checked against the structured front matter in each linked record by
 | UK-AIR                                        | shipped | [UK-AIR](./air-quality-status/uk-air.md)         |
 | ECCC named-community evidence                 | shipped | [ECCC](./air-quality-status/eccc.md)             |
 
-`blocked` means the optional plan's mandatory STOP condition was reached. No
+`blocked` means a mandatory source-contract or legal STOP condition was reached. No
 provider code is present for a blocked row, and the record names the evidence
 needed to revisit it. This does not block the shipped canonical platform.
 The ECCC shipped row is intentionally secondary evidence: it does not claim a

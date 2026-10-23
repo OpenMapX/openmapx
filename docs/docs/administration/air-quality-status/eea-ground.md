@@ -1,5 +1,6 @@
 ---
-title: Air quality — EEA ground observations
+description: Why EEA ground observations require an ingestion pipeline before a provider can ship.
+title: "Air quality: EEA ground observations"
 air_quality_component: eea-ground
 status: blocked
 code_path: "none"
@@ -16,8 +17,7 @@ blocker: "The documented EEA service is an asynchronous bulk Parquet download wo
 
 # EEA ground observations
 
-**Status:** blocked
-**Owner:** optional EEA ground implementation plan
+Blocked for request-time acquisition; review recorded 30 August 2026.
 
 The source-contract STOP condition remains reached for a request-time provider.
 Raw UTD is reusable, but it must first be ingested, validated, stored, and

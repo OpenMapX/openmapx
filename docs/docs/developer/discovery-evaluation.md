@@ -5,12 +5,12 @@ description: Versioned offline discovery and navigation evidence, with a protoco
 
 # Discovery evaluation
 
-Use this protocol before changing discovery, place enrichment or navigation. It
-connects existing semantic search fixtures, conflation guards, Overture gates,
-place-card and selected-sheet contracts and navigation replays. It does not turn synthetic tests
-into evidence of current regional coverage or installed-device readiness.
+Use the offline evaluator to compare search ranking, identity, enrichment,
+place-sheet behavior, and navigation-engine replays. Add independently judged
+live observations when changing coverage or presentation. Synthetic tests do
+not establish current regional coverage or installed-device readiness.
 
-For business-name/address retrieval, see the
+For the dated business-name/address investigation and reusable replay, see the
 [Berlin EDEKA investigation](business-name-address-retrieval.md). It compares
 independent raw, adapted, combined, ranked and live UI evidence and uses stable
 source identities. The pilot's label/radius score alone cannot verify a nearby
@@ -60,17 +60,17 @@ The versioned catalog is `scripts/discovery-eval/catalog.ts`. Its automated
 expectations reuse existing tests, rather than scoring the current provider's
 ordering as truth.
 
-| Case family                                                        | Current evidence                                                                                                                                                             | Required live complement                                                                        |
-| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Stations, aliases, multilingual names, category queries and chains | Recorded adapted API inputs; independently specified expected labels, types, IDs and coordinate radii in `search-eval/cases.ts`                                              | Verify the desired entity and each branch against an independent source before re-recording     |
-| Station synonyms and caches                                        | Mocked upstream cold/warm and query-order regressions; language/proximity partitions                                                                                         | Repeat both query orders on an isolated local cache with a fixed provider configuration         |
-| Co-located tenants and branches                                    | Synthetic conflation guards for plural-per-address categories, contradictory contacts/addresses and shared switchboards                                                      | Judge actual tenants, entrances and floors; equal address does not establish identity           |
-| Partial place cards and sheets                                     | Card and PlaceDetailContent contracts for photo/rating failures, absent/uncertain hours, photo detents, independent actions, loading, bounded retries and retained selection | Inspect missing facts and delayed requests in the browser with a pinned API revision            |
-| Urban/rural categories                                             | Unit contracts for the reviewed Overture anchor gate in Aachen, Berlin, Monschau and Maastricht                                                                              | Run the staged-release gate against an exact imported generation and repeat the visual baseline |
-| Closed/missing businesses                                          | Dated SEA LIFE closure and independently verified EDEKA tenant judgments; operator observations scored when supplied                                                         | Independently dated closure/existence judgments; filtering code alone is insufficient           |
-| Transit transitions, recovery and GPS gaps                         | Synthetic shared-engine replays, including transfers and serialized recovery                                                                                                 | Installed shell, permissions, lifecycle and actual-device evidence under #398                   |
-| Ground off-route behavior, arrival and alternatives                | Synthetic shared-engine assertions                                                                                                                                           | Repeat a real or independently recorded route with a pinned routing dataset                     |
-| Offline place search and rerouting                                 | Unavailable pending #403 and #404                                                                                                                                            | Network-denial or airplane-mode evidence once those capabilities exist                          |
+| Case family                                                        | Current evidence                                                                                                                                                             | Required live complement                                                                                    |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Stations, aliases, multilingual names, category queries and chains | Recorded adapted API inputs; independently specified expected labels, types, IDs and coordinate radii in `search-eval/cases.ts`                                              | Verify the desired entity and each branch against an independent source before re-recording                 |
+| Station synonyms and caches                                        | Mocked upstream cold/warm and query-order regressions; language/proximity partitions                                                                                         | Repeat both query orders on an isolated local cache with a fixed provider configuration                     |
+| Co-located tenants and branches                                    | Synthetic conflation guards for plural-per-address categories, contradictory contacts/addresses and shared switchboards                                                      | Judge actual tenants, entrances and floors; equal address does not establish identity                       |
+| Partial place cards and sheets                                     | Card and PlaceDetailContent contracts for photo/rating failures, absent/uncertain hours, photo detents, independent actions, loading, bounded retries and retained selection | Inspect missing facts and delayed requests in the browser with a pinned API revision                        |
+| Urban/rural categories                                             | Unit contracts for the reviewed Overture anchor gate in Aachen, Berlin, Monschau and Maastricht                                                                              | Run the staged-release gate against an exact imported generation and repeat the visual baseline             |
+| Closed/missing businesses                                          | Dated SEA LIFE closure and independently verified EDEKA tenant judgments; operator observations scored when supplied                                                         | Independently dated closure/existence judgments; filtering code alone is insufficient                       |
+| Transit transitions, recovery and GPS gaps                         | Synthetic shared-engine replays, including transfers and serialized recovery                                                                                                 | Installed shell, permissions, lifecycle and actual-device evidence, tracked separately by the mobile guides |
+| Ground off-route behavior, arrival and alternatives                | Synthetic shared-engine assertions                                                                                                                                           | Repeat a real or independently recorded route with a pinned routing dataset                                 |
+| Offline place search and rerouting                                 | Unavailable in this evaluator; catalog tracks #403 and #404                                                                                                                  | Network-denial or airplane-mode evidence once those capabilities exist                                      |
 
 An assertion passes, fails or is unavailable. An explicitly guarded known gap is
 reported as `known-gap`, rather than claiming its semantic expectation passed.
@@ -141,8 +141,8 @@ Keep three evidence layers separate when diagnosing search:
 3. **Final UI:** client-ranked rows, selection/Enter outcome, map/sheet state and
    application/style revision.
 
-Future `pnpm search-eval:record --api http://localhost:3001 [case-id …]`
-recordings identify themselves as **adapted API, selected fields**, with a capture
+New `pnpm search-eval:record --api http://localhost:3001 [case-id …]`
+recordings identify themselves as adapted API, selected fields, with a capture
 time, local recorder revision/dirty flag and public API origin. They explicitly
 leave remote deployment and source revisions unknown and do not include upstream
 payloads. Credential/query/fragment-bearing base URLs are rejected without
@@ -160,9 +160,7 @@ For station cases, run both orders on separate clean cache namespaces:
 `Hauptbahnhof Neuss → Neuss Hauptbahnhof` and
 `Neuss Hauptbahnhof → Hauptbahnhof Neuss`. Repeat warm, include `Hbf` aliases,
 and vary language and proximity deliberately to test partitioning. Compare the
-entity identity/coordinates and ordering at each evidence layer. The regression
-in #389 is repaired in #392; this protocol retains the cases without replacing
-that fix. Search forwarding and UI ranking are different stages.
+entity identity/coordinates and ordering at each evidence layer. The cases retain the cache-order regression associated with #389/#392. Search forwarding and UI ranking are different stages.
 
 ## Store evidence outside Git
 
@@ -291,7 +289,7 @@ same comparison. This is a harness demonstration, not an application improvement
 | Presentation  | Landmark recall 1, useful labels 6, overlap 0 | Unchanged                                  | Synthetic readable-label judgment unchanged                                   |
 | Runtime       | Existing navigation replays pass              | Unchanged                                  | Shared-engine synthetic evidence; installed/offline runtime still unavailable |
 
-The command writes complete `report.json` and `report.md` in both output folders.
+Both commands write `report.json` and `report.md` in their output folders.
 The after report has `runSucceeded: false` and the reviewed regression
 `business/rewe-invalidenstrasse/normalization`, with no changed data/provider
 inputs. A rank-1 → rank-2 change is also detected numerically even when it remains

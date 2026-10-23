@@ -1,13 +1,12 @@
 # WebView storage qualification
 
-What the WebView keeps, for how long, and what happens when it loses it.
+Record WebView cache and session behavior separately from native navigation
+storage. The remote UI has no guaranteed offline cold start.
 
-The reason this matters is narrow and specific. The web UI is served remotely,
-so everything the WebView caches is an optimisation — never a guarantee. The
-guarantee lives natively: a session that started while online continues through
-network loss and through the WebView failing entirely. These checks exist to
-confirm that the two are actually separate, and that no cached page is ever
-mistaken for navigation authority.
+The navigation cases require a composed native dispatcher, which `src/App.tsx`
+currently lacks. Keep those cases blocked until the candidate can start a real
+native session. Test fixtures and SQLite unit tests do not qualify the installed
+flow or background continuity.
 
 A pass on one WebView build says nothing about another, so record versions.
 
@@ -23,10 +22,10 @@ Web build id (from the handshake):
 
 - [ ] Load the app online. Confirm the map, search and saved places work.
 - [ ] Pan and search, then restart the app while still online. Confirm it loads
-      without a visible re-download of the shell.
+      and record cache behavior; a fresh network fetch is not a failure.
 - [ ] Restart the app with all networking disabled. Record what appears: a
-      cached shell, an honest offline message, or a blank page. **Any of these is
-      an acceptable result** — the point is to record which, not to force one.
+      cached shell or an offline recovery state. Record whether caching worked.
+      A blank page without usable recovery is a failure, not an offline guarantee.
 - [ ] Install an updated local Release build over the previous one. Confirm the
       app loads and that no stale shell is served indefinitely.
 - [ ] Clear website data through the OS. Confirm the app recovers on next launch
@@ -40,10 +39,10 @@ check them one at a time rather than as "storage".
 - [ ] **Service worker Cache Storage.** Record which entries exist after a warm
       load.
 - [ ] **IndexedDB.** Record the databases present. Confirm there is no browser
-      navigation session record while running inside the shell — the shell owns
+      navigation session record while running inside the shell; the shell owns
       the durable session, and a second one would disagree with it after a crash.
 - [ ] **Auth cookie.** Confirm a signed-in session persists across an app
-      restart, and that the cookie is not readable from native.
+      restart, and that no cookie is copied into native navigation storage or diagnostics.
 - [ ] **OPFS.** Record whether it is used at all and by what.
 
 ## Storage pressure
@@ -64,7 +63,8 @@ This is the part that must hold. Run it for ground and for transit.
 - [ ] Feed the fixture's maneuver and stop positions.
 - [ ] Confirm progress advances, cues are spoken, and the position follows the
       captured route.
-- [ ] Confirm a reroute is refused with a clear reason rather than attempted.
+- [ ] Confirm a failed/offline reroute retains the captured route and reports the
+      limitation without inventing a replacement.
 - [ ] Kill the WebView renderer. Confirm guidance continues.
 - [ ] Return to the app. Confirm the UI rehydrates from a native full snapshot,
       not from anything the browser had cached.
@@ -78,7 +78,7 @@ This is the part that must hold. Run it for ground and for transit.
 - [ ] Confirm a live refresh and a replan are both refused offline, and that the
       UI says the times are scheduled rather than live.
 - [ ] Confirm a leg whose capture was missing degrades to schedule times and
-      says so — it must not invent intermediate stops.
+      says so, without inventing intermediate stops.
 
 ### Cold start with nothing cached
 
@@ -89,8 +89,8 @@ This is the part that must hold. Run it for ground and for transit.
 - [ ] Confirm the native recovery overlay still offers Retry and End, and that
       End actually stops the session.
 - [ ] Re-enable networking and retry. Confirm the page loads, sends a handshake,
-      receives a full snapshot, and shows the session at its current revision —
-      not at the revision it had when the page died.
+      receives a full snapshot, and shows the session at its current revision,
+      rather than the revision it had when the page died.
 
 ## Pending volunteer-beta cases
 

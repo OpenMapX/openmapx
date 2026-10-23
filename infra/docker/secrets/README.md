@@ -36,6 +36,18 @@ version. Production loads only this managed file. `OPENMAPX_EXPORTS_KEY` remains
 available solely as an explicit development configuration and does not change
 the managed-file format.
 
+### `privacy-backup-capability-key` (generated, API and ops-agent)
+
+Compose rendering creates this 32-byte key as 43 canonical base64url characters
+without padding or a newline and reuses it on later renders. It signs the
+short-lived capabilities that authorize privacy backup operations through the
+ops-agent. Only `app-api` and `ops-agent` receive the read-only mount.
+
+The generated file has mode `0400`. Both services require an owner-readable,
+single-link regular file owned by their process UID, with no group or other
+permissions. Keep the value out of environment variables, commands, and logs.
+There is no rotation command; ordinary rendering does not rotate it.
+
 ### `offline-package-principal-key` (generated, API only)
 
 Every CLI compose render creates this HMAC key when it is absent. It is exactly
@@ -169,9 +181,11 @@ obsolete password in that process's memory.
 
 ### `transitous-feed-proxy.age` (optional)
 
-age v1 private key (RFC 9106 `-----BEGIN AGE ENCRYPTED FILE-----` format)
-used by Transitous's `src/utils.py` to decrypt `AGE-ENCRYPTED:` values in
-feed JSON files.
+An [age identity file](https://github.com/FiloSottile/age#usage), generated with
+`age-keygen`, used by Transitous to decrypt `AGE-ENCRYPTED:` values in feed JSON
+files. Keep the private identity local; only its public recipient belongs in
+upstream configuration. The command below writes an unencrypted identity file containing the secret
+key; the `.age` filename does not encrypt it.
 
 Generate locally:
 

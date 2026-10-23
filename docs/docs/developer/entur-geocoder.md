@@ -1,6 +1,6 @@
 ---
 title: Entur Geocoder
-description: The native Geocoder v3 SDK, integration configuration, supplier receipts and offline contract generation.
+description: "The native Geocoder v3 SDK, integration configuration, supplier receipts and offline contract generation."
 sidebar_position: 8
 ---
 
@@ -11,6 +11,16 @@ sidebar_position: 8
 operations: `/v3/autocomplete`, `/v3/reverse` and `/v3/place`. GraphQL journey
 planning, realtime vehicles and the National Stop Register read API use their
 separate existing contracts.
+
+Use this page when changing either Entur consumer or regenerating the native
+contract. Runtime implementation lives in `packages/entur-client/src/geocoder/`;
+configuration and lifecycle ownership remain in the integrations.
+
+| SDK method                     | Native operation       | Required input                                 |
+| ------------------------------ | ---------------------- | ---------------------------------------------- |
+| `autocomplete(params, signal)` | `GET /v3/autocomplete` | Nonblank text or a meaningful supported filter |
+| `reverse(params, signal)`      | `GET /v3/reverse`      | Latitude and longitude                         |
+| `place(params, signal)`        | `GET /v3/place`        | 1 to 100 exact native IDs                      |
 
 ## Current configuration
 
@@ -74,15 +84,15 @@ propagate instead of becoming cacheable successful emptiness.
 Validation rejects unknown or wrong-operation query keys, partial focus pairs
 and autocomplete without text or a meaningful filter. It validates original
 values without serializing schema defaults; omitted focus does not add radius
-or weight. Arrays use form-style CSV, and place lookup accepts 1–100 nonblank,
+or weight. Arrays use form-style CSV, and place lookup accepts 1 to 100 nonblank,
 comma-free IDs. Only HTTP 200 is successful. Result validation rejects unknown
 suppliers and invalid WGS84 coordinates while stripping additive fields. Unknown
 string stop roles are omitted without inventing a standalone role.
 
 The primary geocoding health check performs exact place lookup of
 `NSR:StopPlace:337`. Transit retains its composite Journey Planner, vehicles and
-NSR health check. This contract adds no cache namespace/version change, purge,
-rewrite or integration-version invalidation.
+NSR health check. Do not assume regeneration purges caches or invalidates integration versions.
+Cache identity and migration are separate consumer concerns.
 
 ## Supplier receipts and terms
 
@@ -114,7 +124,9 @@ upstream schema notice. Orval generates internal operations and Zod models in
 `packages/entur-client/src/geocoder/generated/`; handwritten code belongs
 outside that directory.
 
-Run from the repository root with the existing locked dependencies:
+Run from the repository root with the locked dependencies installed. Use the
+check command to verify current artifacts; run generation only when accepting a
+contract change:
 
 ```sh
 pnpm entur-geocoder:generate
@@ -135,3 +147,23 @@ consumers before accepting it. Do not weaken validators to accommodate contract
 drift or hand-edit generated output. See the
 [schema notice](https://github.com/OpenMapX/openmapx/blob/main/packages/entur-client/schema/NOTICE.md)
 for the recorded upstream source and licence boundaries.
+
+## Troubleshoot a consumer change
+
+| Symptom                                              | Check                                                                                                                                                         |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Configuration rejected at setup                      | Use an unversioned HTTPS endpoint, a lowercase two-letter `boundaryCountry` or exact empty string, and `parent`, `child` or `all` for `multiModal`.           |
+| No autocomplete results in a region                  | Check the configured country, suggestion routing envelope, requested filters and supplier policy separately. Coverage eligibility does not prove data exists. |
+| `policy`, `quota`, `cooldown` or `unavailable` error | Check source permissions, host shared admission and Redis health. Preserve the typed failure; returning successful emptiness can poison caches.               |
+| Native place lookup rejected                         | Keep the complete ID, including its namespace. Unknown supplier identity requires all possible supplier permissions before lookup.                            |
+| Generated check fails                                | Inspect the pinned input/hash and generated diff. Do not hand-edit generated output or download a live schema during the check.                               |
+
+For focused consumer validation, run:
+
+```sh
+pnpm exec vitest run --project node packages/entur-client/src/geocoder integrations/geocoding-entur integrations/transit-entur/geocoder-contributors.test.ts
+```
+
+These tests use fixtures and host collaborators. They do not establish live
+Entur availability, deployed API revision, current coverage or working
+production admission. Verify those separately when the change depends on them.

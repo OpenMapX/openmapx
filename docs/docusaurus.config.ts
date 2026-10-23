@@ -2,8 +2,6 @@ import {themes as prismThemes} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
-// This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
-
 const config: Config = {
   title: 'OpenMapX',
   tagline: 'Self-hosted maps, navigation, and transit, built on open data',
@@ -21,11 +19,12 @@ const config: Config = {
   projectName: 'openmapx',
 
   onBrokenLinks: 'throw',
+  onBrokenAnchors: 'throw',
 
   markdown: {
     mermaid: true,
     hooks: {
-      onBrokenMarkdownLinks: 'warn',
+      onBrokenMarkdownLinks: 'throw',
     },
   },
 
@@ -79,6 +78,24 @@ const config: Config = {
       },
       items: [
         {
+          type: 'doc',
+          docId: 'overview/using-openmapx',
+          label: 'Use the map',
+          position: 'left',
+        },
+        {
+          type: 'doc',
+          docId: 'install/getting-started',
+          label: 'Self-host',
+          position: 'left',
+        },
+        {
+          type: 'doc',
+          docId: 'developer/development-setup',
+          label: 'Develop',
+          position: 'left',
+        },
+        {
           href: 'https://openmapx.org',
           label: 'Home',
           position: 'right',
@@ -105,6 +122,7 @@ const config: Config = {
           title: 'Project',
           items: [
             {label: 'GitHub', href: 'https://github.com/OpenMapX/openmapx'},
+            {label: 'Ask a question', href: 'https://github.com/OpenMapX/openmapx/discussions'},
             {label: 'Issues', href: 'https://github.com/OpenMapX/openmapx/issues'},
           ],
         },

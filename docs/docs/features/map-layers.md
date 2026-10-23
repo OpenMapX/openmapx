@@ -1,18 +1,19 @@
 ---
 title: Map layers & overlays
-description: Switch the base map style and toggle thematic overlays — traffic, weather, hazards, recreation, and more — each contributed by an integration.
+description: Choose a base map and add traffic, weather, transit, hazards, and other map information.
 sidebar_position: 5
 ---
 
 # Map layers & overlays
 
-The map you see is built in two parts: a **base style** that draws the world
-underneath, and a stack of optional **overlays** layered on top. The base style
-sets the overall look — a clean street map, satellite imagery, shaded terrain.
-Overlays add a single theme over whatever base you've chosen: live traffic, a
-weather radar loop, hiking trails, recent earthquakes, and so on.
+Open **Layers** in the lower-left map controls to choose a base map or add
+information such as traffic, weather, or transit. On smaller screens, open the
+layer panel for the full selection. The available entries depend on enabled
+integrations.
 
-You control both from the **layer picker** in the bottom-left corner of the map.
+Choose one base style at a time. Several overlays can be active together, except
+where their displays conflict. Use a layer's legend to read its scale, filters,
+and loading or unavailable status.
 
 ## Base map styles
 
@@ -21,7 +22,7 @@ ships four:
 
 | Style         | What it shows                                                                                         |
 | ------------- | ----------------------------------------------------------------------------------------------------- |
-| **Default**   | The standard OpenMapX street map — roads, labels, land use, water, and soft shading on mountains.     |
+| **Default**   | Roads, labels, land use, water, and soft mountain shading.                                            |
 | **Satellite** | True-color aerial and satellite imagery, with street and place labels drawn on top.                   |
 | **Terrain**   | The street map with shaded relief, elevation tinting, contour lines, and 3D terrain when you tilt it. |
 | **Cycling**   | A bike-oriented base that foregrounds cycle routes and infrastructure.                                |
@@ -41,7 +42,7 @@ package is active, Default and Terrain show the flat street map. The picker also
 ## Places while browsing
 
 The owned street map introduces a small selection of named restaurants, cafés,
-bars, bakeries and shops at neighborhood zooms 14–15. These labels yield space
+bars, bakeries and shops at neighborhood zooms 14 to 15. These labels yield space
 to existing destinations, transit and road names; they do not show every business.
 The ordinary close-up POI layers take over from zoom 16. Parking and small
 street fixtures keep their later introduction.
@@ -74,33 +75,16 @@ for source policies and operator setup.
 
 ## How overlays work
 
-Every overlay is an [integration](../overview/how-it-works.md). A map-overlay
-integration declares a few things in its manifest:
+Overlay integrations contribute entries to the layer picker. Enabling a layer
+adds its map content and applicable source credits; disabling it removes them.
+Some pairs exclude each other: weather and air quality, schematic and ordinary
+transit lines, or the two traffic-flow displays.
 
-- a **map-layer component** that draws onto the MapLibre map,
-- an optional **legend** explaining its colors or symbols,
-- its **data source** and the **attribution** that must appear while it's on,
-- and where it belongs in the picker (the _Map details_ group, or the _Map
-  tools_ group).
-
-The web app discovers these at runtime and builds the picker from whatever
-overlay integrations are enabled — so the list below describes the full catalog,
-not a fixed menu. Toggle an overlay on and its layer is added to the map and its
-attribution joins the credits in the corner; toggle it off and both go away.
-Several overlays can be on at once. A few declare **exclusions** (for example,
-the weather and air-quality overlays don't stack on top of each other, and
-the schematic transit map mutually excludes the standard transit lines layer), so
-turning one on automatically turns its conflicting siblings off.
-
-Because overlays come from integrations, the catalog is yours to shape. Enabling
-or disabling an integration adds or removes its entry from the picker; community
-integrations can contribute new overlays of their own. Some overlays also have
-prerequisites — the cycling and hiking layers query OpenStreetMap through the
-Overpass service, the travel-time tool uses Valhalla for street isochrones and
-MOTIS for transit reachability — and an overlay whose required service isn't
-running is hidden until it is. See [Managing services](../install/managing-services.md)
-for enabling those backends, and [How it works](../overview/how-it-works.md) for the
-service-and-integration model.
+An enabled entry does not prove its data source is configured or responding.
+Some unavailable layers remain listed and explain the problem in their legend.
+Others require a closer zoom before loading. Operators can check integration
+enablement, credentials, source policy, and backend services under
+[Admin → Integrations](../administration/integrations-administration.md).
 
 ## The overlay catalog
 
@@ -120,7 +104,7 @@ The built-in overlays group into a few themes.
 
 The traffic overlay needs a TomTom API key (set in the admin panel or via
 `.env`), and only renders above a minimum zoom. The **Traffic flow** overlay is
-the self-hosted alternative: it colors roads by congestion — a green→dark-red
+the self-hosted alternative: it colors roads by congestion using a green-to-dark-red
 gradient (free-flow, light, moderate, heavy, severe) computed from the ratio of
 current to free-flow speed in your own [OpenConditions](../administration/community-extensions.md#example-openconditions)
 road-conditions feeds (NDW, Fintraffic, Trafikverket, NYC DOT, and others),
@@ -159,7 +143,7 @@ Navigation then reports live incidents as not current.
 These overlays complement the dedicated [public transit](./public-transit.md) and
 [directions](./directions.md) features rather than replacing them.
 
-The **Traffic flow** legend uses a compact **Fast–Slow** color scale. Open
+The **Traffic flow** legend uses a compact **Fast/Slow** color scale. Open
 **About traffic** with the info button in either traffic legend for its source
 and limitations. The owned legend also explains measured, estimated and typical
 readings there, using the same opacity as the renderer. A hidden layer stays
@@ -169,11 +153,6 @@ The tile formats expose no usable upstream/publication time or completeness
 metadata, so the details say the update time is unknown and some roads may be
 missing. Downloading a tile does not establish fresh measurements. Road colors
 do not establish whether traffic delays are included in a route's travel time.
-
-Traffic publication/check evidence exists in authenticated admin coverage, but
-is not exposed by these public tile contracts. The legends do not fetch admin
-diagnostics or borrow check/request times as observation age. A public, bounded
-publication metadata contract remains follow-up work.
 
 **Map colors do not verify traffic influence on a route.** The routing engine can
 differ from the displayed overlay: hosted TomTom traffic over a self-hosted
@@ -195,17 +174,17 @@ and layers enabled only by the context switch back off when it ends.
 
 | Overlay            | Shows                                                                                   | Data                                                                |
 | ------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| **Weather**        | Precipitation radar animation, plus temperature/precipitation/cloud/wind/pressure tiles | RainViewer, OpenWeather, Open-Meteo                                 |
+| **Weather**        | Precipitation radar animation, plus temperature/precipitation/cloud/wind/pressure tiles | RainViewer, OpenWeather                                             |
 | **Weather alerts** | Active severe-weather warnings                                                          | NWS, Environment Canada, DWD, MeteoAlarm, through OpenConditions    |
 | **Air quality**    | Raw pollutant concentrations from monitoring stations                                   | Canonical provider orchestration (including OpenAQ when configured) |
 | **Environment**    | Readings from community environmental sensors                                           | openSenseMap, Sensor.Community                                      |
 
-The weather overlay's radar loop works out of the box via RainViewer (returning
+The weather overlay's radar loop uses RainViewer without a key (returning
 HTTP 451 if RainViewer is excluded by policy); its temperature, precipitation, cloud,
 wind, and pressure tiles require an OpenWeather API key (`INTEGRATION_OVERLAY_WEATHER_OWMAPIKEY`).
 If an OpenWeather sublayer is selected while unconfigured or unavailable, the UI
 automatically falls back to the RainViewer radar loop. The weather overlay here is
-the map-wide layer — the per-place forecast lives in the [weather](./weather.md)
+the map-wide layer. The per-place forecast lives in the [weather](./weather.md)
 feature.
 
 The air-quality overlay uses a continuous numeric concentration scale rather
@@ -219,15 +198,14 @@ for its pollutant, provenance, and degraded-data semantics.
 | **Daylight & time zones** | Day/night terminator with civil, nautical, and astronomical twilight shading, plus time zone boundaries and their current UTC offset | Terminator computed locally; boundaries from timezone-boundary-builder (OpenStreetMap) |
 
 The terminator is computed locally from the sun's position for the selected
-date and time — it credits no external source. Time zone boundaries are a
+date and time; it credits no external source. Time zone boundaries are a
 separate sub-toggle: polygons derived from OpenStreetMap under the ODbL,
 tinted and labeled with their current UTC offset, rendered up to zoom 8 (past
 that, city scale, the boundaries get noisy and the fill loses its point).
 
-The boundary data is vendored rather than fetched live: it comes from
-[timezone-boundary-builder](https://github.com/evansiroky/timezone-boundary-builder)
-release `2026c` (the `timezones-with-oceans-now` variant) and is refreshed
-with `pnpm --filter @openmapx/integration-overlay-sun-time refresh-timezones`.
+Boundary data is bundled with the integration rather than fetched for each view.
+It describes mapped time zones; use the displayed date and offset when comparing
+places.
 
 ### Hazards & natural events
 
@@ -237,7 +215,7 @@ with `pnpm --filter @openmapx/integration-overlay-sun-time refresh-timezones`.
 | **Wildfires**      | Fire hotspots, active fire perimeters, burnt areas and smoke            | NASA FIRMS, EUMETSAT, NIFC, EFFIS, NOAA HMS |
 | **Natural events** | Tropical cyclones, volcanoes, floods, droughts and other ongoing events | NASA EONET, GDACS                           |
 
-All four hazard overlays, weather alerts included, read their data through
+The earthquake, wildfire, natural-event, and weather-alert layers read through
 [OpenConditions](../administration/community-extensions.md#example-openconditions): it fetches the
 public hazard feeds, and OpenMapX reads the result from the instance at
 `OPENCONDITIONS_URL`. Without it the overlays stay in the layer list and their
@@ -273,28 +251,28 @@ while such a warning is drawn.
 
 Two entries in the picker are interactive tools rather than passive layers:
 
-- **Measure** — draw a path on the map to read off its distance and area.
-- **Travel time** — paint an isochrone showing how far you can get within a
+- **Measure**: draw a path on the map to read off its distance and area.
+- **Travel time**: paint an isochrone showing how far you can get within a
   time budget. Supports street modes (walking, cycling, driving) computed by
   Valhalla, and public transit reachability computed by MOTIS (rendering a continuous
-  WebGL2 shader surface or sampled exportable GeoJSON transit isochrone polygons).
+  estimated surface, with sampled GeoJSON export when explicitly enabled).
 
 :::note[Overlays follow your integrations]
-The picker only lists overlays whose integration is enabled and whose required
-services are running. If an overlay you expect is missing, check that its
-integration is enabled and any backend it needs (Overpass, Valhalla, a transit
-provider) is part of your service selection.
+If an entry is missing, check whether its integration is enabled and admitted by
+the deployment. If it is listed but empty, check the legend, minimum zoom,
+source configuration, coverage, and service health. An empty layer is not proof
+that there are no incidents, hazards, or observations.
 :::
 
 ## Related features
 
-- [Search](./search.md) and [places](./places.md) — finding and inspecting
+- [Search](./search.md) and [places](./places.md): finding and inspecting
   points on the map.
-- [Directions](./directions.md) and [public transit](./public-transit.md) —
+- [Directions](./directions.md) and [public transit](./public-transit.md):
   routing, which uses some of the same backends as the transit overlays.
-- [Street-level imagery](./street-level-imagery.md) — the immersive ground-level
+- [Street-level imagery](./street-level-imagery.md): the immersive ground-level
   view, which can't be on at the same time as some overlays.
-- [Crowd reports](./crowd-reports.md) — submit and verify conditions shown by
+- [Crowd reports](./crowd-reports.md): submit and verify conditions shown by
   the road-conditions overlay.
-- [Weather](./weather.md) and [mobility data](./mobility-data.md) — related
+- [Weather](./weather.md) and [mobility data](./mobility-data.md): related
   data-driven features.

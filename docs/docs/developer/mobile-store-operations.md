@@ -1,91 +1,85 @@
 ---
-title: Mobile store operations — signing, associations, and recovery
-description: The key ceremonies, verified-link setup, and recovery procedures for the OpenMapX mobile app, and what must never enter the repository.
+title: Mobile store operations
+description: Signing material, verified-link setup, beta qualification and recovery.
 sidebar_position: 11
 ---
 
 # Mobile store operations
 
-Everything here is about material the repository must never contain, and the
-procedures that keep it recoverable anyway. Losing an Android upload key is
-recoverable; losing it _without a documented recovery path_ means an app that can
-never be updated again under the same listing.
+Use this runbook after the account holder confirms enrollment, legal identity and
+store access. The repository records placeholder signing identities and no
+physical beta reports. It does not establish current external account, upload or
+review status. Resolve the composition and build-input blockers in
+[Mobile release](./mobile-release.md) before preparing a store candidate.
 
 ## What lives where
 
-| Material                                          | Where it lives                                              | In Git?                             |
-| ------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------- |
-| Apple Team ID, application identifier             | `apps/mobile/release/public-signing-identities.json`        | Yes — published by the app itself   |
-| Play app-signing SHA-256 fingerprint              | Same file                                                   | Yes — published in the Play Console |
-| Apple distribution certificate + private key      | macOS Keychain, plus one encrypted offline `.p12`           | **Never**                           |
-| Provisioning profiles                             | Xcode-managed locally                                       | **Never**                           |
-| Android upload keystore + passwords               | Encrypted password manager, plus two tested offline backups | **Never**                           |
-| App Store Connect API key / app-specific password | Keychain                                                    | **Never**                           |
-| Reviewer credentials                              | Password manager, entered directly into the console         | **Never**                           |
+| Material                                  | Storage                                                   | Commit to Git?     |
+| ----------------------------------------- | --------------------------------------------------------- | ------------------ |
+| Apple Team ID and application identifier  | `apps/mobile/release/public-signing-identities.json`      | Yes, public values |
+| Play app-signing SHA-256 fingerprint      | Same file                                                 | Yes, public value  |
+| Apple certificate and private key         | macOS Keychain and encrypted offline `.p12` recovery copy | Never              |
+| Provisioning profiles                     | Local signing setup                                       | Never              |
+| Android upload keystore and passwords     | Encrypted password manager and two tested offline backups | Never              |
+| Store API keys and app-specific passwords | Keychain or approved secret storage                       | Never              |
+| Reviewer credentials                      | Password manager; enter directly in the store console     | Never              |
 
-`apps/mobile/release/public-signing-identities.json` currently holds
-placeholders. That is the honest state: neither store account exists, so no
-identity has been issued. `assert-store-links.mts` recognises the placeholders
-and reports "not yet issued" rather than passing — the check must not be able to
-report success on a configuration that would silently fail to verify.
+`public-signing-identities.json` has `status: "pending-enrollment"`, `TEAM_ID` and
+`REPLACE_WITH_SHA256_FINGERPRINT`. Replace them only with verified public values.
+Its account-status note is not an external account inventory.
+
+`assert-store-links.mts` reports placeholders as **pending and exits 0** when
+there are no structural errors. Read the output: a successful exit does not
+establish verified links or enrollment, and `release:prepare` does not turn that
+pending result into a failure.
 
 ## Verified links
 
-Two files decide whether tapping an `openmapx.com` link opens the app. They fail
-quietly: the OS fetches each once, decides, and moves on, so a mistake costs a
-release and nothing in the app reports it.
-
-`services/well-known/config/html/apple-app-site-association` claims exactly three
-paths — `/`, `/navigation/active`, and `/mobile-auth` — and declares
-`webcredentials` so passkeys can be associated with the domain. No wildcard: a
-link that opens an unreviewed screen is a link nobody checked.
-
-`services/well-known/config/html/assetlinks.json` names `org.openmapx.app` and
-one certificate fingerprint.
+The committed association files live in
+`services/well-known/config/html/`. The Apple file claims `/`,
+`/navigation/active` and `/mobile-auth`, plus `webcredentials`. The Android file
+names `org.openmapx.app` and its app-signing certificate fingerprint. Keep those
+files and the recorded public identities consistent.
 
 ### The fingerprint that catches people out
 
-Android App Links verify against the certificate **Google** signs the delivered
-app with, not the upload key you sign the bundle with. Both are 64 hex
-characters and nothing about the value distinguishes them, so using the upload
-key's fingerprint produces links that never verify and no error anywhere.
-
-Take the value from Play Console → Setup → App signing → **App signing key
-certificate**, not the upload key certificate below it. The validator refuses a
-configuration where the two match.
+Use the **app-signing key certificate** from Play Console for App Links. The
+upload key signs the bundle submitted to Google; it is a different identity from
+the certificate on the delivered app. Record and label both fingerprints. The
+validator rejects matching upload/app-signing values when both are supplied.
 
 ### Validating
 
+Run from the repository root:
+
 ```bash
-# Against the committed files
+# Inspect committed files without contacting production.
 pnpm -C apps/mobile exec tsx scripts/assert-store-links.mts \
   --local ../../services/well-known/config/html
 
-# Against production, which is the only way to catch a redirect, a login wall,
-# or a CDN serving the wrong content type
+# After deploying real identities, inspect the HTTPS responses.
 pnpm -C apps/mobile exec tsx scripts/assert-store-links.mts
 ```
 
-The production form fetches with `redirect: "error"`, because both platforms
-refuse a redirected association file — following one would report a pass the OS
-will not agree with.
+The network form rejects redirects, non-success responses and content types that
+do not contain `application/json`. It then checks content against the recorded
+identities. It does not prove that an OS has accepted the associations.
 
-After deploying, verify from the platforms' own side:
+With the signed Android app installed, inspect platform verification:
 
 ```bash
 adb shell pm verify-app-links --re-verify org.openmapx.app
 adb shell pm get-app-links org.openmapx.app
 ```
 
-For Apple, check the CDN has picked up the file
-(`https://app-site-association.cdn-apple.com/a/v1/openmapx.com`) and test a cold
-and a warm link on a device with the signed build installed.
+For Apple, inspect
+`https://app-site-association.cdn-apple.com/a/v1/openmapx.com` and test cold and
+warm links on a physical device. Confirm the installed app actually handles the
+resulting intent; parsers and valid association files alone are insufficient.
 
 ## The Android upload-key ceremony
 
-1. Opt into **Play App Signing** when creating the app record. Google then holds
-   the app-signing key; you hold only an upload key, and losing the upload key is
-   recoverable through a support request. Not opting in makes key loss terminal.
+1. Confirm Play App Signing and its recovery process in the actual app record.
 2. Generate a dedicated upload key locally:
 
    ```bash
@@ -93,108 +87,101 @@ and a warm link on a device with the signed build installed.
      -alias openmapx-upload -keyalg RSA -keysize 4096 -validity 10000
    ```
 
-3. Store the keystore and its passwords in an encrypted password manager, and
-   make **two** offline backups on separate media. Restore one of them and
-   confirm it signs before considering the ceremony complete — an untested
-   backup is not a backup.
-4. Record the upload certificate fingerprint separately from Google's
-   app-signing fingerprint, and label both. They are not interchangeable and the
-   labels are the only thing preventing a mix-up.
-5. Never copy the keystore into the repository, and never pass its password as a
-   command-line argument, where it lands in shell history and process listings.
-   The build script reads it from a mode-0600 properties file outside the tree.
+3. Store the keystore/passwords encrypted and make two offline backups on
+   separate media. Test restoring a backup and signing with it.
+4. Record the upload certificate and Play app-signing fingerprints separately.
+5. Configure the external mode-`0600` properties file described in
+   [Mobile release](./mobile-release.md#prerequisites). Confirm generated Gradle
+   configuration consumes it and inspect the signed output. Copying the file
+   alone does not establish signing.
+
+If the upload key is lost, use the app record's upload-key reset process. Do not
+replace the delivered app-signing identity or change association files to an
+unrelated certificate as a workaround.
 
 ## Apple signing recovery
 
-1. Create the distribution certificate through the correct team. Keep the private
-   key in the macOS Keychain.
-2. Export one encrypted `.p12` recovery copy and store it offline. Test importing
-   it on a second machine.
-3. Prefer Xcode-managed signing for the first archive. Nothing is uploaded to a
-   build service, because there is no build service.
-4. Document how to revoke and regenerate: a revoked certificate invalidates every
-   profile derived from it, and the recovery path is regeneration, not panic.
+1. Create the distribution certificate under the correct team and keep its
+   private key in the macOS Keychain.
+2. Export an encrypted `.p12` recovery copy, store it offline and test importing
+   it on a second trusted machine.
+3. Configure local signing and provisioning for the device archive.
+4. Record certificate revocation and profile-regeneration steps. After a
+   revocation, replace affected profiles and inspect a newly signed artifact.
 
 ## Capabilities to enable, and to leave alone
 
-Enable **Associated Domains** only. Leave push notifications, iCloud, Sign in
-with Apple, App Groups, HealthKit, CarPlay, and everything else disabled. An
-entitlement the app does not use is a question in review with no good answer, and
-some of them change the privacy answers.
+The reviewed iOS entitlement surface uses Associated Domains. Keep unused
+capabilities, including push, iCloud, Sign in with Apple, App Groups, HealthKit
+and CarPlay, disabled. Compare generated entitlements and the final archive with
+`compliance/permissions.ts`; do not infer them from a console checkbox alone.
 
 ## What no script here does
 
-No script accepts a store agreement, purchases a membership, uploads a build,
-submits for review, or publishes a listing. Those are decisions with legal
-weight and they belong to the account holder. The tooling's job is to make sure
-that what gets uploaded is what was reviewed.
+The scripts do not enroll an account, accept agreements, upload a build, submit
+for review or publish a listing. The account holder reviews those actions and the
+actual candidate, disclosures and evidence separately.
 
 ## Beta, then rollout
 
-The order is fixed, and each step gates the next.
-
 ### 1. Qualify the candidate locally
 
-`apps/mobile/qa/release/matrix.md` in full, on every virtual path. Every
-scenario concludes `pass` or `pending-physical`; a single `fail` needs a new
-build number and newly built artifacts, not a re-run.
+Complete `apps/mobile/qa/release/matrix.md` on its required virtual paths. Missing
+foreground composition or a reproducible functional failure blocks beta upload.
+Use `pending-physical` only for cases a virtual device cannot establish, never
+for an unrun virtual case. A changed candidate needs a new build number and the
+affected plus core checks rerun.
 
-Passing authorises **beta upload only**.
+A qualifying report permits beta upload only. It does not authorize store
+submission or public rollout.
 
 ### 2. Upload to a beta track
 
-TestFlight and Play internal or closed testing. Both re-sign the artifact, so
-the hash a tester installs is not the hash you uploaded — record the processed
-one in each beta report.
+Use TestFlight or Play internal/closed testing after local sign-off. Retain the
+uploaded artifact hash and the store's processed version/build identity. Stores
+may transform, thin or re-sign delivery packages; where a processed binary hash
+can be obtained, record it and how it was obtained. Do not substitute the uploaded
+hash as proof of the installed bytes or invent a hash that cannot be retrieved.
 
-A new Google personal account must run a closed test with **at least 12 testers
-continuously opted in for 14 days** before production access is granted. That is
-a calendar constraint, not a task, and it is the long pole in any first release.
+For a new personal Play account, check the console's production-access criteria.
+The project's review checklist includes a closed test of at least 12 continuously
+opted-in testers for 14 days; the account holder must confirm the current rule
+and eligibility before scheduling production access.
 
 ### 3. Collect volunteer evidence
 
-The cases in `apps/mobile/qa/results/beta/README.md` are the ones no simulator
-can establish. They block **public rollout**, not beta upload.
-
-The one to watch is the Samsung device with default battery management: vendor
-power management terminates foreground services far more aggressively than AOSP,
-and it is where "guidance stopped after twenty minutes" reports come from.
+Collect sanitized reports for current-iOS iPhone, API 36 Pixel-class Android and
+a recent Samsung with default battery management. Follow
+`apps/mobile/qa/results/beta/README.md` and the ground, transit and secure-shell
+scenarios. Resolve every hardware risk before changing the driver decision to
+`beta-qualified` or allowing public rollout. Missing reports remain blockers.
 
 ### 4. Submit
 
-Freeze the reviewed web build for the duration of review. The app's UI is served
-over the network, so a deploy mid-review changes what the reviewer sees — and a
-rejection for something a reviewer saw that you have since changed is very hard
-to argue with.
+Review store notes, privacy answers, declarations, artwork and the actual installed
+behavior together. The current reviewer notes are preparation checklists, not
+claims ready to submit. Freeze the reviewed web build for the review period so
+reviewers see the qualified UI and protocol pairing.
 
 ### 5. Roll out conservatively
 
-Staged, starting small. Watch for:
-
-- Crash and ANR rate against the pre-beta budget.
-- Reports of guidance stopping in the background, by device vendor.
-- Handshake failures, which mean a web deploy and a shipped binary disagree.
-
-This first release has one v3 protocol pairing and no older OpenMapX binary to
-support. Once a later binary actually exists, its release plan must define and
-test the concrete protocol overlap needed for that rollout.
+Start with a limited rollout and review crash/ANR reports, background-guidance
+failures by device family and bridge handshake failures against the recorded beta
+budgets. The committed first-candidate pairing is protocol v3 only. A later
+release must define its tested overlap with actually deployed versions.
 
 ### Halting
 
-Play supports halting a staged rollout; Apple supports pausing phased release.
-Both leave already-updated users on the new build, so a halt is not a rollback —
-the fix is a new higher version, never a resubmission of the old one.
+Use the store's staged/phased-release controls to stop further distribution.
+Already updated users keep the installed build. Prepare a corrected candidate
+with higher version/build values; a halt does not restore an older binary.
 
 ## The native maintenance loop
 
-- **Expo SDK and React Native**: one deliberate upgrade per cycle, never inside
-  a release candidate. Regenerate, re-run the permission and boundary assertions,
-  and diff the normalized native surface.
-- **Android target SDK**: Play raises the floor annually. Treat the deadline as
-  the date it must already have shipped, not the date to start.
-- **16 KiB page size**: check every bundled native library after any dependency
-  change, with compatibility mode disabled.
-- **Protocol**: v3 only for the first release. Future changes must be derived
-  from the deployed-version matrix and ship their overlap deliberately.
-- **Associations**: re-validate after any change to the well-known service, and
-  after any signing-key rotation.
+- Upgrade Expo and React Native deliberately, outside candidate qualification.
+  Regenerate and compare permissions, entitlements and the native surface.
+- Check store target-SDK deadlines before planning an Android release.
+- Inspect every bundled native library for 16 KiB page-size support after
+  dependency changes; test with compatibility mode disabled.
+- Derive protocol changes from the deployed-version matrix.
+- Revalidate association files and device links after service or signing changes.

@@ -1,6 +1,6 @@
 # Provider branding assets
 
-Original provider assets, retrieved14 October2026 and used solely for required
+Original provider assets, retrieved 14 October 2026 and used solely for required
 attribution. Resizing preserves aspect ratio; do not crop, recolour or imply
 endorsement. These assets are not covered by OpenMapX's code licence.
 

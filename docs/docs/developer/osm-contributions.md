@@ -10,9 +10,9 @@ This is the safety design behind the
 changing anything under `apps/api/src/services/osm-contributions/`,
 `packages/presets/src/editor-*`, or the contribution UI.
 
-The feature writes to a **public, shared, hard-to-repair database** under a real
-person's name. Most of what follows exists to make a whole class of mistake
-structurally impossible rather than merely unlikely.
+Contributions publish to OpenStreetMap under the linked account. Preserve the
+server-owned tag policy, exact-version check, and timeout reconciliation before
+changing the write path.
 
 ## Trust boundary
 
@@ -26,34 +26,37 @@ OpenStreetMap
 
 The browser can express only a small **semantic** operation: "set the name to
 X", "remove the phone number", "change the category to this preset id". It
-cannot send a tag key, a tag map, a coordinate, a version, a changeset, or an
-upstream URL. Those requests are rejected by `.strict()` Zod schemas in
-`@openmapx/core` before a route handler runs.
+cannot send arbitrary tag keys or tag maps, geometry, an arbitrary changeset,
+or an upstream URL. Those requests are rejected by `.strict()` Zod schemas in
+`@openmapx/core` before a route handler runs. The client does supply a positive
+`baseVersion` as an optimistic-concurrency precondition. The server reads the
+live OSM element, verifies that version, and owns the outbound XML and published
+version.
 
-Everything that turns a semantic operation into tags lives in
-`tag-policy.ts` on the server, and preview and publish call the _same_ pure
-function — so what a person approves is exactly what is sent.
+The server's `tag-policy.ts` converts semantic operations into tags. Preview
+and publish call the same pure function; publish also requires the previewed
+element version to remain current.
 
 ## Tag ownership
 
 Each field owns a bounded set of keys:
 
-| Field                   | Owned keys                                                       |
-| ----------------------- | ---------------------------------------------------------------- |
-| Name                    | `name` only — never `name:<lang>`, `alt_name` or `official_name` |
-| Category                | the concrete identifying tags of one iD preset                   |
-| Address                 | only `addr:*` keys already present on that exact element         |
-| Opening hours           | `opening_hours`                                                  |
-| Phone / email / website | whichever of `x` / `contact:x` already exists                    |
-| Accessibility           | `wheelchair`                                                     |
+| Field                   | Owned keys                                                           |
+| ----------------------- | -------------------------------------------------------------------- |
+| Name                    | `name` only; excludes `name:<lang>`, `alt_name`, and `official_name` |
+| Category                | the concrete identifying tags of one iD preset                       |
+| Address                 | only `addr:*` keys already present on that exact element             |
+| Opening hours           | `opening_hours`                                                      |
+| Phone / email / website | whichever of `x` / `contact:x` already exists                        |
+| Accessibility           | `wheelchair`                                                         |
 
 When both alias keys exist, the field is **disabled** rather than merged. When
 no address exists, one cannot be introduced.
 
 After the mutation, `assertOnlyOwnedKeysChanged()` compares the result against
 the base and **throws** if any key outside the computed ownership set differs.
-That is an enforced invariant, not a test expectation — a future field cannot
-quietly widen what an edit touches.
+This runtime check prevents a future field from silently changing unrelated
+keys.
 
 ## Preset policy
 
@@ -73,8 +76,7 @@ editing while leaving scalar fields available.
 OSM's update endpoint requires a **complete** representation, so a missing
 `<nd>` or `<member>` silently destroys geometry. `OsmWritableElement` therefore
 requires the geometry/member properties at compile time, and `osm-xml.ts` builds
-output with `fast-xml-parser` — never string concatenation, so escaping is not a
-per-call decision. Unknown tags, localized names, node references, relation
+output with `fast-xml-parser`, which handles escaping consistently. Unknown tags, localized names, node references, relation
 members and roles all survive verbatim.
 
 ## Exact versioning and the changeset lifecycle
@@ -94,8 +96,8 @@ members and roles all survive verbatim.
 
 Everything that can fail validation happens **before** a changeset exists.
 Closing is the only safely repeatable mutation here, and only when the changeset
-is confirmed still open. An unconfirmed close is an operational signal — it must
-never turn a confirmed element update into a client-visible failure.
+is confirmed still open. Record an unconfirmed close as an operational signal;
+it must not turn a confirmed element update into a client-visible failure.
 
 ## Timeout reconciliation
 
@@ -117,16 +119,16 @@ Sign-in keeps the minimal `openid read_prefs` scopes. `write_api` and
 `write_notes` are requested incrementally, only when someone starts
 contributing.
 
-Provider tokens are encrypted at rest (`account.encryptOAuthTokens`). Nothing
-reads the token column directly — the usable token is resolved through Better
-Auth's public server API. Permission is read from OSM's own `/permissions`
+Provider tokens are encrypted at rest (`account.encryptOAuthTokens`). Resolve
+the usable token through Better Auth's public server API; do not read its
+encrypted database column directly. Permission is read from OSM's own `/permissions`
 endpoint, never from the locally stored scope string, so a revoked authorization
 cannot look effective.
 
 :::warning
-Better Auth's generic-OAuth **link** route uses `body.scopes || configuredScopes`
-— a supplied array _replaces_ the provider defaults (the sign-in route
-concatenates instead). Since one provider token is stored per account, an
+Better Auth's generic-OAuth link route uses `body.scopes || configuredScopes`.
+A supplied array replaces the provider defaults; the sign-in route concatenates
+scopes instead. Since one provider token is stored per account, an
 authorization request must always carry base identity **plus** the intended
 action scope **plus** any contribution scope already in effect. Sending only the
 missing scope silently revokes the other one.
@@ -139,9 +141,9 @@ and a longer idempotency record keyed by user + operation + the client's UUID.
 Both keys are HMAC-SHA-256 digests under a server-only secret, and stored values
 hold only public result ids, trusted URLs and timestamps.
 
-Redis is used when configured, with a bounded in-memory fallback. **Correctness
-never depends on it** — OSM's exact element version remains the cross-instance
-data-safety boundary.
+Redis is used when configured, with a bounded in-memory fallback. The exact OSM
+element version remains the cross-instance data-safety boundary even if a local
+lock or idempotency record is unavailable.
 
 Per-user limits default to 60 reads, 30 previews, 10 publishes and 5 notes per
 10 minutes, each tunable via `RATE_LIMIT_OSM_CONTRIBUTION_*`.
@@ -158,19 +160,21 @@ osm_contribution_operation_duration_ms{operation,outcome}
 Both labels are closed enums. No user or account id, element type or id, field,
 preset, locale, evidence, source, changeset or note id, token, URL, request id
 or response body may ever become a label or a log argument. Logs carry the
-operation, the outcome, a duration and a randomized request id — nothing else.
+operation, outcome, duration, and a randomized request ID only.
 
 ## Feature flags
 
-- `OSM_CONTRIBUTIONS_ENABLED` — master flag. Controls discovery: the public
+- `OSM_CONTRIBUTIONS_ENABLED`: master flag. Controls discovery: the public
   `/api/capabilities` response exposes only whether this **and** OAuth
   configuration are on, so signed-out clients can hide unreleased UI without
   revealing anyone's linked-account state.
-- `OSM_DIRECT_EDITING_ENABLED` — independent kill switch for element writes.
+- `OSM_DIRECT_EDITING_ENABLED`: independent kill switch for element writes.
   Turning it off does **not** convert a requested edit into a note.
 
-Both default false, and every mutation re-checks them, so a cached UI cannot
-bypass a kill switch.
+Both default to false. Every mutation checks the validated process
+configuration, so a cached UI cannot bypass the server guard. Configuration is
+cached by `getOsmConfig()`; after changing environment values, recreate/restart
+the API with the updated configuration.
 
 ## Adding a field later
 
@@ -192,8 +196,10 @@ of the following before it ships:
 If an ambiguous result, a preservation bug, a content leak, an unexpected OSM
 community complaint or repeated upstream write failures appear, set
 `OSM_DIRECT_EDITING_ENABLED=false` immediately. Disable the master flag as well
-if account gating or notes are implicated. Both are runtime configuration; no
-code change or deploy is required to stop writing.
+if account gating or notes are implicated. These are environment settings cached at process startup/first use. Apply the
+changed values and recreate/restart `app-api`; editing an environment file
+alone does not update a running process. Confirm the effective capability and
+mutation response after restart.
 
 ## This is not an automated edit process
 
@@ -203,6 +209,6 @@ stop and follow the
 [automated edits code of conduct](https://wiki.openstreetmap.org/wiki/Automated_Edits_code_of_conduct)
 before implementing it.
 
-Review from experienced OpenStreetMap contributors is welcome before any broad
-rollout — especially on category transitions and the evidence wording. Record
-actionable feedback in normal tracked issues; never in telemetry.
+Seek review from experienced OpenStreetMap contributors before broad rollout,
+especially for category transitions and evidence wording. Record actionable
+feedback in tracked issues; keep it out of telemetry.

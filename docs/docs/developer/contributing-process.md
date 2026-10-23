@@ -1,3 +1,8 @@
+---
+title: Contribution process
+description: Report issues, complete triage, prepare implementation work, and submit a pull request.
+---
+
 # Contribution process
 
 Report what you observed or what should become possible. You do not need to know
@@ -72,10 +77,11 @@ fields and options: Priority **Urgent / High / Medium / Low**, Effort **High /
 Medium / Low**. Leave uncertain estimates unset. Start date and Target date are
 optional internal planning fields.
 
-The target is public Priority/Effort and internal dates. Existing field visibility
-and historical labels are being migrated separately after consumer updates and
-per-item preservation review; this document does not claim that migration is complete.
-Preserve native field IDs, options and history. Do not create parallel priority labels
+The policy is public Priority/Effort and internal dates. Before changing field
+visibility or migrating historical labels, read back the actual organization
+fields and affected items. Repository source does not establish that hosted
+configuration or migration is complete. Preserve native field IDs, options and
+history. Do not create parallel priority labels
 or duplicate Project fields. Field visibility applies across the organization, so
 review other repositories and existing values before changing it.
 
@@ -104,8 +110,11 @@ image paths in the body so they are rewritten to hosted URLs. Local paths and
 expiring CI artifacts are not delivered evidence. Partial uploads may still create
 or update the PR; inspect it before retrying. See
 [Contributing](https://github.com/OpenMapX/openmapx/blob/main/CONTRIBUTING.md#descriptions-and-visual-evidence)
-for commands and the current verification/release-information policy. This process
-uses conditional package Changesets and important product fragments. Deliberate package batches use the separate manual [package release workflow](./package-releases.md); merging a source or version PR does not publish a release.
+for commands and the current verification/release-information policy. Consumer-facing public-package changes need Changesets; important product
+changes need [release fragments](https://github.com/OpenMapX/openmapx/blob/main/release-notes/README.md).
+A change can need both. Deliberate package batches use the manual
+[package release workflow](./package-releases.md); merging a source or version
+PR does not publish a release.
 
 AI assistance and authorized coding agents follow the same standards. The submitter
 owns understanding, accuracy, verification and follow-up. No mandatory AI footer,
