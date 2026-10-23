@@ -102,8 +102,6 @@ export const API_ENDPOINTS = {
   savedPlaces: "/api/saved/places",
   savedLabels: "/api/saved/labels",
   savedCheck: "/api/saved/check",
-  vehicles: "/api/vehicles",
-  parking: "/api/parking",
   // Public resolve is `${base}/${token}`; rotate is `${base}/${id}/rotate`.
   shares: "/api/shares",
   timelineConnection: "/api/timeline/connection",

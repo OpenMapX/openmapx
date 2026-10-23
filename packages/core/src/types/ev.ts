@@ -1,15 +1,17 @@
 /** Canonical connector standards (OCPI ConnectorType aligned). */
-export type ConnectorStandard =
-  | "ccs2"
-  | "ccs1"
-  | "chademo"
-  | "type2"
-  | "type1"
-  | "tesla_ccs"
-  | "nacs"
-  | "gbt_ac"
-  | "gbt_dc"
-  | "type3";
+export const CONNECTOR_STANDARDS = [
+  "ccs2",
+  "ccs1",
+  "chademo",
+  "type2",
+  "type1",
+  "tesla_ccs",
+  "nacs",
+  "gbt_ac",
+  "gbt_dc",
+  "type3",
+] as const;
+export type ConnectorStandard = (typeof CONNECTOR_STANDARDS)[number];
 
 /** Canonical current family. */
 export type CurrentStandard = "ac" | "dc";

@@ -651,3 +651,22 @@ artifacts are generated independently and should not change when this family is
 updated. Use actual serialized Fastify responses through the generated SDK in
 addition to hook tests; the migrated PostgreSQL saved suite qualifies persisted
 read shapes, import concurrency/rollback, receipt invalidation and ownership.
+
+## Personal garage SDK
+
+The eight `/api/vehicles` and `/api/parking` operations share canonical contracts
+and named functions from `@openmapx/core/garage-sdk`. Vehicle creation has a
+separate receipt without persisted timestamps; read records and parking upserts
+have validated ISO timestamps. Public record projection excludes owning account
+IDs. Successful SDK replies require `Cache-Control: no-store`.
+
+Structural request validation runs after session authentication. Existing garage
+normalizers retain trimming, defaults, electric/fuel rules and the write-only
+parking-expiry horizon. Partial updates preserve omitted fields. Account locks,
+ownership checks, default promotion, caps and database constraints stay in the
+producer. Core hooks retain identity-scoped local/remote query behavior;
+`GarageSyncBridge` consumes validated replies before clearing local rows and
+retires acquisition when its identity changes.
+
+Run `pnpm openapi:generate` and `pnpm sdk:generate` after contract changes, and
+commit both outputs. The exact-artifact gate protects previous generated families.

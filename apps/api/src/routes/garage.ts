@@ -1,10 +1,14 @@
 import { MAX_VEHICLES_PER_USER, normalizeParkedDraft, normalizeVehicleDraft } from "@openmapx/core";
-import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, ne, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { db } from "../db/index";
 import { parkedLocation, personalVehicle, user } from "../db/schema";
 import { getUserId, requireAuthHook } from "../utils/require-auth";
 import { declareRouteAuth } from "../utils/route-auth";
+import { registerGarageRoute } from "./garage-contract";
+
+const { userId: _vehicleOwner, ...vehicleColumns } = getTableColumns(personalVehicle);
+const { userId: _parkingOwner, ...parkingColumns } = getTableColumns(parkedLocation);
 
 type GarageTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -27,17 +31,17 @@ export const garageRoute: FastifyPluginAsync = async (fastify) => {
     return payload;
   });
 
-  fastify.get("/vehicles", async (req, reply) => {
+  registerGarageRoute(fastify, "listGarageVehicles", async (req, reply) => {
     const userId = getUserId(req);
     const vehicles = await db
-      .select()
+      .select(vehicleColumns)
       .from(personalVehicle)
       .where(eq(personalVehicle.userId, userId))
       .orderBy(desc(personalVehicle.isDefault), asc(personalVehicle.name));
     return reply.send({ vehicles });
   });
 
-  fastify.post("/vehicles", async (req, reply) => {
+  registerGarageRoute(fastify, "createGarageVehicle", async (req, reply) => {
     const userId = getUserId(req);
     const draft = normalizeVehicleDraft(req.body);
     if (!draft.ok) return reply.status(400).send({ error: draft.reason });
@@ -65,9 +69,9 @@ export const garageRoute: FastifyPluginAsync = async (fastify) => {
     return reply.send(created);
   });
 
-  fastify.patch("/vehicles/:id", async (req, reply) => {
+  registerGarageRoute(fastify, "updateGarageVehicle", async (req, reply) => {
     const userId = getUserId(req);
-    const { id } = req.params as { id: string };
+    const { id } = req.params;
 
     const error = await db.transaction(async (tx) => {
       await lockGarage(tx, userId);
@@ -79,7 +83,7 @@ export const garageRoute: FastifyPluginAsync = async (fastify) => {
       if (existing.length === 0) return { status: 404, error: "Vehicle not found" };
       const draft = normalizeVehicleDraft({
         ...existing[0],
-        ...(req.body as Record<string, unknown>),
+        ...req.body,
       });
       if (!draft.ok) return { status: 400, error: draft.reason };
       if (draft.value.isDefault) {
@@ -98,9 +102,9 @@ export const garageRoute: FastifyPluginAsync = async (fastify) => {
     return reply.send({ ok: true });
   });
 
-  fastify.delete("/vehicles/:id", async (req, reply) => {
+  registerGarageRoute(fastify, "deleteGarageVehicle", async (req, reply) => {
     const userId = getUserId(req);
-    const { id } = req.params as { id: string };
+    const { id } = req.params;
 
     const deleted = await db.transaction(async (tx) => {
       await lockGarage(tx, userId);
@@ -132,17 +136,17 @@ export const garageRoute: FastifyPluginAsync = async (fastify) => {
     return reply.send({ ok: true });
   });
 
-  fastify.get("/parking", async (req, reply) => {
+  registerGarageRoute(fastify, "listGarageParking", async (req, reply) => {
     const userId = getUserId(req);
     const parked = await db
-      .select()
+      .select(parkingColumns)
       .from(parkedLocation)
       .where(eq(parkedLocation.userId, userId))
       .orderBy(desc(parkedLocation.savedAt));
     return reply.send({ parked });
   });
 
-  fastify.put("/parking", async (req, reply) => {
+  registerGarageRoute(fastify, "saveGarageParking", async (req, reply) => {
     const userId = getUserId(req);
     const draft = normalizeParkedDraft(req.body);
     if (!draft.ok) return reply.status(400).send({ error: draft.reason });
@@ -188,14 +192,14 @@ export const garageRoute: FastifyPluginAsync = async (fastify) => {
           updatedAt: now,
         },
       })
-      .returning();
+      .returning(parkingColumns);
 
     return reply.send(rows[0] ?? null);
   });
 
-  fastify.patch("/parking/:id", async (req, reply) => {
+  registerGarageRoute(fastify, "updateGarageParking", async (req, reply) => {
     const userId = getUserId(req);
-    const { id } = req.params as { id: string };
+    const { id } = req.params;
 
     const existing = await db
       .select()
@@ -210,7 +214,7 @@ export const garageRoute: FastifyPluginAsync = async (fastify) => {
     const merged = {
       ...current,
       expiresAt: current.expiresAt ? new Date(current.expiresAt).toISOString() : null,
-      ...(req.body as Record<string, unknown>),
+      ...req.body,
     };
     const draft = normalizeParkedDraft(merged);
     if (!draft.ok) return reply.status(400).send({ error: draft.reason });
@@ -230,9 +234,9 @@ export const garageRoute: FastifyPluginAsync = async (fastify) => {
     return reply.send({ ok: true });
   });
 
-  fastify.delete("/parking/:id", async (req, reply) => {
+  registerGarageRoute(fastify, "deleteGarageParking", async (req, reply) => {
     const userId = getUserId(req);
-    const { id } = req.params as { id: string };
+    const { id } = req.params;
 
     const removed = await db
       .delete(parkedLocation)

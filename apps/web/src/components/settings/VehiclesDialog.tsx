@@ -20,6 +20,7 @@ import type {
   VehiclePowertrain,
 } from "@openmapx/core";
 import {
+  CONNECTOR_STANDARDS,
   MAX_VEHICLES_PER_USER,
   normalizeEvSpec,
   useCreateVehicle,
@@ -40,18 +41,6 @@ import { Section } from "./settingsPrimitives";
 
 const EV_PRESETS = listVehicles();
 const DEFAULT_CONNECTORS: ConnectorStandard[] = ["ccs2", "type2"];
-const CONNECTOR_OPTIONS: ConnectorStandard[] = [
-  "ccs2",
-  "ccs1",
-  "chademo",
-  "type2",
-  "type1",
-  "tesla_ccs",
-  "nacs",
-  "gbt_ac",
-  "gbt_dc",
-  "type3",
-];
 
 function isElectric(powertrain: VehiclePowertrain): boolean {
   return powertrain === "electric" || powertrain === "plugin_hybrid";
@@ -381,7 +370,7 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
                   <Autocomplete
                     multiple
                     size="small"
-                    options={CONNECTOR_OPTIONS}
+                    options={CONNECTOR_STANDARDS}
                     getOptionLabel={(c) => tEv(`connector.${c}`)}
                     value={draft.connectors}
                     onChange={(_event, value) =>

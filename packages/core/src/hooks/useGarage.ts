@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "../api/client";
-import { API_ENDPOINTS } from "../api/endpoints";
+import * as sdk from "../api/garage-sdk";
 import { useSession } from "../auth/useSession";
 import {
   type ParkedDraft,
@@ -33,11 +32,12 @@ export function useVehicles() {
   const identity = useGarageIdentity();
   return useQuery({
     queryKey: [GARAGE_QUERY_KEY, "vehicles", identity],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       identity === "local"
         ? Promise.resolve(readLocalVehicles())
-        : apiClient
-            .get<{ vehicles: PersonalVehicle[] }>(API_ENDPOINTS.vehicles)
+        : sdk
+            .listGarageVehicles({ signal })
+            .then(sdk.unwrapGarageResponse)
             .then((r) => r.vehicles),
     staleTime: 60_000,
   });
@@ -54,10 +54,13 @@ export function useParkedLocations() {
   const identity = useGarageIdentity();
   return useQuery({
     queryKey: [GARAGE_QUERY_KEY, "parked", identity],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       identity === "local"
         ? Promise.resolve(readLocalParked())
-        : apiClient.get<{ parked: ParkedLocation[] }>(API_ENDPOINTS.parking).then((r) => r.parked),
+        : sdk
+            .listGarageParking({ signal })
+            .then(sdk.unwrapGarageResponse)
+            .then((r) => r.parked),
     staleTime: 30_000,
   });
 }
@@ -73,7 +76,7 @@ export function useCreateVehicle() {
   return useMutation({
     mutationFn: async (draft: VehicleDraft) => {
       if (identity !== "local") {
-        return apiClient.post<PersonalVehicle>(API_ENDPOINTS.vehicles, draft);
+        return sdk.createGarageVehicle(draft).then(sdk.unwrapGarageResponse);
       }
       const existing = readLocalVehicles();
       const created: PersonalVehicle = {
@@ -99,7 +102,7 @@ export function useUpdateVehicle() {
   return useMutation({
     mutationFn: async ({ id, ...patch }: Partial<VehicleDraft> & { id: string }) => {
       if (identity !== "local") {
-        return apiClient.patch<{ ok: true }>(`${API_ENDPOINTS.vehicles}/${id}`, patch);
+        return sdk.updateGarageVehicle(id, patch).then(sdk.unwrapGarageResponse);
       }
       const rows = readLocalVehicles().map((vehicle) =>
         vehicle.id === id ? { ...vehicle, ...patch, updatedAt: nowIso() } : vehicle,
@@ -120,7 +123,7 @@ export function useDeleteVehicle() {
   return useMutation({
     mutationFn: async (id: string) => {
       if (identity !== "local") {
-        return apiClient.delete<{ ok: true }>(`${API_ENDPOINTS.vehicles}/${id}`);
+        return sdk.deleteGarageVehicle(id).then(sdk.unwrapGarageResponse);
       }
       const remaining = readLocalVehicles().filter((vehicle) => vehicle.id !== id);
       // A garage with no default silently deselects the user's car; promote the
@@ -143,7 +146,7 @@ export function useSaveParkedLocation() {
   return useMutation({
     mutationFn: async (draft: ParkedDraft) => {
       if (identity !== "local") {
-        return apiClient.put<ParkedLocation>(API_ENDPOINTS.parking, draft);
+        return sdk.saveGarageParking(draft).then(sdk.unwrapGarageResponse);
       }
       const at = nowIso();
       const saved: ParkedLocation = {
@@ -172,7 +175,7 @@ export function useUpdateParkedLocation() {
       Pick<ParkedLocation, "lat" | "lng" | "address" | "note" | "expiresAt">
     >) => {
       if (identity !== "local") {
-        return apiClient.patch<{ ok: true }>(`${API_ENDPOINTS.parking}/${id}`, patch);
+        return sdk.updateGarageParking(id, patch).then(sdk.unwrapGarageResponse);
       }
       writeLocalParked(
         readLocalParked().map((record) =>
@@ -191,7 +194,7 @@ export function useClearParkedLocation() {
   return useMutation({
     mutationFn: async (id: string) => {
       if (identity !== "local") {
-        return apiClient.delete<{ ok: true }>(`${API_ENDPOINTS.parking}/${id}`);
+        return sdk.deleteGarageParking(id).then(sdk.unwrapGarageResponse);
       }
       writeLocalParked(readLocalParked().filter((record) => record.id !== id));
       return { ok: true } as const;

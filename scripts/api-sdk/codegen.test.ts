@@ -204,6 +204,33 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
     `,
     );
   }
+  if (virtual.has(resolve(base, "src/api/generated/garage/garage.generated.ts"))) {
+    virtual.set(
+      resolve(base, "src/api/generated/garage/garage-consumer.typecheck.ts"),
+      `
+      import { createGarageVehicle, listGarageVehicles, updateGarageVehicle, updateGarageParking, saveGarageParking } from "./garage.generated";
+      async function garageConsumer() {
+        const created = await createGarageVehicle({ name: "Car", kind: "car", powertrain: "petrol" });
+        if (created.status === 200) {
+          const id: string = created.data.id;
+          // @ts-expect-error A creation receipt has no persisted timestamp.
+          created.data.createdAt;
+          // @ts-expect-error Owning account IDs are not public records.
+          created.data.userId;
+        }
+        const read = await listGarageVehicles();
+        if (read.status === 200) { const at: string = read.data.vehicles[0].createdAt; }
+        await updateGarageVehicle("car / café", { isDefault: false });
+        await saveGarageParking({ lat: 52, lng: 13, source: "manual" });
+        await updateGarageParking("parked", { expiresAt: null });
+        // @ts-expect-error Coordinates are numeric JSON fields.
+        saveGarageParking({ lat: "52", lng: 13, source: "manual" });
+        // @ts-expect-error PATCH cannot silently reassign a parked position.
+        updateGarageParking("parked", { vehicleId: "other" });
+      }
+    `,
+    );
+  }
   const host = ts.createCompilerHost(options);
   const fileExists = host.fileExists.bind(host),
     read = host.readFile.bind(host),
@@ -223,8 +250,10 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
       ts.createProgram(
         [
           filename,
-          ...Array.from(virtual.keys()).filter((file) =>
-            file.endsWith("/saved-consumer.typecheck.ts"),
+          ...Array.from(virtual.keys()).filter(
+            (file) =>
+              file.endsWith("/saved-consumer.typecheck.ts") ||
+              file.endsWith("/garage-consumer.typecheck.ts"),
           ),
         ],
         options,
@@ -459,7 +488,9 @@ describe("SDK artifact gate", () => {
     expect(bindings).not.toContain("/api/");
     const metadata = first.filter(
       (file: { filename: string }) =>
-        !file.filename.startsWith("admin/") && !file.filename.startsWith("saved/"),
+        !file.filename.startsWith("admin/") &&
+        !file.filename.startsWith("saved/") &&
+        !file.filename.startsWith("garage/"),
     );
     expect(metadata).toHaveLength(6);
     for (const file of metadata)

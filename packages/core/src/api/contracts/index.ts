@@ -1,6 +1,7 @@
 export * from "./activity-admin";
 export * from "./data-manager-admin/index";
 export * from "./extension-admin/index";
+export * from "./garage";
 export * from "./integration-admin/index";
 export * from "./operation";
 export * from "./runtime-metadata";
