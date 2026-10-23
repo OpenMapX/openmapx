@@ -28,11 +28,11 @@ Start a feature guide with how to use the feature and what must be enabled.
 Keep internal schemas, cache algorithms, and implementation walkthroughs in
 developer references. Link to the reference when a user needs the detail.
 
-Keep execution plans, investigation receipts, and acceptance fixtures outside
-the published article tree unless they serve an ongoing operator or developer
-task. A release qualification page must distinguish a required check from a
-recorded result. Never replace a pending runtime check with a claim based only
-on source review or unit tests.
+Document current behavior, supported workflows and operating requirements.
+Omit development diaries, implementation dates, commit histories, task-completion
+reports and historical test counts. Store machine-consumed validation metadata
+with the tooling that owns it. Never replace a pending runtime check with a
+claim based only on source review or unit tests.
 
 ## Write instructions someone can follow
 

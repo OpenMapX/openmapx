@@ -142,22 +142,6 @@ const sidebars: SidebarsConfig = {
             'administration/air-quality-eea-data-use',
           ],
         },
-        {
-          type: 'category',
-          label: 'Release qualification',
-          collapsed: true,
-          items: [
-            'administration/gdpr-export-release-evidence',
-            'administration/air-quality-release-status',
-            'administration/air-quality-release-evidence',
-            'administration/air-quality-status/base',
-            'administration/air-quality-status/airnow',
-            'administration/air-quality-status/eea-ground',
-            'administration/air-quality-status/eea-raster',
-            'administration/air-quality-status/eccc',
-            'administration/air-quality-status/uk-air',
-          ],
-        },
       ],
       link: {
         type: 'doc',

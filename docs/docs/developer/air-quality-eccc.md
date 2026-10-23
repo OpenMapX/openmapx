@@ -38,9 +38,7 @@ time rules, and the non-headline contract. Current collections are capped at
 100 features/512 KiB and cached for five minutes; forecasts are capped at
 5,000 features/four MiB and cached for ten minutes. A truncated or inconsistent
 collection is rejected. These upstream limits are separate from canonical
-response limits. Check the
-[ECCC release status](../administration/air-quality-status/eccc.md) before
-claiming deployment qualification.
+response limits.
 
 - [ECCC AQHI open-data guide](https://eccc-msc.github.io/open-data/msc-data/aqhi/readme_aqhi_en/)
 - [GeoMet AQHI observations](https://api.weather.gc.ca/collections/aqhi-observations-realtime)

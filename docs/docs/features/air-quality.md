@@ -16,6 +16,11 @@ China's HJ 633-2026, and published Canadian AQHI. Availability depends on eviden
 that meets each method's requirements. A supported method does not establish
 local coverage or a calculable index at every point in that country.
 
+Available integrations use Open-Meteo/CAMS, OpenAQ, UK-AIR and ECCC. OpenAQ
+requires credentials. OpenMapX's source policy restricts Open-Meteo's free tier
+to non-commercial deployments. Direct AirNow, EEA ground-observation and EEA
+raster providers are not implemented.
+
 ## What a result means
 
 A result can contain several evidence records:
