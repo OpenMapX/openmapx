@@ -1,8 +1,9 @@
+import cors from "@fastify/cors";
 import * as sdk from "@openmapx/core/sharing-sdk";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createApiClient } from "../../../../../packages/core/src/api/client";
-import { uniformErrorHandler } from "../../server-wiring";
+import { corsOptions, uniformErrorHandler } from "../../server-wiring";
 import { createDbMock } from "../../test/db";
 import { makeCsrfGuardHook } from "../../utils/csrf";
 import { administrationSdkFetch } from "./helpers/administration-sdk-fetch";
@@ -37,6 +38,7 @@ beforeEach(async () => {
   database = createDbMock();
   session.mockResolvedValue({ user: { id: "owner" } });
   app = Fastify();
+  await app.register(cors, corsOptions(["https://web.example"]));
   app.setErrorHandler(uniformErrorHandler);
   app.addHook("onRequest", makeCsrfGuardHook(["https://sharing.example"]));
   const { sharesRoute, resetShareRateLimitsForTests } = await import("../shares");
@@ -201,3 +203,33 @@ it.each(["live", "snapshot"] as const)(
     expect(JSON.stringify(result.data)).not.toContain("synthetic-secret");
   },
 );
+
+it("exposes the owner cache contract to a credentialed cross-origin SDK", async () => {
+  const wireFetch = administrationSdkFetch(app);
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    expect(init?.credentials).toBe("include");
+    const requestHeaders = new Headers(init?.headers);
+    requestHeaders.set("origin", "https://web.example");
+    const response = await wireFetch(input, { ...init, headers: requestHeaders });
+    expect(response.headers.get("access-control-allow-origin")).toBe("https://web.example");
+    expect(response.headers.get("access-control-allow-credentials")).toBe("true");
+    const visible = new Set([
+      "cache-control",
+      "content-language",
+      "content-length",
+      "content-type",
+      "expires",
+      "last-modified",
+      "pragma",
+      ...(response.headers.get("access-control-expose-headers") ?? "").toLowerCase().split(/,\s*/),
+    ]);
+    const headers = new Headers();
+    response.headers.forEach((value, name) => {
+      if (visible.has(name)) headers.set(name, value);
+    });
+    return new Response(response.body, { status: response.status, headers });
+  });
+  const result = await sdk.listOwnerShares({ client });
+  expect(sdk.unwrapSharingResponse(result)).toEqual({ shares: [] });
+  expect(result.headers.get("vary")).toMatch(/Cookie/);
+});

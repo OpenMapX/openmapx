@@ -17,7 +17,8 @@ uniform not-found response. Attribution is retained, with a separate bounded
 operations retain their current decoding limit.
 
 Public server rendering remains anonymous and `no-store`; owner responses retain
-private/no-store, Pragma and Cookie variance. Tokens remain bearer credentials,
+private/no-store, Pragma and Cookie variance. CORS exposes the Vary response
+header so cross-origin clients can validate that cache contract. Tokens remain bearer credentials,
 with only their hashes persisted. Ownership, expiry, rotation, revocation,
 account locking, share caps and route-input normalization remain authoritative.
 
