@@ -6,8 +6,8 @@ description: Why the optional official EEA UTD/hybrid provider is blocked.
 # EEA ground-provider review
 
 Raw EEA up-to-date (UTD) observations are not implemented as a request-time
-provider. The recorded review requires a separate background ingestion
-component. The operating policy below is a proposal for that component, not
+provider. They require a separate background ingestion component.
+The operating policy below is a proposal for that component, not
 current scheduling, retention, or freshness behavior.
 
 The EEA Air Quality Download Service is a documented, CC BY 4.0 source for raw
@@ -59,12 +59,9 @@ Revisit the raw-UTD path when OpenMapX is ready to operate that ingestion/store
 boundary and the download workflow can be automated without representing an
 operator or end user. Revisit hybrid evidence only when an official documented
 endpoint exposes station classification and per-sample quality/gap-fill
-identity. OpenAQ provides request-time ground evidence; enabled UK-AIR and AirNow
-providers add their supported official products. Open-Meteo/CAMS remains
-separately identified model evidence. Availability and release qualification
-are separate: check the
-[EEA ground release status](../administration/air-quality-status/eea-ground.md)
-before planning a deployment.
+identity. OpenAQ provides request-time ground evidence, and UK-AIR provides
+official station DAQI. Open-Meteo/CAMS remains separately identified model
+evidence. A direct AirNow provider is not implemented.
 
 - [EEA Air Quality Download Service](https://www.eea.europa.eu/en/datahub/datahubitem-view/778ef9f5-6293-4846-badd-56a29c70880d)
 - [European Air Quality Index methodology](https://airindex.eea.europa.eu/AQI/?webgl=0)

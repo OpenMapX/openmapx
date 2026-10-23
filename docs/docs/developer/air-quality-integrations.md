@@ -20,9 +20,8 @@ OpenMapX air-quality providers return source evidence. They do not choose the pl
    identity, malformed input, cancellation, and complete attribution. A native
    index name alone does not prove standard conformance.
 4. Run focused provider and normalization/selection tests from the repository
-   root, plus the affected package type check. Check the
-   [release evidence](../administration/air-quality-release-evidence.md) before
-   claiming a provider is qualified for release.
+   root, plus the affected package type check. Verify the provider's credentials,
+   source permissions, coverage and live responses on the target deployment.
 
 The canonical contract is
 `packages/integration-framework/src/contracts/air-quality-provider.ts`. The

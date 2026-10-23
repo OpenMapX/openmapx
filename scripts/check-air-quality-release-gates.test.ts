@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -8,7 +8,7 @@ import { checkAirQualityReleaseGates } from "./check-air-quality-release-gates.j
 
 function fixture(overrides: Record<string, string> = {}) {
   const root = mkdtempSync(join(tmpdir(), "openmapx-aq-gates-"));
-  const statusDir = join(root, "docs/docs/administration/air-quality-status");
+  const statusDir = join(root, "scripts");
   const integrationDir = join(root, "integrations/example");
   mkdirSync(statusDir, { recursive: true });
   mkdirSync(integrationDir, { recursive: true });
@@ -38,14 +38,7 @@ function fixture(overrides: Record<string, string> = {}) {
     blocker: "none",
     ...overrides,
   };
-  const frontmatter = Object.entries(fields)
-    .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
-    .join("\n");
-  writeFileSync(join(statusDir, "base.md"), `---\n${frontmatter}\n---\n\n# Base\n`);
-  writeFileSync(
-    join(root, "docs/docs/administration/air-quality-release-status.md"),
-    `---\ntitle: Status\n---\n\n| Component | Status | Record |\n| --- | --- | --- |\n| Base | shipped | [Base](./air-quality-status/base.md) |\n`,
-  );
+  writeFileSync(join(statusDir, "air-quality-release-status.json"), JSON.stringify([fields]));
   return root;
 }
 
@@ -100,11 +93,23 @@ describe("air-quality release gate checker", () => {
       legal_approval: "missing",
       blocker: "The mandatory dataset-specific approval is absent.",
     });
-    const matrix = join(root, "docs/docs/administration/air-quality-release-status.md");
-    writeFileSync(
-      matrix,
-      `---\ntitle: Status\n---\n\n| Component | Status | Record |\n| --- | --- | --- |\n| Base | blocked | [Base](./air-quality-status/base.md) |\n`,
-    );
     expect(checkAirQualityReleaseGates(root)).toEqual([]);
+  });
+
+  it.each(["[]", "{}", "null", "not JSON", '[{"status":true}]'])(
+    "rejects malformed or empty status data: %s",
+    (contents) => {
+      const root = fixture();
+      writeFileSync(join(root, "scripts/air-quality-release-status.json"), contents);
+      expect(checkAirQualityReleaseGates(root).length).toBeGreaterThan(0);
+    },
+  );
+
+  it("rejects duplicate components", () => {
+    const root = fixture();
+    const path = join(root, "scripts/air-quality-release-status.json");
+    const [record] = JSON.parse(readFileSync(path, "utf8"));
+    writeFileSync(path, JSON.stringify([record, record]));
+    expect(checkAirQualityReleaseGates(root).join("\n")).toContain("duplicate component");
   });
 });

@@ -101,6 +101,6 @@ accept paths, SQL, image names or Docker flags from the browser.
 retention cleanup, backup review, monitoring, notification, OpenAPI/policy and
 current human approvals. A failed check permits intake and an honest partial
 response. It does not establish deployment readiness or authorize an automatic
-GDPR-compliance claim. See the
-[export release status](../administration/gdpr-export-release-evidence.md) for
-recorded qualification and deployment prerequisites.
+GDPR-compliance claim. See
+[Data-subject requests](../administration/data-subject-requests.md#release-and-operational-gate)
+for deployment prerequisites and readiness checks.
