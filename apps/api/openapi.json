@@ -78195,6 +78195,7 @@
                                   },
                                   "connectors": {
                                     "minItems": 1,
+                                    "maxItems": 10,
                                     "type": "array",
                                     "items": {
                                       "$ref": "#/components/schemas/Garage_listGarageVehicles_200___schema0"
@@ -78907,6 +78908,7 @@
                           },
                           "connectors": {
                             "minItems": 1,
+                            "maxItems": 10,
                             "type": "array",
                             "items": {
                               "$ref": "#/components/schemas/Garage_createGarageVehicle_body___schema0"
@@ -79033,6 +79035,7 @@
                             },
                             "connectors": {
                               "minItems": 1,
+                              "maxItems": 10,
                               "type": "array",
                               "items": {
                                 "$ref": "#/components/schemas/Garage_createGarageVehicle_200___schema0"
@@ -80363,6 +80366,7 @@
                           },
                           "connectors": {
                             "minItems": 1,
+                            "maxItems": 10,
                             "type": "array",
                             "items": {
                               "$ref": "#/components/schemas/Garage_updateGarageVehicle_body___schema0"

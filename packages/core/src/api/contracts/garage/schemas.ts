@@ -14,7 +14,7 @@ const evFields = {
   maxDcKw: z.number().positive(),
   maxAcKw: z.number().nonnegative(),
   vehicleTaperSocPct: z.number().positive(),
-  connectors: z.array(z.enum(CONNECTOR_STANDARDS)).min(1),
+  connectors: z.array(z.enum(CONNECTOR_STANDARDS)).min(1).max(CONNECTOR_STANDARDS.length),
 };
 export const garageEvSpecSchema = z.strictObject(evFields) satisfies z.ZodType<EvVehicleSpec>;
 const vehicleFields = {

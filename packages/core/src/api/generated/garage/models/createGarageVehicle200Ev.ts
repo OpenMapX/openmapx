@@ -15,6 +15,9 @@ export type CreateGarageVehicle200Ev = {
   maxAcKw: number;
   /** @exclusiveMinimum 0 */
   vehicleTaperSocPct: number;
-  /** @minItems 1 */
+  /**
+   * @minItems 1
+   * @maxItems 10
+   */
   connectors: GarageCreateGarageVehicle200Schema0[];
 } | null;

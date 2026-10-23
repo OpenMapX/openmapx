@@ -15,6 +15,9 @@ export type ListGarageVehicles200VehiclesItemEv = {
   maxAcKw: number;
   /** @exclusiveMinimum 0 */
   vehicleTaperSocPct: number;
-  /** @minItems 1 */
+  /**
+   * @minItems 1
+   * @maxItems 10
+   */
   connectors: GarageListGarageVehicles200Schema0[];
 } | null;

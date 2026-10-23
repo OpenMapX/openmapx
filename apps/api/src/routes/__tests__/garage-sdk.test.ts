@@ -2,6 +2,13 @@ import * as sdk from "@openmapx/core/garage-sdk";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createApiClient } from "../../../../../packages/core/src/api/client";
+import { CONNECTOR_STANDARDS } from "../../../../../packages/core/src/types/ev";
+import {
+  MAX_VEHICLE_FUEL_L_PER_100KM,
+  MAX_VEHICLE_NAME_LENGTH,
+  MAX_VEHICLES_PER_USER,
+  normalizeVehicleDraft,
+} from "../../../../../packages/core/src/vehicles/validate";
 import { uniformErrorHandler } from "../../server-wiring";
 import { createDbMock } from "../../test/db";
 import { makeCsrfGuardHook } from "../../utils/csrf";
@@ -175,6 +182,58 @@ it("keeps foreign vehicle and parking IDs absent without mutation", async () => 
   ).toBe(404);
   expect(database.db.update).not.toHaveBeenCalled();
   expect(database.db.insert).not.toHaveBeenCalled();
+});
+it.each(["create", "update"])(
+  "rejects excessive connector arrays before %s database work",
+  async (operation) => {
+    const ev = {
+      batteryKwh: 60,
+      baseWhPerKm: 180,
+      maxDcKw: 100,
+      connectors: Array(CONNECTOR_STANDARDS.length + 1).fill("ccs2"),
+    };
+    database.queueSelect([{ id: "garage-user" }]);
+    database.queueSelect(operation === "create" ? [{ count: 0 }] : [vehicle]);
+    const input = { ...draft, powertrain: "electric" as const, fuelConsumptionLPer100Km: null, ev };
+    const response =
+      operation === "create"
+        ? await sdk.createGarageVehicle(input, { client })
+        : await sdk.updateGarageVehicle("vehicle", input, { client });
+    expect(response.status).toBe(400);
+    expect(database.db.select).not.toHaveBeenCalled();
+    expect(database.db.insert).not.toHaveBeenCalled();
+    expect(database.db.update).not.toHaveBeenCalled();
+  },
+);
+it("consumes a full garage of maximum-size normalized EV records within the default SDK budget", async () => {
+  const ev = {
+    batteryKwh: Number.MAX_VALUE,
+    baseWhPerKm: Number.MAX_VALUE,
+    massTonnes: Number.MAX_VALUE,
+    maxDcKw: Number.MAX_VALUE,
+    maxAcKw: Number.MAX_VALUE,
+    vehicleTaperSocPct: Number.MAX_VALUE,
+    connectors: [...CONNECTOR_STANDARDS],
+  };
+  const normalized = normalizeVehicleDraft({
+    ...draft,
+    name: "\u0000".repeat(MAX_VEHICLE_NAME_LENGTH),
+    presetId: "\u0000".repeat(MAX_VEHICLE_NAME_LENGTH),
+    kind: "motorcycle",
+    powertrain: "plugin_hybrid",
+    fuelConsumptionLPer100Km: MAX_VEHICLE_FUEL_L_PER_100KM,
+    ev,
+  });
+  expect(normalized.ok).toBe(true);
+  if (!normalized.ok) throw new Error(normalized.reason);
+  const vehicles = Array.from({ length: MAX_VEHICLES_PER_USER }, (_, index) => ({
+    ...vehicle,
+    ...normalized.value,
+    id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+  }));
+  database.queueSelect(vehicles);
+  expect(sdk.unwrapGarageResponse(await sdk.listGarageVehicles({ client }))).toEqual({ vehicles });
+  expect(Buffer.byteLength(JSON.stringify({ vehicles }))).toBeLessThan(32 * 1024);
 });
 it("retains cookie origin protection and real rate-limit metadata", async () => {
   const denied = await app.inject({

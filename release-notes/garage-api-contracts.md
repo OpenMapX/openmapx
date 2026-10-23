@@ -11,7 +11,7 @@ public record fields without the owning account ID. Invalid successful replies
 are rejected before entering account caches or completing local-to-account sync.
 
 Request objects reject unknown fields and incorrect JSON primitives. EV inputs
-use the existing connector vocabulary and explicit numeric constraints. Parking
+use the existing connector vocabulary, at most ten connector entries, and explicit numeric constraints. Parking
 PATCH accepts only the fields it actually updates. Existing domain normalization,
 account locking, ownership, vehicle cap, default promotion, parking uniqueness,
 cascading deletion, and no-store policy remain authoritative. Signed-out local

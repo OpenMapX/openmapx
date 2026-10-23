@@ -15,6 +15,9 @@ export type UpdateGarageVehicleBodyEv = {
   maxAcKw?: number;
   /** @exclusiveMinimum 0 */
   vehicleTaperSocPct?: number;
-  /** @minItems 1 */
+  /**
+   * @minItems 1
+   * @maxItems 10
+   */
   connectors: GarageUpdateGarageVehicleBodySchema0[];
 } | null;
