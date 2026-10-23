@@ -470,8 +470,8 @@ describe("GroundRouteCache retention across reloaded sessions", () => {
     const cache = new GroundRouteCache();
     const first = session();
     const edited = withGeometry(first, structuredClone(first.payload.startPackage.route.geometry));
-    // Four metres' worth of rounding slack: a fingerprint keyed reuse would
-    // treat this as the same road.
+    // A sub-metre edit (about 0.4 m) within the fingerprint's rounding: a
+    // fingerprint-keyed reuse would treat this as the same road.
     edited.payload.startPackage.route.geometry[30][1] += 4e-6;
     expect(routeFingerprint(edited.payload.startPackage.route.geometry)).toBe(
       routeFingerprint(first.payload.startPackage.route.geometry),
