@@ -88,6 +88,19 @@ export function createCodegenConfig({ inputDocument, outputDirectory }) {
           ),
         }
       : {}),
+    ...(Object.keys(selectTaggedDocument(inputDocument, "garage").paths).length
+      ? {
+          garage: adminFamilyConfig(
+            selectTaggedDocument(inputDocument, "garage"),
+            {
+              directory: "garage",
+              tag: "garage",
+              models: "models",
+            },
+            outputDirectory,
+          ),
+        }
+      : {}),
     ...Object.fromEntries(
       adminFamilies.flatMap((family) => {
         const document = selectTaggedDocument(inputDocument, family.tag);
@@ -277,6 +290,15 @@ export function savedOperationBindings(inputDocument) {
     bindFunction: "bindSavedOperation",
     optionsType: "OperationRequestOptions",
     transportPath: "../../saved-sdk-transport",
+    command: "pnpm sdk:generate",
+  });
+}
+
+export function garageOperationBindings(inputDocument) {
+  return emitOperationBindings(operationIds(selectTaggedDocument(inputDocument, "garage")), {
+    bindFunction: "bindGarageOperation",
+    optionsType: "OperationRequestOptions",
+    transportPath: "../../garage-sdk-transport",
     command: "pnpm sdk:generate",
   });
 }

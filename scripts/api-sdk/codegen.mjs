@@ -6,6 +6,7 @@ import { collectArtifacts, writeOrCheckArtifacts as writeOrCheck } from "../code
 import {
   adminOperationBindings,
   createCodegenConfig,
+  garageOperationBindings,
   savedOperationBindings,
   selectTaggedDocument,
 } from "./config.mjs";
@@ -27,6 +28,7 @@ export async function generateArtifacts({
       "admin-sdk-transport.ts",
       "operation-transport.ts",
       "saved-sdk-transport.ts",
+      "garage-sdk-transport.ts",
       "client.ts",
     ])
       await cp(join(root, "packages/core/src/api", name), join(directory, name));
@@ -40,6 +42,13 @@ export async function generateArtifacts({
       await writeFile(
         join(directory, "generated/saved/operation-bindings.generated.ts"),
         savedOperationBindings(inputDocument),
+      );
+    }
+    if (Object.keys(selectTaggedDocument(inputDocument, "garage").paths).length) {
+      await mkdir(join(directory, "generated/garage"), { recursive: true });
+      await writeFile(
+        join(directory, "generated/garage/operation-bindings.generated.ts"),
+        garageOperationBindings(inputDocument),
       );
     }
     const config = createCodegenConfig({ inputDocument, outputDirectory: directory });

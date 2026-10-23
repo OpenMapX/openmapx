@@ -60,6 +60,7 @@ export type {
   CurrentStandard,
   EvVehicleSpec,
 } from "./ev";
+export { CONNECTOR_STANDARDS } from "./ev";
 export type {
   CabinClass,
   FlightProviderCapabilities,
