@@ -425,6 +425,8 @@ const unusableRetryAfterHeaders: [string, Record<string, string>][] = [
   ["an out-of-range Retry-After", { "Retry-After": "999999999" }],
   ["a non-date Retry-After", { "Retry-After": "soon" }],
   ["an impossible HTTP date", { "Retry-After": "Fri, 99 Oct 2026 08:00:20 GMT" }],
+  ["a nonexistent calendar date", { "Retry-After": "Fri, 31 Sep 2026 08:00:20 GMT" }],
+  ["an unknown weekday", { "Retry-After": "Foo, 23 Oct 2026 08:00:20 GMT" }],
 ];
 
 it.each(unusableRetryAfterHeaders)(

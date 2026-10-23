@@ -126,7 +126,9 @@ function headerRetrySeconds(header: string | null): number | null {
   if (/^\d+$/.test(value)) return boundedSeconds(Number(value));
   if (!HTTP_DATE.test(value)) return null;
   const at = Date.parse(value);
-  return Number.isFinite(at) ? boundedSeconds(Math.max(0, (at - Date.now()) / 1000)) : null;
+  // Round-tripping rejects normalized calendar dates (31 Sep) and wrong weekday/month tokens.
+  if (!Number.isFinite(at) || new Date(at).toUTCString() !== value) return null;
+  return boundedSeconds(Math.max(0, (at - Date.now()) / 1000));
 }
 
 /** Server-declared wait: a usable Retry-After first, else a valid bounded body `retryAfter`. */
