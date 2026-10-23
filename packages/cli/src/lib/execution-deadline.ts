@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { DataManagerTransport } from "@openmapx/core/data-manager-sdk";
 import { executionRefSchema, opsExecutionBudget } from "@openmapx/core/ops";
+import { withCliControlContext } from "./control-context";
 
 // Restriction only. These values authenticate no principal, parent, role or lease.
 const deadlines = new AsyncLocalStorage<{ deadlineAt: number; signal: AbortSignal }>();
@@ -28,8 +29,12 @@ export async function withCliExecutionDeadline<T>(
 ): Promise<T> {
   const encoded = process.env.OPENMAPX_CONTROL_EXECUTION;
   const inherited = process.env.OPENMAPX_CLI_DEADLINE_AT;
-  if (process.env.OPENMAPX_CONTROL_DELEGATION || process.env.OPENMAPX_PARENT_EXECUTION)
-    throw Error("CLI control verifier is unavailable");
+  if (
+    (process.env.OPENMAPX_CONTROL_DELEGATION || process.env.OPENMAPX_PARENT_EXECUTION) &&
+    encoded === undefined
+  )
+    throw Error("Missing bounded fixed CLI execution");
+
   if (encoded === undefined && inherited === undefined) return run();
   if (encoded !== undefined && Buffer.byteLength(encoded) > 2048)
     throw Error("Invalid execution deadline");
@@ -54,7 +59,9 @@ export async function withCliExecutionDeadline<T>(
   );
   timer.unref();
   try {
-    return await deadlines.run({ deadlineAt, signal: controller.signal }, run);
+    return await deadlines.run({ deadlineAt, signal: controller.signal }, () =>
+      withCliControlContext(args, run),
+    );
   } finally {
     clearTimeout(timer);
   }

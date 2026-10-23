@@ -1,3 +1,7 @@
+import type {
+  BorrowedArtifactTargetLease,
+  VerifiedExecutionAuthority,
+} from "@openmapx/core/build-artifacts";
 import type { TrustedConfigurationPayload } from "@openmapx/core/ops";
 import {
   type ExecutionRef,
@@ -45,6 +49,8 @@ export class OpsAgentBusyError extends Error {
 
 export interface OpsExecutionContext {
   readonly execution: ExecutionRef;
+  readonly artifactLease?: BorrowedArtifactTargetLease;
+  readonly controlAuthority?: VerifiedExecutionAuthority;
   signal: AbortSignal;
   emitLog(stream: "stdout" | "stderr", message: string): void;
   claim: OpsTrustedClaim;

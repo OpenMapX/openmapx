@@ -193,6 +193,10 @@
     "./api-admin-sdk": {
       "types": "./src/api/admin-sdk.ts",
       "default": "./src/api/admin-sdk.ts"
+    },
+    "./build-artifacts": {
+      "types": "./src/build-artifacts/index.ts",
+      "default": "./src/build-artifacts/index.ts"
     }
   },
   "scripts": {
@@ -207,6 +211,7 @@
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/tar-stream": "3.1.4",
     "esbuild": "^0.28.2",
     "postgres": "^3.4.9",
     "react-dom": "19.3.0",
@@ -230,6 +235,7 @@
     "@better-auth/oauth-provider": "1.7.7",
     "@better-auth/passkey": "1.7.7",
     "@openmapx/air-quality": "workspace:*",
+    "@openmapx/extension-contracts": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
     "@tanstack/react-query": "^5.104.1",
     "@turf/helpers": "^7.4.0",
@@ -242,11 +248,11 @@
     "opening_hours": "^3.15.0",
     "parse5": "8.0.1",
     "react": "19.3.0",
+    "tar-stream": "3.2.2",
     "tz-lookup": "^6.1.25",
     "undici": "8.11.2",
     "zod": "^4.6.5",
-    "zustand": "^5.0.15",
-    "@openmapx/extension-contracts": "workspace:^"
+    "zustand": "^5.0.15"
   },
   "private": true
 }

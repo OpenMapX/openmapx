@@ -162,7 +162,11 @@ describe("build bundles", () => {
     execFileSync("tar", ["-xf", bundle, "-C", unpacked]);
     writeFileSync(join(unpacked, "osrm-graph", "region.osrm"), "TAMPERED");
     const tampered = join(tmp, "tampered.tar");
-    execFileSync("tar", ["-cf", tampered, "-C", unpacked, BUNDLE_MANIFEST_DIR, "osrm-graph"]);
+    execFileSync(
+      "tar",
+      ["--no-xattrs", "-cf", tampered, "-C", unpacked, BUNDLE_MANIFEST_DIR, "osrm-graph"],
+      { env: { ...process.env, COPYFILE_DISABLE: "1" } },
+    );
 
     await expect(
       importBuildBundle({ bundle: tampered, rootDir: serveHost, runningServices: noneRunning }),
@@ -179,7 +183,11 @@ describe("build bundles", () => {
     execFileSync("tar", ["-xf", bundle, "-C", unpacked]);
     writeFileSync(join(unpacked, "osrm-graph", "extra"), "X");
     const padded = join(tmp, "padded.tar");
-    execFileSync("tar", ["-cf", padded, "-C", unpacked, BUNDLE_MANIFEST_DIR, "osrm-graph"]);
+    execFileSync(
+      "tar",
+      ["--no-xattrs", "-cf", padded, "-C", unpacked, BUNDLE_MANIFEST_DIR, "osrm-graph"],
+      { env: { ...process.env, COPYFILE_DISABLE: "1" } },
+    );
 
     await expect(
       importBuildBundle({ bundle: padded, rootDir: serveHost, runningServices: noneRunning }),
@@ -209,11 +217,15 @@ describe("build bundles", () => {
     );
     symlinkSync(outside, join(crafted, "osrm-graph"));
     const bundle = join(tmp, "crafted.tar");
-    execFileSync("tar", ["-cf", bundle, "-C", crafted, BUNDLE_MANIFEST_DIR, "osrm-graph"]);
+    execFileSync(
+      "tar",
+      ["--no-xattrs", "-cf", bundle, "-C", crafted, BUNDLE_MANIFEST_DIR, "osrm-graph"],
+      { env: { ...process.env, COPYFILE_DISABLE: "1" } },
+    );
 
     await expect(
       importBuildBundle({ bundle, rootDir: serveHost, runningServices: noneRunning }),
-    ).rejects.toThrow(/Refusing symlink in build artifact: osrm-graph/);
+    ).rejects.toThrow(/Unsupported tar type/);
     expect(existsSync(join(dataDir(serveHost), "osrm-graph"))).toBe(false);
   });
 
@@ -262,46 +274,56 @@ describe("build bundles", () => {
     ).rejects.toThrow(/Refusing symlink in build artifact: osrm-graph\/link/);
   });
 
-  it("exports an aliased MOTIS live dir as the directory it points at", async () => {
+  it("requires rebuilding legacy MOTIS output before exporting generated credentials", async () => {
     const data = dataDir(buildHost);
-    mkdirSync(join(data, "motis", "slots", "A", "data"), { recursive: true });
-    writeFileSync(join(data, "motis", "slots", "A", "config.yml"), "osm: x.osm.pbf\n");
-    writeFileSync(join(data, "motis", "slots", "A", "data", "tt.bin"), "TT");
-    symlinkSync(join(data, "motis", "slots", "A"), join(data, "motis", "live"));
-    mkdirSync(join(data, "motis-feed-proxy", "conf"), { recursive: true });
-    writeFileSync(join(data, "motis-feed-proxy", "conf", "default.conf"), "server {}\n");
+    mkdirSync(join(data, "motis/slots/A/data"), { recursive: true });
+    symlinkSync("slots/A", join(data, "motis/live"));
+    mkdirSync(join(data, "motis-feed-proxy/conf"), { recursive: true });
+    writeFileSync(join(data, "motis-feed-proxy/conf/default.conf"), "secret-api-key");
     writeBuildRecord(motisRecord(), buildHost);
-
-    const bundle = join(tmp, "motis.tar");
-    await exportBuildBundle({ serviceId: "motis", bundle, rootDir: buildHost });
-    await importBuildBundle({ bundle, rootDir: serveHost, runningServices: noneRunning });
-
-    const live = join(dataDir(serveHost), "motis", "live");
-    expect(readFileSync(join(live, "data", "tt.bin"), "utf-8")).toBe("TT");
-    expect(readFileSync(join(live, "config.yml"), "utf-8")).toBe("osm: x.osm.pbf\n");
-    expect(existsSync(join(dataDir(serveHost), "motis-feed-proxy", "conf", "default.conf"))).toBe(
-      true,
-    );
+    await expect(
+      exportBuildBundle({ serviceId: "motis", bundle: join(tmp, "motis.tar"), rootDir: buildHost }),
+    ).rejects.toThrow(/retained portable source metadata/);
   });
 
-  it("imports MOTIS into the active slot when the serving host uses the slot layout", async () => {
+  it("keeps the active MOTIS slot unchanged until target credential materialization exists", async () => {
     const source = dataDir(buildHost);
-    mkdirSync(join(source, "motis", "live", "data"), { recursive: true });
-    writeFileSync(join(source, "motis", "live", "data", "tt.bin"), "NEW");
+    mkdirSync(join(source, "motis/live/data"), { recursive: true });
     mkdirSync(join(source, "motis-feed-proxy"), { recursive: true });
+    writeFileSync(join(source, "motis/live/data/tt.bin"), "NEW");
+    writeFileSync(
+      join(source, "motis/live/portable-sources.json"),
+      JSON.stringify({ version: 1, sourceFingerprints: [], credentialRequirements: [] }),
+    );
     writeBuildRecord(motisRecord(), buildHost);
     const bundle = join(tmp, "motis.tar");
     await exportBuildBundle({ serviceId: "motis", bundle, rootDir: buildHost });
-
     const target = dataDir(serveHost);
-    const slotA = join(target, "motis", "slots", "A");
+    const slotA = join(target, "motis/slots/A");
     mkdirSync(join(slotA, "data"), { recursive: true });
-    writeFileSync(join(slotA, "data", "tt.bin"), "OLD");
-    symlinkSync(slotA, join(target, "motis", "live"));
-
-    await importBuildBundle({ bundle, rootDir: serveHost, runningServices: noneRunning });
-
-    expect(lstatSync(join(target, "motis", "live")).isSymbolicLink()).toBe(true);
-    expect(readFileSync(join(slotA, "data", "tt.bin"), "utf-8")).toBe("NEW");
+    writeFileSync(join(slotA, "data/tt.bin"), "OLD");
+    symlinkSync(slotA, join(target, "motis/live"));
+    await expect(
+      importBuildBundle({ bundle, rootDir: serveHost, runningServices: noneRunning }),
+    ).rejects.toThrow(/target credential materialization/);
+    expect(lstatSync(join(target, "motis/live")).isSymbolicLink()).toBe(true);
+    expect(readFileSync(join(slotA, "data/tt.bin"), "utf8")).toBe("OLD");
   });
+});
+
+it("validates the manifest before invoking any legacy extraction hook", async () => {
+  const bundle = join(tmp, "invalid.tar");
+  writeFileSync(bundle, Buffer.alloc(1024));
+  let extracted = false;
+  await expect(
+    importBuildBundle({
+      bundle,
+      rootDir: serveHost,
+      runningServices: noneRunning,
+      tar: async () => {
+        extracted = true;
+      },
+    }),
+  ).rejects.toThrow();
+  expect(extracted, "untrusted archive reached extract-first tar hook").toBe(false);
 });

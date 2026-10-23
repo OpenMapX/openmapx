@@ -366,7 +366,7 @@ describe("agent handoff helper container", () => {
     rootSource: "/srv/openmapx",
   };
 
-  it("runs the agent image with only the socket and checkout, no network and no privileges", () => {
+  it("runs the agent image with isolated control material, no network and no privileges", () => {
     const args = agentHandoffRunArgs(facts, "/srv/openmapx", "handoff-1");
     expect(args.slice(0, 3)).toEqual(["run", "--detach", "--rm"]);
     expect(args).toEqual(
@@ -386,7 +386,11 @@ describe("agent handoff helper container", () => {
         "DOCKER_CONFIG=/tmp/docker",
       ]),
     );
-    expect(args.filter((arg) => arg === "--mount")).toHaveLength(2);
+    expect(args.filter((arg) => arg === "--mount")).toHaveLength(9);
+    for (const role of ["ops-agent", "data-manager", "host-cli"])
+      expect(args).toContain(
+        `type=bind,source=/srv/openmapx/infra/docker/control-private/hidden-key,target=/srv/openmapx/infra/docker/secrets/control-${role}.key,readonly`,
+      );
     expect(args).not.toContain("HOSTNAME");
     expect(args).not.toContain("DOCKER_CONFIG");
     // Only names: Docker copies each value from the agent's own environment.

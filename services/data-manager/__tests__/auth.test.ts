@@ -298,3 +298,32 @@ describe("resolveAuthToken", () => {
     expect(token).toMatch(/^[0-9a-f]{64}$/);
   });
 });
+
+it("retains the durable-receiver prerequisite for internal control headers", async () => {
+  const app = await buildApp();
+  try {
+    for (const name of ["x-openmapx-control-delegation", "x-openmapx-parent-execution"]) {
+      for (const value of ["", "not-yet-admitted"]) {
+        const response = await app.inject({
+          url: "/protected",
+          headers: { authorization: `Bearer ${TOKEN}`, [name]: value },
+        });
+        expect(response.statusCode).toBe(503);
+      }
+      expect(
+        (
+          await app.inject({
+            url: "/protected",
+            headers: { authorization: `Bearer ${TOKEN}`, [name]: "x".repeat(4097) },
+          })
+        ).statusCode,
+      ).toBe(403);
+    }
+    expect(
+      (await app.inject({ url: "/protected", headers: { authorization: `Bearer ${TOKEN}` } }))
+        .statusCode,
+    ).toBe(200);
+  } finally {
+    await app.close();
+  }
+});

@@ -192,7 +192,7 @@ export function agentHandoffContainerName(handoffId: string): string {
   return `openmapx-ops-agent-handoff-${handoffId.slice(0, 64)}`;
 }
 
-/** `docker run` arguments for the helper: Docker socket and checkout only, no network. */
+/** Fixed helper mounts keep sibling role keys and private receipts hidden; no network. */
 export function agentHandoffRunArgs(
   facts: AgentContainerFacts,
   rootDir: string,
@@ -206,7 +206,14 @@ export function agentHandoffRunArgs(
   const inherited = facts.envNames.filter(
     (name) =>
       /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) &&
-      !["HOSTNAME", "DOCKER_CONFIG", "OPS_AGENT_HANDOFF_ID"].includes(name),
+      ![
+        "HOSTNAME",
+        "DOCKER_CONFIG",
+        "OPS_AGENT_HANDOFF_ID",
+        "OPENMAPX_CONTROL_EXECUTION",
+        "OPENMAPX_CONTROL_DELEGATION",
+        "OPENMAPX_PARENT_EXECUTION",
+      ].includes(name),
   );
   return [
     "run",
@@ -236,6 +243,18 @@ export function agentHandoffRunArgs(
     `type=bind,source=${facts.dockerSocketSource},target=/var/run/docker.sock`,
     "--mount",
     `type=bind,source=${facts.rootSource},target=${rootDir}`,
+    ...["ops-agent", "data-manager", "host-cli"].flatMap((role) => [
+      "--mount",
+      `type=bind,source=${facts.rootSource}/infra/docker/control-private/hidden-key,target=${rootDir}/infra/docker/secrets/control-${role}.key,readonly`,
+    ]),
+    ...["data-manager", "host-cli"].flatMap((role) => [
+      "--mount",
+      `type=bind,source=${facts.rootSource}/infra/docker/control-private/empty,target=${rootDir}/infra/docker/control-private/${role},readonly`,
+    ]),
+    "--mount",
+    `type=bind,source=${facts.rootSource}/infra/docker/control-private/ops-agent,target=/var/lib/openmapx/control-private`,
+    "--mount",
+    `type=bind,source=${facts.rootSource}/infra/docker/secrets/control-verifiers.json,target=/run/secrets/openmapx-control-verifiers,readonly`,
     ...inherited.flatMap((name) => ["--env", name]),
     "--env",
     "DOCKER_CONFIG=/tmp/docker",

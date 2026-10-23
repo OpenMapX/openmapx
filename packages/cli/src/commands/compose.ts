@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { provisionControlInstallation } from "@openmapx/core/build-artifacts";
 import { initializeErasureJournal } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
 import { type Command, Option } from "commander";
@@ -195,6 +197,8 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   coreServices.releaseSelection();
   const paths = repoPaths(opts.rootDir);
   assertCliDeploymentSecrets();
+  if (!existsSync("/run/secrets/openmapx-control-verifiers"))
+    await provisionControlInstallation(paths.infraDir);
   return withConfigurationGenerationWriter(paths.infraDir, async (writer) => {
     assertCliExecutionAvailable();
     ensurePlatformPrivateDirectory(join(paths.infraDir, "data", "ops-agent", "trusted-config"));

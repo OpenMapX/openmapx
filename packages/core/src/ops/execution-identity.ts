@@ -21,7 +21,7 @@ export const executionRefSchema = z
   );
 export type ExecutionRef = z.infer<typeof executionRefSchema>;
 
-const parentIdentitySchema = z.strictObject({
+const apiParentIdentitySchema = z.strictObject({
   issuer: z.literal("api"),
   apiJobId: z.uuid(),
   apiOwnerVersion: z.number().int().positive().safe(),
@@ -31,13 +31,30 @@ const parentIdentitySchema = z.strictObject({
   attemptId: z.uuid(),
   assertionDigest: z.string().regex(/^[a-f0-9]{64}$/),
 });
+const roleParentIdentitySchema = z
+  .strictObject({
+    issuer: z.enum(["ops-agent", "data-manager", "host-cli"]),
+    execution: executionRefSchema,
+    operationKey: z.string().regex(/^opk1_[A-Za-z0-9_-]{16,64}$/),
+    fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    deadlineAt: z.number().int().nonnegative().safe(),
+  })
+  .refine(
+    (p) =>
+      p.issuer === p.execution.executor &&
+      p.operationKey === p.execution.operationKey &&
+      p.fingerprint === p.execution.fingerprint &&
+      p.deadlineAt === p.execution.deadlineAt,
+  );
+const parentIdentitySchema = z.union([apiParentIdentitySchema, roleParentIdentitySchema]);
 /** Persisted identity is evidence only; parsing it does not authenticate a parent. */
 export type RetainedParentExecution = z.infer<typeof parentIdentitySchema>;
 declare const verifiedParent: unique symbol;
 export type VerifiedParentExecution = Readonly<RetainedParentExecution> & {
   readonly [verifiedParent]: true;
 };
-const verifiedParents = new WeakSet<object>();
+
+import { verifiedParents } from "./verified-parent-internal";
 export type ExecutionAdmission = { requestedDeadlineAt?: number; parent?: VerifiedParentExecution };
 export const retainedParentExecutionSchema = parentIdentitySchema;
 export const OPS_MAX_EXECUTION_MS = 7 * 24 * 3600_000;

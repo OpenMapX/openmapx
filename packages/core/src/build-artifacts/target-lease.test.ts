@@ -1,0 +1,371 @@
+import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { executionFingerprint } from "../ops/execution-identity";
+import { opsOperationFingerprint } from "../ops/fingerprint";
+import {
+  type ControlInstallation,
+  closeControlInstallation,
+  openControlInstallation,
+  provisionControlInstallation,
+  retainAdmittedControlExecution,
+  retainControlEffectReceipt,
+  verifyControlEffectSettlement,
+} from "./control-authority";
+
+let root: string;
+let installation: ControlInstallation;
+beforeEach(async () => {
+  root = mkdtempSync(join(tmpdir(), "omx-target-"));
+  mkdirSync(join(root, "data"), { mode: 0o700 });
+  await provisionControlInstallation(root);
+  installation = openControlInstallation({
+    infraDir: root,
+    role: "host-cli",
+    serviceIds: ["osrm", "motis"],
+  });
+});
+afterEach(() => {
+  closeControlInstallation(installation);
+  rmSync(root, { recursive: true, force: true });
+});
+function owner() {
+  const operation = { kind: "service.build" as const, serviceId: "osrm" };
+  const operationFingerprint = opsOperationFingerprint(operation);
+  const deadlineAt = Date.now() + 60000;
+  return retainAdmittedControlExecution(installation, {
+    execution: {
+      executor: "host-cli",
+      principal: "host-cli",
+      executionId: randomUUID(),
+      operationKey: `opk1_${randomUUID().replaceAll("-", "")}`,
+      operationFingerprint,
+      fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
+      deadlineAt,
+    },
+    kind: operation.kind,
+    operation,
+    admittedAt: deadlineAt - 60000,
+    serviceIds: ["osrm"],
+  });
+}
+async function api() {
+  expect(
+    existsSync(join(import.meta.dirname, "target-lease.ts")),
+    "missing certified filesystem target authority",
+  ).toBe(true);
+  return import("./target-lease");
+}
+describe("certified target leases", () => {
+  it("requires nominal durable ownership, then fences unknown own effects", async () => {
+    const a = await api();
+    const authority = owner();
+    await expect(
+      a.acquireArtifactTargetLease({
+        dataRoot: join(root, "data"),
+        serviceIds: ["osrm"],
+        owner: { execution: authority.execution } as typeof authority,
+      }),
+    ).rejects.toThrow(/authority/);
+    const lease = await a.acquireArtifactTargetLease({
+      dataRoot: join(root, "data"),
+      serviceIds: ["osrm"],
+      owner: authority,
+    });
+    await expect(a.releaseArtifactTargetLease(lease)).rejects.toThrow(/settlement|effect/);
+    expect(existsSync(join(root, "data/.admin-target-control/locks/osrm"))).toBe(true);
+  });
+  it("requires the exact unchanged inode and durable settlement before release", async () => {
+    const a = await api();
+    const authority = owner();
+    const lease = await a.acquireArtifactTargetLease({
+      dataRoot: join(root, "data"),
+      serviceIds: ["osrm"],
+      owner: authority,
+    });
+    retainControlEffectReceipt(authority, {
+      outcome: "failed_without_effect",
+      publication: "not_started",
+      receipt: { kind: "not-started" },
+    });
+    await a.settleArtifactTargetLeaseChild(
+      lease,
+      verifyControlEffectSettlement(installation, authority.execution),
+    );
+    await a.releaseArtifactTargetLease(lease);
+    expect(existsSync(join(root, "data/.admin-target-control/locks/osrm"))).toBe(false);
+  });
+  it("rejects replacement lock inodes without removing the replacement", async () => {
+    const a = await api();
+    const authority = owner();
+    const lease = await a.acquireArtifactTargetLease({
+      dataRoot: join(root, "data"),
+      serviceIds: ["osrm"],
+      owner: authority,
+    });
+    const path = join(root, "data/.admin-target-control/locks/osrm");
+    renameSync(path, `${path}.old`);
+    mkdirSync(path, { mode: 0o700 });
+    await expect(a.releaseArtifactTargetLease(lease)).rejects.toThrow(/inode|identity|changed/);
+    expect(existsSync(path)).toBe(true);
+  });
+  it("keeps the fence when the callback throws; elapsed time is never containment", async () => {
+    const a = await api();
+    await expect(
+      a.withArtifactTargetLease(
+        { dataRoot: join(root, "data"), serviceIds: ["osrm"], owner: owner() },
+        async () => {
+          throw Error("lost response");
+        },
+      ),
+    ).rejects.toThrow("lost response");
+    expect(existsSync(join(root, "data/.admin-target-control/locks/osrm"))).toBe(true);
+  });
+});
+it("never reacquires or expands a retained execution's root", async () => {
+  const a = await api();
+  const authority = owner();
+  await a.acquireArtifactTargetLease({
+    dataRoot: join(root, "data"),
+    serviceIds: ["osrm"],
+    owner: authority,
+  });
+  await expect(
+    a.acquireArtifactTargetLease({
+      dataRoot: join(root, "data"),
+      serviceIds: ["osrm"],
+      owner: authority,
+    }),
+  ).rejects.toThrow(/already acquired/);
+  await expect(
+    a.acquireArtifactTargetLease({
+      dataRoot: join(root, "data"),
+      serviceIds: ["motis"],
+      owner: authority,
+    }),
+  ).rejects.toThrow(/closure/);
+});
+it("detects rollback of a signed shared journal using private high-water evidence", async () => {
+  const a = await api();
+  const authority = owner();
+  const lease = await a.acquireArtifactTargetLease({
+    dataRoot: join(root, "data"),
+    serviceIds: ["osrm"],
+    owner: authority,
+  });
+  const path = join(root, `data/.admin-target-control/leases/${lease.leaseId}/owner.json`);
+  const previous = readFileSync(path);
+  await a.cancelArtifactTargetLease(lease);
+  const { writeFileSync } = await import("node:fs");
+  writeFileSync(path, previous);
+  await expect(a.releaseArtifactTargetLease(lease)).rejects.toThrow(/rollback|replacement/);
+});
+it("rejects arbitrary caller text as effect evidence", async () => {
+  const authority = owner();
+  expect(() =>
+    retainControlEffectReceipt(authority, {
+      outcome: "committed",
+      publication: "committed",
+      receipt: "trust me",
+    }),
+  ).toThrow(/evidence|receipt/);
+});
+it("retains terminal maintenance ownership and permits only frozen one-use continuations", async () => {
+  const c = await import("./control-authority");
+  const a = await api();
+  const { writeFileSync } = await import("node:fs");
+  const agent = c.openControlInstallation({
+    infraDir: root,
+    role: "ops-agent",
+    serviceIds: ["motis", "osrm"],
+  });
+  const operation = {
+    kind: "configurationMaintenance.prepare",
+    maintenanceId: randomUUID(),
+    candidateId: randomUUID(),
+  };
+  const operationFingerprint = c.controlDigest(operation);
+  const deadlineAt = Date.now() + 60000;
+  const execution = {
+    executor: "ops-agent" as const,
+    principal: "api" as const,
+    executionId: `job1_${randomUUID().replaceAll("-", "")}`,
+    operationKey: `opk1_${randomUUID().replaceAll("-", "")}`,
+    operationFingerprint,
+    deadlineAt,
+    fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
+  };
+  const body = { kind: "service.recreate" as const, serviceId: "motis" };
+  const hash = opsOperationFingerprint(body);
+  const child = {
+    ...execution,
+    executionId: `job1_${randomUUID().replaceAll("-", "")}`,
+    operationKey: c.controlChildOperationKey(execution.operationKey, "maintenance-recreate", 0),
+    operationFingerprint: hash,
+    fingerprint: executionFingerprint({
+      kind: body.kind,
+      operationFingerprint: hash,
+      deadlineAt,
+      parent: c.retainedControlParent(execution),
+    }),
+  };
+  const plan = {
+    phase: "maintenance-recreate" as const,
+    ordinal: 0,
+    kind: body.kind,
+    execution: child,
+    serviceIds: ["motis"],
+    recipient: "ops-agent" as const,
+  };
+  const authority = c.retainAdmittedControlExecution(agent, {
+    execution,
+    kind: operation.kind,
+    operation,
+    admittedAt: deadlineAt - 60000,
+    serviceIds: ["motis"],
+    plan: [plan],
+  });
+  const lease = await a.acquireArtifactTargetLease({
+    dataRoot: join(root, "data"),
+    serviceIds: ["motis"],
+    owner: authority,
+  });
+  await expect(
+    a.delegateArtifactTargetLease(lease, { ...plan, childPublicKey: agent.publicKey }),
+  ).rejects.toThrow();
+  mkdirSync(join(root, "data/ops-agent"), { mode: 0o700 });
+  writeFileSync(
+    join(root, "data/ops-agent/jobs-v1.json"),
+    JSON.stringify({
+      version: 2,
+      jobs: [
+        {
+          operationId: execution.executionId,
+          operationKey: execution.operationKey,
+          operationFingerprint: execution.operationFingerprint,
+          fingerprint: execution.fingerprint,
+          deadlineAt,
+          state: "succeeded",
+          operation,
+          result: { state: "prepared" },
+          terminalAt: new Date().toISOString(),
+        },
+      ],
+    }),
+    { mode: 0o600 },
+  );
+  c.retainControlPreparedTerminal(authority);
+  await expect(
+    a.delegateArtifactTargetLease(lease, {
+      ...plan,
+      serviceIds: ["osrm"],
+      childPublicKey: agent.publicKey,
+    }),
+  ).rejects.toThrow();
+  const assertion = await a.delegateArtifactTargetLease(lease, {
+    ...plan,
+    childPublicKey: agent.publicKey,
+  });
+  await expect(
+    a.delegateArtifactTargetLease(lease, { ...plan, childPublicKey: agent.publicKey }),
+  ).rejects.toThrow(/replay/);
+  const peer = c.verifyRetainedLocalControlPeer(agent, {
+    assertion,
+    execution: child,
+    kind: body.kind,
+  });
+  const borrowed = await a.adoptArtifactTargetLease({
+    dataRoot: join(root, "data"),
+    assertion,
+    peer,
+    execution: child,
+    serviceIds: ["motis"],
+  });
+  const childAuthority = c.retainAdmittedControlExecution(agent, {
+    execution: child,
+    kind: body.kind,
+    operation: body,
+    parent: c.retainedControlParent(execution),
+    admittedAt: deadlineAt - 60000,
+    serviceIds: ["motis"],
+  });
+  await expect(a.releaseArtifactTargetLease(lease)).rejects.toThrow();
+  c.retainControlEffectReceipt(childAuthority, {
+    outcome: "failed_without_effect",
+    publication: "not_started",
+    receipt: { kind: "not-started" },
+  });
+  await a.settleArtifactTargetLeaseChild(borrowed, c.verifyControlEffectSettlement(agent, child));
+  c.retainControlEffectReceipt(authority, {
+    outcome: "failed_without_effect",
+    publication: "not_started",
+    receipt: { kind: "not-started" },
+  });
+  await a.settleArtifactTargetLeaseChild(lease, c.verifyControlEffectSettlement(agent, execution));
+  await a.releaseArtifactTargetLease(lease);
+  c.closeControlInstallation(agent);
+});
+it("orders physical target ownership before a nonblocking reservation, configuration writer and release store", async () => {
+  const { acquireConfigurationOwnership } = await import("../services/configuration-ownership");
+  const { acquireReleaseStoreLock } = await import("../services/release-store-lock");
+  const { rmdirSync } = await import("node:fs");
+  const a = await api();
+  const c = await import("./control-authority");
+  const authority = owner();
+  const lease = await a.acquireArtifactTargetLease({
+    dataRoot: join(root, "data"),
+    serviceIds: ["osrm"],
+    owner: authority,
+  });
+  const order = ["target"];
+  // The future DM durable reservation is a closed consumer. This fixture uses
+  // an actual exclusive directory, not an in-memory success flag.
+  const reservation = join(root, "data/transit-reservation-fixture");
+  mkdirSync(reservation, { mode: 0o700 });
+  order.push("reservation");
+  expect(() => mkdirSync(reservation, { mode: 0o700 })).toThrow();
+  expect(existsSync(join(root, "data/.admin-target-control/locks/osrm"))).toBe(true);
+  const releaseWriter = await acquireConfigurationOwnership(root);
+  order.push("configuration");
+  const store = await acquireReleaseStoreLock(root, {}, { failIfBusy: true });
+  order.push("release-store");
+  expect(existsSync(join(root, ".trusted-config-writer"))).toBe(true);
+  expect(order).toEqual(["target", "reservation", "configuration", "release-store"]);
+  store.release();
+  releaseWriter();
+  rmdirSync(reservation);
+  c.retainControlEffectReceipt(authority, {
+    outcome: "failed_without_effect",
+    publication: "not_started",
+    receipt: { kind: "not-started" },
+  });
+  await a.settleArtifactTargetLeaseChild(
+    lease,
+    c.verifyControlEffectSettlement(installation, authority.execution),
+  );
+  await a.releaseArtifactTargetLease(lease);
+});
+it("does not turn an already-started execution into no-effect evidence", async () => {
+  const c = await import("./control-authority");
+  const authority = owner();
+  c.beginControlEffect(authority);
+  expect(() =>
+    c.retainControlEffectReceipt(authority, {
+      outcome: "failed_without_effect",
+      publication: "not_started",
+      receipt: { kind: "not-started" },
+    }),
+  ).toThrow(/Started/);
+});
+it("does not restart effects after retaining unused-execution evidence", async () => {
+  const c = await import("./control-authority");
+  const authority = owner();
+  c.retainControlEffectReceipt(authority, {
+    outcome: "failed_without_effect",
+    publication: "not_started",
+    receipt: { kind: "not-started" },
+  });
+  expect(() => c.beginControlEffect(authority)).toThrow(/cannot restart/);
+});

@@ -1,5 +1,6 @@
 import { accessSync, constants } from "node:fs";
 import { join } from "node:path";
+import { loadControlStartup } from "@openmapx/core/build-artifacts";
 import { createFatalProcessHandler } from "@openmapx/core/server";
 import Fastify from "fastify";
 import { registerApi } from "./api.js";
@@ -29,6 +30,12 @@ import { StateStore } from "./state.js";
 const app = Fastify({ loggerInstance: rootLogger });
 registerAuth(app, resolveAuthToken(app));
 const readiness = new DataManagerReadiness();
+const controlStartup = loadControlStartup({
+  infraDir: "/data",
+  role: "data-manager",
+  container: true,
+});
+if (controlStartup.reason) app.log.warn(controlStartup.reason);
 
 const dataDir = process.env.DATA_DIR ?? "/data";
 const offlinePackageStorage = new OfflinePackageStorage(join(dataDir, "offline-packages"));

@@ -1,0 +1,46 @@
+// Server-only surface: intentionally absent from core's browser barrels.
+
+export * from "./archive";
+export {
+  type ArtifactDelegationAssertion,
+  attestParentExecution,
+  beginControlEffect,
+  beginFixedCliExecution,
+  CONTROL_RECOVERY_INSTRUCTIONS,
+  type ControlAdoption,
+  type ControlChildPhase,
+  type ControlInstallation,
+  type ControlPlannedChild,
+  type ControlRecipient,
+  closeControlInstallation,
+  controlAdoptionSchema,
+  controlChildOperationKey,
+  controlHeaders,
+  fixedCliArguments,
+  loadControlStartup,
+  openControlInstallation,
+  openFixedChildInstallation,
+  prepareFixedControlChild,
+  provisionControlInstallation,
+  readFixedCliSpawnIntent,
+  restoreAdmittedControlExecution,
+  retainAdmittedControlExecution,
+  retainControlEffectReceipt,
+  retainControlPreparedTerminal,
+  retainedControlAdoptionAssertion,
+  retainedControlParent,
+  retainFixedCliSpawnIntent,
+  type VerifiedChildSettlement,
+  type VerifiedControlPeer,
+  type VerifiedExecutionAuthority,
+  type VerifiedRecoveryAuthority,
+  verifyControlEffectSettlement,
+  verifyControlPeer,
+  verifyControlRecoveryAuthority,
+  verifyFixedCliControlPeer,
+  verifyParentExecution,
+  verifyRetainedLocalControlPeer,
+} from "./control-authority";
+export * from "./manifest";
+export { inspectControlAdmission, verifiedParentForArtifactDelegation } from "./peer-admission";
+export * from "./target-lease";

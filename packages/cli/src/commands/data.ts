@@ -9,6 +9,7 @@ import {
   exportBuildBundle,
   importBuildBundle,
 } from "../lib/build-artifacts";
+import { completeCliCommand } from "../lib/control-context";
 import {
   applyDataCleanup,
   collectOfflineDataStatus,
@@ -280,14 +281,14 @@ export function registerDataCommands(program: Command): void {
           await runFontDownload(transport);
         } else {
           log.err(`Unknown kind: ${kind} (use osm | gtfs | fonts)`);
-          process.exit(1);
+          completeCliCommand(1);
         }
       } catch (err) {
         log.err(`download failed: ${(err as Error).message}`);
         if (!(err as Error).message.startsWith("region required")) {
           dataManagerHint();
         }
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -301,7 +302,7 @@ export function registerDataCommands(program: Command): void {
         const serviceId = resolveDataBuildServiceId(kind);
         if (!serviceId) {
           log.err(`Unknown kind: ${kind} (use: motis | osrm | otp | pelias | tileserver)`);
-          process.exit(1);
+          completeCliCommand(1);
         }
         const result = await buildServices({
           mode: "explicit",
@@ -312,7 +313,7 @@ export function registerDataCommands(program: Command): void {
         await renderAndApplyHardlinks();
       } catch (err) {
         log.err(`build failed: ${(err as Error).message}`);
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -338,7 +339,7 @@ export function registerDataCommands(program: Command): void {
         );
       } catch (err) {
         log.err(`export failed: ${(err as Error).message}`);
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -353,7 +354,7 @@ export function registerDataCommands(program: Command): void {
         manifest = await importBuildBundle({ bundle, runningServices: runningComposeServices });
       } catch (err) {
         log.err(`import failed: ${(err as Error).message}`);
-        process.exit(1);
+        completeCliCommand(1);
       }
       log.ok(
         `Imported ${manifest.service} (${manifest.files.length} files, built ${manifest.builtAt}${manifest.revision ? ` at ${manifest.revision.slice(0, 12)}` : ""})`,
@@ -364,7 +365,7 @@ export function registerDataCommands(program: Command): void {
         log.err(
           `The artifact is in place, but rendering and linking failed: ${(err as Error).message}. Fix that, then run \`openmapx data link\`.`,
         );
-        process.exit(1);
+        completeCliCommand(1);
       }
       log.info(
         `Start the consumers with \`openmapx services start ${buildArtifactSpec(manifest.service).consumers.join(" ")}\``,
@@ -394,7 +395,7 @@ export function registerDataCommands(program: Command): void {
           if (!(err as Error).message.startsWith("region required")) {
             dataManagerHint();
           }
-          process.exit(1);
+          completeCliCommand(1);
         }
 
         try {
@@ -410,13 +411,13 @@ export function registerDataCommands(program: Command): void {
             log.err(
               `update completed with ${buildResult.failures.length} build failure${buildResult.failures.length === 1 ? "" : "s"}`,
             );
-            process.exit(1);
+            completeCliCommand(1);
           }
 
           log.ok("Update complete");
         } catch (err) {
           log.err(`update failed: ${(err as Error).message}`);
-          process.exit(1);
+          completeCliCommand(1);
         }
       },
     );
@@ -447,12 +448,12 @@ export function registerDataCommands(program: Command): void {
           log.ok(`Converted → ${r.targetBz2} (${(r.sizeBytes / 1e9).toFixed(2)} GB)`);
         } else {
           log.err(`Unknown kind: ${kind} (use: overpass)`);
-          process.exit(1);
+          completeCliCommand(1);
         }
       } catch (err) {
         log.err(`convert failed: ${(err as Error).message}`);
         dataManagerHint();
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -474,7 +475,7 @@ export function registerDataCommands(program: Command): void {
         );
       } catch (err) {
         log.err(`link failed: ${(err as Error).message}`);
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -491,7 +492,7 @@ export function registerDataCommands(program: Command): void {
       } catch (err) {
         log.err(`sync failed: ${(err as Error).message}`);
         dataManagerHint();
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -511,7 +512,7 @@ export function registerDataCommands(program: Command): void {
         log.err(
           `search-index build requires a region (for example europe/germany) or $${OPENMAPX_REGION_ENV}`,
         );
-        process.exit(1);
+        completeCliCommand(1);
         return;
       }
       try {
@@ -526,7 +527,7 @@ export function registerDataCommands(program: Command): void {
       } catch (err) {
         log.err(`search-index build failed: ${(err as Error).message}`);
         dataManagerHint();
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -562,7 +563,7 @@ export function registerDataCommands(program: Command): void {
       } catch (err) {
         log.err(`search-index status failed: ${(err as Error).message}`);
         dataManagerHint();
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -586,7 +587,7 @@ export function registerDataCommands(program: Command): void {
       } catch (err) {
         log.err(`notable-places build failed: ${(err as Error).message}`);
         dataManagerHint();
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -620,7 +621,7 @@ export function registerDataCommands(program: Command): void {
       } catch (err) {
         log.err(`notable-places status failed: ${(err as Error).message}`);
         dataManagerHint();
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -658,7 +659,7 @@ export function registerDataCommands(program: Command): void {
       } catch (err) {
         log.err(`source list failed: ${(err as Error).message}`);
         dataManagerHint();
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -683,7 +684,7 @@ export function registerDataCommands(program: Command): void {
       ) => {
         if (!options.licenseSpdx && !options.licenseUrl) {
           log.err("source add requires --license-spdx or --license-url");
-          process.exit(1);
+          completeCliCommand(1);
         }
         try {
           const result = dm.unwrapDataManagerResponse(
@@ -705,7 +706,7 @@ export function registerDataCommands(program: Command): void {
         } catch (err) {
           log.err(`source add failed: ${(err as Error).message}`);
           dataManagerHint();
-          process.exit(1);
+          completeCliCommand(1);
         }
       },
     );
@@ -722,7 +723,7 @@ export function registerDataCommands(program: Command): void {
       } catch (err) {
         log.err(`source remove failed: ${(err as Error).message}`);
         dataManagerHint();
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -738,7 +739,7 @@ export function registerDataCommands(program: Command): void {
       } catch (err) {
         log.err(`source enable failed: ${(err as Error).message}`);
         dataManagerHint();
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -800,7 +801,7 @@ export function registerDataCommands(program: Command): void {
         }
       } catch (err) {
         log.err(`clean failed: ${(err as Error).message}`);
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -831,7 +832,7 @@ export function registerDataCommands(program: Command): void {
       } catch (err) {
         log.err(`overture-sync failed: ${(err as Error).message}`);
         dataManagerHint();
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -854,7 +855,7 @@ export function registerDataCommands(program: Command): void {
       } catch (err) {
         log.err(`overture-pull failed: ${(err as Error).message}`);
         dataManagerHint();
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -877,7 +878,7 @@ export function registerDataCommands(program: Command): void {
       } catch (err) {
         log.err(`overture-ingest failed: ${(err as Error).message}`);
         dataManagerHint();
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -901,7 +902,7 @@ export function registerDataCommands(program: Command): void {
           log.err(
             `overture-conflate failed: ${result.message ?? result.status ?? "unknown error"}`,
           );
-          process.exit(1);
+          completeCliCommand(1);
         }
         if (result.status === "already_running") {
           log.warn(
@@ -926,7 +927,7 @@ export function registerDataCommands(program: Command): void {
       } catch (err) {
         log.err(`overture-conflate failed: ${(err as Error).message}`);
         dataManagerHint();
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -941,7 +942,7 @@ export function registerDataCommands(program: Command): void {
       } catch (err) {
         log.err(`overture-status failed: ${(err as Error).message}`);
         dataManagerHint();
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -964,7 +965,7 @@ export function registerDataCommands(program: Command): void {
       } catch (err) {
         log.err(`overture-extract failed: ${(err as Error).message}`);
         dataManagerHint();
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -1000,7 +1001,7 @@ export function registerDataCommands(program: Command): void {
         log.dim("Fill in missing values, then run: openmapx data sync");
       } catch (err) {
         log.err(`generate-api-keys failed: ${(err as Error).message}`);
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 

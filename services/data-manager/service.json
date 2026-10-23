@@ -140,17 +140,38 @@
       "startPeriod": "120s"
     },
     "dependsOn": [
-      { "service": "postgis", "condition": "service_healthy" },
-      { "service": "ops-agent", "condition": "service_healthy" },
-      { "service": "transitous-runner", "condition": "service_healthy" }
+      {
+        "service": "postgis",
+        "condition": "service_healthy"
+      },
+      {
+        "service": "ops-agent",
+        "condition": "service_healthy"
+      },
+      {
+        "service": "transitous-runner",
+        "condition": "service_healthy"
+      }
     ]
   },
   "provides": ["osm-data", "gtfs-data", "tile-asset-data"],
   "produces": [
-    { "type": "osm-pbf", "sourceDir": "data/osm" },
-    { "type": "osm-pbf-bz2", "sourceDir": "data/osm-bz2" },
-    { "type": "gtfs", "sourceDir": "data/gtfs" },
-    { "type": "tile-fonts", "sourceDir": "data/tile-fonts" }
+    {
+      "type": "osm-pbf",
+      "sourceDir": "data/osm"
+    },
+    {
+      "type": "osm-pbf-bz2",
+      "sourceDir": "data/osm-bz2"
+    },
+    {
+      "type": "gtfs",
+      "sourceDir": "data/gtfs"
+    },
+    {
+      "type": "tile-fonts",
+      "sourceDir": "data/tile-fonts"
+    }
   ],
   "bindMounts": [
     {
@@ -163,7 +184,11 @@
       "target": "/run/secrets/transitous-runner-capability",
       "readOnly": true
     },
-    { "source": "@infra:data", "target": "/data", "readOnly": false },
+    {
+      "source": "@infra:data",
+      "target": "/data",
+      "readOnly": false
+    },
     {
       "source": "@service:motis:tools/transitous",
       "target": "/config/transitous",
@@ -174,10 +199,33 @@
       "target": "/secrets/transitous-feed-proxy.age",
       "readOnly": true,
       "optional": true
+    },
+    {
+      "source": "@infra:secrets/control-data-manager.key",
+      "target": "/run/secrets/openmapx-control-role-key",
+      "readOnly": true
+    },
+    {
+      "source": "@infra:secrets/control-verifiers.json",
+      "target": "/run/secrets/openmapx-control-verifiers",
+      "readOnly": true
+    },
+    {
+      "source": "@infra:control-private/data-manager",
+      "target": "/var/lib/openmapx/control-private",
+      "readOnly": false
     }
   ],
   "exposure": {
-    "hostPorts": [{ "container": 4000, "host": 4000, "bindAddress": "127.0.0.1" }]
+    "hostPorts": [
+      {
+        "container": 4000,
+        "host": 4000,
+        "bindAddress": "127.0.0.1"
+      }
+    ]
   },
-  "ui": { "category": "infrastructure" }
+  "ui": {
+    "category": "infrastructure"
+  }
 }

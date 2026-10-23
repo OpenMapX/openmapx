@@ -1,5 +1,6 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import rateLimit, { normalizeIP } from "@fastify/rate-limit";
+import { controlHeaders } from "@openmapx/core/build-artifacts";
 import { assertProductionApplicationSecret } from "@openmapx/core/deployment-secret-policy";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
@@ -98,6 +99,16 @@ export function registerAuth(app: FastifyInstance, expectedToken: string): void 
           .header("Retry-After", String(limit.ttlInSeconds))
           .send({ error: "Too many authentication attempts" });
       return reply.code(401).send({ error: "Unauthorized" });
+    }
+    // Task02.3 owns durable receiver admission. Never silently ignore an internal authority header.
+    try {
+      const headers = controlHeaders(req.raw.rawHeaders);
+      if (headers.delegation !== undefined || headers.parent !== undefined)
+        return reply
+          .code(503)
+          .send({ error: "Managed data-manager execution requires the durable receiver upgrade" });
+    } catch {
+      return reply.code(403).send({ error: "Invalid control authority" });
     }
   });
 }

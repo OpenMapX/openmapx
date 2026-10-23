@@ -1,5 +1,23 @@
 import { createHash, randomBytes as nodeRandomBytes, timingSafeEqual } from "node:crypto";
 import {
+  assertArtifactTargetLeaseForward,
+  type BorrowedArtifactTargetLease,
+  beginControlEffect,
+  type ControlInstallation,
+  cancelArtifactTargetLease,
+  closeArtifactTargetLeaseHandle,
+  inspectControlAdmission,
+  controlHeaders as readControlHeaders,
+  restoreAdmittedControlExecution,
+  retainAdmittedControlExecution,
+  retainControlEffectReceipt,
+  retainedControlAdoptionAssertion,
+  settleArtifactTargetLeaseChild,
+  type VerifiedExecutionAuthority,
+  verifyControlEffectSettlement,
+  verifyRetainedArtifactTargetSettlement,
+} from "@openmapx/core/build-artifacts";
+import {
   type ConfigurationApplyResult,
   configurationApplyResultSchema,
   type ExecutionRef,
@@ -114,6 +132,7 @@ export interface OpsAuditEvent {
 }
 
 export interface BuildOpsAgentServerOptions {
+  controlInstallation?: ControlInstallation;
   tokens: Record<OpsRole, string>;
   releaseRecovery?: { ready: boolean; reason?: "recovery_required" };
   resourcePolicy?: OpsResourcePolicy;
@@ -385,7 +404,15 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     }
   };
 
+  const controlLeases = new Map<string, BorrowedArtifactTargetLease>();
+  const controlAuthorities = new Map<string, VerifiedExecutionAuthority>();
+  app.addHook("onClose", async () => {
+    for (const lease of controlLeases.values()) closeArtifactTargetLeaseHandle(lease);
+    controlLeases.clear();
+    controlAuthorities.clear();
+  });
   const persisted = (job: JobRecord): PersistedOpsJob => ({
+    ...(job.controlAdoption ? { controlAdoption: job.controlAdoption } : {}),
     ...(job.executionVersion === 2
       ? {
           executionVersion: 2 as const,
@@ -510,6 +537,24 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   ): Promise<void> => {
     await withAdmissionLock(async () => {
       const updatedAt = now().toISOString();
+      const lease = controlLeases.get(job.operationId);
+      const authority = controlAuthorities.get(job.operationId);
+      if (lease && state === "termination_pending") await cancelArtifactTargetLease(lease);
+      if (lease && authority && ["succeeded", "failed", "timed_out"].includes(state)) {
+        // The fixed runtime's validated result is own-effect evidence. Failure alone is not containment.
+        const committed = state === "succeeded" && updates.result !== undefined;
+        retainControlEffectReceipt(authority, {
+          outcome: committed ? "committed" : "unknown",
+          publication: committed ? "committed" : "unknown",
+          receipt: committed
+            ? { kind: "ops-result", result: updates.result }
+            : { kind: "unresolved" },
+        });
+        await settleArtifactTargetLeaseChild(
+          lease,
+          verifyControlEffectSettlement(options.controlInstallation!, authority.execution),
+        );
+      }
       const candidate: JobRecord = { ...job, ...updates, state, updatedAt };
       await journal.replace(
         [...jobsById.values()].map((entry) => persisted(entry === job ? candidate : entry)),
@@ -517,6 +562,11 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       Object.assign(job, updates);
       job.updatedAt = updatedAt;
       job.state = state;
+      if (lease && ["succeeded", "failed", "timed_out"].includes(state)) {
+        closeArtifactTargetLeaseHandle(lease);
+        controlLeases.delete(job.operationId);
+        controlAuthorities.delete(job.operationId);
+      }
       job.cursor += 1;
       pushEvent(job, {
         cursor: job.cursor,
@@ -560,6 +610,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     signal,
     claim,
     execution: executionFor(job),
+    artifactLease: controlLeases.get(job.operationId),
+    controlAuthority: controlAuthorities.get(job.operationId),
     otherActiveOperations: () =>
       [...jobsById.values()].filter(
         (other) =>
@@ -689,6 +741,12 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         if ((job.deadlineAt ?? 0) <= now().getTime()) {
           timedOut = true;
           throw new OpsExecutionFailure("timeout", {});
+        }
+        const authority = controlAuthorities.get(job.operationId);
+        if (authority) {
+          const lease = controlLeases.get(job.operationId);
+          if (lease) assertArtifactTargetLeaseForward(lease);
+          beginControlEffect(authority);
         }
         return dispatch(job.operation, runtime, contextFor(job, controller.signal, claim));
       })
@@ -939,6 +997,56 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     };
   });
 
+  // No replay during restart. Rejoin only the original signed adoption and settle
+  // from an already retained own-effect receipt; absent evidence keeps its fence.
+  app.addHook("onReady", async () => {
+    let changed = false;
+    for (const job of jobsById.values()) {
+      if (!job.controlAdoption) continue;
+      try {
+        if (!options.controlInstallation) throw Error("Control trust unavailable");
+        const execution = executionFor(job);
+        if (job.state === "succeeded") {
+          verifyRetainedArtifactTargetSettlement(
+            options.controlInstallation,
+            job.controlAdoption,
+            execution,
+          );
+          continue;
+        }
+        const assertion = retainedControlAdoptionAssertion(
+          options.controlInstallation,
+          job.controlAdoption,
+          execution,
+        );
+        const admission = inspectControlAdmission(options.controlInstallation, {
+          rawHeaders: ["x-openmapx-control-delegation", assertion],
+          transportPrincipal: "data-manager",
+          kind: job.operation.kind,
+          operationKey: job.operationKey,
+          operationFingerprint: execution.operationFingerprint,
+          requestedDeadlineAt: execution.deadlineAt,
+        });
+        const lease = await admission.adopt(execution);
+        const authority = restoreAdmittedControlExecution(options.controlInstallation, execution);
+        controlLeases.set(job.operationId, lease);
+        controlAuthorities.set(job.operationId, authority);
+        await settleArtifactTargetLeaseChild(
+          lease,
+          verifyControlEffectSettlement(options.controlInstallation, execution),
+        );
+      } catch {
+        job.controlAdoption = { ...job.controlAdoption, phase: "recovery_required" };
+        job.state = "failed";
+        job.errorClass = "recovery_required";
+        job.result = undefined;
+        stickyRecoveryRequired.add(job.operationId);
+        changed = true;
+      }
+    }
+    if (changed) await journal.replace([...jobsById.values()].map(persisted));
+  });
+
   app.post("/v1/operations", async (request, reply) => {
     const startedAt = Date.now();
     const requestId = requestIdFromBody(request.body);
@@ -957,16 +1065,36 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       const policy = OPS_KIND_POLICIES[operation.kind];
       const operationFingerprint = opsOperationFingerprint(operation);
       let parent: VerifiedParentExecution | undefined;
+      let controlAdmission: ReturnType<typeof inspectControlAdmission> | undefined;
       const parentHeader = request.headers["x-openmapx-parent-execution"];
       const delegationHeader = request.headers["x-openmapx-control-delegation"];
-      const controlHeaders = request.raw.rawHeaders
-        .filter((_, i) => i % 2 === 0)
-        .map((x) => x.toLowerCase());
-      if (
-        delegationHeader !== undefined ||
-        controlHeaders.filter((x) => x === "x-openmapx-parent-execution").length > 1
-      )
+      try {
+        readControlHeaders(request.raw.rawHeaders);
+      } catch {
         throw new RequestGuardError("authorization", 403);
+      }
+      if (delegationHeader !== undefined) {
+        if (
+          !options.controlInstallation ||
+          role !== "data-manager" ||
+          parsed.version !== 2 ||
+          parentHeader !== undefined
+        )
+          throw new RequestGuardError("authorization", 403);
+        try {
+          controlAdmission = inspectControlAdmission(options.controlInstallation, {
+            rawHeaders: request.raw.rawHeaders,
+            transportPrincipal: "data-manager",
+            kind,
+            operationKey: parsed.operationKey,
+            operationFingerprint,
+            requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
+          });
+          parent = controlAdmission.parent;
+        } catch {
+          throw new RequestGuardError("authorization", 403);
+        }
+      }
       if (parsed.version === 1 && (parentHeader !== undefined || delegationHeader !== undefined))
         throw new RequestGuardError("authorization", 403);
       if (parentHeader !== undefined) {
@@ -1126,9 +1254,11 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           if (jobsById.size >= maxJobEntries) throw new RequestGuardError("busy", 429);
           if (normalized.deadlineAt <= now().getTime()) throw new RequestGuardError("timeout", 504);
           const timestamp = new Date(normalized.admittedAt).toISOString();
-          let operationId: string | undefined;
+          let operationId: string | undefined = controlAdmission?.execution.executionId;
+          if (operationId && jobsById.has(operationId))
+            throw new RequestGuardError("conflict", 409);
           try {
-            for (let attempt = 0; attempt < MAX_JOB_ID_ATTEMPTS; attempt += 1) {
+            for (let attempt = 0; !operationId && attempt < MAX_JOB_ID_ATTEMPTS; attempt += 1) {
               const candidate = `job1_${Buffer.from(randomBytes(18)).toString("base64url")}`;
               if (OPERATION_ID_PATTERN.test(candidate) && !jobsById.has(candidate)) {
                 operationId = candidate;
@@ -1140,6 +1270,15 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           }
           if (!operationId) throw new RequestGuardError("busy", 429);
           const job: JobRecord = {
+            ...(controlAdmission
+              ? {
+                  controlAdoption: {
+                    leaseId: controlAdmission.leaseId,
+                    delegationId: controlAdmission.delegationId,
+                    phase: "pending-adoption" as const,
+                  },
+                }
+              : {}),
             role,
             operation,
             operationId,
@@ -1166,6 +1305,37 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           await journal.replace([...jobsById.values()].map(persisted).concat(persisted(job)));
           jobsById.set(job.operationId, job);
           jobsByKey.set(ownerKey, job);
+          if (controlAdmission) {
+            try {
+              const lease = await controlAdmission.adopt(executionFor(job));
+              const authority = retainAdmittedControlExecution(options.controlInstallation!, {
+                execution: executionFor(job),
+                kind: job.operation.kind,
+                operation: job.operation,
+                admittedAt: job.admittedAt!,
+                parent: job.parent,
+                serviceIds: lease.serviceIds,
+              });
+              controlLeases.set(job.operationId, lease);
+              controlAuthorities.set(job.operationId, authority);
+              job.controlAdoption = { ...job.controlAdoption!, phase: "ready" };
+              await journal.replace([...jobsById.values()].map(persisted));
+            } catch (error) {
+              // The receiver may already have adopted. This identity remains
+              // observable as recovery-required and is never dispatched again.
+              job.controlAdoption = { ...job.controlAdoption!, phase: "recovery_required" };
+              forceRecoveryRequired(job);
+              try {
+                await journal.replace([...jobsById.values()].map(persisted));
+              } catch (persistence) {
+                throw new AggregateError(
+                  [error, persistence],
+                  "Control adoption requires reconciliation",
+                );
+              }
+              throw error;
+            }
+          }
           return { type: "new", job } as const;
         }).catch(async (error) => {
           await claimAdmission?.rollback().catch(() => undefined);

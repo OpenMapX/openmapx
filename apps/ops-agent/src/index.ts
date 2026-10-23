@@ -1,6 +1,7 @@
 import { constants, existsSync } from "node:fs";
 import { open } from "node:fs/promises";
 import { join } from "node:path";
+import { loadControlStartup } from "@openmapx/core/build-artifacts";
 import { readOpsTokenFile } from "@openmapx/core/ops";
 import { repoPaths, services } from "@openmapx/core/server";
 import {
@@ -130,6 +131,13 @@ async function main(): Promise<void> {
       service.enabled = bootstrapEnabledServiceIds.has(service.manifest.id);
     }
     const journal = await openOpsJobJournal(config.journalFile);
+    const controlStartup = loadControlStartup({
+      infraDir: paths.infraDir,
+      role: "ops-agent",
+      serviceIds: [...builtInServices, ...communityServices].map((s) => s.manifest.id),
+      container: existsSync("/run/secrets/openmapx-control-verifiers"),
+    });
+    if (controlStartup.reason) console.error(controlStartup.reason);
     await initializeTrustedSnapshotDirectory(config.trustedConfigDirectory, {
       allowedUids: [uid],
       expectedGid: gid,
@@ -246,6 +254,7 @@ async function main(): Promise<void> {
           },
         }),
         journal,
+        controlInstallation: controlStartup.installation,
         runtime,
         replacementInProgress: () => {
           try {

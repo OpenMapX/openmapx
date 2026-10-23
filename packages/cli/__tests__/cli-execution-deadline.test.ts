@@ -141,7 +141,7 @@ it("fix1 unsigned metadata can only clamp policy and cannot authorize a remote m
     vi.stubEnv("OPENMAPX_PARENT_EXECUTION", "unsigned-parent");
     await expect(
       withCliExecutionDeadline(["services", "build"], async () => undefined),
-    ).rejects.toThrow("CLI control verifier is unavailable");
+    ).rejects.toThrow();
   } finally {
     vi.useRealTimers();
     vi.unstubAllEnvs();

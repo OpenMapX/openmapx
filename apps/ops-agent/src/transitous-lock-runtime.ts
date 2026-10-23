@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import type { OpsResultFor } from "@openmapx/core/ops";
-import type { OpsRuntime } from "./runtime";
+import { OpsNotWiredError, type OpsRuntime } from "./runtime";
 
 // The catalog lock lives in the repository's `infra/docker/`, which only the
 // operations agent may write. Data-manager and the API previously bind-mounted
@@ -134,28 +134,13 @@ export function createTransitousLockRuntime(
     return { ref: operation.ref, proposed: true as const };
   };
 
-  runtime["transitousLock.approve"] = async (operation) => {
-    const proposal = readLockAt(proposedPath);
-    if (!proposal) throw new Error("No Transitous lock proposal to approve");
-    if (proposal.ref !== operation.ref) {
-      // The reviewer approved a different ref than the one now proposed.
-      throw new Error("Transitous lock proposal does not match the approved ref");
-    }
-    const lockedAt = now().toISOString();
-    atomicWriteJson(lockPath, {
-      ref: proposal.ref,
-      submodules: proposal.submodules,
-      lockedAt,
-      lockedBy: operation.approvedBy,
-      comment: "Approved after compatibility review and inactive-slot validation.",
-    });
-    try {
-      unlinkSync(proposedPath);
-    } catch {
-      // The activation already committed; a leftover proposal is inert because
-      // `approve` re-reads and re-matches it.
-    }
-    return { ref: proposal.ref, lockedAt };
+  // The legacy ref-only approval cannot prove paired generation/pointer ownership.
+  // Tasks02.3/05.3 replace this same operation with durable paired-pin admission.
+  runtime["transitousLock.approve"] = async () => {
+    const error = new OpsNotWiredError();
+    error.message =
+      "Transitous approval requires the durable paired-pin publication upgrade; retain the proposal and inspect current status";
+    throw error;
   };
 
   return runtime;

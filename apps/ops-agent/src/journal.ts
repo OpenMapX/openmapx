@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import { mkdir, open, opendir, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { type ControlAdoption, controlAdoptionSchema } from "@openmapx/core/build-artifacts";
 import {
   OPS_KIND_POLICIES,
   OPS_PUBLIC_ERROR_MESSAGES,
@@ -40,6 +41,7 @@ const ERROR_CLASSES = new Set<OpsErrorClass>(
 );
 
 export interface PersistedOpsJob {
+  controlAdoption?: ControlAdoption;
   executionVersion?: 2;
   requestVersion?: 1 | 2;
   admittedAt?: number;
@@ -97,6 +99,7 @@ function parseJob(value: unknown): PersistedOpsJob {
   if (
     !exactKeys(raw, [
       "executionVersion",
+      "controlAdoption",
       "requestVersion",
       "admittedAt",
       "deadlineAt",
@@ -138,6 +141,10 @@ function parseJob(value: unknown): PersistedOpsJob {
       (typeof raw.errorClass !== "string" || !ERROR_CLASSES.has(raw.errorClass as OpsErrorClass)))
   ) {
     throw new Error("invalid");
+  }
+  if (raw.controlAdoption !== undefined) {
+    controlAdoptionSchema.parse(raw.controlAdoption);
+    if (raw.executionVersion !== 2) throw Error("invalid control adoption");
   }
   const operation = opsOperationSchema.parse(raw.operation);
   if (

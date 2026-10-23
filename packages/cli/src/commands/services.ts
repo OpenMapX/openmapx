@@ -1,6 +1,7 @@
 import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
 import kleur from "kleur";
+import { completeCliCommand } from "../lib/control-context";
 import { dockerComposeStream } from "../lib/docker";
 import { applyGeneratedHardlinks } from "../lib/hardlinks";
 import { log, table } from "../lib/output";
@@ -181,7 +182,7 @@ function mergeIdsWithPresets(ids: string[], preset: string | undefined): string[
   } catch (err) {
     if (err instanceof UnknownPresetError) {
       log.err(err.message);
-      process.exit(1);
+      completeCliCommand(1);
     }
     throw err;
   }
@@ -202,7 +203,7 @@ export function registerServicesCommands(program: Command): void {
         for (const warning of applied.selection.warnings) log.warn(warning);
       } catch (err) {
         log.err((err as Error).message);
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -221,7 +222,7 @@ export function registerServicesCommands(program: Command): void {
         if ((err as Error).message.includes(SERVICE_SELECTION_ENV)) {
           log.dim(`Selection file was not changed.`);
         }
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -240,7 +241,7 @@ export function registerServicesCommands(program: Command): void {
         if ((err as Error).message.includes(SERVICE_SELECTION_ENV)) {
           log.dim(`Selection file was not changed.`);
         }
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -273,7 +274,7 @@ export function registerServicesCommands(program: Command): void {
       const svc = list.find((s) => s.manifest.id === id);
       if (!svc) {
         log.err(`Service not found: ${id}`);
-        process.exit(1);
+        completeCliCommand(1);
       }
       console.log(JSON.stringify(svc.manifest, null, 2));
     });
@@ -307,11 +308,11 @@ export function registerServicesCommands(program: Command): void {
           log.err(
             `build-all completed with ${result.failures.length} failure${result.failures.length === 1 ? "" : "s"}`,
           );
-          process.exit(1);
+          completeCliCommand(1);
         }
       } catch (err) {
         log.err(`build-all failed: ${(err as Error).message}`);
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -357,11 +358,11 @@ export function registerServicesCommands(program: Command): void {
             log.err(
               `build completed with ${result.failures.length} failure${result.failures.length === 1 ? "" : "s"}`,
             );
-            process.exit(1);
+            completeCliCommand(1);
           }
         } catch (err) {
           log.err(`build failed: ${(err as Error).message}`);
-          process.exit(1);
+          completeCliCommand(1);
         }
       },
     );
@@ -379,7 +380,7 @@ export function registerServicesCommands(program: Command): void {
       const allIds = mergeIdsWithPresets(ids, options.preset);
       if (allIds.length === 0) {
         log.err("No services selected. Pass <ids...> or --preset.");
-        process.exit(1);
+        completeCliCommand(1);
       }
       try {
         // Don't pass `services: allIds` — that would narrow the persisted
@@ -397,7 +398,7 @@ export function registerServicesCommands(program: Command): void {
         );
       } catch (err) {
         log.err(`prepare/start failed: ${(err as Error).message}`);
-        process.exit(1);
+        completeCliCommand(1);
       }
       if (touchesReleasePinnedServices(allIds)) {
         const overlay = await ensureReleaseOverlay();
@@ -407,13 +408,13 @@ export function registerServicesCommands(program: Command): void {
           for (const line of releaseStatusLines(overlay.path)) log.dim(line);
         } else if (overlay.status === "unpinned") {
           log.err(unpinnedReleaseWarning(overlay.reason));
-          process.exit(1);
+          completeCliCommand(1);
         } else if (overlay.status === "disabled") {
           log.dim("Release pinning disabled (OPENMAPX_RELEASE=local); using manifest image tags.");
         }
       }
       const code = await dockerComposeStream(["up", "-d", ...allIds]);
-      process.exit(code);
+      completeCliCommand(code);
     });
 
   services
@@ -424,10 +425,10 @@ export function registerServicesCommands(program: Command): void {
       const allIds = mergeIdsWithPresets(ids, options.preset);
       if (allIds.length === 0) {
         log.err("No services selected. Pass <ids...> or --preset.");
-        process.exit(1);
+        completeCliCommand(1);
       }
       const code = await dockerComposeStream(["stop", ...allIds]);
-      process.exit(code);
+      completeCliCommand(code);
     });
 
   services
@@ -440,10 +441,10 @@ export function registerServicesCommands(program: Command): void {
       const allIds = mergeIdsWithPresets(ids, options.preset);
       if (allIds.length === 0) {
         log.err("No services selected. Pass <ids...> or --preset.");
-        process.exit(1);
+        completeCliCommand(1);
       }
       const code = await dockerComposeStream(["restart", ...allIds]);
-      process.exit(code);
+      completeCliCommand(code);
     });
 
   services
@@ -457,7 +458,7 @@ export function registerServicesCommands(program: Command): void {
       const allIds = mergeIdsWithPresets(ids, options.preset);
       if (allIds.length === 0) {
         log.err("No services selected. Pass <ids...> or --preset.");
-        process.exit(1);
+        completeCliCommand(1);
       }
       try {
         // Render the operator's selection (env / service-selection.json), NOT
@@ -473,7 +474,7 @@ export function registerServicesCommands(program: Command): void {
         );
       } catch (err) {
         log.err(`prepare/update failed: ${(err as Error).message}`);
-        process.exit(1);
+        completeCliCommand(1);
       }
 
       let releasePinned = false;
@@ -487,7 +488,7 @@ export function registerServicesCommands(program: Command): void {
           for (const line of releaseStatusLines(overlay.path)) log.dim(line);
         } else if (overlay.status === "unpinned") {
           log.err(unpinnedReleaseWarning(overlay.reason));
-          process.exit(1);
+          completeCliCommand(1);
         } else if (overlay.status === "disabled") {
           log.warn(
             "Release pinning is disabled (OPENMAPX_RELEASE=local); this update uses the manifest image tags instead of a digest-pinned release.",
@@ -499,7 +500,7 @@ export function registerServicesCommands(program: Command): void {
       if (pullCode !== 0) {
         if (releasePinned) {
           log.err("Could not pull the pinned release images; refusing to recreate services.");
-          process.exit(pullCode);
+          completeCliCommand(pullCode);
         }
         log.warn("Some images could not be pulled (service may be locally built). Continuing.");
       }
@@ -511,7 +512,7 @@ export function registerServicesCommands(program: Command): void {
         ...(options.deps === false ? ["--no-deps"] : []),
         ...allIds,
       ]);
-      process.exit(code);
+      completeCliCommand(code);
     });
 
   services
@@ -520,7 +521,7 @@ export function registerServicesCommands(program: Command): void {
     .action(async (id?: string) => {
       const args = id ? ["ps", id] : ["ps"];
       const code = await dockerComposeStream(args);
-      process.exit(code);
+      completeCliCommand(code);
     });
 
   services
@@ -533,7 +534,7 @@ export function registerServicesCommands(program: Command): void {
       if (options.follow) args.push("-f");
       args.push(id);
       const code = await dockerComposeStream(args);
-      process.exit(code);
+      completeCliCommand(code);
     });
 
   services

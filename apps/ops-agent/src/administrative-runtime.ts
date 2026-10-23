@@ -18,6 +18,11 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
+  closeControlInstallation,
+  openFixedChildInstallation,
+  readFixedCliSpawnIntent,
+} from "@openmapx/core/build-artifacts";
+import {
   type ExecutionRef,
   executionRefSchema,
   OPS_MAX_BACKUP_ID_LENGTH,
@@ -1721,8 +1726,23 @@ export function createDefaultFixedCli(
       const encoded = JSON.stringify(executionRefSchema.parse(options.execution));
       if (Buffer.byteLength(encoded) > 2048) throw new Error("Execution context exceeds budget");
       env.OPENMAPX_CONTROL_EXECUTION = encoded;
-      if (options.controlAssertion || options.parentAssertion)
-        throw new Error("Fixed CLI control verifier is unavailable");
+      if (options.controlAssertion || options.parentAssertion) {
+        if (options.controlAssertion && options.parentAssertion)
+          throw Error("Ambiguous CLI authority");
+        const assertion = (options.controlAssertion ?? options.parentAssertion)!;
+        const installation = openFixedChildInstallation({
+          infraDir: join(_rootDir, "infra/docker"),
+          assertion,
+          container: existsSync("/run/secrets/openmapx-control-verifiers"),
+        });
+        try {
+          readFixedCliSpawnIntent(installation, options.execution, args);
+        } finally {
+          closeControlInstallation(installation);
+        }
+        if (options.controlAssertion) env.OPENMAPX_CONTROL_DELEGATION = assertion;
+        else env.OPENMAPX_PARENT_EXECUTION = assertion;
+      }
     } else if (options.controlAssertion || options.parentAssertion)
       throw new Error("Execution context is required");
     await runContainedStreamingProcess(executable as string, [...prefix, ...args], {

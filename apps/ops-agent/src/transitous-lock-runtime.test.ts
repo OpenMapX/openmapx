@@ -81,7 +81,7 @@ describe("agent-owned Transitous catalog lock", () => {
     });
   });
 
-  it("activates a proposal only when the approved ref matches exactly", async () => {
+  it("keeps approval closed until durable paired-pin publication is installed", async () => {
     const rootDir = root();
     const runtime = runtimeFor(rootDir);
     await dispatchOpsOperation(
@@ -89,40 +89,16 @@ describe("agent-owned Transitous catalog lock", () => {
       { kind: "transitousLock.propose", ref: REF, submodules: {}, lockedBy: "auto-bump" },
       context(),
     );
-
-    // Approving a different ref than the one proposed must not activate.
-    await expect(
-      dispatchOpsOperation(
-        runtime,
-        { kind: "transitousLock.approve", ref: OTHER_REF, approvedBy: "admin" },
-        context(),
-      ),
-    ).rejects.toThrow(/does not match/i);
+    for (const ref of [REF, OTHER_REF])
+      await expect(
+        dispatchOpsOperation(
+          runtime,
+          { kind: "transitousLock.approve", ref, approvedBy: "admin" },
+          context(),
+        ),
+      ).rejects.toThrow(/paired-pin/);
     expect(existsSync(lockPath(rootDir))).toBe(false);
-
-    const approved = await dispatchOpsOperation(
-      runtime,
-      { kind: "transitousLock.approve", ref: REF, approvedBy: "admin" },
-      context(),
-    );
-    expect(approved).toMatchObject({ ref: REF });
-    expect(JSON.parse(readFileSync(lockPath(rootDir), "utf-8"))).toMatchObject({
-      ref: REF,
-      lockedBy: "admin",
-    });
-    // The consumed proposal is cleared.
-    expect(existsSync(proposedPath(rootDir))).toBe(false);
-  });
-
-  it("refuses to approve when there is no proposal", async () => {
-    const rootDir = root();
-    await expect(
-      dispatchOpsOperation(
-        runtimeFor(rootDir),
-        { kind: "transitousLock.approve", ref: REF, approvedBy: "admin" },
-        context(),
-      ),
-    ).rejects.toThrow(/no transitous lock proposal/i);
+    expect(existsSync(proposedPath(rootDir))).toBe(true);
   });
 
   it("reads back an existing active lock", async () => {
