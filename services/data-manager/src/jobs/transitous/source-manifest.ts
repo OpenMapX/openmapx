@@ -107,11 +107,14 @@ function sameArtifact(a: BigIntStats, b: BigIntStats): boolean {
   );
 }
 
-/** Same float-millisecond rounding as `Stats.mtime`; `BigIntStats.mtime` truncates instead. */
+/**
+ * Matches `Stats.mtime`, which rounds the float millisecond value to the nearest
+ * millisecond; `BigIntStats.mtime` and the `Date` constructor would truncate.
+ */
 function modifiedAtIso(mtimeNs: bigint): string {
   const seconds = Number(mtimeNs / 1_000_000_000n);
   const nanoseconds = Number(mtimeNs % 1_000_000_000n);
-  return new Date(seconds * 1e3 + nanoseconds / 1e6).toISOString();
+  return new Date(Math.round(seconds * 1e3 + nanoseconds / 1e6)).toISOString();
 }
 
 /**

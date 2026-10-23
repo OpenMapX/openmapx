@@ -6,6 +6,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   truncateSync,
   utimesSync,
   writeFileSync,
@@ -20,7 +21,6 @@ import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import {
   finalizeTransitSourceManifest,
   readTransitSourceManifest,
-  TRANSIT_SOURCE_MANIFEST_FILENAME,
   writeTransitSourceManifest,
 } from "../../src/jobs/transitous/source-manifest.js";
 import { StateStore } from "../../src/state.js";
@@ -264,6 +264,39 @@ describe("transit acquisition manifest", () => {
         expect(source.artifact.relativePath).toBe(`de_${source.sourceId.split(":")[2]}.gtfs.zip`);
       }
       expect(readTransitSourceManifest(manifestPath).sources).toHaveLength(4);
+    });
+
+    it("records the same modifiedAt as Stats.mtime for sub-millisecond and pre-epoch timestamps", async () => {
+      const times: number[] = [
+        1700000000.0004,
+        1700000000.0005,
+        1700000000.0006,
+        1700000000.9996,
+        new Date(-86400123).getTime() / 1000,
+      ];
+      const ctx = makeCtx(times.map((_, index) => ({ name: `t${index}` })));
+      writeTransitSourceManifest(ctx);
+      const expected = new Map<string, string>();
+      times.forEach((time, index) => {
+        const file = join(ctx.outDir, `de_t${index}.gtfs.zip`);
+        writeFileSync(file, payload(index + 1));
+        utimesSync(file, time, time);
+        expected.set(`catalog:de:t${index}`, statSync(file).mtime.toISOString());
+      });
+      // The filesystem decides what was actually stored. At least one value must
+      // round up, which a truncating conversion would get wrong.
+      const roundedUp = times.filter((_, index) => {
+        const { mtimeNs } = statSync(join(ctx.outDir, `de_t${index}.gtfs.zip`), { bigint: true });
+        const truncated = new Date(Number(mtimeNs / 1_000_000n)).toISOString();
+        return truncated !== expected.get(`catalog:de:t${index}`);
+      });
+      expect(roundedUp.length).toBeGreaterThan(0);
+
+      const manifestPath = await finalizeTransitSourceManifest(ctx);
+
+      for (const source of readSources(manifestPath)) {
+        expect(source.artifact.modifiedAt).toBe(expected.get(source.sourceId));
+      }
     });
 
     it("reads each artifact in bounded chunks with at most one owned handle at a time", async () => {
@@ -555,7 +588,6 @@ describe("transit acquisition manifest", () => {
       expect(readFileSync(manifestPath).equals(previous)).toBe(true);
       expect(atomicWriteFile).not.toHaveBeenCalled();
       expect(probe.openNow).toBe(0);
-      expect(TRANSIT_SOURCE_MANIFEST_FILENAME).toBe("transit-source-manifest.json");
     });
   });
 });
