@@ -732,7 +732,7 @@ it("observer abort leaves the admitted backend running until its real completion
 });
 
 it.each([0, 1])(
-  "fix1 retains safe truncation and final diagnostics through the real CLI/server boundary (exit %s)",
+  "fix2 retains safe credential continuations, truncation and final diagnostics through the real CLI/server boundary (exit %s)",
   async (exitCode) => {
     const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");
@@ -749,13 +749,24 @@ it.each([0, 1])(
       'synthetic-final"\n',
       'pass\x1b[31mword="ansi-first\n',
       'ansi-continuation"\n',
+      ...["accesstoken", "accessToken", "ACCESSTOKEN"].flatMap((key, index) => {
+        const ending = ["\n", "\r\n", "\r"][index];
+        return [
+          `${key}="synthetic-access-first-${index}${ending}`,
+          `synthetic-access-second-${index}"${ending}`,
+        ];
+      }),
+      ...["Bearer", "Basic", "Token"].flatMap((scheme, index) => {
+        const ending = ["\n", "\r\n", "\r"][index];
+        return [`Authorization: ${scheme}${ending}`, `synthetic-auth-value-${index}${ending}`];
+      }),
       `${"x".repeat(4096 - Buffer.byteLength(suffix))}${suffix}@host.invalid/path\n`,
       `${"x".repeat(6000)}\n`,
       "last-diagnostic\n",
     ];
     writeFileSync(
       join(root, "cli.mjs"),
-      `for(const frame of ${JSON.stringify(frames)})process.stdout.write(frame);process.exitCode=${exitCode};`,
+      `for(const frame of ${JSON.stringify(frames)})for(const byte of Buffer.from(frame))process.stdout.write(Buffer.from([byte]));process.exitCode=${exitCode};`,
     );
     const runtime = createUnavailableRuntime();
     createAdministrativeRuntime(runtime, {
@@ -828,6 +839,9 @@ it.each([0, 1])(
         "ansi-first",
         "ansi-continuation",
         "synthetic-user",
+        "synthetic-access-first-",
+        "synthetic-access-second-",
+        "synthetic-auth-value-",
       ])
         expect(all).not.toContain(secret);
       if (exitCode !== 0)

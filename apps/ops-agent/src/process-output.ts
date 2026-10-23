@@ -1,7 +1,11 @@
 import { StringDecoder } from "node:string_decoder";
 import { stripVTControlCharacters } from "node:util";
 import { PROCESS_OUTPUT_TRUNCATED, type ProcessDiagnostics } from "@openmapx/core/ops";
-import { scrubSecrets } from "@openmapx/core/scrub-secrets";
+import {
+  DIAGNOSTIC_AUTHORIZATION_SCHEMES,
+  DIAGNOSTIC_CREDENTIAL_KEY_SOURCE,
+  scrubSecrets,
+} from "@openmapx/core/scrub-secrets";
 
 type Stream = "stdout" | "stderr";
 interface OutputOptions {
@@ -9,45 +13,87 @@ interface OutputOptions {
   redact: (message: string) => string;
   maxTailBytes?: number;
 }
-const QUOTED_CREDENTIAL =
-  /\b((?:authorization|api[-_]?key|access[-_]?token|token|secret|password|passwd|auth|key)\s*[:=]\s*)(["']).*$/gi;
-const CREDENTIAL_KEYS = new Set([
-  "authorization",
-  "apikey",
-  "api-key",
-  "api_key",
-  "access-token",
-  "access_token",
-  "token",
-  "secret",
-  "password",
-  "passwd",
-  "auth",
-  "key",
-]);
+const CREDENTIAL_KEY_SOURCE = `(?:authorization|${DIAGNOSTIC_CREDENTIAL_KEY_SOURCE})`;
+const CREDENTIAL_KEY = new RegExp(`^${CREDENTIAL_KEY_SOURCE}$`, "i");
+const QUOTED_CREDENTIAL = new RegExp(
+  String.raw`\b(${CREDENTIAL_KEY_SOURCE}\s*[:=]\s*)(["']).*$`,
+  "gi",
+);
+const AUTHORIZATION_SCHEMES = DIAGNOSTIC_AUTHORIZATION_SCHEMES.map((scheme) =>
+  scheme.toLowerCase(),
+);
 interface CredentialScan {
-  phase: "word" | "key" | "value" | "bare" | "quote";
+  phase:
+    | "word"
+    | "key"
+    | "value"
+    | "scheme"
+    | "schemeValue"
+    | "framedSchemeValue"
+    | "bare"
+    | "quote";
+  authorization: boolean;
+  inlineAuthorization: boolean;
   word: string;
   quote: string;
   escaped: boolean;
 }
 function scanCredential(scan: CredentialScan, character: string): void {
+  if (/\s/.test(character)) scan.inlineAuthorization = false;
   if (scan.phase === "quote") {
     if (scan.escaped) scan.escaped = false;
     else if (character === "\\") scan.escaped = true;
     else if (character === scan.quote) scan.phase = "word";
     return;
   }
+  if (scan.phase === "scheme") {
+    if (/\s/.test(character)) {
+      // A complete scheme followed by a real frame boundary still awaits its credential.
+      scan.phase = AUTHORIZATION_SCHEMES.includes(scan.word) ? "schemeValue" : "word";
+      scan.word = "";
+    } else {
+      const candidate = scan.word + character.toLowerCase();
+      if (AUTHORIZATION_SCHEMES.some((scheme) => scheme.startsWith(candidate))) {
+        scan.word = candidate; // At most the longest known scheme; never accumulates a raw value.
+        return;
+      }
+      scan.word = "";
+      scan.phase = "bare";
+    }
+  }
   if (scan.phase === "bare") {
     if (/[\s'"&,;)\]}]/.test(character)) scan.phase = "word";
     else return;
   }
-  if (scan.phase === "value") {
-    if (/\s/.test(character)) return;
+  if (
+    scan.phase === "value" ||
+    scan.phase === "schemeValue" ||
+    scan.phase === "framedSchemeValue"
+  ) {
+    if (/\s/.test(character)) {
+      if (scan.phase === "schemeValue" && (character === "\r" || character === "\n"))
+        scan.phase = "framedSchemeValue";
+      return;
+    }
+    const schemeValue = scan.phase === "schemeValue" || scan.phase === "framedSchemeValue";
+    const inlineAuthorization = scan.phase === "schemeValue";
+    const authorization = scan.authorization;
+    scan.authorization = false;
     if (character === '"' || character === "'") {
       scan.phase = "quote";
       scan.quote = character;
       scan.escaped = false;
+    } else if (schemeValue) {
+      // Keep recognizing later assignments rather than swallowing them as an opaque token.
+      scan.phase = "word";
+      scan.word = /[\w-]/.test(character) ? character.toLowerCase() : "";
+      scan.inlineAuthorization = inlineAuthorization;
+    } else if (
+      authorization &&
+      AUTHORIZATION_SCHEMES.some((scheme) => scheme.startsWith(character.toLowerCase()))
+    ) {
+      scan.phase = "scheme";
+      scan.word = character.toLowerCase();
     } else scan.phase = "bare";
     return;
   }
@@ -55,12 +101,16 @@ function scanCredential(scan: CredentialScan, character: string): void {
     if (/\s/.test(character)) return;
     scan.phase = character === ":" || character === "=" ? "value" : "word";
     if (scan.phase === "value") return;
+    scan.authorization = false;
   }
   if (/[\w-]/.test(character)) {
     scan.word = (scan.word + character.toLowerCase()).slice(-32);
     return;
   }
-  const key = CREDENTIAL_KEYS.has(scan.word.replace(/^--/, ""));
+  const name = scan.word.replace(/^--/, "");
+  const key = CREDENTIAL_KEY.test(name);
+  scan.authorization = key && name === "authorization";
+  if (key) scan.inlineAuthorization = false;
   scan.word = "";
   if (key && (character === ":" || character === "=")) scan.phase = "value";
   else if (key && /\s/.test(character)) scan.phase = "key";
@@ -142,7 +192,14 @@ export function createBoundedProcessOutput(options: OutputOptions): {
     protected: false,
     cr: false,
     control: "",
-    scan: { phase: "word", word: "", quote: "", escaped: false } as CredentialScan,
+    scan: {
+      phase: "word",
+      authorization: false,
+      inlineAuthorization: false,
+      word: "",
+      quote: "",
+      escaped: false,
+    } as CredentialScan,
   });
   const streams = { stdout: streamState(), stderr: streamState() };
   const tail: ProcessDiagnostics["tail"] = [];
@@ -204,7 +261,8 @@ export function createBoundedProcessOutput(options: OutputOptions): {
     for (const decoded of text) {
       const character = controlFree(state, decoded);
       if (!character) continue;
-      const progressSecret = character === "\r" && state.scan.phase === "bare";
+      const progressSecret =
+        character === "\r" && (state.scan.phase === "bare" || state.scan.inlineAuthorization);
       scanCredential(state.scan, character);
       if (character === "\n" || character === "\r") {
         if (!(character === "\n" && state.cr)) {
@@ -216,6 +274,8 @@ export function createBoundedProcessOutput(options: OutputOptions): {
           state.protected =
             state.scan.phase === "quote" ||
             state.scan.phase === "value" ||
+            state.scan.phase === "schemeValue" ||
+            state.scan.phase === "framedSchemeValue" ||
             state.scan.phase === "key" ||
             progressSecret;
           state.dropping = false;

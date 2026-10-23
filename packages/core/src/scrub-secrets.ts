@@ -17,8 +17,18 @@ const PATH_SECRET_SEGMENTS = new Set([
   "auth",
   "operator-feed",
 ]);
-const BARE_CREDENTIAL_PATTERN =
-  /((?<![\w-])(?:--)?(?:api[-_]?key|access[-_]?token|token|secret|password|passwd|auth|key)\b\s*[:=]\s*)(['"]?)(\[redacted\]|[^\s'"&,;)\]}]+)\2/gi;
+// Shared with incremental diagnostic framing so its continuation grammar stays in sync.
+export const DIAGNOSTIC_CREDENTIAL_KEY_SOURCE =
+  "api[-_]?key|access[-_]?token|token|secret|password|passwd|auth|key";
+export const DIAGNOSTIC_AUTHORIZATION_SCHEMES = ["Bearer", "Basic", "Token"] as const;
+const AUTHORIZATION_CREDENTIAL_PATTERN = new RegExp(
+  String.raw`\b(Authorization\s*[:=]\s*)(?:${DIAGNOSTIC_AUTHORIZATION_SCHEMES.join("|")})\s+\S+`,
+  "gi",
+);
+const BARE_CREDENTIAL_PATTERN = new RegExp(
+  String.raw`((?<![\w-])(?:--)?(?:${DIAGNOSTIC_CREDENTIAL_KEY_SOURCE})\b\s*[:=]\s*)(['"]?)(\[redacted\]|[^\s'"&,;)\]}]+)\2`,
+  "gi",
+);
 
 function scrubPathKeys(pathname: string): string {
   const segments = pathname.split("/");
@@ -58,10 +68,7 @@ export function scrubSecrets(message: string): string {
     return scrubUrl(raw);
   });
 
-  scrubbed = scrubbed.replace(
-    /\b(Authorization\s*[:=]\s*)(?:Bearer|Basic|Token)\s+\S+/gi,
-    "$1[redacted]",
-  );
+  scrubbed = scrubbed.replace(AUTHORIZATION_CREDENTIAL_PATTERN, "$1[redacted]");
   scrubbed = scrubbed.replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/g, "$1 [redacted]");
   scrubbed = scrubbed.replace(BARE_CREDENTIAL_PATTERN, "$1$2[redacted]$2");
   scrubbed = scrubbed.replace(/AGE-ENCRYPTED:[A-Za-z0-9+/=]+/g, "AGE-ENCRYPTED:[redacted]");

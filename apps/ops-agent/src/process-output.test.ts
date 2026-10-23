@@ -157,3 +157,104 @@ it("fix1 withholds a quoted assignment whose delimiter follows a real frame boun
   expect(all).not.toContain("synthetic-value-continuation");
   expect(seen).toContain("last-diagnostic");
 });
+
+describe("fix2 credential continuation parity", () => {
+  it.each(["accesstoken", "accessToken", "ACCESSTOKEN"])(
+    "withholds quoted %s continuations with every real line ending and byte split",
+    (key) => {
+      const observed: unknown[] = [];
+      for (const ending of ["\n", "\r\n", "\r"]) {
+        for (const splitBytes of [false, true]) {
+          const seen: string[] = [];
+          const output = createBoundedProcessOutput({
+            onLine: (_stream, line) => seen.push(line),
+            redact: (x) => x,
+          });
+          for (const frame of [
+            `${key}="synthetic-access-first${ending}`,
+            `synthetic-access-second"${ending}`,
+            `last-diagnostic${ending}`,
+          ]) {
+            const bytes = Buffer.from(frame);
+            if (splitBytes) for (const byte of bytes) output.write("stdout", Uint8Array.of(byte));
+            else output.write("stdout", bytes);
+          }
+          const diagnostics = output.end();
+          expect(seen).toContain("last-diagnostic");
+          expect(diagnostics.tail.at(-1)?.message).toBe("last-diagnostic");
+          observed.push({ ending, splitBytes, seen, diagnostics });
+        }
+      }
+      const all = JSON.stringify(observed);
+      expect(all).not.toContain("synthetic-access-first");
+      expect(all).not.toContain("synthetic-access-second");
+    },
+  );
+
+  it.each(["Bearer", "Basic", "Token"])(
+    "retains Authorization %s awaiting its value across every real line ending and byte split",
+    (scheme) => {
+      const observed: unknown[] = [];
+      for (const ending of ["\n", "\r\n", "\r"]) {
+        for (const splitBytes of [false, true]) {
+          const seen: string[] = [];
+          const output = createBoundedProcessOutput({
+            onLine: (_stream, line) => seen.push(line),
+            redact: (x) => x,
+          });
+          for (const frame of [
+            `Authorization: ${scheme}${ending}`,
+            `synthetic-authorization-value${ending}`,
+            `last-diagnostic${ending}`,
+          ]) {
+            const bytes = Buffer.from(frame);
+            if (splitBytes) for (const byte of bytes) output.write("stdout", Uint8Array.of(byte));
+            else output.write("stdout", bytes);
+          }
+          const diagnostics = output.end();
+          expect(seen).toContain("last-diagnostic");
+          expect(diagnostics.tail.at(-1)?.message).toBe("last-diagnostic");
+          observed.push({ ending, splitBytes, seen, diagnostics });
+        }
+      }
+      expect(JSON.stringify(observed)).not.toContain("synthetic-authorization-value");
+    },
+  );
+});
+
+it("fix2 preserves inline authorization CR continuation protection", () => {
+  for (const scheme of ["Bearer", "Basic", "Token"]) {
+    const seen: string[] = [];
+    const output = createBoundedProcessOutput({
+      onLine: (_stream, line) => seen.push(line),
+      redact: (x) => x,
+    });
+    for (const frame of [
+      `Authorization: ${scheme} synthetic-inline-value\r`,
+      "synthetic-inline-continuation\r",
+      "last-diagnostic\n",
+    ])
+      output.write("stdout", Buffer.from(frame));
+    const diagnostics = output.end();
+    expect(JSON.stringify({ seen, diagnostics })).not.toContain("synthetic-inline-");
+    expect(seen).toContain("last-diagnostic");
+  }
+});
+
+it("fix2 still tracks a quoted assignment used as an authorization value", () => {
+  for (const prefix of ["Authorization: Bearer ", "Authorization: Bearer\n"]) {
+    const seen: string[] = [];
+    const output = createBoundedProcessOutput({
+      onLine: (_stream, line) => seen.push(line),
+      redact: (x) => x,
+    });
+    for (const frame of [
+      `${prefix}token="synthetic-nested-first\n`,
+      'synthetic-nested-second"\n',
+      "last-diagnostic\n",
+    ])
+      output.write("stdout", Buffer.from(frame));
+    expect(JSON.stringify({ seen, diagnostics: output.end() })).not.toContain("synthetic-nested-");
+    expect(seen).toContain("last-diagnostic");
+  }
+});
