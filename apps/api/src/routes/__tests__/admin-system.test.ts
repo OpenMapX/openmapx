@@ -50,6 +50,7 @@ vi.mock("../../utils/audit-log", () => ({
 }));
 vi.mock("../../utils/rate-limit", () => ({
   systemMaintenanceLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
+  systemUpdateCheckLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
 }));
 vi.mock("../../services/ops-client", () => ({
   createApiOpsClient: () => opsClient,

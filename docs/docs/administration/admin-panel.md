@@ -122,6 +122,12 @@ and checkpoint the operation before replacing the API, so the new API process ca
 finalize the job after its migrations succeed. The pre-update backup is recommended
 but optional in the confirmation dialog. The same page runs the CLI-equivalent deep service probes.
 
+You can start the update as soon as a check finishes. Checks have their own
+once-per-30-seconds throttle, separate from the one shared by updates and
+diagnostics. If the API rejects a request as too frequent, the page says so, keeps the update
+confirmation open with your choices, and re-enables the action when the server's wait
+is over. Nothing is retried automatically; press the button again when it is available.
+
 ### Transit
 
 The public-transit data pipeline: the Transitous feed snapshot, audited catalog
