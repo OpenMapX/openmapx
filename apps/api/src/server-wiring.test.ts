@@ -4,9 +4,11 @@ import { Writable } from "node:stream";
 import cors from "@fastify/cors";
 import { ApiClientError, createApiClient } from "@openmapx/core";
 import { getApiDataManagerTransitState, unwrapAdminResponse } from "@openmapx/core/api-admin-sdk";
+import { exportSavedList, unwrapSavedResponse } from "@openmapx/core/saved-places-sdk";
 import Fastify, { type FastifyInstance } from "fastify";
 import pino from "pino";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { registerSavedRoute } from "./routes/saved-contract";
 import {
   controlledRequestLoggingOptions,
   corsOptions,
@@ -97,6 +99,65 @@ describe("uniformErrorHandler", () => {
 });
 
 describe("corsOptions", () => {
+  it.each([
+    ["gpx", "application/gpx+xml"],
+    ["geojson", "application/geo+json"],
+    ["kml", "application/vnd.google-earth.kml+xml"],
+  ] as const)(
+    "exposes attachment metadata for credentialed %s SDK downloads",
+    async (format, media) => {
+      const app = Fastify({ logger: false });
+      await app.register(cors, corsOptions(["https://web.example"]));
+      await app.register(
+        async (routes) => {
+          registerSavedRoute(routes, "exportSavedList", async (_request, reply) =>
+            reply
+              .header("Content-Type", media)
+              .header("Content-Disposition", "attachment; filename=fixture")
+              .send("synthetic export"),
+          );
+        },
+        { prefix: "/api" },
+      );
+      vi.stubGlobal("fetch", async (_url: unknown, init: RequestInit) => {
+        expect(init.credentials).toBe("include");
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/saved/lists/list/export?format=${format}`,
+          headers: { origin: "https://web.example" },
+        });
+        expect(response.statusCode).toBe(200);
+        expect(response.headers["access-control-allow-origin"]).toBe("https://web.example");
+        expect(response.headers["access-control-allow-credentials"]).toBe("true");
+        // Model Fetch's CORS view: Content-Type is safelisted, attachment metadata is not.
+        const headers = new Headers({ "content-type": String(response.headers["content-type"]) });
+        const exposed = String(response.headers["access-control-expose-headers"] ?? "")
+          .toLowerCase()
+          .split(/,\s*/);
+        for (const name of exposed) {
+          const value = response.headers[name];
+          if (value !== undefined) headers.set(name, String(value));
+        }
+        return new Response(response.body, { status: response.statusCode, headers });
+      });
+      try {
+        const result = unwrapSavedResponse(
+          await exportSavedList(
+            "list",
+            { format },
+            {
+              client: createApiClient({ baseUrl: "https://api.example", credentials: "include" }),
+            },
+          ),
+        );
+        expect(result.type.split(";", 1)[0]).toBe(media);
+        expect(await result.text()).toBe("synthetic export");
+      } finally {
+        await app.close();
+      }
+    },
+  );
+
   it("lets a cross-origin generated client retain rate-limit retry metadata", async () => {
     const app = Fastify({ logger: false });
     await app.register(cors, corsOptions(["https://web.example"]));

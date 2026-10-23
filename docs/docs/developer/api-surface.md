@@ -561,3 +561,33 @@ The CLI prints queued 202 job IDs without adding an Activity watcher. Since
 install/update acquire another preview, a preceding explicit `ext preview` does
 not bypass the one-preview-per-30-seconds bucket; 429 ends that command without
 writing or automatically retrying.
+
+## Saved places application SDK
+
+The `saved-places` family covers all 14 session-authenticated `/api/saved`
+operations: list and place CRUD, labels, membership, import and export. Portable
+Zod contracts live under `packages/core/src/api/contracts/saved`; producer
+registration uses the shared HTTP contract registrar with session guards retained
+on the plugin. Authentication runs before application payload validation.
+
+Import generated functions from `@openmapx/core/saved-places-sdk` and unwrap their
+validated status envelopes with `unwrapSavedResponse`. Creation and update replies
+are receipts, not full read records. Saved read types are inferred from the
+canonical schemas. Keep React Query keys, session gating and invalidation in the
+feature hooks, and pass query cancellation signals to acquisition.
+
+Exports return consumed `Blob` values. The transport validates the media type
+against the requested GPX/GeoJSON/KML selector and requires attachment metadata.
+It consumes the UTF-8 response inside the application's cancellation/deadline
+lifetime, with a 40 MiB default download budget adjustable through request
+options. The web download adapter supplies a 60-second default deadline. Never
+return an unread response after releasing that lifetime or parse an XML download
+as JSON. Captured field attribution, licence bindings and import/export semantics
+remain part of the contract.
+
+Run `pnpm openapi:generate`, `pnpm sdk:generate`, `pnpm check-openapi` and
+`pnpm check-api-sdk` for contract changes. Existing metadata and administration
+artifacts are generated independently and should not change when this family is
+updated. Use actual serialized Fastify responses through the generated SDK in
+addition to hook tests; the migrated PostgreSQL saved suite qualifies persisted
+read shapes, import concurrency/rollback, receipt invalidation and ownership.
