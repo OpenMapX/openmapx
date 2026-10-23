@@ -267,12 +267,13 @@ describe("transit acquisition manifest", () => {
     });
 
     it("records the same modifiedAt as Stats.mtime for sub-millisecond and pre-epoch timestamps", async () => {
-      const times: number[] = [
+      // Node treats a negative numeric time as "now", so pre-epoch must be a Date.
+      const times: Array<number | Date> = [
         1700000000.0004,
         1700000000.0005,
         1700000000.0006,
         1700000000.9996,
-        new Date(-86400123).getTime() / 1000,
+        new Date(-86400123),
       ];
       const ctx = makeCtx(times.map((_, index) => ({ name: `t${index}` })));
       writeTransitSourceManifest(ctx);
@@ -283,6 +284,10 @@ describe("transit acquisition manifest", () => {
         utimesSync(file, time, time);
         expected.set(`catalog:de:t${index}`, statSync(file).mtime.toISOString());
       });
+      // A negative numeric utimes value is replaced by "now", so the pre-epoch
+      // case must really be stored before the Stats.mtime comparison means anything.
+      const preEpochFile = join(ctx.outDir, `de_t${times.length - 1}.gtfs.zip`);
+      expect(statSync(preEpochFile).mtimeMs).toBeLessThan(0);
       // The filesystem decides what was actually stored. At least one value must
       // round up, which a truncating conversion would get wrong.
       const roundedUp = times.filter((_, index) => {
