@@ -315,10 +315,15 @@ describe("Wikimedia acquisition sharing within one enrichment", () => {
       return defaultResponder(url);
     };
     const scope = createRequestJsonScope();
+    const getJson = vi.spyOn(scope, "getJson");
+    const commonsInvocations = () =>
+      getJson.mock.calls.filter(([url]) => url.includes(COMMONS_URL_PART)).length;
     const first = enrichmentLookups(place(), scope);
-    // Hold the failure until every branch has had time to join the pending request.
-    await vi.waitFor(() => expect(counts()).toEqual({ entity: 1, summary: 1, commons: 1 }));
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    // Hold the failure until every Commons consumer has asked the scope while one request is pending.
+    await vi.waitFor(() => {
+      expect(counts()).toEqual({ entity: 1, summary: 1, commons: 1 });
+      expect(commonsInvocations()).toBe(3);
+    });
     release.resolve();
     const failed = await first;
 
