@@ -18,18 +18,21 @@ import type { FeedFileEntry } from "./types.js";
 const FEED_STATE_WRITE_TIMEOUT_MS = 800;
 let feedStateCircuitOpen = false;
 
-async function withTimeout<T>(promise: Promise<T>): Promise<T> {
+/**
+ * Run feed_state work under the breaker and timeout. Callers pass a lazy
+ * factory so an open breaker rejects before any query starts; a timed-out
+ * operation is not cancelled and may still complete in the background.
+ */
+async function withTimeout<T>(work: () => Promise<T>): Promise<T> {
   if (feedStateCircuitOpen) {
-    // Swallow the underlying promise's eventual rejection so it doesn't
-    // surface as an unhandled rejection on a later tick.
-    promise.catch(() => {});
     throw new Error("feed_state writes disabled (previous write failed)");
   }
-  // Attach a passive catch handler so a delayed connection failure after the
-  // timeout has fired does not surface as an unhandled rejection.
-  promise.catch(() => {});
   let timer: NodeJS.Timeout | undefined;
   try {
+    const promise = work();
+    // Attach a passive catch handler so a delayed connection failure after the
+    // timeout has fired does not surface as an unhandled rejection.
+    promise.catch(() => {});
     return await Promise.race([
       promise,
       new Promise<T>((_resolve, reject) => {
@@ -94,7 +97,7 @@ export interface ValidateOutcome extends FeedStateKey {
 export async function recordFetchOutcome(outcome: FetchOutcome): Promise<void> {
   const now = new Date();
   if (outcome.ok) {
-    await withTimeout(
+    await withTimeout(() =>
       upsertFeedState({
         region: outcome.region,
         name: outcome.name,
@@ -108,7 +111,7 @@ export async function recordFetchOutcome(outcome: FetchOutcome): Promise<void> {
   } else {
     // Failed fetch: leave `lastFetchedAt` alone so the 48h staleness check
     // still fires. Mark status as `failed` for the admin UI.
-    await withTimeout(
+    await withTimeout(() =>
       upsertFeedState({
         region: outcome.region,
         name: outcome.name,
@@ -126,7 +129,7 @@ export async function recordFetchOutcome(outcome: FetchOutcome): Promise<void> {
 export async function recordValidateOutcome(outcome: ValidateOutcome): Promise<void> {
   const validationMessage = scrubSecretsOptional(outcome.message) ?? null;
   if (outcome.ok) {
-    await withTimeout(
+    await withTimeout(() =>
       upsertFeedState({
         region: outcome.region,
         name: outcome.name,
@@ -144,38 +147,36 @@ export async function recordValidateOutcome(outcome: ValidateOutcome): Promise<v
   // unique constraint yet — see the comment in `upsertFeedState`. Increments
   // are read-modify-write under a serialisable-enough envelope (one writer
   // per region+name within a single pipeline run).
-  await withTimeout(
-    (async () => {
-      const existing = await db
-        .select({
-          id: feedState.id,
-          consecutiveFailures: feedState.consecutiveFailures,
+  await withTimeout(async () => {
+    const existing = await db
+      .select({
+        id: feedState.id,
+        consecutiveFailures: feedState.consecutiveFailures,
+      })
+      .from(feedState)
+      .where(and(eq(feedState.region, outcome.region), eq(feedState.name, outcome.name)))
+      .limit(1);
+    if (existing[0]) {
+      await db
+        .update(feedState)
+        .set({
+          validationStatus: "error",
+          validationMessage,
+          status: "failed",
+          consecutiveFailures: existing[0].consecutiveFailures + 1,
         })
-        .from(feedState)
-        .where(and(eq(feedState.region, outcome.region), eq(feedState.name, outcome.name)))
-        .limit(1);
-      if (existing[0]) {
-        await db
-          .update(feedState)
-          .set({
-            validationStatus: "error",
-            validationMessage,
-            status: "failed",
-            consecutiveFailures: existing[0].consecutiveFailures + 1,
-          })
-          .where(eq(feedState.id, existing[0].id));
-        return;
-      }
-      await db.insert(feedState).values({
-        region: outcome.region,
-        name: outcome.name,
-        validationStatus: "error",
-        validationMessage,
-        status: "failed",
-        consecutiveFailures: 1,
-      });
-    })(),
-  );
+        .where(eq(feedState.id, existing[0].id));
+      return;
+    }
+    await db.insert(feedState).values({
+      region: outcome.region,
+      name: outcome.name,
+      validationStatus: "error",
+      validationMessage,
+      status: "failed",
+      consecutiveFailures: 1,
+    });
+  });
 }
 
 interface UpsertArgs {
@@ -253,7 +254,7 @@ export async function recordPromotedSource(source: {
   region: string;
   name: string;
 }): Promise<void> {
-  await withTimeout(
+  await withTimeout(() =>
     upsertFeedState({
       region: source.region.toLowerCase(),
       name: source.name.toLowerCase(),
