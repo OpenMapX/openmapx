@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
 import { execa } from "execa";
+import { cliProcessOptions } from "./execution-deadline";
 import { repoPaths } from "./paths";
 
 const {
@@ -34,7 +35,7 @@ export type ReleaseDockerRunner = (
 ) => Promise<{ stdout: string; exitCode: number; stderr: string }>;
 
 async function defaultDocker(args: string[]) {
-  const result = await execa("docker", args, { reject: false });
+  const result = await execa("docker", args, { ...cliProcessOptions(), reject: false });
   return {
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? "",

@@ -36,6 +36,7 @@ import { PLATFORM_VERSION } from "@openmapx/integration-framework";
 import type { Command } from "commander";
 import { execa } from "execa";
 import kleur from "kleur";
+import { cliProcessOptions } from "../lib/execution-deadline";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import { applyServiceSelection } from "../lib/service-selection";
@@ -393,6 +394,7 @@ function ctxFromRepo(rootDir?: string): ComposeContext {
 
 async function dockerCompose(ctx: ComposeContext, args: string[]): Promise<string> {
   const result = await execa("docker", [...ctx.composeArgs, ...args], {
+    ...cliProcessOptions(),
     cwd: ctx.cwd,
     reject: false,
   });
@@ -484,7 +486,7 @@ async function waitForPostgres(
         "-t",
         "1",
       ],
-      { cwd: ctx.cwd, reject: false, timeout: 5_000 },
+      { ...cliProcessOptions(5_000), cwd: ctx.cwd, reject: false },
     );
     if (result.exitCode === 0) return;
     if (attempt < 30) await new Promise((resolve) => setTimeout(resolve, 1_000));
@@ -800,7 +802,13 @@ async function pgDumpToFile(
       "--no-privileges",
       db,
     ],
-    { cwd: ctx.cwd, reject: false, stderr: "pipe", buffer: { stdout: false } },
+    {
+      ...cliProcessOptions(),
+      cwd: ctx.cwd,
+      reject: false,
+      stderr: "pipe",
+      buffer: { stdout: false },
+    },
   );
 
   if (!sub.stdout) {
@@ -841,7 +849,7 @@ async function tarVolumeToFile(
       "/source",
       ".",
     ],
-    { reject: false },
+    { ...cliProcessOptions(), reject: false },
   );
   if (result.exitCode !== 0) {
     throw new Error(
@@ -1106,7 +1114,7 @@ async function listRestoredUsers(
       "-c",
       `SELECT json_build_object('id', id, 'email', email)::text FROM "user"`,
     ],
-    { cwd: ctx.cwd, reject: false, maxBuffer: 16 * 1024 * 1024 },
+    { ...cliProcessOptions(), cwd: ctx.cwd, reject: false, maxBuffer: 16 * 1024 * 1024 },
   );
   if (result.exitCode !== 0)
     throw new Error(`Unable to enumerate restored users: ${result.stderr}`);
@@ -1227,7 +1235,7 @@ COMMIT;
       "-v",
       "ON_ERROR_STOP=1",
     ],
-    { cwd: ctx.cwd, reject: false, input: statement },
+    { ...cliProcessOptions(), cwd: ctx.cwd, reject: false, input: statement },
   );
   if (result.exitCode !== 0) {
     throw new Error(`Unable to replay user erasure (psql exit ${result.exitCode})`);
@@ -1504,7 +1512,7 @@ async function pgRestoreFromFile(
   const drop = await execa(
     "docker",
     [...ctx.composeArgs, "exec", "-T", serviceId, "dropdb", "-U", user, "--if-exists", db],
-    { cwd: ctx.cwd, reject: false },
+    { ...cliProcessOptions(), cwd: ctx.cwd, reject: false },
   );
   if (drop.exitCode !== 0) {
     throw new Error(`dropdb failed: ${drop.stderr ?? ""}`);
@@ -1513,7 +1521,7 @@ async function pgRestoreFromFile(
   const create = await execa(
     "docker",
     [...ctx.composeArgs, "exec", "-T", serviceId, "createdb", "-U", user, db],
-    { cwd: ctx.cwd, reject: false },
+    { ...cliProcessOptions(), cwd: ctx.cwd, reject: false },
   );
   if (create.exitCode !== 0) {
     throw new Error(`createdb failed: ${create.stderr ?? ""}`);
@@ -1521,6 +1529,7 @@ async function pgRestoreFromFile(
 
   // gunzip <file> | docker compose exec -T <svc> psql -U <user> <db>
   const gunzip = execa("gunzip", ["-c", gzFile], {
+    ...cliProcessOptions(),
     cwd: ctx.cwd,
     reject: false,
     stdout: "pipe",
@@ -1528,7 +1537,7 @@ async function pgRestoreFromFile(
   const psql = execa(
     "docker",
     [...ctx.composeArgs, "exec", "-T", serviceId, "psql", "-U", user, "-v", "ON_ERROR_STOP=1", db],
-    { cwd: ctx.cwd, reject: false, input: gunzip.stdout ?? undefined },
+    { ...cliProcessOptions(), cwd: ctx.cwd, reject: false, input: gunzip.stdout ?? undefined },
   );
 
   const [gunzipRes, psqlRes] = await Promise.all([gunzip, psql]);
@@ -1564,7 +1573,7 @@ async function tarRestoreFromFile(
       `cd /target && find . -mindepth 1 -delete && ` +
         `tar -xzf /backup/${shellEscape(fileName)} -C /target`,
     ],
-    { reject: false },
+    { ...cliProcessOptions(), reject: false },
   );
   if (result.exitCode !== 0) {
     throw new Error(

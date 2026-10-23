@@ -5,6 +5,7 @@ import { services as coreServices } from "@openmapx/core/server";
 import { type Command, Option } from "commander";
 import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
 import { dockerComposeStream } from "../lib/docker";
+import { assertCliExecutionAvailable } from "../lib/execution-deadline";
 import { applyGeneratedHardlinks } from "../lib/hardlinks";
 import { log } from "../lib/output";
 import { repoPaths } from "../lib/paths";
@@ -190,10 +191,12 @@ export function rotateRedisPasswordForRepo(
 }
 
 export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<RenderRepoResult> {
+  assertCliExecutionAvailable();
   coreServices.releaseSelection();
   const paths = repoPaths(opts.rootDir);
   assertCliDeploymentSecrets();
   return withConfigurationGenerationWriter(paths.infraDir, async (writer) => {
+    assertCliExecutionAvailable();
     ensurePlatformPrivateDirectory(join(paths.infraDir, "data", "ops-agent", "trusted-config"));
     const erasureDirectory = join(paths.infraDir, "data", "erasure");
     ensurePlatformPrivateDirectory(erasureDirectory);
@@ -280,6 +283,7 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
       if (Object.keys(values).length === 0 && envKeys.length === 0) return [];
       return [{ serviceId: id, values, ...(envKeys.length > 0 ? { envKeys } : {}) }];
     });
+    assertCliExecutionAvailable();
     const committed = await writer.commit({
       services,
       integrationSchemas,

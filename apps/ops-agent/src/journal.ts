@@ -41,6 +41,7 @@ const ERROR_CLASSES = new Set<OpsErrorClass>(
 
 export interface PersistedOpsJob {
   executionVersion?: 2;
+  requestVersion?: 1 | 2;
   admittedAt?: number;
   deadlineAt?: number;
   operationFingerprint?: string;
@@ -96,6 +97,7 @@ function parseJob(value: unknown): PersistedOpsJob {
   if (
     !exactKeys(raw, [
       "executionVersion",
+      "requestVersion",
       "admittedAt",
       "deadlineAt",
       "operationFingerprint",
@@ -150,10 +152,13 @@ function parseJob(value: unknown): PersistedOpsJob {
       operation.kind,
       raw as unknown as RetainedExecutionAdmission,
     );
+    if (raw.requestVersion !== undefined && raw.requestVersion !== 1 && raw.requestVersion !== 2)
+      throw new Error("invalid request version");
     if (raw.admittedAt !== Date.parse(raw.submittedAt as string)) throw new Error("invalid");
   } else if (
     [
       "executionVersion",
+      "requestVersion",
       "admittedAt",
       "deadlineAt",
       "operationFingerprint",
@@ -338,6 +343,7 @@ export async function openOpsJobJournal(
           retained.role !== record.role ||
           retained.fingerprint !== record.fingerprint ||
           retained.executionVersion !== record.executionVersion ||
+          retained.requestVersion !== record.requestVersion ||
           retained.admittedAt !== record.admittedAt ||
           retained.deadlineAt !== record.deadlineAt ||
           retained.operationFingerprint !== record.operationFingerprint ||

@@ -16,6 +16,7 @@ import {
   type OpsRequest,
   type OpsResponseEnvelope,
   type OpsSubmitResult,
+  parseOpsAdmission,
   parseOpsEventBatch,
   parseOpsJobStatus,
   parseOpsJobStatusForKind,
@@ -59,6 +60,14 @@ export class OpsClientError extends Error {
   ) {
     super("Ops agent request failed");
     this.name = "OpsClientError";
+  }
+}
+
+export class OpsProtocolUpgradeRequiredError extends OpsClientError {
+  constructor() {
+    super("host_update_required", 409);
+    this.name = "OpsProtocolUpgradeRequiredError";
+    this.message = "Update the ops-agent before submitting version2 operations";
   }
 }
 
@@ -206,6 +215,7 @@ export function opsRequestTimeoutMs(_kind: OpsOperationKind, configuredTimeoutMs
 }
 
 export class OpsClient {
+  private protocolReady?: Promise<void>;
   private readonly baseUrl: string;
   private readonly tokenFile: string;
   private readonly fetchImpl: typeof globalThis.fetch;
@@ -267,6 +277,7 @@ export class OpsClient {
         headers: {
           authorization: `Bearer ${token}`,
           "x-ops-request-id": requestId,
+          "x-ops-protocol-version": "2",
           ...(options.fingerprint ? { "x-ops-operation-fingerprint": options.fingerprint } : {}),
           ...(options.bodyFingerprint ? { "x-ops-body-fingerprint": options.bodyFingerprint } : {}),
           ...(options.requestedDeadlineAt === undefined
@@ -392,7 +403,7 @@ export class OpsClient {
         await this.get(`/v1/operation-keys/${operationKey}`, {
           signal: options.signal,
           bodyFingerprint: opsOperationFingerprint(operation),
-          fingerprint: options.fingerprint,
+          fingerprint: options.fingerprint ?? opsOperationFingerprint(operation),
           requestedDeadlineAt: options.execution?.requestedDeadlineAt,
         }),
         {},
@@ -405,6 +416,37 @@ export class OpsClient {
       if (error instanceof OpsClientError) throw error;
       if (isAbortError(error)) throw new DOMException("Aborted", "AbortError");
       throw new OpsClientError("runtime");
+    }
+  }
+
+  private async requireProtocol2(signal?: AbortSignal): Promise<void> {
+    this.protocolReady ??= (async () => {
+      let value: unknown;
+      try {
+        value = await this.get("/v1/protocol", { signal });
+      } catch (error) {
+        if (
+          isAbortError(error) ||
+          (error instanceof OpsClientError &&
+            ["authentication", "authorization", "timeout"].includes(error.errorClass))
+        )
+          throw error;
+        throw new OpsProtocolUpgradeRequiredError();
+      }
+      if (
+        !value ||
+        typeof value !== "object" ||
+        Array.isArray(value) ||
+        !exactKeys(value as Record<string, unknown>, ["versions"]) ||
+        JSON.stringify((value as { versions?: unknown }).versions) !== "[1,2]"
+      )
+        throw new OpsProtocolUpgradeRequiredError();
+    })();
+    try {
+      await this.protocolReady;
+    } catch (error) {
+      this.protocolReady = undefined;
+      throw error;
     }
   }
 
@@ -421,6 +463,7 @@ export class OpsClient {
     if (OPS_KIND_POLICIES[operation.kind].execution === "async" && !options.operationKey) {
       throw new Error("Async operation key is required");
     }
+    await this.requireProtocol2(options.signal);
     const token = await readOpsTokenFile(this.tokenFile);
     const issued = this.now();
     const requestId = `ops1_${Buffer.from(this.randomBytes(18)).toString("base64url")}`;
@@ -485,55 +528,10 @@ export class OpsClient {
           value: parseOpsResult(operation.kind, submit.value),
         } as OpsSubmitResult<K>;
       }
-      if (
-        !(submit.version === 2
-          ? exactKeys(submit, [
-              "version",
-              "execution",
-              "operationId",
-              "operationKey",
-              "kind",
-              "state",
-              "admittedAt",
-              "deadlineAt",
-              "fingerprint",
-            ])
-          : submit.version === 1 &&
-            exactKeys(submit, [
-              "version",
-              "execution",
-              "operationId",
-              "operationKey",
-              "kind",
-              "state",
-            ])) ||
-        submit.execution !== "async" ||
-        submit.kind !== operation.kind ||
-        submit.operationKey !== operationKey ||
-        typeof submit.operationId !== "string" ||
-        !/^job1_[A-Za-z0-9_-]{16,64}$/.test(submit.operationId) ||
-        !["queued", "running", "succeeded", "failed", "termination_pending", "timed_out"].includes(
-          String(submit.state),
-        )
-      ) {
+      const admission = parseOpsAdmission(submit);
+      if (admission.kind !== operation.kind || admission.operationKey !== operationKey)
         throw new OpsClientError("runtime", response.status);
-      }
-      if (
-        submit.version === 2 ||
-        submit.admittedAt !== undefined ||
-        submit.deadlineAt !== undefined ||
-        submit.fingerprint !== undefined
-      ) {
-        if (
-          !Number.isSafeInteger(submit.admittedAt) ||
-          !Number.isSafeInteger(submit.deadlineAt) ||
-          (submit.deadlineAt as number) <= (submit.admittedAt as number) ||
-          typeof submit.fingerprint !== "string" ||
-          !/^[a-f0-9]{64}$/.test(submit.fingerprint)
-        )
-          throw new OpsClientError("runtime");
-      }
-      return submit as unknown as OpsSubmitResult<K>;
+      return admission as OpsSubmitResult<K>;
     } catch (error) {
       if (error instanceof OpsClientError) throw error;
       if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");

@@ -19,6 +19,28 @@ function tokenFile(contents = Buffer.alloc(32, 7).toString("base64url")): string
   return path;
 }
 
+// Existing operation tests use a negotiated v2 peer; negotiation itself is tested below.
+class ProtocolTestClient extends OpsClient {
+  constructor(options: ConstructorParameters<typeof OpsClient>[0]) {
+    const transport = options.fetch ?? globalThis.fetch;
+    super({
+      ...options,
+      fetch: async (url, init) => {
+        if (new URL(String(url)).pathname === "/v1/protocol")
+          return new Response(
+            JSON.stringify({
+              version: 1,
+              requestId: new Headers(init?.headers).get("x-ops-request-id"),
+              ok: true,
+              result: { versions: [1, 2] },
+            }),
+          );
+        return transport(url, init);
+      },
+    });
+  }
+}
+
 describe("ops client", () => {
   it("derives synchronous transport timeouts from the per-kind execution budget", () => {
     expect(opsRequestTimeoutMs("docker.status")).toBe(15_000);
@@ -64,7 +86,7 @@ describe("ops client", () => {
         { status: 200 },
       );
     });
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(token),
       fetch,
@@ -86,7 +108,7 @@ describe("ops client", () => {
   ])(
     "accepts only canonical host-update errors (canonical: %s)",
     async (canonical, expectedCode) => {
-      const client = new OpsClient({
+      const client = new ProtocolTestClient({
         baseUrl: "http://ops-agent:4300",
         tokenFile: tokenFile(),
         fetch: async (_url, init) =>
@@ -120,11 +142,11 @@ describe("ops client", () => {
   it("bounds response bodies and never includes token, file path, URL, or remote body in errors", async () => {
     const token = Buffer.alloc(32, 11).toString("base64url");
     const path = tokenFile(token);
-    const secretBody = `remote docker stderr ${token}`;
-    const client = new OpsClient({
+    const secretBody = `remote docker stderr ${token}`.repeat(100);
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: path,
-      maxResponseBytes: 32,
+      maxResponseBytes: 256,
       fetch: async () => new Response(secretBody, { status: 500 }),
     });
 
@@ -145,7 +167,7 @@ describe("ops client", () => {
           });
         }),
     );
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(),
       fetch,
@@ -159,7 +181,7 @@ describe("ops client", () => {
 
   it("rejects non-private destinations without echoing the URL", () => {
     for (const baseUrl of ["http://evil.example/steal?token=x", "https://evil.example"]) {
-      expect(() => new OpsClient({ baseUrl, tokenFile: tokenFile() })).toThrow(
+      expect(() => new ProtocolTestClient({ baseUrl, tokenFile: tokenFile() })).toThrow(
         "Invalid ops agent destination",
       );
     }
@@ -198,7 +220,7 @@ describe("ops client", () => {
     ]) {
       expect(
         () =>
-          new OpsClient({
+          new ProtocolTestClient({
             baseUrl: "http://ops-agent:4300",
             tokenFile: tokenFile(),
             ...options,
@@ -207,13 +229,13 @@ describe("ops client", () => {
     }
     expect(
       () =>
-        new OpsClient({
+        new ProtocolTestClient({
           baseUrl: "http://ops-agent:4300",
           tokenFile: tokenFile(),
           maxResponseBytes: OPS_MAX_HTTP_RESPONSE_BYTES,
         }),
     ).not.toThrow();
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(),
       randomBytes: () => Buffer.alloc(18, 4),
@@ -262,7 +284,7 @@ describe("ops client", () => {
         { status: 202 },
       );
     });
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(),
       randomBytes: () => Buffer.alloc(18, 8),
@@ -306,7 +328,7 @@ describe("ops client", () => {
         }),
       );
     });
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(token),
       fetch,
@@ -352,7 +374,7 @@ describe("ops client", () => {
         }),
       );
     });
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(),
       fetch,
@@ -370,7 +392,7 @@ describe("ops client", () => {
 
   it("preserves caller AbortError for an in-flight event request", async () => {
     const controller = new AbortController();
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(),
       requestTimeoutMs: 500,
@@ -392,7 +414,7 @@ describe("ops client", () => {
 
   it("carries caller AbortSignal through admission and retained status requests", async () => {
     const signals: AbortSignal[] = [];
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(),
       requestTimeoutMs: 500,
@@ -431,7 +453,7 @@ describe("ops client", () => {
       "timed_out",
     ] as const;
     let index = 0;
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(),
       randomBytes: () => Buffer.alloc(18, 12),
@@ -472,7 +494,7 @@ describe("ops client", () => {
   });
 
   it("strictly parses typed retained status and bounded event pages", async () => {
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(),
       randomBytes: () => Buffer.alloc(18, 9),
@@ -520,7 +542,7 @@ describe("ops client", () => {
   });
 
   it("rejects retained responses for another operation and incoherent event cursors", async () => {
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(),
       randomBytes: () => Buffer.alloc(18, 10),
@@ -555,4 +577,41 @@ describe("ops client", () => {
       client.events("job1_retainedOperation0", { after: 2, limit: 10 }),
     ).rejects.toMatchObject({ errorClass: "runtime" });
   });
+});
+
+it("fix1 refuses an older agent before any version2 mutation admission", async () => {
+  let posts = 0;
+  const client = new OpsClient({
+    baseUrl: "http://ops-agent:4300",
+    tokenFile: tokenFile(),
+    fetch: async (_url, init) => {
+      if (init?.method !== "POST")
+        return new Response(JSON.stringify({ error: "Not Found" }), { status: 404 });
+      posts++;
+      const body = JSON.parse(String(init.body));
+      return new Response(
+        JSON.stringify({
+          version: 1,
+          requestId: body.requestId,
+          ok: true,
+          result: {
+            execution: "async",
+            operationId: "job1_abcdefghijklmnop",
+            operationKey: body.operationKey,
+            kind: "service.build",
+            state: "running",
+          },
+        }),
+        { status: 202 },
+      );
+    },
+  });
+  const error = await client
+    .execute(
+      { kind: "service.build", serviceId: "osrm" },
+      { operationKey: "opk1_abcdefghijklmnop" },
+    )
+    .catch((error) => error);
+  expect(posts).toBe(0);
+  expect(error).toMatchObject({ name: "OpsProtocolUpgradeRequiredError" });
 });

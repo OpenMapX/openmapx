@@ -8,6 +8,7 @@ import {
   type TransitousFeedFile,
 } from "@openmapx/transitous-core";
 import { execa } from "execa";
+import { cliProcessOptions } from "./execution-deadline";
 import { repoPaths } from "./paths";
 
 export type { CommandRunner };
@@ -42,7 +43,11 @@ async function defaultRunner(
   args: string[],
   opts: { cwd?: string; stdio?: "inherit" | "pipe" },
 ): Promise<void> {
-  await execa(command, args, { cwd: opts.cwd, stdio: opts.stdio ?? "pipe" });
+  await execa(command, args, {
+    ...cliProcessOptions(),
+    cwd: opts.cwd,
+    stdio: opts.stdio ?? "pipe",
+  });
 }
 
 /** Defense-in-depth: refuse to write outside the monorepo root. */

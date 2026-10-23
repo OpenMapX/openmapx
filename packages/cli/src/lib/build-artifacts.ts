@@ -16,6 +16,7 @@ import { dirname, isAbsolute, join } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
 import { execa } from "execa";
 import { promoteStagedBuildDirs } from "./build-staging";
+import { cliProcessOptions } from "./execution-deadline";
 import { repoPaths, resolveInvocationPath } from "./paths";
 
 /**
@@ -121,6 +122,7 @@ export function readBuildRecord(serviceId: string, rootDir?: string): BuildRecor
 
 export async function currentRevision(rootDir?: string): Promise<string | undefined> {
   const result = await execa("git", ["rev-parse", "HEAD"], {
+    ...cliProcessOptions(),
     cwd: repoPaths(rootDir).root,
     reject: false,
   });
@@ -216,10 +218,12 @@ async function defaultTar(
   args: string[],
   opts: { cwd?: string; stdin?: "inherit"; stdout?: "inherit" },
 ): Promise<void> {
+  const executionOptions = cliProcessOptions();
   await execa("tar", args, {
+    ...executionOptions,
     cwd: opts.cwd,
     // Stops macOS tar from adding `._*` AppleDouble members.
-    env: { COPYFILE_DISABLE: "1" },
+    env: { ...executionOptions.env, COPYFILE_DISABLE: "1" },
     stdin: opts.stdin ?? "ignore",
     stdout: opts.stdout ?? "inherit",
     stderr: "inherit",

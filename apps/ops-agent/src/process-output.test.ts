@@ -96,3 +96,64 @@ it("withholds an unterminated quoted credential across multiple real frames", ()
     expect(text).not.toContain(secret);
   expect(seen).toContain("last-diagnostic");
 });
+
+describe("fix1 credential boundary regressions", () => {
+  it.each([
+    'pass\x1b(Bword="synthetic-first\n',
+    'pass\x90control\x9cword="synthetic-first\n',
+    'password=closed;token="synthetic-first\n',
+    'password="closed" token="synthetic-first\n',
+    'pass\x1b[31mword="synthetic-first\n',
+  ])("tracks every normalized open assignment: %j", (first) => {
+    const seen: string[] = [];
+    const output = createBoundedProcessOutput({
+      onLine: (_s, line) => seen.push(line),
+      redact: (x) => x,
+    });
+    for (const frame of [
+      first,
+      'synthetic-continuation\\"still-open\n',
+      'synthetic-final"\n',
+      "last-diagnostic\n",
+    ])
+      output.write("stdout", Buffer.from(frame));
+    const all = JSON.stringify({ seen, diagnostics: output.end() });
+    for (const secret of ["synthetic-first", "synthetic-continuation", "synthetic-final"])
+      expect(all).not.toContain(secret);
+    expect(seen).toContain("last-diagnostic");
+  });
+  it.each([" https://synthetic-user", " https://synthetic-user:443"])(
+    "withholds ambiguous URL userinfo at an artificial boundary: %s",
+    (suffix) => {
+      const prefix = "x".repeat(4096 - Buffer.byteLength(suffix)) + suffix;
+      const seen: string[] = [];
+      const output = createBoundedProcessOutput({
+        onLine: (_s, line) => seen.push(line),
+        redact: (x) => x,
+      });
+      output.write("stdout", Buffer.from(prefix));
+      output.write("stdout", Buffer.from("@host.invalid/path\nlast-diagnostic\n"));
+      expect(JSON.stringify({ seen, diagnostics: output.end() })).not.toContain("synthetic-user");
+      expect(seen).toContain("last-diagnostic");
+    },
+  );
+});
+
+it("fix1 withholds a quoted assignment whose delimiter follows a real frame boundary", () => {
+  const seen: string[] = [];
+  const output = createBoundedProcessOutput({
+    onLine: (_s, line) => seen.push(line),
+    redact: (x) => x,
+  });
+  for (const frame of [
+    "password\n",
+    '="synthetic-key-continuation\n',
+    'synthetic-value-continuation"\n',
+    "last-diagnostic\n",
+  ])
+    output.write("stdout", Buffer.from(frame));
+  const all = JSON.stringify({ seen, result: output.end() });
+  expect(all).not.toContain("synthetic-key-continuation");
+  expect(all).not.toContain("synthetic-value-continuation");
+  expect(seen).toContain("last-diagnostic");
+});

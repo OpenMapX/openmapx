@@ -1,3 +1,8 @@
+import {
+  assertCliExecutionAvailable,
+  assertCliRemoteMutationSupported,
+  cliAcquisitionOptions,
+} from "./execution-deadline";
 // CLI-side hardlink apply. Two paths:
 //
 //   1. Preferred — POST the plan to the data-manager's `/link` endpoint.
@@ -106,8 +111,9 @@ async function dataManagerReachable(baseUrl: string, timeoutMs: number): Promise
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    const { signal } = cliAcquisitionOptions();
     const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/status`, {
-      signal: controller.signal,
+      signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
     });
     return res.ok;
   } catch {
@@ -120,6 +126,7 @@ async function dataManagerReachable(baseUrl: string, timeoutMs: number): Promise
 export async function applyGeneratedHardlinks(
   opts: ApplyGeneratedHardlinkOptions = {},
 ): Promise<ApplyGeneratedHardlinkResult> {
+  assertCliExecutionAvailable();
   const paths = repoPaths(opts.rootDir);
   const planPath = hardlinkPlanPath(paths.infraDir);
   if (!existsSync(planPath)) {
@@ -146,7 +153,9 @@ export async function applyGeneratedHardlinks(
     const baseUrl = opts.dataManagerUrl ?? dataManagerUrl();
     const timeout = opts.reachabilityTimeoutMs ?? 1500;
     if (await dataManagerReachable(baseUrl, timeout)) {
+      assertCliRemoteMutationSupported();
       const transport = createDataManagerTransport({
+        ...cliAcquisitionOptions(),
         baseUrl,
         authToken: process.env.DATA_MANAGER_AUTH_TOKEN?.trim(),
       });
@@ -165,6 +174,7 @@ export async function applyGeneratedHardlinks(
     }
   }
 
+  assertCliExecutionAvailable();
   const result = applyHardlinkPlan(plan, { rootDir: dataRoot, prune: opts.prune });
   return {
     applied: true,

@@ -88,7 +88,11 @@ function fixture(options: { agent: "old" | "current"; helperStarts?: boolean }) 
     runDocker: docker,
     verifyAppliedRelease: async () => true,
   });
-  const context = { signal: new AbortController().signal, emitLog: vi.fn() };
+  const context = {
+    execution: testExecution(),
+    signal: new AbortController().signal,
+    emitLog: vi.fn(),
+  };
   return { rootDir, docker, calls, cli, effects, context };
 }
 

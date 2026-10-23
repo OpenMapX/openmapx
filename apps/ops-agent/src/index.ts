@@ -14,6 +14,7 @@ import {
   pruneBackupRetention,
 } from "./administrative-runtime";
 import { isTerminalHandoff, readAgentHandoff } from "./agent-handoff";
+import { startOpsAgentServer } from "./bootstrap";
 import {
   CommunityRepositoryStore,
   installCommunityRepositoryRuntime,
@@ -32,7 +33,6 @@ import {
   janitorPrivacyBackupScratch,
   probePrivacyBackupRuntime,
 } from "./privacy-backup-runtime";
-import { buildOpsAgentServer } from "./server";
 import {
   afterValidatedServiceAuthority,
   resolveBootstrapEnabledServiceIds,
@@ -173,7 +173,6 @@ async function main(): Promise<void> {
       : undefined;
     const administrativeCli = createDefaultFixedCli(config.rootDir);
     const releaseEffects = createDefaultReleaseEffects(config.rootDir, administrativeCli);
-    await releaseEffects.initialize?.();
     createTransitousLockRuntime(runtime, { rootDir: config.rootDir });
     createAdministrativeRuntime(runtime, {
       rootDir: config.rootDir,
@@ -195,8 +194,6 @@ async function main(): Promise<void> {
       void pruneBackupRetention(config.rootDir, retentionDays, administrativeCli).catch(() => {
         process.stderr.write("Scheduled backup retention failed\n");
       });
-    runBackupRetention();
-    setInterval(runBackupRetention, 24 * 60 * 60 * 1_000);
     const policyAuthority = async () => {
       const authority = await authorityLoader();
       const resources = loadConfiguredResourceAuthority();
@@ -212,68 +209,78 @@ async function main(): Promise<void> {
       };
     };
     const initialPolicyAuthority = await policyAuthority();
-    const app = buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
-      resourceClaimer: createProductionRegistryResourceClaimer({
-        services: initialPolicyAuthority.services,
-        integrationIds: initialPolicyAuthority.integrationIds,
-        loadAuthority: policyAuthority,
-        enabledServiceIds: (authorityServices) => {
-          const trusted = readTrustedEnabledServiceIds(
-            paths.infraDir,
-            authorityServices.map((service) => service.selectionAuthority),
-          );
-          return trusted ?? bootstrapEnabledServiceIds;
-        },
-        trustedData: createFileTrustedOpsDataSource({
-          directory: config.trustedConfigDirectory,
-          token: apiToken,
-          allowedUids: [uid],
-          expectedGid: gid,
+    await startOpsAgentServer(
+      {
+        tokens: { api: apiToken, "data-manager": dataManagerToken },
+        resourceClaimer: createProductionRegistryResourceClaimer({
+          services: initialPolicyAuthority.services,
+          integrationIds: initialPolicyAuthority.integrationIds,
+          loadAuthority: policyAuthority,
+          enabledServiceIds: (authorityServices) => {
+            const trusted = readTrustedEnabledServiceIds(
+              paths.infraDir,
+              authorityServices.map((service) => service.selectionAuthority),
+            );
+            return trusted ?? bootstrapEnabledServiceIds;
+          },
+          trustedData: createFileTrustedOpsDataSource({
+            directory: config.trustedConfigDirectory,
+            token: apiToken,
+            allowedUids: [uid],
+            expectedGid: gid,
+          }),
+          resourceAuthority: {
+            allowBackup: (kind, backupId, serviceIds) =>
+              inspectBackupAuthority(config.rootDir, kind, backupId, serviceIds),
+            allowRegion: (_kind, regionId) =>
+              loadConfiguredResourceAuthority().regions.has(regionId),
+            allowCountry: (_kind, countryCode) =>
+              loadConfiguredResourceAuthority().countries.has(countryCode),
+            allowDataType: async (dataTypeId) =>
+              inspectDataTypeAuthority((await authorityLoader()).services, dataTypeId),
+            allowCatalogRevision: (kind, revisionId) =>
+              kind === "data.generateApiKeys" && revisionId === "transitous-fixed-v1",
+            allowRelease: (_kind, releaseId) => inspectReleaseAuthority(config.rootDir, releaseId),
+            allowUpdateJobId: (updateJobId) =>
+              /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(updateJobId),
+          },
         }),
-        resourceAuthority: {
-          allowBackup: (kind, backupId, serviceIds) =>
-            inspectBackupAuthority(config.rootDir, kind, backupId, serviceIds),
-          allowRegion: (_kind, regionId) => loadConfiguredResourceAuthority().regions.has(regionId),
-          allowCountry: (_kind, countryCode) =>
-            loadConfiguredResourceAuthority().countries.has(countryCode),
-          allowDataType: async (dataTypeId) =>
-            inspectDataTypeAuthority((await authorityLoader()).services, dataTypeId),
-          allowCatalogRevision: (kind, revisionId) =>
-            kind === "data.generateApiKeys" && revisionId === "transitous-fixed-v1",
-          allowRelease: (_kind, releaseId) => inspectReleaseAuthority(config.rootDir, releaseId),
-          allowUpdateJobId: (updateJobId) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(updateJobId),
-        },
-      }),
-      journal,
-      runtime,
-      replacementInProgress: () => {
-        try {
-          const handoff = readAgentHandoff(config.rootDir);
-          return handoff !== null && !isTerminalHandoff(handoff.phase);
-        } catch {
-          // An unreadable record fails release operations, not every operation.
-          return false;
-        }
-      },
-      audit: (event) => process.stdout.write(`${JSON.stringify(event)}\n`),
-      ...(privacyBackupExtraction ? { privacyBackupExtraction } : {}),
-      privacyBackupHealth: () =>
-        probePrivacyBackupRuntime({
-          ...privacyBackupRuntimeOptions,
-          enabled: privacyBackupExtraction?.enabled === true,
-        }),
-      ...(dawarichCollector && dawarichInspector
-        ? {
-            dawarichExport: {
-              enabled: true,
-              inspectRuntime: dawarichInspector,
-              runCollector: dawarichCollector,
-            },
+        journal,
+        runtime,
+        replacementInProgress: () => {
+          try {
+            const handoff = readAgentHandoff(config.rootDir);
+            return handoff !== null && !isTerminalHandoff(handoff.phase);
+          } catch {
+            // An unreadable record fails release operations, not every operation.
+            return false;
           }
-        : {}),
-    });
-    await app.listen({ host: config.host, port: config.port });
+        },
+        audit: (event) => process.stdout.write(`${JSON.stringify(event)}\n`),
+        ...(privacyBackupExtraction ? { privacyBackupExtraction } : {}),
+        privacyBackupHealth: () =>
+          probePrivacyBackupRuntime({
+            ...privacyBackupRuntimeOptions,
+            enabled: privacyBackupExtraction?.enabled === true,
+          }),
+        ...(dawarichCollector && dawarichInspector
+          ? {
+              dawarichExport: {
+                enabled: true,
+                inspectRuntime: dawarichInspector,
+                runCollector: dawarichCollector,
+              },
+            }
+          : {}),
+      },
+      releaseEffects,
+      { host: config.host, port: config.port },
+      () => {
+        runBackupRetention();
+        const retentionTimer = setInterval(runBackupRetention, 24 * 60 * 60 * 1_000);
+        retentionTimer.unref();
+      },
+    );
   });
 }
 

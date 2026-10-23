@@ -230,6 +230,7 @@ describe("version2 execution journal", () => {
     });
     const record = {
       executionVersion: 2 as const,
+      requestVersion: 1 as const,
       ...normalized,
       operationFingerprint,
       requestedDeadlineAt: admittedAt + 1000,
@@ -250,12 +251,16 @@ describe("version2 execution journal", () => {
       admittedAt,
       deadlineAt: admittedAt + 1000,
       fingerprint: normalized.fingerprint,
+      requestVersion: 1,
       state: "failed",
       errorClass: "recovery_required",
       terminationRequestedAt: new Date(admittedAt + 1000).toISOString(),
     });
     const retained = recovered.records()[0];
     if (!retained) throw new Error("Missing retained execution");
+    await expect(recovered.replace([{ ...retained, requestVersion: 2 }])).rejects.toThrow(
+      "Retained execution identity is immutable",
+    );
     const extended = normalizeExecutionAdmission({
       operationFingerprint,
       operationKey,

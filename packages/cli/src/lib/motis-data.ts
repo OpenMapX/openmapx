@@ -37,6 +37,7 @@ import {
 } from "@openmapx/transitous-core";
 import { execa } from "execa";
 import { TRANSITOUS_COUNTRIES_ENV } from "./env-defaults";
+import { cliProcessOptions } from "./execution-deadline";
 import { readFeedProxyVars, renderFeedProxyNginxConfig } from "./motis-feed-proxy";
 import { resolveOsmPbf } from "./osm-pbf";
 import { repoPaths } from "./paths";
@@ -125,7 +126,11 @@ async function defaultRunner(
   args: string[],
   opts: { cwd?: string; stdio?: "inherit" | "pipe" },
 ): Promise<void> {
-  await execa(command, args, { cwd: opts.cwd, stdio: opts.stdio ?? "inherit" });
+  await execa(command, args, {
+    ...cliProcessOptions(),
+    cwd: opts.cwd,
+    stdio: opts.stdio ?? "inherit",
+  });
 }
 
 function linkOrCopy(source: string, target: string): void {

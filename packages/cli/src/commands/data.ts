@@ -24,6 +24,7 @@ import {
   resolveTransitousCountries,
   TRANSITOUS_COUNTRIES_ENV,
 } from "../lib/env-defaults";
+import { cliAcquisitionOptions, constrainCliDataManagerTransport } from "../lib/execution-deadline";
 import { applyGeneratedHardlinks } from "../lib/hardlinks";
 import { log, routeLogsToStderr, table } from "../lib/output";
 import { buildServices, resolveDataBuildServiceId } from "../lib/service-builds";
@@ -31,10 +32,13 @@ import { generateTransitousApiKeys } from "../lib/transitous-api-keys";
 import { renderComposeForRepo } from "./compose";
 
 function createCliTransport() {
-  return dm.createDataManagerTransport({
-    baseUrl: dataManagerUrl(),
-    authToken: process.env.DATA_MANAGER_AUTH_TOKEN?.trim(),
-  });
+  return constrainCliDataManagerTransport(
+    dm.createDataManagerTransport({
+      ...cliAcquisitionOptions(),
+      baseUrl: dataManagerUrl(),
+      authToken: process.env.DATA_MANAGER_AUTH_TOKEN?.trim(),
+    }),
+  );
 }
 
 function formatBytes(n: number): string {

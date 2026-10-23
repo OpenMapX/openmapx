@@ -85,6 +85,7 @@ describe("default fixed CLI live output", () => {
     );
     const seen: string[] = [];
     const completion = createDefaultFixedCli(root, join(root, "agent.mjs"))([], {
+      execution: testExecution(),
       signal: new AbortController().signal,
       emitLog: (_stream, message) => seen.push(message),
     });
@@ -625,7 +626,11 @@ describe("administrative release runtime", () => {
       }
       return "";
     };
-    const context = { signal: new AbortController().signal, emitLog: vi.fn() };
+    const context = {
+      execution: testExecution(),
+      signal: new AbortController().signal,
+      emitLog: vi.fn(),
+    };
     const first = createDefaultReleaseEffects(rootDir, async () => undefined, {
       runDocker: docker,
     });
@@ -710,7 +715,11 @@ describe("administrative release runtime", () => {
         return "";
       },
     });
-    const context = { signal: new AbortController().signal, emitLog: vi.fn() };
+    const context = {
+      execution: testExecution(),
+      signal: new AbortController().signal,
+      emitLog: vi.fn(),
+    };
     expect(await runtime.resolve(context)).toBe(`${sourceRevision}-123-1`);
     attempt = 2;
     expect(await runtime.resolve(context)).toBe(`${sourceRevision}-123-2`);
@@ -836,8 +845,16 @@ describe("administrative release runtime", () => {
     };
 
     const results = await Promise.allSettled([
-      resolveFor("release-a").resolve({ signal: new AbortController().signal, emitLog: vi.fn() }),
-      resolveFor("release-b").resolve({ signal: new AbortController().signal, emitLog: vi.fn() }),
+      resolveFor("release-a").resolve({
+        execution: testExecution(),
+        signal: new AbortController().signal,
+        emitLog: vi.fn(),
+      }),
+      resolveFor("release-b").resolve({
+        execution: testExecution(),
+        signal: new AbortController().signal,
+        emitLog: vi.fn(),
+      }),
     ]);
 
     const stayed = readdirSync(directory).filter((name) => name.endsWith(".json")).length;
@@ -895,7 +912,7 @@ describe("administrative release runtime", () => {
         first.apply(
           releaseId,
           ["app-api"],
-          { signal: new AbortController().signal, emitLog: vi.fn() },
+          { execution: testExecution(), signal: new AbortController().signal, emitLog: vi.fn() },
           "job-recovery",
         ),
       ).rejects.toThrow("injected crash");
@@ -961,7 +978,7 @@ describe("administrative release runtime", () => {
         first.apply(
           releaseId,
           ["app-api"],
-          { signal: new AbortController().signal, emitLog: vi.fn() },
+          { execution: testExecution(), signal: new AbortController().signal, emitLog: vi.fn() },
           "job-recovery",
         ),
       ).rejects.toThrow("injected crash");
@@ -1011,6 +1028,7 @@ describe("administrative release runtime", () => {
     });
     await expect(
       first.apply(releaseId, ["app-api"], {
+        execution: testExecution(),
         signal: new AbortController().signal,
         emitLog: vi.fn(),
       }),
@@ -1074,7 +1092,7 @@ describe("administrative release runtime", () => {
         first.apply(
           releaseId,
           ["app-api"],
-          { signal: new AbortController().signal, emitLog: vi.fn() },
+          { execution: testExecution(), signal: new AbortController().signal, emitLog: vi.fn() },
           `job-${crashPhase}`,
         ),
       ).rejects.toThrow("injected crash");
@@ -1150,7 +1168,11 @@ describe("administrative release runtime", () => {
     });
 
     await expect(
-      effects.inspectSystem({ signal: new AbortController().signal, emitLog: vi.fn() }),
+      effects.inspectSystem({
+        execution: testExecution(),
+        signal: new AbortController().signal,
+        emitLog: vi.fn(),
+      }),
     ).resolves.toMatchObject({
       dockerReachable: true,
       services: [
@@ -1209,7 +1231,11 @@ describe("administrative release runtime", () => {
       return createDefaultReleaseEffects(rootDir, async () => undefined, { runDocker });
     }
 
-    const context = () => ({ signal: new AbortController().signal, emitLog: vi.fn() });
+    const context = () => ({
+      execution: testExecution(),
+      signal: new AbortController().signal,
+      emitLog: vi.fn(),
+    });
 
     it("reports unknown rather than stopped when a per-service observation throws", async () => {
       const effects = systemFixture("file", async (args) => {
@@ -1346,7 +1372,7 @@ describe("administrative release runtime", () => {
       effects.apply(
         releaseId,
         ["app-api"],
-        { signal: new AbortController().signal, emitLog: vi.fn() },
+        { execution: testExecution(), signal: new AbortController().signal, emitLog: vi.fn() },
         "job-1",
       ),
     ).rejects.toThrow("injected update failure");
@@ -1623,6 +1649,124 @@ it("never gives release recovery a fresh execution budget after restart expiry",
     });
     expect(runFixedCli).not.toHaveBeenCalled();
     expect(existsSync(join(directory, "transaction.json"))).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+describe("fix1 legacy release recovery", () => {
+  it.each(["overlay_written", "rollback_services"])(
+    "refuses legacy %s effects without a retained deadline",
+    async (phase) => {
+      const rootDir = temporaryRoot();
+      const releaseId = "release-legacy-unknown";
+      const directory = join(rootDir, "infra", "docker", ".ops-agent-releases");
+      mkdirSync(directory, { mode: 0o700 });
+      writeFileSync(
+        join(directory, `${releaseId}.json`),
+        JSON.stringify({
+          schemaVersion: 1,
+          release: releaseId,
+          images: Object.fromEntries(
+            [
+              "api",
+              "web",
+              "data-manager",
+              "ops-agent",
+              "privacy-backup",
+              "transitous-runner",
+              "transitous-tools",
+            ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`]),
+          ),
+          privacyReleaseValidation,
+        }),
+        { mode: 0o600 },
+      );
+      const first = createDefaultReleaseEffects(rootDir, async () => undefined, {
+        afterReleasePhase: (p) => {
+          if (p === "overlay_written") throw Error("fixture crash");
+        },
+      });
+      await expect(
+        first.apply(releaseId, ["app-api"], {
+          signal: new AbortController().signal,
+          emitLog: () => undefined,
+        }),
+      ).rejects.toThrow("fixture crash");
+      const transaction = join(directory, "transaction.json");
+      const record = JSON.parse(readFileSync(transaction, "utf8"));
+      record.phase = phase;
+      writeFileSync(transaction, JSON.stringify(record));
+      const overlay = join(rootDir, "infra", "docker", "docker-compose.release.yml");
+      writeFileSync(overlay, "operator-state\n");
+      const run = vi.fn(async () => undefined);
+      const recovered = createDefaultReleaseEffects(rootDir, run, {
+        verifyAppliedRelease: async () => true,
+      });
+      await expect(recovered.initialize?.()).rejects.toMatchObject({
+        name: "OpsExecutionFailure",
+        errorClass: "recovery_required",
+      });
+      expect(run).not.toHaveBeenCalled();
+      expect(readFileSync(overlay, "utf8")).toBe("operator-state\n");
+      expect(existsSync(transaction)).toBe(true);
+    },
+  );
+});
+
+it("fix1 recovery cannot publish after verification consumes the remaining deadline", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const rootDir = temporaryRoot();
+  const releaseId = "release-verification-expiry";
+  const directory = join(rootDir, "infra/docker/.ops-agent-releases");
+  mkdirSync(directory, { mode: 0o700 });
+  writeFileSync(
+    join(directory, `${releaseId}.json`),
+    JSON.stringify({
+      schemaVersion: 1,
+      release: releaseId,
+      images: Object.fromEntries(
+        [
+          "api",
+          "web",
+          "data-manager",
+          "ops-agent",
+          "privacy-backup",
+          "transitous-runner",
+          "transitous-tools",
+        ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`]),
+      ),
+      privacyReleaseValidation,
+    }),
+    { mode: 0o600 },
+  );
+  const execution = { ...testExecution(), deadlineAt: Date.now() + 1000 };
+  try {
+    const first = createDefaultReleaseEffects(rootDir, async () => undefined, {
+      afterReleasePhase: (phase) => {
+        if (phase === "overlay_written") throw Error("fixture crash");
+      },
+    });
+    await expect(
+      first.apply(releaseId, ["app-api"], {
+        execution,
+        signal: new AbortController().signal,
+        emitLog: () => undefined,
+      }),
+    ).rejects.toThrow("fixture crash");
+    const path = join(directory, "transaction.json");
+    const record = JSON.parse(readFileSync(path, "utf8"));
+    record.phase = "services_applied";
+    writeFileSync(path, JSON.stringify(record));
+    const recovered = createDefaultReleaseEffects(rootDir, async () => undefined, {
+      verifyAppliedRelease: async () => {
+        vi.setSystemTime(Date.now() + 2000);
+        return true;
+      },
+    });
+    await expect(recovered.initialize?.()).rejects.toMatchObject({ errorClass: "timeout" });
+    expect(existsSync(join(directory, "current.json"))).toBe(false);
+    expect(existsSync(path)).toBe(true);
   } finally {
     vi.useRealTimers();
   }

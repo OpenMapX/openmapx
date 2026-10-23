@@ -1195,13 +1195,17 @@ export function createDefaultReleaseEffects(
     transaction: ReleaseTransaction,
     context: FixedCliOptions,
   ): Promise<void> => {
-    if (transaction.execution) context = { ...context, execution: transaction.execution };
+    if (!transaction.execution) throw new OpsExecutionFailure("recovery_required", {});
+    context = { ...context, execution: transaction.execution };
     remainingCliTime(context);
     await writeTransaction({ ...transaction, phase: "rollback_overlay" });
+    remainingCliTime(context);
     if (transaction.previousOverlay === null) durableUnlink(paths.overlay);
     else atomicWrite(paths.overlay, transaction.previousOverlay);
     await writeTransaction({ ...transaction, phase: "rollback_services" });
+    remainingCliTime(context);
     await runFixedCli(["services", "update", "--no-deps", ...transaction.serviceIds], context);
+    remainingCliTime(context);
     if (transaction.previousState === null) durableUnlink(paths.state);
     else atomicWrite(paths.state, transaction.previousState);
     durableUnlink(paths.transaction);
@@ -1210,7 +1214,8 @@ export function createDefaultReleaseEffects(
     transaction: ReleaseTransaction,
     context: FixedCliOptions,
   ): Promise<void> => {
-    if (transaction.execution) context = { ...context, execution: transaction.execution };
+    if (!transaction.execution) throw new OpsExecutionFailure("recovery_required", {});
+    context = { ...context, execution: transaction.execution };
     remainingCliTime(context);
     const manifest = loadManifest(transaction.releaseId);
     // The transaction's digest was taken from the exact bytes authorized when
@@ -1224,12 +1229,15 @@ export function createDefaultReleaseEffects(
       await requireCurrentAgent(manifest, context);
     }
     if (transaction.phase === "prepared") {
+      remainingCliTime(context);
       coreServices.writeReleaseComposeArtifacts(manifest, paths.overlay);
       transaction = { ...transaction, phase: "overlay_written" };
       await writeTransaction(transaction);
     }
     if (transaction.phase === "overlay_written") {
+      remainingCliTime(context);
       coreServices.writeReleaseComposeArtifacts(manifest, paths.overlay);
+      remainingCliTime(context);
       await runFixedCli(["services", "update", "--no-deps", ...transaction.serviceIds], context);
       if (!(await verifyApplied(manifest, transaction.serviceIds, context))) {
         throw new Error("Release recovery verification failed");
@@ -1246,6 +1254,7 @@ export function createDefaultReleaseEffects(
       if (!(await verifyApplied(manifest, transaction.serviceIds, context))) {
         throw new Error("Release recovery verification failed");
       }
+      remainingCliTime(context);
       publishState(transaction);
       transaction = { ...transaction, phase: "state_published" };
       await writeTransaction(transaction);
@@ -1259,6 +1268,7 @@ export function createDefaultReleaseEffects(
       if (!(await verifyApplied(manifest, transaction.serviceIds, context))) {
         throw new Error("Release recovery verification failed");
       }
+      remainingCliTime(context);
       durableUnlink(paths.transaction);
       return;
     }

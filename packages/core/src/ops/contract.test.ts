@@ -718,3 +718,26 @@ describe("ops contract", () => {
     ).toThrow();
   });
 });
+
+it("fix1 reads only the actual historical or exact v2 admission projection", async () => {
+  const { parseOpsAdmission } = await import("./contract");
+  const historical = {
+    execution: "async",
+    operationId: "job1_0123456789abcdef",
+    operationKey: "opk1_0123456789abcdef",
+    kind: "service.build",
+    state: "queued",
+  };
+  expect(parseOpsAdmission(historical)).toEqual(historical);
+  for (const extra of [{ version: 1 }, { deadlineAt: 10 }, { parent: {} }, { unexpected: true }])
+    expect(() => parseOpsAdmission({ ...historical, ...extra })).toThrow();
+  expect(
+    parseOpsAdmission({
+      ...historical,
+      version: 2,
+      admittedAt: 1,
+      deadlineAt: 2,
+      fingerprint: "a".repeat(64),
+    }),
+  ).toMatchObject({ version: 2 });
+});

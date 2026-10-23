@@ -11,12 +11,12 @@ import { registerServicesCommands } from "./commands/services";
 import { registerTransitousCommands } from "./commands/transitous-bump";
 import { registerTransportApisPinCommands } from "./commands/transport-apis-pin";
 import { registerUsersCommands } from "./commands/users";
+import { assertCliExecutionAvailable, withCliExecutionDeadline } from "./lib/execution-deadline";
 import { loadInfraEnv } from "./lib/infra-env";
 
 // Mirror Docker Compose's behaviour: auto-load infra/docker/.env so that
 // `--domain` and `SERVICE_<ID>_<KEY>` overrides resolve consistently between
 // `pnpm openmapx compose render` (CLI) and `docker compose up` (compose).
-loadInfraEnv();
 
 const program = new Command();
 
@@ -39,4 +39,8 @@ registerCacheCommands(program);
 registerTransportApisPinCommands(program);
 registerTransitousCommands(program);
 
-await program.parseAsync(process.argv);
+await withCliExecutionDeadline(process.argv.slice(2), async () => {
+  loadInfraEnv();
+  program.hook("preAction", () => assertCliExecutionAvailable());
+  await program.parseAsync(process.argv);
+});

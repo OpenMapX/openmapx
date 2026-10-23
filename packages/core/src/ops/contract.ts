@@ -485,17 +485,22 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
 ]);
 export type OpsOperation = z.infer<typeof opsOperationSchema>;
 
-const opsRequestSchema = z.strictObject({
-  version: z.union([z.literal(1), z.literal(OPS_PROTOCOL_VERSION)]),
-  requestId: requestIdSchema,
-  operationKey: operationKeySchema,
-  issuedAt: timestampSchema,
-  expiresAt: timestampSchema,
-  operation: opsOperationSchema,
-  execution: z
-    .strictObject({ requestedDeadlineAt: z.number().int().nonnegative().safe() })
-    .optional(),
-});
+const opsRequestSchema = z
+  .strictObject({
+    version: z.union([z.literal(1), z.literal(OPS_PROTOCOL_VERSION)]),
+    requestId: requestIdSchema,
+    operationKey: operationKeySchema,
+    issuedAt: timestampSchema,
+    expiresAt: timestampSchema,
+    operation: opsOperationSchema,
+    execution: z
+      .strictObject({ requestedDeadlineAt: z.number().int().nonnegative().safe() })
+      .optional(),
+  })
+  .refine(
+    (request) => request.version === 2 || request.execution === undefined,
+    "Version1 cannot carry execution authority",
+  );
 export type OpsRequest = z.infer<typeof opsRequestSchema>;
 
 export function authorizeOpsOperation(role: OpsRole, kind: OpsOperationKind): boolean {
@@ -1227,7 +1232,9 @@ export function parseOpsJobStatus(input: unknown): OpsJobStatus {
     status.version === 1 &&
     (status.admittedAt !== undefined ||
       status.deadlineAt !== undefined ||
-      status.fingerprint !== undefined)
+      status.fingerprint !== undefined ||
+      status.diagnostics !== undefined ||
+      status.failureResult !== undefined)
   )
     throw new Error("Invalid compatibility identity");
   if (
@@ -1346,6 +1353,25 @@ export interface OpsAdmission {
   operationKey: string;
   kind: OpsOperationKind;
   state: OpsJobState;
+}
+const legacyAdmission = z.strictObject({
+  execution: z.literal("async"),
+  operationId: operationIdSchema,
+  operationKey: operationKeySchema,
+  kind: operationKindSchema,
+  state: jobState,
+});
+const executionAdmission = legacyAdmission
+  .extend({
+    version: z.literal(2),
+    admittedAt: z.number().int().nonnegative().safe(),
+    deadlineAt: z.number().int().nonnegative().safe(),
+    fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  })
+  .refine((value) => value.deadlineAt > value.admittedAt);
+/** The historical admission had no inner version. Both forms remain exact, disjoint schemas. */
+export function parseOpsAdmission(input: unknown): OpsAdmission {
+  return z.union([legacyAdmission, executionAdmission]).parse(input);
 }
 export interface OpsSyncResult<K extends OpsOperationKind = OpsOperationKind> {
   execution: "sync";

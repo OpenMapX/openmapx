@@ -77,6 +77,28 @@ export const OPS_AGENT_RETENTION_LIMITS = {
   maxAggregateJournalBytes: 24 * 1024 * 1024,
   maxAggregateEventBytes: DEFAULT_JOB_ENTRIES * MAX_RETAINED_EVENT_BYTES_PER_JOB,
 } as const;
+// Conservative read-only surface while a retained release transaction needs reconciliation.
+const RELEASE_RECOVERY_READ_KINDS = new Set<OpsOperationKind>([
+  "docker.status",
+  "stack.status",
+  "configuration.inspect",
+  "configuration.hardlinks.inspect",
+  "service.logs",
+  "service.logs.follow",
+  "dawarich.provisioning.inspect",
+  "release.inspect",
+  "appApi.runtime.inspect",
+  "agent.handoff.inspect",
+  "backup.list",
+  "system.inspect",
+  "communityServices.inspect",
+  "serviceSelection.inspect",
+  "data.inspect",
+  "valhalla.traffic.inspect",
+  "postgis.capacity.inspect",
+  "transitousLock.inspect",
+  "gbfsCatalogLock.inspect",
+]);
 const FALLBACK_REQUEST_ID = "ops1_unavailable000000";
 const OPERATION_KIND_SET = new Set<string>(OPS_OPERATION_KINDS);
 const REQUEST_ID_PATTERN = /^ops1_[A-Za-z0-9_-]{16,64}$/;
@@ -93,6 +115,7 @@ export interface OpsAuditEvent {
 
 export interface BuildOpsAgentServerOptions {
   tokens: Record<OpsRole, string>;
+  releaseRecovery?: { ready: boolean; reason?: "recovery_required" };
   resourcePolicy?: OpsResourcePolicy;
   resourceClaimer?: OpsResourceClaimer;
   journal?: OpsJobJournal;
@@ -366,6 +389,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     ...(job.executionVersion === 2
       ? {
           executionVersion: 2 as const,
+          requestVersion: job.requestVersion,
           admittedAt: job.admittedAt,
           deadlineAt: job.deadlineAt,
           operationFingerprint: job.operationFingerprint,
@@ -555,7 +579,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         ),
         { stream, message: boundedMessage },
       ];
-      let truncated = job.diagnostics?.truncated ?? false;
+      let truncated =
+        (job.diagnostics?.truncated ?? false) || boundedMessage === PROCESS_OUTPUT_TRUNCATED;
       while (
         tail.length > 255 ||
         Buffer.byteLength(JSON.stringify({ tail, truncated })) > 16 * 1024 - 128
@@ -592,11 +617,25 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     },
   });
 
-  const statusFor = (job: JobRecord): OpsJobStatus => ({
-    version: job.executionVersion === 2 ? 2 : 1,
-    ...(job.executionVersion === 2 ? identityFor(job) : {}),
-    ...(job.diagnostics ? { diagnostics: job.diagnostics } : {}),
-    ...(job.failureResult ? { failureResult: job.failureResult } : {}),
+  const projectionVersion = (request: { headers: Record<string, unknown> }): 1 | 2 =>
+    request.headers["x-ops-protocol-version"] === "2" ? 2 : 1;
+  const admissionFor = (job: JobRecord, version: 1 | 2) => ({
+    execution: "async",
+    operationId: job.operationId,
+    operationKey: job.operationKey,
+    kind: job.operation.kind,
+    state: outwardStateFor(job),
+    ...(version === 2 && job.executionVersion === 2 ? { version: 2, ...identityFor(job) } : {}),
+  });
+  const statusFor = (job: JobRecord, version: 1 | 2): OpsJobStatus => ({
+    version: version === 2 && job.executionVersion === 2 ? 2 : 1,
+    ...(version === 2 && job.executionVersion === 2 ? identityFor(job) : {}),
+    ...(version === 2 && job.executionVersion === 2 && job.diagnostics
+      ? { diagnostics: job.diagnostics }
+      : {}),
+    ...(version === 2 && job.executionVersion === 2 && job.failureResult
+      ? { failureResult: job.failureResult }
+      : {}),
     operationId: job.operationId,
     operationKey: job.operationKey,
     kind: job.operation.kind,
@@ -876,6 +915,12 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       .code(statusCode)
       .send(redactedOpsError(requestIdFromBody(request.body), "validation", error));
   });
+  app.get("/v1/protocol", async (request, reply) => {
+    const requestId = validRequestId(request.headers["x-ops-request-id"]);
+    if (!resolveRole(request.headers.authorization, options.tokens))
+      return reply.code(401).send(redactedOpsError(requestId, "authentication"));
+    return reply.send(opsSuccess(requestId, { versions: [1, 2] }));
+  });
   app.get("/health", async () => {
     let privacyBackup = {
       ready: false,
@@ -887,7 +932,11 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     } catch {
       // Health evidence is fail-closed and never includes Docker/inventory errors.
     }
-    return { ok: true, privacyBackup };
+    return {
+      ok: true,
+      privacyBackup,
+      ...(options.releaseRecovery ? { releaseRecovery: options.releaseRecovery } : {}),
+    };
   });
 
   app.post("/v1/operations", async (request, reply) => {
@@ -917,6 +966,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         delegationHeader !== undefined ||
         controlHeaders.filter((x) => x === "x-openmapx-parent-execution").length > 1
       )
+        throw new RequestGuardError("authorization", 403);
+      if (parsed.version === 1 && (parentHeader !== undefined || delegationHeader !== undefined))
         throw new RequestGuardError("authorization", 403);
       if (parentHeader !== undefined) {
         if (role !== "api" || typeof parentHeader !== "string")
@@ -970,17 +1021,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         const existing = jobsByKey.get(ownerKey);
         if (existing) {
           if (!matchesRetained(existing)) throw new RequestGuardError("conflict", 409);
-          return reply.code(202).send(
-            opsSuccess(parsed.requestId, {
-              execution: "async",
-              operationId: existing.operationId,
-              operationKey: existing.operationKey,
-              kind: existing.operation.kind,
-              state: outwardStateFor(existing),
-              version: existing.executionVersion === 2 ? 2 : 1,
-              ...identityFor(existing),
-            }),
-          );
+          return reply
+            .code(202)
+            .send(opsSuccess(parsed.requestId, admissionFor(existing, parsed.version)));
         }
         if (jobsById.size >= maxJobEntries) {
           throw new RequestGuardError("busy", 429);
@@ -990,6 +1033,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           throw new RequestGuardError("busy", 409);
         }
       }
+      if (options.releaseRecovery?.ready === false && !RELEASE_RECOVERY_READ_KINDS.has(kind))
+        throw new RequestGuardError("recovery_required", 409);
       normalized = normalize(nowMs);
       if (active >= maxConcurrency) throw new RequestGuardError("busy", 429);
       active += 1;
@@ -1100,6 +1145,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             operationId,
             operationKey: parsed.operationKey,
             executionVersion: 2,
+            requestVersion: parsed.version,
             ...normalized,
             operationFingerprint,
             requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
@@ -1129,17 +1175,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         if (admission.type === "retained") {
           await claimAdmission?.rollback().catch(() => undefined);
           active -= 1;
-          return reply.code(202).send(
-            opsSuccess(parsed.requestId, {
-              execution: "async",
-              operationId: admission.job.operationId,
-              operationKey: admission.job.operationKey,
-              kind: admission.job.operation.kind,
-              state: outwardStateFor(admission.job),
-              version: admission.job.executionVersion === 2 ? 2 : 1,
-              ...identityFor(admission.job),
-            }),
-          );
+          return reply
+            .code(202)
+            .send(opsSuccess(parsed.requestId, admissionFor(admission.job, parsed.version)));
         }
         const { job } = admission;
         try {
@@ -1157,17 +1195,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           throw new RequestGuardError("runtime", 500);
         }
         await runAsync(job, startedAt, claim, claimAdmission);
-        return reply.code(202).send(
-          opsSuccess(parsed.requestId, {
-            execution: "async",
-            operationId: job.operationId,
-            operationKey: job.operationKey,
-            kind: job.operation.kind,
-            state: outwardStateFor(job),
-            version: job.executionVersion === 2 ? 2 : 1,
-            ...identityFor(job),
-          }),
-        );
+        return reply
+          .code(202)
+          .send(opsSuccess(parsed.requestId, admissionFor(job, parsed.version)));
       }
       const controller = new AbortController();
       try {
@@ -1265,7 +1295,11 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     if (bodyFingerprint !== undefined) {
       if (bodyFingerprint !== (job.operationFingerprint ?? job.fingerprint))
         return reply.code(409).send(redactedOpsError(requestId, "conflict"));
-      if (fingerprint !== undefined && fingerprint !== job.fingerprint)
+      if (
+        fingerprint !== undefined &&
+        fingerprint !== job.fingerprint &&
+        fingerprint !== bodyFingerprint
+      )
         return reply.code(409).send(redactedOpsError(requestId, "conflict"));
       const requested = request.headers["x-ops-requested-deadline"];
       if (requested !== undefined) {
@@ -1297,7 +1331,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       if (fingerprint !== job.fingerprint && fingerprint !== job.operationFingerprint)
         return reply.code(409).send(redactedOpsError(requestId, "conflict"));
     }
-    return reply.code(200).send(opsSuccess(requestId, statusFor(job)));
+    return reply.code(200).send(opsSuccess(requestId, statusFor(job, projectionVersion(request))));
   });
 
   app.get("/v1/operations/:operationId", async (request, reply) => {
@@ -1313,7 +1347,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     if (!job || job.role !== role) {
       return reply.code(404).send(redactedOpsError(requestId, "not_found"));
     }
-    return reply.code(200).send(opsSuccess(requestId, statusFor(job)));
+    return reply.code(200).send(opsSuccess(requestId, statusFor(job, projectionVersion(request))));
   });
 
   app.delete("/v1/operations/:operationId", async (request, reply) => {
@@ -1331,11 +1365,14 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     }
     if (
       job.executionVersion === 2 &&
-      request.headers["x-ops-operation-fingerprint"] !== job.fingerprint
+      request.headers["x-ops-operation-fingerprint"] !== job.fingerprint &&
+      !(projectionVersion(request) === 1 && job.requestVersion === 1)
     )
       return reply.code(409).send(redactedOpsError(requestId, "conflict"));
     if (job.terminalAt !== undefined) {
-      return reply.code(200).send(opsSuccess(requestId, statusFor(job)));
+      return reply
+        .code(200)
+        .send(opsSuccess(requestId, statusFor(job, projectionVersion(request))));
     }
     const controller = activeControllers.get(operationId);
     if (!controller) {
@@ -1378,7 +1415,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         if (waitTimer !== undefined) clearTimeout(waitTimer);
       });
     }
-    return reply.code(200).send(opsSuccess(requestId, statusFor(job)));
+    return reply.code(200).send(opsSuccess(requestId, statusFor(job, projectionVersion(request))));
   });
 
   app.get("/v1/operations/:operationId/events", async (request, reply) => {

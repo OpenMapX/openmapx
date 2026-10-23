@@ -26,11 +26,11 @@ function envelope(
   issuedAt = nowIso,
   expiresAt = "2026-08-23T18:00:20.000Z",
 ) {
-  return { version: 1, requestId, operationKey, issuedAt, expiresAt, operation };
+  return { version: 2, requestId, operationKey, issuedAt, expiresAt, operation };
 }
 
 function auth(token: string) {
-  return { authorization: `Bearer ${token}` };
+  return { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" };
 }
 
 describe("ops-agent request boundary", () => {
@@ -725,6 +725,253 @@ it("observer abort leaves the admitted backend running until its real completion
     expect(cancel).not.toHaveBeenCalled();
     finish({ completed: true });
     await vi.waitFor(async () => expect((await status()).state).toBe("succeeded"));
+  } finally {
+    finish?.({ completed: true });
+    await app.close();
+  }
+});
+
+it.each([0, 1])(
+  "fix1 retains safe truncation and final diagnostics through the real CLI/server boundary (exit %s)",
+  async (exitCode) => {
+    const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { createDefaultFixedCli, createAdministrativeRuntime } = await import(
+      "./administrative-runtime"
+    );
+    const { createUnavailableRuntime } = await import("./runtime");
+    const root = mkdtempSync(join(tmpdir(), "openmapx-fix1-diagnostics-"));
+    const suffix = " https://synthetic-user:443";
+    const frames = [
+      'password="closed" token="synthetic-first\n',
+      'synthetic-continuation\\"still-open\n',
+      'synthetic-final"\n',
+      'pass\x1b[31mword="ansi-first\n',
+      'ansi-continuation"\n',
+      `${"x".repeat(4096 - Buffer.byteLength(suffix))}${suffix}@host.invalid/path\n`,
+      `${"x".repeat(6000)}\n`,
+      "last-diagnostic\n",
+    ];
+    writeFileSync(
+      join(root, "cli.mjs"),
+      `for(const frame of ${JSON.stringify(frames)})process.stdout.write(frame);process.exitCode=${exitCode};`,
+    );
+    const runtime = createUnavailableRuntime();
+    createAdministrativeRuntime(runtime, {
+      rootDir: root,
+      runFixedCli: createDefaultFixedCli(root, join(root, "agent.mjs")),
+      loadBuildAuthority: async () => [
+        {
+          serviceId: "osrm",
+          enabled: true,
+          isBuiltIn: true,
+          buildCommand: "openmapx services build osrm",
+        },
+      ],
+    });
+    const retained: import("./journal").PersistedOpsJob[][] = [];
+    const app = buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      resourcePolicy: allowAll,
+      runtime,
+      journal: {
+        records: () => [],
+        replace: async (x) => {
+          retained.push(structuredClone([...x]));
+        },
+      },
+    });
+    try {
+      const payload = {
+        ...envelope({ kind: "service.build", serviceId: "osrm" }),
+        version: 2,
+        issuedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 20000).toISOString(),
+      };
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: auth(apiToken),
+        payload,
+      });
+      const id = response.json().result.operationId;
+      await vi.waitFor(
+        () => expect(retained.at(-1)?.[0]?.state).toBe(exitCode === 0 ? "succeeded" : "failed"),
+        { timeout: 3000 },
+      );
+      const status = (
+        await app.inject({
+          method: "GET",
+          url: `/v1/operations/${id}`,
+          headers: { ...auth(apiToken), "x-ops-protocol-version": "2" },
+        })
+      ).json().result;
+      expect(status.diagnostics.truncated).toBe(true);
+      expect(status.diagnostics.tail).toContainEqual({
+        stream: "stdout",
+        message: "last-diagnostic",
+      });
+      expect(retained.at(-1)?.[0]?.diagnostics?.truncated).toBe(true);
+      const events = (
+        await app.inject({
+          method: "GET",
+          url: `/v1/operations/${id}/events`,
+          headers: auth(apiToken),
+        })
+      ).json();
+      const all = JSON.stringify({ status, events, retained });
+      for (const secret of [
+        "synthetic-first",
+        "synthetic-continuation",
+        "synthetic-final",
+        "ansi-first",
+        "ansi-continuation",
+        "synthetic-user",
+      ])
+        expect(all).not.toContain(secret);
+      if (exitCode !== 0)
+        expect(status.failureResult.diagnostics.tail).toContainEqual({
+          stream: "stdout",
+          message: "last-diagnostic",
+        });
+    } finally {
+      await app.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
+
+describe("fix1 baseline protocol compatibility", () => {
+  const legacyEnvelope = (...args: Parameters<typeof envelope>) => ({
+    ...envelope(...args),
+    version: 1,
+  });
+  it("projects the exact historical admission/status/lookup/cancel shapes for a v1 caller", async () => {
+    const { opsOperationFingerprint } = await import("@openmapx/core/ops");
+    let finish!: (x: unknown) => void;
+    let signal: AbortSignal | undefined;
+    let dispatches = 0;
+    const operation = { kind: "service.build" as const, serviceId: "osrm" };
+    const app = buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      resourcePolicy: allowAll,
+      now: () => new Date(nowIso),
+      dispatch: async (_o, _r, c) => {
+        dispatches += 1;
+        signal = c.signal;
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      },
+    });
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: { authorization: `Bearer ${apiToken}` },
+        payload: legacyEnvelope(operation),
+      });
+      const admission = response.json().result;
+      expect(Object.keys(admission).sort()).toEqual(
+        ["execution", "operationId", "operationKey", "kind", "state"].sort(),
+      );
+      const duplicate = (
+        await app.inject({
+          method: "POST",
+          url: "/v1/operations",
+          headers: { authorization: `Bearer ${apiToken}` },
+          payload: legacyEnvelope(operation, "ops1_legacyretry00000"),
+        })
+      ).json().result;
+      expect(duplicate).toEqual(admission);
+      expect(dispatches).toBe(1);
+      for (const url of [
+        `/v1/operations/${admission.operationId}`,
+        `/v1/operation-keys/${admission.operationKey}`,
+      ]) {
+        const status = (
+          await app.inject({
+            method: "GET",
+            url,
+            headers: {
+              ...{ authorization: `Bearer ${apiToken}` },
+              "x-ops-operation-fingerprint": opsOperationFingerprint(operation),
+            },
+          })
+        ).json().result;
+        expect(status.version).toBe(1);
+        expect(Object.keys(status).sort()).toEqual(
+          [
+            "version",
+            "operationId",
+            "operationKey",
+            "kind",
+            "resourceId",
+            "state",
+            "submittedAt",
+            "updatedAt",
+          ].sort(),
+        );
+      }
+      const cancel = app.inject({
+        method: "DELETE",
+        url: `/v1/operations/${admission.operationId}`,
+        headers: { authorization: `Bearer ${apiToken}` },
+      });
+      await vi.waitFor(() => expect(signal?.aborted).toBe(true));
+      finish({ completed: true });
+      expect((await cancel).statusCode).toBe(200);
+      const modern = (
+        await app.inject({
+          method: "GET",
+          url: `/v1/operations/${admission.operationId}`,
+          headers: { ...{ authorization: `Bearer ${apiToken}` }, "x-ops-protocol-version": "2" },
+        })
+      ).json().result;
+      expect(modern.version).toBe(2);
+      expect(modern.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+    } finally {
+      finish?.({ completed: true });
+      await app.close();
+    }
+  });
+});
+
+it("fix1 cannot downgrade modern-origin cancellation to the legacy fence", async () => {
+  let finish!: (x: unknown) => void;
+  const app = buildOpsAgentServer({
+    tokens: { api: apiToken, "data-manager": dataManagerToken },
+    resourcePolicy: allowAll,
+    now: () => new Date(nowIso),
+    dispatch: async () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  });
+  try {
+    const admission = (
+      await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: auth(apiToken),
+        payload: envelope({ kind: "service.build", serviceId: "osrm" }),
+      })
+    ).json().result;
+    const rejected = await app.inject({
+      method: "DELETE",
+      url: `/v1/operations/${admission.operationId}`,
+      headers: { authorization: `Bearer ${apiToken}` },
+    });
+    expect(rejected.statusCode).toBe(409);
+    const cancellation = app.inject({
+      method: "DELETE",
+      url: `/v1/operations/${admission.operationId}`,
+      headers: { ...auth(apiToken), "x-ops-operation-fingerprint": admission.fingerprint },
+    });
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+    finish({ completed: true });
+    expect((await cancellation).statusCode).toBe(200);
   } finally {
     finish?.({ completed: true });
     await app.close();

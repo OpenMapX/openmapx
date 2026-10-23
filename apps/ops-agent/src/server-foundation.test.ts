@@ -26,12 +26,12 @@ const allowAllResources: OpsResourcePolicy = {
 };
 
 function auth(token = apiToken) {
-  return { authorization: `Bearer ${token}` };
+  return { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" };
 }
 
 function request(operation: OpsOperation, requestId: string, operationKey: string) {
   return {
-    version: 1,
+    version: 2,
     requestId,
     operationKey,
     issuedAt: new Date(baseTime).toISOString(),

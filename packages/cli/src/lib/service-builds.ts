@@ -9,6 +9,7 @@ import {
 } from "./build-artifacts";
 import { runningComposeServices } from "./docker";
 import { resolveBuildRegion } from "./env-defaults";
+import { assertCliExecutionAvailable } from "./execution-deadline";
 import { buildMotisData, importMotisData } from "./motis-data";
 import { buildOsrmGraph } from "./osrm-graph";
 import { buildOtpGraph } from "./otp-graph";
@@ -210,7 +211,9 @@ async function recordBuild(
   region: string | undefined,
   artifact: ServiceBuildArtifact,
 ): Promise<void> {
+  assertCliExecutionAvailable();
   const revision = await currentRevision(rootDir);
+  assertCliExecutionAvailable();
   writeBuildRecord(
     {
       schemaVersion: 1,
@@ -363,6 +366,7 @@ export async function buildServices(
   }
 
   for (const item of plan) {
+    assertCliExecutionAvailable();
     log.dim(`Manifest command → ${item.buildCommand}`);
     try {
       const resolvedRegion = resolveBuildRegion(item.id, opts.region);

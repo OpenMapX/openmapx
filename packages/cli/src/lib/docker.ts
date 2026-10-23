@@ -1,5 +1,6 @@
 import { services as coreServices } from "@openmapx/core/server";
 import { execa } from "execa";
+import { cliProcessOptions } from "./execution-deadline";
 import { repoPaths } from "./paths";
 
 export async function dockerCompose(
@@ -7,6 +8,7 @@ export async function dockerCompose(
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const paths = repoPaths();
   const result = await execa("docker", [...coreServices.stackComposeArgs(paths), ...args], {
+    ...cliProcessOptions(),
     cwd: paths.infraDir,
     reject: false,
   });
@@ -26,7 +28,7 @@ export async function dockerCompose(
 export async function dockerRun(
   args: string[],
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const result = await execa("docker", ["run", ...args], { reject: false });
+  const result = await execa("docker", ["run", ...args], { ...cliProcessOptions(), reject: false });
   return {
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? "",
@@ -37,6 +39,7 @@ export async function dockerRun(
 export async function dockerComposeStream(args: string[]): Promise<number> {
   const paths = repoPaths();
   const sub = execa("docker", [...coreServices.stackComposeArgs(paths), ...args], {
+    ...cliProcessOptions(),
     cwd: paths.infraDir,
     stdio: "inherit",
     reject: false,
