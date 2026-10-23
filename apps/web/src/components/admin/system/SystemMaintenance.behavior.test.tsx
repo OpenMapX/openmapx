@@ -336,6 +336,7 @@ it("keeps a busy rejection recoverable without disabling the retry", async () =>
     expect(screen.getByRole("dialog")).toHaveTextContent(
       "A maintenance operation is already active",
     );
+    expect(screen.getByRole("dialog")).toHaveTextContent("once the active operation has finished");
     expect(screen.getByRole("textbox")).toHaveValue("UPDATE OPENMAPX");
     expect(screen.getByRole("button", { name: "Update application" })).not.toBeDisabled();
     // The conflicting job belongs to someone else; it is not adopted as this submission's job.
@@ -413,6 +414,137 @@ it("uses a valid body retryAfter when the header is missing, and an HTTP-date he
     expect(calls.applyPosts).toBe(2);
     expect(screen.getByRole("dialog")).toHaveTextContent("seconds");
     expect(screen.getByRole("button", { name: "Update application" })).toBeDisabled();
+  } finally {
+    cleanup();
+    client.clear();
+  }
+});
+
+const unusableRetryAfterHeaders: [string, Record<string, string>][] = [
+  ["a negative Retry-After", { "Retry-After": "-1" }],
+  ["an out-of-range Retry-After", { "Retry-After": "999999999" }],
+  ["a non-date Retry-After", { "Retry-After": "soon" }],
+  ["an impossible HTTP date", { "Retry-After": "Fri, 99 Oct 2026 08:00:20 GMT" }],
+];
+
+it.each(unusableRetryAfterHeaders)(
+  "falls back to a valid body retryAfter when the header is %s",
+  async (_name, headers) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-23T08:00:00.000Z"));
+    const { calls } = installAdmissionFetch({
+      checked: true,
+      applyResponses: [tooManyRequests(headers, { retryAfter: 7 })],
+    });
+    const client = renderMaintenance();
+    try {
+      await settle();
+      await openConfirmedDialog();
+      fireEvent.click(screen.getByRole("button", { name: "Update application" }));
+      await settle();
+      expect(screen.getByRole("dialog")).toHaveTextContent("7 seconds");
+      expect(screen.getByRole("button", { name: "Update application" })).toBeDisabled();
+      await settle(7_100);
+      expect(screen.getByRole("button", { name: "Update application" })).not.toBeDisabled();
+      expect(calls.applyPosts).toBe(1);
+    } finally {
+      cleanup();
+      client.clear();
+    }
+  },
+);
+
+it("does not present a host-unavailable 409 as an active operation", async () => {
+  vi.useFakeTimers();
+  const { calls } = installAdmissionFetch({
+    checked: true,
+    applyResponses: [
+      Response.json(
+        {
+          error: "Host maintenance is unavailable through the operations agent.",
+          deployment: { ...readyDeployment, maintenanceReady: false },
+        },
+        { status: 409 },
+      ),
+    ],
+  });
+  const client = renderMaintenance();
+  try {
+    await settle();
+    await openConfirmedDialog();
+    fireEvent.click(screen.getByRole("button", { name: "Update application" }));
+    await settle();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("Host maintenance is unavailable");
+    expect(dialog).not.toHaveTextContent("active operation");
+    expect(dialog).toHaveTextContent("host-control readiness");
+    expect(screen.getByRole("textbox")).toHaveValue("UPDATE OPENMAPX");
+    expect(screen.getByRole("button", { name: "Update application" })).not.toBeDisabled();
+    expect(calls.applyJobReads).toBe(0);
+    expect(calls.applyPosts).toBe(1);
+  } finally {
+    cleanup();
+    client.clear();
+  }
+});
+
+it("keeps each action's wait and feedback independent when another action is rejected", async () => {
+  vi.useFakeTimers();
+  const posts: string[] = [];
+  const diagnosticsResponses = [
+    tooManyRequests({ "Retry-After": "5" }, { retryAfter: 5 }),
+    Response.json({ jobId: "diagnostics-job" }),
+  ];
+  vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
+    const url = String(input);
+    if (init?.method === "POST") {
+      posts.push(url.slice(url.lastIndexOf("/system/") + 8));
+      return url.endsWith("/updates/check")
+        ? tooManyRequests({ "Retry-After": "30" }, { retryAfter: 30 })
+        : (diagnosticsResponses.shift() ?? Response.json({ jobId: "diagnostics-job" }));
+    }
+    if (url.includes("/diagnostics-job?source=application")) {
+      return Response.json(
+        job({ id: "diagnostics-job", status: "success", error: null, cancelable: false }),
+      );
+    }
+    return Response.json({ deployment: readyDeployment, release: {}, images: [] });
+  });
+  const client = renderMaintenance();
+  try {
+    await settle();
+    fireEvent.click(screen.getByRole("button", { name: "Check for updates" }));
+    await settle();
+    fireEvent.click(screen.getByRole("button", { name: "Run diagnostics" }));
+    await settle();
+    // Both rejections stay visible, each with its own wait.
+    const alertText = () => screen.getAllByRole("alert").map((alert) => alert.textContent);
+    expect(alertText()).toEqual([
+      expect.stringContaining("30 seconds"),
+      expect.stringContaining("5 seconds"),
+    ]);
+    expect(screen.getByRole("button", { name: "Check for updates" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Run diagnostics" })).toBeDisabled();
+
+    // The shorter wait ends; the longer one is untouched.
+    await settle(5_100);
+    expect(screen.getByRole("button", { name: "Run diagnostics" })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Check for updates" })).toBeDisabled();
+    expect(alertText()[0]).toContain("30 seconds");
+
+    // Submitting the other action does not erase the pending wait or its feedback.
+    fireEvent.click(screen.getByRole("button", { name: "Run diagnostics" }));
+    await settle();
+    expect(screen.getByRole("button", { name: "Check for updates" })).toBeDisabled();
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.getByRole("alert")).toHaveTextContent("Update check was not queued");
+    expect(screen.getByRole("alert")).toHaveTextContent("30 seconds");
+
+    await settle(25_000);
+    expect(screen.getByRole("button", { name: "Check for updates" })).not.toBeDisabled();
+    await settle(30_000);
+    // Nothing was ever resubmitted automatically.
+    expect(posts).toEqual(["updates/check", "diagnostics", "diagnostics"]);
   } finally {
     cleanup();
     client.clear();

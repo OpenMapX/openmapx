@@ -80,13 +80,22 @@ interface TrackedJob {
   label: string;
 }
 
-/** A submission the API refused before any job existed; nothing is tracked or polled for it. */
+type SubmissionPath = "updates/check" | "updates/apply" | "diagnostics";
+const SUBMISSION_PATHS: SubmissionPath[] = ["updates/check", "updates/apply", "diagnostics"];
+
+/**
+ * A submission the API refused before any job existed; nothing is tracked or polled for it.
+ * `until` is the server-declared retry deadline (epoch ms) while that action must wait.
+ */
 interface SubmissionRejection {
-  path: string;
+  path: SubmissionPath;
   label: string;
   status: number | null;
+  /** A 409 that names the active job, as opposed to other conflicts such as unavailable host control. */
+  busy: boolean;
   message: string;
   retrySeconds: number | null;
+  until: number | null;
 }
 
 const MAX_RETRY_SECONDS = 3_600;
@@ -96,6 +105,7 @@ class SubmissionError extends Error {
     message: string,
     readonly status: number | null,
     readonly retrySeconds: number | null,
+    readonly busy: boolean,
   ) {
     super(message);
   }
@@ -107,14 +117,22 @@ function boundedSeconds(seconds: number): number | null {
     : null;
 }
 
-/** Server-declared wait: Retry-After (seconds or HTTP date) first, else a valid body `retryAfter`. */
-function declaredRetrySeconds(header: string | null, body: unknown): number | null {
+const HTTP_DATE = /^[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/;
+
+/** Seconds from a Retry-After header: delta-seconds or an HTTP date (IMF-fixdate); else null. */
+function headerRetrySeconds(header: string | null): number | null {
   const value = header?.trim();
-  if (value) {
-    if (/^\d+$/.test(value)) return boundedSeconds(Number(value));
-    const at = Date.parse(value);
-    if (Number.isFinite(at)) return boundedSeconds(Math.max(0, (at - Date.now()) / 1000));
-  }
+  if (!value) return null;
+  if (/^\d+$/.test(value)) return boundedSeconds(Number(value));
+  if (!HTTP_DATE.test(value)) return null;
+  const at = Date.parse(value);
+  return Number.isFinite(at) ? boundedSeconds(Math.max(0, (at - Date.now()) / 1000)) : null;
+}
+
+/** Server-declared wait: a usable Retry-After first, else a valid bounded body `retryAfter`. */
+function declaredRetrySeconds(header: string | null, body: unknown): number | null {
+  const fromHeader = headerRetrySeconds(header);
+  if (fromHeader !== null) return fromHeader;
   const fallback = (body as { retryAfter?: unknown } | null)?.retryAfter;
   return typeof fallback === "number" ? boundedSeconds(fallback) : null;
 }
@@ -159,15 +177,30 @@ export function SystemMaintenance() {
   const [createBackup, setCreateBackup] = useState(true);
   const [trackedJob, setTrackedJob] = useState<TrackedJob | null>(null);
   const [blockedCandidate, setBlockedCandidate] = useState<string | null>(null);
-  const [rejection, setRejection] = useState<SubmissionRejection | null>(null);
-  // The action the server asked us to leave alone, and when it may be tried again.
-  const [cooldown, setCooldown] = useState<{ path: string; until: number } | null>(null);
+  // Latest refusal per action, so one action's feedback and wait never replace another's.
+  const [rejections, setRejections] = useState<
+    Partial<Record<SubmissionPath, SubmissionRejection>>
+  >({});
 
   useEffect(() => {
-    if (!cooldown) return;
-    const timer = setTimeout(() => setCooldown(null), Math.max(0, cooldown.until - Date.now()));
-    return () => clearTimeout(timer);
-  }, [cooldown]);
+    const timers = SUBMISSION_PATHS.flatMap((path) => {
+      const until = rejections[path]?.until;
+      if (!until) return [];
+      return setTimeout(
+        () =>
+          setRejections((current) => {
+            const entry = current[path];
+            return entry?.until === until
+              ? { ...current, [path]: { ...entry, until: null } }
+              : current;
+          }),
+        Math.max(0, until - Date.now()),
+      );
+    });
+    return () => {
+      for (const timer of timers) clearTimeout(timer);
+    };
+  }, [rejections]);
 
   const statusQuery = useQuery<SystemStatus>({
     queryKey: ["admin", "system"],
@@ -213,7 +246,7 @@ export function SystemMaintenance() {
       body,
       label,
     }: {
-      path: string;
+      path: SubmissionPath;
       body?: Record<string, unknown>;
       label: string;
     }) => {
@@ -234,11 +267,16 @@ export function SystemMaintenance() {
           response.status === 429
             ? declaredRetrySeconds(response.headers.get("Retry-After"), result)
             : null,
+          response.status === 409 && typeof result.jobId === "string",
         );
       }
       return { id: result.jobId, label, path };
     },
-    onMutate: () => setRejection(null),
+    onMutate: ({ path }) =>
+      setRejections((current) => {
+        const { [path]: _cleared, ...others } = current;
+        return others;
+      }),
     onSuccess: (job) => {
       setTrackedJob(job);
       if (job.path === "updates/apply") {
@@ -249,29 +287,45 @@ export function SystemMaintenance() {
     },
     onError: (error, { path, label }) => {
       const message = error instanceof Error ? error.message : "Request failed";
-      const status = error instanceof SubmissionError ? error.status : null;
-      const retrySeconds = error instanceof SubmissionError ? error.retrySeconds : null;
-      setRejection({ path, label, status, message, retrySeconds });
-      if (retrySeconds) setCooldown({ path, until: Date.now() + retrySeconds * 1000 });
+      const submission = error instanceof SubmissionError ? error : null;
+      const retrySeconds = submission?.retrySeconds ?? null;
+      setRejections((current) => ({
+        ...current,
+        [path]: {
+          path,
+          label,
+          status: submission?.status ?? null,
+          busy: submission?.busy ?? false,
+          message,
+          retrySeconds,
+          until: retrySeconds ? Date.now() + retrySeconds * 1000 : null,
+        },
+      }));
       showToast(message, "error");
     },
   });
 
   const status = statusQuery.data;
   const active = Boolean(trackedJob || queueJob.isPending);
-  const waiting = (path: string) => cooldown?.path === path;
-  const rejectionAlert = rejection && (
-    <Alert severity="warning" sx={{ minWidth: 0 }}>
+  const waiting = (path: SubmissionPath) => Boolean(rejections[path]?.until);
+  const rejectionAlert = (rejection: SubmissionRejection) => (
+    <Alert key={rejection.path} severity="warning" sx={{ minWidth: 0 }}>
       <AlertTitle>{rejection.label} was not queued</AlertTitle>
       {rejection.message.replace(/[.\s]+$/, "")}.{" "}
       {waiting(rejection.path) && rejection.retrySeconds
         ? `Try again in about ${rejection.retrySeconds} ${rejection.retrySeconds === 1 ? "second" : "seconds"}.`
-        : rejection.status === 409
-          ? "Try again once the active operation has finished."
-          : "You can try again."}
+        : rejection.status !== 409
+          ? "You can try again."
+          : rejection.busy
+            ? "Try again once the active operation has finished."
+            : "Check the host-control readiness below, then try again."}
     </Alert>
   );
-  const rejectionInDialog = dialogOpen && rejection?.path === "updates/apply";
+  const rejectionInDialog = dialogOpen && Boolean(rejections["updates/apply"]);
+  const pageRejections = SUBMISSION_PATHS.flatMap((path) => {
+    const rejection = rejections[path];
+    return rejection && !(path === "updates/apply" && rejectionInDialog) ? [rejection] : [];
+  });
   const progress = jobQuery.data?.progress ?? 0;
   const updateCount = status?.images.filter((image) => image.updateAvailable).length ?? 0;
   const checkedCandidate =
@@ -399,7 +453,7 @@ export function SystemMaintenance() {
         </Alert>
       )}
 
-      {!rejectionInDialog && rejectionAlert}
+      {pageRejections.map(rejectionAlert)}
 
       {trackedJob && (
         <Paper variant="outlined" sx={{ p: 1.5 }}>
@@ -452,7 +506,9 @@ export function SystemMaintenance() {
               onClick={() => {
                 setCandidateToApply(checkedCandidate);
                 // Stale feedback goes; an active server wait keeps its explanation.
-                if (!waiting("updates/apply")) setRejection(null);
+                if (!waiting("updates/apply")) {
+                  setRejections(({ "updates/apply": _stale, ...others }) => others);
+                }
                 setDialogOpen(true);
               }}
             >
@@ -563,7 +619,7 @@ export function SystemMaintenance() {
               first when the release changes it, then Data Manager and Web; API updates last and
               briefly interrupts this page.
             </Alert>
-            {rejectionInDialog && rejectionAlert}
+            {rejections["updates/apply"] && rejectionAlert(rejections["updates/apply"])}
             <FormControlLabel
               control={
                 <Checkbox
