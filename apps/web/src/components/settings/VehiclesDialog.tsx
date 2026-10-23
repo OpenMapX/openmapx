@@ -1,9 +1,11 @@
 "use client";
 
 import CloseIcon from "@mui/icons-material/Close";
+import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
 import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -32,7 +34,7 @@ import {
 } from "@openmapx/core";
 import { getVehiclePreset, listVehicles } from "@openmapx/ev-charge-planner";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   mobileFullScreenDialogPaperSx,
   useFullScreenOnMobile,
@@ -146,11 +148,33 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
   const remove = useDeleteVehicle();
 
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "failed">("idle");
+  // Identifies the current editor. A save only publishes its outcome while the
+  // editor that submitted it is still the current one, so a late completion
+  // can never close, lock or flag a newer editor. Not a transport abort: an
+  // abandoned save may still persist.
+  const editorSession = useRef(0);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
 
   const rows = vehicles ?? [];
   const atCap = rows.length >= MAX_VEHICLES_PER_USER;
   const payload = draft ? draftToVehicle(draft) : null;
+
+  const saving = saveState === "saving";
+
+  /** Starts, replaces or (with null) abandons the editor and retires its save. */
+  const openEditor = (next: Draft | null) => {
+    editorSession.current += 1;
+    setDraft(next);
+    setSaveState("idle");
+  };
+
+  useEffect(
+    () => () => {
+      editorSession.current += 1;
+    },
+    [],
+  );
 
   const applyPreset = (presetId: string | null) => {
     if (!draft) return;
@@ -172,13 +196,20 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
     });
   };
 
-  const handleSave = () => {
-    if (!draft || !payload) return;
-    if (draft.id) {
-      const { isDefault: _isDefault, ...patch } = payload;
-      update.mutate({ id: draft.id, ...patch });
-    } else create.mutate(payload);
-    setDraft(null);
+  const handleSave = async () => {
+    if (!draft || !payload || saving) return;
+    const session = editorSession.current;
+    setSaveState("saving");
+    try {
+      if (draft.id) {
+        const { isDefault: _isDefault, ...patch } = payload;
+        await update.mutateAsync({ id: draft.id, ...patch });
+      } else await create.mutateAsync(payload);
+    } catch {
+      if (editorSession.current === session) setSaveState("failed");
+      return;
+    }
+    if (editorSession.current === session) openEditor(null);
   };
 
   return (
@@ -216,7 +247,7 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
             <Button
               size="small"
               onClick={() =>
-                setDraft({
+                openEditor({
                   id: vehicle.id,
                   name: vehicle.name,
                   kind: vehicle.kind,
@@ -274,7 +305,7 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
           </Typography>
         ) : (
           !draft && (
-            <Button sx={{ mt: 1 }} onClick={() => setDraft(emptyDraft())}>
+            <Button sx={{ mt: 1 }} onClick={() => openEditor(emptyDraft())}>
               {t("add")}
             </Button>
           )
@@ -288,11 +319,13 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
                 label={t("name")}
                 value={draft.name}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                disabled={saving}
                 fullWidth
               />
               <Select
                 size="small"
                 value={draft.kind}
+                disabled={saving}
                 onChange={(e) => setDraft({ ...draft, kind: e.target.value as VehicleKind })}
                 inputProps={{ "aria-label": t("kind") }}
               >
@@ -305,6 +338,7 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
               <Select
                 size="small"
                 value={draft.powertrain}
+                disabled={saving}
                 onChange={(e) =>
                   setDraft({ ...draft, powertrain: e.target.value as VehiclePowertrain })
                 }
@@ -326,6 +360,7 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
                     getOptionKey={(o) => o.id}
                     groupBy={(o) => o.make}
                     value={EV_PRESETS.find((o) => o.id === draft.presetId) ?? null}
+                    disabled={saving}
                     onChange={(_event, option) => applyPreset(option?.id ?? null)}
                     renderInput={(params) => (
                       <TextField {...params} size="small" label={t("preset")} />
@@ -338,6 +373,7 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
                       label={t("battery")}
                       value={draft.battery}
                       onChange={(e) => setDraft({ ...draft, battery: e.target.value })}
+                      disabled={saving}
                       fullWidth
                     />
                     <TextField
@@ -346,6 +382,7 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
                       label={t("consumption")}
                       value={draft.consumption}
                       onChange={(e) => setDraft({ ...draft, consumption: e.target.value })}
+                      disabled={saving}
                       fullWidth
                     />
                   </Box>
@@ -356,6 +393,7 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
                       label={t("maxDc")}
                       value={draft.maxDc}
                       onChange={(e) => setDraft({ ...draft, maxDc: e.target.value })}
+                      disabled={saving}
                       fullWidth
                     />
                     <TextField
@@ -364,6 +402,7 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
                       label={t("maxAc")}
                       value={draft.maxAc}
                       onChange={(e) => setDraft({ ...draft, maxAc: e.target.value })}
+                      disabled={saving}
                       fullWidth
                     />
                   </Box>
@@ -373,6 +412,7 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
                     options={CONNECTOR_STANDARDS}
                     getOptionLabel={(c) => tEv(`connector.${c}`)}
                     value={draft.connectors}
+                    disabled={saving}
                     onChange={(_event, value) =>
                       setDraft({ ...draft, connectors: value as ConnectorStandard[] })
                     }
@@ -389,16 +429,25 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
                     label={t("fuelConsumption")}
                     value={draft.fuel}
                     onChange={(e) => setDraft({ ...draft, fuel: e.target.value })}
+                    disabled={saving}
                     fullWidth
                   />
                 )
               )}
 
+              {saveState === "failed" && <Alert severity="error">{t("saveFailed")}</Alert>}
+
               <Box sx={{ display: "flex", gap: 1 }}>
-                <Button variant="contained" disabled={payload === null} onClick={handleSave}>
+                <Button
+                  variant="contained"
+                  disabled={payload === null || saving}
+                  aria-busy={saving}
+                  startIcon={saving ? <CircularProgress size={16} color="inherit" /> : undefined}
+                  onClick={handleSave}
+                >
                   {t("save")}
                 </Button>
-                <Button onClick={() => setDraft(null)}>{t("cancel")}</Button>
+                <Button onClick={() => openEditor(null)}>{t("cancel")}</Button>
               </Box>
             </Box>
           </Section>

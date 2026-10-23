@@ -3598,6 +3598,7 @@
     "delete": "Löschen",
     "deleteWarning": "Beim Löschen dieses Fahrzeugs wird auch seine Parkposition entfernt.",
     "save": "Speichern",
+    "saveFailed": "Das Fahrzeug konnte nicht gespeichert werden. Deine Änderungen sind noch da. Versuche es erneut.",
     "cancel": "Abbrechen",
     "name": "Name",
     "kind": "Typ",
