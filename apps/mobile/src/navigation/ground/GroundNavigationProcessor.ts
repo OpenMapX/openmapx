@@ -16,8 +16,9 @@ import { createGroundPreparingSession, validateGroundStartPackage } from "./grou
  * run against a recorded trace and a moving car and produce identical results.
  *
  * The one piece of mutable state it does hold is the prepared route index — a
- * cache, keyed by the route it indexes, rebuilt in microseconds after a process
- * restart and invalidated by any replacement.
+ * single-entry cache of the active session's geometry, reused while the
+ * coordinates are exactly unchanged, rebuilt after a process restart and
+ * invalidated by any replacement.
  */
 export class GroundNavigationProcessor implements NavigationProcessor<"ground"> {
   readonly kind = "ground" as const;
