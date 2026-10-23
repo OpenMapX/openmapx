@@ -56,6 +56,9 @@ overrides:
   "source-map-js@1": "^1.2.2" # CVE-2026-93749
   # Updating vue brings its exact-version renderer/compiler dependencies along.
   "vue@3": "^3.5.42" # GHSA-g2v6-rqmx-r4w6
+  # Serwist pins zod 4.6.5, and zod 3 has no patched release. The Expo CLI,
+  # the only zod 3 consumer, uses schema APIs that zod 4 keeps.
+  "zod": "^4.6.7" # GHSA-mrhx-c7xc-m3w5
   "@xmldom/xmldom@0.9": "^0.9.12"
   "esbuild": ">=0.28.1"
   "postcss": ">=8.5.10"
