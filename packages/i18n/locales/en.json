@@ -3598,6 +3598,7 @@
     "delete": "Delete",
     "deleteWarning": "Deleting this vehicle also clears where it is parked.",
     "save": "Save",
+    "saveFailed": "Could not save the vehicle. Your changes are still here. Try again.",
     "cancel": "Cancel",
     "name": "Name",
     "kind": "Type",
