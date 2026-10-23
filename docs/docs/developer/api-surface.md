@@ -670,3 +670,26 @@ retires acquisition when its identity changes.
 
 Run `pnpm openapi:generate` and `pnpm sdk:generate` after contract changes, and
 commit both outputs. The exact-artifact gate protects previous generated families.
+
+## Sharing SDK
+
+The five `/api/shares` operations use canonical contracts and named functions
+from `@openmapx/core/sharing-sdk`. Creation returns `201` with its one-time token
+and owner projection. Owner reads never include token hashes or snapshots.
+Success validation requires the public `no-store` or owner
+`private, no-store`/`Pragma: no-cache`/`Vary: Cookie` headers. CORS explicitly
+exposes `Vary` so credentialed browser clients can validate this contract when
+the web application and API have different origins.
+
+The public page uses a request-local, cookie-free ApiClient with `cache: no-store`,
+independent of browser singleton configuration. Invalid public replies become
+unavailable before metadata or client rendering. Public lists retain captured
+attribution and the existing 1,000-place limit; this operation alone has a
+128 MiB JSON decoding ceiling, derived from bounded saved text and at most
+64 KiB captured attribution per place. Owner operations keep the default limit.
+
+Authentication precedes owner request validation. Account locking, ownership,
+expiry, token hashing, rate limits and route normalization stay in the producer.
+Regenerate OpenAPI and the SDK together. Tests cover serialized Fastify replies,
+anonymous SSR isolation, malformed successes, large attribution-bearing lists,
+and real migrated PostgreSQL ownership and share-cap concurrency.

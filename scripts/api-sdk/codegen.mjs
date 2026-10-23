@@ -9,6 +9,7 @@ import {
   garageOperationBindings,
   savedOperationBindings,
   selectTaggedDocument,
+  sharingOperationBindings,
 } from "./config.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -29,6 +30,7 @@ export async function generateArtifacts({
       "operation-transport.ts",
       "saved-sdk-transport.ts",
       "garage-sdk-transport.ts",
+      "sharing-sdk-transport.ts",
       "client.ts",
     ])
       await cp(join(root, "packages/core/src/api", name), join(directory, name));
@@ -49,6 +51,13 @@ export async function generateArtifacts({
       await writeFile(
         join(directory, "generated/garage/operation-bindings.generated.ts"),
         garageOperationBindings(inputDocument),
+      );
+    }
+    if (Object.keys(selectTaggedDocument(inputDocument, "sharing").paths).length) {
+      await mkdir(join(directory, "generated/sharing"), { recursive: true });
+      await writeFile(
+        join(directory, "generated/sharing/operation-bindings.generated.ts"),
+        sharingOperationBindings(inputDocument),
       );
     }
     const config = createCodegenConfig({ inputDocument, outputDirectory: directory });

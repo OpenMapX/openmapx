@@ -191,6 +191,7 @@ export function corsOptions(trustedWebOrigins: readonly string[] = configuredTru
     // on different origins (the default local-development topology).
     exposedHeaders: [
       "Content-Disposition",
+      "Vary",
       "X-Tile-Source",
       "Accept-Ranges",
       "Content-Range",
