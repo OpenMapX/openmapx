@@ -36,11 +36,11 @@ controller records cross-plan shared-file/interface ownership before dispatch.
 
 ## Task Q0: Review and baseline
 
-- [ ] Complete all nine subsystem plans with exact file ownership, interfaces and test-first steps.
-- [ ] Self-review every scope ID against a task, record decisions and resolve shared-file conflicts.
-- [ ] Obtain a fresh Codex builder/plan review and resolve every material objection.
-- [ ] Install both frozen dependency sets and run the focused audit baseline in this worktree.
-- [ ] Commit reviewed design/plans and record the starting implementation SHA in the execution ledger.
+- [x] Complete all nine subsystem plans with exact file ownership, interfaces and test-first steps.
+- [x] Self-review every scope ID against a task, record decisions and resolve shared-file conflicts.
+- [x] Obtain a fresh Codex builder/plan review and resolve every material objection.
+- [x] Install both frozen dependency sets and run the focused audit baseline in this worktree.
+- [x] Commit reviewed design/plans and record the starting implementation SHA in the execution ledger.
 
 ## Task Q1: Integrated contract/runtime proof
 
