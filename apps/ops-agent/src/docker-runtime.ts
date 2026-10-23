@@ -7,13 +7,20 @@ import {
   OPS_MAX_EVENT_MESSAGE_BYTES,
   OPS_MAX_FOLLOW_LOG_EVENTS,
   type OpsResultFor,
+  type ProcessDiagnostics,
 } from "@openmapx/core/ops";
 import {
   assertPosixProcessGroupsSupported,
   monitorPosixProcessGroup,
   services,
 } from "@openmapx/core/server";
-import { createUnavailableRuntime, type OpsRuntime } from "./runtime";
+import { createBoundedProcessOutput, safeProcessDiagnostic } from "./process-output";
+import {
+  createUnavailableRuntime,
+  type OpsExecutionContext,
+  OpsExecutionFailure,
+  type OpsRuntime,
+} from "./runtime";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const LIFECYCLE_TIMEOUT_MS = 10 * 60_000;
@@ -73,6 +80,85 @@ export interface ContainedProcessOptions {
   killGraceMs?: number;
 }
 
+export interface StreamingProcessOptions {
+  signal: AbortSignal;
+  timeout: number;
+  killGraceMs?: number;
+  onLine(stream: "stdout" | "stderr", message: string): void;
+  redact: (message: string) => string;
+  /** Only the fixed CLI adapter supplies a private managed context. */
+  env?: NodeJS.ProcessEnv;
+}
+
+function childEnvironment(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const key of [
+    "OPENMAPX_CONTROL_EXECUTION",
+    "OPENMAPX_CONTROL_DELEGATION",
+    "OPENMAPX_PARENT_EXECUTION",
+  ])
+    delete env[key];
+  return env;
+}
+
+export async function runContainedStreamingProcess(
+  file: string,
+  args: readonly string[],
+  options: StreamingProcessOptions,
+): Promise<ProcessDiagnostics> {
+  assertPosixProcessGroupsSupported();
+  if (options.signal.aborted || options.timeout <= 0)
+    throw new OpsExecutionFailure("timeout", { diagnostics: { tail: [], truncated: false } });
+  if (
+    !Number.isSafeInteger(options.timeout) ||
+    (options.killGraceMs !== undefined &&
+      (!Number.isSafeInteger(options.killGraceMs) || options.killGraceMs < 1))
+  )
+    throw new OpsExecutionFailure("runtime", { diagnostics: { tail: [], truncated: false } });
+  const output = createBoundedProcessOutput(options);
+  let child: ReturnType<typeof spawn>;
+  try {
+    child = spawn(file, [...args], {
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: options.env ?? childEnvironment(),
+    });
+  } catch {
+    throw new OpsExecutionFailure("runtime", { diagnostics: output.end() });
+  }
+  const group = monitorPosixProcessGroup(child, {
+    killGraceMs: options.killGraceMs ?? KILL_GRACE_MS,
+  });
+  let timedOut = false;
+  const abort = () => group.terminate();
+  const timer = setTimeout(() => {
+    timedOut = true;
+    group.terminate();
+  }, options.timeout);
+  options.signal.addEventListener("abort", abort, { once: true });
+  if (options.signal.aborted) abort();
+  child.stdout?.on("data", (chunk: Buffer) => output.write("stdout", chunk));
+  child.stderr?.on("data", (chunk: Buffer) => output.write("stderr", chunk));
+  try {
+    const exit = await group.closed;
+    const diagnostics = output.end();
+    if (
+      timedOut ||
+      options.signal.aborted ||
+      exit.spawnFailed ||
+      exit.residualDescendants ||
+      exit.containmentFailed ||
+      exit.code !== 0 ||
+      exit.signal !== null
+    )
+      throw new OpsExecutionFailure(timedOut ? "timeout" : "runtime", { diagnostics });
+    return diagnostics;
+  } finally {
+    clearTimeout(timer);
+    options.signal.removeEventListener("abort", abort);
+  }
+}
+
 // The agent runs as the data-owning user, so its own identity is the default
 // owner for artifacts produced inside a container on the shared mount.
 const defaultDataMountOwner = {
@@ -120,10 +206,13 @@ export function runContainedProcess(
   options: ContainedProcessOptions,
 ): Promise<{ stdout: string; stderr: string }> {
   assertPosixProcessGroupsSupported();
+  if (options.signal.aborted || options.timeout <= 0)
+    return Promise.reject(new Error("Contained process failed"));
   return new Promise((resolve, reject) => {
     const child = spawn(file, [...args], {
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
+      env: childEnvironment(),
     });
     const group = monitorPosixProcessGroup(child, {
       killGraceMs: options.killGraceMs ?? KILL_GRACE_MS,
@@ -151,8 +240,8 @@ export function runContainedProcess(
     const timeout = setTimeout(terminate, options.timeout);
     options.signal.addEventListener("abort", onAbort, { once: true });
     if (options.signal.aborted) terminate();
-    child.stdout.on("data", onData(stdout));
-    child.stderr.on("data", onData(stderr));
+    child.stdout?.on("data", onData(stdout));
+    child.stderr?.on("data", onData(stderr));
     child.once("error", () => {
       failed = true;
     });
@@ -188,6 +277,7 @@ export function runContainedLogProcess(
     const child = spawn(file, [...args], {
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
+      env: childEnvironment(),
     });
     const group = monitorPosixProcessGroup(child, { killGraceMs: KILL_GRACE_MS });
     let bytes = 0;
@@ -325,8 +415,21 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     services.stackComposeArgs(options.stack, options.fileExists);
   const run = (args: readonly string[], signal: AbortSignal, timeout = DEFAULT_TIMEOUT_MS) =>
     execFile("docker", args, { signal, timeout, maxBuffer: MAX_OUTPUT_BYTES });
-  const changed = async (args: readonly string[], signal: AbortSignal, timeout?: number) => {
-    await run(args, signal, timeout);
+  const changed = async (
+    args: readonly string[],
+    context: OpsExecutionContext,
+    timeout = DEFAULT_TIMEOUT_MS,
+  ) => {
+    const remaining = context.execution.deadlineAt - Date.now();
+    if (remaining <= 0 || context.signal.aborted) throw new OpsExecutionFailure("timeout", {});
+    if (options.execFile) await run(args, context.signal, Math.min(timeout, remaining));
+    else
+      await runContainedStreamingProcess("docker", args, {
+        signal: context.signal,
+        timeout: Math.min(timeout, remaining),
+        onLine: context.emitLog,
+        redact: safeProcessDiagnostic,
+      });
     return { changed: true } as const;
   };
   const motisState = async (name: "motis" | "motis-staging", signal: AbortSignal) => {
@@ -356,12 +459,12 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   };
   const stopMotis = async (
     name: "motis" | "motis-staging",
-    signal: AbortSignal,
+    context: OpsExecutionContext,
   ): Promise<OpsResultFor<"motis.primary.stop">> => {
-    const before = await motisState(name, signal);
+    const before = await motisState(name, context.signal);
     if (before !== "running") return { changed: false, state: before };
-    await run(["stop", name], signal);
-    const after = await motisState(name, signal);
+    await changed(["stop", name], context);
+    const after = await motisState(name, context.signal);
     if (after === "running") throw new Error("MOTIS container remains running after stop");
     return { changed: true, state: after };
   };
@@ -377,45 +480,29 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     return parseStackStatus(result.stdout);
   };
   runtime["stack.start"] = (_operation, context) =>
-    changed([...composePrefix(), "up", "-d"], context.signal, LIFECYCLE_TIMEOUT_MS);
+    changed([...composePrefix(), "up", "-d"], context, LIFECYCLE_TIMEOUT_MS);
   runtime["service.start"] = (operation, context) =>
-    changed(
-      [...composePrefix(), "up", "-d", operation.serviceId],
-      context.signal,
-      LIFECYCLE_TIMEOUT_MS,
-    );
+    changed([...composePrefix(), "up", "-d", operation.serviceId], context, LIFECYCLE_TIMEOUT_MS);
   runtime["service.stop"] = (operation, context) =>
-    changed(
-      [...composePrefix(), "stop", operation.serviceId],
-      context.signal,
-      LIFECYCLE_TIMEOUT_MS,
-    );
+    changed([...composePrefix(), "stop", operation.serviceId], context, LIFECYCLE_TIMEOUT_MS);
   runtime["service.restart"] = (operation, context) =>
-    changed(
-      [...composePrefix(), "restart", operation.serviceId],
-      context.signal,
-      LIFECYCLE_TIMEOUT_MS,
-    );
+    changed([...composePrefix(), "restart", operation.serviceId], context, LIFECYCLE_TIMEOUT_MS);
   runtime["service.recreate"] = (operation, context) =>
     changed(
       [...composePrefix(), "up", "-d", "--force-recreate", operation.serviceId],
-      context.signal,
+      context,
       LIFECYCLE_TIMEOUT_MS,
     );
   runtime["service.recreateIsolated"] = (operation, context) =>
     changed(
       [...composePrefix(), "up", "-d", "--force-recreate", "--no-deps", operation.serviceId],
-      context.signal,
+      context,
       LIFECYCLE_TIMEOUT_MS,
     );
   runtime["service.pull"] = (operation, context) =>
-    changed([...composePrefix(), "pull", operation.serviceId], context.signal, PULL_TIMEOUT_MS);
+    changed([...composePrefix(), "pull", operation.serviceId], context, PULL_TIMEOUT_MS);
   runtime["service.remove"] = (operation, context) =>
-    changed(
-      [...composePrefix(), "rm", "-sf", operation.serviceId],
-      context.signal,
-      LIFECYCLE_TIMEOUT_MS,
-    );
+    changed([...composePrefix(), "rm", "-sf", operation.serviceId], context, LIFECYCLE_TIMEOUT_MS);
   runtime["service.logs"] = async (operation, context) => {
     const result = await run(
       [...composePrefix(), "logs", "--no-color", `--tail=${operation.tail}`, operation.serviceId],
@@ -505,8 +592,8 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   runtime["feedProxy.validateAndReload"] = async (operation, context) => {
     // Validate before reloading: a reload against a bad configuration would
     // take the proxy down rather than reject the candidate.
-    await run(["exec", FEED_PROXY_CONTAINER, "nginx", "-t"], context.signal, 30_000);
-    await run(["exec", FEED_PROXY_CONTAINER, "nginx", "-s", "reload"], context.signal, 30_000);
+    await changed(["exec", FEED_PROXY_CONTAINER, "nginx", "-t"], context, 30_000);
+    await changed(["exec", FEED_PROXY_CONTAINER, "nginx", "-s", "reload"], context, 30_000);
     return { candidateId: operation.candidateId, reloaded: true as const };
   };
   // Valhalla traffic effects. The whole sequence lives here because each step
@@ -766,25 +853,24 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   };
 
   runtime["motis.staging.restart"] = (_operation, context) =>
-    changed(["restart", "motis-staging"], context.signal);
-  runtime["motis.staging.stop"] = (_operation, context) =>
-    stopMotis("motis-staging", context.signal);
+    changed(["restart", "motis-staging"], context);
+  runtime["motis.staging.stop"] = (_operation, context) => stopMotis("motis-staging", context);
   runtime["motis.primary.restart"] = (_operation, context) =>
-    changed(["restart", "motis"], context.signal);
+    changed(["restart", "motis"], context);
   runtime["motis.primary.promote"] = async (operation, context) => {
     // Recreate rather than restart: Docker resolves a bind-mount symlink when
     // the container is created, so a plain restart can keep pointing at the old
     // A/B target. `--no-deps` stops Compose from cascading into the feed proxy
     // and recreating MOTIS a second time, which would race the caller's
     // post-swap health probe.
-    await run(
+    await changed(
       [...composePrefix(), "up", "-d", "--force-recreate", "--no-deps", "motis"],
-      context.signal,
+      context,
       10 * 60_000,
     );
     // The caller performed the data swap; the agent reports the run it activated.
     return { activeRunId: operation.preparedRunId };
   };
-  runtime["motis.primary.stop"] = (_operation, context) => stopMotis("motis", context.signal);
+  runtime["motis.primary.stop"] = (_operation, context) => stopMotis("motis", context);
   return runtime;
 }

@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { testExecution } from "./__fixtures__/execution";
 import { createAdministrativeRuntime, createDefaultReleaseEffects } from "./administrative-runtime";
 import { type AgentHandoffRecord, readAgentHandoff, writeAgentHandoff } from "./agent-handoff";
 import { createUnavailableRuntime, dispatchOpsOperation } from "./runtime";
@@ -243,6 +244,7 @@ describe("operations agent update", () => {
       runtime,
       { kind: "agent.update", releaseId: release, expectedDigest: digest, handoffId: "handoff-1" },
       {
+        execution: testExecution(),
         signal: new AbortController().signal,
         emitLog: () => {},
         otherActiveOperations: () => 2,

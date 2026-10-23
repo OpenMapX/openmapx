@@ -51,7 +51,7 @@ describe("durable ops job journal", () => {
   it("durably probes a missing journal before open succeeds", async () => {
     const path = join(root(), "journal", "jobs-v1.json");
     await openOpsJobJournal(path);
-    expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ version: 1, jobs: [] });
+    expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ version: 2, jobs: [] });
   });
 
   it("fails open when an existing readable journal directory is not writable", async () => {
@@ -208,5 +208,69 @@ describe("durable ops job journal", () => {
         openOpsJobJournal(join(root(), "journal", "jobs-v1.json"), options),
       ).rejects.toThrow("Invalid ops job journal limits");
     }
+  });
+});
+
+describe("version2 execution journal", () => {
+  it("recomputes both hashes and never renews a running deadline on restart", async () => {
+    const { normalizeExecutionAdmission, opsOperationFingerprint } = await import(
+      "@openmapx/core/ops"
+    );
+    const path = join(root(), "jobs-v1.json");
+    const operation = { kind: "service.build" as const, serviceId: "valhalla" };
+    const operationFingerprint = opsOperationFingerprint(operation);
+    const admittedAt = Date.parse("2026-08-23T18:00:00.000Z");
+    const operationKey = "opk1_abcdefghijklmnop";
+    const normalized = normalizeExecutionAdmission({
+      operationFingerprint,
+      operationKey,
+      kind: operation.kind,
+      admittedAt,
+      requestedDeadlineAt: admittedAt + 1000,
+    });
+    const record = {
+      executionVersion: 2 as const,
+      ...normalized,
+      operationFingerprint,
+      requestedDeadlineAt: admittedAt + 1000,
+      deploymentBudgetMs: 12 * 3600_000,
+      operation,
+      operationKey,
+      operationId: "job1_abcdefghijklmnop",
+      role: "api" as const,
+      resourceId: "valhalla",
+      state: "running" as const,
+      submittedAt: new Date(admittedAt).toISOString(),
+      updatedAt: new Date(admittedAt).toISOString(),
+    };
+    const journal = await openOpsJobJournal(path);
+    await journal.replace([record]);
+    const recovered = await openOpsJobJournal(path, { now: () => new Date(admittedAt + 2000) });
+    expect(recovered.records()[0]).toMatchObject({
+      admittedAt,
+      deadlineAt: admittedAt + 1000,
+      fingerprint: normalized.fingerprint,
+      state: "failed",
+      errorClass: "recovery_required",
+      terminationRequestedAt: new Date(admittedAt + 1000).toISOString(),
+    });
+    const retained = recovered.records()[0];
+    if (!retained) throw new Error("Missing retained execution");
+    const extended = normalizeExecutionAdmission({
+      operationFingerprint,
+      operationKey,
+      kind: operation.kind,
+      admittedAt,
+      requestedDeadlineAt: admittedAt + 5000,
+    });
+    await expect(
+      recovered.replace([{ ...retained, ...extended, requestedDeadlineAt: admittedAt + 5000 }]),
+    ).rejects.toThrow("Retained execution identity is immutable");
+    await expect(
+      recovered.replace([{ ...retained, deadlineAt: admittedAt + 5000 }]),
+    ).rejects.toThrow();
+    await expect(
+      recovered.replace([{ ...retained, operationFingerprint: "c".repeat(64) }]),
+    ).rejects.toThrow();
   });
 });

@@ -10,6 +10,7 @@ import {
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import { afterEach, describe, expect, it } from "vitest";
+import { testExecution } from "./__fixtures__/execution";
 import type { PersistedOpsJob } from "./journal";
 import { createRegistryResourceClaimer } from "./policy";
 import { createUnavailableRuntime, dispatchOpsOperation } from "./runtime";
@@ -79,6 +80,7 @@ function fixture() {
       ...(expected !== undefined ? { expectedCurrentRevisionId: expected } : {}),
     } as OpsOperation & { kind: "stack.render" };
     return dispatchOpsOperation(runtime, operation, {
+      execution: testExecution(),
       signal: new AbortController().signal,
       emitLog() {},
       claim: {
@@ -147,6 +149,7 @@ describe("trusted configuration ownership and outcomes", () => {
           ...(kind === "integrationConfig.apply" ? { integrationId: "demo" } : {}),
         } as OpsOperation;
         return dispatchOpsOperation(runtime, operation, {
+          execution: testExecution(),
           signal: new AbortController().signal,
           emitLog() {},
           claim: {
@@ -209,6 +212,7 @@ describe("trusted configuration ownership and outcomes", () => {
     const operation = { kind: "configuration.inspect" as const };
     let settled = false;
     const observation = dispatchOpsOperation(runtime, operation, {
+      execution: testExecution(),
       signal: new AbortController().signal,
       emitLog() {},
       claim: {
@@ -309,6 +313,7 @@ describe("trusted configuration ownership and outcomes", () => {
     const operation = { ...claimed, expectedCurrentRevisionId: revision("b") };
     await expect(
       dispatchOpsOperation(runtime, operation, {
+        execution: testExecution(),
         signal: new AbortController().signal,
         emitLog() {},
         claim: {

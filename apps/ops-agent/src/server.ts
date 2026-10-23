@@ -2,6 +2,9 @@ import { createHash, randomBytes as nodeRandomBytes, timingSafeEqual } from "nod
 import {
   type ConfigurationApplyResult,
   configurationApplyResultSchema,
+  type ExecutionRef,
+  executionFingerprint,
+  normalizeExecutionAdmission,
   OPS_KIND_POLICIES,
   OPS_MAX_CLOCK_SKEW_MS,
   OPS_MAX_EVENT_BATCH,
@@ -13,18 +16,24 @@ import {
   OpsContractError,
   type OpsErrorClass,
   type OpsEventBatch,
+  type OpsFailureResult,
   type OpsJobState,
   type OpsJobStatus,
   type OpsOperation,
   type OpsOperationKind,
   type OpsResourcePolicy,
   type OpsRole,
+  opsFailureResultSchema,
   opsOperationFingerprint,
   opsResourceId,
   opsSuccess,
+  PROCESS_OUTPUT_TRUNCATED,
   parseBoundedOpsResult,
   parseOpsRequest,
+  processDiagnosticsSchema,
   redactedOpsError,
+  type VerifiedParentExecution,
+  verifyApiJobParentExecution,
 } from "@openmapx/core/ops";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -37,11 +46,13 @@ import {
   type PrivacyBackupExtractionRouteOptions,
   registerPrivacyBackupExtractionRoute,
 } from "./privacy-backup-extraction";
+import { safeProcessDiagnostic } from "./process-output";
 import {
   createUnavailableRuntime,
   dispatchOpsOperation,
   OpsAgentBusyError,
   type OpsExecutionContext,
+  OpsExecutionFailure,
   OpsHostUpdateRequiredError,
   OpsNotWiredError,
   type OpsRuntime,
@@ -53,7 +64,7 @@ const DEFAULT_CONCURRENCY = 4;
 const DEFAULT_REPLAY_ENTRIES = 10_000;
 const DEFAULT_JOB_ENTRIES = 256;
 const DEFAULT_JOB_RETENTION_MS = 60 * 60_000;
-const DEFAULT_ADMISSION_TIMEOUT_MS = 30_000;
+const DEFAULT_ADMISSION_TIMEOUT_MS = 15_000;
 const DEFAULT_CLAIM_TIMEOUT_MS = 5_000;
 const MAX_JOB_ID_ATTEMPTS = 8;
 const MAX_RETAINED_EVENTS_PER_JOB = 64;
@@ -117,7 +128,7 @@ export interface BuildOpsAgentServerOptions {
   }>;
 }
 
-interface JobRecord {
+interface JobRecord extends Omit<PersistedOpsJob, "terminalAt"> {
   role: OpsRole;
   operation: OpsOperation;
   operationId: string;
@@ -240,6 +251,8 @@ function classify(error: unknown): { errorClass: OpsErrorClass; statusCode: numb
   if (error instanceof RequestGuardError) {
     return { errorClass: error.errorClass, statusCode: error.statusCode };
   }
+  if (error instanceof OpsExecutionFailure)
+    return { errorClass: error.errorClass, statusCode: error.errorClass === "timeout" ? 504 : 500 };
   if (error instanceof OpsHostUpdateRequiredError)
     return { errorClass: "host_update_required", statusCode: 409 };
   if (error instanceof OpsAgentBusyError) return { errorClass: "busy", statusCode: 409 };
@@ -292,6 +305,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   const configurationResultsSettling = new Set<string>();
   let active = 0;
   let admissionTail = Promise.resolve();
+  let diagnosticTimer: ReturnType<typeof setTimeout> | undefined;
+  let diagnosticWriteActive = false;
+  const dirtyDiagnostics = new Set<string>();
 
   const withAdmissionLock = async <T>(work: () => Promise<T>): Promise<T> => {
     const previous = admissionTail;
@@ -347,6 +363,19 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   };
 
   const persisted = (job: JobRecord): PersistedOpsJob => ({
+    ...(job.executionVersion === 2
+      ? {
+          executionVersion: 2 as const,
+          admittedAt: job.admittedAt,
+          deadlineAt: job.deadlineAt,
+          operationFingerprint: job.operationFingerprint,
+          requestedDeadlineAt: job.requestedDeadlineAt,
+          deploymentBudgetMs: job.deploymentBudgetMs,
+          parent: job.parent,
+        }
+      : {}),
+    ...(job.diagnostics ? { diagnostics: job.diagnostics } : {}),
+    ...(job.failureResult ? { failureResult: job.failureResult } : {}),
     role: job.role,
     operation: job.operation,
     operationId: job.operationId,
@@ -362,6 +391,32 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     ...(job.terminationRequestedAt === undefined
       ? {}
       : { terminationRequestedAt: job.terminationRequestedAt }),
+  });
+
+  const flushDiagnostics = async () => {
+    if (diagnosticWriteActive || dirtyDiagnostics.size === 0) return;
+    diagnosticWriteActive = true;
+    dirtyDiagnostics.clear();
+    try {
+      await withAdmissionLock(async () => journal.replace([...jobsById.values()].map(persisted)));
+    } catch {
+      /* Projection persistence failure never terminates owned backend work. */
+    } finally {
+      diagnosticWriteActive = false;
+    }
+  };
+  const scheduleDiagnostics = (job: JobRecord) => {
+    dirtyDiagnostics.add(job.operationId);
+    if (diagnosticTimer !== undefined) return;
+    diagnosticTimer = setTimeout(() => {
+      diagnosticTimer = undefined;
+      void flushDiagnostics();
+    }, 1000);
+    diagnosticTimer.unref?.();
+  };
+  app.addHook("onClose", async () => {
+    if (diagnosticTimer !== undefined) clearTimeout(diagnosticTimer);
+    await flushDiagnostics();
   });
 
   const pruneJobs = async (nowMs: number) => {
@@ -422,7 +477,12 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   const transition = async (
     job: JobRecord,
     state: OpsJobState,
-    updates: Partial<Pick<JobRecord, "result" | "errorClass" | "terminalAt">> = {},
+    updates: Partial<
+      Pick<
+        JobRecord,
+        "result" | "errorClass" | "terminalAt" | "terminationRequestedAt" | "failureResult"
+      >
+    > = {},
   ): Promise<void> => {
     await withAdmissionLock(async () => {
       const updatedAt = now().toISOString();
@@ -453,6 +513,21 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     pushEvent(job, { cursor: job.cursor, type: "state", state: "failed" });
   };
 
+  const identityFor = (job: JobRecord) =>
+    job.executionVersion === 2
+      ? { admittedAt: job.admittedAt, deadlineAt: job.deadlineAt, fingerprint: job.fingerprint }
+      : {};
+  const executionFor = (job: JobRecord): ExecutionRef =>
+    Object.freeze({
+      executor: "ops-agent",
+      principal: job.role,
+      executionId: job.operationId,
+      operationKey: job.operationKey,
+      operationFingerprint: job.operationFingerprint ?? job.fingerprint,
+      fingerprint: job.fingerprint,
+      // Compatibility records never resume a forward execution or gain a new budget.
+      deadlineAt: job.deadlineAt ?? Date.parse(job.submittedAt),
+    });
   const contextFor = (
     job: JobRecord,
     signal: AbortSignal,
@@ -460,6 +535,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   ): OpsExecutionContext => ({
     signal,
     claim,
+    execution: executionFor(job),
     otherActiveOperations: () =>
       [...jobsById.values()].filter(
         (other) =>
@@ -469,7 +545,43 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             other.state === "termination_pending"),
       ).length,
     emitLog: (stream, message) => {
-      const boundedMessage = truncateUtf8(message, OPS_MAX_EVENT_MESSAGE_BYTES);
+      const boundedMessage = truncateUtf8(
+        safeProcessDiagnostic(message),
+        OPS_MAX_EVENT_MESSAGE_BYTES,
+      );
+      const tail = [
+        ...(job.diagnostics?.tail ?? []).filter(
+          (entry) => entry.message !== PROCESS_OUTPUT_TRUNCATED,
+        ),
+        { stream, message: boundedMessage },
+      ];
+      let truncated = job.diagnostics?.truncated ?? false;
+      while (
+        tail.length > 255 ||
+        Buffer.byteLength(JSON.stringify({ tail, truncated })) > 16 * 1024 - 128
+      ) {
+        const stdoutBytes = tail
+          .filter((entry) => entry.stream === "stdout")
+          .reduce((bytes, entry) => bytes + Buffer.byteLength(JSON.stringify(entry)), 0);
+        const stderrBytes = tail
+          .filter((entry) => entry.stream === "stderr")
+          .reduce((bytes, entry) => bytes + Buffer.byteLength(JSON.stringify(entry)), 0);
+        tail.splice(
+          tail.findIndex(
+            (entry) => entry.stream === (stdoutBytes >= stderrBytes ? "stdout" : "stderr"),
+          ),
+          1,
+        );
+        truncated = true;
+      }
+      job.diagnostics = {
+        tail: [
+          ...(truncated ? [{ stream: "stderr" as const, message: PROCESS_OUTPUT_TRUNCATED }] : []),
+          ...tail,
+        ],
+        truncated,
+      };
+      scheduleDiagnostics(job);
       job.cursor += 1;
       pushEvent(job, {
         cursor: job.cursor,
@@ -481,7 +593,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   });
 
   const statusFor = (job: JobRecord): OpsJobStatus => ({
-    version: 1,
+    version: job.executionVersion === 2 ? 2 : 1,
+    ...(job.executionVersion === 2 ? identityFor(job) : {}),
+    ...(job.diagnostics ? { diagnostics: job.diagnostics } : {}),
+    ...(job.failureResult ? { failureResult: job.failureResult } : {}),
     operationId: job.operationId,
     operationKey: job.operationKey,
     kind: job.operation.kind,
@@ -516,23 +631,28 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     }
     const controller = new AbortController();
     activeControllers.set(job.operationId, controller);
-    const timeoutMs = Math.min(
-      OPS_KIND_POLICIES[job.operation.kind].timeoutMs,
-      options.operationTimeoutMs ?? Number.POSITIVE_INFINITY,
-    );
+    const timeoutMs = Math.max(0, (job.deadlineAt ?? now().getTime()) - now().getTime());
     let timedOut = false;
     let terminalDurable = false;
     let claimReleased = false;
     let configurationEvidence: ConfigurationApplyResult | undefined;
     const timer = setTimeout(() => {
       timedOut = true;
-      void transition(job, "termination_pending").then(
+      void transition(job, "termination_pending", {
+        terminationRequestedAt: job.terminationRequestedAt ?? now().toISOString(),
+      }).then(
         () => controller.abort(),
         () => controller.abort(),
       );
     }, timeoutMs);
     const settlement = Promise.resolve()
-      .then(() => dispatch(job.operation, runtime, contextFor(job, controller.signal, claim)))
+      .then(() => {
+        if ((job.deadlineAt ?? 0) <= now().getTime()) {
+          timedOut = true;
+          throw new OpsExecutionFailure("timeout", {});
+        }
+        return dispatch(job.operation, runtime, contextFor(job, controller.signal, claim));
+      })
       .then(
         async (rawResult) => {
           clearTimeout(timer);
@@ -681,8 +801,29 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               const classification = timedOut
                 ? { errorClass: "timeout" as const }
                 : classify(error);
+              let failureResult: OpsFailureResult | undefined;
+              if (error instanceof OpsExecutionFailure) {
+                const safe = opsFailureResultSchema.parse(error.failureResult);
+                if (safe.diagnostics)
+                  safe.diagnostics = {
+                    ...safe.diagnostics,
+                    tail: safe.diagnostics.tail.map((entry) => ({
+                      ...entry,
+                      message: safeProcessDiagnostic(entry.message),
+                    })),
+                  };
+                failureResult = opsFailureResultSchema.parse(safe);
+                if (
+                  Buffer.byteLength(JSON.stringify(failureResult)) >
+                  OPS_KIND_POLICIES[job.operation.kind].maxResultBytes
+                )
+                  failureResult = undefined;
+                if (failureResult?.diagnostics)
+                  job.diagnostics = processDiagnosticsSchema.parse(failureResult.diagnostics);
+              }
               await transition(job, timedOut ? "timed_out" : "failed", {
                 result: undefined,
+                failureResult,
                 errorClass: classification.errorClass,
                 terminalAt: now().getTime(),
               });
@@ -765,13 +906,70 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       const timing = validateTiming(parsed.issuedAt, parsed.expiresAt, nowMs);
       replay.accept(parsed.requestId, timing.expiresAtMs, nowMs);
       const policy = OPS_KIND_POLICIES[operation.kind];
-      const fingerprint = opsOperationFingerprint(operation);
+      const operationFingerprint = opsOperationFingerprint(operation);
+      let parent: VerifiedParentExecution | undefined;
+      const parentHeader = request.headers["x-openmapx-parent-execution"];
+      const delegationHeader = request.headers["x-openmapx-control-delegation"];
+      const controlHeaders = request.raw.rawHeaders
+        .filter((_, i) => i % 2 === 0)
+        .map((x) => x.toLowerCase());
+      if (
+        delegationHeader !== undefined ||
+        controlHeaders.filter((x) => x === "x-openmapx-parent-execution").length > 1
+      )
+        throw new RequestGuardError("authorization", 403);
+      if (parentHeader !== undefined) {
+        if (role !== "api" || typeof parentHeader !== "string")
+          throw new RequestGuardError("authorization", 403);
+        try {
+          parent = verifyApiJobParentExecution(parentHeader, options.tokens.api, {
+            operationKey: parsed.operationKey,
+            operationFingerprint,
+            requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
+          });
+        } catch {
+          throw new RequestGuardError("authorization", 403);
+        }
+      }
+      const normalize = (
+        originalAdmittedAt: number,
+        deploymentBudgetMs = Math.min(
+          policy.timeoutMs,
+          options.operationTimeoutMs ?? policy.timeoutMs,
+        ),
+      ) => {
+        try {
+          return normalizeExecutionAdmission({
+            kind,
+            operationKey: parsed.operationKey,
+            operationFingerprint,
+            admittedAt: originalAdmittedAt,
+            requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
+            parent,
+            deploymentBudgetMs,
+          });
+        } catch {
+          throw new RequestGuardError("validation", 400);
+        }
+      };
+      let normalized: ReturnType<typeof normalize>;
+      const fingerprint = operationFingerprint; // Existing sealed claims bind the body, never execution timing.
+      const matchesRetained = (job: JobRecord): boolean => {
+        try {
+          return job.executionVersion === 2
+            ? job.fingerprint ===
+                normalize(job.admittedAt as number, job.deploymentBudgetMs).fingerprint
+            : job.fingerprint === operationFingerprint && parsed.execution === undefined && !parent;
+        } catch {
+          return false;
+        }
+      };
       if (policy.execution === "async") {
         await pruneJobs(nowMs);
         const ownerKey = `${role}:${parsed.operationKey}`;
         const existing = jobsByKey.get(ownerKey);
         if (existing) {
-          if (existing.fingerprint !== fingerprint) throw new RequestGuardError("conflict", 409);
+          if (!matchesRetained(existing)) throw new RequestGuardError("conflict", 409);
           return reply.code(202).send(
             opsSuccess(parsed.requestId, {
               execution: "async",
@@ -779,6 +977,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               operationKey: existing.operationKey,
               kind: existing.operation.kind,
               state: outwardStateFor(existing),
+              version: existing.executionVersion === 2 ? 2 : 1,
+              ...identityFor(existing),
             }),
           );
         }
@@ -790,6 +990,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           throw new RequestGuardError("busy", 409);
         }
       }
+      normalized = normalize(nowMs);
       if (active >= maxConcurrency) throw new RequestGuardError("busy", 429);
       active += 1;
       const claimController = new AbortController();
@@ -872,13 +1073,14 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         const admission = await withAdmissionLock(async () => {
           const retained = jobsByKey.get(ownerKey);
           if (retained) {
-            if (retained.fingerprint !== fingerprint) {
+            if (!matchesRetained(retained)) {
               throw new RequestGuardError("conflict", 409);
             }
             return { type: "retained", job: retained } as const;
           }
           if (jobsById.size >= maxJobEntries) throw new RequestGuardError("busy", 429);
-          const timestamp = now().toISOString();
+          if (normalized.deadlineAt <= now().getTime()) throw new RequestGuardError("timeout", 504);
+          const timestamp = new Date(normalized.admittedAt).toISOString();
           let operationId: string | undefined;
           try {
             for (let attempt = 0; attempt < MAX_JOB_ID_ATTEMPTS; attempt += 1) {
@@ -897,7 +1099,15 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             operation,
             operationId,
             operationKey: parsed.operationKey,
-            fingerprint,
+            executionVersion: 2,
+            ...normalized,
+            operationFingerprint,
+            requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
+            parent,
+            deploymentBudgetMs: Math.min(
+              policy.timeoutMs,
+              options.operationTimeoutMs ?? policy.timeoutMs,
+            ),
             resourceId,
             state: "queued",
             submittedAt: timestamp,
@@ -926,11 +1136,14 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               operationKey: admission.job.operationKey,
               kind: admission.job.operation.kind,
               state: outwardStateFor(admission.job),
+              version: admission.job.executionVersion === 2 ? 2 : 1,
+              ...identityFor(admission.job),
             }),
           );
         }
         const { job } = admission;
         try {
+          if (normalized.deadlineAt <= now().getTime()) throw new RequestGuardError("timeout", 504);
           await claimAdmission?.commit();
         } catch {
           stickyRecoveryRequired.add(job.operationId);
@@ -951,27 +1164,37 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             operationKey: job.operationKey,
             kind: job.operation.kind,
             state: outwardStateFor(job),
+            version: job.executionVersion === 2 ? 2 : 1,
+            ...identityFor(job),
           }),
         );
       }
       const controller = new AbortController();
       try {
+        if (normalized.deadlineAt <= now().getTime()) throw new RequestGuardError("timeout", 504);
         await claimAdmission?.commit();
       } catch {
         active -= 1;
         throw new RequestGuardError("runtime", 500);
       }
-      const timeoutMs = Math.min(
-        policy.timeoutMs,
-        options.operationTimeoutMs ?? Number.POSITIVE_INFINITY,
-      );
-      const execution = Promise.resolve().then(() =>
-        dispatch(operation, runtime, {
+      const timeoutMs = Math.max(0, normalized.deadlineAt - now().getTime());
+      const execution = Promise.resolve().then(() => {
+        if (normalized.deadlineAt <= now().getTime()) throw new RequestGuardError("timeout", 504);
+        return dispatch(operation, runtime, {
           signal: controller.signal,
+          execution: Object.freeze({
+            executor: "ops-agent",
+            principal: role,
+            executionId: `job1_${Buffer.from(randomBytes(18)).toString("base64url")}`,
+            operationKey: parsed.operationKey,
+            operationFingerprint,
+            fingerprint: normalized.fingerprint,
+            deadlineAt: normalized.deadlineAt,
+          }),
           emitLog: () => undefined,
           claim,
-        }),
-      );
+        });
+      });
       let timeout: ReturnType<typeof setTimeout> | undefined;
       try {
         const timeoutResult = new Promise<never>((_resolve, reject) => {
@@ -1037,11 +1260,42 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     const job = jobsByKey.get(`${role}:${operationKey}`);
     if (!job) return reply.code(404).send(redactedOpsError(requestId, "not_found"));
     const fingerprint = request.headers["x-ops-operation-fingerprint"];
-    if (typeof fingerprint !== "string" || !/^[a-f0-9]{64}$/.test(fingerprint)) {
-      return reply.code(400).send(redactedOpsError(requestId, "validation"));
-    }
-    if (fingerprint !== job.fingerprint) {
-      return reply.code(409).send(redactedOpsError(requestId, "conflict"));
+    const bodyFingerprint = request.headers["x-ops-body-fingerprint"];
+    // Explicit compatibility: a v1 lookup used the body hash in the sole header.
+    if (bodyFingerprint !== undefined) {
+      if (bodyFingerprint !== (job.operationFingerprint ?? job.fingerprint))
+        return reply.code(409).send(redactedOpsError(requestId, "conflict"));
+      if (fingerprint !== undefined && fingerprint !== job.fingerprint)
+        return reply.code(409).send(redactedOpsError(requestId, "conflict"));
+      const requested = request.headers["x-ops-requested-deadline"];
+      if (requested !== undefined) {
+        const requestedDeadlineAt = Number(requested);
+        if (
+          typeof requested !== "string" ||
+          !Number.isSafeInteger(requestedDeadlineAt) ||
+          requestedDeadlineAt < 0
+        )
+          return reply.code(400).send(redactedOpsError(requestId, "validation"));
+        const deadlineAt = Math.min(
+          requestedDeadlineAt,
+          job.parent?.deadlineAt ?? Infinity,
+          (job.admittedAt ?? 0) + (job.deploymentBudgetMs ?? 0),
+        );
+        if (
+          executionFingerprint({
+            kind: job.operation.kind,
+            operationFingerprint: bodyFingerprint as string,
+            deadlineAt,
+            ...(job.parent ? { parent: job.parent } : {}),
+          }) !== job.fingerprint
+        )
+          return reply.code(409).send(redactedOpsError(requestId, "conflict"));
+      }
+    } else {
+      if (typeof fingerprint !== "string" || !/^[a-f0-9]{64}$/.test(fingerprint))
+        return reply.code(400).send(redactedOpsError(requestId, "validation"));
+      if (fingerprint !== job.fingerprint && fingerprint !== job.operationFingerprint)
+        return reply.code(409).send(redactedOpsError(requestId, "conflict"));
     }
     return reply.code(200).send(opsSuccess(requestId, statusFor(job)));
   });
@@ -1075,6 +1329,11 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     if (!job || job.role !== role) {
       return reply.code(404).send(redactedOpsError(requestId, "not_found"));
     }
+    if (
+      job.executionVersion === 2 &&
+      request.headers["x-ops-operation-fingerprint"] !== job.fingerprint
+    )
+      return reply.code(409).send(redactedOpsError(requestId, "conflict"));
     if (job.terminalAt !== undefined) {
       return reply.code(200).send(opsSuccess(requestId, statusFor(job)));
     }

@@ -20,6 +20,7 @@ import {
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { testExecution } from "./__fixtures__/execution";
 import { createUnavailableRuntime, dispatchOpsOperation, type OpsTrustedClaim } from "./runtime";
 import {
   initializeTrustedConfigurationRuntime,
@@ -155,6 +156,7 @@ describe("ops-agent trusted configuration runtime", () => {
       }),
     );
     const result = await dispatchOpsOperation(runtime, operation, {
+      execution: testExecution(),
       signal: new AbortController().signal,
       emitLog: vi.fn(),
       claim: trusted,
@@ -209,6 +211,7 @@ describe("ops-agent trusted configuration runtime", () => {
       }),
     );
     await dispatchOpsOperation(runtime, operation, {
+      execution: testExecution(),
       signal: new AbortController().signal,
       emitLog: vi.fn(),
       claim: trusted,
@@ -283,6 +286,7 @@ describe("ops-agent trusted configuration runtime", () => {
           revisionId,
         },
         {
+          execution: testExecution(),
           signal: new AbortController().signal,
           emitLog: vi.fn(),
           claim: claim(
@@ -318,6 +322,7 @@ describe("ops-agent trusted configuration runtime", () => {
     select(paths.infraDir, ["app-api"]);
     await expect(
       dispatchOpsOperation(runtime, operation, {
+        execution: testExecution(),
         signal: new AbortController().signal,
         emitLog: vi.fn(),
         claim: claim(
@@ -352,6 +357,7 @@ describe("ops-agent trusted configuration runtime", () => {
     };
     select(paths.infraDir, ["app-api", "alpha"]);
     await dispatchOpsOperation(runtime, operation, {
+      execution: testExecution(),
       signal: new AbortController().signal,
       emitLog: vi.fn(),
       claim: claim(
@@ -426,6 +432,7 @@ describe("ops-agent trusted configuration runtime", () => {
     };
     await expect(
       dispatchOpsOperation(runtime, operation, {
+        execution: testExecution(),
         signal: new AbortController().signal,
         emitLog: vi.fn(),
         claim: claim(
@@ -466,6 +473,7 @@ describe("ops-agent trusted configuration runtime", () => {
     select(paths.infraDir, ["dawarich-app"]);
     await expect(
       dispatchOpsOperation(runtime, operation, {
+        execution: testExecution(),
         signal: new AbortController().signal,
         emitLog: vi.fn(),
         claim: claim(
@@ -507,6 +515,7 @@ describe("ops-agent trusted configuration runtime", () => {
     };
     await expect(
       dispatchOpsOperation(runtime, operation, {
+        execution: testExecution(),
         signal: new AbortController().signal,
         emitLog: vi.fn(),
         claim: claim(
@@ -552,6 +561,7 @@ describe("ops-agent trusted configuration runtime", () => {
     };
     await expect(
       dispatchOpsOperation(runtime, selection, {
+        execution: testExecution(),
         signal: new AbortController().signal,
         emitLog: vi.fn(),
         claim: claim(
@@ -587,6 +597,7 @@ describe("ops-agent trusted configuration runtime", () => {
     };
     await expect(
       dispatchOpsOperation(runtime, config, {
+        execution: testExecution(),
         signal: new AbortController().signal,
         emitLog: vi.fn(),
         claim: claim(
@@ -613,6 +624,7 @@ describe("ops-agent trusted configuration runtime", () => {
     };
     await expect(
       dispatchOpsOperation(runtime, removed, {
+        execution: testExecution(),
         signal: new AbortController().signal,
         emitLog: vi.fn(),
         claim: claim(
@@ -650,6 +662,7 @@ describe("ops-agent trusted configuration runtime", () => {
           revisionId,
         },
         {
+          execution: testExecution(),
           signal: new AbortController().signal,
           emitLog: vi.fn(),
           claim: claim(
@@ -690,6 +703,7 @@ describe("ops-agent trusted configuration runtime", () => {
           revisionId,
         },
         {
+          execution: testExecution(),
           signal: new AbortController().signal,
           emitLog: vi.fn(),
           claim: claim(
@@ -727,6 +741,7 @@ describe("ops-agent trusted configuration runtime", () => {
     });
     await expect(
       dispatchOpsOperation(crashing, operation, {
+        execution: testExecution(),
         signal: new AbortController().signal,
         emitLog: vi.fn(),
         claim: claim(operation, payload({ integrationConfigs: [] })),
@@ -745,6 +760,7 @@ describe("ops-agent trusted configuration runtime", () => {
     });
     await expect(
       dispatchOpsOperation(retry, operation, {
+        execution: testExecution(),
         signal: new AbortController().signal,
         emitLog: vi.fn(),
         claim: claim(operation, payload({ integrationConfigs: [] })),
@@ -780,6 +796,7 @@ describe("ops-agent trusted configuration runtime", () => {
       infraDir: paths.infraDir,
     });
     await dispatchOpsOperation(runtime, operation, {
+      execution: testExecution(),
       signal: new AbortController().signal,
       emitLog: vi.fn(),
       claim: claim(operation, payload({ integrationConfigs: [] })),
@@ -793,6 +810,7 @@ describe("ops-agent trusted configuration runtime", () => {
 
     await expect(
       dispatchOpsOperation(runtime, operation, {
+        execution: testExecution(),
         signal: new AbortController().signal,
         emitLog: vi.fn(),
         claim: claim(operation, payload({ integrationConfigs: [] })),
@@ -820,6 +838,7 @@ describe("ops-agent trusted configuration runtime", () => {
     });
     await expect(
       dispatchOpsOperation(crashing, operation, {
+        execution: testExecution(),
         signal: new AbortController().signal,
         emitLog: vi.fn(),
         claim: claim(operation, payload({ integrationConfigs: [] })),
@@ -833,6 +852,7 @@ describe("ops-agent trusted configuration runtime", () => {
     });
     await expect(
       dispatchOpsOperation(retry, operation, {
+        execution: testExecution(),
         signal: new AbortController().signal,
         emitLog: vi.fn(),
         claim: claim(operation, payload({ integrationConfigs: [] })),
@@ -860,6 +880,7 @@ describe("ops-agent trusted configuration runtime", () => {
       revisionId: firstRevision,
     };
     await dispatchOpsOperation(runtime, first, {
+      execution: testExecution(),
       signal: new AbortController().signal,
       emitLog: vi.fn(),
       claim: claim(
@@ -882,6 +903,7 @@ describe("ops-agent trusted configuration runtime", () => {
       revisionId: secondRevision,
     };
     await dispatchOpsOperation(runtime, second, {
+      execution: testExecution(),
       signal: new AbortController().signal,
       emitLog: vi.fn(),
       claim: claim(
@@ -928,6 +950,7 @@ describe("ops-agent trusted configuration runtime", () => {
     };
     await expect(
       dispatchOpsOperation(runtime, operation, {
+        execution: testExecution(),
         signal: new AbortController().signal,
         emitLog: vi.fn(),
         claim: claim(operation, payload({ integrationConfigs: [] })),
@@ -962,6 +985,7 @@ describe("ops-agent trusted configuration runtime", () => {
     };
     await expect(
       dispatchOpsOperation(runtime, operation, {
+        execution: testExecution(),
         signal: new AbortController().signal,
         emitLog: vi.fn(),
         claim: claim(operation, payload({ selectedRoots: ["beta"], integrationConfigs: [] })),
@@ -974,6 +998,7 @@ describe("ops-agent trusted configuration runtime", () => {
         runtime,
         { kind: "serviceSelection.inspect" },
         {
+          execution: testExecution(),
           signal: new AbortController().signal,
           emitLog: vi.fn(),
           claim: {
@@ -1028,6 +1053,7 @@ describe("ops-agent trusted configuration runtime", () => {
         revisionId: inspectRevision,
       };
       return dispatchOpsOperation(runtime, operation, {
+        execution: testExecution(),
         signal: new AbortController().signal,
         emitLog: vi.fn(),
         claim: {

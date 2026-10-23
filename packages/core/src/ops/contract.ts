@@ -1,12 +1,13 @@
 import z from "zod/v4";
+import { opsFailureResultSchema, processDiagnosticsSchema } from "./job-evidence";
 
-export const OPS_PROTOCOL_VERSION = 1 as const;
+export const OPS_PROTOCOL_VERSION = 2 as const;
 export const OPS_MAX_LOG_TAIL = 2_000;
 export const OPS_MAX_EVENT_MESSAGE_BYTES = 4_096;
 export const OPS_MAX_EVENT_BATCH = 100;
 export const OPS_MAX_FOLLOW_LOG_EVENTS = 2_000;
 export const OPS_MAX_RESULT_BYTES = 1024 * 1024;
-export const OPS_MAX_HTTP_RESPONSE_BYTES = OPS_MAX_RESULT_BYTES + 16 * 1024;
+export const OPS_MAX_HTTP_RESPONSE_BYTES = OPS_MAX_RESULT_BYTES + 32 * 1024;
 export const OPS_MAX_REQUEST_TTL_MS = 30_000;
 export const OPS_MAX_CLOCK_SKEW_MS = 5_000;
 export const OPS_MAX_BACKUP_ID_LENGTH = 128;
@@ -144,8 +145,8 @@ export const OPS_KIND_POLICIES = {
   "service.pull": asyncEffect("api", 15 * 60_000),
   "service.remove": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "service.update": asyncEffect("api", 15 * 60_000),
-  "service.build": asyncEffect("api", 30 * 60_000),
-  "services.buildAll": asyncEffect("api", 30 * 60_000, 16 * 1024),
+  "service.build": asyncEffect("api", 12 * 3600_000),
+  "services.buildAll": asyncEffect("api", 24 * 3600_000, 64 * 1024),
   "service.logs": sync("api", 30_000, 1024 * 1024),
   "service.logs.follow": asyncEffect("api", 15 * 60_000, 64 * 1024),
   "dawarich.provisioning.inspect": sync("api", 30_000),
@@ -163,7 +164,7 @@ export const OPS_KIND_POLICIES = {
   "backup.delete": asyncEffect("api", 5 * 60_000),
   "system.diagnostics": asyncEffect("api", 10 * 60_000, 256 * 1024),
   "system.inspect": sync("api", 30_000, 256 * 1024),
-  "system.update": asyncEffect("api", 30 * 60_000),
+  "system.update": asyncEffect("api", 48 * 3600_000),
   "serviceRepository.inspect": asyncEffect("api", 5 * 60_000, 1024 * 1024),
   "serviceRepository.publish": asyncEffect("api", 10 * 60_000),
   "serviceRepository.settle": asyncEffect("api", 5 * 60_000),
@@ -175,17 +176,17 @@ export const OPS_KIND_POLICIES = {
   "integrationConfig.apply": asyncEffect("api", 2 * 60_000),
   "vault.apply": asyncEffect("api", 2 * 60_000),
   "data.inspect": sync("api", 30_000, 256 * 1024),
-  "data.downloadOsm": asyncEffect("api", 30 * 60_000),
-  "data.downloadFonts": asyncEffect("api", 15 * 60_000),
-  "data.update": asyncEffect("api", 30 * 60_000),
-  "data.convertOverpass": asyncEffect("api", 30 * 60_000),
+  "data.downloadOsm": asyncEffect("api", 24 * 3600_000),
+  "data.downloadFonts": asyncEffect("api", 24 * 3600_000),
+  "data.update": asyncEffect("api", 24 * 3600_000),
+  "data.convertOverpass": asyncEffect("api", 24 * 3600_000),
   "data.link": asyncEffect("api", 10 * 60_000),
   "data.clean": asyncEffect("api", 10 * 60_000),
   "data.generateApiKeys": asyncEffect("api", 10 * 60_000),
-  "data.overtureSync": asyncEffect("api", 30 * 60_000),
-  "data.overtureConflate": asyncEffect("api", 30 * 60_000),
-  "data.searchIndexBuild": asyncEffect("api", 30 * 60_000),
-  "data.notablePlacesBuild": asyncEffect("api", 30 * 60_000),
+  "data.overtureSync": asyncEffect("api", 24 * 3600_000),
+  "data.overtureConflate": asyncEffect("api", 24 * 3600_000),
+  "data.searchIndexBuild": asyncEffect("api", 24 * 3600_000),
+  "data.notablePlacesBuild": asyncEffect("api", 24 * 3600_000),
   "motis.staging.restart": asyncEffect("data-manager", 2 * 60_000),
   "motis.staging.stop": asyncEffect("data-manager", 2 * 60_000),
   "motis.primary.restart": asyncEffect("data-manager", 2 * 60_000),
@@ -485,12 +486,15 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
 export type OpsOperation = z.infer<typeof opsOperationSchema>;
 
 const opsRequestSchema = z.strictObject({
-  version: z.literal(OPS_PROTOCOL_VERSION),
+  version: z.union([z.literal(1), z.literal(OPS_PROTOCOL_VERSION)]),
   requestId: requestIdSchema,
   operationKey: operationKeySchema,
   issuedAt: timestampSchema,
   expiresAt: timestampSchema,
   operation: opsOperationSchema,
+  execution: z
+    .strictObject({ requestedDeadlineAt: z.number().int().nonnegative().safe() })
+    .optional(),
 });
 export type OpsRequest = z.infer<typeof opsRequestSchema>;
 
@@ -1192,7 +1196,15 @@ const errorClass = z.enum(
   Object.keys(OPS_PUBLIC_ERROR_MESSAGES) as [OpsErrorClass, ...OpsErrorClass[]],
 );
 const jobStatus = z.strictObject({
-  version: z.literal(1),
+  version: z.union([z.literal(1), z.literal(2)]),
+  admittedAt: z.number().int().nonnegative().safe().optional(),
+  deadlineAt: z.number().int().nonnegative().safe().optional(),
+  fingerprint: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
+  diagnostics: processDiagnosticsSchema.optional(),
+  failureResult: opsFailureResultSchema.optional(),
   operationId: operationIdSchema,
   operationKey: operationKeySchema,
   kind: operationKindSchema,
@@ -1211,6 +1223,29 @@ const jobStatus = z.strictObject({
 export type OpsJobStatus = z.infer<typeof jobStatus>;
 export function parseOpsJobStatus(input: unknown): OpsJobStatus {
   const status = jobStatus.parse(input);
+  if (
+    status.version === 1 &&
+    (status.admittedAt !== undefined ||
+      status.deadlineAt !== undefined ||
+      status.fingerprint !== undefined)
+  )
+    throw new Error("Invalid compatibility identity");
+  if (
+    status.version === 2 &&
+    (status.admittedAt === undefined ||
+      status.deadlineAt === undefined ||
+      status.fingerprint === undefined ||
+      status.deadlineAt <= status.admittedAt)
+  )
+    throw new Error("Invalid execution identity");
+  if (status.failureResult !== undefined && !["failed", "timed_out"].includes(status.state))
+    throw new Error("Invalid failure evidence");
+  if (
+    status.failureResult &&
+    new TextEncoder().encode(JSON.stringify(status.failureResult)).byteLength >
+      OPS_KIND_POLICIES[status.kind].maxResultBytes
+  )
+    throw new Error("Failure evidence exceeds budget");
   if (status.state === "succeeded") {
     if (status.result === undefined || status.errorClass !== undefined)
       throw new Error("Invalid operation status");
@@ -1302,6 +1337,10 @@ export function parseOpsEventBatch(
 }
 
 export interface OpsAdmission {
+  version?: 1 | 2;
+  admittedAt?: number;
+  deadlineAt?: number;
+  fingerprint?: string;
   execution: "async";
   operationId: string;
   operationKey: string;

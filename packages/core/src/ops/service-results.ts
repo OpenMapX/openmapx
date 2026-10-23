@@ -1,0 +1,59 @@
+import { z } from "zod";
+
+export type CoordinatorMode = "ensure-running" | "require-running";
+const serviceId = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
+const ids = z
+  .array(serviceId)
+  .max(256)
+  .refine((x) => new Set(x).size === x.length);
+export const serviceBatchResultSchema = z
+  .strictObject({
+    outcome: z.enum(["success", "partial", "failed"]),
+    completedServiceIds: ids,
+    failedServiceIds: ids,
+    skippedServiceIds: ids,
+  })
+  .refine((x) => {
+    const all = [...x.completedServiceIds, ...x.failedServiceIds, ...x.skippedServiceIds];
+    return all.length <= 256 && new Set(all).size === all.length;
+  });
+export type ServiceBatchResult = z.infer<typeof serviceBatchResultSchema>;
+const revision = z
+  .string()
+  .regex(/^cfg1_[A-Za-z0-9_-]{43}$/)
+  .nullable();
+export const serviceLifecycleFailureEvidenceSchema = z.strictObject({
+  expectedRevisionId: revision,
+  seedRevisionId: revision,
+  finalRevisionId: revision,
+  phase: z.enum([
+    "prepared",
+    "pins_validated",
+    "pulled",
+    "generation_committed",
+    "hardlinks_applied",
+    "recreated",
+    "complete",
+    "failed",
+    "unknown",
+  ]),
+  commit: z.enum(["not_committed", "seed_committed", "final_committed", "unknown"]),
+  followUp: z.enum(["not_started", "complete", "failed", "unknown"]),
+  failure: z
+    .strictObject({
+      reason: z.enum([
+        "pins",
+        "pull",
+        "revision_conflict",
+        "hardlinks",
+        "recreate",
+        "deadline",
+        "canceled",
+        "containment",
+        "receipt_io",
+      ]),
+      failedServiceIds: ids,
+    })
+    .optional(),
+});
+export type ServiceLifecycleFailureEvidence = z.infer<typeof serviceLifecycleFailureEvidenceSchema>;

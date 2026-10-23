@@ -18,9 +18,12 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
+  type ExecutionRef,
+  executionRefSchema,
   OPS_MAX_BACKUP_ID_LENGTH,
   OPS_MAX_BACKUP_INVENTORY_ENTRIES,
   OPS_PUBLIC_ERROR_MESSAGES,
+  type OpsOperationKind,
   type OpsResultFor,
 } from "@openmapx/core/ops";
 import { atomicWrite, durableUnlink, fsyncDirectory } from "@openmapx/core/release-files";
@@ -40,12 +43,14 @@ import {
   listDescriptorAnchoredDirectory,
   readDescriptorAnchoredUtf8,
 } from "./descriptor-file";
-import { runContainedProcess } from "./docker-runtime";
+import { runContainedProcess, runContainedStreamingProcess } from "./docker-runtime";
 import { strictReadFile } from "./durable-files";
+import { safeProcessDiagnostic } from "./process-output";
 import { createImageInspection } from "./release-images";
 import {
   OpsAgentBusyError,
   type OpsExecutionContext,
+  OpsExecutionFailure,
   OpsHostUpdateRequiredError,
   type OpsRuntime,
 } from "./runtime";
@@ -94,7 +99,11 @@ const DATA_TYPE_ALIASES: Readonly<Record<string, readonly string[]>> = {
 type BackupKind = "backup.create" | "backup.restore" | "backup.delete";
 type BackupInventoryEntry = OpsResultFor<"backup.list">["backups"][number];
 
-interface FixedCliOptions {
+export interface FixedCliOptions {
+  operationKind?: OpsOperationKind;
+  execution?: ExecutionRef;
+  controlAssertion?: string;
+  parentAssertion?: string;
   signal: AbortSignal;
   emitLog(stream: "stdout" | "stderr", message: string): void;
 }
@@ -656,7 +665,7 @@ function emitLines(
   contents: string,
 ): void {
   for (const line of contents.split(/\r?\n/).filter(Boolean)) {
-    emitLog(stream, line);
+    emitLog(stream, safeProcessDiagnostic(line));
   }
 }
 
@@ -922,7 +931,7 @@ export function createDefaultReleaseEffects(
     (async (args: readonly string[], context: FixedCliOptions) => {
       const result = await runContainedProcess("docker", args, {
         signal: context.signal,
-        timeout: MAX_CLI_DURATION_MS,
+        timeout: remainingCliTime(context),
         maxBuffer: MAX_CLI_OUTPUT_BYTES,
       });
       emitLines(context.emitLog, "stdout", result.stdout);
@@ -1071,6 +1080,7 @@ export function createDefaultReleaseEffects(
     digest: string;
     serviceIds: string[];
     updateJobId?: string;
+    execution?: ExecutionRef;
     previousOverlay: string | null;
     previousState: string | null;
   }
@@ -1127,6 +1137,7 @@ export function createDefaultReleaseEffects(
     ) {
       throw new Error("Release transaction rejected");
     }
+    if (value.execution !== undefined) executionRefSchema.parse(value.execution);
     const transaction = value as unknown as ReleaseTransaction;
     const manifest = loadManifest(transaction.releaseId);
     if (releaseDigest(coreServices.canonicalReleaseManifest(manifest)) !== transaction.digest) {
@@ -1184,6 +1195,8 @@ export function createDefaultReleaseEffects(
     transaction: ReleaseTransaction,
     context: FixedCliOptions,
   ): Promise<void> => {
+    if (transaction.execution) context = { ...context, execution: transaction.execution };
+    remainingCliTime(context);
     await writeTransaction({ ...transaction, phase: "rollback_overlay" });
     if (transaction.previousOverlay === null) durableUnlink(paths.overlay);
     else atomicWrite(paths.overlay, transaction.previousOverlay);
@@ -1197,6 +1210,8 @@ export function createDefaultReleaseEffects(
     transaction: ReleaseTransaction,
     context: FixedCliOptions,
   ): Promise<void> => {
+    if (transaction.execution) context = { ...context, execution: transaction.execution };
+    remainingCliTime(context);
     const manifest = loadManifest(transaction.releaseId);
     // The transaction's digest was taken from the exact bytes authorized when
     // the apply was admitted. Reopening by release ID would otherwise let a
@@ -1388,7 +1403,14 @@ export function createDefaultReleaseEffects(
       ] as const;
       for (const [index, name] of names.entries()) {
         context.emitLog("stdout", `Downloading ${name} image (${index + 1}/${names.length})`);
-        await runDocker(["pull", manifest.images[name]], context);
+        if (runtimeOptions.runDocker) await runDocker(["pull", manifest.images[name]], context);
+        else
+          await runContainedStreamingProcess("docker", ["pull", manifest.images[name]], {
+            signal: context.signal,
+            timeout: remainingCliTime(context),
+            onLine: context.emitLog,
+            redact: safeProcessDiagnostic,
+          });
       }
     },
     inspect: async () => {
@@ -1542,6 +1564,7 @@ export function createDefaultReleaseEffects(
           ...(updateJobId ? { updateJobId } : {}),
           previousOverlay,
           previousState,
+          ...(context.execution ? { execution: context.execution } : {}),
         };
         await writeTransaction(transaction);
         if (afterHandoff) {
@@ -1578,7 +1601,7 @@ export function createDefaultReleaseEffects(
       await reconcileHandoff();
       await validateCandidate(request.releaseId, request.expectedDigest);
       const manifest = loadManifest(request.releaseId);
-      const silent = { signal: context.signal, emitLog: () => undefined };
+      const silent = { ...context, emitLog: () => undefined };
       const existing = readAgentHandoff(rootDir);
       if (existing?.handoffId === request.handoffId) {
         return { handoffId: request.handoffId, replaced: true };
@@ -1648,6 +1671,18 @@ export function createDefaultReleaseEffects(
  * `cli.mjs` sits next to the agent's entry; in development the agent runs from
  * `src/` and the CLI runs from source under tsx.
  */
+function remainingCliTime(options: FixedCliOptions): number {
+  if (options.signal.aborted) throw new OpsExecutionFailure("runtime", {});
+  if (!options.execution) {
+    if (options.operationKind) throw new Error("Managed execution context is required");
+    return MAX_CLI_DURATION_MS;
+  }
+  const execution = executionRefSchema.parse(options.execution);
+  const remaining = execution.deadlineAt - Date.now();
+  if (remaining <= 0) throw new OpsExecutionFailure("timeout", {});
+  return remaining;
+}
+
 export function createDefaultFixedCli(
   _rootDir: string,
   entry: string = process.argv[1] ?? "",
@@ -1664,13 +1699,29 @@ export function createDefaultFixedCli(
         join(runtimeRoot, "packages", "cli", "src", "index.ts"),
       ];
   return async (args, options) => {
-    const result = await runContainedProcess(executable as string, [...prefix, ...args], {
+    const timeout = remainingCliTime(options);
+    const env = { ...process.env };
+    for (const key of [
+      "OPENMAPX_CONTROL_EXECUTION",
+      "OPENMAPX_CONTROL_DELEGATION",
+      "OPENMAPX_PARENT_EXECUTION",
+    ])
+      delete env[key];
+    if (options.execution) {
+      const encoded = JSON.stringify(executionRefSchema.parse(options.execution));
+      if (Buffer.byteLength(encoded) > 2048) throw new Error("Execution context exceeds budget");
+      env.OPENMAPX_CONTROL_EXECUTION = encoded;
+      if (options.controlAssertion || options.parentAssertion)
+        throw new Error("Fixed CLI control verifier is unavailable");
+    } else if (options.controlAssertion || options.parentAssertion)
+      throw new Error("Execution context is required");
+    await runContainedStreamingProcess(executable as string, [...prefix, ...args], {
+      env,
       signal: options.signal,
-      timeout: MAX_CLI_DURATION_MS,
-      maxBuffer: MAX_CLI_OUTPUT_BYTES,
+      timeout,
+      onLine: options.emitLog,
+      redact: safeProcessDiagnostic,
     });
-    emitLines(options.emitLog, "stdout", result.stdout);
-    emitLines(options.emitLog, "stderr", result.stderr);
   };
 }
 
@@ -1736,8 +1787,8 @@ export function createAdministrativeRuntime(
     const lock = await acquireBackupStoreLock(options.rootDir);
     try {
       await runFixedCli(["backup", "create", "--name", operation.backupId], {
-        signal: context.signal,
-        emitLog: context.emitLog,
+        ...context,
+        operationKind: context.claim.operation.kind,
       });
     } finally {
       lock.release();
@@ -1767,7 +1818,7 @@ export function createAdministrativeRuntime(
           ...(operation.serviceIds?.length ? ["--services", ...operation.serviceIds] : []),
           ...(operation.stopRunning ? ["--stop-running"] : []),
         ],
-        { signal: context.signal, emitLog: context.emitLog },
+        { ...context, operationKind: context.claim.operation.kind },
       );
       if (inspectBackupManifestDigest(options.rootDir, operation.backupId) !== digest) {
         throw new Error("Backup authority rejected");
@@ -1781,8 +1832,8 @@ export function createAdministrativeRuntime(
     const lock = await acquireBackupStoreLock(options.rootDir);
     try {
       await runFixedCli(["backup", "delete", operation.backupId], {
-        signal: context.signal,
-        emitLog: context.emitLog,
+        ...context,
+        operationKind: context.claim.operation.kind,
       });
     } finally {
       lock.release();
@@ -1793,14 +1844,14 @@ export function createAdministrativeRuntime(
   runtime["data.downloadOsm"] = async (operation, context) => {
     await runFixedCli(
       ["data", "download", "osm", ...(operation.regionId ? [operation.regionId] : [])],
-      { signal: context.signal, emitLog: context.emitLog },
+      { ...context, operationKind: context.claim.operation.kind },
     );
     return { completed: true, ...(operation.regionId ? { resourceId: operation.regionId } : {}) };
   };
   runtime["data.downloadFonts"] = async (_operation, context) => {
     await runFixedCli(["data", "download", "fonts"], {
-      signal: context.signal,
-      emitLog: context.emitLog,
+      ...context,
+      operationKind: context.claim.operation.kind,
     });
     return { completed: true };
   };
@@ -1815,42 +1866,42 @@ export function createAdministrativeRuntime(
           : []),
         ...(operation.failFast ? ["--fail-fast"] : []),
       ],
-      { signal: context.signal, emitLog: context.emitLog },
+      { ...context, operationKind: context.claim.operation.kind },
     );
     return { completed: true, ...(operation.regionId ? { resourceId: operation.regionId } : {}) };
   };
   runtime["data.convertOverpass"] = async (operation, context) => {
     await runFixedCli(
       ["data", "convert", "overpass", ...(operation.regionId ? [operation.regionId] : [])],
-      { signal: context.signal, emitLog: context.emitLog },
+      { ...context, operationKind: context.claim.operation.kind },
     );
     return { completed: true, ...(operation.regionId ? { resourceId: operation.regionId } : {}) };
   };
   runtime["data.link"] = async (_operation, context) => {
     await runFixedCli(["data", "link"], {
-      signal: context.signal,
-      emitLog: context.emitLog,
+      ...context,
+      operationKind: context.claim.operation.kind,
     });
     return { completed: true };
   };
   runtime["data.clean"] = async (operation, context) => {
     await runFixedCli(["data", "clean", operation.dataTypeId], {
-      signal: context.signal,
-      emitLog: context.emitLog,
+      ...context,
+      operationKind: context.claim.operation.kind,
     });
     return { completed: true, resourceId: operation.dataTypeId };
   };
   runtime["data.generateApiKeys"] = async (_operation, context) => {
     await runFixedCli(["data", "generate-api-keys"], {
-      signal: context.signal,
-      emitLog: context.emitLog,
+      ...context,
+      operationKind: context.claim.operation.kind,
     });
     return { completed: true };
   };
   runtime["data.overtureSync"] = async (operation, context) => {
     await runFixedCli(["data", "overture-sync", operation.regionId], {
-      signal: context.signal,
-      emitLog: context.emitLog,
+      ...context,
+      operationKind: context.claim.operation.kind,
     });
     return { completed: true, resourceId: operation.regionId };
   };
@@ -1862,28 +1913,28 @@ export function createAdministrativeRuntime(
         operation.regionId,
         ...(operation.restart ? ["--restart"] : []),
       ],
-      { signal: context.signal, emitLog: context.emitLog },
+      { ...context, operationKind: context.claim.operation.kind },
     );
     return { completed: true, resourceId: operation.regionId };
   };
   runtime["data.searchIndexBuild"] = async (operation, context) => {
     await runFixedCli(["data", "search-index", "build", operation.regionId], {
-      signal: context.signal,
-      emitLog: context.emitLog,
+      ...context,
+      operationKind: context.claim.operation.kind,
     });
     return { completed: true, resourceId: operation.regionId };
   };
   runtime["data.notablePlacesBuild"] = async (_operation, context) => {
     await runFixedCli(["data", "notable-places", "build"], {
-      signal: context.signal,
-      emitLog: context.emitLog,
+      ...context,
+      operationKind: context.claim.operation.kind,
     });
     return { completed: true };
   };
   runtime["system.diagnostics"] = async (_operation, context) => {
     await runFixedCli(["check"], {
-      signal: context.signal,
-      emitLog: context.emitLog,
+      ...context,
+      operationKind: context.claim.operation.kind,
     });
     return { ok: true, checks: [] };
   };

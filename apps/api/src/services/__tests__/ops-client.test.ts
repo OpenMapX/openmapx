@@ -1,3 +1,4 @@
+import { getEventListeners } from "node:events";
 import type {
   OpsEventBatch,
   OpsJobStatusFor,
@@ -13,6 +14,7 @@ import {
   executeAndWait,
   executeTrustedConfigurationAndWait,
   followOpsEvents,
+  OpsObservationPending,
   waitForOpsResult,
 } from "../ops-client.js";
 
@@ -94,7 +96,7 @@ describe("bounded async ops helpers", () => {
           checkpoints.push(now);
         },
       }),
-    ).rejects.toMatchObject({ errorClass: "timeout" });
+    ).rejects.toMatchObject({ name: "OpsObservationPending" });
     expect(checkpoints).toContain(630_000);
     expect(now).toBe(635_000);
     expect(client.execute).not.toHaveBeenCalled();
@@ -143,7 +145,7 @@ describe("bounded async ops helpers", () => {
           recoveryTimeoutMs: 5,
         },
       ),
-    ).rejects.toMatchObject({ errorClass: "timeout" });
+    ).rejects.toMatchObject({ name: "OpsObservationPending" });
     expect(execute).not.toHaveBeenCalled();
     expect(lookup).toHaveBeenCalled();
   });
@@ -342,7 +344,10 @@ describe("bounded async ops helpers", () => {
         now += ms;
       },
     });
-    await expect(timedOut).rejects.toEqual(new ApiOpsError("timeout"));
+    await expect(timedOut).rejects.toMatchObject({
+      name: "OpsObservationPending",
+      reason: "observer_deadline",
+    });
   });
 
   it("rejects a status bound to a different operation key", async () => {
@@ -374,8 +379,6 @@ describe("bounded async ops helpers", () => {
 
   it("removes the sleep abort listener after every normal poll", async () => {
     const controller = new AbortController();
-    const add = vi.spyOn(controller.signal, "addEventListener");
-    const remove = vi.spyOn(controller.signal, "removeEventListener");
     const admission = {
       execution: "async" as const,
       operationId: "job1_abcdefghijklmnop",
@@ -383,36 +386,35 @@ describe("bounded async ops helpers", () => {
       kind: "service.stop" as const,
       state: "queued" as const,
     };
-    const status = vi
-      .fn()
-      .mockResolvedValueOnce({
-        version: 1,
-        operationId: admission.operationId,
-        operationKey: admission.operationKey,
-        kind: admission.kind,
-        resourceId: "redis",
-        state: "running",
-        submittedAt: "2026-08-23T10:00:00.000Z",
-        updatedAt: "2026-08-23T10:00:01.000Z",
-      })
-      .mockResolvedValueOnce({
-        version: 1,
-        operationId: admission.operationId,
-        operationKey: admission.operationKey,
-        kind: admission.kind,
-        resourceId: "redis",
-        state: "succeeded",
-        submittedAt: "2026-08-23T10:00:00.000Z",
-        updatedAt: "2026-08-23T10:00:02.000Z",
-        result: { changed: true },
-      });
-    await waitForOpsResult(fakeClient({ status }), admission.kind, admission, {
-      signal: controller.signal,
-      pollIntervalMs: 1,
-      timeoutMs: 100,
+    let effectiveSignal: AbortSignal | undefined;
+    let reads = 0;
+    const client = fakeClient({
+      status: async (_kind: unknown, _id: unknown, options: { signal: AbortSignal }) => {
+        effectiveSignal = options.signal;
+        reads++;
+        return {
+          version: 1,
+          operationId: admission.operationId,
+          operationKey: admission.operationKey,
+          kind: admission.kind,
+          resourceId: "redis",
+          state: reads === 1 ? "running" : "succeeded",
+          submittedAt: "2026-08-23T10:00:00.000Z",
+          updatedAt: "2026-08-23T10:00:01.000Z",
+          ...(reads === 1 ? {} : { result: { changed: true } }),
+        };
+      },
     });
-    expect(add).toHaveBeenCalledTimes(1);
-    expect(remove).toHaveBeenCalledTimes(1);
+    await expect(
+      waitForOpsResult(client, admission.kind, admission, {
+        signal: controller.signal,
+        pollIntervalMs: 1,
+        timeoutMs: 100,
+      }),
+    ).resolves.toEqual({ changed: true });
+    if (!effectiveSignal) throw new Error("Status did not receive the observer signal");
+    expect(getEventListeners(effectiveSignal, "abort")).toHaveLength(0);
+    expect(reads).toBe(2);
   });
 
   it("streams bounded event pages and stops promptly on caller cancellation", async () => {
@@ -625,4 +627,105 @@ describe("configuration outcome evidence", () => {
       await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome456"),
     ).toEqual({ outcome: "unknown", reason: "transport_or_result" });
   });
+});
+
+describe("independent observation deadlines", () => {
+  it("observes beyond thirty minutes without extending or canceling backend work", async () => {
+    let now = 0;
+    const admission = {
+      execution: "async" as const,
+      kind: "service.build" as const,
+      operationId: "job1_abcdefghijklmnop",
+      operationKey: "opk1_abcdefghijklmnop",
+      state: "running" as const,
+      admittedAt: 0,
+      deadlineAt: 12 * 3600_000,
+      fingerprint: "a".repeat(64),
+    };
+    let polls = 0;
+    const client = fakeClient({
+      status: async () => ({
+        version: 2,
+        ...admission,
+        resourceId: "valhalla",
+        submittedAt: new Date(0).toISOString(),
+        updatedAt: new Date(now).toISOString(),
+        state: ++polls === 1 ? "running" : "succeeded",
+        ...(polls === 1 ? {} : { result: { changed: true } }),
+      }),
+    });
+    await expect(
+      waitForOpsResult(client, admission.kind, admission, {
+        now: () => now,
+        sleep: async () => {
+          now = 31 * 60_000;
+        },
+      }),
+    ).resolves.toEqual({ changed: true });
+    expect(client.cancel).not.toHaveBeenCalled();
+    expect(client.execute).not.toHaveBeenCalled();
+  });
+  it("allows a separately selected observer beyond forty-eight hours and reports loss as pending", async () => {
+    const controller = new AbortController();
+    const admission = {
+      execution: "async" as const,
+      kind: "system.update" as const,
+      operationId: "job1_abcdefghijklmnop",
+      operationKey: "opk1_abcdefghijklmnop",
+      state: "running" as const,
+    };
+    const client = fakeClient({
+      status: async () => {
+        controller.abort();
+        throw new DOMException("Aborted", "AbortError");
+      },
+    });
+    await expect(
+      waitForOpsResult(client, admission.kind, admission, {
+        signal: controller.signal,
+        timeoutMs: 72 * 3600_000,
+      }),
+    ).rejects.toBeInstanceOf(OpsObservationPending);
+    expect(client.cancel).not.toHaveBeenCalled();
+  });
+});
+
+it("bounds an inflight status read by the observer deadline without canceling execution", async () => {
+  const admission = {
+    execution: "async" as const,
+    kind: "service.build" as const,
+    operationId: "job1_abcdefghijklmnop",
+    operationKey: "opk1_abcdefghijklmnop",
+    state: "running" as const,
+  };
+  const client = fakeClient({
+    status: async (_kind: unknown, _id: unknown, options: { signal: AbortSignal }) =>
+      new Promise((resolve, reject) => {
+        const timer = setTimeout(
+          () =>
+            resolve({
+              version: 1,
+              ...admission,
+              resourceId: "valhalla",
+              state: "succeeded",
+              result: { completed: true },
+              submittedAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }),
+          200,
+        );
+        options.signal?.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(timer);
+            reject(new DOMException("Aborted", "AbortError"));
+          },
+          { once: true },
+        );
+      }),
+  });
+  await expect(
+    waitForOpsResult(client, admission.kind, admission, { observerDeadlineAt: Date.now() + 20 }),
+  ).rejects.toMatchObject({ name: "OpsObservationPending", reason: "observer_deadline" });
+  expect(client.cancel).not.toHaveBeenCalled();
 });

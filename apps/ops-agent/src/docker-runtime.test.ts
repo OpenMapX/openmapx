@@ -1,13 +1,28 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import type { OpsOperation } from "@openmapx/core/ops";
 import { describe, expect, it, vi } from "vitest";
-import { createDockerRuntime, runContainedLogProcess, runContainedProcess } from "./docker-runtime";
+import { testExecution } from "./__fixtures__/execution";
+import {
+  createDockerRuntime,
+  runContainedLogProcess,
+  runContainedProcess,
+  runContainedStreamingProcess,
+} from "./docker-runtime";
 import { dispatchOpsOperation } from "./runtime";
 
 const context = () => ({
+  execution: testExecution(),
   signal: new AbortController().signal,
   emitLog: () => undefined,
   claim: {
@@ -1781,7 +1796,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     }
   });
 
-  it.each(["action", "follow"] as const)(
+  it.each(["action", "follow", "stream"] as const)(
     "contains a residual TERM-ignoring descendant for %s authority",
     async (kind) => {
       const root = mkdtempSync(join(tmpdir(), "openmapx-contained-group-"));
@@ -1806,18 +1821,133 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
               maxBuffer: 1_024,
               killGraceMs: 20,
             })
-          : runContainedLogProcess(process.execPath, ["-e", parentScript], {
-              signal: new AbortController().signal,
-              timeout: 5_000,
-              maxBuffer: 1_024,
-              onLine: () => undefined,
-            });
+          : kind === "stream"
+            ? runContainedStreamingProcess(process.execPath, ["-e", parentScript], {
+                signal: new AbortController().signal,
+                timeout: 5000,
+                killGraceMs: 20,
+                onLine: () => undefined,
+                redact: (x) => x,
+              })
+            : runContainedLogProcess(process.execPath, ["-e", parentScript], {
+                signal: new AbortController().signal,
+                timeout: 5_000,
+                maxBuffer: 1_024,
+                onLine: () => undefined,
+              });
 
-      await expect(operation).rejects.toThrow(/Contained .*process failed/);
+      await expect(operation).rejects.toThrow(/Contained .*process failed|Operation failed/);
       await new Promise((resolve) => setTimeout(resolve, 2_500));
       expect(existsSync(marker)).toBe(false);
       rmSync(root, { recursive: true, force: true });
     },
     12_000,
   );
+});
+
+describe("durable streaming process containment", () => {
+  it("does not kill a noisy successful child when projection fails", async () => {
+    const diagnostics = await runContainedStreamingProcess(
+      process.execPath,
+      [
+        "-e",
+        "for(let i=0;i<2048;i++) console.log('x'.repeat(1024));console.error('last-diagnostic');",
+      ],
+      {
+        signal: new AbortController().signal,
+        timeout: 5000,
+        onLine: () => {
+          throw Error("projection failed");
+        },
+        redact: (x) => x,
+      },
+    );
+    expect(diagnostics).toMatchObject({
+      truncated: true,
+      tail: expect.arrayContaining([{ stream: "stderr", message: "last-diagnostic" }]),
+    });
+    expect(Buffer.byteLength(JSON.stringify(diagnostics))).toBeLessThanOrEqual(16 * 1024);
+  });
+  it.each(["abort", "deadline"] as const)(
+    "contains descendants on explicit %s with short safe errors",
+    async (mode) => {
+      const root = mkdtempSync(join(tmpdir(), "openmapx-stream-containment-"));
+      const ready = join(root, "ready");
+      const marker = join(root, "marker");
+      const script = `const {spawn}=require('node:child_process');process.on('SIGTERM',()=>{});spawn(process.execPath,['-e', ${JSON.stringify("process.on('SIGTERM',()=>{});require('node:fs').writeFileSync(process.argv[1],'ready');setTimeout(()=>require('node:fs').writeFileSync(process.argv[2],'late'),5000);setInterval(()=>{},1000)")},process.argv[1],process.argv[2]],{stdio:'ignore'});console.error('password=private');setInterval(()=>{},1000);`;
+      const controller = new AbortController();
+      const completion = runContainedStreamingProcess(
+        process.execPath,
+        ["-e", script, ready, marker],
+        {
+          signal: controller.signal,
+          timeout: mode === "deadline" ? 3500 : 10_000,
+          killGraceMs: 20,
+          onLine: () => undefined,
+          redact: (x) => x,
+        },
+      );
+      const rejected = expect(completion).rejects.toMatchObject({
+        name: "OpsExecutionFailure",
+        errorClass: mode === "deadline" ? "timeout" : "runtime",
+      });
+      try {
+        await vi.waitFor(() => expect(existsSync(ready)).toBe(true), { timeout: 3000 });
+        if (mode === "abort") controller.abort();
+        await rejected;
+        const failure = await completion.catch((x) => x);
+        expect(JSON.stringify(failure.failureResult)).not.toContain("private");
+        await new Promise((resolve) => setTimeout(resolve, 5100));
+        expect(existsSync(marker)).toBe(false);
+      } finally {
+        controller.abort();
+        await rejected;
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+});
+
+it("streams the actual default fixed Docker human output without the JSON collector limit", async () => {
+  const root = mkdtempSync(join(tmpdir(), "openmapx-fixed-docker-"));
+  const ready = join(root, "ready");
+  const release = join(root, "release");
+  writeFileSync(
+    join(root, "docker"),
+    `#!${process.execPath}\nconst{writeFileSync,existsSync}=require('node:fs');console.log('phase-one');writeFileSync(${JSON.stringify(ready)},'ready');const timer=setInterval(()=>{if(existsSync(${JSON.stringify(release)})){clearInterval(timer);process.stdout.write('x'.repeat(2*1024*1024)+'\\nlast-diagnostic\\n');}},5);`,
+  );
+  chmodSync(join(root, "docker"), 0o700);
+  vi.stubEnv("PATH", root + delimiter + process.env.PATH);
+  const seen: string[] = [];
+  const runtime = createDockerRuntime({
+    stack: {
+      infraDir: root,
+      composePath: join(root, "compose.yml"),
+      composeReleasePath: join(root, "release.yml"),
+    },
+    fileExists: () => false,
+  });
+  const completion = dispatchOpsOperation(
+    runtime,
+    { kind: "service.pull", serviceId: "redis" },
+    {
+      ...context(),
+      emitLog: (_s, line) => {
+        seen.push(line);
+      },
+    },
+  );
+  void completion.catch(() => undefined);
+  try {
+    await vi.waitFor(() => expect(existsSync(ready)).toBe(true), { timeout: 2000 });
+    await vi.waitFor(() => expect(seen).toContain("phase-one"), { timeout: 2000 });
+    writeFileSync(release, "go");
+    await expect(completion).resolves.toEqual({ changed: true });
+    expect(seen).toContain("last-diagnostic");
+  } finally {
+    writeFileSync(release, "go");
+    await completion.catch(() => undefined);
+    vi.unstubAllEnvs();
+    rmSync(root, { recursive: true, force: true });
+  }
 });

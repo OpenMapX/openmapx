@@ -1,12 +1,25 @@
 import type { TrustedConfigurationPayload } from "@openmapx/core/ops";
 import {
+  type ExecutionRef,
   OPS_OPERATION_KINDS,
   OPS_PUBLIC_ERROR_MESSAGES,
+  type OpsErrorClass,
+  type OpsFailureResult,
   type OpsOperation,
   type OpsOperationKind,
   type OpsResultFor,
   parseOpsResult,
 } from "@openmapx/core/ops";
+
+export class OpsExecutionFailure extends Error {
+  constructor(
+    readonly errorClass: OpsErrorClass,
+    readonly failureResult: OpsFailureResult,
+  ) {
+    super(OPS_PUBLIC_ERROR_MESSAGES[errorClass]);
+    this.name = "OpsExecutionFailure";
+  }
+}
 
 export class OpsNotWiredError extends Error {
   constructor() {
@@ -31,6 +44,7 @@ export class OpsAgentBusyError extends Error {
 }
 
 export interface OpsExecutionContext {
+  readonly execution: ExecutionRef;
   signal: AbortSignal;
   emitLog(stream: "stdout" | "stderr", message: string): void;
   claim: OpsTrustedClaim;

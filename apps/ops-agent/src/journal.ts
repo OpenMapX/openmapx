@@ -3,15 +3,22 @@ import { constants } from "node:fs";
 import { mkdir, open, opendir, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import {
+  OPS_KIND_POLICIES,
   OPS_PUBLIC_ERROR_MESSAGES,
   type OpsErrorClass,
+  type OpsFailureResult,
   type OpsJobState,
   type OpsOperation,
   type OpsRole,
+  opsFailureResultSchema,
   opsOperationFingerprint,
   opsOperationSchema,
   opsResourceId,
+  type ProcessDiagnostics,
   parseBoundedOpsResult,
+  processDiagnosticsSchema,
+  type RetainedExecutionAdmission,
+  validateRetainedExecutionAdmission,
 } from "@openmapx/core/ops";
 
 const OPS_JOB_JOURNAL_MAX_ENTRIES = 256;
@@ -33,6 +40,15 @@ const ERROR_CLASSES = new Set<OpsErrorClass>(
 );
 
 export interface PersistedOpsJob {
+  executionVersion?: 2;
+  admittedAt?: number;
+  deadlineAt?: number;
+  operationFingerprint?: string;
+  requestedDeadlineAt?: number;
+  deploymentBudgetMs?: number;
+  parent?: RetainedExecutionAdmission["parent"];
+  diagnostics?: ProcessDiagnostics;
+  failureResult?: OpsFailureResult;
   role: OpsRole;
   operation: OpsOperation;
   operationId: string;
@@ -79,6 +95,15 @@ function parseJob(value: unknown): PersistedOpsJob {
   const raw = value as Record<string, unknown>;
   if (
     !exactKeys(raw, [
+      "executionVersion",
+      "admittedAt",
+      "deadlineAt",
+      "operationFingerprint",
+      "requestedDeadlineAt",
+      "deploymentBudgetMs",
+      "parent",
+      "diagnostics",
+      "failureResult",
       "role",
       "operation",
       "operationId",
@@ -114,10 +139,38 @@ function parseJob(value: unknown): PersistedOpsJob {
   }
   const operation = opsOperationSchema.parse(raw.operation);
   if (
-    opsOperationFingerprint(operation) !== raw.fingerprint ||
+    opsOperationFingerprint(operation) !==
+      (raw.executionVersion === 2 ? raw.operationFingerprint : raw.fingerprint) ||
     opsResourceId(operation) !== raw.resourceId
   ) {
     throw new Error("invalid");
+  }
+  if (raw.executionVersion === 2) {
+    validateRetainedExecutionAdmission(
+      operation.kind,
+      raw as unknown as RetainedExecutionAdmission,
+    );
+    if (raw.admittedAt !== Date.parse(raw.submittedAt as string)) throw new Error("invalid");
+  } else if (
+    [
+      "executionVersion",
+      "admittedAt",
+      "deadlineAt",
+      "operationFingerprint",
+      "requestedDeadlineAt",
+      "deploymentBudgetMs",
+      "parent",
+    ].some((key) => raw[key] !== undefined)
+  )
+    throw new Error("invalid");
+  if (raw.diagnostics !== undefined) processDiagnosticsSchema.parse(raw.diagnostics);
+  if (raw.failureResult !== undefined) {
+    if (!["failed", "timed_out"].includes(raw.state as string)) throw new Error("invalid");
+    const result = opsFailureResultSchema.parse(raw.failureResult);
+    if (
+      Buffer.byteLength(JSON.stringify(result)) > OPS_KIND_POLICIES[operation.kind].maxResultBytes
+    )
+      throw new Error("invalid");
   }
   const state = raw.state as OpsJobState;
   if (state === "succeeded") {
@@ -144,13 +197,15 @@ function parseFile(bytes: Uint8Array, maxEntries: number): PersistedOpsJob[] {
   const raw = decoded as Record<string, unknown>;
   if (
     Object.keys(raw).sort().join(",") !== "jobs,version" ||
-    raw.version !== 1 ||
+    (raw.version !== 1 && raw.version !== 2) ||
     !Array.isArray(raw.jobs) ||
     raw.jobs.length > maxEntries
   ) {
     throw new Error("invalid");
   }
   const jobs = raw.jobs.map(parseJob);
+  if (raw.version === 1 && jobs.some((job) => job.executionVersion !== undefined))
+    throw new Error("invalid journal version");
   const ids = new Set(jobs.map((entry) => entry.operationId));
   const keys = new Set(jobs.map((entry) => `${entry.role}:${entry.operationKey}`));
   if (ids.size !== jobs.length || keys.size !== jobs.length) throw new Error("invalid");
@@ -270,12 +325,34 @@ export async function openOpsJobJournal(
   const writeSnapshot = async (records: readonly PersistedOpsJob[]): Promise<void> => {
     if (records.length > maxEntries) throw new Error("Ops job journal capacity exceeded");
     const validated = records.map(parseJob);
+    for (const record of validated) {
+      const retained = current.find(
+        (prior) =>
+          prior.operationId === record.operationId ||
+          (prior.role === record.role && prior.operationKey === record.operationKey),
+      );
+      if (
+        retained &&
+        (retained.operationId !== record.operationId ||
+          retained.operationKey !== record.operationKey ||
+          retained.role !== record.role ||
+          retained.fingerprint !== record.fingerprint ||
+          retained.executionVersion !== record.executionVersion ||
+          retained.admittedAt !== record.admittedAt ||
+          retained.deadlineAt !== record.deadlineAt ||
+          retained.operationFingerprint !== record.operationFingerprint ||
+          retained.requestedDeadlineAt !== record.requestedDeadlineAt ||
+          retained.deploymentBudgetMs !== record.deploymentBudgetMs ||
+          JSON.stringify(retained.parent) !== JSON.stringify(record.parent))
+      )
+        throw Error("Retained execution identity is immutable");
+    }
     const ids = new Set(validated.map((entry) => entry.operationId));
     const keys = new Set(validated.map((entry) => `${entry.role}:${entry.operationKey}`));
     if (ids.size !== validated.length || keys.size !== validated.length) {
       throw new Error("Ops job journal contains duplicate identity");
     }
-    const bytes = Buffer.from(JSON.stringify({ version: 1, jobs: validated }), "utf8");
+    const bytes = Buffer.from(JSON.stringify({ version: 2, jobs: validated }), "utf8");
     if (bytes.byteLength > maxBytes) throw new Error("Ops job journal capacity exceeded");
     const directory = dirname(path);
     const temporary = join(directory, `.${basename(path)}.${randomBytes(12).toString("hex")}.tmp`);
@@ -322,6 +399,12 @@ export async function openOpsJobJournal(
           ["queued", "running", "termination_pending"].includes(entry.state)
             ? {
                 ...entry,
+                ...(entry.deadlineAt !== undefined && entry.deadlineAt <= now().getTime()
+                  ? {
+                      terminationRequestedAt:
+                        entry.terminationRequestedAt ?? new Date(entry.deadlineAt).toISOString(),
+                    }
+                  : {}),
                 state: "failed" as const,
                 updatedAt: timestamp,
                 terminalAt: timestamp,

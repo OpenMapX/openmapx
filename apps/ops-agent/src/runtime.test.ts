@@ -1,8 +1,10 @@
 import { OPS_OPERATION_KINDS } from "@openmapx/core/ops";
 import { describe, expect, it } from "vitest";
+import { testExecution } from "./__fixtures__/execution";
 import { createUnavailableRuntime, dispatchOpsOperation } from "./runtime";
 
 const context = {
+  execution: testExecution(),
   signal: new AbortController().signal,
   emitLog: () => undefined,
   claim: {
@@ -34,6 +36,7 @@ describe("typed ops runtime registry", () => {
         runtime,
         { kind: "docker.status" },
         {
+          execution: testExecution(),
           signal: new AbortController().signal,
           emitLog: () => undefined,
           claim: context.claim,

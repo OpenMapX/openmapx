@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { testExecution } from "./__fixtures__/execution";
 import { createUnavailableRuntime, dispatchOpsOperation } from "./runtime";
 import { createTransitousLockRuntime } from "./transitous-lock-runtime";
 
@@ -18,6 +19,7 @@ function root(): string {
 
 function context() {
   return {
+    execution: testExecution(),
     signal: new AbortController().signal,
     emitLog: vi.fn(),
     claim: {

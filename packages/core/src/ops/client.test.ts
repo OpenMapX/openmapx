@@ -21,8 +21,8 @@ function tokenFile(contents = Buffer.alloc(32, 7).toString("base64url")): string
 
 describe("ops client", () => {
   it("derives synchronous transport timeouts from the per-kind execution budget", () => {
-    expect(opsRequestTimeoutMs("docker.status")).toBe(10_000);
-    expect(opsRequestTimeoutMs("service.logs")).toBe(35_000);
+    expect(opsRequestTimeoutMs("docker.status")).toBe(15_000);
+    expect(opsRequestTimeoutMs("service.logs")).toBe(15_000);
     expect(opsRequestTimeoutMs("service.logs", 7)).toBe(7);
     expect(opsRequestTimeoutMs("service.pull")).toBe(15_000);
   });
@@ -41,7 +41,7 @@ describe("ops client", () => {
     const fetch = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
       expect(body).toMatchObject({
-        version: 1,
+        version: 2,
         requestId: "ops1_AQEBAQEBAQEBAQEBAQEBAQEB",
         operationKey: "opk1_AQEBAQEBAQEBAQEBAQEBAQEB",
         issuedAt: "2026-08-23T18:00:00.000Z",
@@ -248,6 +248,10 @@ describe("ops client", () => {
           requestId: body.requestId,
           ok: true,
           result: {
+            version: 2,
+            admittedAt: 0,
+            deadlineAt: 1000,
+            fingerprint: "a".repeat(64),
             execution: "async",
             operationId: "job1_reusableOperation1",
             operationKey: body.operationKey,
@@ -281,7 +285,7 @@ describe("ops client", () => {
     const token = Buffer.alloc(32, 17).toString("base64url");
     const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       expect(String(input)).toBe(`http://ops-agent:4300/v1/operations/${operationId}`);
-      expect(init?.method).toBe("DELETE");
+      expect(["GET", "DELETE"]).toContain(init?.method);
       expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${token}`);
       const requestId = new Headers(init?.headers).get("x-ops-request-id");
       return new Response(
@@ -326,7 +330,7 @@ describe("ops client", () => {
     const fingerprints: string[] = [];
     const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       expect(String(input)).toBe(`http://ops-agent:4300/v1/operation-keys/${operationKey}`);
-      const fingerprint = new Headers(init?.headers).get("x-ops-operation-fingerprint");
+      const fingerprint = new Headers(init?.headers).get("x-ops-body-fingerprint");
       expect(fingerprint).toMatch(/^[a-f0-9]{64}$/);
       fingerprints.push(fingerprint as string);
       const requestId = new Headers(init?.headers).get("x-ops-request-id");
@@ -442,6 +446,10 @@ describe("ops client", () => {
             requestId: body.requestId,
             ok: true,
             result: {
+              version: 2,
+              admittedAt: 0,
+              deadlineAt: 1000,
+              fingerprint: "a".repeat(64),
               execution: "async",
               operationId: `job1_retainedClient${index}00`,
               operationKey: body.operationKey,

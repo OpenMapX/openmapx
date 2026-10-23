@@ -236,7 +236,7 @@ describe("ops contract", () => {
     });
   });
 
-  it("preserves budgets outside the wired lifecycle operations", () => {
+  it("retains short operation budgets and expands long build budgets", () => {
     for (const [kind, timeoutMs] of [
       ["docker.status", 5_000],
       ["stack.status", 15_000],
@@ -244,8 +244,8 @@ describe("ops contract", () => {
       ["service.logs", 30_000],
       ["service.logs.follow", 900_000],
       ["service.pull", 900_000],
-      ["service.build", 1_800_000],
-      ["services.buildAll", 1_800_000],
+      ["service.build", 43_200_000],
+      ["services.buildAll", 86_400_000],
       ["stack.stop", 300_000],
       ["service.update", 900_000],
     ] as const)

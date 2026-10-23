@@ -314,7 +314,7 @@ describe("ops-agent async foundation", () => {
     const canceled = await app.inject({
       method: "DELETE",
       url: `/v1/operations/${operationId}`,
-      headers: auth(),
+      headers: { ...auth(), "x-ops-operation-fingerprint": admitted.json().result.fingerprint },
     });
     expect(canceled.statusCode).toBe(200);
     expect(canceled.json().result).toMatchObject({
@@ -367,7 +367,10 @@ describe("ops-agent async foundation", () => {
     const migratedCancel = await app.inject({
       method: "DELETE",
       url: `/v1/operations/${restartId}`,
-      headers: auth(),
+      headers: {
+        ...auth(),
+        "x-ops-operation-fingerprint": restartAdmission.json().result.fingerprint,
+      },
     });
     expect(migratedCancel.statusCode).toBe(200);
     expect(migratedCancel.json().result.state).toBe("termination_pending");
@@ -445,7 +448,7 @@ describe("ops-agent async foundation", () => {
       const canceled = await app.inject({
         method: "DELETE",
         url: `/v1/operations/${operationId}`,
-        headers: auth(),
+        headers: { ...auth(), "x-ops-operation-fingerprint": admitted.json().result.fingerprint },
       });
       expect(canceled.statusCode).toBe(500);
       expect(aborted).toBe(true);
@@ -597,7 +600,7 @@ describe("ops-agent async foundation", () => {
     await app.close();
   });
 
-  it("rejects validated sync and async results that exceed their per-kind byte budgets", async () => {
+  it("rejects oversized sync output and retains the maximum build-all receipt", async () => {
     const app = buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourcePolicy: allowAllResources,
@@ -640,12 +643,15 @@ describe("ops-agent async foundation", () => {
       ),
     });
     const operationId = admitted.json().result.operationId as string;
-    const failed = await eventually(
+    const completed = await eventually(
       async () =>
         app.inject({ method: "GET", url: `/v1/operations/${operationId}`, headers: auth() }),
-      (response) => response.json().result.state === "failed",
+      (response) => response.json().result.state === "succeeded",
     );
-    expect(failed.json().result.errorClass).toBe("runtime");
+    expect(completed.json().result.result.completedServiceIds).toHaveLength(256);
+    expect(Buffer.byteLength(JSON.stringify(completed.json().result.result))).toBeGreaterThan(
+      16 * 1024,
+    );
     await app.close();
   });
 

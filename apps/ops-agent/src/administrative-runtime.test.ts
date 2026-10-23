@@ -11,8 +11,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { OpsOperation } from "@openmapx/core/ops";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { testExecution } from "./__fixtures__/execution";
 import {
   createAdministrativeRuntime,
+  createDefaultFixedCli,
   createDefaultReleaseEffects,
   inspectBackupAuthority,
   inspectDataTypeAuthority,
@@ -44,6 +46,7 @@ function temporaryRoot(): string {
 
 function context(kind: string) {
   return {
+    execution: testExecution(),
     signal: new AbortController().signal,
     emitLog: vi.fn(),
     claim: {
@@ -58,6 +61,48 @@ function context(kind: string) {
 afterEach(async () => {
   const { rm } = await import("node:fs/promises");
   await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true })));
+});
+
+describe("default fixed CLI live output", () => {
+  it.each(["visibility", "volume"])("streams live bounded output: %s", async (check) => {
+    const root = temporaryRoot();
+    const release = join(root, "release");
+    const ready = join(root, "ready");
+    writeFileSync(
+      join(root, "cli.mjs"),
+      `
+      import { existsSync, writeFileSync } from 'node:fs';
+      import { setTimeout } from 'node:timers/promises';
+      console.log('phase-one');
+      writeFileSync(${JSON.stringify(ready)}, 'ready');
+      while (!existsSync(${JSON.stringify(release)})) await setTimeout(5);
+      for (let i = 0; i < 2048; i++) {
+        if (!process.stdout.write('x'.repeat(1024) + '\\n'))
+          await new Promise(resolve => process.stdout.once('drain', resolve));
+      }
+      console.log('last-diagnostic');
+    `,
+    );
+    const seen: string[] = [];
+    const completion = createDefaultFixedCli(root, join(root, "agent.mjs"))([], {
+      signal: new AbortController().signal,
+      emitLog: (_stream, message) => seen.push(message),
+    });
+    // Attach immediately: the volume regression may reject before the assertion.
+    void completion.catch(() => undefined);
+    try {
+      await vi.waitFor(() => expect(existsSync(ready)).toBe(true), { timeout: 2000 });
+      if (check === "visibility") {
+        await vi.waitFor(() => expect(seen).toContain("phase-one"), { timeout: 2000 });
+      }
+      writeFileSync(release, "go");
+      await expect(completion).resolves.toBeUndefined();
+      expect(seen).toContain("last-diagnostic");
+    } finally {
+      writeFileSync(release, "go");
+      await completion.catch(() => undefined);
+    }
+  });
 });
 
 describe("administrative backup runtime", () => {
@@ -1478,4 +1523,107 @@ describe("administrative release runtime", () => {
     ).rejects.toThrow("collector pull failed");
     expect(apply).not.toHaveBeenCalled();
   });
+});
+
+describe("fixed CLI execution context", () => {
+  it("uses the original long deadline and clears inherited control authority", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    const root = temporaryRoot();
+    const ready = join(root, "ready");
+    const release = join(root, "release");
+    const execution = testExecution();
+    execution.deadlineAt = Date.now() + 12 * 3600_000;
+    writeFileSync(
+      join(root, "cli.mjs"),
+      `import{writeFileSync,existsSync}from'node:fs';import{setTimeout}from'node:timers/promises';if(process.env.OPENMAPX_CONTROL_DELEGATION||process.env.OPENMAPX_PARENT_EXECUTION)process.exit(2);const execution=JSON.parse(process.env.OPENMAPX_CONTROL_EXECUTION);writeFileSync(${JSON.stringify(ready)},JSON.stringify(execution));while(!existsSync(${JSON.stringify(release)}))await setTimeout(5);console.log('completed');`,
+    );
+    vi.stubEnv("OPENMAPX_CONTROL_DELEGATION", "untrusted-inherited");
+    vi.stubEnv("OPENMAPX_PARENT_EXECUTION", "untrusted-parent");
+    let settled = false;
+    const completion = createDefaultFixedCli(root, join(root, "agent.mjs"))([], {
+      execution,
+      operationKind: "service.build",
+      signal: new AbortController().signal,
+      emitLog: () => undefined,
+    });
+    void completion
+      .finally(() => {
+        settled = true;
+      })
+      .catch(() => undefined);
+    try {
+      await vi.waitFor(() => expect(existsSync(ready)).toBe(true), { timeout: 2000 });
+      expect(JSON.parse(readFileSync(ready, "utf8"))).toEqual(execution);
+      await vi.advanceTimersByTimeAsync(31 * 60_000);
+      expect(settled).toBe(false);
+      writeFileSync(release, "go");
+      await expect(completion).resolves.toBeUndefined();
+      await expect(
+        createDefaultFixedCli(root, join(root, "agent.mjs"))([], {
+          execution: { ...execution, deadlineAt: Date.now() - 1 },
+          signal: new AbortController().signal,
+          emitLog: () => undefined,
+        }),
+      ).rejects.toMatchObject({ errorClass: "timeout" });
+    } finally {
+      writeFileSync(release, "go");
+      vi.useRealTimers();
+      vi.unstubAllEnvs();
+      await completion.catch(() => undefined);
+    }
+  });
+});
+
+it("never gives release recovery a fresh execution budget after restart expiry", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const rootDir = temporaryRoot();
+  const releaseId = "release-expired-recovery";
+  const directory = join(rootDir, "infra", "docker", ".ops-agent-releases");
+  mkdirSync(directory, { mode: 0o700 });
+  writeFileSync(
+    join(directory, `${releaseId}.json`),
+    JSON.stringify({
+      schemaVersion: 1,
+      release: releaseId,
+      images: Object.fromEntries(
+        [
+          "api",
+          "web",
+          "data-manager",
+          "ops-agent",
+          "privacy-backup",
+          "transitous-runner",
+          "transitous-tools",
+        ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`]),
+      ),
+      privacyReleaseValidation,
+    }),
+    { mode: 0o600 },
+  );
+  const execution = { ...testExecution(), deadlineAt: Date.now() + 1000 };
+  const runFixedCli = vi.fn(async () => undefined);
+  try {
+    const first = createDefaultReleaseEffects(rootDir, runFixedCli, {
+      afterReleasePhase: (phase) => {
+        if (phase === "overlay_written") throw Error("crash");
+      },
+    });
+    await expect(
+      first.apply(releaseId, ["app-api"], {
+        signal: new AbortController().signal,
+        emitLog: () => undefined,
+        execution,
+      }),
+    ).rejects.toThrow("crash");
+    vi.setSystemTime(Date.now() + 2000);
+    const recovered = createDefaultReleaseEffects(rootDir, runFixedCli);
+    await expect(recovered.initialize?.()).rejects.toMatchObject({
+      name: "OpsExecutionFailure",
+      errorClass: "timeout",
+    });
+    expect(runFixedCli).not.toHaveBeenCalled();
+    expect(existsSync(join(directory, "transaction.json"))).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
 });
