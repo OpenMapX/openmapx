@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
-import { adminJob } from "../db/schema";
+import { adminJob, adminJobLog } from "../db/schema";
 
 export interface JobExecution {
   owner: string;
@@ -45,6 +45,48 @@ export function jobOwnership(
       : sql`${adminJob.result}->'_execution' IS NULL`,
   );
 }
+export const ADMIN_JOB_LEASE_MS = 60_000;
+export function adminJobObservationDue(now = new Date().toISOString()) {
+  return and(
+    sql`(${adminJob.status} = 'cancel_pending' OR ${adminJob.result}->'observation'->>'state' = 'unknown' OR ${adminJob.result}->>'_observationLeaseUntil' IS NOT NULL)`,
+    sql`coalesce(${adminJob.result}->'observation'->>'nextCheckAt', '') <= ${now}`,
+    sql`coalesce(${adminJob.result}->>'_observationLeaseUntil', '') <= ${now}`,
+  );
+}
+export async function renewAdminJobClaim(id: string, execution: JobExecution | undefined) {
+  const now = new Date().toISOString();
+  const rows = await db
+    .update(adminJob)
+    .set({
+      result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify({ _observationLeaseUntil: new Date(Date.now() + ADMIN_JOB_LEASE_MS).toISOString() })}::jsonb`,
+    })
+    .where(
+      and(jobOwnership(id, execution), sql`${adminJob.result}->>'_observationLeaseUntil' > ${now}`),
+    )
+    .returning({ id: adminJob.id });
+  if (!rows.length) throw new JobOwnershipLost();
+}
+
+/** Row locking serializes the insert with claims/cancel/settlement. The returned
+ * insertion, not a preflight SELECT, is the event publication authority. */
+export async function insertOwnedJobLog(
+  execution: JobExecution | undefined,
+  entry: typeof adminJobLog.$inferInsert,
+): Promise<boolean> {
+  const [result] = await db.execute<{ owned: boolean; inserted: boolean }>(sql`
+    WITH owner AS MATERIALIZED (
+      SELECT ${adminJob.id} FROM ${adminJob} WHERE ${jobOwnership(entry.jobId, execution)} FOR UPDATE
+    ), inserted AS (
+      INSERT INTO ${adminJobLog} (id, job_id, seq, stream, line, created_at)
+      SELECT ${entry.id}, ${entry.jobId}, ${entry.seq}, ${entry.stream}, ${entry.line}, ${entry.createdAt?.toISOString()}::timestamp
+      FROM owner ON CONFLICT (id) DO NOTHING RETURNING id
+    )
+    SELECT EXISTS (SELECT 1 FROM owner) AS owned, EXISTS (SELECT 1 FROM inserted) AS inserted
+  `);
+  if (!result?.owned) throw new JobOwnershipLost();
+  return result.inserted;
+}
+
 /** Both fields change in one PostgreSQL statement; the old JSON member is the CAS token. */
 export async function claimAdminJob(
   job: { id: string; result: unknown; status: string },
@@ -58,9 +100,14 @@ export async function claimAdminJob(
     .update(adminJob)
     .set({
       ...patch,
-      result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify({ _execution: execution, ...(observation ? { _observationLeaseUntil: new Date(Date.now() + 60_000).toISOString() } : {}) })}::jsonb`,
+      result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify({ _execution: execution, _observationLeaseUntil: new Date(Date.now() + ADMIN_JOB_LEASE_MS).toISOString() })}::jsonb`,
     })
-    .where(jobOwnership(job.id, previous, [job.status]))
+    .where(
+      and(
+        jobOwnership(job.id, previous, [job.status]),
+        ...(observation ? [adminJobObservationDue()] : []),
+      ),
+    )
     .returning();
   return claimed;
 }

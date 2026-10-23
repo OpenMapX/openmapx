@@ -16,6 +16,8 @@ const plan = [
 const executeAndWait = vi.fn();
 const dockerComposeAction = vi.fn();
 const link = vi.fn();
+const getStatus = vi.fn();
+const broker = vi.fn();
 const registryGet = vi.fn();
 
 vi.mock("../ops-client.js", () => ({
@@ -29,7 +31,7 @@ vi.mock("../../utils/docker-compose.js", () => ({
 }));
 vi.mock("@openmapx/core/data-manager-sdk", () => ({
   createDataManagerTransport: () => ({}),
-  getStatus: vi.fn(async () => ({ data: {}, status: 200 })),
+  getStatus: (...args: unknown[]) => getStatus(...args),
   link: (...args: unknown[]) => link(...args),
   unwrapDataManagerResponse: (response: unknown) => response,
 }));
@@ -37,7 +39,15 @@ vi.mock("../service-registry.js", () => ({
   getServiceRegistry: () => ({ get: registryGet }),
 }));
 
-const { applyGenerationHardlinks } = await import("../admin-ops.js");
+vi.mock("../admin-job-ops", () => ({
+  executeAdminJobOperation: (...args: unknown[]) => broker(...args),
+}));
+
+vi.mock("../trusted-config-operations", () => ({
+  applyTrustedConfiguration: async () => ({ revisionId: REVISION }),
+}));
+
+const { applyGenerationHardlinks, serviceStart } = await import("../admin-ops.js");
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -45,6 +55,8 @@ beforeEach(() => {
   dockerComposeAction.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
   link.mockResolvedValue({ linked: 1, skipped: 0, pruned: 0 });
   registryGet.mockReturnValue({ enabled: true });
+  getStatus.mockResolvedValue({ data: {}, status: 200 });
+  broker.mockResolvedValue({ changed: true });
 });
 
 describe("applyGenerationHardlinks", () => {
@@ -83,4 +95,79 @@ describe("applyGenerationHardlinks", () => {
     ).rejects.toThrow('service "data-manager" is disabled');
     expect(link).not.toHaveBeenCalled();
   });
+});
+
+it("does not link or start a later lifecycle effect after canceled readiness resolves", async () => {
+  const ready = Promise.withResolvers<unknown>();
+  getStatus.mockReturnValue(ready.promise);
+  const abort = new AbortController();
+  const ctx = {
+    jobId: "fix1-service",
+    payload: {},
+    signal: abort.signal,
+    log: vi.fn(),
+    setProgress: vi.fn(),
+    checkpoint: vi.fn(),
+    checkpointResult: {},
+  };
+  const work = serviceStart("valhalla", ctx);
+  const outcome = work.then(
+    () => "fulfilled",
+    (error) => error,
+  );
+  await vi.waitFor(() => expect(getStatus).toHaveBeenCalled());
+  abort.abort();
+  ready.resolve({ data: {}, status: 200 });
+  expect(await outcome).toBeInstanceOf(Error);
+  expect(link).not.toHaveBeenCalled();
+  expect(broker.mock.calls.map((call) => call[1])).toEqual([
+    { kind: "service.start", serviceId: "data-manager" },
+  ]);
+});
+
+it("fences the link attempt against current ownership after readiness", async () => {
+  const { JobOwnershipLost } = await import("../admin-job-state");
+  const ctx = {
+    jobId: "fix1-owner",
+    payload: {},
+    signal: new AbortController().signal,
+    log: vi.fn(),
+    setProgress: vi.fn(),
+    checkpoint: vi.fn().mockRejectedValue(new JobOwnershipLost()),
+    checkpointResult: {},
+  };
+  await expect(
+    applyGenerationHardlinks({
+      revisionId: REVISION,
+      operationIdentity: "fix1-owner:valhalla",
+      ctx,
+    }),
+  ).rejects.toBeInstanceOf(JobOwnershipLost);
+  expect(link).not.toHaveBeenCalled();
+});
+
+it("retains an unknown link attempt and refuses any coordinator/link replay", async () => {
+  const { JobObservationPending } = await import("../admin-job-failure");
+  const ctx: import("../job-runner").JobContext = {
+    jobId: "fix1-link",
+    payload: {},
+    signal: new AbortController().signal,
+    log: vi.fn(),
+    setProgress: vi.fn(),
+    checkpoint: async (value) => {
+      ctx.checkpointResult = structuredClone(value);
+    },
+    checkpointResult: {},
+  };
+  link.mockImplementation(async () => {
+    expect(ctx.checkpointResult).toMatchObject({
+      _hardlinkAttempts: { "fix1-link:valhalla": { revisionId: REVISION, phase: "attempted" } },
+    });
+    throw new Error("response lost after remote acceptance");
+  });
+  const options = { revisionId: REVISION, operationIdentity: "fix1-link:valhalla", ctx };
+  await expect(applyGenerationHardlinks(options)).rejects.toBeInstanceOf(JobObservationPending);
+  await expect(applyGenerationHardlinks(options)).rejects.toBeInstanceOf(JobObservationPending);
+  expect(link).toHaveBeenCalledTimes(1);
+  expect(broker).toHaveBeenCalledTimes(1);
 });

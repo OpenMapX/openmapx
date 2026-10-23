@@ -142,7 +142,11 @@ it("rejects stale checkpoint writes before another child can be admitted", async
   });
   await run("test.checkpoint");
   expect(effect).not.toHaveBeenCalled();
-  expect(store.writes[0]?.values.result).toMatchObject({ _execution: execution });
+  expect(
+    JSON.parse(
+      new PgDialect().sqlToQuery(store.writes[0]?.values.result as SQL).params[0] as string,
+    ),
+  ).toMatchObject({ _execution: execution });
 });
 
 it("changes owner and version together while retaining the complete result in PostgreSQL", async () => {

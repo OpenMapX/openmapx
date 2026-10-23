@@ -1,16 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
-import { adminJob, adminJobLog } from "../db/schema";
+import { adminJob } from "../db/schema";
 import { dbActorId } from "../utils/actor";
 import { AdminJobFailure, JobObservationPending, publicAdminJobResult } from "./admin-job-failure";
 import { cancelAdminJobOperations, resumeAdminJobObservation } from "./admin-job-ops";
 import {
+  adminJobObservationDue,
   claimAdminJob,
+  insertOwnedJobLog,
   type JobExecution,
   JobOwnershipLost,
   jobOwnership,
   readJobExecution,
+  renewAdminJobClaim,
 } from "./admin-job-state";
 import { type JobStatusEvent, jobEventBus, TERMINAL_JOB_STATUSES } from "./job-events";
 import { ApiOpsError, OpsObservationPending } from "./ops-client";
@@ -61,6 +64,8 @@ export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
   "system.diagnostics",
   "system.update",
 ] as const;
+
+class JobPersistenceUnavailable extends Error {}
 
 class AdminJobRunner {
   private readonly handlers = new Map<string, JobHandler>();
@@ -144,7 +149,11 @@ class AdminJobRunner {
     const finishedAt = new Date();
     const rows = await db
       .update(adminJob)
-      .set({ status: "canceled", finishedAt })
+      .set({
+        status: "canceled",
+        finishedAt,
+        result: sql`coalesce(${adminJob.result}, '{}'::jsonb) - 'observation'`,
+      })
       .where(jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]))
       .returning({ id: adminJob.id, result: adminJob.result });
     if (rows.length === 0) return false;
@@ -303,6 +312,25 @@ class AdminJobRunner {
     this.active.set(job.id, controller);
     this.logSeq.set(job.id, 0);
 
+    let closed = false;
+    let heartbeat: ReturnType<typeof setTimeout> | undefined;
+    const renew = async () => {
+      if (closed || controller.signal.aborted) return;
+      try {
+        await renewAdminJobClaim(job.id, readJobExecution(job.result));
+      } catch (error) {
+        controller.abort(error);
+        return;
+      }
+      if (!closed) {
+        heartbeat = setTimeout(() => void renew(), 10_000);
+        heartbeat.unref?.();
+      }
+    };
+    if (!observe) {
+      heartbeat = setTimeout(() => void renew(), 10_000);
+      heartbeat.unref?.();
+    }
     return this.executeJob(
       job.id,
       job.type,
@@ -318,6 +346,8 @@ class AdminJobRunner {
       observe,
     )
       .finally(() => {
+        closed = true;
+        clearTimeout(heartbeat);
         this.active.delete(job.id);
         this.logSeq.delete(job.id);
         setTimeout(() => void this.pump(), 0);
@@ -338,6 +368,13 @@ class AdminJobRunner {
     signal: AbortSignal,
     observe = false,
   ): Promise<void> {
+    const retirement = new AbortController();
+    signal = AbortSignal.any([signal, retirement.signal]);
+    const lost = (): never => {
+      const error = new JobOwnershipLost();
+      retirement.abort(error);
+      throw error;
+    };
     const handler = observe ? resumeAdminJobObservation : this.handlers.get(type);
     const execution = readJobExecution(checkpointResult);
     let checkpointTail = Promise.resolve();
@@ -355,11 +392,23 @@ class AdminJobRunner {
         this.logSeq.set(jobId, Math.max(localSeq + 1, seq + 1));
         const id = sourceEventId ?? randomUUID();
         const createdAt = new Date();
-        const insertion = db
-          .insert(adminJobLog)
-          .values({ id, jobId, seq, stream, line, createdAt });
-        if (sourceEventId) await insertion.onConflictDoNothing();
-        else await insertion;
+        signal.throwIfAborted();
+        let inserted: boolean;
+        try {
+          inserted = await insertOwnedJobLog(execution, {
+            id,
+            jobId,
+            seq,
+            stream,
+            line,
+            createdAt,
+          });
+        } catch (error) {
+          if (error instanceof JobOwnershipLost) lost();
+          throw error;
+        }
+        signal.throwIfAborted();
+        if (!inserted) return;
         jobEventBus.publish(jobId, {
           type: "log",
           id,
@@ -370,16 +419,21 @@ class AdminJobRunner {
         });
       },
       setProgress: async (progress) => {
+        signal.throwIfAborted();
         const rows = await db
           .update(adminJob)
           .set({ progress })
           .where(jobOwnership(jobId, execution))
-          .returning({ id: adminJob.id });
-        if (!rows.length) throw new JobOwnershipLost();
+          .returning({ id: adminJob.id })
+          .catch(() => {
+            throw new JobPersistenceUnavailable("Administrative job progress unavailable");
+          });
+        if (!rows.length) lost();
         jobEventBus.publish(jobId, { type: "progress", progress });
       },
       checkpoint: async (result, progress, admissionKey) => {
         const write = checkpointTail.then(async () => {
+          signal.throwIfAborted();
           // A handler cannot replace the runner's ownership member.
           const merged: Record<string, unknown> = {
             ...ctx.checkpointResult,
@@ -388,7 +442,10 @@ class AdminJobRunner {
           };
           const rows = await db
             .update(adminJob)
-            .set({ result: merged, ...(progress === undefined ? {} : { progress }) })
+            .set({
+              result: sql`${JSON.stringify(merged)}::jsonb || jsonb_build_object('_observationLeaseUntil', ${adminJob.result}->'_observationLeaseUntil')`,
+              ...(progress === undefined ? {} : { progress }),
+            })
             .where(
               and(
                 jobOwnership(jobId, execution),
@@ -401,81 +458,92 @@ class AdminJobRunner {
               ),
             )
             .returning({ id: adminJob.id });
-          if (!rows.length) throw new JobOwnershipLost();
+          if (!rows.length) lost();
           ctx.checkpointResult = merged;
           if (progress !== undefined) jobEventBus.publish(jobId, { type: "progress", progress });
         });
         checkpointTail = write.catch(() => undefined);
-        return write;
+        return write.catch((error) => {
+          if (error instanceof JobOwnershipLost || signal.aborted) throw error;
+          throw new JobPersistenceUnavailable("Administrative job checkpoint unavailable");
+        });
       },
     };
 
     if (!observe) this.announce(jobId, "running", { startedAt: new Date().toISOString() });
     const startedAtMs = Date.now();
     const pending = async (reason: OpsObservationPending["reason"]) => {
-      const attempts = Math.min(12, Number(ctx.checkpointResult?._observationAttempts ?? 0) + 1);
-      const observationPatch = {
-        _observationAttempts: attempts,
-        _observationLeaseUntil: null,
-        observation: {
-          state: "unknown",
-          reason,
-          nextCheckAt: new Date(
-            Date.now() + Math.min(60_000, 5_000 * 2 ** (attempts - 1)),
-          ).toISOString(),
-        },
-      };
-      const rows = await db
-        .update(adminJob)
-        .set({
-          result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify(observationPatch)}::jsonb`,
-        })
-        .where(jobOwnership(jobId, execution, ["running", "cancel_pending"]))
-        .returning({ status: adminJob.status, result: adminJob.result });
-      if (rows[0])
-        this.announce(jobId, rows[0].status, {
-          result: publicAdminJobResult(rows[0].result as Record<string, unknown> | null),
-        });
+      try {
+        const attempts = Math.min(12, Number(ctx.checkpointResult?._observationAttempts ?? 0) + 1);
+        const observationPatch = {
+          _observationAttempts: attempts,
+          _observationLeaseUntil: null,
+          observation: {
+            state: "unknown",
+            reason,
+            nextCheckAt: new Date(
+              Date.now() + Math.min(60_000, 5_000 * 2 ** (attempts - 1)),
+            ).toISOString(),
+          },
+        };
+        const rows = await db
+          .update(adminJob)
+          .set({
+            result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify(observationPatch)}::jsonb`,
+          })
+          .where(jobOwnership(jobId, execution, ["running", "cancel_pending"]))
+          .returning({ status: adminJob.status, result: adminJob.result });
+        if (rows[0])
+          this.announce(jobId, rows[0].status, {
+            result: publicAdminJobResult(rows[0].result as Record<string, unknown> | null),
+          });
+      } catch {
+        throw new JobPersistenceUnavailable("Administrative job persistence unavailable");
+      }
     };
     const settle = async (
       status: "success" | "failed",
       result: Record<string, unknown> | null,
       error?: string,
     ) => {
-      await checkpointTail;
-      const merged: Record<string, unknown> = {
-        ...ctx.checkpointResult,
-        ...result,
-        ...(execution ? { _execution: execution } : {}),
-      };
-      delete merged.observation;
-      const finishedAt = new Date();
-      const rows = await db
-        .update(adminJob)
-        .set({
-          status,
-          result: merged,
-          error: error ?? null,
-          finishedAt,
-          ...(status === "success" ? { progress: 100 } : {}),
-        })
-        .where(jobOwnership(jobId, execution))
-        .returning({ id: adminJob.id });
-      if (rows.length) {
-        this.announce(jobId, status, {
-          result: publicAdminJobResult(merged),
-          error: error ?? null,
-          ...(status === "success" ? { progress: 100 } : {}),
-          finishedAt: finishedAt.toISOString(),
-        });
-      } else {
-        // Cancel intent wins; retain late evidence without publishing a terminal event.
-        await db
+      try {
+        await checkpointTail;
+        const merged: Record<string, unknown> = {
+          ...ctx.checkpointResult,
+          ...result,
+          ...(execution ? { _execution: execution } : {}),
+        };
+        delete merged.observation;
+        const finishedAt = new Date();
+        const rows = await db
           .update(adminJob)
           .set({
-            result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify({ _settled: { status, result: publicAdminJobResult(merged), error } })}::jsonb`,
+            status,
+            result: merged,
+            error: error ?? null,
+            finishedAt,
+            ...(status === "success" ? { progress: 100 } : {}),
           })
-          .where(jobOwnership(jobId, execution, ["cancel_pending"]));
+          .where(jobOwnership(jobId, execution))
+          .returning({ id: adminJob.id });
+        if (rows.length) {
+          this.announce(jobId, status, {
+            result: publicAdminJobResult(merged),
+            error: error ?? null,
+            ...(status === "success" ? { progress: 100 } : {}),
+            finishedAt: finishedAt.toISOString(),
+          });
+        } else {
+          // Cancel intent wins; retain late evidence without publishing a terminal event.
+          await db
+            .update(adminJob)
+            .set({
+              result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify({ _settled: { status, result: publicAdminJobResult(merged), error } })}::jsonb`,
+            })
+            .where(jobOwnership(jobId, execution, ["cancel_pending"]));
+        }
+      } catch {
+        throw new JobPersistenceUnavailable("Administrative job persistence unavailable");
       }
     };
     try {
@@ -510,13 +578,17 @@ class AdminJobRunner {
             const finishedAt = new Date();
             const rows = await db
               .update(adminJob)
-              .set({ status: "canceled", finishedAt })
+              .set({
+                status: "canceled",
+                finishedAt,
+                result: sql`coalesce(${adminJob.result}, '{}'::jsonb) - 'observation'`,
+              })
               .where(jobOwnership(jobId, execution, ["cancel_pending"]))
-              .returning({ id: adminJob.id });
+              .returning({ id: adminJob.id, result: adminJob.result });
             if (rows.length)
               this.announce(jobId, "canceled", {
                 finishedAt: finishedAt.toISOString(),
-                result: publicAdminJobResult(ctx.checkpointResult),
+                result: publicAdminJobResult(rows[0]?.result as Record<string, unknown> | null),
               });
             return;
           }
@@ -530,16 +602,21 @@ class AdminJobRunner {
         }
       }
       const result = await handler(ctx);
-      await settle("success", result ?? null);
+      // A failed terminal write is uncertainty, not a handler failure. Never
+      // turn an accepted successful effect into failed because PostgreSQL failed.
+      try {
+        await settle("success", result ?? null);
+      } catch {
+        await pending("transport");
+      }
     } catch (err) {
+      if (err instanceof JobOwnershipLost || err instanceof JobPersistenceUnavailable) return;
       if (err instanceof OpsObservationPending || err instanceof JobObservationPending)
         await pending(err.reason);
-      else if (
-        err instanceof JobOwnershipLost ||
-        signal.aborted ||
-        (err instanceof Error && err.name === "AbortError")
-      )
+      else if (signal.aborted || (err instanceof Error && err.name === "AbortError"))
         await pending("observer_deadline");
+      else if (observe && !(err instanceof AdminJobFailure) && !(err instanceof ApiOpsError))
+        await pending("transport");
       else
         await settle(
           "failed",
@@ -567,9 +644,7 @@ class AdminJobRunner {
         and(
           inArray(adminJob.status, ["running", "cancel_pending"]),
           inArray(adminJob.type, [...AGENT_RECOVERABLE_ADMIN_JOB_TYPES]),
-          sql`(${adminJob.status} = 'cancel_pending' OR ${adminJob.result}->'observation'->>'state' = 'unknown')`,
-          sql`coalesce(${adminJob.result}->'observation'->>'nextCheckAt', '') <= ${new Date().toISOString()}`,
-          sql`coalesce(${adminJob.result}->>'_observationLeaseUntil', '') <= ${new Date().toISOString()}`,
+          adminJobObservationDue(),
         ),
       )
       .orderBy(asc(adminJob.createdAt))

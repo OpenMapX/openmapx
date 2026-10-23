@@ -1,4 +1,5 @@
 import { dirname, join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import {
   createDataManagerTransport,
@@ -12,7 +13,9 @@ import {
   dockerComposeAction,
   dockerStatus,
 } from "../utils/docker-compose";
+import { JobObservationPending } from "./admin-job-failure";
 import { executeAdminJobOperation } from "./admin-job-ops";
+import { JobOwnershipLost } from "./admin-job-state";
 import type { JobContext } from "./job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-client";
 import { getServiceRegistry } from "./service-registry";
@@ -112,7 +115,7 @@ function dataManagerUrlCandidates(): string[] {
   return [...new Set(out)];
 }
 
-async function waitForDataManagerTransport(): Promise<{
+async function waitForDataManagerTransport(signal?: AbortSignal): Promise<{
   transport: ReturnType<typeof createDataManagerTransport>;
   url: string;
 }> {
@@ -122,18 +125,21 @@ async function waitForDataManagerTransport(): Promise<{
 
   while (Date.now() < deadline) {
     for (const url of urls) {
+      signal?.throwIfAborted();
       const transport = createDataManagerTransport({
         baseUrl: url,
         authToken: process.env.DATA_MANAGER_AUTH_TOKEN?.trim(),
       });
       try {
-        unwrapDataManagerResponse(await getStatus({ transport }));
+        unwrapDataManagerResponse(await getStatus({ transport, signal }));
+        signal?.throwIfAborted();
         return { transport, url };
       } catch (err) {
+        signal?.throwIfAborted();
         lastErr = err;
       }
     }
-    await new Promise((resolve) => setTimeout(resolve, DATA_MANAGER_POLL_INTERVAL_MS));
+    await delay(DATA_MANAGER_POLL_INTERVAL_MS, undefined, { signal });
   }
 
   const detail = (lastErr as Error | undefined)?.message ?? String(lastErr ?? "unknown error");
@@ -153,12 +159,25 @@ export async function applyGenerationHardlinks(opts: {
   operationIdentity: string;
   log?: (msg: string) => Promise<void> | void;
   signal?: AbortSignal;
+  ctx?: JobContext;
 }): Promise<HardlinkApplySummary> {
+  const signal = opts.ctx?.signal ?? opts.signal;
+  signal?.throwIfAborted();
+  const attempts = opts.ctx?.checkpointResult?._hardlinkAttempts as
+    | Record<string, { revisionId: string; phase: string; result?: HardlinkApplySummary }>
+    | undefined;
+  const prior = attempts?.[opts.operationIdentity];
+  if (prior) {
+    if (prior.revisionId !== opts.revisionId || prior.phase !== "complete" || !prior.result)
+      throw new JobObservationPending("recovery_required");
+    return prior.result;
+  }
+  if (opts.ctx?.observationOnly) throw new JobObservationPending("recovery_required");
   const { plan } = await executeAndWait(
     createApiOpsClient(),
     { kind: "configuration.hardlinks.inspect", revisionId: opts.revisionId },
     createDurableOpsKey("admin-job.hardlinks.inspect", opts.operationIdentity),
-    { signal: opts.signal },
+    { signal },
   );
   if (plan.length === 0) {
     return { applied: true, linked: 0, skipped: 0, pruned: 0, entries: 0 };
@@ -170,21 +189,61 @@ export async function applyGenerationHardlinks(opts: {
   }
 
   await opts.log?.("Ensuring data-manager is running for hardlink apply...");
-  const dmStart = await dockerComposeAction("data-manager", "start", {
-    operationKey: createDurableOpsKey(
+  signal?.throwIfAborted();
+  const coordinatorKey = createDurableOpsKey(
+    "admin-job.hardlinks.start",
+    `${opts.operationIdentity}:data-manager`,
+  );
+  if (opts.ctx) {
+    await executeAdminJobOperation(
+      opts.ctx,
+      { kind: "service.start", serviceId: "data-manager" },
       "admin-job.hardlinks.start",
-      `${opts.operationIdentity}:data-manager`,
-    ),
-    signal: opts.signal,
-  });
-  if (dmStart.exitCode !== 0) {
-    throw new Error(`docker compose up data-manager exited with ${dmStart.exitCode}`);
+      { operationKey: coordinatorKey },
+    );
+  } else {
+    const dmStart = await dockerComposeAction("data-manager", "start", {
+      operationKey: coordinatorKey,
+      signal,
+    });
+    if (dmStart.exitCode !== 0)
+      throw new Error(`docker compose up data-manager exited with ${dmStart.exitCode}`);
   }
 
   await opts.log?.(`Applying hardlink plan (${plan.length} entries, prune enabled)...`);
-  const { transport, url } = await waitForDataManagerTransport();
-  const result = unwrapDataManagerResponse(await link({ plan, prune: true }, { transport }));
-  return { applied: true, entries: plan.length, via: url, ...result };
+  const { transport, url } = await waitForDataManagerTransport(signal);
+  signal?.throwIfAborted();
+  const checkpoint = async (phase: "attempted" | "complete", result?: HardlinkApplySummary) => {
+    if (!opts.ctx) return;
+    await opts.ctx.checkpoint({
+      ...opts.ctx.checkpointResult,
+      _hardlinkAttempts: {
+        ...(opts.ctx.checkpointResult?._hardlinkAttempts as Record<string, unknown>),
+        [opts.operationIdentity]: {
+          revisionId: opts.revisionId,
+          coordinatorKey,
+          phase,
+          ...(result ? { result } : {}),
+        },
+      },
+    });
+  };
+  // This records only the current caller's exact attempt, not a receiver lease
+  // or containment proof. Unknown remote work is never submitted again.
+  await checkpoint("attempted");
+  signal?.throwIfAborted();
+  try {
+    const result = unwrapDataManagerResponse(
+      await link({ plan, prune: true }, { transport, signal }),
+    );
+    const summary = { applied: true, entries: plan.length, via: url, ...result };
+    await checkpoint("complete", summary);
+    return summary;
+  } catch (error) {
+    if (error instanceof JobOwnershipLost) throw error;
+    if (opts.ctx) throw new JobObservationPending("recovery_required");
+    throw error;
+  }
 }
 
 // Service control (job handlers) — registry-authorized + routed through the
@@ -240,6 +299,7 @@ export async function serviceStart(service: string, ctx: JobContext): Promise<vo
     signal: ctx.signal,
   });
   const hardlinks = await applyGenerationHardlinks({
+    ctx,
     revisionId,
     operationIdentity: `${ctx.jobId}:${service}`,
     log: (m) => ctx.log(m),
@@ -273,6 +333,7 @@ export async function serviceApply(service: string, ctx: JobContext): Promise<vo
           signal: ctx.signal,
         });
   const hardlinks = await applyGenerationHardlinks({
+    ctx,
     revisionId,
     operationIdentity: `${ctx.jobId}:${service}`,
     log: (m) => ctx.log(m),

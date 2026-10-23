@@ -19,6 +19,7 @@ import {
   issueApiJobChildAssertion,
   prepareApiJobChildAttempt,
 } from "./admin-job-parent";
+import { JobOwnershipLost } from "./admin-job-state";
 import type { JobContext } from "./job-runner";
 import {
   type ApiOpsClient,
@@ -267,6 +268,17 @@ async function observeOperation(
   options: ExecuteAdminJobOperationOptions,
   fresh = false,
 ): Promise<unknown> {
+  context.signal.throwIfAborted();
+  const observer = new AbortController();
+  const signal = AbortSignal.any([context.signal, observer.signal]);
+  let ownershipLost: JobOwnershipLost | undefined;
+  const retireIfLost = (error: unknown) => {
+    if (error instanceof JobOwnershipLost) {
+      ownershipLost = error;
+      observer.abort(error);
+      throw error;
+    }
+  };
   const identity = {
     kind: projected.kind,
     operationKey: projected.operationKey,
@@ -285,8 +297,9 @@ async function observeOperation(
   const safeCheckpoint = async () => {
     try {
       await persistProjection(context, projection);
-    } catch {
-      /* Observation never cancels effects. */
+    } catch (error) {
+      retireIfLost(error);
+      /* Ordinary projection failure never cancels effects. */
     }
   };
   try {
@@ -296,7 +309,7 @@ async function observeOperation(
       // Authenticate and match its complete identity before opening the stream.
       const status = await client
         .status(projected.kind, projected.operationId, {
-          signal: AbortSignal.any([context.signal, AbortSignal.timeout(2_000)]),
+          signal: AbortSignal.any([signal, AbortSignal.timeout(2_000)]),
         })
         .catch(() => {
           throw new OpsObservationPending(
@@ -328,7 +341,7 @@ async function observeOperation(
         projected.operation,
         projected.operationKey,
         {
-          signal: context.signal,
+          signal,
           admissionAlreadyAttempted: !fresh,
           recoveryTimeoutMs: 2_000,
           ...(projected.attempt
@@ -353,12 +366,13 @@ async function observeOperation(
       // If this checkpoint fails, the admitting intent still supports lookup-only recovery.
       try {
         await persistProjection(context, projection);
-      } catch {
+      } catch (error) {
+        retireIfLost(error);
         throw new OpsObservationPending(identity, "transport");
       }
     }
     const mirrorController = new AbortController();
-    const mirrorSignal = AbortSignal.any([context.signal, mirrorController.signal]);
+    const mirrorSignal = AbortSignal.any([signal, mirrorController.signal]);
     const mirror = projected.mirrorStopped
       ? Promise.resolve()
       : followOpsEvents(client, admission.operationId, {
@@ -376,7 +390,8 @@ async function observeOperation(
           onLog: async (stream, message, cursor) => {
             try {
               await context.log(message, stream, `ops:${admission.operationId}:${cursor}`, cursor);
-            } catch {
+            } catch (error) {
+              retireIfLost(error);
               projected.truncated = true;
               projection.truncated = true;
             }
@@ -397,32 +412,42 @@ async function observeOperation(
               await safeCheckpoint();
             }
           })
-          .catch(() => undefined);
-    try {
-      const result = await waitForOpsResult(client, projected.kind, admission, {
-        signal: context.signal,
-        pollIntervalMs: options.pollIntervalMs,
-        ...(context.observationOnly ? { timeoutMs: 2_000 } : {}),
-        onStatus: (status) => {
-          if (status.diagnostics) projected.diagnostics = status.diagnostics;
-          if (status.failureResult) projected.failureResult = status.failureResult;
-        },
-      });
-      projected.result = result;
-      const configuration = configurationApplyResultSchema.safeParse(result);
-      if (configuration.success)
-        context.checkpointResult = {
-          ...context.checkpointResult,
-          configuration: configuration.data,
-        };
-      projected.terminal = true;
-      projected.phase = "terminal";
-      delete projected.outcome;
-      return result;
-    } finally {
-      mirrorController.abort();
-      await mirror;
-    }
+          .catch((error) => {
+            // Observe this rejection immediately; propagate after joining the
+            // result observer so it cannot become an unhandled rejection.
+            if (error instanceof JobOwnershipLost) {
+              ownershipLost = error;
+              observer.abort(error);
+            }
+          });
+    const observed = await waitForOpsResult(client, projected.kind, admission, {
+      signal,
+      pollIntervalMs: options.pollIntervalMs,
+      ...(context.observationOnly ? { timeoutMs: 2_000 } : {}),
+      onStatus: (status) => {
+        if (status.diagnostics) projected.diagnostics = status.diagnostics;
+        if (status.failureResult) projected.failureResult = status.failureResult;
+      },
+    }).then(
+      (result) => ({ ok: true as const, result }),
+      (error: unknown) => ({ ok: false as const, error }),
+    );
+    mirrorController.abort();
+    await mirror;
+    if (ownershipLost) throw ownershipLost;
+    if (!observed.ok) throw observed.error;
+    const result = observed.result;
+    projected.result = result;
+    const configuration = configurationApplyResultSchema.safeParse(result);
+    if (configuration.success)
+      context.checkpointResult = {
+        ...context.checkpointResult,
+        configuration: configuration.data,
+      };
+    projected.terminal = true;
+    projected.phase = "terminal";
+    delete projected.outcome;
+    return result;
   } catch (error) {
     if (error instanceof ApiOpsError) {
       projected.failureResult = error.failureResult;
@@ -449,7 +474,7 @@ async function observeOperation(
         ...context.checkpointResult,
         diagnostics: projected.diagnostics,
       };
-    await safeCheckpoint();
+    if (!ownershipLost) await safeCheckpoint();
   }
 }
 
@@ -477,6 +502,7 @@ export async function resumeAdminJobObservation(
     }
   }
   const evidence = { ...ctx.checkpointResult };
+  if (hasUnsettledHardlinks(evidence)) throw new JobObservationPending("recovery_required");
   if (failure)
     throw new AdminJobFailure(failure.message, { ...evidence, ...failure.failureResult });
   const settled = evidence._settled as
@@ -517,6 +543,12 @@ export async function resumeAdminJobObservation(
     },
     "recovery_required",
   );
+}
+
+function hasUnsettledHardlinks(result: unknown): boolean {
+  const attempts = (result as { _hardlinkAttempts?: Record<string, { phase?: string }> } | null)
+    ?._hardlinkAttempts;
+  return !!attempts && Object.values(attempts).some((attempt) => attempt?.phase !== "complete");
 }
 
 export interface CancelAdminJobOperationsOptions {
@@ -652,6 +684,7 @@ export async function cancelAdminJobOperations(
           : "already_terminal",
     );
   }
+  if (hasUnsettledHardlinks(result)) return "pending";
   if (outcomes.includes("contained")) return "canceled";
   return outcomes.every((outcome) => outcome === "succeeded") ? "completed" : "already_terminal";
 }

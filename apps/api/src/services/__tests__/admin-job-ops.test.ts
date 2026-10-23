@@ -38,7 +38,7 @@ describe("administrative job operations broker", () => {
     expect(execute.mock.calls[0]?.[0]).toEqual(operation);
     expect(execute.mock.calls[0]?.[1]).toEqual({
       operationKey: expect.stringMatching(/^opk1_[A-Za-z0-9_-]+$/),
-      signal: ctx.signal,
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -823,3 +823,75 @@ it("does not read or cancel an attempted child belonging to another API job", as
   expect(client.events).not.toHaveBeenCalled();
   expect(client.cancel).not.toHaveBeenCalled();
 });
+
+it.each(["log", "checkpoint", "output"])(
+  "retires ownership loss but tolerates ordinary %s projection failure without backend cancel",
+  async (edge) => {
+    const { JobOwnershipLost } = await import("../admin-job-state");
+    const ctx = context();
+    const entered = Promise.withResolvers<void>();
+    const resume = Promise.withResolvers<void>();
+    let writes = 0;
+    ctx.checkpoint = async () => {
+      writes++;
+      if (edge === "checkpoint" && writes >= 3) {
+        entered.resolve();
+        await resume.promise;
+        throw new JobOwnershipLost();
+      }
+    };
+    if (edge === "log" || edge === "output")
+      ctx.log = async () => {
+        entered.resolve();
+        await resume.promise;
+        throw edge === "log" ? new JobOwnershipLost() : new Error("output unavailable");
+      };
+    const key = "opk1_displacedObserver1";
+    const id = "job1_displacedObserver1";
+    const client = {
+      execute: vi.fn().mockResolvedValue({
+        execution: "async",
+        kind: "backup.delete",
+        operationKey: key,
+        operationId: id,
+        state: "queued",
+      }),
+      status: vi.fn(async () => {
+        await resume.promise;
+        return {
+          kind: "backup.delete",
+          operationId: id,
+          operationKey: key,
+          state: "succeeded",
+          result: { backupId: "nightly" },
+        };
+      }),
+      events: vi.fn().mockResolvedValue({
+        version: 1,
+        operationId: id,
+        terminal: true,
+        truncated: false,
+        nextCursor: 1,
+        events: [{ cursor: 1, type: "log", stream: "stdout", message: "old owner" }],
+      }),
+      cancel: vi.fn(),
+      lookup: vi.fn(),
+    };
+    const result = executeAdminJobOperation(
+      ctx,
+      { kind: "backup.delete", backupId: "nightly" },
+      "admin-job.backup.delete",
+      { client: client as never, operationKey: key },
+    );
+    const outcome = result.then(
+      () => "fulfilled",
+      (error) => error,
+    );
+    await entered.promise;
+    resume.resolve();
+    if (edge === "output") expect(await outcome).toBe("fulfilled");
+    else expect(await outcome).toBeInstanceOf(JobOwnershipLost);
+    expect(client.cancel).not.toHaveBeenCalled();
+    expect(client.execute).toHaveBeenCalledTimes(1);
+  },
+);
