@@ -1,4 +1,5 @@
 import {
+  configurationApplyResultSchema,
   configurationGenerationRevisionSchema,
   type OpsOperation,
   type OpsResultFor,
@@ -10,7 +11,14 @@ import { envString } from "@openmapx/core/server-env";
 import { db } from "../db";
 import { integrationConfig } from "../db/schema";
 import { getAllIntegrations } from "../integration-host";
+import { AdminJobFailure, JobObservationPending } from "./admin-job-failure";
+import {
+  executeAdminJobOperation,
+  hasRetainedAdminJobOperation,
+  observeRetainedAdminJobOperation,
+} from "./admin-job-ops";
 import { projectIntegrationConfig } from "./integration-config-projection";
+import type { JobContext } from "./job-runner";
 import {
   createApiOpsClient,
   createDurableOpsKey,
@@ -43,6 +51,7 @@ export interface ApplyTrustedConfigurationOptions {
   integrationId?: string;
   selectedRoots?: string[];
   signal?: AbortSignal;
+  ctx?: JobContext;
 }
 
 function exactInteger(env: NodeJS.ProcessEnv, name: string): number {
@@ -110,6 +119,7 @@ export async function applyTrustedConfiguration(
   options: ApplyTrustedConfigurationOptions,
 ): Promise<{ revisionId: string; enabledServiceIds: string[] }> {
   const { outcome } = await applyTrustedConfigurationWithEvidence(options);
+  if (options.ctx && outcome.outcome === "unknown") throw new JobObservationPending("transport");
   if (
     outcome.outcome !== "committed" ||
     outcome.followUp !== "complete" ||
@@ -117,7 +127,9 @@ export async function applyTrustedConfiguration(
     outcome.publisherCleanupFailed ||
     outcome.registryUpdateFailed
   )
-    throw new TrustedConfigurationApplyError(outcome);
+    if (options.ctx)
+      throw new AdminJobFailure("Configuration did not complete", { configuration: outcome });
+    else throw new TrustedConfigurationApplyError(outcome);
   return { revisionId: outcome.revisionId, enabledServiceIds: outcome.enabledServiceIds };
 }
 
@@ -129,6 +141,21 @@ export async function applyTrustedConfigurationWithEvidence(
   previousApplied?: OpsResultFor<"configuration.inspect">;
   outcome: TrustedConfigurationApplyOutcome;
 }> {
+  if (options.ctx && hasRetainedAdminJobOperation(options.ctx, options.operationKey)) {
+    const outcome = configurationApplyResultSchema.parse(
+      await observeRetainedAdminJobOperation(options.ctx, options.operationKey),
+    );
+    const retained = (
+      options.ctx.checkpointResult?._configurationOutcomes as
+        | Record<string, TrustedConfigurationApplyOutcome>
+        | undefined
+    )?.[options.operationKey];
+    if (!retained) {
+      await options.ctx.checkpoint({ ...options.ctx.checkpointResult, configuration: outcome });
+      throw new JobObservationPending("recovery_required");
+    }
+    return { outcome: retained };
+  }
   let payload: TrustedConfigurationPayload;
   let previousApplied: OpsResultFor<"configuration.inspect">;
   try {
@@ -242,6 +269,10 @@ async function applySnapshot(
     const consumed = await consumePublishedTrustedConfiguration(sealed, () => {
       const client = createApiOpsClient();
       submitted = true;
+      if (options.ctx)
+        return executeAdminJobOperation(options.ctx, sealed.operation, "admin-job.configuration", {
+          operationKey: options.operationKey,
+        }).then((result) => configurationApplyResultSchema.parse(result));
       return executeTrustedConfigurationAndWait(
         client,
         sealed.operation as Extract<OpsOperation, { revisionId: string }>,
@@ -249,6 +280,7 @@ async function applySnapshot(
         { signal: options.signal },
       );
     });
+    if (options.ctx && consumed.submission.status === "rejected") throw consumed.submission.reason;
     const result =
       consumed.submission.status === "fulfilled"
         ? consumed.submission.value
@@ -263,8 +295,24 @@ async function applySnapshot(
         registryUpdateFailed = true;
       }
     }
-    return { ...result, publisherCleanupFailed: consumed.cleanupFailed, registryUpdateFailed };
-  } catch {
+    const outcome = {
+      ...result,
+      publisherCleanupFailed: consumed.cleanupFailed,
+      registryUpdateFailed,
+    };
+    if (options.ctx)
+      await options.ctx.checkpoint({
+        ...options.ctx.checkpointResult,
+        configuration: outcome,
+        _configurationOutcomes: {
+          ...((options.ctx.checkpointResult?._configurationOutcomes as Record<string, unknown>) ??
+            {}),
+          [options.operationKey]: outcome,
+        },
+      });
+    return outcome;
+  } catch (error) {
+    if (options.ctx && submitted) throw error;
     // Publication/preparation failed before execute, or an unexpected error after submission.
     return {
       ...(submitted

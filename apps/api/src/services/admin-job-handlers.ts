@@ -1,8 +1,11 @@
 import { assertValidBackupName } from "./admin-cli";
+import { JobObservationPending } from "./admin-job-failure";
 import { executeAdminJobOperation } from "./admin-job-ops";
+import { JobOwnershipLost } from "./admin-job-state";
 import { getAdminOperation, parseAdminOperationInput } from "./admin-operation-catalog";
 import { assertKnownServiceIds, assertRegion } from "./admin-operation-input";
 import type { JobContext } from "./job-runner";
+import { OpsObservationPending } from "./ops-client";
 
 type BackupOperation = "create" | "restore" | "delete";
 type BulkServiceAction = "start" | "stop" | "restart" | "update" | "build";
@@ -159,6 +162,15 @@ export async function handleServiceBulkJob(ctx: JobContext): Promise<Record<stri
           );
           completedServiceIds.push(serviceId);
         } catch (error) {
+          // continueOnError applies only to settled failures. An unknown child
+          // or lost ownership cannot authorize the next mutation in the batch.
+          if (
+            error instanceof OpsObservationPending ||
+            error instanceof JobObservationPending ||
+            error instanceof JobOwnershipLost ||
+            ctx.signal.aborted
+          )
+            throw error;
           failedServiceIds.push(serviceId);
           if (payload.continueOnError !== true) throw error;
           await ctx.log(`Build failed for ${serviceId}`, "stderr");

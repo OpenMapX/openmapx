@@ -9,7 +9,10 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { cancelAdminActivityJob, unwrapAdminResponse } from "@openmapx/core/api-admin-sdk";
-import type { AdminActivityJobSource } from "@openmapx/core/api-contracts";
+import {
+  type AdminActivityJobSource,
+  adminJobObservationSchema,
+} from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { DataManagerJobStages } from "../shared/DataManagerJobStages";
@@ -126,6 +129,27 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
     );
   }
 
+  const result =
+    data.result && typeof data.result === "object" && !Array.isArray(data.result)
+      ? data.result
+      : {};
+  const observation = adminJobObservationSchema.safeParse(result.observation);
+  const diagnostics =
+    result.diagnostics &&
+    typeof result.diagnostics === "object" &&
+    !Array.isArray(result.diagnostics)
+      ? result.diagnostics
+      : null;
+  const tail = Array.isArray(diagnostics?.tail)
+    ? diagnostics.tail.filter(
+        (entry): entry is { stream: string; message: string } =>
+          !!entry &&
+          typeof entry === "object" &&
+          !Array.isArray(entry) &&
+          typeof entry.message === "string" &&
+          typeof entry.stream === "string",
+      )
+    : [];
   return (
     <Stack
       sx={{
@@ -178,6 +202,24 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
           </Button>
         )}
       </Stack>
+      {observation.success && (
+        <Typography role="status" variant="body2" color="warning.main">
+          Outcome unknown; checking retained operation status.
+        </Typography>
+      )}
+      {tail.length > 0 && (
+        <Box>
+          <Typography variant="caption" sx={{ fontWeight: 600 }}>
+            Retained diagnostics
+          </Typography>
+          <Box
+            component="pre"
+            sx={{ whiteSpace: "pre-wrap", maxHeight: 200, overflow: "auto", fontSize: "0.75rem" }}
+          >
+            {tail.map((entry) => entry.message).join("\n")}
+          </Box>
+        </Box>
+      )}
       {data.error && (
         <Box
           sx={{

@@ -3,6 +3,7 @@ import { unionAll } from "drizzle-orm/pg-core";
 import { db } from "../db";
 import { adminJob, adminJobLog, dataManagerJobStages, dataManagerJobs } from "../db/schema";
 import { type ActorSummary, resolveActors } from "../utils/resolve-actor";
+import { publicAdminJobResult } from "./admin-job-failure";
 
 export type ActivityJobSource = "application" | "data-manager";
 export type ActivityJobFilter = "active" | "completed" | "failed";
@@ -205,6 +206,7 @@ export async function getActivityJob(id: string, source: ActivityJobSource) {
       .orderBy(adminJobLog.seq);
     return {
       ...job,
+      result: publicAdminJobResult(job.result),
       source,
       actorLabel: job.createdBy ? "Administrator" : "System",
       cancelable: job.status === "queued" || job.status === "running",

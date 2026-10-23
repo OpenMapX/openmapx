@@ -12,6 +12,7 @@ import {
   dockerComposeAction,
   dockerStatus,
 } from "../utils/docker-compose";
+import { executeAdminJobOperation } from "./admin-job-ops";
 import type { JobContext } from "./job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-client";
 import { getServiceRegistry } from "./service-registry";
@@ -86,6 +87,7 @@ export function resetDockerCache(): void {
 export async function renderAndPersistCompose(options: {
   operationKey: string;
   signal?: AbortSignal;
+  ctx?: JobContext;
 }): Promise<{ revisionId: string }> {
   const { revisionId } = await applyTrustedConfiguration({ kind: "stack.render", ...options });
   return { revisionId };
@@ -213,16 +215,27 @@ async function serviceComposeAction(
   // Community and built-in services now take the same typed path: the agent
   // authorizes the id against its own trusted selection, so the API no longer
   // needs a direct-Docker adapter for community lifecycle.
-  return dockerComposeAction(service, action, {
-    operationKey: createDurableOpsKey(`admin-job.service.${action}`, `${ctx.jobId}:${service}`),
-    signal: ctx.signal,
+  await ctx.checkpoint({
+    ...ctx.checkpointResult,
+    _completion: {
+      operationKey: createDurableOpsKey(`admin-job.service.${action}`, `${ctx.jobId}:${service}`),
+      result: { service, action },
+    },
   });
+  await executeAdminJobOperation(
+    ctx,
+    { kind: `service.${action}`, serviceId: service },
+    `admin-job.service.${action}`,
+    { durableIdentity: service },
+  );
+  return { exitCode: 0 };
 }
 
 export async function serviceStart(service: string, ctx: JobContext): Promise<void> {
   assertKnownService(service);
   await ctx.log(`Rendering compose for latest config...`);
   const { revisionId } = await renderAndPersistCompose({
+    ctx,
     operationKey: createDurableOpsKey("admin-job.config.render", `${ctx.jobId}:${service}`),
     signal: ctx.signal,
   });
@@ -248,12 +261,14 @@ export async function serviceApply(service: string, ctx: JobContext): Promise<vo
   const { revisionId } =
     configurationKind === "vault"
       ? await applyTrustedConfiguration({
+          ctx,
           kind: "vault.apply",
           serviceId: service,
           operationKey: createDurableOpsKey("admin-job.vault.apply", `${ctx.jobId}:${service}`),
           signal: ctx.signal,
         })
       : await renderAndPersistCompose({
+          ctx,
           operationKey: createDurableOpsKey("admin-job.config.apply", `${ctx.jobId}:${service}`),
           signal: ctx.signal,
         });

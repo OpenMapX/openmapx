@@ -69,6 +69,13 @@ export async function handleSystemUpdateJob(
   await replaceAgentIfNeeded(ctx, payload.releaseId, payload.expectedDigest, dependencies);
   await ctx.setProgress(60);
   const createBackup = payload.createBackup !== false;
+  await ctx.checkpoint({
+    ...ctx.checkpointResult,
+    _completion: {
+      operationKey: createDurableOpsKey("admin-job.system.update", ctx.jobId),
+      result: { operation: "apply", release: payload.releaseId, phase: "complete" },
+    },
+  });
   const result = await executeAdminJobOperation(
     ctx,
     {

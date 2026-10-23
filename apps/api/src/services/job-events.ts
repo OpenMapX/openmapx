@@ -8,6 +8,7 @@
  */
 
 import type { AdminJobStreamEvents, AdminJobStreamMetrics } from "@openmapx/core/api-contracts";
+import { publicAdminJobResult } from "./admin-job-failure";
 
 /** Producer-domain fields are wider until the route validates the serialized JSON boundary. */
 export type JobStatusEvent = Omit<AdminJobStreamEvents["status"], "status" | "result"> & {
@@ -90,6 +91,8 @@ export class JobEventBus {
   }
 
   publish(jobId: string, event: JobEvent): StoredJobEvent {
+    if (event.type === "status" && event.result !== undefined)
+      event = { ...event, result: publicAdminJobResult(event.result) };
     const state = this.state(jobId);
     const stored: StoredJobEvent = { cursor: state.nextCursor, publishedAtMs: this.nowMs(), event };
     state.nextCursor += 1;

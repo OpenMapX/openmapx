@@ -19,7 +19,11 @@ const dbMock = vi.hoisted(() => {
         set: vi.fn((values: Record<string, unknown>) => {
           updates.push(values);
           return {
-            where: vi.fn(() => Object.assign(emptyResult(), { returning: emptyResult })),
+            where: vi.fn(() =>
+              Object.assign(emptyResult(), {
+                returning: async () => rows.map((row) => ({ ...row, status: "running" })),
+              }),
+            ),
           };
         }),
       })),
@@ -54,18 +58,21 @@ afterEach(() => {
 });
 
 describe("job runner restart initialization", () => {
-  it("requeues only typed agent-backed administrative jobs for durable replay", async () => {
+  it("keeps typed agent-backed jobs for observation without handler replay", async () => {
     expect(AGENT_RECOVERABLE_ADMIN_JOB_TYPES).toEqual([
       "backup.operation",
       "data.operation",
       "service.bulk",
+      "service.start",
+      "service.stop",
+      "service.restart",
+      "service.apply",
+      "compose.render",
       "system.diagnostics",
       "system.update",
     ]);
     await jobRunner.initialize({ completeRestartedUpdates: true });
-    expect(dbMock.updates).toContainEqual(
-      expect.objectContaining({ status: "queued", error: null }),
-    );
+    expect(dbMock.updates).not.toContainEqual(expect.objectContaining({ status: "queued" }));
   });
 
   it("finalizes a checkpointed update after successful migrations", async () => {
@@ -82,7 +89,7 @@ describe("job runner restart initialization", () => {
       expect.objectContaining({
         status: "success",
         progress: 100,
-        result: { phase: "complete", completedAfterRestart: true },
+        result: expect.objectContaining({ phase: "complete", completedAfterRestart: true }),
       }),
     );
   });
@@ -153,12 +160,7 @@ describe("job runner restart initialization", () => {
       resolveReplacementOutcome: appliedOutcome,
     });
 
-    expect(dbMock.updates).toContainEqual(
-      expect.objectContaining({
-        status: "failed",
-        error: "Job interrupted by api restart — re-run if still needed",
-      }),
-    );
+    expect(dbMock.updates).not.toContainEqual(expect.objectContaining({ status: "failed" }));
     expect(dbMock.updates).not.toContainEqual(expect.objectContaining({ status: "success" }));
   });
 });

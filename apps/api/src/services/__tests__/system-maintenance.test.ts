@@ -120,7 +120,11 @@ describe("agent-owned system maintenance", () => {
       },
       "admin-job.system.update",
     );
-    expect(ctx.checkpoint).not.toHaveBeenCalled();
+    expect(ctx.checkpoint).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _completion: expect.objectContaining({ operationKey: expect.stringMatching(/^opk1_/) }),
+      }),
+    );
     expect(
       executeAdminOperation.mock.calls.some((call) => call[1].kind === "release.resolve"),
     ).toBe(false);

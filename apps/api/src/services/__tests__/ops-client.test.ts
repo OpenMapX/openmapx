@@ -247,7 +247,7 @@ describe("bounded async ops helpers", () => {
     const denied = vi.fn().mockRejectedValue(new ApiOpsError("authorization"));
     await expect(
       waitForOpsResult(fakeClient({ status: denied }), admission.kind, admission),
-    ).rejects.toMatchObject({ errorClass: "authorization" });
+    ).rejects.toMatchObject({ name: "OpsObservationPending", reason: "unavailable" });
     expect(denied).toHaveBeenCalledTimes(1);
   });
 
@@ -372,8 +372,8 @@ describe("bounded async ops helpers", () => {
       })),
     });
     await expect(waitForOpsResult(client, admission.kind, admission)).rejects.toMatchObject({
-      name: "ApiOpsError",
-      errorClass: "runtime",
+      name: "OpsObservationPending",
+      reason: "invalid_identity",
     });
   });
 

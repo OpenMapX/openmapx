@@ -279,3 +279,59 @@ describe("version2 execution journal", () => {
     ).rejects.toThrow();
   });
 });
+
+it("reloads strict v2 failed evidence and rejects it on a successful record", async () => {
+  const { normalizeExecutionAdmission } = await import("@openmapx/core/ops");
+  const operation = { kind: "service.build", serviceId: "valhalla" } as const;
+  const operationKey = "opk1_retainedFailure123";
+  const operationFingerprint = opsOperationFingerprint(operation);
+  const admittedAt = Date.parse("2026-10-23T12:00:00.000Z");
+  const normalized = normalizeExecutionAdmission({
+    kind: operation.kind,
+    operationKey,
+    operationFingerprint,
+    admittedAt,
+  });
+  const evidence = {
+    serviceBatch: {
+      outcome: "partial" as const,
+      completedServiceIds: ["tileserver"],
+      failedServiceIds: ["valhalla"],
+      skippedServiceIds: [],
+    },
+    diagnostics: {
+      truncated: false,
+      tail: [{ stream: "stderr" as const, message: "retained diagnostic" }],
+    },
+  };
+  const record = job({
+    operation,
+    operationKey,
+    operationFingerprint,
+    resourceId: "valhalla",
+    submittedAt: new Date(admittedAt).toISOString(),
+    ...normalized,
+    executionVersion: 2,
+    requestVersion: 2,
+    deploymentBudgetMs: 12 * 3600_000,
+    state: "failed",
+    errorClass: "runtime",
+    terminalAt: "2026-10-23T12:00:01.000Z",
+    failureResult: evidence,
+    diagnostics: evidence.diagnostics,
+  });
+  const path = join(root(), "journal", "jobs-v1.json");
+  const journal = await openOpsJobJournal(path);
+  await journal.replace([record]);
+  const reopened = await openOpsJobJournal(path);
+  expect(reopened.records()[0]).toMatchObject({
+    state: "failed",
+    failureResult: evidence,
+    diagnostics: evidence.diagnostics,
+  });
+  await expect(
+    reopened.replace([
+      { ...record, state: "succeeded", errorClass: undefined, result: { completed: true } },
+    ]),
+  ).rejects.toThrow();
+});

@@ -368,3 +368,35 @@ describe("Activity generated SDK consumers", () => {
     );
   });
 });
+
+it("shows unknown observation and independent retained diagnostics while cancellation is pending", async () => {
+  vi.stubGlobal("fetch", async () =>
+    Response.json(
+      job({
+        status: "cancel_pending",
+        cancelable: false,
+        result: {
+          observation: { state: "unknown", reason: "transport", nextCheckAt: timestamp },
+          serviceBatch: {
+            outcome: "partial",
+            completedServiceIds: ["tileserver"],
+            failedServiceIds: ["valhalla"],
+            skippedServiceIds: [],
+          },
+          diagnostics: {
+            truncated: true,
+            tail: [{ stream: "stderr", message: "retained final diagnostic" }],
+          },
+        },
+        logs: [],
+      }),
+    ),
+  );
+  mount(<JobDetail jobId="job-1" source="application" />);
+  expect(
+    await screen.findByText("Outcome unknown; checking retained operation status."),
+  ).toBeInTheDocument();
+  expect(screen.getByText("Retained diagnostics")).toBeInTheDocument();
+  expect(screen.getByText("retained final diagnostic")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+});

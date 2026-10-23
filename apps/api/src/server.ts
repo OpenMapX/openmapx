@@ -110,6 +110,10 @@ import {
   withExtensionChangeLock,
 } from "./services/extension-recovery";
 import { pruneOldRecords } from "./services/health-history";
+import {
+  startAdminJobReconciliation,
+  stopAdminJobReconciliation,
+} from "./services/job-reconciliation";
 import { jobRunner } from "./services/job-runner";
 import { readOfflinePackagePrincipalKeyFile } from "./services/offline-package-principal.js";
 import { getServiceRegistry, initServiceRegistry } from "./services/service-registry";
@@ -724,6 +728,7 @@ await startDataUsePolicyRefresh();
 
 const port = envInt("PORT", 3000);
 const host = envString("HOST", "0.0.0.0");
+server.addHook("onClose", stopAdminJobReconciliation);
 
 try {
   await server.listen({ port, host });
@@ -736,6 +741,7 @@ try {
 // genuinely listening, migrations succeeded, and Docker confirms that this
 // process is running the exact image pulled by the update job.
 await jobRunner.initialize();
+startAdminJobReconciliation();
 
 // Graceful shutdown
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

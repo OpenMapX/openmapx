@@ -344,6 +344,27 @@ describe("admin job handlers", () => {
   });
 
   describe("bulk service operations", () => {
+    it("does not continue a batch after unknown admission even with continueOnError", async () => {
+      const { OpsObservationPending } = await import("../ops-client");
+      const pending = new OpsObservationPending(
+        { kind: "service.build", operationKey: "opk1_abcdefghijklmnop" },
+        "transport",
+      );
+      runAdminOperationMock.mockClear();
+      runAdminOperationMock.mockRejectedValueOnce(pending);
+      await expect(
+        handleServiceBulkJob({
+          jobId: "job",
+          payload: { action: "build", serviceIds: ["valhalla", "osrm"], continueOnError: true },
+          signal: new AbortController().signal,
+          log: vi.fn(),
+          setProgress: vi.fn(),
+          checkpoint: vi.fn(),
+        }),
+      ).rejects.toBe(pending);
+      expect(runAdminOperationMock).toHaveBeenCalledTimes(1);
+    });
+
     it("submits one typed lifecycle operation per exact service ID", async () => {
       runAdminOperationMock.mockClear();
       const ctx = {

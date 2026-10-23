@@ -57,7 +57,12 @@ export class ApiOpsError extends Error {
 export class OpsObservationPending extends Error {
   constructor(
     readonly identity: { kind: OpsOperationKind; operationKey: string; operationId?: string },
-    readonly reason: "transport" | "observer_deadline" | "recovery_required",
+    readonly reason:
+      | "transport"
+      | "observer_deadline"
+      | "recovery_required"
+      | "unavailable"
+      | "invalid_identity",
   ) {
     super("Operations observation is pending");
     this.name = "OpsObservationPending";
@@ -310,6 +315,7 @@ export interface WaitForOpsResultOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
   observerDeadlineAt?: number;
+  onStatus?: (status: OpsJobStatusFor<OpsOperationKind>) => void | Promise<void>;
   execution?: { requestedDeadlineAt: number };
   parentAssertion?: string;
   pollIntervalMs?: number;
@@ -338,7 +344,7 @@ export async function waitForOpsResult<K extends OpsOperationKind>(
     operationKey: admission.operationKey,
     operationId: admission.operationId,
   };
-  const pending = (reason: "transport" | "observer_deadline" | "recovery_required"): never => {
+  const pending = (reason: OpsObservationPending["reason"]): never => {
     throw new OpsObservationPending(identity, reason);
   };
   const observer = new AbortController();
@@ -374,15 +380,18 @@ export async function waitForOpsResult<K extends OpsOperationKind>(
         }
         if (isTransientTransportError(error))
           pending(observerExpired() ? "observer_deadline" : "transport");
-        translateError(error);
+        return pending("unavailable");
       }
       if (observerExpired()) pending("observer_deadline");
       if (
+        status.kind !== kind ||
+        status.operationId !== admission.operationId ||
         status.operationKey !== admission.operationKey ||
         (admission.fingerprint !== undefined && status.fingerprint !== admission.fingerprint) ||
         (admission.deadlineAt !== undefined && status.deadlineAt !== admission.deadlineAt)
       )
-        throw new ApiOpsError("runtime");
+        pending("invalid_identity");
+      await options.onStatus?.(status);
       if (status.state === "succeeded") return status.result;
       if (status.state === "failed" || status.state === "timed_out") {
         if (status.errorClass === "recovery_required") pending("recovery_required");
@@ -593,6 +602,11 @@ export async function submitOpsOperationWithRecovery<K extends OpsOperationKind>
           signal: recoverySignal,
           execution: options.execution,
         });
+        if (status.kind !== operation.kind || status.operationKey !== operationKey)
+          throw new OpsObservationPending(
+            { kind: operation.kind, operationKey },
+            "invalid_identity",
+          );
         return {
           execution: "async",
           version: status.version,
@@ -609,9 +623,10 @@ export async function submitOpsOperationWithRecovery<K extends OpsOperationKind>
             : {}),
         } as OpsSubmitResult<K>;
       } catch (lookupError) {
+        if (lookupError instanceof OpsObservationPending) throw lookupError;
         const lookupClass = errorClass(lookupError);
         if (lookupClass !== "not_found" && !isTransientTransportError(lookupError)) {
-          translateError(lookupError);
+          throw new OpsObservationPending({ kind: operation.kind, operationKey }, "unavailable");
         }
         if (recoverySignal.aborted)
           throw new OpsObservationPending({ kind: operation.kind, operationKey }, "transport");

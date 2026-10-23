@@ -300,3 +300,72 @@ describe("actual generated Activity SDK through Fastify serialization", () => {
     }
   });
 });
+
+it("serializes retained failure and observation evidence through the actual SDK and rejects internal ownership", async () => {
+  const { getAdminActivityJob } = await import("@openmapx/core/api-admin-sdk");
+  const app = await createAdminTestApp(adminActivityRoute);
+  try {
+    const evidence = {
+      serviceBatch: {
+        outcome: "partial",
+        completedServiceIds: ["tileserver"],
+        failedServiceIds: ["valhalla"],
+        skippedServiceIds: [],
+      },
+      diagnostics: { truncated: false, tail: [{ stream: "stderr", message: "final diagnostic" }] },
+      observation: {
+        state: "unknown",
+        reason: "recovery_required",
+        nextCheckAt: "2026-10-23T20:00:00.000Z",
+      },
+    };
+    detail.mockResolvedValue({ ...activityDetail(), status: "cancel_pending", result: evidence });
+    const response = await app.inject("/admin/jobs/job-1");
+    expect(response.statusCode).toBe(200);
+    expect(response.json().result).toEqual(evidence);
+    // The generated JSON result decoder must preserve this same producer shape.
+    vi.stubGlobal(
+      "fetch",
+      async () =>
+        new Response(response.body, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const client = createApiClient({ baseUrl: "http://api.test" });
+    expect(await getAdminActivityJob("job-1", {}, { client })).toMatchObject({
+      data: { result: evidence },
+    });
+    detail.mockResolvedValue({
+      ...activityDetail(),
+      result: { _execution: { owner: "private", version: 1 } },
+    });
+    const rejected = await app.inject("/admin/jobs/job-1");
+    expect(rejected.statusCode).toBe(500);
+    expect(rejected.body).not.toContain("private");
+  } finally {
+    await app.close();
+  }
+});
+
+it.each([401, 403])(
+  "denies detail/cancel before any domain call for guard status %s",
+  async (statusCode) => {
+    const app = await createAdminTestApp(adminActivityRoute);
+    try {
+      for (const [method, url] of [
+        ["GET", "/admin/jobs/job-1"],
+        ["POST", "/admin/jobs/job-1/cancel"],
+      ] as const) {
+        mocks.requireAdmin.mockRejectedValueOnce(
+          Object.assign(new Error("Denied"), { statusCode }),
+        );
+        expect((await app.inject({ method, url })).statusCode).toBe(statusCode);
+      }
+      expect(detail).not.toHaveBeenCalled();
+      expect(cancel).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  },
+);

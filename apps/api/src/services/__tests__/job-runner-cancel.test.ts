@@ -1,3 +1,5 @@
+import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const cancelOperations = vi.hoisted(() => vi.fn());
@@ -21,7 +23,13 @@ const database = vi.hoisted(() => {
           updates.push(value);
           return {
             where: vi.fn(() => ({
-              returning: vi.fn().mockResolvedValue([]),
+              returning: vi
+                .fn()
+                .mockResolvedValue(
+                  value.status === "canceled" && updates.length === 1
+                    ? []
+                    : [{ id: "job-1", status: value.status ?? "running", result }],
+                ),
               // biome-ignore lint/suspicious/noThenProperty: the Drizzle query builder is thenable.
               then: (resolve: (value: unknown[]) => unknown) => Promise.resolve([]).then(resolve),
             })),
@@ -55,8 +63,12 @@ describe("admin job cancellation", () => {
 
     await expect(jobRunner.cancel("job-1")).resolves.toBe(true);
 
-    expect(cancelOperations).toHaveBeenCalledWith(database.result);
-    expect(database.updates).toContainEqual({ status: "cancel_pending" });
+    expect(cancelOperations).toHaveBeenCalledWith(
+      database.result,
+      undefined,
+      expect.objectContaining({ onEvidence: expect.any(Function) }),
+    );
+    expect(database.updates).toContainEqual(expect.objectContaining({ status: "cancel_pending" }));
     expect(database.updates).toContainEqual(
       expect.objectContaining({ status: "canceled", finishedAt: expect.any(Date) }),
     );
@@ -66,6 +78,68 @@ describe("admin job cancellation", () => {
     cancelOperations.mockResolvedValue("pending");
 
     await expect(jobRunner.cancel("job-1")).resolves.toBe(false);
-    expect(database.updates.at(-1)).toEqual({ status: "cancel_pending" });
+    expect(database.updates.at(-1)).toMatchObject({ status: "cancel_pending" });
   });
+});
+
+it("observer abort without backend containment never publishes canceled", async () => {
+  const controller = new AbortController();
+  jobRunner.register("test.observer-abort", async () => {
+    controller.abort();
+    throw new DOMException("Aborted", "AbortError");
+  });
+  const execute = jobRunner as unknown as {
+    executeJob(
+      id: string,
+      type: string,
+      payload: Record<string, unknown>,
+      result: Record<string, unknown> | null,
+      signal: AbortSignal,
+    ): Promise<void>;
+  };
+  await execute.executeJob("job-1", "test.observer-abort", {}, null, controller.signal);
+  expect(database.updates).not.toContainEqual(expect.objectContaining({ status: "canceled" }));
+  const patch = new PgDialect().sqlToQuery(database.updates.at(-1)?.result as SQL);
+  expect(JSON.parse(patch.params[0] as string)).toMatchObject({
+    observation: { state: "unknown" },
+  });
+});
+
+it("retains a fulfilled backend's partial failure evidence in failed DB and SSE results", async () => {
+  const { ApiOpsError } = await import("../ops-client");
+  const { jobEventBus } = await import("../job-events");
+  const evidence = {
+    serviceBatch: {
+      outcome: "partial" as const,
+      completedServiceIds: ["tileserver"],
+      failedServiceIds: ["valhalla"],
+      skippedServiceIds: [],
+    },
+  };
+  const events: unknown[] = [];
+  const unsubscribe = jobEventBus.subscribe("job-evidence", ({ event }) => events.push(event));
+  jobRunner.register("test.partial", async () => {
+    const result = await Promise.resolve(evidence);
+    throw new ApiOpsError("runtime", result);
+  });
+  await (jobRunner as unknown as { executeJob(...args: unknown[]): Promise<void> }).executeJob(
+    "job-evidence",
+    "test.partial",
+    {},
+    { phase: "build" },
+    new AbortController().signal,
+  );
+  unsubscribe();
+  expect(database.updates).toContainEqual(
+    expect.objectContaining({
+      status: "failed",
+      result: expect.objectContaining({ phase: "build", ...evidence }),
+    }),
+  );
+  expect(events).toContainEqual(
+    expect.objectContaining({
+      status: "failed",
+      result: expect.objectContaining(evidence),
+    }),
+  );
 });

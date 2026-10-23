@@ -8,13 +8,13 @@ export const processDiagnosticsSchema = z
       .array(
         z.strictObject({
           stream: z.enum(["stdout", "stderr"]),
-          message: z.string().refine((x) => Buffer.byteLength(x) <= 4096),
+          message: z.string().refine((x) => new TextEncoder().encode(x).byteLength <= 4096),
         }),
       )
       .max(256),
     truncated: z.boolean(),
   })
-  .refine((x) => Buffer.byteLength(JSON.stringify(x)) <= 16 * 1024);
+  .refine((x) => new TextEncoder().encode(JSON.stringify(x)).byteLength <= 16 * 1024);
 export type ProcessDiagnostics = z.infer<typeof processDiagnosticsSchema>;
 export const dataWorkflowReceiptSchema = z.strictObject({
   version: z.literal(1),
@@ -56,5 +56,5 @@ export const opsFailureResultSchema = z
     diagnostics: processDiagnosticsSchema.optional(),
     serviceLifecycle: serviceLifecycleFailureEvidenceSchema.optional(),
   })
-  .refine((x) => Buffer.byteLength(JSON.stringify(x)) <= 64 * 1024);
+  .refine((x) => new TextEncoder().encode(JSON.stringify(x)).byteLength <= 64 * 1024);
 export type OpsFailureResult = z.infer<typeof opsFailureResultSchema>;

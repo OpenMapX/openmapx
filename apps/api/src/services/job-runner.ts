@@ -1,10 +1,19 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob, adminJobLog } from "../db/schema";
 import { dbActorId } from "../utils/actor";
-import { cancelAdminJobOperations } from "./admin-job-ops";
+import { AdminJobFailure, JobObservationPending, publicAdminJobResult } from "./admin-job-failure";
+import { cancelAdminJobOperations, resumeAdminJobObservation } from "./admin-job-ops";
+import {
+  claimAdminJob,
+  type JobExecution,
+  JobOwnershipLost,
+  jobOwnership,
+  readJobExecution,
+} from "./admin-job-state";
 import { type JobStatusEvent, jobEventBus, TERMINAL_JOB_STATUSES } from "./job-events";
+import { ApiOpsError, OpsObservationPending } from "./ops-client";
 import { appApiRestartCheckpoint } from "./system-update-state";
 
 type AppApiReplacementOutcome = "applied" | "rolled-back" | "failed";
@@ -16,6 +25,9 @@ interface AppApiRuntimeInfo {
 
 export interface JobContext {
   jobId: string;
+  jobType?: string;
+  execution?: JobExecution;
+  observationOnly?: boolean;
   payload: Record<string, unknown>;
   signal: AbortSignal;
   log(
@@ -26,7 +38,11 @@ export interface JobContext {
   ): Promise<void>;
   setProgress(progress: number): Promise<void>;
   /** Persist restart-safe state before an operation intentionally replaces app-api. */
-  checkpoint(result: Record<string, unknown>, progress?: number): Promise<void>;
+  checkpoint(
+    result: Record<string, unknown>,
+    progress?: number,
+    admissionKey?: string,
+  ): Promise<void>;
   /** Last durable checkpoint loaded with the job and updated after each checkpoint. */
   checkpointResult?: Record<string, unknown> | null;
 }
@@ -37,6 +53,11 @@ export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
   "backup.operation",
   "data.operation",
   "service.bulk",
+  "service.start",
+  "service.stop",
+  "service.restart",
+  "service.apply",
+  "compose.render",
   "system.diagnostics",
   "system.update",
 ] as const;
@@ -92,42 +113,45 @@ class AdminJobRunner {
     }
 
     const [job] = await db
-      .select({ status: adminJob.status, result: adminJob.result })
-      .from(adminJob)
-      .where(and(eq(adminJob.id, jobId), eq(adminJob.status, "running")))
-      .limit(1);
-    if (!job) return false;
-    await db
       .update(adminJob)
-      .set({ status: "cancel_pending" })
-      .where(and(eq(adminJob.id, jobId), eq(adminJob.status, "running")));
+      .set({
+        status: "cancel_pending",
+        result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || jsonb_build_object('_cancelRequestedAt', coalesce(${adminJob.result}->>'_cancelRequestedAt', ${new Date().toISOString()}::text))`,
+      })
+      .where(and(eq(adminJob.id, jobId), inArray(adminJob.status, ["running", "cancel_pending"])))
+      .returning();
+    if (!job) return false;
     this.announce(jobId, "cancel_pending");
-    let outcome: Awaited<ReturnType<typeof cancelAdminJobOperations>>;
-    try {
-      outcome = await cancelAdminJobOperations(job.result);
-    } catch {
-      return false;
-    }
-    if (outcome === "pending") return false;
-    // `already_terminal` means the agent work had ended before this request
-    // reached it, so this cancellation contained nothing. The still-running
-    // local execution settles the row; claiming a cancellation here would
-    // record containment that never happened.
-    if (outcome === "completed" || outcome === "already_terminal") {
-      await db
-        .update(adminJob)
-        .set({ status: "running" })
-        .where(and(eq(adminJob.id, jobId), eq(adminJob.status, "cancel_pending")));
-      this.announce(jobId, "running");
-      return false;
-    }
+    // Stops only this observer/forward handler. Backend containment is independently verified.
     this.active.get(jobId)?.abort();
+    let outcome: Awaited<ReturnType<typeof cancelAdminJobOperations>> = "pending";
+    try {
+      outcome = await cancelAdminJobOperations(job.result, undefined, {
+        jobId,
+        onEvidence: async (evidence) => {
+          await db
+            .update(adminJob)
+            .set({
+              result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify(evidence)}::jsonb`,
+            })
+            .where(jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]));
+        },
+      });
+    } catch {
+      /* Retain intent. */
+    }
+    if (outcome !== "canceled") return false;
     const finishedAt = new Date();
-    await db
+    const rows = await db
       .update(adminJob)
       .set({ status: "canceled", finishedAt })
-      .where(and(eq(adminJob.id, jobId), eq(adminJob.status, "cancel_pending")));
-    this.announce(jobId, "canceled", { finishedAt: finishedAt.toISOString() });
+      .where(jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]))
+      .returning({ id: adminJob.id, result: adminJob.result });
+    if (rows.length === 0) return false;
+    this.announce(jobId, "canceled", {
+      finishedAt: finishedAt.toISOString(),
+      result: publicAdminJobResult(rows[0]?.result as Record<string, unknown> | null),
+    });
     return true;
   }
 
@@ -135,7 +159,12 @@ class AdminJobRunner {
     const [job] = await db
       .select({ id: adminJob.id, status: adminJob.status })
       .from(adminJob)
-      .where(and(eq(adminJob.type, type), inArray(adminJob.status, ["queued", "running"])))
+      .where(
+        and(
+          eq(adminJob.type, type),
+          inArray(adminJob.status, ["queued", "running", "cancel_pending"]),
+        ),
+      )
       .orderBy(asc(adminJob.createdAt))
       .limit(1);
     return job ?? null;
@@ -149,175 +178,88 @@ class AdminJobRunner {
       cleanupReplacementOutcome?: (outcomeFile: string) => Promise<void>;
     } = {},
   ): Promise<void> {
-    const interruptedCancellations = await db
-      .select({ id: adminJob.id, status: adminJob.status, result: adminJob.result })
-      .from(adminJob)
-      .where(eq(adminJob.status, "cancel_pending"));
-    for (const job of interruptedCancellations) {
-      if (job.status !== "cancel_pending") continue;
-      let outcome: Awaited<ReturnType<typeof cancelAdminJobOperations>> = "pending";
-      try {
-        outcome = await cancelAdminJobOperations(job.result);
-      } catch {
-        // Keep the durable pending state until the authoritative agent can be reached.
-      }
-      if (outcome === "canceled") {
-        await db
-          .update(adminJob)
-          .set({ status: "canceled", finishedAt: new Date() })
-          .where(and(eq(adminJob.id, job.id), eq(adminJob.status, "cancel_pending")));
-      } else if (outcome === "completed") {
-        await db
-          .update(adminJob)
-          .set({ status: "queued", startedAt: null })
-          .where(and(eq(adminJob.id, job.id), eq(adminJob.status, "cancel_pending")));
-      } else if (outcome === "already_terminal") {
-        // The agent operations had already failed before the cancel request,
-        // and no local execution survived the restart to settle this row.
-        await db
-          .update(adminJob)
-          .set({
-            status: "failed",
-            finishedAt: new Date(),
-            error: "Operation failed before the cancellation request was applied",
-          })
-          .where(and(eq(adminJob.id, job.id), eq(adminJob.status, "cancel_pending")));
-      }
-    }
     // An application update deliberately replaces app-api as its final step.
     // The server calls this only after it is listening. Finalize only jobs that
     // wrote the explicit pre-restart checkpoint, passed the migration gate,
     // and are now running the exact image that the update pulled. Any other
-    // interrupted job remains a failure (including an update that died before
-    // the checkpoint).
+    // interrupted job retains uncertainty until its original effect is observed.
     const interruptedUpdates = await db
-      .select({ id: adminJob.id, result: adminJob.result })
+      .select({ id: adminJob.id, result: adminJob.result, status: adminJob.status })
       .from(adminJob)
       .where(and(eq(adminJob.status, "running"), eq(adminJob.type, "system.update")));
     const checkpointedUpdates = interruptedUpdates.flatMap((job) => {
       const checkpoint = appApiRestartCheckpoint(job.result);
-      return checkpoint ? [{ id: job.id, checkpoint }] : [];
+      return checkpoint ? [{ ...job, checkpoint }] : [];
     });
-    const checkpointedUpdateIds = checkpointedUpdates.map((job) => job.id);
-    const resolveOutcome = options.resolveReplacementOutcome ?? (async () => null);
-    const evaluatedUpdates = await Promise.all(
-      checkpointedUpdates.map(async (job) => ({
-        ...job,
-        outcome: await resolveOutcome(job.checkpoint.outcomeFile),
-      })),
-    );
-    const runtime = options.currentAppApiRuntime;
-    const cleanupOutcome = options.cleanupReplacementOutcome ?? (async () => undefined);
-    const completedUpdateIds =
-      options.completeRestartedUpdates === false
-        ? []
-        : evaluatedUpdates
-            .filter(
-              (job) =>
-                job.outcome === "applied" &&
-                runtime?.imageId === job.checkpoint.expectedImageId &&
-                runtime.containerId !== job.checkpoint.previousContainerId &&
-                runtime.updateJobId === job.id,
-            )
-            .map((job) => job.id);
-    if (completedUpdateIds.length > 0) {
-      await db
-        .update(adminJob)
-        .set({
-          status: "success",
-          finishedAt: new Date(),
-          progress: 100,
-          result: { phase: "complete", completedAfterRestart: true },
-        })
-        .where(inArray(adminJob.id, completedUpdateIds));
-      await Promise.all(
-        evaluatedUpdates
-          .filter((job) => completedUpdateIds.includes(job.id))
-          .map((job) => cleanupOutcome(job.checkpoint.outcomeFile)),
+    for (const candidate of checkpointedUpdates) {
+      const claimed = await claimAdminJob({ ...candidate, status: candidate.status ?? "running" });
+      if (!claimed) continue;
+      const execution = readJobExecution(claimed.result);
+      const outcome = await (options.resolveReplacementOutcome ?? (async () => null))(
+        candidate.checkpoint.outcomeFile,
       );
-    }
-    if (options.completeRestartedUpdates === false && checkpointedUpdateIds.length > 0) {
-      await db
+      const runtime = options.currentAppApiRuntime;
+      const migrationsFailed = options.completeRestartedUpdates === false;
+      if (!migrationsFailed && (outcome === null || (outcome === "applied" && !runtime))) continue;
+      const complete =
+        !migrationsFailed &&
+        outcome === "applied" &&
+        runtime?.imageId === candidate.checkpoint.expectedImageId &&
+        runtime.containerId !== candidate.checkpoint.previousContainerId &&
+        runtime.updateJobId === candidate.id;
+      const error = migrationsFailed
+        ? "Update replaced app-api, but database migrations did not complete"
+        : outcome === "rolled-back"
+          ? "Update failed; the previous app-api image was restored"
+          : outcome === "failed"
+            ? "Update failed and app-api rollback did not complete"
+            : "Update restarted app-api with an unexpected container identity or image";
+      const rows = await db
         .update(adminJob)
         .set({
-          status: "failed",
+          status: complete ? "success" : "failed",
           finishedAt: new Date(),
-          error: "Update replaced app-api, but database migrations did not complete",
+          ...(complete
+            ? {
+                progress: 100,
+                result: {
+                  ...(claimed.result as Record<string, unknown>),
+                  phase: "complete",
+                  completedAfterRestart: true,
+                },
+              }
+            : { error }),
         })
-        .where(inArray(adminJob.id, checkpointedUpdateIds));
-      await Promise.all(evaluatedUpdates.map((job) => cleanupOutcome(job.checkpoint.outcomeFile)));
+        .where(jobOwnership(candidate.id, execution))
+        .returning({ id: adminJob.id });
+      if (rows.length) await options.cleanupReplacementOutcome?.(candidate.checkpoint.outcomeFile);
     }
 
-    if (options.completeRestartedUpdates !== false) {
-      const failedUpdates = evaluatedUpdates.filter((job) => !completedUpdateIds.includes(job.id));
-      for (const job of failedUpdates) {
-        const error =
-          job.outcome === "rolled-back"
-            ? "Update failed; the previous app-api image was restored"
-            : job.outcome === "failed"
-              ? "Update failed and app-api rollback did not complete"
-              : job.outcome === null
-                ? "Update helper did not report a durable outcome"
-                : "Update restarted app-api with an unexpected container identity or image";
-        await db
-          .update(adminJob)
-          .set({
-            status: "failed",
-            finishedAt: new Date(),
-            error,
-          })
-          .where(eq(adminJob.id, job.id));
-        await cleanupOutcome(job.checkpoint.outcomeFile);
-      }
-    }
-
-    // Agent-backed jobs use deterministic operation keys. Re-running their API
-    // projection performs a journal lookup/replay and cannot duplicate the
-    // underlying host effect, so an API restart safely requeues them.
+    // Startup marks interrupted observers due; no handler is requeued/replayed.
     await db
       .update(adminJob)
       .set({
-        status: "queued",
-        startedAt: null,
-        finishedAt: null,
-        error: null,
+        result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || jsonb_build_object('observation', jsonb_build_object('state', 'unknown', 'reason', 'transport', 'nextCheckAt', ${new Date().toISOString()}::text))`,
       })
       .where(
         and(
-          eq(adminJob.status, "running"),
+          inArray(adminJob.status, ["running", "cancel_pending"]),
           inArray(adminJob.type, [...AGENT_RECOVERABLE_ADMIN_JOB_TYPES]),
         ),
       );
 
-    // Mark every other job that was running when the api process died as failed.
-    //
-    // Earlier this re-queued them, but that turned a job that crashed
-    // the api once into a crash loop: the job re-runs immediately on
-    // startup, hits the same condition that killed the api before
-    // (commonly `service.bulk` recreating postgis while the api was
-    // logging to it), and dies again before clearing its own row.
-    //
-    // Failing the row instead is safe: the operator can re-trigger the
-    // intent from the admin UI, and they'll see in the activity log that
-    // the previous attempt was aborted by an api restart.
+    // Unknown handlers are never replayed. Interruption alone proves neither
+    // failure nor containment, so retain their evidence for operator recovery.
     await db
       .update(adminJob)
       .set({
-        status: "failed",
-        finishedAt: new Date(),
-        error: "Job interrupted by api restart — re-run if still needed",
+        result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || jsonb_build_object('observation', jsonb_build_object('state', 'unknown', 'reason', 'recovery_required', 'nextCheckAt', ${new Date().toISOString()}::text))`,
       })
       .where(
-        checkpointedUpdateIds.length > 0
-          ? and(
-              eq(adminJob.status, "running"),
-              notInArray(adminJob.type, [...AGENT_RECOVERABLE_ADMIN_JOB_TYPES]),
-              notInArray(adminJob.id, checkpointedUpdateIds),
-            )
-          : and(
-              eq(adminJob.status, "running"),
-              notInArray(adminJob.type, [...AGENT_RECOVERABLE_ADMIN_JOB_TYPES]),
-            ),
+        and(
+          inArray(adminJob.status, ["running", "cancel_pending"]),
+          sql`${adminJob.result}->'observation' IS NULL`,
+        ),
       );
     void this.pump();
   }
@@ -335,28 +277,16 @@ class AdminJobRunner {
       do {
         this.pumpAgain = false;
         while (this.active.size < this.maxConcurrent) {
-          // Atomically claim a queued job by updating its status to running
-          const [job] = await db
-            .update(adminJob)
-            .set({ status: "running", startedAt: new Date() })
-            .where(
-              and(
-                eq(adminJob.status, "queued"),
-                inArray(
-                  adminJob.id,
-                  db
-                    .select({ id: adminJob.id })
-                    .from(adminJob)
-                    .where(eq(adminJob.status, "queued"))
-                    .orderBy(asc(adminJob.createdAt))
-                    .limit(1),
-                ),
-              ),
-            )
-            .returning();
-
-          if (!job) break;
-          this.launchJob(job);
+          const [candidate] = await db
+            .select()
+            .from(adminJob)
+            .where(eq(adminJob.status, "queued"))
+            .orderBy(asc(adminJob.createdAt))
+            .limit(1);
+          if (!candidate) break;
+          const job = await claimAdminJob(candidate, { status: "running", startedAt: new Date() });
+          if (!job) continue;
+          void this.launchJob(job);
         }
       } while (this.pumpAgain && this.active.size < this.maxConcurrent);
     } finally {
@@ -364,17 +294,28 @@ class AdminJobRunner {
     }
   }
 
-  private launchJob(job: typeof adminJob.$inferSelect): void {
+  private launchJob(
+    job: typeof adminJob.$inferSelect,
+    observe = false,
+    observationSignal?: AbortSignal,
+  ): Promise<void> {
     const controller = new AbortController();
     this.active.set(job.id, controller);
     this.logSeq.set(job.id, 0);
 
-    void this.executeJob(
+    return this.executeJob(
       job.id,
       job.type,
       (job.payload as Record<string, unknown>) ?? {},
       (job.result as Record<string, unknown> | null) ?? null,
-      controller.signal,
+      observe
+        ? AbortSignal.any([
+            controller.signal,
+            AbortSignal.timeout(3_000),
+            ...(observationSignal ? [observationSignal] : []),
+          ])
+        : controller.signal,
+      observe,
     )
       .finally(() => {
         this.active.delete(job.id);
@@ -395,22 +336,16 @@ class AdminJobRunner {
     payload: Record<string, unknown>,
     checkpointResult: Record<string, unknown> | null,
     signal: AbortSignal,
+    observe = false,
   ): Promise<void> {
-    const handler = this.handlers.get(type);
-    if (!handler) {
-      await db
-        .update(adminJob)
-        .set({
-          status: "failed",
-          error: `No handler registered for job type "${type}"`,
-          finishedAt: new Date(),
-        })
-        .where(eq(adminJob.id, jobId));
-      return;
-    }
-
+    const handler = observe ? resumeAdminJobObservation : this.handlers.get(type);
+    const execution = readJobExecution(checkpointResult);
+    let checkpointTail = Promise.resolve();
     const ctx: JobContext = {
       jobId,
+      jobType: type,
+      execution,
+      observationOnly: observe,
       payload,
       signal,
       checkpointResult,
@@ -435,63 +370,215 @@ class AdminJobRunner {
         });
       },
       setProgress: async (progress) => {
-        await db.update(adminJob).set({ progress }).where(eq(adminJob.id, jobId));
+        const rows = await db
+          .update(adminJob)
+          .set({ progress })
+          .where(jobOwnership(jobId, execution))
+          .returning({ id: adminJob.id });
+        if (!rows.length) throw new JobOwnershipLost();
         jobEventBus.publish(jobId, { type: "progress", progress });
       },
-      checkpoint: async (result, progress) => {
-        await db
-          .update(adminJob)
-          .set({ result, ...(progress === undefined ? {} : { progress }) })
-          .where(eq(adminJob.id, jobId));
-        ctx.checkpointResult = result;
-        if (progress !== undefined) jobEventBus.publish(jobId, { type: "progress", progress });
+      checkpoint: async (result, progress, admissionKey) => {
+        const write = checkpointTail.then(async () => {
+          // A handler cannot replace the runner's ownership member.
+          const merged: Record<string, unknown> = {
+            ...ctx.checkpointResult,
+            ...result,
+            ...(execution ? { _execution: execution } : {}),
+          };
+          const rows = await db
+            .update(adminJob)
+            .set({ result: merged, ...(progress === undefined ? {} : { progress }) })
+            .where(
+              and(
+                jobOwnership(jobId, execution),
+                ...(admissionKey
+                  ? [
+                      sql`${adminJob.result}->'opsProjection'->'operations'->${admissionKey} IS NULL`,
+                      sql`(${adminJob.result}->'_parentExecution' IS NULL OR ${adminJob.result}->'_parentExecution' = ${JSON.stringify(merged._parentExecution ?? null)}::jsonb)`,
+                    ]
+                  : []),
+              ),
+            )
+            .returning({ id: adminJob.id });
+          if (!rows.length) throw new JobOwnershipLost();
+          ctx.checkpointResult = merged;
+          if (progress !== undefined) jobEventBus.publish(jobId, { type: "progress", progress });
+        });
+        checkpointTail = write.catch(() => undefined);
+        return write;
       },
     };
 
-    this.announce(jobId, "running", { startedAt: new Date().toISOString() });
+    if (!observe) this.announce(jobId, "running", { startedAt: new Date().toISOString() });
     const startedAtMs = Date.now();
-    try {
-      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-      const result = await handler(ctx);
-      jobEventBus.recordHandlerDuration(Date.now() - startedAtMs);
+    const pending = async (reason: OpsObservationPending["reason"]) => {
+      const attempts = Math.min(12, Number(ctx.checkpointResult?._observationAttempts ?? 0) + 1);
+      const observationPatch = {
+        _observationAttempts: attempts,
+        _observationLeaseUntil: null,
+        observation: {
+          state: "unknown",
+          reason,
+          nextCheckAt: new Date(
+            Date.now() + Math.min(60_000, 5_000 * 2 ** (attempts - 1)),
+          ).toISOString(),
+        },
+      };
+      const rows = await db
+        .update(adminJob)
+        .set({
+          result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify(observationPatch)}::jsonb`,
+        })
+        .where(jobOwnership(jobId, execution, ["running", "cancel_pending"]))
+        .returning({ status: adminJob.status, result: adminJob.result });
+      if (rows[0])
+        this.announce(jobId, rows[0].status, {
+          result: publicAdminJobResult(rows[0].result as Record<string, unknown> | null),
+        });
+    };
+    const settle = async (
+      status: "success" | "failed",
+      result: Record<string, unknown> | null,
+      error?: string,
+    ) => {
+      await checkpointTail;
+      const merged: Record<string, unknown> = {
+        ...ctx.checkpointResult,
+        ...result,
+        ...(execution ? { _execution: execution } : {}),
+      };
+      delete merged.observation;
       const finishedAt = new Date();
-      if (signal.aborted) {
-        await db
-          .update(adminJob)
-          .set({ status: "canceled", finishedAt })
-          .where(eq(adminJob.id, jobId));
-        this.announce(jobId, "canceled", { finishedAt: finishedAt.toISOString() });
-      } else {
-        const mergedResult =
-          result === undefined
-            ? (ctx.checkpointResult ?? null)
-            : { ...(ctx.checkpointResult ?? {}), ...result };
-        await db
-          .update(adminJob)
-          .set({ status: "success", result: mergedResult, finishedAt, progress: 100 })
-          .where(eq(adminJob.id, jobId));
-        this.announce(jobId, "success", {
-          result: mergedResult,
-          progress: 100,
+      const rows = await db
+        .update(adminJob)
+        .set({
+          status,
+          result: merged,
+          error: error ?? null,
+          finishedAt,
+          ...(status === "success" ? { progress: 100 } : {}),
+        })
+        .where(jobOwnership(jobId, execution))
+        .returning({ id: adminJob.id });
+      if (rows.length) {
+        this.announce(jobId, status, {
+          result: publicAdminJobResult(merged),
+          error: error ?? null,
+          ...(status === "success" ? { progress: 100 } : {}),
           finishedAt: finishedAt.toISOString(),
         });
+      } else {
+        // Cancel intent wins; retain late evidence without publishing a terminal event.
+        await db
+          .update(adminJob)
+          .set({
+            result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify({ _settled: { status, result: publicAdminJobResult(merged), error } })}::jsonb`,
+          })
+          .where(jobOwnership(jobId, execution, ["cancel_pending"]));
       }
+    };
+    try {
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+      if (!handler) throw new Error(`No handler registered for job type "${type}"`);
+      if (observe) {
+        const [current] = await db
+          .select()
+          .from(adminJob)
+          .where(jobOwnership(jobId, execution, ["running", "cancel_pending"]))
+          .limit(1);
+        if (!current) return;
+        if (current.status === "cancel_pending") {
+          const outcome = await cancelAdminJobOperations(current.result, undefined, {
+            jobId,
+            signal,
+            onEvidence: async (evidence) => {
+              ctx.checkpointResult = { ...ctx.checkpointResult, ...evidence };
+              await db
+                .update(adminJob)
+                .set({
+                  result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify(evidence)}::jsonb`,
+                })
+                .where(jobOwnership(jobId, execution, ["cancel_pending"]));
+            },
+          });
+          if (outcome === "pending") {
+            await pending("transport");
+            return;
+          }
+          if (outcome === "canceled") {
+            const finishedAt = new Date();
+            const rows = await db
+              .update(adminJob)
+              .set({ status: "canceled", finishedAt })
+              .where(jobOwnership(jobId, execution, ["cancel_pending"]))
+              .returning({ id: adminJob.id });
+            if (rows.length)
+              this.announce(jobId, "canceled", {
+                finishedAt: finishedAt.toISOString(),
+                result: publicAdminJobResult(ctx.checkpointResult),
+              });
+            return;
+          }
+          // Containment was not performed. Observe the original outcome under this claim.
+          const rows = await db
+            .update(adminJob)
+            .set({ status: "running" })
+            .where(jobOwnership(jobId, execution, ["cancel_pending"]))
+            .returning({ id: adminJob.id });
+          if (!rows.length) return;
+        }
+      }
+      const result = await handler(ctx);
+      await settle("success", result ?? null);
     } catch (err) {
+      if (err instanceof OpsObservationPending || err instanceof JobObservationPending)
+        await pending(err.reason);
+      else if (
+        err instanceof JobOwnershipLost ||
+        signal.aborted ||
+        (err instanceof Error && err.name === "AbortError")
+      )
+        await pending("observer_deadline");
+      else
+        await settle(
+          "failed",
+          err instanceof AdminJobFailure
+            ? err.result
+            : err instanceof ApiOpsError
+              ? (err.failureResult ?? null)
+              : null,
+          err instanceof Error ? err.message : "Administrative job failed",
+        );
+    } finally {
       jobEventBus.recordHandlerDuration(Date.now() - startedAtMs);
-      const isAbort = signal.aborted || (err instanceof DOMException && err.name === "AbortError");
-      const finishedAt = new Date();
-      const error = err instanceof Error ? err.message : String(err);
-      await db
-        .update(adminJob)
-        .set(isAbort ? { status: "canceled", finishedAt } : { status: "failed", error, finishedAt })
-        .where(eq(adminJob.id, jobId));
-      this.announce(
-        jobId,
-        isAbort ? "canceled" : "failed",
-        isAbort
-          ? { finishedAt: finishedAt.toISOString() }
-          : { error, finishedAt: finishedAt.toISOString() },
-      );
+    }
+  }
+
+  /** Bounded, database-fenced acquisition; no arbitrary handler is dispatched. */
+  async reconcile(options: { limit?: number } = {}, signal?: AbortSignal): Promise<void> {
+    const limit = options.limit ?? 32;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 32)
+      throw new Error("Invalid reconciliation limit");
+    const due = await db
+      .select()
+      .from(adminJob)
+      .where(
+        and(
+          inArray(adminJob.status, ["running", "cancel_pending"]),
+          inArray(adminJob.type, [...AGENT_RECOVERABLE_ADMIN_JOB_TYPES]),
+          sql`(${adminJob.status} = 'cancel_pending' OR ${adminJob.result}->'observation'->>'state' = 'unknown')`,
+          sql`coalesce(${adminJob.result}->'observation'->>'nextCheckAt', '') <= ${new Date().toISOString()}`,
+          sql`coalesce(${adminJob.result}->>'_observationLeaseUntil', '') <= ${new Date().toISOString()}`,
+        ),
+      )
+      .orderBy(asc(adminJob.createdAt))
+      .limit(limit);
+    for (const job of due) {
+      if (signal?.aborted) break;
+      if (this.active.has(job.id)) continue;
+      const claimed = await claimAdminJob(job, {}, true);
+      if (claimed) await this.launchJob(claimed, true, signal);
     }
   }
 }

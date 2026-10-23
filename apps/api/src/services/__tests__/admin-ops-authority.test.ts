@@ -7,6 +7,10 @@ process.env.BETTER_AUTH_SECRET ||= "admin-ops-authority-test-stub-secret";
 
 const dockerComposeAction = vi.fn().mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
 const registryGet = vi.fn();
+const executeAdminJobOperation = vi.fn().mockResolvedValue({ changed: true });
+vi.mock("../admin-job-ops", () => ({
+  executeAdminJobOperation: (...args: unknown[]) => executeAdminJobOperation(...args),
+}));
 
 vi.mock("../../utils/docker-compose.js", () => ({
   dockerComposeAction: (...args: unknown[]) => dockerComposeAction(...args),
@@ -43,14 +47,13 @@ describe("admin service authority split", () => {
   it("keeps enabled built-ins on typed ops-agent lifecycle", async () => {
     registryGet.mockReturnValue({ manifest: { id: "redis" }, enabled: true, isBuiltIn: true });
     await serviceStop("redis", context());
-    expect(dockerComposeAction).toHaveBeenCalledWith(
-      "redis",
-      "stop",
-      expect.objectContaining({
-        operationKey: expect.stringMatching(/^opk1_/),
-        signal: expect.anything(),
-      }),
+    expect(executeAdminJobOperation).toHaveBeenCalledWith(
+      expect.objectContaining({ jobId: "job-123" }),
+      { kind: "service.stop", serviceId: "redis" },
+      "admin-job.service.stop",
+      { durableIdentity: "redis" },
     );
+    expect(dockerComposeAction).not.toHaveBeenCalled();
   });
 
   it("routes enabled community lifecycle through the same typed operation", async () => {
@@ -63,11 +66,14 @@ describe("admin service authority split", () => {
     await serviceRestart("community-weather", ctx);
     // No direct-Docker adapter remains: the agent authorizes the community id
     // against its own trusted selection.
-    expect(dockerComposeAction).toHaveBeenCalledWith(
-      "community-weather",
-      "restart",
-      expect.objectContaining({ signal: ctx.signal }),
+    expect(executeAdminJobOperation).toHaveBeenCalledWith(
+      ctx,
+      { kind: "service.restart", serviceId: "community-weather" },
+      "admin-job.service.restart",
+      { durableIdentity: "community-weather" },
     );
+    expect(ctx.checkpoint).toHaveBeenCalledBefore(executeAdminJobOperation);
+    expect(dockerComposeAction).not.toHaveBeenCalled();
   });
 
   it("denies disabled services before either authority boundary", async () => {
@@ -78,5 +84,6 @@ describe("admin service authority split", () => {
     });
     await expect(serviceStop("community-weather", context())).rejects.toThrow("is disabled");
     expect(dockerComposeAction).not.toHaveBeenCalled();
+    expect(executeAdminJobOperation).not.toHaveBeenCalled();
   });
 });

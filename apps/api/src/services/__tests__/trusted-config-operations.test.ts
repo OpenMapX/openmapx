@@ -30,7 +30,8 @@ vi.mock("../service-config-resolver", () => ({
 vi.mock("../service-secrets", () => ({
   resolveServiceVaultSecretsStrict: async () => ({}),
 }));
-vi.mock("../ops-client", () => ({
+vi.mock("../ops-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../ops-client")>()),
   createApiOpsClient: vi.fn(),
   createDurableOpsKey: () => "opk1_inspect123456789",
   executeTrustedConfigurationAndWait: vi.fn(),
@@ -273,4 +274,97 @@ describe("applyTrustedConfiguration", () => {
       applyTrustedConfiguration({ kind: "serviceSelection.apply", operationKey: "opk1_sel" }),
     ).rejects.toThrow("Trusted configuration unavailable");
   });
+});
+
+it("resumes a retained render without inspecting or rebuilding newer configuration", async () => {
+  prepared.mockClear();
+  inspect.mockReset().mockResolvedValue({ revisionId: null, integrationConfigDigests: [] });
+  published.length = 0;
+  process.env.OPS_TRUSTED_CONFIG_DIR = "/var/lib/openmapx/trusted-config";
+  process.env.OPS_AGENT_TOKEN_FILE = "/run/secrets/ops-agent-api-token";
+  process.env.OPS_TRUSTED_CONFIG_UID = "1000";
+  process.env.OPS_TRUSTED_CONFIG_GID = "1000";
+  vi.mocked(executeTrustedConfigurationAndWait).mockResolvedValue({
+    outcome: "not_committed",
+    reason: "failed",
+    cleanupFailed: false,
+  });
+  const { createApiOpsClient } = await import("../ops-client");
+  const key = "opk1_retainedRender12345";
+  const operationId = "job1_retainedRender12345";
+  const revisionId = `cfg1_${"r".repeat(43)}`;
+  const operation = { kind: "stack.render", revisionId, expectedCurrentRevisionId: null };
+  const result = {
+    outcome: "committed",
+    revisionId,
+    enabledServiceIds: [],
+    followUp: "complete",
+    cleanupFailed: false,
+  };
+  const client = {
+    execute: vi.fn(),
+    lookup: vi.fn(),
+    cancel: vi.fn(),
+    status: vi.fn().mockResolvedValue({
+      version: 1,
+      kind: operation.kind,
+      operationId,
+      operationKey: key,
+      state: "succeeded",
+      result,
+      submittedAt: "2026-10-23T00:00:00Z",
+      updatedAt: "2026-10-23T00:00:00Z",
+    }),
+    events: vi.fn().mockResolvedValue({
+      version: 1,
+      operationId,
+      nextCursor: 0,
+      terminal: true,
+      truncated: false,
+      events: [],
+    }),
+  };
+  vi.mocked(createApiOpsClient).mockReturnValue(client as never);
+  const ctx = {
+    jobId: "1d2b29cd-23de-4b19-8c32-86c196833b79",
+    payload: {},
+    signal: new AbortController().signal,
+    log: vi.fn(),
+    checkpoint: vi.fn(),
+    setProgress: vi.fn(),
+    checkpointResult: {
+      opsProjection: {
+        version: 2,
+        eventTotal: 0,
+        byteTotal: 0,
+        truncated: false,
+        operations: {
+          [key]: {
+            kind: operation.kind,
+            operation,
+            operationId,
+            operationKey: key,
+            phase: "observing",
+            cursor: 0,
+            events: 0,
+            bytes: 0,
+            terminal: false,
+            truncated: false,
+          },
+        },
+      },
+    },
+  };
+  await expect(
+    applyTrustedConfigurationWithEvidence({
+      kind: "stack.render",
+      operationKey: key,
+      ctx,
+    } as never),
+  ).rejects.toMatchObject({ reason: "recovery_required" });
+  expect(prepared).not.toHaveBeenCalled();
+  expect(inspect).not.toHaveBeenCalled();
+  expect(published).toEqual([]);
+  expect(client.execute).not.toHaveBeenCalled();
+  expect(client.status).toHaveBeenCalled();
 });
