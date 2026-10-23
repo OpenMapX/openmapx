@@ -58,7 +58,7 @@
     "pino": "^10.4.0",
     "postgres": "^3.4.9",
     "tsx": "4.23.15",
-    "zod": "^4.6.5",
+    "zod": "^4.6.7",
     "p-limit": "7.3.3"
   },
   "devDependencies": {

@@ -31,7 +31,7 @@
     "postgres": "^3.4.9",
     "undici": "^8.11.2",
     "p-map": "7.1.1",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@mapbox/vector-tile": "3.0.0",

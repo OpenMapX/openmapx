@@ -81,7 +81,7 @@ treats it as a workspace member and resolves the framework packages.
   "dependencies": {
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   }
 }
 ```
