@@ -32,34 +32,62 @@ import { announceMultiplierFor } from "./groundSession";
  * still describe the present.
  */
 
+type RouteGeometry = PreparedRouteMatcher["geometry"];
+
+/** True only when both arrays hold exactly the same coordinate values. */
+function sameCoordinates(owned: RouteGeometry, candidate: RouteGeometry): boolean {
+  if (owned.length !== candidate.length) return false;
+  for (let index = 0; index < owned.length; index += 1) {
+    const a = owned[index];
+    const b = candidate[index];
+    if (a.length !== b.length) return false;
+    for (let axis = 0; axis < a.length; axis += 1) if (a[axis] !== b[axis]) return false;
+  }
+  return true;
+}
+
 /**
- * A prepared route index, kept in memory and keyed by the array it indexes.
+ * The prepared route index for the session being guided, kept in memory.
  *
- * The key is the geometry array *itself*, not its fingerprint. The engine binds
- * a prepared matcher to the exact array it was built from and rejects it against
- * any other — and a session reloaded from storage produces a new array with
- * identical values every time, so a fingerprint would match while the matcher no
- * longer belonged to the geometry it was handed.
+ * The engine binds a prepared matcher to the exact array it was built from, and
+ * every load from storage hands back a new array with identical values, so
+ * identity cannot be the key and a rounded fingerprint cannot be the proof — two
+ * roads a few metres apart share one. The cache instead owns a private copy of
+ * the geometry it indexed, remembers which session it belongs to, and reuses the
+ * index only when the incoming coordinates equal that copy exactly. The linear
+ * comparison replaces rebuilding the spatial index on every callback; it does
+ * not remove the other route-size-dependent work of loading and validating the
+ * session.
  *
- * What this buys is therefore per-batch reuse: one preparation for a batch of
- * fixes, which is the case that matters, since the batch shares one loaded
- * session. A replacement or a restart simply rebuilds.
+ * One entry is held. Anything else — a different session, any changed or
+ * resized coordinate, an explicit `invalidate`, or a new process — prepares
+ * afresh. Only geometry is retained; route metadata (steps, durations, limits)
+ * is always read from the newest session.
  */
 export class GroundRouteCache {
-  private geometry: readonly unknown[] | null = null;
+  private sessionId: string | null = null;
   private matcher: PreparedRouteMatcher | null = null;
 
+  /** The index for this session's geometry, whose `geometry` is the canonical array. */
   matcherFor(session: GroundMobileSession): PreparedRouteMatcher {
-    const geometry = session.payload.startPackage.route.geometry;
-    if (this.geometry !== geometry || !this.matcher) {
-      this.matcher = prepareRouteMatcher(geometry);
-      this.geometry = geometry;
+    const geometry = session.payload.startPackage.route.geometry as RouteGeometry;
+    if (
+      this.matcher &&
+      this.sessionId === session.sessionId &&
+      sameCoordinates(this.matcher.geometry, geometry)
+    ) {
+      return this.matcher;
     }
+    // A copy, so later edits to the caller's array can neither change the index
+    // nor be mistaken for the geometry it was built from.
+    const owned = geometry.map((point) => [...point]) as RouteGeometry;
+    this.matcher = prepareRouteMatcher(owned);
+    this.sessionId = session.sessionId;
     return this.matcher;
   }
 
   invalidate(): void {
-    this.geometry = null;
+    this.sessionId = null;
     this.matcher = null;
   }
 }
@@ -125,6 +153,13 @@ export function processGroundBatch(input: ProcessGroundBatchInput): GroundBatchO
     announceMultiplier: announceMultiplierFor(startPackage.settings.voiceTiming),
   };
 
+  // The current session's own route, bound to the cache's canonical geometry so
+  // the engine and the matcher share the one array the matcher was built from.
+  const engineRoute = {
+    ...startPackage.route,
+    geometry: matcher.geometry,
+  } as unknown as Parameters<typeof processFix>[0];
+
   let tickState = session.payload.tickState;
   let progress = session.payload.progress;
   let weakGps = session.payload.weakGps;
@@ -145,7 +180,7 @@ export function processGroundBatch(input: ProcessGroundBatchInput): GroundBatchO
     // passes engine-specific extras through — so the shape is asserted once
     // here rather than at every field.
     const result: NavTickResult = processFix(
-      startPackage.route as unknown as Parameters<typeof processFix>[0],
+      engineRoute,
       fix,
       tickState as never,
       options,
