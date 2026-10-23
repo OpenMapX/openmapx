@@ -3,6 +3,11 @@ import type { TripItinerary, TripPlan } from "@openmapx/mobility-core/transit";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createQueryWrapper, createTestQueryClient } from "@/test";
+import {
+  signTransitPageToken,
+  transitRequestFingerprint,
+  verifyTransitPageToken,
+} from "../../../../../../integrations/transit/page-token";
 import { useTransitPlan as realUseTransitPlan } from "../../../../../../packages/core/src/hooks/transit/useTransitPlan";
 import {
   type TransitDirectionsSnapshot,
@@ -360,6 +365,343 @@ describe("transit planning controller", () => {
       const published = view.result.current.itineraries;
       await act(async () => releases[0]({ data: response([a]), attributions: [] }));
       expect(view.result.current.itineraries).toBe(published);
+    } finally {
+      view.unmount();
+      client.clear();
+    }
+  });
+});
+
+type Change = {
+  name: string;
+  initial?: Partial<TransitDirectionsSnapshot>;
+  arrange?: () => void;
+  mutate?: () => void;
+  next?: Partial<TransitDirectionsSnapshot>;
+};
+const epoch = (datasetEpoch: string, source = "source") => ({
+  data: {
+    providers: [
+      { id: "transit-motis-local", metadata: { datasetEpoch, source, instance: "instance" } },
+    ],
+  },
+});
+const departure = new Date("2026-10-22T14:00:00Z");
+const arrival = new Date("2026-10-22T16:00:00Z");
+
+const routingChanges: Change[] = [
+  {
+    name: "destination",
+    mutate: () => useDirectionsStore.getState().setWaypoint(1, [15, 54], "New destination"),
+  },
+  {
+    name: "origin",
+    mutate: () => useDirectionsStore.getState().setWaypoint(0, [12, 51], "New origin"),
+  },
+  { name: "wheelchairRequired", next: { wheelchairRequired: true } },
+  { name: "maxTransfers from unset to zero", next: { maxTransfers: 0 } },
+  {
+    name: "maxTransfers from two to zero",
+    initial: { maxTransfers: 2 },
+    next: { maxTransfers: 0 },
+  },
+  { name: "transferBuffer", next: { transferBuffer: "relaxed" } },
+  { name: "requireBikeTransport", next: { requireBikeTransport: true } },
+  { name: "bikeHillPreference", next: { bikeHillPreference: "avoid" } },
+  { name: "preferred modes", next: { transitPreferredModes: ["bus"] } },
+  { name: "access mode", next: { transitAccessMode: "bike" } },
+  {
+    name: "resolved D-ticket eligibility",
+    arrange: () => mocks.germany.mockReturnValue({ bothInGermany: true }),
+    initial: { deutschlandticketOnly: false },
+    next: { deutschlandticketOnly: true },
+  },
+  { name: "effective itinerary count", next: { transitRoutePreference: "fewerTransfers" } },
+  { name: "time mode", next: { timeMode: "depart" } },
+  {
+    name: "raw departure time",
+    initial: { timeMode: "depart", transitDepartureTime: departure },
+    next: { timeMode: "depart", transitDepartureTime: new Date(departure.getTime() + 3_600_000) },
+  },
+  {
+    name: "raw arrival time",
+    initial: { timeMode: "arrive", transitArrivalTime: arrival },
+    next: { timeMode: "arrive", transitArrivalTime: new Date(arrival.getTime() + 3_600_000) },
+  },
+  {
+    name: "capability epoch",
+    arrange: () => mocks.capabilities.mockReturnValue(epoch("epoch-1")),
+    mutate: () => mocks.capabilities.mockReturnValue(epoch("epoch-2")),
+  },
+  {
+    name: "rental source",
+    initial: { transitAccessMode: "bike_share" },
+    arrange: () => mocks.capabilities.mockReturnValue(epoch("epoch-1", "source-1")),
+    mutate: () => mocks.capabilities.mockReturnValue(epoch("epoch-1", "source-2")),
+  },
+  { name: "enabled", next: { enabled: false } },
+  {
+    name: "chained planning",
+    mutate: () => useDirectionsStore.getState().setWaypointSchedule(0, { dwellSeconds: 300 }),
+  },
+];
+
+function pagedResult(overrides: Partial<TripPlan> = {}) {
+  return {
+    data: response([a], { nextPageToken: "next", previousPageToken: "previous", ...overrides }),
+    isLoading: false,
+    isError: false,
+  };
+}
+function pagedView(initial: Partial<TransitDirectionsSnapshot> = {}) {
+  mocks.plan.mockReturnValue(pagedResult());
+  const view = renderHook((props: TransitDirectionsSnapshot) => useTransitDirectionsPlan(props), {
+    initialProps: snapshot(initial),
+  });
+  return view;
+}
+
+describe("transit page ownership", () => {
+  it.each(routingChanges)("never pairs a changed $name with the old page token", (change) => {
+    change.arrange?.();
+    const view = pagedView(change.initial);
+    act(() => view.result.current.paging.loadNext());
+    expect(lastPlan().pageToken).toBe("next");
+    const before = mocks.plan.mock.calls.length;
+    change.mutate?.();
+    view.rerender(snapshot({ ...change.initial, ...change.next }));
+    const after = mocks.plan.mock.calls
+      .slice(before)
+      .map(([params]) => params as Parameters<typeof realUseTransitPlan>[0]);
+    expect(after.length).toBeGreaterThan(0);
+    expect(after.map((params) => params.pageToken)).toEqual(after.map(() => undefined));
+    expect(view.result.current.paging.isPage).toBe(false);
+  });
+
+  it("retires a page the moment the edited date changes and keeps it retired once the debounce settles", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const initial = { timeMode: "depart", transitDepartureTime: departure } as const;
+    const view = pagedView(initial);
+    act(() => view.result.current.paging.loadNext());
+    const later = new Date(departure.getTime() + 3_600_000);
+    const before = mocks.plan.mock.calls.length;
+    view.rerender(snapshot({ ...initial, transitDepartureTime: later }));
+    expect(lastPlan().pageToken).toBeUndefined();
+    expect(lastPlan().departAt).toBe(departure.toISOString());
+    await act(async () => vi.advanceTimersByTimeAsync(500));
+    expect(lastPlan().departAt).toBe(later.toISOString());
+    const after = mocks.plan.mock.calls
+      .slice(before)
+      .map(([params]) => params as Parameters<typeof realUseTransitPlan>[0]);
+    expect(after.map((params) => params.pageToken)).toEqual(after.map(() => undefined));
+  });
+
+  it("keeps compatible paging for equivalent coordinate values, list order and client-only ranking", () => {
+    const view = pagedView({
+      transitPreferredModes: ["bus", "tram"],
+      transitRoutePreference: "fewerTransfers",
+    });
+    act(() => view.result.current.paging.loadNext());
+    view.rerender(
+      snapshot({
+        waypoints: useDirectionsStore.getState().waypoints.map((waypoint) => ({
+          ...waypoint,
+          coords: [...(waypoint.coords ?? [])],
+        })) as never,
+        transitPreferredModes: ["tram", "bus"],
+        transitRoutePreference: "lessWalking",
+      }),
+    );
+    expect(lastPlan().pageToken).toBe("next");
+    expect(view.result.current.paging.isPage).toBe(true);
+  });
+
+  it("makes page callbacks captured before a routing change inert", () => {
+    const view = pagedView();
+    const before = view.result.current.paging;
+    useDirectionsStore.getState().setWaypoint(1, [15, 54], "New destination");
+    view.rerender(snapshot());
+    act(() => {
+      before.loadNext();
+      before.loadPrevious();
+    });
+    expect(lastPlan().pageToken).toBeUndefined();
+    expect(view.result.current.paging.isPage).toBe(false);
+  });
+
+  it("never restores an earlier page when the routing query returns to a previous value", () => {
+    const view = pagedView();
+    const original = view.result.current.paging;
+    act(() => view.result.current.paging.loadNext());
+    expect(lastPlan().pageToken).toBe("next");
+    useDirectionsStore.getState().setWaypoint(1, [15, 54], "B");
+    view.rerender(snapshot());
+    useDirectionsStore.getState().setWaypoint(1, [14, 53], "Destination");
+    view.rerender(snapshot());
+    expect(lastPlan().pageToken).toBeUndefined();
+    act(() => original.loadNext());
+    expect(lastPlan().pageToken).toBeUndefined();
+    act(() => view.result.current.paging.loadPrevious());
+    expect(lastPlan().pageToken).toBe("previous");
+  });
+
+  it("lets only one page action act per rendered ownership", () => {
+    const view = pagedView();
+    const paging = view.result.current.paging;
+    act(() => {
+      paging.loadNext();
+      paging.loadPrevious();
+    });
+    expect(lastPlan().pageToken).toBe("next");
+  });
+
+  it("cannot resurrect paging while planning is disabled or chained", () => {
+    const view = pagedView({ enabled: false });
+    act(() => view.result.current.paging.loadNext());
+    expect(lastPlan().pageToken).toBeUndefined();
+    useDirectionsStore.getState().setWaypointSchedule(0, { dwellSeconds: 300 });
+    view.rerender(snapshot());
+    act(() => view.result.current.paging.loadPrevious());
+    expect(lastPlan().pageToken).toBeUndefined();
+    expect(view.result.current.paging.isPage).toBe(false);
+  });
+});
+
+describe("transit paging through the real query cache and signed tokens", () => {
+  const SECRET = "synthetic-signing-secret-for-controller-tests-only";
+  const pages: Record<string, { items: TripItinerary[]; previous?: string; next?: string }> = {
+    initial: { items: [b], previous: "p0", next: "n0" },
+    n0: { items: [itinerary("c")], previous: "p1", next: "n1" },
+    p1: { items: [a], previous: "p2", next: "n2" },
+  };
+  type Request = {
+    params: Record<string, string>;
+    resolve: (value: unknown) => void;
+    reject: (error: unknown) => void;
+  };
+  let requests: Request[];
+  let client: ReturnType<typeof createTestQueryClient>;
+
+  /** Server side of the transport: the real signer/verifier over the real serializer output. */
+  function serve(params: Record<string, string>) {
+    const fingerprint = transitRequestFingerprint(params);
+    const key = params.page_token
+      ? verifyTransitPageToken(params.page_token, SECRET, fingerprint).cursor
+      : "initial";
+    const sign = (cursor: string, direction: "previous" | "next") =>
+      signTransitPageToken(
+        {
+          cursor,
+          source: "synthetic",
+          instance: "synthetic",
+          datasetEpoch: "epoch",
+          fingerprint,
+          direction,
+        },
+        SECRET,
+      );
+    const page = params.wheelchair ? { items: [itinerary("z")] } : (pages[key] ?? { items: [] });
+    return {
+      data: response(page.items, {
+        ...("previous" in page && page.previous
+          ? { previousPageToken: sign(page.previous, "previous") }
+          : {}),
+        ...("next" in page && page.next ? { nextPageToken: sign(page.next, "next") } : {}),
+      }),
+      attributions: [],
+    };
+  }
+  async function release(index: number) {
+    await act(async () => {
+      try {
+        requests[index].resolve(serve(requests[index].params));
+      } catch (error) {
+        requests[index].reject(error);
+      }
+    });
+  }
+  const ids = (view: { result: { current: { itineraries: TripItinerary[] } } }) =>
+    view.result.current.itineraries.map((item) => item.id);
+
+  beforeEach(() => {
+    requests = [];
+    client = createTestQueryClient();
+    vi.spyOn(apiClient, "get").mockImplementation(
+      (_url: unknown, params: unknown) =>
+        new Promise((resolve, reject) =>
+          requests.push({ params: params as Record<string, string>, resolve, reject }),
+        ),
+    );
+    mocks.plan.mockImplementation((params) =>
+      realUseTransitPlan(params as Parameters<typeof realUseTransitPlan>[0]),
+    );
+  });
+  afterEach(() => client.clear());
+
+  it("verifies each earlier/later token on the original wire time across minute rollover and merges pages", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime("2026-10-23T05:20:10Z");
+    const view = renderHook((props: TransitDirectionsSnapshot) => useTransitDirectionsPlan(props), {
+      initialProps: snapshot(),
+      wrapper: createQueryWrapper(client),
+    });
+    try {
+      await waitFor(() => expect(requests.length).toBe(1));
+      await release(0);
+      await waitFor(() => expect(ids(view)).toEqual(["b"]));
+
+      vi.setSystemTime("2026-10-23T05:21:30Z");
+      act(() => view.result.current.paging.loadNext());
+      await waitFor(() => expect(requests.length).toBe(2));
+      await release(1);
+      await waitFor(() => expect(ids(view)).toEqual(["b", "c"]));
+
+      vi.setSystemTime("2026-10-23T05:22:30Z");
+      act(() => view.result.current.paging.loadPrevious());
+      await waitFor(() => expect(requests.length).toBe(3));
+      await release(2);
+      await waitFor(() => expect(ids(view)).toEqual(["a", "b", "c"]));
+
+      expect(requests.map((request) => request.params.time)).toEqual(
+        Array(3).fill("2026-10-23T05:20:00Z"),
+      );
+      expect(requests.map((request) => request.params.page_token !== undefined)).toEqual([
+        false,
+        true,
+        true,
+      ]);
+    } finally {
+      view.unmount();
+      client.clear();
+    }
+  });
+
+  it("never merges an obsolete deferred page into a replacement query's results", async () => {
+    const view = renderHook((props: TransitDirectionsSnapshot) => useTransitDirectionsPlan(props), {
+      initialProps: snapshot(),
+      wrapper: createQueryWrapper(client),
+    });
+    try {
+      await waitFor(() => expect(requests.length).toBe(1));
+      await release(0);
+      await waitFor(() => expect(ids(view)).toEqual(["b"]));
+      act(() => view.result.current.paging.loadNext());
+      await waitFor(() => expect(requests.length).toBe(2));
+
+      view.rerender(snapshot({ wheelchairRequired: true }));
+      await waitFor(() => expect(requests.length).toBe(3));
+      expect(requests[2].params.page_token).toBeUndefined();
+      expect(requests[2].params.wheelchair).toBe("true");
+      await release(2);
+      await waitFor(() => expect(ids(view)).toEqual(["z"]));
+      const published = view.result.current.itineraries;
+
+      await release(1);
+      expect(view.result.current.itineraries).toBe(published);
+      expect(ids(view)).toEqual(["z"]);
+      expect(
+        requests.filter((request) => request.params.wheelchair && request.params.page_token),
+      ).toEqual([]);
     } finally {
       view.unmount();
       client.clear();
