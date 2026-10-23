@@ -147,6 +147,58 @@ describe("transit replan request ownership", () => {
     },
   );
 
+  it("replans with every requirement captured when the trip started", async () => {
+    const get = vi.spyOn(apiClient, "get").mockResolvedValue({ data: { itineraries: [] } });
+    useNavigationStore.getState().startTransitNavigation(missedTrip(), {
+      wheelchairRequired: true,
+      maxTransfers: 0,
+      transferBuffer: "extra",
+      requireBikeTransport: true,
+      bikeHillPreference: "avoid",
+      modes: ["BUS"],
+      preTransitModes: ["WALK"],
+      postTransitModes: ["WALK"],
+      directModes: ["WALK"],
+      deutschlandticketOnly: true,
+    });
+    renderEngine();
+    const before = Date.now();
+    act(() => fixHandler?.({ coords: [0.00002, 0.00001], accuracy: 5, timestampMs: before }));
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
+    const after = Date.now();
+
+    const query = get.mock.calls[0][1] as Record<string, string>;
+    expect(query).toMatchObject({
+      from_lat: "0.00001",
+      from_lng: "0.00002",
+      to_lat: "0",
+      to_lng: "0.004",
+      wheelchair: "true",
+      max_transfers: "0",
+      transfer_buffer: "extra",
+      require_bike_transport: "true",
+      bike_hill_preference: "avoid",
+      modes: "BUS",
+      pre_modes: "WALK",
+      post_modes: "WALK",
+      direct_modes: "WALK",
+      deutschlandticket: "true",
+    });
+    // The departure is the moment of the replan, not the missed leg's schedule.
+    const requested = Date.parse(query.time);
+    expect(requested).toBeGreaterThanOrEqual(before);
+    expect(requested).toBeLessThanOrEqual(after);
+  });
+
+  it("replans without captured options, and keeps the legacy wheelchair flag", async () => {
+    const get = vi.spyOn(apiClient, "get").mockResolvedValue({ data: { itineraries: [] } });
+    useNavigationStore.getState().startTransitNavigation(missedTrip(), { wheelchair: true });
+    renderEngine();
+    act(() => fixHandler?.({ coords: [0, 0], accuracy: 5, timestampMs: Date.now() }));
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
+    expect(get.mock.calls[0][1]).toMatchObject({ wheelchair: "true" });
+  });
+
   it("does not clear a new trip's reroute flag when an old request fails", async () => {
     let reject: (reason: Error) => void = () => {};
     const get = vi.spyOn(apiClient, "get").mockImplementation(

@@ -1,7 +1,6 @@
 import {
-  API_ENDPOINTS,
-  apiClient,
   type FixInput,
+  fetchTransitPlan,
   type PreparedTransitProgress,
   prepareTransitProgress,
   useNavigationStore,
@@ -16,8 +15,7 @@ import {
   transitItineraryFingerprint,
   transitProgressFromTick,
 } from "@openmapx/core/navigation";
-import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
-import type { TripItinerary, TripPlan } from "@openmapx/mobility-core/transit";
+import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { useCallback, useEffect, useRef } from "react";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import { haptics } from "../haptics";
@@ -99,31 +97,18 @@ export function useTransitNavigationEngine(): void {
       initial.setTransitRerouteNeeded(true);
       try {
         // Reuse the user's original transit options, snapshotted into the
-        // navigation store when the trip started (preferred modes, the
-        // Deutschlandticket-filtered set, wheelchair, first/last-mile access).
-        // Reading the snapshot — not the live directions store, which close()
-        // resets to defaults — keeps the replan from silently routing onto
-        // excluded/inaccessible legs, and respects the Germany-only D-Ticket gate
-        // exactly as it was applied at planning time.
-        const opts = initial.transitReplanOptions;
-        const params: Record<string, string> = {
-          from_lat: String(from[1]),
-          from_lng: String(from[0]),
-          to_lat: String(to[1]),
-          to_lng: String(to[0]),
+        // navigation store when the trip started (modes, wheelchair, transfer
+        // limits and buffer, bicycle requirements, first/last-mile access and
+        // the Deutschlandticket filter). Reading the snapshot — not the live
+        // directions store, which close() resets to defaults — keeps the replan
+        // from silently routing onto excluded/inaccessible legs. The shared
+        // request builder serializes them, so this cannot drift from planning.
+        const env = await fetchTransitPlan({
+          ...initial.transitReplanOptions,
+          origin: from,
+          destination: to,
           time: new Date().toISOString(),
-        };
-        if (opts?.modes?.length) params.modes = opts.modes.join(",");
-        if (opts?.wheelchair) params.wheelchair = "true";
-        if (opts?.preTransitModes?.length) params.pre_modes = opts.preTransitModes.join(",");
-        if (opts?.postTransitModes?.length) params.post_modes = opts.postTransitModes.join(",");
-        if (opts?.directModes?.length) params.direct_modes = opts.directModes.join(",");
-        if (opts?.deutschlandticketOnly) params.deutschlandticket = "true";
-
-        const env = await apiClient.get<MobilityEnvelope<TripPlan>>(
-          API_ENDPOINTS.transitPlan,
-          params,
-        );
+        });
         const next = env.data?.itineraries?.[0];
         const latest = useNavigationStore.getState();
         if (!ownsRequest()) return;
