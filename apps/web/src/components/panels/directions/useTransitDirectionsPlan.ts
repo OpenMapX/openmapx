@@ -2,6 +2,7 @@
 
 import type { DirectionsState, TransitReplanOptions } from "@openmapx/core";
 import {
+  buildTransitPlanParams,
   preferredModesToMotis,
   TRANSIT_ACCESS_MOTIS_MODES,
   TRANSIT_ACCESS_RENTAL_FORM_FACTORS,
@@ -32,6 +33,18 @@ export type TransitDirectionsSnapshot = Pick<
   | "deutschlandticketOnly"
 > & { enabled: boolean; timeMode: "now" | "depart" | "arrive" };
 
+/** Paging state owned by exactly one routing query; a different query never inherits it. */
+interface TransitPagingOwner {
+  identity: string;
+  token?: string;
+  direction: "previous" | "next";
+}
+
+/** Raw (undebounced) value of the time the active mode edits, so edits retire paging at once. */
+function rawTimeIdentity(value: "now" | Date | null): string | number | null {
+  return value instanceof Date ? value.getTime() : value;
+}
+
 /** Composes existing transit acquisition, page publication and captured navigation policy. */
 export function useTransitDirectionsPlan({
   enabled,
@@ -59,8 +72,6 @@ export function useTransitDirectionsPlan({
   const itineraries = useDirectionsStore((s) => s.transitItineraries);
   const setTransitItineraries = useDirectionsStore((s) => s.setTransitItineraries);
   const { data: transitPlanningCapabilities } = useTransitPlanningCapabilities();
-  const [transitPageToken, setTransitPageToken] = useState<string | undefined>();
-  const [transitPageDirection, setTransitPageDirection] = useState<"previous" | "next">("next");
   // Transit plan query
   const debouncedDepartureTime = useDebounce(transitDepartureTime, 500);
   const debouncedArrivalTime = useDebounce(transitArrivalTime, 500);
@@ -182,11 +193,8 @@ export function useTransitDirectionsPlan({
   );
   const transitChainQuery = useTransitChainPlan(transitChainRequest);
 
-  const transitPlanQuery = useTransitPlan({
-    origin: enabled && !transitIsChained ? origin : null,
-    destination: enabled && !transitIsChained ? destination : null,
-    departAt: transitDepartAtStr,
-    arriveBy: transitArriveByStr,
+  const planningActive = enabled && !transitIsChained && origin !== null && destination !== null;
+  const planArgs = {
     numItineraries: effectiveNumItineraries,
     modes: effectiveMotisModes,
     wheelchairRequired,
@@ -202,6 +210,59 @@ export function useTransitDirectionsPlan({
     postTransitModes: accessModes.postTransitModes,
     directModes: accessModes.directModes,
     deutschlandticketOnly: deutschlandticketActive,
+  };
+
+  // Page tokens are signed against the query that issued them, so paging belongs
+  // to that query's canonical request. The serializer collapses equivalent
+  // coordinates and option lists; an implicit time is a marker because the hook
+  // owns the actual minute it anchors to.
+  const pagingIdentity =
+    planningActive && origin && destination
+      ? JSON.stringify([
+          buildTransitPlanParams({
+            origin,
+            destination,
+            time: transitArriveByStr ?? transitDepartAtStr ?? "now",
+            arriveBy: transitArriveByStr !== undefined,
+            ...planArgs,
+          }),
+          timeMode,
+          rawTimeIdentity(
+            timeMode === "depart"
+              ? transitDepartureTime
+              : timeMode === "arrive"
+                ? transitArrivalTime
+                : null,
+          ),
+        ])
+      : "inactive";
+  const [storedPaging, setStoredPaging] = useState<TransitPagingOwner>({
+    identity: pagingIdentity,
+    direction: "next",
+  });
+  // Retire a previous query's paging synchronously: an effect would first let one
+  // render and request pair the changed inputs with the old token.
+  let paging = storedPaging;
+  if (storedPaging.identity !== pagingIdentity) {
+    paging = { identity: pagingIdentity, direction: "next" };
+    setStoredPaging(paging);
+  }
+  const transitPageToken = paging.token;
+  const transitPageDirection = paging.direction;
+  const loadPage = (direction: "previous" | "next", token: string | undefined) => {
+    if (!planningActive || !token) return;
+    // Only the rendered owner may advance; callbacks from an earlier query or page no-op.
+    setStoredPaging((current) =>
+      current === paging ? { identity: paging.identity, token, direction } : current,
+    );
+  };
+
+  const transitPlanQuery = useTransitPlan({
+    origin: enabled && !transitIsChained ? origin : null,
+    destination: enabled && !transitIsChained ? destination : null,
+    departAt: transitDepartAtStr,
+    arriveBy: transitArriveByStr,
+    ...planArgs,
     pageToken: transitPageToken,
   });
   const { data: transitPlanData } = transitPlanQuery;
@@ -225,11 +286,6 @@ export function useTransitDirectionsPlan({
     transitPageDirection,
   ]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional trigger deps
-  useEffect(() => {
-    setTransitPageToken(undefined);
-  }, [origin, destination]);
-
   return {
     isChained: transitIsChained,
     planQuery: transitPlanQuery,
@@ -241,16 +297,8 @@ export function useTransitDirectionsPlan({
       isPage: Boolean(transitPageToken),
       previousToken: transitPlanData?.previousPageToken,
       nextToken: transitPlanData?.nextPageToken,
-      loadPrevious: () => {
-        if (!transitPlanData?.previousPageToken) return;
-        setTransitPageDirection("previous");
-        setTransitPageToken(transitPlanData.previousPageToken);
-      },
-      loadNext: () => {
-        if (!transitPlanData?.nextPageToken) return;
-        setTransitPageDirection("next");
-        setTransitPageToken(transitPlanData.nextPageToken);
-      },
+      loadPrevious: () => loadPage("previous", transitPlanData?.previousPageToken),
+      loadNext: () => loadPage("next", transitPlanData?.nextPageToken),
     },
   };
 }
