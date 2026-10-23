@@ -136,6 +136,9 @@ export const extensionPreviewLimit = new RateLimiter({ max: 1, windowMs: 30_000 
 
 export const storeInstallLimit = new RateLimiter({ max: 1, windowMs: 30_000 });
 
+/** Update checks are read-only host inspection; keep them from consuming the apply token. */
+export const systemUpdateCheckLimit = new RateLimiter({ max: 1, windowMs: 30_000 });
+
 export const systemMaintenanceLimit = new RateLimiter({ max: 1, windowMs: 30_000 });
 
 export const userModerationLimit = new RateLimiter({ max: 5, windowMs: 60_000 });

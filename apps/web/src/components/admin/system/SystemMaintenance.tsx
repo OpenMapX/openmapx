@@ -80,6 +80,45 @@ interface TrackedJob {
   label: string;
 }
 
+/** A submission the API refused before any job existed; nothing is tracked or polled for it. */
+interface SubmissionRejection {
+  path: string;
+  label: string;
+  status: number | null;
+  message: string;
+  retrySeconds: number | null;
+}
+
+const MAX_RETRY_SECONDS = 3_600;
+
+class SubmissionError extends Error {
+  constructor(
+    message: string,
+    readonly status: number | null,
+    readonly retrySeconds: number | null,
+  ) {
+    super(message);
+  }
+}
+
+function boundedSeconds(seconds: number): number | null {
+  return Number.isFinite(seconds) && seconds >= 0 && seconds <= MAX_RETRY_SECONDS
+    ? Math.ceil(seconds)
+    : null;
+}
+
+/** Server-declared wait: Retry-After (seconds or HTTP date) first, else a valid body `retryAfter`. */
+function declaredRetrySeconds(header: string | null, body: unknown): number | null {
+  const value = header?.trim();
+  if (value) {
+    if (/^\d+$/.test(value)) return boundedSeconds(Number(value));
+    const at = Date.parse(value);
+    if (Number.isFinite(at)) return boundedSeconds(Math.max(0, (at - Date.now()) / 1000));
+  }
+  const fallback = (body as { retryAfter?: unknown } | null)?.retryAfter;
+  return typeof fallback === "number" ? boundedSeconds(fallback) : null;
+}
+
 export function buildSystemJobRequestInit(body?: Record<string, unknown>): RequestInit {
   return {
     method: "POST",
@@ -120,6 +159,15 @@ export function SystemMaintenance() {
   const [createBackup, setCreateBackup] = useState(true);
   const [trackedJob, setTrackedJob] = useState<TrackedJob | null>(null);
   const [blockedCandidate, setBlockedCandidate] = useState<string | null>(null);
+  const [rejection, setRejection] = useState<SubmissionRejection | null>(null);
+  // The action the server asked us to leave alone, and when it may be tried again.
+  const [cooldown, setCooldown] = useState<{ path: string; until: number } | null>(null);
+
+  useEffect(() => {
+    if (!cooldown) return;
+    const timer = setTimeout(() => setCooldown(null), Math.max(0, cooldown.until - Date.now()));
+    return () => clearTimeout(timer);
+  }, [cooldown]);
 
   const statusQuery = useQuery<SystemStatus>({
     queryKey: ["admin", "system"],
@@ -158,6 +206,8 @@ export function SystemMaintenance() {
   }, [candidateToApply, jobQuery.data, queryClient, showToast, trackedJob]);
 
   const queueJob = useMutation({
+    // Maintenance actions are never repeated automatically, whatever the client defaults are.
+    retry: false,
     mutationFn: async ({
       path,
       body,
@@ -174,21 +224,54 @@ export function SystemMaintenance() {
       const result = (await response.json().catch(() => ({}))) as {
         jobId?: string;
         error?: string;
+        retryAfter?: unknown;
       };
-      if (!response.ok || !result.jobId)
-        throw new Error(result.error ?? `Failed to queue ${label}`);
+      if (!response.ok || !result.jobId) {
+        throw new SubmissionError(
+          result.error ??
+            (response.status === 429 ? "Too many requests" : `Failed to queue ${label}`),
+          response.status,
+          response.status === 429
+            ? declaredRetrySeconds(response.headers.get("Retry-After"), result)
+            : null,
+        );
+      }
       return { id: result.jobId, label, path };
     },
+    onMutate: () => setRejection(null),
     onSuccess: (job) => {
       setTrackedJob(job);
+      if (job.path === "updates/apply") {
+        setDialogOpen(false);
+        setConfirmation("");
+      }
       showToast(`${job.label} queued`);
     },
-    onError: (error) =>
-      showToast(error instanceof Error ? error.message : "Request failed", "error"),
+    onError: (error, { path, label }) => {
+      const message = error instanceof Error ? error.message : "Request failed";
+      const status = error instanceof SubmissionError ? error.status : null;
+      const retrySeconds = error instanceof SubmissionError ? error.retrySeconds : null;
+      setRejection({ path, label, status, message, retrySeconds });
+      if (retrySeconds) setCooldown({ path, until: Date.now() + retrySeconds * 1000 });
+      showToast(message, "error");
+    },
   });
 
   const status = statusQuery.data;
   const active = Boolean(trackedJob || queueJob.isPending);
+  const waiting = (path: string) => cooldown?.path === path;
+  const rejectionAlert = rejection && (
+    <Alert severity="warning" sx={{ minWidth: 0 }}>
+      <AlertTitle>{rejection.label} was not queued</AlertTitle>
+      {rejection.message.replace(/[.\s]+$/, "")}.{" "}
+      {waiting(rejection.path) && rejection.retrySeconds
+        ? `Try again in about ${rejection.retrySeconds} ${rejection.retrySeconds === 1 ? "second" : "seconds"}.`
+        : rejection.status === 409
+          ? "Try again once the active operation has finished."
+          : "You can try again."}
+    </Alert>
+  );
+  const rejectionInDialog = dialogOpen && rejection?.path === "updates/apply";
   const progress = jobQuery.data?.progress ?? 0;
   const updateCount = status?.images.filter((image) => image.updateAvailable).length ?? 0;
   const checkedCandidate =
@@ -316,6 +399,8 @@ export function SystemMaintenance() {
         </Alert>
       )}
 
+      {!rejectionInDialog && rejectionAlert}
+
       {trackedJob && (
         <Paper variant="outlined" sx={{ p: 1.5 }}>
           <Stack direction="row" sx={{ alignItems: "center", gap: 1, mb: 1 }}>
@@ -348,7 +433,7 @@ export function SystemMaintenance() {
             <Button
               variant="outlined"
               startIcon={<RefreshIcon />}
-              disabled={active || !status?.deployment.maintenanceReady}
+              disabled={active || !status?.deployment.maintenanceReady || waiting("updates/check")}
               onClick={() => queueJob.mutate({ path: "updates/check", label: "Update check" })}
             >
               Check for updates
@@ -366,6 +451,8 @@ export function SystemMaintenance() {
               }
               onClick={() => {
                 setCandidateToApply(checkedCandidate);
+                // Stale feedback goes; an active server wait keeps its explanation.
+                if (!waiting("updates/apply")) setRejection(null);
                 setDialogOpen(true);
               }}
             >
@@ -429,7 +516,7 @@ export function SystemMaintenance() {
           <Button
             variant="outlined"
             startIcon={<DiagnosticsIcon />}
-            disabled={active || !status?.deployment.maintenanceReady}
+            disabled={active || !status?.deployment.maintenanceReady || waiting("diagnostics")}
             onClick={() => queueJob.mutate({ path: "diagnostics", label: "Deep diagnostics" })}
           >
             Run diagnostics
@@ -476,6 +563,7 @@ export function SystemMaintenance() {
               first when the release changes it, then Data Manager and Web; API updates last and
               briefly interrupts this page.
             </Alert>
+            {rejectionInDialog && rejectionAlert}
             <FormControlLabel
               control={
                 <Checkbox
@@ -513,17 +601,17 @@ export function SystemMaintenance() {
               confirmation !== CONFIRMATION ||
               queueJob.isPending ||
               !candidateToApply ||
-              hostUpdateRequired
+              hostUpdateRequired ||
+              waiting("updates/apply")
             }
-            onClick={() => {
+            onClick={() =>
+              // The dialog closes only once the update is accepted (see onSuccess).
               queueJob.mutate({
                 path: "updates/apply",
                 body: { confirmation, createBackup, ...candidateToApply },
                 label: "OpenMapX update",
-              });
-              setDialogOpen(false);
-              setConfirmation("");
-            }}
+              })
+            }
           >
             Update application
           </Button>

@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { jobRunner } from "../services/job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "../services/ops-client";
 import { writeAuditLog } from "../utils/audit-log";
-import { systemMaintenanceLimit } from "../utils/rate-limit";
+import { systemMaintenanceLimit, systemUpdateCheckLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { declareRouteAuth } from "../utils/route-auth";
 
@@ -178,7 +178,7 @@ export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/admin/system/updates/check",
-    { preHandler: [systemMaintenanceLimit.preHandler()] },
+    { preHandler: [systemUpdateCheckLimit.preHandler()] },
     async (request, reply) => {
       if (!hasOnlyBodyKeys(request.body, new Set())) {
         reply.status(400);
