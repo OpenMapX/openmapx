@@ -76,8 +76,8 @@ export function SavedListDetail() {
   const [nameValue, setNameValue] = useState(list ? resolveListName(list.name) : "");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [iconAnchor, setIconAnchor] = useState<HTMLElement | null>(null);
-  const [noteEditId, setNoteEditId] = useState<string | null>(null);
-  const [noteValue, setNoteValue] = useState("");
+  // Each open or edit creates a new snapshot; a save may close only the snapshot it submitted.
+  const [noteEdit, setNoteEdit] = useState<{ placeId: string; value: string } | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState(tCommon("copied"));
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -129,16 +129,16 @@ export function SavedListDetail() {
 
   const handleAddNoteClick = (e: React.MouseEvent, place: SavedPlace) => {
     e.stopPropagation();
-    setNoteEditId(place.id);
-    setNoteValue(place.note ?? "");
+    setNoteEdit({ placeId: place.id, value: place.note ?? "" });
   };
 
   const handleNoteSubmit = () => {
-    if (!noteEditId) return;
-    const trimmed = noteValue.trim();
+    if (!noteEdit) return;
+    const submitted = noteEdit;
+    const trimmed = submitted.value.trim();
     updatePlaceMutation.mutate(
-      { id: noteEditId, note: trimmed || null },
-      { onSuccess: () => setNoteEditId(null) },
+      { id: submitted.placeId, note: trimmed || null },
+      { onSuccess: () => setNoteEdit((current) => (current === submitted ? null : current)) },
     );
   };
 
@@ -146,7 +146,7 @@ export function SavedListDetail() {
     if (e.key === "Enter") {
       handleNoteSubmit();
     } else if (e.key === "Escape") {
-      setNoteEditId(null);
+      setNoteEdit(null);
     }
   };
 
@@ -336,13 +336,16 @@ export function SavedListDetail() {
             places={places}
             onSelect={handlePlaceClick}
             renderNote={(place) =>
-              noteEditId === place.id ? (
+              noteEdit?.placeId === place.id ? (
                 <TextField
                   fullWidth
                   size="small"
                   placeholder={t("note")}
-                  value={noteValue}
-                  onChange={(e) => setNoteValue(e.target.value)}
+                  value={noteEdit.value}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setNoteEdit((current) => current && { ...current, value });
+                  }}
                   onBlur={handleNoteSubmit}
                   onKeyDown={handleNoteKeyDown}
                   autoFocus

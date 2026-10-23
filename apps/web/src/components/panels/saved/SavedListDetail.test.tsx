@@ -5,7 +5,7 @@ import {
   useSavedPlacesStore,
 } from "@openmapx/core";
 import { en } from "@openmapx/i18n";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as savedPlaceActions from "@/lib/openSavedPlace";
@@ -184,4 +184,119 @@ it("adds and edits notes without opening the place, and opens rows through openS
   fireEvent.keyDown(screen.getByPlaceholderText("Note"), { key: "Escape" });
   fireEvent.click(screen.getByRole("button", { name: /Public landmark/ }));
   expect(open).toHaveBeenCalledWith(state.places[0], expect.any(Function));
+});
+
+describe("saved note editor ownership", () => {
+  const notePlace = (id: string, note: string | null = null): SavedPlace => ({
+    id,
+    listId: "list-1",
+    name: `Place ${id}`,
+    address: null,
+    placeId: null,
+    note,
+    sortOrder: 0,
+    lat: 51,
+    lng: 8,
+    createdAt: "2026-10-23T00:00:00Z",
+  });
+  const settle = (call: number) => {
+    const options = state.updatePlace.mock.calls[call]?.[1] as { onSuccess: () => void };
+    act(() => options.onSuccess());
+  };
+  const draft = (value: string) => {
+    fireEvent.change(screen.getByPlaceholderText("Note"), { target: { value } });
+  };
+
+  it("keeps a different place's editor open when an earlier save succeeds", () => {
+    state.places = [notePlace("a"), notePlace("b", "Existing")];
+    renderDetail();
+    fireEvent.click(screen.getByRole("button", { name: "+ Note" }));
+    draft("Saved A");
+    fireEvent.keyDown(screen.getByPlaceholderText("Note"), { key: "Enter" });
+    fireEvent.click(screen.getByRole("button", { name: "Edit note" }));
+    draft("Unsaved B draft");
+    settle(0);
+    expect(screen.getByPlaceholderText("Note")).toHaveValue("Unsaved B draft");
+  });
+
+  it("keeps a second place's editor opened from a blurred save", () => {
+    state.places = [notePlace("a"), notePlace("b")];
+    renderDetail();
+    fireEvent.click(screen.getAllByRole("button", { name: "+ Note" })[0]);
+    draft("Saved A");
+    fireEvent.blur(screen.getByPlaceholderText("Note"));
+    fireEvent.click(screen.getByRole("button", { name: "+ Note" }));
+    draft("Unsaved B draft");
+    settle(0);
+    expect(screen.getByPlaceholderText("Note")).toHaveValue("Unsaved B draft");
+  });
+
+  it("keeps a reopened editor for the same place after cancelling a pending save", () => {
+    state.places = [notePlace("a")];
+    renderDetail();
+    fireEvent.click(screen.getByRole("button", { name: "+ Note" }));
+    draft("Same text");
+    fireEvent.keyDown(screen.getByPlaceholderText("Note"), { key: "Enter" });
+    fireEvent.keyDown(screen.getByPlaceholderText("Note"), { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "+ Note" }));
+    draft("Same text");
+    settle(0);
+    expect(screen.getByPlaceholderText("Note")).toHaveValue("Same text");
+  });
+
+  it("keeps text typed after a save was submitted and sends the earlier trimmed snapshot", () => {
+    state.places = [notePlace("a")];
+    renderDetail();
+    fireEvent.click(screen.getByRole("button", { name: "+ Note" }));
+    draft("  First  ");
+    fireEvent.keyDown(screen.getByPlaceholderText("Note"), { key: "Enter" });
+    draft("First and more");
+    settle(0);
+    expect(screen.getByPlaceholderText("Note")).toHaveValue("First and more");
+    expect(state.updatePlace.mock.calls[0][0]).toEqual({ id: "a", note: "First" });
+  });
+
+  it("lets only the matching save close its editor and ignores a late duplicate completion", () => {
+    state.places = [notePlace("a"), notePlace("b")];
+    renderDetail();
+    fireEvent.click(screen.getAllByRole("button", { name: "+ Note" })[0]);
+    draft("Saved A");
+    fireEvent.blur(screen.getByPlaceholderText("Note"));
+    fireEvent.click(screen.getByRole("button", { name: "+ Note" }));
+    draft("Saved B");
+    fireEvent.blur(screen.getByPlaceholderText("Note"));
+    settle(0);
+    expect(screen.getByPlaceholderText("Note")).toHaveValue("Saved B");
+    settle(1);
+    expect(screen.queryByPlaceholderText("Note")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "+ Note" })[0]);
+    draft("Again");
+    fireEvent.keyDown(screen.getByPlaceholderText("Note"), { key: "Enter" });
+    fireEvent.blur(screen.getByPlaceholderText("Note"));
+    settle(2);
+    expect(screen.queryByPlaceholderText("Note")).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "+ Note" })[0]);
+    draft("Reopened");
+    settle(3);
+    expect(screen.getByPlaceholderText("Note")).toHaveValue("Reopened");
+  });
+
+  it("closes the submitted editor on success and sends null for blank notes", () => {
+    state.places = [notePlace("a", "Old")];
+    const open = vi.spyOn(savedPlaceActions, "openSavedPlace");
+    open.mockClear();
+    renderDetail();
+    fireEvent.click(screen.getByRole("button", { name: "Edit note" }));
+    draft("   ");
+    fireEvent.keyDown(screen.getByPlaceholderText("Note"), { key: "Enter" });
+    expect(state.updatePlace.mock.calls[0][0]).toEqual({ id: "a", note: null });
+    settle(0);
+    expect(screen.queryByPlaceholderText("Note")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit note" }));
+    fireEvent.keyDown(screen.getByPlaceholderText("Note"), { key: "Escape" });
+    expect(screen.queryByPlaceholderText("Note")).not.toBeInTheDocument();
+    expect(open).not.toHaveBeenCalled();
+  });
 });
