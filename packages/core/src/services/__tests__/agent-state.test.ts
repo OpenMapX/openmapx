@@ -109,8 +109,9 @@ describe("service selection file", () => {
     writeServiceSelectionFile(infraDir, ["postgis"]);
 
     expect(readFileSync(sentinel, "utf8")).toBe("untouched");
-    expect(lstatSync(path).isFile()).toBe(true);
     expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ selected: ["postgis"] });
-    expect(statSync(path).mode & 0o777).toBe(0o644);
+    const written = lstatSync(path);
+    expect(written.isFile()).toBe(true);
+    expect(written.mode & 0o777).toBe(0o644);
   });
 });

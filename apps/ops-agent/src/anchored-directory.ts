@@ -61,11 +61,14 @@ export function openAnchoredDirectory(
   }
   const anchorRoot =
     options.descriptorAnchorRoot === undefined ? defaultAnchorRoot() : options.descriptorAnchorRoot;
-  const directoryFlags = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
+  // Opens an existing directory: without O_CREAT nothing is created, so the
+  // mode is never applied.
+  const openDirectory = (path: string) =>
+    openSync(path, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW, 0o700);
   const descriptors: number[] = [];
   let path = root;
   try {
-    descriptors.push(openSync(root, directoryFlags));
+    descriptors.push(openDirectory(root));
     for (const component of components) {
       const parent = descriptors.at(-1) as number;
       const child = anchorRoot
@@ -84,7 +87,7 @@ export function openAnchoredDirectory(
           throw new Error("Unsafe anchored directory");
         }
       }
-      descriptors.push(openSync(child, directoryFlags));
+      descriptors.push(openDirectory(child));
       path = join(path, component);
     }
     const directory = descriptors.at(-1) as number;
