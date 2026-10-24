@@ -24,6 +24,21 @@ sources resolve relative to that directory. Community services install under
 `services/.community/<repo-hash>/`, at most four directory levels into their
 repository, and cannot declare bind mounts.
 
+The ops-agent and the fixed CLI it runs do not read built-in manifests from the
+host checkout. The ops-agent image's runtime bundle embeds every
+`services/<id>/service.json` when it is built, so a release pins the manifests
+together with the agent image, and the checkout's copies and their file
+permissions do not decide what runs. The checkout still supplies everything a
+manifest mounts from its service directory. The agent logs at startup, and
+`pnpm openmapx check` warns, when the checkout's built-in manifests differ from
+the release's (missing, changed, or not in the release). Rendering warns when an
+enabled service mounts a file the checkout does not have. Run from source (the
+host `pnpm openmapx`, tsx and tests), the code reads the checkout it runs from.
+Adding a built-in service means adding its directory, its ID to
+`RELEASE_BUILT_IN_SERVICE_IDS` and its manifest URL to
+`packages/core/src/services/embedded-built-in-services.bundle.ts`; a test fails
+until all three agree.
+
 The portable Zod schema and semantic validator live in
 `packages/extension-contracts/src/service.ts`, with provenance restrictions in
 `service-policy.ts`. Core re-exports them through

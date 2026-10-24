@@ -98,18 +98,24 @@ pull:
 pnpm install --frozen-lockfile
 ```
 
-The ops-agent refuses to start while a service manifest, an integration
-manifest or their directories are writable by the group or by others. Some
-distributions give user accounts a umask of `002`, under which `git pull`
-writes every changed file group-writable; pulling with umask `022`, as above,
-keeps them private. If the ops-agent stops with "Release service authority is
-unavailable" or "Trusted configuration authority rejected" after a pull, clear
-the group and other write bits and restart it:
+The ops-agent runs the built-in service manifests of its own release, not the
+checkout's. It still refuses to start while the checkout directory, `services/`,
+an integration manifest or their directories are writable by the group or by
+others. Some distributions give user accounts a umask of `002`, under which
+`git pull` writes every changed file group-writable; pulling with umask `022`,
+as above, keeps them private. If the ops-agent stops with "Trusted configuration
+authority rejected" after a pull, clear the group and other write bits and
+restart it:
 
 ```bash
+chmod go-w .
 git ls-files -z | xargs -0 chmod go-w
 git ls-tree -rd --name-only -z HEAD | xargs -0 chmod go-w
 ```
+
+Keep the checkout at the selected release: the services still mount their
+configuration files from it. `pnpm openmapx check` and the ops-agent's startup
+log say when the checkout's built-in services differ from the release's.
 
 The checkout has changed, but running containers still use their existing
 images. Continue with release selection and replacement.

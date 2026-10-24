@@ -186,7 +186,9 @@ bounded structured audit fields. It is reachable solely on the private
 
 `ops-agent` is the sole owner of the Docker socket and trusted repository write
 mounts, including the community service checkouts under `services/.community/`. `app-api` and `data-manager` submit typed operations instead of receiving
-that host authority themselves. A process cannot recreate its own container, so
+that host authority themselves. The built-in service manifests the agent and its
+fixed CLI render come from the agent's own image, not from the host checkout.
+A process cannot recreate its own container, so
 to update itself the agent starts a short-lived helper container from its own
 image. The helper has only the socket and checkout mounts, no network and no
 capabilities. It replaces the agent container, verifies the new agent and exits. Traefik consumes generated configuration rather

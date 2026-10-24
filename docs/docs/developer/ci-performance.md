@@ -181,6 +181,12 @@ workspace code it reaches with esbuild:
   production database secret). The build rejects any other module that runs
   top-level statements besides declarations, so the list cannot fall behind.
   It also rejects a listed module the bundle no longer includes.
+- A bundle's `replaceModules` swaps a workspace module for a bundle variant.
+  ops-agent replaces `embedded-built-in-services.ts`, which returns nothing, with
+  `embedded-built-in-services.bundle.ts`, whose asset URLs embed every built-in
+  `service.json`. Only the ops-agent bundle therefore embeds the manifests, and
+  a manifest change rebuilds only that image. The build fails if a replacement is
+  missing or nothing imports the replaced module.
 - A computed `import()` or `require()`, any other use of `import.meta` or the
   module's location, and any esbuild warning fail the build. Among the warnings
   is a bare `import "…"` of a module not in `sideEffectModules`.
