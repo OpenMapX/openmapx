@@ -145,8 +145,9 @@ WORKDIR /app
 # socket became reachable.
 # The pinned base predates Alpine's OpenSSL fix for CVE-2026-14456, and git
 # pulls in libexpat, whose CVE-2026-66046 fix landed after this base was cut.
+# curl pulls in brotli-libs; 1.2.1-r0 fixes CVE-2026-111497.
 RUN apk add --no-cache curl ca-certificates git && \
-    apk upgrade --no-cache libcrypto3 libssl3 libexpat && \
+    apk upgrade --no-cache libcrypto3 libssl3 libexpat brotli-libs && \
     rm -rf /usr/local/lib/node_modules/npm && \
     rm -f /usr/local/bin/npm /usr/local/bin/npx
 
