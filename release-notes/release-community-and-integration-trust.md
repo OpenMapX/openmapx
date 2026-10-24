@@ -29,7 +29,11 @@ clone and pull with umask `022`.
   checks. Their installer gives installed files fixed modes and refuses an
   integration those checks, or the agent's schema check, would reject, so one
   installed integration can no longer stop the agent from authorizing
-  configuration changes.
+  configuration changes. The configuration writer removes group and other
+  write from `custom_integrations/` and everything in it its user owns, as it
+  does for `infra/docker`, so an integration installed earlier with
+  group-writable files, for example under a umask of `002`, loads without
+  being installed again.
 
 It also fixes trusted configuration requests (applying settings, the service
 selection or secrets from the admin panel): the agent bound each request to one
@@ -47,9 +51,3 @@ None. If the agent refuses to start with "Trusted configuration authority
 rejected" because of a repository installed by an earlier release, delete that
 repository's directory and its `.repository-<hash>.json` under
 `services/.community/` and install the extension again.
-
-If it rejects its authority with "Trusted integration registry rejected"
-because of an integration installed earlier, for example with
-`pnpm openmapx integrations install` under a umask of `002`, install that
-integration again, from the admin panel or with the same command. The installer
-replaces its files with the modes the agent loads.
