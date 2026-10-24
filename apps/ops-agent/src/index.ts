@@ -53,7 +53,11 @@ import { createTrustedConfigurationAuthorityLoader } from "./trusted-configurati
 
 async function main(): Promise<void> {
   const config = loadOpsAgentConfig();
-  janitorPrivacyBackupScratch(config.rootDir, process.env.OPS_PRIVACY_BACKUP_SCRATCH_ROOT);
+  // Privacy scratch, like the trusted-configuration queue, is reached through
+  // the checkout: the container's own mount may still be the old location,
+  // which data-manager can read. OPS_PRIVACY_BACKUP_SCRATCH_ROOT stays set for
+  // agents of earlier releases.
+  janitorPrivacyBackupScratch(config.rootDir);
   // The release's built-in manifests apply either way; a checkout that differs
   // still supplies the configuration files those services mount.
   const drift = services.describeBuiltInServiceDrift(
@@ -69,7 +73,6 @@ async function main(): Promise<void> {
     const privacyBackupRuntimeOptions = {
       rootDir: config.rootDir,
       collectorImage: process.env.OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE?.trim(),
-      scratchRoot: process.env.OPS_PRIVACY_BACKUP_SCRATCH_ROOT?.trim() || undefined,
     };
     if (config.privacyBackupCapabilityKeyFile) {
       let handle: Awaited<ReturnType<typeof open>> | undefined;
@@ -175,6 +178,11 @@ async function main(): Promise<void> {
     }
     await retireLegacyAgentState(legacyState).catch(() => false);
     const journal = await openOpsJobJournal(config.journalFile);
+    // After a self-update this agent starts before anything has rendered with
+    // its code, so the state directories it opens may not exist yet.
+    await services.withConfigurationGenerationWriter(paths.infraDir, async () =>
+      services.prepareAgentStateDirectories(paths.infraDir),
+    );
     await initializeTrustedSnapshotDirectory(config.trustedConfigDirectory, {
       allowedUids: [uid],
       expectedGid: gid,
