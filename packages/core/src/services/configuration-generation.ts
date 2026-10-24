@@ -741,8 +741,8 @@ function writeStackFiles(
   for (const dir of writableBindDirs) mkdirSync(dir, { recursive: true });
   // app-api bind-mounts `${OPENMAPX_HOST_DIR}/custom_integrations`, a path the
   // renderer cannot resolve. Left to Docker it is created root-owned on first
-  // start, and the ops-agent then refuses to start on its next boot because
-  // its authority scan only trusts directories owned by the checkout's user.
+  // start, and the ops-agent, which installs integrations there as the
+  // checkout's user, could not write it.
   mkdirSync(join(rootDir, "custom_integrations"), { recursive: true, mode: 0o755 });
 }
 

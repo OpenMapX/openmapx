@@ -120,6 +120,25 @@ export {
   validateExtensionManifest,
   verifiedCatalogEntrySchema,
 } from "./extension-schema";
+export {
+  acceptedManifestDigests,
+  INTEGRATION_RECORD_VERSION,
+  type IntegrationFileDigest,
+  type IntegrationInstallation,
+  type IntegrationPending,
+  type IntegrationRecord,
+  type IntegrationRecordsReading,
+  type IntegrationSource,
+  integrationRecordPath,
+  integrationRecordsDirectory,
+  integrationUploadsDirectory,
+  MAX_RECORDED_FILES,
+  MAX_TOTAL_RECORDED_FILES,
+  parseIntegrationRecord,
+  readIntegrationRecords,
+  safeRelativePath,
+  sha256Hex,
+} from "./integration-records";
 export { findServiceManifestDirs } from "./manifest-discovery";
 export {
   isSafePostgresIdentifier,
@@ -221,8 +240,11 @@ export {
 } from "./trusted-authority-filesystem";
 export {
   assertTrustedIntegrationDirectory,
+  type IntegrationAuthorityProblem,
   type LoadTrustedIntegrationSchemasOptions,
+  loadTrustedIntegrationAuthority,
   loadTrustedIntegrationSchemas,
   MAX_INTEGRATION_MANIFEST_BYTES,
+  type TrustedIntegrationAuthority,
 } from "./trusted-integration-schemas";
 export * from "./types";

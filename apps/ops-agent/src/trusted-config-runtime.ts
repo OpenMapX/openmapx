@@ -32,6 +32,8 @@ export interface TrustedConfigurationAuthoritySnapshot {
   revisionId: string;
   services: readonly coreServices.LoadedService[];
   integrationSchemas: ReadonlyMap<string, Record<string, unknown>>;
+  /** Installed integrations left out of the schemas, and why. */
+  integrationProblems?: readonly coreServices.IntegrationAuthorityProblem[];
 }
 
 /** The enabled services of the applied generation, or null before the first render. */

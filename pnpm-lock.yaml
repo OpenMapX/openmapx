@@ -537,6 +537,9 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
       '@openmapx/transitous-core':
         specifier: workspace:^
         version: link:../../packages/transitous-core

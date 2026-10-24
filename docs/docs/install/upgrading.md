@@ -393,6 +393,23 @@ invocation authenticates through the public proxy.
 An accepted request queues work; check admin activity for completion before
 retrying an interrupted request.
 
+### Integrations installed before the agent recorded them
+
+Releases before the operations agent owned `custom_integrations/` left
+installed integrations without a record. On its first start after the upgrade,
+`app-api` asks the agent to verify each integration an extension installed:
+the agent downloads that extension's pinned artifact again, checks its
+SHA-256, and records the integration only if the files on disk are exactly the
+artifact's files. Until then, and for any integration that fails the check, the
+agent leaves it out; its startup log and **Run diagnostics** name it, and why.
+Nothing on disk is trusted as it is:
+
+- an integration whose files differ from its artifact, or that was installed
+  with `pnpm openmapx integrations install` (nothing records where it came
+  from), needs to be installed again, from **Admin → Extensions** or with the
+  same command;
+- if the artifact could not be downloaded, the next `app-api` start tries again.
+
 ### After an interrupted extension update
 
 The operations agent installs each service repository as a transaction: it
@@ -403,8 +420,8 @@ later extension install or removal, settles what was left: a change the
 database recorded is kept, and any other is rolled back, restoring the previous
 checkout, service selection and running containers. The agent keeps its note
 about a rolled-back change until the selection is restored, so a failure part
-way through is finished by the next attempt. Integration artifacts use
-`custom_integrations/.extension-install-journal-*.json` the same way.
+way through is finished by the next attempt. Integration installs are
+transactions in the agent too, settled the same way.
 
 If the agent is unreachable when `app-api` starts, `app-api` logs
 `Interrupted extension changes could not be recovered yet` and serves normally;

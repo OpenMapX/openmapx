@@ -24,6 +24,7 @@ import {
   createDockerDawarichRuntimeInspector,
 } from "./dawarich-subject-export";
 import { createDockerRuntime, runContainedProcess } from "./docker-runtime";
+import { IntegrationStore, installIntegrationRuntime } from "./integration-store";
 import { openOpsJobJournal } from "./journal";
 import { importLegacyAgentState, retireLegacyAgentState } from "./legacy-state";
 import { createProductionRegistryResourceClaimer } from "./policy";
@@ -124,6 +125,20 @@ async function main(): Promise<void> {
       loadAuthority: () => authorityLoader(),
     });
     await communityRepositories.recover();
+    // The agent is the only writer of custom_integrations, too; an interrupted
+    // install is undone before any authority load reads the integrations.
+    const integrationStore = new IntegrationStore({
+      rootDir: config.rootDir,
+      uid,
+      builtInIds: () =>
+        new Set(
+          (
+            services.embeddedBuiltInIntegrationManifests() ??
+            services.checkoutBuiltInIntegrationManifests(config.rootDir)
+          ).ids,
+        ),
+    });
+    await integrationStore.recover();
     // The operator's selection can name installed community services as well
     // as built-in ones.
     const communityServices = (
@@ -172,6 +187,9 @@ async function main(): Promise<void> {
       builtInServices,
     });
     const initialAuthority = await authorityLoader();
+    for (const { integrationId, problem } of initialAuthority.integrationProblems ?? []) {
+      process.stderr.write(`Integration "${integrationId}" is not loaded: ${problem}\n`);
+    }
     // The policy binds each trusted-configuration claim to this revision, and
     // the runtime commits only while the authority still has it: both must
     // derive it the same way.
@@ -192,6 +210,7 @@ async function main(): Promise<void> {
       infraDir: paths.infraDir,
     });
     installCommunityRepositoryRuntime(runtime, communityRepositories);
+    installIntegrationRuntime(runtime, integrationStore);
     // The managed timeline endpoint is registered only when the trusted
     // service selection explicitly enables `dawarich-app`.  Its request path,
     // container name and collector script remain fixed; every call re-checks

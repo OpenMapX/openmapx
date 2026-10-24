@@ -1,9 +1,8 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { type IntegrationManifest, integrationEnvVarName } from "@openmapx/integration-framework";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { integrationConfig } from "./db/schema";
+import { readIntegrationFile } from "./integration-files";
 import { resolveVaultSecrets } from "./services/secrets";
 
 export type ConfigSource = "default" | "database" | "vault" | "config.json" | "env";
@@ -122,10 +121,12 @@ export async function resolveConfigWithSources(
     // vault unavailable
   }
 
-  const configJsonPath = join(directory, "config.json");
-  if (existsSync(configJsonPath)) {
+  // Read through the verifier: in an installed directory the operations agent
+  // owns, only a config.json it installed is used.
+  const configJson = readIntegrationFile(directory, "config.json");
+  if (configJson) {
     try {
-      const fileConfig = JSON.parse(readFileSync(configJsonPath, "utf-8"));
+      const fileConfig = JSON.parse(configJson.toString("utf-8"));
       if (typeof fileConfig === "object" && fileConfig !== null) {
         for (const [key, value] of Object.entries(fileConfig as Record<string, unknown>)) {
           if (knownKeys.has(key)) result[key] = { value, source: "config.json" };

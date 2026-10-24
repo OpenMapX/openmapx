@@ -18,22 +18,6 @@ const dbMock: DbMock = createDbMock();
 
 vi.mock("../../db/index.js", () => ({ db: dbMock.db }));
 
-vi.mock("@openmapx/integration-framework/installer", () => ({
-  backupInstalledIntegration: vi.fn(() => ({
-    id: "intg-one",
-    backupDirectory: "/safe/mock-integration-backup",
-  })),
-  discardInstalledIntegrationBackup: vi.fn(),
-  installIntegration: vi.fn(async (opts: { source: string }) => ({
-    // The installer asserts the artifact reports the declared component id.
-    id: /intg-[a-z0-9-]+/.exec(opts.source)?.[0] ?? "intg-one",
-    directory: "/safe/mock-integration",
-    replaced: false,
-  })),
-  removeIntegration: vi.fn(),
-  restoreInstalledIntegration: vi.fn(),
-}));
-
 vi.mock("../extension-component-ownership", () => ({
   assertComponentOwnership: vi.fn().mockResolvedValue(undefined),
   ExtensionComponentOwnershipError: class extends Error {},
@@ -68,15 +52,12 @@ vi.mock("../admin-ops", () => ({
   serviceStart: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../extension-install-journal", () => ({
-  createExtensionInstallJournal: vi.fn((_root, extensionId, targetManifest) => ({
-    path: "/safe/mock-extension-journal.json",
-    data: { schemaVersion: 1, extensionId, targetManifest, integrations: [] },
-  })),
-  appendIntegrationJournalEntry: vi.fn(),
-  markIntegrationJournalEntryInstalled: vi.fn(),
-  markExtensionInstallJournalRestoring: vi.fn(),
-  reconcileExtensionInstallJournal: vi.fn().mockResolvedValue(undefined),
+vi.mock("../agent-integrations", () => ({
+  adoptIntegration: vi.fn(),
+  publishIntegration: vi.fn(),
+  readInstalledIntegrations: vi.fn(),
+  removeIntegration: vi.fn(),
+  settleIntegration: vi.fn(),
 }));
 
 const applyEnabledIds = vi.fn();
@@ -105,17 +86,17 @@ vi.mock("../extension-recovery", () => ({
   recoverInterruptedExtensionChanges: vi.fn().mockResolvedValue(undefined),
 }));
 
-import {
-  backupInstalledIntegration,
-  discardInstalledIntegrationBackup,
-  installIntegration,
-  removeIntegration,
-  restoreInstalledIntegration,
-} from "@openmapx/integration-framework/installer";
 import { reloadIntegrations } from "../../integration-host";
 import { dockerComposeAction } from "../../utils/docker-compose";
 import { getServiceSelectionSummary } from "../admin-cli";
 import { renderAndPersistCompose, serviceStart } from "../admin-ops";
+import {
+  adoptIntegration,
+  publishIntegration,
+  readInstalledIntegrations,
+  removeIntegration,
+  settleIntegration,
+} from "../agent-integrations";
 import {
   inspectServiceRepository,
   publishServiceRepository,
@@ -123,11 +104,6 @@ import {
   removeServiceRepository,
   settleServiceRepository,
 } from "../community-repositories";
-import {
-  createExtensionInstallJournal,
-  markExtensionInstallJournalRestoring,
-  reconcileExtensionInstallJournal,
-} from "../extension-install-journal";
 import { recoverInterruptedExtensionChanges, withExtensionChangeLock } from "../extension-recovery";
 import type { JobContext } from "../job-runner.js";
 import { getServiceRegistry, initServiceRegistry } from "../service-registry";
@@ -249,11 +225,11 @@ const RECOVERY = {
   previouslyEnabledServiceIds: [],
 };
 
-const dbInstallMock = vi.mocked(installIntegration);
-const dbRemoveMock = vi.mocked(removeIntegration);
-const integrationBackupMock = vi.mocked(backupInstalledIntegration);
-const integrationBackupDiscardMock = vi.mocked(discardInstalledIntegrationBackup);
-const integrationRestoreMock = vi.mocked(restoreInstalledIntegration);
+const publishIntegrationMock = vi.mocked(publishIntegration);
+const settleIntegrationMock = vi.mocked(settleIntegration);
+const removeIntegrationMock = vi.mocked(removeIntegration);
+const adoptIntegrationMock = vi.mocked(adoptIntegration);
+const readInstalledMock = vi.mocked(readInstalledIntegrations);
 const reloadMock = vi.mocked(reloadIntegrations);
 const composeMock = vi.mocked(dockerComposeAction);
 const inspectMock = vi.mocked(inspectServiceRepository);
@@ -267,9 +243,25 @@ const serviceStartMock = vi.mocked(serviceStart);
 const renderMock = vi.mocked(renderAndPersistCompose);
 const writeSelectionMock = vi.mocked(applyTrustedConfiguration);
 const initRegistryMock = vi.mocked(initServiceRegistry);
-const createInstallJournalMock = vi.mocked(createExtensionInstallJournal);
-const markInstallJournalRestoringMock = vi.mocked(markExtensionInstallJournalRestoring);
-const reconcileInstallJournalMock = vi.mocked(reconcileExtensionInstallJournal);
+
+const INTEGRATION_TRANSACTION = `itx1_${"e".repeat(24)}`;
+
+function installedSnapshot(
+  integrations: Array<{ integrationId: string; extensionId: string | null }>,
+  unrecorded: string[] = [],
+) {
+  return {
+    integrations: integrations.map((entry) => ({
+      ...entry,
+      status: "ok" as const,
+      reason: null,
+      source: null,
+      files: [],
+      pending: null,
+    })),
+    unrecorded,
+  };
+}
 
 afterEach(() => {
   // clearAllMocks resets call history but preserves mockReturnValue /
@@ -309,6 +301,28 @@ afterEach(() => {
     problems: ["svc-one was rejected"],
     reportedServiceIds: ["svc-one"],
   } as never);
+  publishIntegrationMock.mockImplementation(async (request) => ({
+    integrationId: request.integrationId,
+    transactionId: INTEGRATION_TRANSACTION,
+    manifestSha256: "f".repeat(64),
+  }));
+  settleIntegrationMock.mockImplementation(async (request) => ({
+    integrationId: request.integrationId,
+    outcome: request.outcome,
+    changed: true,
+  }));
+  removeIntegrationMock.mockImplementation(async (request) => ({
+    integrationId: request.integrationId,
+    removed: true,
+  }));
+  adoptIntegrationMock.mockImplementation(async (request) => ({
+    integrationId: request.integrationId,
+    status: "needs_reinstall",
+    reason: "Nothing records the archive it was installed from.",
+  }));
+  readInstalledMock.mockResolvedValue(
+    installedSnapshot([{ integrationId: "intg-one", extensionId: "bundle-x" }]),
+  );
   recoverMock.mockResolvedValue(undefined);
   lockMock.mockImplementation((work) => work());
   vi.mocked(getServiceSelectionSummary).mockReturnValue({ selectedRoots: [] } as never);
@@ -329,10 +343,9 @@ describe("installExtension", () => {
         await expect(installExtension(makeCtx(), opts)).rejects.toThrow(/critical/);
       }
       expect(inspectMock).not.toHaveBeenCalled();
-      expect(createInstallJournalMock).not.toHaveBeenCalled();
       expect(writeSelectionMock).not.toHaveBeenCalled();
       expect(serviceStartMock).not.toHaveBeenCalled();
-      expect(dbInstallMock).not.toHaveBeenCalled();
+      expect(publishIntegrationMock).not.toHaveBeenCalled();
     },
   );
   it("rechecks revocation after preview while queued and permits flow once cleared", async () => {
@@ -346,7 +359,7 @@ describe("installExtension", () => {
     });
     await expect(installExtension(makeCtx(), opts)).rejects.toThrow(/critical/);
     expect(inspectMock).not.toHaveBeenCalled();
-    expect(createInstallJournalMock).not.toHaveBeenCalled();
+    expect(publishIntegrationMock).not.toHaveBeenCalled();
     vi.mocked(getKillSwitch).mockResolvedValue({
       removed: new Map(),
       critical: new Map(),
@@ -368,7 +381,6 @@ describe("installExtension", () => {
           ],
         }) as never,
     );
-    dbMock.queueSelect([]);
 
     await expect(
       installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" }),
@@ -401,8 +413,6 @@ describe("installExtension", () => {
   });
 
   it("installs the exact inspected commit with this run's recovery note", async () => {
-    dbMock.queueSelect([]);
-
     await installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" });
 
     expect(inspectMock).toHaveBeenCalledTimes(1);
@@ -427,8 +437,6 @@ describe("installExtension", () => {
   });
 
   it("recovers interrupted changes under the extension change lock before installing", async () => {
-    dbMock.queueSelect([]);
-
     await installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" });
 
     expect(lockMock).toHaveBeenCalledTimes(1);
@@ -457,9 +465,8 @@ describe("installExtension", () => {
     expect(settleMock).not.toHaveBeenCalled();
     expect(initRegistryMock).not.toHaveBeenCalled();
     expect(applyEnabledIds).not.toHaveBeenCalled();
-    expect(createInstallJournalMock).not.toHaveBeenCalled();
-    expect(markInstallJournalRestoringMock).not.toHaveBeenCalled();
-    expect(reconcileInstallJournalMock).not.toHaveBeenCalled();
+    expect(publishIntegrationMock).not.toHaveBeenCalled();
+    expect(settleIntegrationMock).not.toHaveBeenCalled();
     expect(renderMock).not.toHaveBeenCalled();
     expect(composeMock).not.toHaveBeenCalled();
     expect(serviceStartMock).not.toHaveBeenCalled();
@@ -489,8 +496,6 @@ describe("installExtension", () => {
   });
 
   it("happy path installs a service + integration and records all bookkeeping", async () => {
-    dbMock.queueSelect([]); // integration not installed
-
     const result = await installExtension(makeCtx(), {
       manifest: MANIFEST,
       sourceTrust: "community",
@@ -501,12 +506,18 @@ describe("installExtension", () => {
     expect(publishMock).toHaveBeenCalledTimes(1);
     expect(composeMock).toHaveBeenCalledWith("svc-one", "pull", expect.anything());
     expect(serviceStartMock).toHaveBeenCalledWith("svc-one", expect.anything());
-    expect(dbInstallMock).toHaveBeenCalledTimes(1);
-    expect(dbInstallMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sourceKind: "artifact",
-        source: "https://ex.example/intg-one.tar.gz",
-      }),
+    expect(publishIntegrationMock).toHaveBeenCalledTimes(1);
+    expect(publishIntegrationMock).toHaveBeenCalledWith(
+      {
+        integrationId: "intg-one",
+        source: {
+          kind: "artifact",
+          url: "https://ex.example/intg-one.tar.gz",
+          sha256: "a".repeat(64),
+        },
+        extensionId: "bundle-x",
+      },
+      expect.objectContaining({ operationKey: expect.stringMatching(/^opk1_/) }),
     );
     expect(reloadMock).toHaveBeenCalledTimes(1);
 
@@ -531,8 +542,6 @@ describe("installExtension", () => {
   });
 
   it("records the agent transaction with the repository in the bookkeeping transaction", async () => {
-    dbMock.queueSelect([]);
-
     await installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" });
 
     expect(dbMock.db.transaction).toHaveBeenCalledTimes(1);
@@ -547,6 +556,88 @@ describe("installExtension", () => {
       managedByExtension: "bundle-x",
       lastTransactionId: transactionFor(REPO_ONE),
     });
+  });
+
+  it("takes over an earlier release's unverified install of this extension before replacing it", async () => {
+    readInstalledMock.mockResolvedValue(installedSnapshot([], ["intg-one"]));
+    dbMock.queueSelect([{ managedByExtension: "bundle-x" }]);
+
+    await installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" });
+
+    expect(adoptIntegrationMock).toHaveBeenCalledWith(
+      { integrationId: "intg-one", extensionId: "bundle-x" },
+      expect.anything(),
+    );
+    expect(adoptIntegrationMock.mock.invocationCallOrder[0]).toBeLessThan(
+      publishIntegrationMock.mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it("never takes over an unrecorded integration another owner installed", async () => {
+    readInstalledMock.mockResolvedValue(installedSnapshot([], ["intg-one"]));
+    dbMock.queueSelect([{ managedByExtension: "another-bundle" }]);
+
+    await installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" });
+
+    expect(adoptIntegrationMock).not.toHaveBeenCalled();
+  });
+
+  it("records the integration's agent transaction on its row in the bookkeeping transaction", async () => {
+    await installExtension(makeCtx(), { manifest: INTEGRATION_ONLY, sourceTrust: "community" });
+
+    expect(dbMock.db.transaction).toHaveBeenCalledTimes(1);
+    const integrationInsert = dbMock.db.insert.mock.results[0]?.value as {
+      values: ReturnType<typeof vi.fn>;
+      onConflictDoUpdate: ReturnType<typeof vi.fn>;
+    };
+    expect(integrationInsert.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "intg-one",
+        managedByExtension: "bundle-x",
+        lastTransactionId: INTEGRATION_TRANSACTION,
+      }),
+    );
+    expect(integrationInsert.onConflictDoUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        set: expect.objectContaining({ lastTransactionId: INTEGRATION_TRANSACTION }),
+      }),
+    );
+  });
+
+  it("commits the integration transaction only after the bookkeeping transaction", async () => {
+    await installExtension(makeCtx(), { manifest: INTEGRATION_ONLY, sourceTrust: "community" });
+
+    expect(settleIntegrationMock).toHaveBeenCalledTimes(1);
+    expect(settleIntegrationMock).toHaveBeenCalledWith(
+      { integrationId: "intg-one", transactionId: INTEGRATION_TRANSACTION, outcome: "commit" },
+      expect.objectContaining({ operationKey: expect.stringMatching(/^opk1_/) }),
+    );
+    expect(settleIntegrationMock.mock.invocationCallOrder[0]).toBeGreaterThan(
+      dbMock.db.transaction.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    );
+    expect(publishIntegrationMock.mock.invocationCallOrder[0]).toBeLessThan(
+      reloadMock.mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it("keeps a committed integration install when the agent cannot settle it yet", async () => {
+    settleIntegrationMock.mockRejectedValueOnce(new Error("agent unavailable"));
+    const ctx = makeCtx();
+
+    await expect(
+      installExtension(ctx, { manifest: INTEGRATION_ONLY, sourceTrust: "community" }),
+    ).resolves.toEqual({ id: "bundle-x", components: 1 });
+
+    // Recovery commits the pending transaction the row records.
+    expect(settleIntegrationMock).toHaveBeenCalledTimes(1);
+    expect(settleIntegrationMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: "rollback" }),
+      expect.anything(),
+    );
+    expect(ctx.log).toHaveBeenCalledWith(
+      expect.stringContaining("could not settle integration intg-one"),
+      "stderr",
+    );
   });
 
   it("commits each repository transaction only after the bookkeeping transaction", async () => {
@@ -586,7 +677,6 @@ describe("installExtension", () => {
   });
 
   it("does not roll back a committed install when final progress reporting fails", async () => {
-    dbMock.queueSelect([]);
     const ctx = makeCtx();
     vi.mocked(ctx.setProgress).mockImplementation(async (progress) => {
       if (progress === 100) throw new Error("job store unavailable");
@@ -597,13 +687,13 @@ describe("installExtension", () => {
     ).resolves.toEqual({ id: "bundle-x", components: 1 });
 
     expect(dbMock.db.transaction).toHaveBeenCalledTimes(1);
-    expect(dbRemoveMock).not.toHaveBeenCalled();
+    expect(settleIntegrationMock.mock.calls.map(([request]) => request.outcome)).toEqual([
+      "commit",
+    ]);
     expect(settleMock).not.toHaveBeenCalled();
   });
 
   it("makes the new service part of the operator's selection through one apply, init once", async () => {
-    dbMock.queueSelect([]);
-
     await installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" });
 
     // The apply writes the selection file and moves the registry to what it applied.
@@ -688,7 +778,8 @@ describe("installExtension", () => {
     expect(settleMock.mock.invocationCallOrder[0]).toBeGreaterThan(removeOrder);
     expect(renderMock).toHaveBeenCalled();
     // No integration was installed this run, and no bookkeeping was written.
-    expect(dbRemoveMock).not.toHaveBeenCalled();
+    expect(publishIntegrationMock).not.toHaveBeenCalled();
+    expect(settleIntegrationMock).not.toHaveBeenCalled();
     expect(dbMock.db.insert).not.toHaveBeenCalled();
     expect(reloadMock).not.toHaveBeenCalled();
   });
@@ -828,54 +919,94 @@ describe("installExtension", () => {
   });
 
   it("rolls back the installed integration when the reload fails", async () => {
-    dbMock.queueSelect([]); // integration not installed
     reloadMock.mockRejectedValueOnce(new Error("reload-fail"));
 
     await expect(
       installExtension(makeCtx(), { manifest: INTEGRATION_ONLY, sourceTrust: "community" }),
     ).rejects.toThrow(/reload-fail/);
 
-    expect(dbRemoveMock).toHaveBeenCalledWith(
-      expect.objectContaining({ rootDir: expect.any(String), id: "intg-one" }),
-    );
-    expect(dbMock.db.delete).toHaveBeenCalled(); // installedIntegration cleanup
+    // The agent restores the previous copy, or removes a fresh install.
+    expect(settleIntegrationMock.mock.calls.map(([request]) => request)).toEqual([
+      { integrationId: "intg-one", transactionId: INTEGRATION_TRANSACTION, outcome: "rollback" },
+    ]);
     // Pipeline reload (threw) + rollback reload.
     expect(reloadMock).toHaveBeenCalledTimes(2);
+    expect(reloadMock.mock.invocationCallOrder[1]).toBeGreaterThan(
+      settleIntegrationMock.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    );
     // The reload threw before the bookkeeping transaction, so no rows to leak.
+    expect(dbMock.db.transaction).not.toHaveBeenCalled();
+    expect(dbMock.db.insert).not.toHaveBeenCalled();
+  });
+
+  it("rolls back an integration the agent reports under a different id", async () => {
+    publishIntegrationMock.mockResolvedValueOnce({
+      integrationId: "intg-other",
+      transactionId: INTEGRATION_TRANSACTION,
+      manifestSha256: "f".repeat(64),
+    });
+
+    await expect(
+      installExtension(makeCtx(), { manifest: INTEGRATION_ONLY, sourceTrust: "community" }),
+    ).rejects.toThrow(/installed "intg-other" but the manifest declared "intg-one"/);
+
+    expect(settleIntegrationMock).toHaveBeenCalledWith(
+      { integrationId: "intg-one", transactionId: INTEGRATION_TRANSACTION, outcome: "rollback" },
+      expect.anything(),
+    );
     expect(dbMock.db.transaction).not.toHaveBeenCalled();
   });
 
-  it("restores a pre-existing integration artifact when reload fails", async () => {
-    dbMock.queueSelect([{ id: "intg-one" }]);
+  it("rolls back integrations newest first, before the services", async () => {
+    const manifest = {
+      ...MANIFEST,
+      integrations: [
+        ...MANIFEST.integrations,
+        { artifact: "https://ex.example/intg-two.tar.gz", id: "intg-two", sha256: "b".repeat(64) },
+      ],
+    } satisfies ExtensionManifest;
+    publishIntegrationMock.mockImplementation(async (request) => ({
+      integrationId: request.integrationId,
+      transactionId: `itx1_${(request.integrationId === "intg-one" ? "1" : "2").repeat(24)}`,
+      manifestSha256: "f".repeat(64),
+    }));
     reloadMock.mockRejectedValueOnce(new Error("reload-fail"));
 
     await expect(
-      installExtension(makeCtx(), { manifest: INTEGRATION_ONLY, sourceTrust: "community" }),
+      installExtension(makeCtx(), { manifest, sourceTrust: "community" }),
     ).rejects.toThrow(/reload-fail/);
 
-    expect(integrationBackupMock).toHaveBeenCalledWith(expect.any(String), "intg-one");
-    expect(integrationRestoreMock).toHaveBeenCalledWith(expect.any(String), {
-      id: "intg-one",
-      backupDirectory: "/safe/mock-integration-backup",
-    });
-    expect(dbRemoveMock).not.toHaveBeenCalled();
-    expect(integrationBackupDiscardMock).not.toHaveBeenCalled();
-    expect(reloadMock).toHaveBeenCalledTimes(2);
+    expect(settleIntegrationMock.mock.calls.map(([request]) => request.integrationId)).toEqual([
+      "intg-two",
+      "intg-one",
+    ]);
+    expect(settleIntegrationMock.mock.invocationCallOrder.at(-1)).toBeLessThan(
+      settleMock.mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it("keeps rolling back when the agent cannot undo an integration yet", async () => {
+    reloadMock.mockRejectedValueOnce(new Error("reload-fail"));
+    settleIntegrationMock.mockRejectedValueOnce(new Error("agent unavailable"));
+
+    await expect(
+      installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" }),
+    ).rejects.toThrow(/reload-fail/);
+
+    // Recovery rolls the integration back later; the services are still undone.
+    expect(settleMock).toHaveBeenCalledWith(
+      expect.objectContaining({ repository: REPO_ONE, outcome: "rollback" }),
+      expect.anything(),
+    );
   });
 
   it("update/re-install re-writes the component links (delete + insert)", async () => {
-    dbMock.queueSelect([{ id: "intg-one" }]); // integration already installed → ledger empty
-
     const result = await installExtension(makeCtx(), {
       manifest: INTEGRATION_ONLY,
       sourceTrust: "community",
     });
 
     expect(result).toEqual({ id: "bundle-x", components: 1 });
-    expect(integrationBackupDiscardMock).toHaveBeenCalledWith(expect.any(String), {
-      id: "intg-one",
-      backupDirectory: "/safe/mock-integration-backup",
-    });
     expect(dbMock.db.delete).toHaveBeenCalledTimes(1);
 
     // Inserts: [0]=installedIntegration, [1]=installedExtension, [2]=component.
@@ -896,7 +1027,7 @@ describe("installExtension", () => {
 
     expect(inspectMock).not.toHaveBeenCalled();
     expect(publishMock).not.toHaveBeenCalled();
-    expect(dbInstallMock).not.toHaveBeenCalled();
+    expect(publishIntegrationMock).not.toHaveBeenCalled();
     expect(dbMock.db.insert).not.toHaveBeenCalled();
   });
 });
@@ -958,6 +1089,73 @@ describe("removeExtension", () => {
     });
 
     expect(composeMock).not.toHaveBeenCalled();
+    expect(dbMock.db.delete).toHaveBeenCalledTimes(2);
+  });
+
+  it("has the agent remove the extension's integrations before deleting its records", async () => {
+    dbMock.queueSelect([{ id: "bundle-x" }]);
+    dbMock.queueSelect([{ extensionId: "bundle-x", kind: "integration", componentId: "intg-one" }]);
+
+    await expect(removeExtension(makeCtx(), "bundle-x")).resolves.toEqual({
+      id: "bundle-x",
+      removed: 1,
+    });
+
+    expect(removeIntegrationMock).toHaveBeenCalledWith(
+      { integrationId: "intg-one", extensionId: "bundle-x" },
+      expect.objectContaining({ operationKey: expect.stringMatching(/^opk1_/) }),
+    );
+    expect(adoptIntegrationMock).not.toHaveBeenCalled();
+    // The integration row, then the extension record.
+    expect(dbMock.db.delete).toHaveBeenCalledTimes(2);
+    expect(removeIntegrationMock.mock.invocationCallOrder[0]).toBeLessThan(
+      dbMock.db.delete.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(reloadMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the extension record when the agent cannot remove its integration", async () => {
+    dbMock.queueSelect([{ id: "bundle-x" }]);
+    dbMock.queueSelect([{ extensionId: "bundle-x", kind: "integration", componentId: "intg-one" }]);
+    removeIntegrationMock.mockRejectedValueOnce(new Error("busy"));
+
+    await expect(removeExtension(makeCtx(), "bundle-x")).rejects.toThrow("busy");
+
+    expect(dbMock.db.delete).not.toHaveBeenCalled();
+  });
+
+  it("records an integration an earlier release installed before removing it", async () => {
+    dbMock.queueSelect([{ id: "bundle-x" }]);
+    dbMock.queueSelect([{ extensionId: "bundle-x", kind: "integration", componentId: "intg-one" }]);
+    readInstalledMock.mockResolvedValueOnce(installedSnapshot([], ["intg-one"]));
+
+    await removeExtension(makeCtx(), "bundle-x");
+
+    expect(adoptIntegrationMock).toHaveBeenCalledWith(
+      { integrationId: "intg-one", extensionId: "bundle-x" },
+      expect.anything(),
+    );
+    expect(removeIntegrationMock).toHaveBeenCalledWith(
+      { integrationId: "intg-one", extensionId: "bundle-x" },
+      expect.anything(),
+    );
+    expect(adoptIntegrationMock.mock.invocationCallOrder[0]).toBeLessThan(
+      removeIntegrationMock.mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it("leaves an integration someone else now installs in place", async () => {
+    dbMock.queueSelect([{ id: "bundle-x" }]);
+    dbMock.queueSelect([{ extensionId: "bundle-x", kind: "integration", componentId: "intg-one" }]);
+    readInstalledMock.mockResolvedValueOnce(
+      installedSnapshot([{ integrationId: "intg-one", extensionId: null }]),
+    );
+
+    await expect(removeExtension(makeCtx(), "bundle-x")).resolves.toMatchObject({
+      id: "bundle-x",
+    });
+
+    expect(removeIntegrationMock).not.toHaveBeenCalled();
     expect(dbMock.db.delete).toHaveBeenCalledTimes(2);
   });
 

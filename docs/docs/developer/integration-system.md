@@ -1344,7 +1344,9 @@ The host treats the two install locations differently, and the
 - **Built-in integrations** ship in the repository under `integrations/`. They
   run directly from workspace TypeScript source. The host imports their
   `index.ts`; no separate integration build is needed. They carry `quality: "built-in"`.
-- **Community integrations** are installed under `custom_integrations/`. Their
+- **Community integrations** are installed under `custom_integrations/` by the
+  operations agent, which records the SHA-256 of every file it installs; app-api
+  mounts the directory read-only and serves only files that match. Their
   manifests and safe static assets are discovered, but backend and frontend
   JavaScript is never imported by app-api: that process holds
   database credentials and application secrets and is not a sandbox. Host and

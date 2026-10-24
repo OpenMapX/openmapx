@@ -163,6 +163,24 @@ async function detectComposeNetwork(): Promise<string> {
   return "docker_openmapx";
 }
 
+/**
+ * Installed integrations the operations agent does not load, and why: not
+ * installed through it, changed since, or needing a reinstall after an
+ * upgrade. Empty from source, where nothing is recorded.
+ */
+export function installedIntegrationWarnings(rootDir: string): string[] {
+  if (!coreServices.embeddedBuiltInIntegrationManifests()) return [];
+  try {
+    return coreServices
+      .loadTrustedIntegrationAuthority(rootDir)
+      .problems.map(
+        ({ integrationId, problem }) => `Integration "${integrationId}" is not loaded: ${problem}`,
+      );
+  } catch (error) {
+    return [`Installed integrations could not be checked: ${(error as Error).message}`];
+  }
+}
+
 export function registerCheckCommand(program: Command): void {
   program
     .command("check")
@@ -184,6 +202,9 @@ export function registerCheckCommand(program: Command): void {
         coreServices.inspectBuiltInServiceDrift(repoPaths().root),
       );
       if (drift) log.warn(drift);
+      // Integrations the operations agent installed are trusted by its records;
+      // only its fixed CLI reads them, so a check from source has none to report.
+      for (const warning of installedIntegrationWarnings(repoPaths().root)) log.warn(warning);
 
       const result = await dockerComposeAfterDeploymentSecretCheck(["ps", "--format", "json"]);
       if (result.exitCode !== 0) {

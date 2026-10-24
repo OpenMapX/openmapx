@@ -6,7 +6,7 @@ import type { TrustedConfigurationAuthoritySnapshot } from "./trusted-config-run
 const {
   assertTrustedConfigurationSchema,
   loadRecordedCommunityServices,
-  loadTrustedIntegrationSchemas,
+  loadTrustedIntegrationAuthority,
 } = coreServices;
 type TrustedAuthorityFilesystem = InstanceType<typeof coreServices.TrustedAuthorityFilesystem>;
 
@@ -191,9 +191,15 @@ export function createTrustedConfigurationAuthorityLoader(options: {
       if (new Set(services.map((service) => service.manifest.id)).size !== services.length) {
         throw new Error(FAILED);
       }
-      const integrationSchemas = loadTrustedIntegrationSchemas(options.rootDir, {
-        ...(options.hooks ? { hooks: options.hooks } : {}),
+      const integrations = loadTrustedIntegrationAuthority(options.rootDir, {
+        ...(options.hooks?.beforeManifestOpen
+          ? {
+              beforeInstalledManifestRead: (_id: string, path: string) =>
+                options.hooks?.beforeManifestOpen?.("integration", path),
+            }
+          : {}),
       });
+      const integrationSchemas = integrations.schemas;
       const digest = createHash("sha256").update("openmapx-trusted-authority-v1\0");
       if (options.builtInAuthorityDigest) {
         if (!/^release1_[A-Za-z0-9_-]{43}$/.test(options.builtInAuthorityDigest)) {
@@ -221,6 +227,7 @@ export function createTrustedConfigurationAuthorityLoader(options: {
         revisionId: `authority1_${digest.digest("base64url")}`,
         services,
         integrationSchemas,
+        integrationProblems: integrations.problems,
       };
       deepFreeze(snapshot);
       return snapshot;

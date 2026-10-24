@@ -53,35 +53,35 @@ function customDir(rootDir: string): string {
   return join(rootDir, "custom_integrations");
 }
 
-// The operations agent loads installed integrations only from directories and
-// manifests its own account owns and nobody else can write; one it would
-// reject stops it from authorizing any configuration change. Installed files
-// therefore get these modes whatever the source, the archive or the umask
-// declared.
+// Installed files get these modes whatever the source, the archive or the
+// umask declared. The operations agent trusts installed integrations by the
+// digests it records, not by modes; fixed modes keep installs reproducible.
 const INSTALLED_DIRECTORY_MODE = 0o755;
 const INSTALLED_FILE_MODE = 0o644;
 const MAX_AGENT_INTEGRATION_ID_LENGTH = 64;
 
-/**
- * Create `custom_integrations/`, or take it over as it is, in the state the
- * agent trusts: a directory owned by the installing account that neither its
- * group nor others can write.
- */
+/** Create `custom_integrations/` when it is missing; it must be a real directory. */
 function prepareCustomDir(rootDir: string): void {
   const directory = customDir(rootDir);
   mkdirSync(directory, { recursive: true, mode: INSTALLED_DIRECTORY_MODE });
-  const stats = lstatSync(directory);
-  if (!stats.isDirectory()) {
+  if (!lstatSync(directory).isDirectory()) {
     throw new Error(`${directory} must be a directory, not a symbolic link or a file`);
   }
-  const uid = process.geteuid?.();
-  if (uid !== undefined && stats.uid !== uid) {
-    throw new Error(
-      `${directory} is owned by uid ${stats.uid}, not by the installing account (uid ${uid}). ` +
-        "The operations agent only loads integrations from a directory its own account owns.",
-    );
+}
+
+/** Refuse anything in a staged tree but directories and regular single-link files. */
+function assertOnlyFilesAndDirectories(directory: string, root = directory): void {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    const stats = lstatSync(path);
+    if (stats.isDirectory()) {
+      assertOnlyFilesAndDirectories(path, root);
+    } else if (!stats.isFile() || stats.nlink !== 1) {
+      throw new Error(
+        `${relative(root, path).split(sep).join("/")} must be a regular file: integration artifacts may not contain links`,
+      );
+    }
   }
-  if ((stats.mode & 0o022) !== 0) chmodSync(directory, stats.mode & 0o755);
 }
 
 /** Give a staged tree the installed modes. Symbolic links are left as they are. */
@@ -230,8 +230,8 @@ function builtInIntegrationIds(rootDir: string): Set<string> {
   return ids;
 }
 
-function assertDoesNotShadowBuiltIn(rootDir: string, id: string): void {
-  if (builtInIntegrationIds(rootDir).has(id)) {
+function assertDoesNotShadowBuiltIn(builtInIds: ReadonlySet<string>, id: string): void {
+  if (builtInIds.has(id)) {
     throw new Error(
       `Built-in integration id "${id}" is reserved and cannot be installed as a community integration`,
     );
@@ -453,34 +453,17 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
   }
 
   try {
-    assertManifestFile(stage);
-    const manifest = readManifest(stage);
-    if (!manifest || typeof manifest.id !== "string") {
-      throw new Error("Source has no manifest.json with a string `id` at its root");
-    }
-
-    const validation = validateManifest(manifest);
-    if (!validation.valid) {
-      throw new Error(`Manifest validation failed:\n  - ${validation.errors.join("\n  - ")}`);
-    }
-    assertCompatibleManifestProtocol(manifest);
-    const id = manifest.id;
-    assertSafeId(id);
-    assertDoesNotShadowBuiltIn(opts.rootDir, id);
-    resolveLayerSelectorPreview(stage, manifest);
-    assertNoExecutableCommunityCode(stage, manifest);
+    const { id } = validateStagedIntegration(stage, {
+      builtInIds: builtInIntegrationIds(opts.rootDir),
+      artifact: sourceKind === "artifact",
+      allowLinks: true,
+    });
 
     // The schema regex already enforces the slug shape, but resolveInstallTarget
     // (via assertSafeId) gives a single point of defense if the schema ever
     // loosens AND verifies the resolved path stays under custom_integrations/.
     const target = resolveInstallTarget(opts.rootDir, id);
     const replaced = existsSync(target);
-    validateDeclarativeArtifact(stage);
-    if (sourceKind === "artifact") {
-      validateArtifactMetadata(stage, manifest);
-    }
-    applyInstalledModes(stage);
-    assertAgentLoads(stage, id);
     if (replaced) {
       rmSync(target, { recursive: true, force: true });
     }
@@ -489,6 +472,71 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
   } catch (err) {
     rmSync(stage, { recursive: true, force: true });
     throw err;
+  }
+}
+
+export interface StagedIntegrationOptions {
+  /** Ids an installed integration may not take: the built-in integrations. */
+  builtInIds: ReadonlySet<string>;
+  /** Whether the tree came from a release artifact, whose metadata is checked. */
+  artifact: boolean;
+  /** Keep internal symbolic links and hard links (local development installs). */
+  allowLinks?: boolean;
+}
+
+/**
+ * Every check an installed integration must pass, run on a staged tree before
+ * it replaces anything: the manifest, its protocol and id, the declarative-only
+ * policy, artifact metadata, and what the operations agent's loader requires.
+ * Gives the tree the installed modes on the way.
+ */
+export function validateStagedIntegration(
+  stage: string,
+  options: StagedIntegrationOptions,
+): { id: string; manifest: Record<string, unknown> } {
+  assertManifestFile(stage);
+  const manifest = readManifest(stage);
+  if (!manifest || typeof manifest.id !== "string") {
+    throw new Error("Source has no manifest.json with a string `id` at its root");
+  }
+  const validation = validateManifest(manifest);
+  if (!validation.valid) {
+    throw new Error(`Manifest validation failed:\n  - ${validation.errors.join("\n  - ")}`);
+  }
+  assertCompatibleManifestProtocol(manifest);
+  const id = manifest.id;
+  assertSafeId(id);
+  assertDoesNotShadowBuiltIn(options.builtInIds, id);
+  resolveLayerSelectorPreview(stage, manifest);
+  assertNoExecutableCommunityCode(stage, manifest);
+  validateDeclarativeArtifact(stage);
+  if (options.artifact) validateArtifactMetadata(stage, manifest);
+  if (!options.allowLinks) assertOnlyFilesAndDirectories(stage);
+  applyInstalledModes(stage);
+  assertAgentLoads(stage, id);
+  return { id, manifest };
+}
+
+/**
+ * Extract an integration `.tar.gz` into `extractRoot` (which must not exist),
+ * with the same path, link and size checks as an install. An archive whose
+ * only entry is a directory holding `manifest.json` is unwrapped to
+ * `promoted`. Returns the directory that holds the integration.
+ */
+export function extractIntegrationArchive(
+  archivePath: string,
+  extractRoot: string,
+  promoted: string,
+  maxBytes: number = DEFAULT_MAX_ARTIFACT_BYTES,
+): string {
+  assertArtifactFileSize(archivePath, maxBytes);
+  mkdirSync(extractRoot, { mode: INSTALLED_DIRECTORY_MODE });
+  try {
+    extractTarGz(archivePath, extractRoot, maxBytes);
+    return normalizeExtractedArtifactRoot(extractRoot, promoted);
+  } catch (error) {
+    rmSync(extractRoot, { recursive: true, force: true });
+    throw error;
   }
 }
 
@@ -525,9 +573,13 @@ async function stageArtifactSource(opts: InstallOptions): Promise<string> {
 
     assertArtifactFileSize(sourcePath, maxArtifactBytes);
     verifyArtifactSha256(sourcePath, opts.artifactSha256);
-    extractTarGz(sourcePath, extractRoot, maxArtifactBytes);
-
-    const stage = normalizeExtractedArtifactRoot(extractRoot, join(parent, `source-${token}`));
+    rmSync(extractRoot, { recursive: true, force: true });
+    const stage = extractIntegrationArchive(
+      sourcePath,
+      extractRoot,
+      join(parent, `source-${token}`),
+      maxArtifactBytes,
+    );
     if (sourcePath === archivePath) rmSync(archivePath, { force: true });
     return stage;
   } catch (err) {

@@ -91,6 +91,7 @@ function installService(root: string): string {
   return directory;
 }
 
+/** An integration installed and recorded the way the agent installs one. */
 function installIntegration(root: string, allowed = "eu"): string {
   const directory = join(root, "custom_integrations", "integration-live");
   mkdirSync(directory, { recursive: true, mode: 0o755 });
@@ -101,6 +102,27 @@ function installIntegration(root: string, allowed = "eu"): string {
       configSchema: { type: "object", properties: { region: { enum: [allowed] } } },
     }),
     { mode: 0o644 },
+  );
+  const records = services.integrationRecordsDirectory(join(root, "infra", "docker"));
+  mkdirSync(records, { recursive: true, mode: 0o700 });
+  writeFileSync(
+    join(records, "integration-live.json"),
+    JSON.stringify({
+      version: services.INTEGRATION_RECORD_VERSION,
+      integrationId: "integration-live",
+      extensionId: "live-extension",
+      status: "ok",
+      reason: null,
+      source: { kind: "upload", sha256: "e".repeat(64) },
+      files: [
+        {
+          path: "manifest.json",
+          sha256: services.sha256Hex(readFileSync(join(directory, "manifest.json"))),
+        },
+      ],
+      pending: null,
+    }),
+    { mode: 0o600 },
   );
   return directory;
 }
@@ -138,13 +160,19 @@ describe("refreshed trusted configuration authority", () => {
     rmSync(join(root, "services", ".community", REPOSITORY), { recursive: true });
     rmSync(join(root, "services", ".community", services.communityRecordFileName(REPOSITORY)));
     rmSync(integrationDirectory, { recursive: true });
+    rmSync(
+      join(
+        services.integrationRecordsDirectory(join(root, "infra", "docker")),
+        "integration-live.json",
+      ),
+    );
     const removed = await load();
     expect(removed.services.map((service) => service.manifest.id)).toEqual(["alpha"]);
     expect(removed.integrationSchemas).toEqual(new Map());
     expect(removed.revisionId).not.toBe(updated.revisionId);
   });
 
-  it("rejects symbolic or writable custom authority instead of following it", async () => {
+  it("rejects symbolic service authority, and trusts integrations by bytes, not modes", async () => {
     const root = fixture();
     const serviceDirectory = installService(root);
     const load = createTrustedConfigurationAuthorityLoader({
@@ -162,7 +190,18 @@ describe("refreshed trusted configuration authority", () => {
     rmSync(join(root, "services", ".community", services.communityRecordFileName(REPOSITORY)));
     const integrationDirectory = installIntegration(root);
     chmodSync(integrationDirectory, 0o777);
-    await expect(load()).rejects.toThrow("Trusted configuration authority rejected");
+    chmodSync(join(integrationDirectory, "manifest.json"), 0o666);
+    expect((await load()).integrationSchemas.has("integration-live")).toBe(true);
+
+    writeFileSync(
+      join(integrationDirectory, "manifest.json"),
+      JSON.stringify({ id: "integration-live", configSchema: { properties: {} } }),
+    );
+    const changed = await load();
+    expect(changed.integrationSchemas.has("integration-live")).toBe(false);
+    expect(changed.integrationProblems?.map((entry) => entry.integrationId)).toEqual([
+      "integration-live",
+    ]);
   });
 
   it("rejects a recorded repository replaced by a symlink to identical bytes", async () => {
@@ -252,7 +291,7 @@ describe("refreshed trusted configuration authority", () => {
     }
   });
 
-  it("rejects an integration parent replaced by a symlink after validation", async () => {
+  it("leaves out an integration whose directory is swapped for other bytes during the read", async () => {
     const root = fixture();
     installIntegration(root);
     const integrations = join(root, "custom_integrations");
@@ -282,6 +321,9 @@ describe("refreshed trusted configuration authority", () => {
       },
     });
 
-    await expect(load()).rejects.toThrow("Trusted configuration authority rejected");
+    const authority = await load();
+    expect(swapped).toBe(true);
+    expect(authority.integrationSchemas.has("integration-live")).toBe(false);
+    expect(authority.integrationProblems?.[0]?.problem).toContain("no longer matches");
   });
 });

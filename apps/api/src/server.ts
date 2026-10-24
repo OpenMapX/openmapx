@@ -1,7 +1,6 @@
 import "@openmapx/core/undici-fetch";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { isDeepStrictEqual } from "node:util";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import { compactErasureJournal } from "@openmapx/core/erasure-journal";
@@ -10,7 +9,7 @@ import {
   DAWARICH_SUPPORTED_IMAGE,
   DAWARICH_SUPPORTED_IMAGE_DIGEST,
 } from "@openmapx/core/privacy";
-import { createFatalProcessHandler, findRepoRoot } from "@openmapx/core/server";
+import { createFatalProcessHandler } from "@openmapx/core/server";
 import { envInt, envString } from "@openmapx/core/server-env";
 import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { eq } from "drizzle-orm";
@@ -18,13 +17,14 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import Fastify from "fastify";
 import { auth } from "./auth";
 import { db, sql } from "./db/index";
-import { dataSubjectRequest, dataSubjectRequestTask, installedExtension } from "./db/schema";
+import { dataSubjectRequest, dataSubjectRequestTask } from "./db/schema";
 import {
   getAllIntegrations,
   initIntegrations,
   reloadIntegrations,
   setDisallowedIntegrationResolver,
   setDisallowedSourceResolver,
+  setInstalledIntegrationResolver,
   setIntegrationSourcesChangedHook,
   setRoadConditionsPolicyResolver,
   shutdownIntegrations,
@@ -88,6 +88,7 @@ import {
 } from "./services/admin-job-handlers";
 import { validateAdminOperationCatalog } from "./services/admin-operation-catalog";
 import { serviceApply, serviceRestart, serviceStart, serviceStop } from "./services/admin-ops";
+import { readLoadableIntegrations } from "./services/agent-integrations";
 import { appLogger } from "./services/app-logger";
 import { cacheInvalidation } from "./services/cache-invalidation";
 import {
@@ -100,13 +101,14 @@ import {
   refreshDataUsePolicy,
   startDataUsePolicyRefresh,
 } from "./services/data-use-policy";
-import { reconcileExtensionInstallJournals } from "./services/extension-install-journal";
 import {
   handleExtensionInstallJob,
   handleExtensionRemoveJob,
 } from "./services/extension-installer";
 import {
+  adoptUnrecordedIntegrations,
   recoverInterruptedExtensionChanges,
+  warnAboutLegacyInstallJournals,
   withExtensionChangeLock,
 } from "./services/extension-recovery";
 import { pruneOldRecords } from "./services/health-history";
@@ -177,26 +179,14 @@ try {
   throw err;
 }
 
-try {
-  await reconcileExtensionInstallJournals(findRepoRoot(), async (journal) => {
-    const [row] = await db
-      .select({ manifest: installedExtension.manifest })
-      .from(installedExtension)
-      .where(eq(installedExtension.id, journal.extensionId))
-      .limit(1);
-    return !!row && isDeepStrictEqual(row.manifest, journal.targetManifest);
-  });
-  server.log.info("Extension integration install journals reconciled");
-} catch (err) {
-  server.log.fatal(err, "Extension integration journal reconciliation failed; refusing to start");
-  throw err;
-}
-
 // Settle what an interrupted extension change left in the operations agent.
 // An unreachable agent must not keep the API down; every extension job runs
 // this recovery again before it changes anything.
 try {
-  await withExtensionChangeLock(() => recoverInterruptedExtensionChanges());
+  // Adoption downloads archives again, so it waits until the API listens.
+  await withExtensionChangeLock(() =>
+    recoverInterruptedExtensionChanges(undefined, { adoptIntegrations: false }),
+  );
   server.log.info("Interrupted extension changes recovered");
 } catch (err) {
   server.log.error(
@@ -595,14 +585,26 @@ try {
 }
 
 // Integration framework
-// Built-ins are loaded from the immutable app-api image. Community integrations
-// are loaded from a writable, bind-mounted runtime directory so admin/CLI
-// installs survive app-api container replacement.
+// Built-ins are loaded from the immutable app-api image. Installed integrations
+// are loaded from the bind-mounted host directory the operations agent owns
+// and app-api only reads. With an agent, only integrations it reports intact
+// are loaded, and their files are checked against the digests it recorded.
 const runtimeRootDir = join(import.meta.dirname ?? ".", "..", "..", "..");
 const integrationsDir = join(runtimeRootDir, "integrations");
 const customIntegrationsDir =
   process.env.OPENMAPX_CUSTOM_INTEGRATIONS_DIR?.trim() ||
   join(runtimeRootDir, "custom_integrations");
+warnAboutLegacyInstallJournals(customIntegrationsDir, (message) => server.log.warn(message));
+setInstalledIntegrationResolver(() =>
+  readLoadableIntegrations({
+    // The agent was unreachable and now reports a different set.
+    onChange: () => {
+      reloadIntegrations().catch((err) =>
+        server.log.warn(err, "Reloading integrations the operations agent reported failed"),
+      );
+    },
+  }),
+);
 // Register core-owned id-scheme views (OSM, Wikidata, social platforms,
 // internal handles). Integrations can re-register their own schemes in
 // their setup functions — registration is idempotent.
@@ -731,6 +733,15 @@ try {
   server.log.error(err);
   process.exit(1);
 }
+
+// Integrations earlier releases installed load once the operations agent has
+// verified them against their extensions' archives; every extension job retries.
+void withExtensionChangeLock(() => adoptUnrecordedIntegrations()).catch((err) =>
+  server.log.warn(
+    err,
+    "Installed integrations could not be adopted yet; extension jobs will retry",
+  ),
+);
 
 // Only complete a checkpointed self-update after the replacement API is
 // genuinely listening, migrations succeeded, and Docker confirms that this

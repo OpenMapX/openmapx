@@ -33,6 +33,12 @@ const requiredKinds = [
   "serviceRepository.settle",
   "serviceRepository.remove",
   "communityServices.inspect",
+  "integration.inspect",
+  "integration.publish",
+  "integration.settle",
+  "integration.remove",
+  "integration.adopt",
+  "installedIntegrations.inspect",
   "serviceSelection.apply",
   "serviceConfig.apply",
   "integrationConfig.apply",
@@ -62,6 +68,9 @@ describe("reviewed ops foundation contract", () => {
       "system.update",
       "serviceRepository.inspect",
       "serviceRepository.publish",
+      "integration.inspect",
+      "integration.publish",
+      "integration.adopt",
     ] as const) {
       expect(OPS_KIND_POLICIES[kind].execution).toBe("async");
     }
