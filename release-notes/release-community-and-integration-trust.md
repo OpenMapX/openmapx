@@ -7,7 +7,12 @@ impacts: [security]
 The operations agent no longer decides what to trust from the checkout's file
 permissions. A checkout written under a umask of `002`, as `git clone` and
 `git pull` leave it on Debian and Ubuntu, now starts the agent and serves its
-requests without any `chmod`.
+requests without any `chmod`. The checkout must still be writable only by the
+operator's account, because services mount configuration files from it,
+`services build` uses its build contexts, and `infra/docker/.env` and the
+release overlay live in it. A private group per user, the Debian and Ubuntu
+default, meets this with a umask of `002`; where the group has other members,
+clone and pull with umask `022`.
 
 - Built-in integration schemas come from the ops-agent image of the selected
   release, like the built-in service manifests.

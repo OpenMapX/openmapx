@@ -31,6 +31,7 @@ configuration files from it. The agent's startup log and **Run diagnostics**
 under Maintenance in the admin panel report built-in services that are missing
 from, changed in or not in the release. The host `pnpm openmapx check` runs the
 checkout's own manifests and does not compare them. Together with
-`release-community-and-integration-trust.md`, no permission check on the
-checkout's tracked files remains, so a checkout written under a umask of `002`
-needs no repair.
+`release-community-and-integration-trust.md`, the agent checks no file
+permissions on the checkout's tracked files, so a checkout written under a
+umask of `002` needs no repair. Only the operator's account may write the
+checkout, as that fragment explains.

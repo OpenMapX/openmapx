@@ -22,7 +22,9 @@ cd openmapx
 pnpm install --frozen-lockfile
 ```
 
-Use the Node.js and pnpm versions declared in `package.json`.
+Use the Node.js and pnpm versions declared in `package.json`. Only the
+deployment owner's account may write the checkout; see
+[requirements](./requirements.md).
 
 ## 2. Configure your environment
 

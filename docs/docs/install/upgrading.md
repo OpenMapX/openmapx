@@ -99,9 +99,15 @@ pnpm install --frozen-lockfile
 ```
 
 The ops-agent runs the built-in service and integration manifests of its own
-release, not the checkout's, so the checkout's file permissions do not matter.
-Keep the checkout at the selected release: the services still mount their
-configuration files from it. The ops-agent's startup log
+release, not the checkout's, and checks no file permissions in it. The checkout
+must still be writable only by the operator's account: services mount
+configuration files from it, `services build` uses its build contexts, and
+`infra/docker/.env` and the release overlay live in it. A private group per user, the Debian and
+Ubuntu default, meets this even with their umask of `002`. Where the account's
+group has other members, clone and pull with umask `022`.
+
+For the same reason, keep the checkout at the selected release. The ops-agent's
+startup log
 (`pnpm openmapx services logs ops-agent`) and **Run diagnostics** under
 Maintenance in the admin panel say when the checkout's built-in services differ
 from the release's. The host `pnpm openmapx check` cannot: it runs the
