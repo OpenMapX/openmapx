@@ -42,7 +42,6 @@ import {
   ConfigurationWriterBusyError,
 } from "./configuration-ownership";
 import { validateTrustedConfigurationValues } from "./configuration-schema";
-import { tightenCustomIntegrations } from "./custom-integrations-modes";
 import {
   CONFIGURATION_GENERATIONS,
   CURRENT_CONFIGURATION,
@@ -743,10 +742,8 @@ function writeStackFiles(
   // app-api bind-mounts `${OPENMAPX_HOST_DIR}/custom_integrations`, a path the
   // renderer cannot resolve. Left to Docker it is created root-owned on first
   // start, and the ops-agent then refuses to start on its next boot because
-  // its authority scan only trusts directories owned by the checkout's user,
-  // and only when nobody else can write them.
+  // its authority scan only trusts directories owned by the checkout's user.
   mkdirSync(join(rootDir, "custom_integrations"), { recursive: true, mode: 0o755 });
-  tightenCustomIntegrations(rootDir);
 }
 
 export type RenderConfigurationOptions = Pick<
