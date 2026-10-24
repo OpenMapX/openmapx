@@ -359,6 +359,8 @@ describe.each(["selection", "digest"] as const)("same-descriptor %s reader", (re
 
   it("accepts an unchanged private generation, including 0444 secrets, and closes descriptors", async () => {
     const f = await fixture(reader);
+    // Only the reader's own opens; building the fixture writes files.
+    seam.flags.length = 0;
     seam.readLimit = 3; // Real short reads must be accumulated rather than parsed/hashed partially.
     const result = await f.run(() => {});
     if (reader === "selection") expect(result).toEqual(new Set(["alpha"]));

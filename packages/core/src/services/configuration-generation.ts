@@ -15,7 +15,6 @@ import {
   renameSync,
   rmSync,
   symlinkSync,
-  writeFileSync,
 } from "node:fs";
 import { open } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
@@ -25,6 +24,7 @@ import {
   type TrustedConfigurationPayload,
   trustedConfigurationPayloadSchema,
 } from "../ops/trusted-config";
+import { atomicWrite } from "../release-files";
 import {
   GENERATED_SECRETS_DIRNAME,
   type RenderContext,
@@ -737,8 +737,7 @@ function writeStackFiles(
   mkdirSync(routesDir, { recursive: true });
   const routes = join(routesDir, "generated-routes.yml");
   // Traefik watches the file, so it is replaced, never rewritten in place.
-  writeFileSync(`${routes}.tmp`, renderTraefikDynamicYaml(traefik), "utf-8");
-  renameSync(`${routes}.tmp`, routes);
+  atomicWrite(routes, renderTraefikDynamicYaml(traefik), 0o644);
   for (const dir of writableBindDirs) mkdirSync(dir, { recursive: true });
   // app-api bind-mounts `${OPENMAPX_HOST_DIR}/custom_integrations`, a path the
   // renderer cannot resolve. Left to Docker it is created root-owned on first

@@ -1,12 +1,6 @@
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { atomicWrite } from "../release-files";
 import {
   DEFAULT_SELECTED_SERVICE_IDS,
   normalizeServiceIds,
@@ -131,11 +125,9 @@ export function loadIntegrationSchemas(rootDir: string): Map<string, Record<stri
 export function writeServiceSelectionFile(infraDir: string, roots: Iterable<string>): void {
   const path = serviceSelectionPath(infraDir);
   mkdirSync(infraDir, { recursive: true });
-  const temporary = `${path}.${process.pid}.tmp`;
-  writeFileSync(
-    temporary,
+  atomicWrite(
+    path,
     `${JSON.stringify({ selected: normalizeServiceIds(roots) }, null, 2)}\n`,
-    { encoding: "utf-8", mode: 0o644 },
+    0o644,
   );
-  renameSync(temporary, path);
 }
