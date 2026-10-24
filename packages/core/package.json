@@ -245,7 +245,7 @@
     "parse5": "8.0.1",
     "react": "19.3.0",
     "tz-lookup": "^6.1.25",
-    "undici": "8.11.2",
+    "undici": "8.12.3",
     "zod": "^4.6.7",
     "zustand": "^5.0.15",
     "@openmapx/extension-contracts": "workspace:^"
