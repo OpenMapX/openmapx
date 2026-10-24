@@ -1,14 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { services as coreServices, findRepoRoot } from "@openmapx/core/server";
+import { services as coreServices } from "@openmapx/core/server";
 import { PLATFORM_VERSION, satisfiesPlatformVersion } from "@openmapx/integration-framework";
-import {
-  backupInstalledIntegration,
-  installIntegration as coreInstallIntegration,
-  removeIntegration as coreRemoveIntegration,
-  discardInstalledIntegrationBackup,
-  type IntegrationRollbackBackup,
-  restoreInstalledIntegration,
-} from "@openmapx/integration-framework/installer";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import {
@@ -23,6 +15,13 @@ import { dockerComposeAction } from "../utils/docker-compose";
 import { getServiceSelectionSummary } from "./admin-cli";
 import { renderAndPersistCompose, serviceStart } from "./admin-ops";
 import {
+  adoptIntegration,
+  publishIntegration,
+  readInstalledIntegrations,
+  removeIntegration,
+  settleIntegration,
+} from "./agent-integrations";
+import {
   inspectServiceRepository,
   publishServiceRepository,
   type RepositoryInspection,
@@ -31,14 +30,6 @@ import {
   settleServiceRepository,
 } from "./community-repositories";
 import { assertComponentOwnership } from "./extension-component-ownership";
-import {
-  appendIntegrationJournalEntry,
-  createExtensionInstallJournal,
-  type ExtensionInstallJournal,
-  markExtensionInstallJournalRestoring,
-  markIntegrationJournalEntryInstalled,
-  reconcileExtensionInstallJournal,
-} from "./extension-install-journal";
 import { recoverInterruptedExtensionChanges, withExtensionChangeLock } from "./extension-recovery";
 import { getKillSwitch } from "./extension-store";
 import type { JobContext } from "./job-runner";
@@ -55,7 +46,6 @@ import {
 } from "./trusted-config-outcome";
 
 type ExtensionManifest = coreServices.ExtensionManifest;
-const ROOT_DIR = findRepoRoot();
 
 export type ExtensionTrust = "built-in" | "verified" | "community";
 
@@ -281,13 +271,14 @@ export async function preflightExtensionInstall(
   return { manifest, components, serviceRepos: serviceRepos as never };
 }
 
-async function integrationInstalledExists(id: string): Promise<boolean> {
+/** The extension the database records as owning an installed integration. */
+async function integrationManagedBy(id: string): Promise<string | null> {
   const [row] = await db
-    .select({ id: installedIntegration.id })
+    .select({ managedByExtension: installedIntegration.managedByExtension })
     .from(installedIntegration)
     .where(eq(installedIntegration.id, id))
     .limit(1);
-  return !!row;
+  return row?.managedByExtension ?? null;
 }
 
 /**
@@ -346,9 +337,9 @@ async function disableServicesInSelection(
 interface InstallLedger {
   /** Repository transactions this run opened in the operations agent. */
   publishedRepositories: Array<{ repository: string; transactionId: string }>;
+  /** Integration transactions this run opened in the operations agent. */
+  publishedIntegrations: Array<{ integrationId: string; transactionId: string }>;
   enabledServiceIds: string[]; // services newly enabled this run
-  installedIntegrationIds: string[]; // integrations newly installed this run
-  previousIntegrations: IntegrationRollbackBackup[];
   touchedServiceIds: string[];
   previouslyEnabledServiceIds: string[];
   selectedRootsBefore: string[] | null;
@@ -356,13 +347,14 @@ interface InstallLedger {
 
 /**
  * Orchestrated, atomic-ish install of an extension bundle. The operations
- * agent installs each service repository as a transaction it can undo;
- * compose render/start and integration artifact install + hot reload follow,
- * and one `installed_extension` parent records the bundle so it removes and
- * updates as a unit. The database transaction is the commit point. On any
- * failure before it, the steps completed this run are rolled back
- * best-effort; parts that pre-existed are left untouched. Extension changes run
- * one at a time, after recovering any change an earlier crash interrupted.
+ * agent installs each service repository and each integration archive as a
+ * transaction it can undo; compose render/start and the integration hot
+ * reload follow, and one `installed_extension` parent records the bundle so it
+ * removes and updates as a unit. The database transaction is the commit point:
+ * it records every agent transaction it accepts. On any failure before it, the
+ * steps completed this run are rolled back best-effort; parts that pre-existed
+ * are left untouched. Extension changes run one at a time, after recovering any
+ * change an earlier crash interrupted.
  */
 export function installExtension(
   ctx: JobContext,
@@ -391,16 +383,14 @@ async function installExtensionNow(
 
   const ledger: InstallLedger = {
     publishedRepositories: [],
+    publishedIntegrations: [],
     enabledServiceIds: [],
-    installedIntegrationIds: [],
-    previousIntegrations: [],
     touchedServiceIds: [],
     previouslyEnabledServiceIds: [],
     selectedRootsBefore: null,
   };
   let bookkeepingCommitted = false;
   let rollbackRequired = false;
-  let integrationJournal: ExtensionInstallJournal | null = null;
 
   try {
     const serviceComponents = manifest.services ?? [];
@@ -548,60 +538,72 @@ async function installExtensionNow(
     }
     await ctx.setProgress(60);
 
-    // 3. Install each integration artifact, then hot-reload once. The
+    // 3. Have the agent install each integration archive, then hot-reload
+    // once. The agent keeps each previous copy until the change settles. The
     // bookkeeping rows are collected here and written in the step-4 transaction
     // so nothing is persisted until the whole record set can land atomically.
-    const pendingIntegrationRows: Array<{ id: string; repository: string }> = [];
-    if (integrationComponents.length > 0) {
-      integrationJournal = createExtensionInstallJournal(
-        ROOT_DIR,
-        manifest.id,
-        manifest as unknown as Record<string, unknown>,
-      );
-      rollbackRequired = true;
-    }
+    const pendingIntegrationRows: Array<{
+      id: string;
+      repository: string;
+      transactionId: string;
+    }> = [];
+    const agentIntegrations =
+      integrationComponents.length > 0
+        ? await readInstalledIntegrations({ signal: ctx.signal })
+        : null;
     for (const intg of integrationComponents) {
-      if (!integrationJournal) throw new Error("Integration install journal was not initialized");
-      const existed = await integrationInstalledExists(intg.id);
-      if (existed) {
-        const backup = backupInstalledIntegration(ROOT_DIR, intg.id);
-        if (!backup) {
-          throw new Error(`Installed integration "${intg.id}" is missing from disk`);
-        }
-        ledger.previousIntegrations.push(backup);
-      }
-      appendIntegrationJournalEntry(integrationJournal, {
-        id: intg.id,
-        backupDirectory:
-          ledger.previousIntegrations.find((backup) => backup.id === intg.id)?.backupDirectory ??
-          null,
-      });
       await ctx.log(`Installing integration ${intg.id} from ${intg.artifact}...`);
-      const installed = await coreInstallIntegration({
-        rootDir: ROOT_DIR,
-        source: intg.artifact,
-        sourceKind: "artifact",
-        artifactSha256: intg.sha256,
-        allowLocalSources: false,
-        signal: ctx.signal,
-        onLog: (line, stream) => {
-          ctx.log(line, stream).catch(() => {});
-        },
-      });
-      // The artifact declares its own id. If it does not match the component
-      // the manifest authorized, the extension would own — and later remove —
-      // an integration nobody approved.
-      if (installed.id !== intg.id) {
-        throw new Error(
-          `Integration artifact installed "${installed.id}" but the manifest declared "${intg.id}"`,
+      if (
+        agentIntegrations?.unrecorded.includes(intg.id) &&
+        (await integrationManagedBy(intg.id)) === manifest.id
+      ) {
+        // An earlier release installed it for this extension and the agent
+        // could not verify it. Recording it as this extension's, unverified,
+        // lets this install replace it with the archive it now verifies.
+        await adoptIntegration(
+          { integrationId: intg.id, extensionId: manifest.id },
+          {
+            operationKey: createDurableOpsKey(
+              "extension.integration.adopt",
+              `${ctx.jobId}:${manifest.id}:${intg.id}`,
+            ),
+            signal: ctx.signal,
+          },
         );
       }
-      markIntegrationJournalEntryInstalled(integrationJournal, intg.id);
-      if (!existed) ledger.installedIntegrationIds.push(intg.id);
-
+      const published = await publishIntegration(
+        {
+          integrationId: intg.id,
+          source: { kind: "artifact", url: intg.artifact, sha256: intg.sha256 },
+          extensionId: manifest.id,
+        },
+        {
+          operationKey: createDurableOpsKey(
+            "extension.integration.publish",
+            `${ctx.jobId}:${manifest.id}:${intg.id}`,
+          ),
+          signal: ctx.signal,
+        },
+      );
+      // Recorded before any check, so a failure from here on undoes it.
+      rollbackRequired = true;
+      ledger.publishedIntegrations.push({
+        integrationId: intg.id,
+        transactionId: published.transactionId,
+      });
+      // The archive declares its own id. If it does not match the component
+      // the manifest authorized, the extension would own — and later remove —
+      // an integration nobody approved. The agent refuses such an archive;
+      // this keeps the check on this side too.
+      if (published.integrationId !== intg.id) {
+        throw new Error(
+          `Integration artifact installed "${published.integrationId}" but the manifest declared "${intg.id}"`,
+        );
+      }
       pendingIntegrationRows.push({
         id: intg.id,
         repository: opts.sourceUrl ?? intg.artifact,
+        transactionId: published.transactionId,
       });
     }
     if (integrationComponents.length > 0) {
@@ -648,6 +650,7 @@ async function installExtensionNow(
             updatedAt: now,
             installedBy,
             managedByExtension: manifest.id,
+            lastTransactionId: row.transactionId,
           })
           .onConflictDoUpdate({
             target: installedIntegration.id,
@@ -657,6 +660,7 @@ async function installExtensionNow(
               sourceType: "registry",
               updatedAt: now,
               managedByExtension: manifest.id,
+              lastTransactionId: row.transactionId,
             },
           });
       }
@@ -705,8 +709,38 @@ async function installExtensionNow(
     // Job-reporting failures must not roll back external state while leaving
     // committed extension rows behind.
     await ctx.setProgress(100).catch(() => {});
-    // The install is committed; let the agent drop the previous checkouts. A
-    // failure here leaves the transaction pending, and recovery commits it.
+    // The install is committed; let the agent drop the previous checkouts and
+    // integration copies. A failure here leaves the transaction pending, and
+    // recovery commits it.
+    for (const { integrationId, transactionId } of ledger.publishedIntegrations) {
+      try {
+        const settled = await settleIntegration(
+          { integrationId, transactionId, outcome: "commit" },
+          {
+            operationKey: createDurableOpsKey(
+              "extension.integration.commit",
+              `${ctx.jobId}:${integrationId}:${transactionId}`,
+            ),
+            signal: ctx.signal,
+          },
+        );
+        if (!settled.changed) {
+          await ctx
+            .log(
+              `The operations agent no longer held the installed change for integration ${integrationId}; reinstall extension "${manifest.id}" to make sure it runs the recorded version.`,
+              "stderr",
+            )
+            .catch(() => {});
+        }
+      } catch (error) {
+        await ctx
+          .log(
+            `Cleanup: the operations agent could not settle integration ${integrationId}: ${(error as Error).message}`,
+            "stderr",
+          )
+          .catch(() => {});
+      }
+    }
     for (const { repository, transactionId } of ledger.publishedRepositories) {
       try {
         const settled = await settleServiceRepository(
@@ -738,21 +772,6 @@ async function installExtensionNow(
           .catch(() => {});
       }
     }
-    for (const backup of ledger.previousIntegrations) {
-      try {
-        discardInstalledIntegrationBackup(ROOT_DIR, backup);
-      } catch (error) {
-        await ctx
-          .log(
-            `Cleanup: failed to remove integration backup for ${backup.id}: ${(error as Error).message}`,
-            "stderr",
-          )
-          .catch(() => {});
-      }
-    }
-    if (integrationJournal) {
-      await reconcileExtensionInstallJournal(ROOT_DIR, integrationJournal.path, async () => true);
-    }
     await ctx
       .log(`Extension "${manifest.id}" installed (${components.length} component(s)).`)
       .catch(() => {});
@@ -765,63 +784,41 @@ async function installExtensionNow(
     await ctx
       .log(`Install failed: ${(err as Error).message}. Rolling back...`, "stderr")
       .catch(() => {});
-    if (integrationJournal) {
-      try {
-        markExtensionInstallJournalRestoring(integrationJournal);
-      } catch (journalError) {
-        await ctx
-          .log(
-            `Rollback deferred to startup because the integration recovery journal could not be checkpointed: ${(journalError as Error).message}`,
-            "stderr",
-          )
-          .catch(() => {});
-        // Do not mutate integration artifacts without first recording the
-        // restoring phase. The existing journal and backups let startup retry
-        // from the last durable state.
-        throw err;
-      }
-    }
     await rollbackInstall(ctx, ledger).catch((rbErr) => {
       ctx
         .log(`Rollback encountered an error: ${(rbErr as Error).message}`, "stderr")
         .catch(() => {});
     });
-    if (integrationJournal) {
-      await reconcileExtensionInstallJournal(
-        ROOT_DIR,
-        integrationJournal.path,
-        async () => false,
-      ).catch(() => {});
-    }
     throw err;
   }
 }
 
 async function rollbackInstall(ctx: JobContext, ledger: InstallLedger): Promise<void> {
-  // Integrations first (cheap), then services.
-  for (const id of ledger.installedIntegrationIds) {
+  // Integrations first (cheap), then services. Newest first: the agent
+  // restores each previous copy, or removes an integration this run added. One
+  // it cannot undo yet stays pending, and recovery rolls it back, since no
+  // bookkeeping row records it.
+  for (const transaction of [...ledger.publishedIntegrations].reverse()) {
     try {
-      coreRemoveIntegration({ rootDir: ROOT_DIR, id });
-      await db.delete(installedIntegration).where(eq(installedIntegration.id, id));
-    } catch (e) {
-      await ctx
-        .log(`Rollback: failed to remove integration ${id}: ${(e as Error).message}`, "stderr")
-        .catch(() => {});
-    }
-  }
-  for (const backup of ledger.previousIntegrations) {
-    try {
-      restoreInstalledIntegration(ROOT_DIR, backup);
+      await settleIntegration(
+        { ...transaction, outcome: "rollback" },
+        {
+          operationKey: createDurableOpsKey(
+            "extension.integration.rollback",
+            `${ctx.jobId}:${transaction.integrationId}:${transaction.transactionId}`,
+          ),
+        },
+      );
     } catch (error) {
       await ctx
         .log(
-          `Rollback: failed to restore integration ${backup.id}: ${(error as Error).message}`,
+          `Rollback: the operations agent could not restore integration ${transaction.integrationId}: ${(error as Error).message}`,
           "stderr",
         )
         .catch(() => {});
     }
   }
-  if (ledger.installedIntegrationIds.length > 0 || ledger.previousIntegrations.length > 0) {
+  if (ledger.publishedIntegrations.length > 0) {
     await reloadIntegrations().catch(() => {});
   }
 
@@ -1005,24 +1002,54 @@ async function removeExtensionNow(
   }
   await ctx.setProgress(60);
 
-  // Remove integrations.
-  for (const intgId of integrationIds) {
-    await ctx.log(`Removing integration ${intgId}...`);
-    try {
-      coreRemoveIntegration({ rootDir: ROOT_DIR, id: intgId });
-    } catch (e) {
-      await ctx.log(
-        `Failed to remove integration files for ${intgId}: ${(e as Error).message}`,
-        "stderr",
-      );
-    }
-    await db
-      .delete(installedIntegration)
-      .where(
-        and(eq(installedIntegration.id, intgId), eq(installedIntegration.managedByExtension, id)),
-      );
-  }
+  // Have the agent remove the integrations. One it cannot remove fails the
+  // job before the extension record is deleted, so the removal can be retried.
   if (integrationIds.length > 0) {
+    const installed = await readInstalledIntegrations({ signal: ctx.signal });
+    const records = new Map(installed.integrations.map((entry) => [entry.integrationId, entry]));
+    const unrecorded = new Set(installed.unrecorded);
+    for (const intgId of integrationIds) {
+      await ctx.log(`Removing integration ${intgId}...`);
+      const record = records.get(intgId);
+      if (record && record.extensionId !== id) {
+        // Someone else installed it since; it is not this extension's to remove.
+        await ctx.log(
+          `Integration ${intgId} is now installed by ${record.extensionId ? `extension "${record.extensionId}"` : "the operator"}; leaving it in place.`,
+          "stderr",
+        );
+      } else {
+        if (!record && unrecorded.has(intgId)) {
+          // An earlier release installed it and recovery could not verify it
+          // yet. Recording it as this extension's, unverified, lets the agent
+          // remove it.
+          await adoptIntegration(
+            { integrationId: intgId, extensionId: id },
+            {
+              operationKey: createDurableOpsKey(
+                "extension.integration.adopt",
+                `${ctx.jobId}:${intgId}`,
+              ),
+              signal: ctx.signal,
+            },
+          );
+        }
+        await removeIntegration(
+          { integrationId: intgId, extensionId: id },
+          {
+            operationKey: createDurableOpsKey(
+              "extension.integration.remove",
+              `${ctx.jobId}:${intgId}`,
+            ),
+            signal: ctx.signal,
+          },
+        );
+      }
+      await db
+        .delete(installedIntegration)
+        .where(
+          and(eq(installedIntegration.id, intgId), eq(installedIntegration.managedByExtension, id)),
+        );
+    }
     await reloadIntegrations().catch(() => {});
   }
   await ctx.setProgress(90);
