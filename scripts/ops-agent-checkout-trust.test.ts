@@ -54,7 +54,7 @@ async function umask002Checkout(): Promise<string> {
   const parent = mkdtempSync(join(tmpdir(), "openmapx-umask-002-"));
   roots.push(parent);
   const checkout = join(parent, "checkout");
-  await run("sh", ["-c", 'umask 002 && git clone -q "$0" "$1"', ROOT, checkout]);
+  await runUnderUmask002("git", ["clone", "-q", ROOT, checkout]);
   writeFileSync(
     join(checkout, "infra", "docker", ".env"),
     [
@@ -69,16 +69,34 @@ async function umask002Checkout(): Promise<string> {
   return checkout;
 }
 
+/**
+ * Runs a command with a umask of 002, as a Debian or Ubuntu login shell does,
+ * without a shell: a Node process sets the umask and starts the command with
+ * its arguments as given.
+ */
+function runUnderUmask002(
+  command: string,
+  args: readonly string[],
+  options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
+) {
+  return run(
+    process.execPath,
+    [
+      "-e",
+      'process.umask(0o002); const { status } = require("node:child_process").spawnSync(process.argv[1], process.argv.slice(2), { stdio: "inherit" }); process.exit(status ?? 1);',
+      command,
+      ...args,
+    ],
+    options,
+  );
+}
+
 /** The bundled fixed CLI, run the way an operator's shell runs it: under umask 002. */
 async function cli(checkout: string, ...args: string[]) {
-  return run(
-    "sh",
-    ["-c", 'umask 002 && exec "$0" "$@"', process.execPath, join(outdir, "cli.mjs"), ...args],
-    {
-      cwd: checkout,
-      env: { PATH: process.env.PATH, HOME: process.env.HOME, OPENMAPX_ROOT_DIR: checkout },
-    },
-  ).catch((error: { stdout: string; stderr: string; code: number }) => error);
+  return runUnderUmask002(process.execPath, [join(outdir, "cli.mjs"), ...args], {
+    cwd: checkout,
+    env: { PATH: process.env.PATH, HOME: process.env.HOME, OPENMAPX_ROOT_DIR: checkout },
+  }).catch((error: { stdout: string; stderr: string; code: number }) => error);
 }
 
 async function freePort(): Promise<number> {
