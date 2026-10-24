@@ -63,8 +63,12 @@ overrides:
   "esbuild": ">=0.28.1"
   "postcss": ">=8.5.10"
   # Force every 7.x consumer onto the security-fixed request stack. Scalar's
-  # parser still declares an older compatible 7.x range.
-  "undici@7": ">=7.29.1"
+  # parser and the AI SDK still declare older compatible 7.x ranges; this
+  # override resolves them to 8.x, so it also excludes the 8.x releases before
+  # the same fix.
+  "undici@7": ">=7.30.1 <8.0.0 || >=8.12.3" # GHSA-xjj6-f33q-929c
+  # jsdom and testcontainers lock the 8.x release before the fix.
+  "undici@8": "^8.12.3" # GHSA-xjj6-f33q-929c
   # Serwist pins 4.28.6 directly; 4.28.7+ fixes its unbounded query cache and
   # custom-stats prototype write. Keep the workspace on the current 4.x line.
   "browserslist": ">=4.29.0"

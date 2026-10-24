@@ -70,7 +70,10 @@ COPY scripts/copy-runtime-packages.mjs scripts/
 COPY --from=bundle /app/apps/ops-agent/dist/runtime-packages.json /tmp/runtime-packages.json
 RUN node scripts/copy-runtime-packages.mjs /tmp/runtime-packages.json /app /runtime
 
-FROM base AS runner
+# The runner needs no package manager: starting from the plain Node image keeps
+# the pnpm that corepack prepared for the build stages, and its bundled
+# dependencies, out of the shipped image.
+FROM node:24.22.1-alpine@sha256:6a1c190e17215d844926b0677f4bf87273ff7d5e54db06d3b5b5863ab0b09a3d AS runner
 WORKDIR /app
 # The pinned base predates Alpine's OpenSSL fix for CVE-2026-14456.
 # git fetches community service repositories into services/.community.

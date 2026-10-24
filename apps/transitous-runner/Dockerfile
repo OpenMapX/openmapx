@@ -75,7 +75,10 @@ COPY scripts/copy-runtime-packages.mjs scripts/
 COPY --from=bundle /app/apps/transitous-runner/dist/runtime-packages.json /tmp/runtime-packages.json
 RUN node scripts/copy-runtime-packages.mjs /tmp/runtime-packages.json /app /runtime
 
-FROM base AS runner
+# The runner needs no package manager: starting from the plain Node image keeps
+# the pnpm that corepack prepared for the build stages, and its bundled
+# dependencies, out of the shipped image.
+FROM node:24.22.1-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS runner
 WORKDIR /app
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
