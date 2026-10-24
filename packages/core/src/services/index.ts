@@ -1,5 +1,7 @@
 export {
+  type BuiltInManifestSource,
   type BuiltInServiceManifestSource,
+  checkoutBuiltInIntegrationManifests,
   checkoutBuiltInServiceManifests,
 } from "./built-in-service-source";
 export {
@@ -13,6 +15,23 @@ export {
   WELL_KNOWN_DATA_TYPES,
 } from "./capabilities";
 export { communityServiceManifestProblems } from "./community-manifest";
+export {
+  COMMUNITY_RECORD_VERSION,
+  type CommunityRepositoryPending,
+  type CommunityRepositoryRecord,
+  type CommunityRepositoryRecovery,
+  type CommunityRepositorySource,
+  communityRecordFileName,
+  communityRecordRepository,
+  type LoadRecordedCommunityServicesOptions,
+  loadRecordedCommunityServices,
+  manifestSha256,
+  parseCommunityRepositoryRecord,
+  type RecordedManifest,
+  readCommunityRepositoryRecord,
+  type VerifiedCommunityService,
+  verifyRecordedRepository,
+} from "./community-repository-records";
 export {
   type ComposeServiceSnippet,
   GENERATED_SECRETS_DIRNAME,
@@ -79,7 +98,10 @@ export {
   stackComposeArgs,
   writeServiceSelectionFile,
 } from "./deployment";
-export { embeddedBuiltInServiceManifests } from "./embedded-built-in-services";
+export {
+  embeddedBuiltInIntegrationManifests,
+  embeddedBuiltInServiceManifests,
+} from "./embedded-built-in-services";
 export {
   type ExtensionComponentRef,
   type ExtensionIntegrationComponent,
@@ -185,4 +207,13 @@ export {
   type TraefikDynamicConfiguration,
   type TraefikRenderContext,
 } from "./traefik-renderer";
+export {
+  TrustedAuthorityFilesystem,
+  type TrustedAuthorityKind,
+  type TrustedAuthorityReadHooks,
+} from "./trusted-authority-filesystem";
+export {
+  type LoadTrustedIntegrationSchemasOptions,
+  loadTrustedIntegrationSchemas,
+} from "./trusted-integration-schemas";
 export * from "./types";

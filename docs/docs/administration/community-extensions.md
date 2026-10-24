@@ -145,7 +145,20 @@ Docker and the generated configuration. `app-api` never writes there: it asks
 the agent to inspect, install, settle or remove a repository, and reads the
 installed community services back from it. Until a change is settled the agent
 keeps the previous checkout for rollback and attempts recovery of interrupted
-changes on startup. Recovery failures remain operator work. `custom_integrations/` is
+changes on startup. Recovery failures remain operator work.
+
+The agent trusts an installed repository by content, not by file permissions.
+When it installs a commit, its record (`services/.community/.repository-<hash>.json`)
+lists each `service.json` it validated with that file's SHA-256. The agent, and
+the CLI it runs for updates, builds and backups, load exactly those manifests
+and only while their bytes match: a manifest the record does not list, or a
+repository directory without a record, is never loaded. Changed bytes, or a
+record the agent did not write, stop the agent from starting or authorizing
+anything, as an invalid manifest always has. Recover by deleting that
+repository's directory and record under `services/.community/` and installing
+the extension again. Records are the agent's own files: they must be owned by
+its user and writable only by it. Repositories installed before records carried
+digests are refused the same way. `custom_integrations/` is
 written by `app-api`. Both locations are gitignored and live on the host, so
 installs survive container restarts.
 

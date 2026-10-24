@@ -148,6 +148,11 @@ async function main(): Promise<void> {
       builtInServices,
     });
     const initialAuthority = await authorityLoader();
+    // The policy binds each trusted-configuration claim to this revision, and
+    // the runtime commits only while the authority still has it: both must
+    // derive it the same way.
+    const authorizedRevision = (authority: { revisionId: string }) =>
+      `${authority.revisionId.slice(0, 48)}-${loadConfiguredResourceAuthority().revisionId}`;
     const runtime = createDockerRuntime({
       stack: paths,
       fileExists: existsSync,
@@ -156,7 +161,10 @@ async function main(): Promise<void> {
     installTrustedConfigurationRuntime(runtime, {
       services: initialAuthority.services,
       integrationSchemas: initialAuthority.integrationSchemas,
-      loadAuthority: authorityLoader,
+      loadAuthority: async () => {
+        const authority = await authorityLoader();
+        return { ...authority, revisionId: authorizedRevision(authority) };
+      },
       infraDir: paths.infraDir,
     });
     installCommunityRepositoryRuntime(runtime, communityRepositories);
@@ -205,9 +213,8 @@ async function main(): Promise<void> {
     setInterval(runBackupRetention, 24 * 60 * 60 * 1_000);
     const policyAuthority = async () => {
       const authority = await authorityLoader();
-      const resources = loadConfiguredResourceAuthority();
       return {
-        revisionId: `${authority.revisionId.slice(0, 48)}-${resources.revisionId}`,
+        revisionId: authorizedRevision(authority),
         services: authority.services.map((service) => ({
           serviceId: service.manifest.id,
           enabled: service.enabled,

@@ -43,9 +43,14 @@ host architecture and allocate memory and disk to its Linux VM. Do not assume
 that successful local startup establishes production readiness on Linux.
 
 Run the checkout and containers under compatible IDs (`UID` and `GID`, default
-`1000:1000`). The ops-agent rejects writable-by-others trusted manifests and
-directories. Clone and update with `umask 022`. The container user also needs to
+`1000:1000`). The container user also needs to
 read the registry credentials directory if private images are used.
+
+Only the operator's account may write the checkout: services mount
+configuration files from it, `services build` uses its build contexts, and
+`infra/docker/.env` and the release overlay live in it. A private group per
+user, the Debian and Ubuntu default, meets this even with their umask of `002`.
+Where the account's group has other members, clone and pull with umask `022`.
 
 ## Hardware
 
