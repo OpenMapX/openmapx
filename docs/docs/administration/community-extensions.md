@@ -201,6 +201,18 @@ entry points are also rejected; executable behavior must move into an isolated
 service. These reduce the blast radius of a
 malformed archive. They cannot establish that the author's code is safe.
 
+The operations agent reads the configuration schema of every installed
+integration, and loads one only from files its own account owns and nobody
+else can write. A single integration it refuses stops it from authorizing any
+configuration change. The installer therefore gives installed files fixed
+modes (`0755` for directories, `0644` for files), whatever the archive or the
+umask declares. It also refuses an integration the agent would not load:
+
+- a `manifest.json` that is a symbolic link, hard-linked to another file,
+  larger than 128 KiB or not UTF-8;
+- a configuration schema the agent does not accept;
+- an id longer than 64 characters.
+
 ### Preview, admission and failures
 
 Extension previews have an independent limit of one request per 30 seconds per

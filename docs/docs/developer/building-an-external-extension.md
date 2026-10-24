@@ -272,7 +272,7 @@ cannot reach a release:
 
 | Included                                                           | Limit                   |
 | ------------------------------------------------------------------ | ----------------------- |
-| `manifest.json` (after schema validation)                          | :                       |
+| `manifest.json` (after schema validation)                          | 128 KiB                 |
 | `openmapx-artifact.json` (generated)                               | :                       |
 | `dist/licenses.json` (generated when dependency notices are found) | :                       |
 | `strings/<locale>.json` matching `[a-z0-9-]{2,35}`                 | 100 files, 256 KiB each |

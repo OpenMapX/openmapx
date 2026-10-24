@@ -122,6 +122,14 @@
       "types": "./src/services/secret-key.ts",
       "default": "./src/services/secret-key.ts"
     },
+    "./services/configuration-schema": {
+      "types": "./src/services/configuration-schema.ts",
+      "default": "./src/services/configuration-schema.ts"
+    },
+    "./services/trusted-integration-schemas": {
+      "types": "./src/services/trusted-integration-schemas.ts",
+      "default": "./src/services/trusted-integration-schemas.ts"
+    },
     "./utils/brandFilter": {
       "types": "./src/utils/brandFilter.ts",
       "default": "./src/utils/brandFilter.ts"

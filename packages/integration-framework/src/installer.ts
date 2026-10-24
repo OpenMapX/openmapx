@@ -28,6 +28,11 @@ import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep 
 import { gunzipSync } from "node:zlib";
 import { scanLicenses } from "@openmapx/core/licenses";
 import { assertAllowedGitUrl, gitShallowClone, safeDownload } from "@openmapx/core/server";
+import { assertTrustedConfigurationSchema } from "@openmapx/core/services/configuration-schema";
+import {
+  assertTrustedIntegrationDirectory,
+  MAX_INTEGRATION_MANIFEST_BYTES,
+} from "@openmapx/core/services/trusted-integration-schemas";
 import {
   type ArtifactMetadata,
   validateArtifactMetadata as validatePortableArtifactMetadata,
@@ -46,6 +51,102 @@ export interface IntegrationSummary {
 
 function customDir(rootDir: string): string {
   return join(rootDir, "custom_integrations");
+}
+
+// The operations agent loads installed integrations only from directories and
+// manifests its own account owns and nobody else can write; one it would
+// reject stops it from authorizing any configuration change. Installed files
+// therefore get these modes whatever the source, the archive or the umask
+// declared.
+const INSTALLED_DIRECTORY_MODE = 0o755;
+const INSTALLED_FILE_MODE = 0o644;
+const MAX_AGENT_INTEGRATION_ID_LENGTH = 64;
+
+/**
+ * Create `custom_integrations/`, or take it over as it is, in the state the
+ * agent trusts: a directory owned by the installing account that neither its
+ * group nor others can write.
+ */
+function prepareCustomDir(rootDir: string): void {
+  const directory = customDir(rootDir);
+  mkdirSync(directory, { recursive: true, mode: INSTALLED_DIRECTORY_MODE });
+  const stats = lstatSync(directory);
+  if (!stats.isDirectory()) {
+    throw new Error(`${directory} must be a directory, not a symbolic link or a file`);
+  }
+  const uid = process.geteuid?.();
+  if (uid !== undefined && stats.uid !== uid) {
+    throw new Error(
+      `${directory} is owned by uid ${stats.uid}, not by the installing account (uid ${uid}). ` +
+        "The operations agent only loads integrations from a directory its own account owns.",
+    );
+  }
+  if ((stats.mode & 0o022) !== 0) chmodSync(directory, stats.mode & 0o755);
+}
+
+/** Give a staged tree the installed modes. Symbolic links are left as they are. */
+function applyInstalledModes(directory: string): void {
+  chmodSync(directory, INSTALLED_DIRECTORY_MODE);
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) applyInstalledModes(path);
+    else if (entry.isFile()) chmodSync(path, INSTALLED_FILE_MODE);
+  }
+}
+
+/**
+ * Refuse a `manifest.json` the agent would not read: a symbolic link, a file
+ * hard-linked to another, or one larger than the agent reads. Checked before
+ * the manifest is parsed, since parsing would follow a link.
+ */
+function assertManifestFile(directory: string): void {
+  let stats: ReturnType<typeof lstatSync>;
+  try {
+    stats = lstatSync(join(directory, "manifest.json"));
+  } catch {
+    return; // Missing: reported when the manifest is read.
+  }
+  if (stats.isSymbolicLink()) {
+    throw new Error("manifest.json must be a regular file, not a symbolic link");
+  }
+  if (!stats.isFile()) throw new Error("manifest.json must be a regular file");
+  if (stats.nlink !== 1) {
+    throw new Error("manifest.json must not be hard-linked to another file");
+  }
+  if (stats.size > MAX_INTEGRATION_MANIFEST_BYTES) {
+    throw new Error(`manifest.json exceeds the ${MAX_INTEGRATION_MANIFEST_BYTES / 1024} KiB limit`);
+  }
+}
+
+/**
+ * The checks the operations agent's loader applies, run on the staged tree
+ * after its modes are set: anything it would reject is refused here, before
+ * it replaces an installed integration.
+ */
+function assertAgentLoads(directory: string, id: string): void {
+  if (id.length > MAX_AGENT_INTEGRATION_ID_LENGTH) {
+    throw new Error(
+      `Integration id "${id}" is longer than the ${MAX_AGENT_INTEGRATION_ID_LENGTH} characters the operations agent loads`,
+    );
+  }
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(
+      readFileSync(join(directory, "manifest.json")),
+    );
+  } catch {
+    throw new Error("manifest.json is not valid UTF-8");
+  }
+  const manifest = readManifest(directory);
+  try {
+    assertTrustedConfigurationSchema(manifest?.configSchema as Record<string, unknown> | undefined);
+  } catch {
+    throw new Error("configSchema uses a construct the operations agent does not accept");
+  }
+  try {
+    assertTrustedIntegrationDirectory(directory, id);
+  } catch {
+    throw new Error("The operations agent would not load the installed files");
+  }
 }
 
 const STAGING_DIR_NAME = ".staging";
@@ -297,7 +398,7 @@ function resolveGitUrl(source: string): string | null {
 }
 
 export async function installIntegration(opts: InstallOptions): Promise<InstallResult> {
-  mkdirSync(customDir(opts.rootDir), { recursive: true });
+  prepareCustomDir(opts.rootDir);
 
   const allowLocal = opts.allowLocalSources ?? true;
   const sourceKind = opts.sourceKind ?? "source";
@@ -352,6 +453,7 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
   }
 
   try {
+    assertManifestFile(stage);
     const manifest = readManifest(stage);
     if (!manifest || typeof manifest.id !== "string") {
       throw new Error("Source has no manifest.json with a string `id` at its root");
@@ -377,6 +479,8 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
     if (sourceKind === "artifact") {
       validateArtifactMetadata(stage, manifest);
     }
+    applyInstalledModes(stage);
+    assertAgentLoads(stage, id);
     if (replaced) {
       rmSync(target, { recursive: true, force: true });
     }
@@ -479,7 +583,6 @@ interface TarDescriptor {
   linkTarget?: string;
   payloadOffset: number;
   payloadLength: number;
-  mode: number;
 }
 
 function extractTarGz(archivePath: string, destDir: string, maxBytes: number): void {
@@ -524,7 +627,7 @@ function validateTarDescriptors(data: Buffer, destDir: string): TarDescriptor[] 
     const headerPath = prefix ? `${prefix}/${name}` : name;
     const headerLinkPath = readTarString(header, 157, 100);
     const size = parseTarOctal(header, 124, 12);
-    const mode = parseTarOctal(header, 100, 8);
+    // The entry's mode (offset 100) is not used: installed files get fixed modes.
     const typeflag = readTarString(header, 156, 1) || "0";
     const payloadOffset = offset;
     if (size > data.length - payloadOffset) {
@@ -578,7 +681,6 @@ function validateTarDescriptors(data: Buffer, destDir: string): TarDescriptor[] 
         path: safePath,
         payloadOffset,
         payloadLength: size,
-        mode,
       });
       continue;
     }
@@ -590,7 +692,6 @@ function validateTarDescriptors(data: Buffer, destDir: string): TarDescriptor[] 
         linkTarget: linkTarget.raw,
         payloadOffset,
         payloadLength: size,
-        mode,
       });
       continue;
     }
@@ -602,7 +703,6 @@ function validateTarDescriptors(data: Buffer, destDir: string): TarDescriptor[] 
         linkTarget,
         payloadOffset,
         payloadLength: size,
-        mode,
       });
       continue;
     }
@@ -615,7 +715,6 @@ function validateTarDescriptors(data: Buffer, destDir: string): TarDescriptor[] 
       path: safePath,
       payloadOffset,
       payloadLength: size,
-      mode,
     });
   }
   if (!reachedEndBlock && offset !== data.length) {
@@ -664,14 +763,8 @@ function materializeTarDescriptors(
     writeFileSync(
       target,
       data.subarray(descriptor.payloadOffset, descriptor.payloadOffset + descriptor.payloadLength),
+      { mode: INSTALLED_FILE_MODE },
     );
-    if (descriptor.mode > 0) {
-      try {
-        chmodSync(target, descriptor.mode & 0o777);
-      } catch {
-        // Non-fatal on filesystems that do not support chmod.
-      }
-    }
   }
 }
 
@@ -924,6 +1017,7 @@ export function restoreInstalledIntegration(
   const restoreStage = createStagePath(rootDir, `restore-${backup.id}`);
   try {
     cpSync(backupDirectory, restoreStage, { recursive: true, errorOnExist: true, force: false });
+    applyInstalledModes(restoreStage);
     if (existsSync(target)) rmSync(target, { recursive: true, force: true });
     renameSync(restoreStage, target);
   } catch (error) {
@@ -1041,7 +1135,14 @@ function collectArtifactFiles(
   generated: { metadata: string; licenses: string | null },
 ): StagedFile[] {
   const files: StagedFile[] = [];
-  const manifestFile = collectStagedFile(directory, "manifest.json", MAX_LEGAL_BYTES, true);
+  // The operations agent reads no larger manifest; an artifact with one would
+  // install nowhere.
+  const manifestFile = collectStagedFile(
+    directory,
+    "manifest.json",
+    MAX_INTEGRATION_MANIFEST_BYTES,
+    true,
+  );
   if (manifestFile) files.push(manifestFile);
 
   files.push({
