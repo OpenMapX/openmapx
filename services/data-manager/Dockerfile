@@ -92,13 +92,15 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # Explicitly upgrade libraries already satisfied by the pinned base image:
 # Require at least Expat's 2.5.0-1+deb12u4 security update; Debian may replace
 # older revisions in its repositories. libpcre2-8-0 fixes CVE-2026-86145,
-# CVE-2026-89157 and CVE-2026-89161.
+# CVE-2026-89157 and CVE-2026-89161. libbrotli1 1.0.9-2+deb12u1 fixes
+# CVE-2026-111497.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
       osmium-tool curl unzip bzip2 lbzip2 ca-certificates age \
       git python3 python3-pip python3-venv wget rsync openssh-client \
-      libexpat1 libpcre2-8-0 \
+      libexpat1 libpcre2-8-0 libbrotli1 \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libexpat1)" ge '2.5.0-1+deb12u4' \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge '1.0.9-2+deb12u1' \
     && rm -rf /var/lib/apt/lists/*
 
 ARG DUCKDB_VERSION=1.5.6
