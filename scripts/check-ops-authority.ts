@@ -13,13 +13,64 @@
  * `check:policy` so CI fails on a reintroduction even when tests are skipped.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, posix, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 /** The single component allowed to reach the Docker daemon. */
 const AUTHORITY_SERVICE = "ops-agent";
+
+/** The agent's state, relative to the checkout. */
+const AGENT_STATE = "infra/docker/state";
+
+/** The one part of the agent's state another service may mount: app-api's snapshot queue. */
+const AGENT_TRUSTED_CONFIG_QUEUE = `${AGENT_STATE}/ops-agent/trusted-config`;
+
+/** `$OPENMAPX_HOST_DIR`, `${OPENMAPX_HOST_DIR}` or `${OPENMAPX_HOST_DIR:?…}`, then the rest of the path. */
+const HOST_DIR_SOURCE =
+  /^\$(?:OPENMAPX_HOST_DIR(?![A-Za-z0-9_])|\{OPENMAPX_HOST_DIR(?:[:?+-][^}]*)?\})(.*)$/s;
+
+/**
+ * Where a bind source resolves in the checkout, as a normalized relative path
+ * (`..` when it leaves the checkout), or `null` when it cannot be known here:
+ * another Compose variable anywhere in it, or an absolute host path.
+ */
+function checkoutPath(serviceId: string, source: string): string | null {
+  const within = (...parts: string[]) => posix.normalize(posix.join(...parts)).replace(/\/+$/, "");
+  const hostDir = HOST_DIR_SOURCE.exec(source);
+  // Compose interpolates a `$` anywhere in the rendered path.
+  const rest = hostDir ? (hostDir[1] as string) : source;
+  if (rest.includes("$")) return null;
+  if (hostDir) return within(".", rest);
+  if (source.startsWith("/")) return null;
+  if (source.startsWith("@infra:")) return within("infra/docker", source.slice("@infra:".length));
+  if (source.startsWith("@service:")) {
+    const rest = source.slice("@service:".length);
+    const colon = rest.indexOf(":");
+    return colon < 0 ? null : within("services", rest.slice(0, colon), rest.slice(colon + 1));
+  }
+  return within("services", serviceId, source);
+}
+
+/**
+ * Whether a checkout path holds the agent's state: the state directory or
+ * anything below it, a directory containing it (up to the checkout and
+ * beyond), or one of the dot entries in `infra/docker` (generations, `.env`).
+ */
+function reachesAgentState(path: string): boolean {
+  const containsState =
+    path === "." ||
+    path === ".." ||
+    path.startsWith("../") ||
+    `${AGENT_STATE}/`.startsWith(`${path}/`);
+  return (
+    containsState ||
+    path === AGENT_STATE ||
+    path.startsWith(`${AGENT_STATE}/`) ||
+    path.startsWith("infra/docker/.")
+  );
+}
 
 /** Directories whose production TypeScript must not invoke Docker directly. */
 const PRODUCTION_SOURCE_ROOTS = [
@@ -104,6 +155,28 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
           file: relative(root, manifestPath),
           detail: `service "${serviceId}" mounts the host repository root`,
         });
+      }
+      // The agent's own state (job journal, handoff record, trusted-config
+      // queue, privacy scratch). app-api publishes into the trusted-config
+      // queue and nothing else; every other service, data-manager above all,
+      // must not be able to reach it, by whichever form of source. A source
+      // this gate cannot resolve is refused rather than assumed to be safe.
+      if (source !== "@docker-socket") {
+        const path = checkoutPath(serviceId, source);
+        if (path === null) {
+          violations.push({
+            file: relative(root, manifestPath),
+            detail: `service "${serviceId}" mounts a host path this gate cannot place in the checkout (${source})`,
+          });
+        } else if (
+          reachesAgentState(path) &&
+          !(serviceId === "app-api" && path === AGENT_TRUSTED_CONFIG_QUEUE)
+        ) {
+          violations.push({
+            file: relative(root, manifestPath),
+            detail: `service "${serviceId}" mounts the operations agent's state (${source})`,
+          });
+        }
       }
       if (source.includes("DOCKER_CONFIG_DIR") || target.endsWith("/.docker")) {
         violations.push({

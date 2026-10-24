@@ -27,7 +27,7 @@ const containerId = "c".repeat(64);
 function root(): string {
   const directory = mkdtempSync(join(tmpdir(), "openmapx-agent-handoff-"));
   roots.push(directory);
-  mkdirSync(join(directory, "infra", "docker", "data", "ops-agent"), {
+  mkdirSync(join(directory, "infra", "docker", "state", "ops-agent"), {
     recursive: true,
     mode: 0o700,
   });

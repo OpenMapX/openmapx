@@ -19,7 +19,7 @@ import { dirname } from "node:path";
 export function fsyncDirectory(path: string): void {
   const descriptor = openSync(
     path,
-    constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+    constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
   );
   try {
     fsyncSync(descriptor);
@@ -36,16 +36,22 @@ export function fsyncDirectory(path: string): void {
 
 /**
  * Replace mutable state via an exclusive, private temporary in the same directory.
+ * The temporary has a random name and is created without following a symlink,
+ * so nothing planted beside `path` can redirect the write.
  * A failure after rename may leave the new contents visible with durability
  * unconfirmed; do not infer rollback from a thrown error.
  */
-export function atomicWrite(path: string, contents: string): void {
+export function atomicWrite(path: string, contents: string, mode = 0o600): void {
   const temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
   // Open before entering cleanup: if exclusive creation fails, this path is not ours.
   const descriptor = openSync(
     temporary,
-    constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW,
-    0o600,
+    constants.O_CREAT |
+      constants.O_EXCL |
+      constants.O_WRONLY |
+      constants.O_NOFOLLOW |
+      constants.O_NONBLOCK,
+    mode,
   );
   let failure: { error: unknown } | undefined;
   try {

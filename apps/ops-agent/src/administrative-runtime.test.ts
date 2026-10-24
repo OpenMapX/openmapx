@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -144,6 +145,48 @@ describe("administrative backup runtime", () => {
     ]);
     expect(context("backup.create").emitLog).not.toHaveBeenCalled();
   });
+
+  it.runIf(process.platform === "linux")(
+    "lists backups in a checkout whose own directories a umask of 002 left group-writable",
+    async () => {
+      const rootDir = temporaryRoot();
+      const backups = join(rootDir, "infra", "docker", "backups");
+      // Rendering creates the backups directory owner-only; git created the rest.
+      chmodSync(backups, 0o700);
+      for (const path of [rootDir, join(rootDir, "infra"), join(rootDir, "infra", "docker")]) {
+        chmodSync(path, 0o775);
+      }
+      const backup = join(backups, "nightly-20260823");
+      mkdirSync(backup, { mode: 0o700 });
+      writeFileSync(
+        join(backup, "manifest.json"),
+        JSON.stringify({
+          formatVersion: 2,
+          name: "nightly-20260823",
+          createdAt: "2026-08-23T18:00:00.000Z",
+          openmapxVersion: "1.0.0",
+          services: [],
+        }),
+        { mode: 0o600 },
+      );
+      const runtime = createUnavailableRuntime();
+      createAdministrativeRuntime(runtime, { rootDir, runFixedCli: async () => undefined });
+      await expect(
+        dispatchOpsOperation(runtime, { kind: "backup.list" }, context("backup.list")),
+      ).resolves.toEqual({
+        backups: [expect.objectContaining({ backupId: "nightly-20260823", serviceCount: 0 })],
+        warningCount: 0,
+      });
+      // A backups directory others can write is still refused.
+      chmodSync(backups, 0o777);
+      const refused = (await dispatchOpsOperation(
+        runtime,
+        { kind: "backup.list" },
+        context("backup.list"),
+      ).catch((error: Error) => error)) as { backups?: unknown[] } | Error;
+      expect(refused instanceof Error || (refused.backups ?? []).length === 0).toBe(true);
+    },
+  );
 
   it.runIf(process.platform === "linux")(
     "loads a bounded newest-first agent-owned inventory and never returns a host path",

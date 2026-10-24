@@ -151,6 +151,8 @@ export interface AdministrativeReleaseRuntimeOptions {
   ) => Promise<boolean>;
   /** Crash points inside release-store lock acquisition, for recovery tests. */
   releaseStoreLockHooks?: ReleaseStoreLockHooks;
+  /** Runs after an inspection settled a handoff whose helper had exited. */
+  afterHandoffSettled?: () => Promise<void>;
 }
 
 type ReleaseTransactionPhase =
@@ -276,6 +278,11 @@ export function inspectDataTypeAuthority(
   return targets?.some((target) => types.has(target)) ?? false;
 }
 
+/**
+ * Backup reads are anchored here, at the directory rendering creates owner-only,
+ * not at the checkout root: git leaves the checkout's own directories
+ * group-writable under a umask of 002, and they hold no backup.
+ */
 function backupRoot(rootDir: string): string {
   return join(rootDir, "infra", "docker", "backups");
 }
@@ -322,11 +329,10 @@ function parseManifest(rootDir: string, backupId: string): ParsedBackupManifest 
   let candidate: unknown;
   let contents: string;
   try {
-    contents = readDescriptorAnchoredUtf8(
-      rootDir,
-      ["infra", "docker", "backups", backupId, "manifest.json"],
-      { minimumBytes: 1, maximumBytes: MAX_BACKUP_MANIFEST_BYTES },
-    );
+    contents = readDescriptorAnchoredUtf8(backupRoot(rootDir), [backupId, "manifest.json"], {
+      minimumBytes: 1,
+      maximumBytes: MAX_BACKUP_MANIFEST_BYTES,
+    });
     candidate = JSON.parse(contents);
   } catch {
     throw new Error("Backup authority rejected");
@@ -462,7 +468,7 @@ function corruptEntry(
 export function inspectBackupInventory(rootDir: string): OpsResultFor<"backup.list"> {
   const root = backupRoot(rootDir);
   if (!strictDirectory(root)) return { backups: [], warningCount: 0 };
-  const entries = listDescriptorAnchoredDirectory(rootDir, ["infra", "docker", "backups"], {
+  const entries = listDescriptorAnchoredDirectory(backupRoot(rootDir), [], {
     maximumEntries: OPS_MAX_BACKUP_INVENTORY_ENTRIES,
   });
   const backups: BackupInventoryEntry[] = [];
@@ -478,11 +484,9 @@ export function inspectBackupInventory(rootDir: string): OpsResultFor<"backup.li
     }
     let manifest: ParsedBackupManifest;
     try {
-      const children = listDescriptorAnchoredDirectory(
-        rootDir,
-        ["infra", "docker", "backups", entry.name],
-        { maximumEntries: MAX_BACKUP_VOLUMES + 1 },
-      );
+      const children = listDescriptorAnchoredDirectory(backupRoot(rootDir), [entry.name], {
+        maximumEntries: MAX_BACKUP_VOLUMES + 1,
+      });
       if (!children.some((child) => child.name === "manifest.json" && child.type === "file")) {
         backups.push(corruptEntry(entry.name, "missing_manifest"));
         warningCount += 1;
@@ -509,8 +513,8 @@ export function inspectBackupInventory(rootDir: string): OpsResultFor<"backup.li
         for (const volume of service.volumes) {
           try {
             const measured = hashDescriptorAnchoredFile(
-              rootDir,
-              ["infra", "docker", "backups", entry.name, volume.file],
+              backupRoot(rootDir),
+              [entry.name, volume.file],
               {
                 maximumBytes: Number.MAX_SAFE_INTEGER,
                 expectedBytes: volume.sizeBytes,
@@ -567,15 +571,11 @@ export function readVerifiedPrivacyBackupInputs(
   const inputs: VerifiedPrivacyBackupInput[] = [];
   for (const service of manifest.services) {
     for (const volume of service.volumes) {
-      const measured = hashDescriptorAnchoredFile(
-        rootDir,
-        ["infra", "docker", "backups", backupId, volume.file],
-        {
-          maximumBytes: Number.MAX_SAFE_INTEGER,
-          expectedBytes: volume.sizeBytes,
-          expectedSha256: volume.sha256,
-        },
-      );
+      const measured = hashDescriptorAnchoredFile(backupRoot(rootDir), [backupId, volume.file], {
+        maximumBytes: Number.MAX_SAFE_INTEGER,
+        expectedBytes: volume.sizeBytes,
+        expectedSha256: volume.sha256,
+      });
       if (measured.sizeBytes !== volume.sizeBytes || measured.sha256 !== volume.sha256) {
         throw new Error("Backup authority rejected");
       }
@@ -635,7 +635,7 @@ export async function inspectBackupAuthority(
     const root = backupRoot(rootDir);
     const rootStats = strictDirectory(root);
     if (!rootStats) return kind === "backup.create";
-    const entries = listDescriptorAnchoredDirectory(rootDir, ["infra", "docker", "backups"], {
+    const entries = listDescriptorAnchoredDirectory(backupRoot(rootDir), [], {
       maximumEntries: OPS_MAX_BACKUP_INVENTORY_ENTRIES,
     });
     const entry = entries.find((candidate) => candidate.name === backupId);
@@ -760,11 +760,10 @@ export async function pruneBackupRetention(
 function inspectBackupManifestDigest(rootDir: string, backupId: string): string | null {
   try {
     assertBackupId(backupId);
-    const raw = readDescriptorAnchoredUtf8(
-      rootDir,
-      ["infra", "docker", "backups", backupId, "manifest.json"],
-      { minimumBytes: 1, maximumBytes: MAX_BACKUP_MANIFEST_BYTES },
-    );
+    const raw = readDescriptorAnchoredUtf8(backupRoot(rootDir), [backupId, "manifest.json"], {
+      minimumBytes: 1,
+      maximumBytes: MAX_BACKUP_MANIFEST_BYTES,
+    });
     return createHash("sha256").update(raw).digest("hex");
   } catch {
     return null;
@@ -971,6 +970,22 @@ export function createDefaultReleaseEffects(
     };
   };
   const readState = () => readReleasePointer(paths.state, true);
+  /**
+   * The overlay of the release the agent last applied, from its own release
+   * store. A handoff imported from an earlier release's state location keeps
+   * no previous overlay, because data-manager could write that file; this is
+   * its rollback target instead. Without a recorded release it is the current
+   * overlay, which leaves the application services where they are.
+   */
+  const releaseStateOverlay = (): string | null => {
+    try {
+      const { releaseId } = readState();
+      if (releaseId) return coreServices.renderReleaseCompose(loadManifest(releaseId));
+    } catch {
+      // Unreadable release state: no derived target.
+    }
+    return readOverlay();
+  };
   const configurationIdentity = () =>
     releaseDigest(JSON.stringify(coreServices.releaseSelection()));
   const selectionReceipts = (): Record<
@@ -1529,7 +1544,11 @@ export function createDefaultReleaseEffects(
           handoff?.phase === "applied" && handoff.releaseId === releaseId && !handoff.consumed
             ? handoff
             : undefined;
-        const previousOverlay = afterHandoff ? afterHandoff.previousOverlay : readOverlay();
+        const previousOverlay = !afterHandoff
+          ? readOverlay()
+          : afterHandoff.importedFromLegacy
+            ? releaseStateOverlay()
+            : afterHandoff.previousOverlay;
         const previousState = existsSync(paths.state)
           ? strictReadFile(paths.state, MAX_RELEASE_STATE_BYTES)
           : null;
@@ -1624,7 +1643,21 @@ export function createDefaultReleaseEffects(
       return { handoffId: request.handoffId, replaced: true };
     },
     inspectAgentHandoff: async (handoffId) => {
-      const record = readAgentHandoff(rootDir);
+      let record = readAgentHandoff(rootDir);
+      // A helper from an earlier release records its outcome where that
+      // release kept its state, which this agent no longer reads. Once that
+      // helper has exited, settle the handoff here as a restart would.
+      if (
+        record?.handoffId === handoffId &&
+        record.importedFromLegacy === true &&
+        !isTerminalHandoff(record.phase)
+      ) {
+        await reconcileHandoff().catch(() => undefined);
+        record = readAgentHandoff(rootDir);
+        if (record && isTerminalHandoff(record.phase)) {
+          await runtimeOptions.afterHandoffSettled?.().catch(() => undefined);
+        }
+      }
       if (record?.handoffId !== handoffId) return { handoffId, phase: "none" };
       return {
         handoffId,

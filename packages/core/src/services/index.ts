@@ -1,4 +1,10 @@
 export {
+  type AgentStatePaths,
+  agentStatePaths,
+  legacyAgentStatePaths,
+  prepareAgentStateDirectories,
+} from "./agent-state";
+export {
   type BuiltInManifestSource,
   type BuiltInServiceManifestSource,
   checkoutBuiltInIntegrationManifests,
@@ -21,6 +27,7 @@ export {
   type CommunityRepositoryRecord,
   type CommunityRepositoryRecovery,
   type CommunityRepositorySource,
+  CommunityServiceRecordsError,
   communityRecordFileName,
   communityRecordRepository,
   type LoadRecordedCommunityServicesOptions,

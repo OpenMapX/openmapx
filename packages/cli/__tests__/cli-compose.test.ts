@@ -115,7 +115,7 @@ describe("renderComposeForRepo", () => {
     expect(yaml).toContain("services:");
     expect(yaml).toContain("alpha:");
     expect(yaml).toContain("beta:");
-    const queue = lstatSync(join(tmp, "infra", "docker", "data", "ops-agent", "trusted-config"));
+    const queue = lstatSync(join(tmp, "infra", "docker", "state", "ops-agent", "trusted-config"));
     expect(queue.isDirectory()).toBe(true);
     expect(queue.mode & 0o777).toBe(0o700);
     const backups = lstatSync(join(tmp, "infra", "docker", "backups"));

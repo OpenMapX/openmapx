@@ -1,4 +1,13 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { renderCompose } from "../packages/core/src/services/compose-renderer";
@@ -114,6 +123,124 @@ describe("Gate C — host authority", () => {
       .map(([id]) => id);
     expect(holders).toEqual([]);
   });
+
+  it("keeps the operations agent's state out of every other service's reach in the rendered stack", () => {
+    // The journal, handoff record, trusted-config queue and privacy scratch
+    // live in infra/docker/state/ops-agent. data-manager, which mounts the
+    // data directory read-write as the same uid, must not reach any of it.
+    const state = "./state/ops-agent";
+    const reaching = Object.entries(services).flatMap(([id, service]) =>
+      (service.volumes ?? [])
+        .map((volume) => volume.split(":")[0] ?? "")
+        .filter(
+          (source) =>
+            source === "." ||
+            source === "./" ||
+            source === "./state" ||
+            source === state ||
+            source.startsWith(`${state}/`),
+        )
+        .map((source) => `${id} ${source}`),
+    );
+    expect(reaching.filter((entry) => !entry.startsWith(`${AUTHORITY_SERVICE} `))).toEqual([
+      "app-api ./state/ops-agent/trusted-config",
+    ]);
+    expect(services["data-manager"]?.volumes).toContain("./data:/data");
+  });
+
+  it("rejects a manifest that mounts the operations agent's state", () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-authority-"));
+    try {
+      const manifest = (id: string, sources: string[]) => {
+        mkdirSync(join(root, "services", id), { recursive: true });
+        writeFileSync(
+          join(root, "services", id, "service.json"),
+          JSON.stringify({
+            id,
+            bindMounts: sources.map((source) => ({ source, target: `/mnt/${id}` })),
+          }),
+        );
+      };
+      manifest("app-api", ["@infra:state/ops-agent/trusted-config", "@infra:state/ops-agent"]);
+      manifest("data-manager", ["@infra:data", "@infra:state", "@infra:."]);
+      manifest("ops-agent", ["@infra:state/ops-agent/trusted-config"]);
+      expect(findAuthorityViolations(root).map((violation) => violation.detail)).toEqual([
+        `service "app-api" mounts the operations agent's state (@infra:state/ops-agent)`,
+        `service "data-manager" mounts the operations agent's state (@infra:state)`,
+        `service "data-manager" mounts the operations agent's state (@infra:.)`,
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // biome-ignore-start lint/suspicious/noTemplateCurlyInString: literal Compose variable sources under test
+  it("rejects the agent's state reached through any other form of source", () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-authority-"));
+    try {
+      const manifest = (id: string, sources: string[]) => {
+        mkdirSync(join(root, "services", id), { recursive: true });
+        writeFileSync(
+          join(root, "services", id, "service.json"),
+          JSON.stringify({
+            id,
+            bindMounts: sources.map((source) => ({ source, target: `/mnt/${id}` })),
+          }),
+        );
+      };
+      manifest("app-api", [
+        "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/custom_integrations",
+        "${OPENMAPX_HOST_DIR}/infra/docker/state/ops-agent/trusted-config",
+        "@infra:data/../state/ops-agent/trusted-config/",
+      ]);
+      manifest("data-manager", [
+        "${OPENMAPX_HOST_DIR}/infra/docker/state/ops-agent",
+        "$OPENMAPX_HOST_DIR/infra/docker/state",
+        "${OPENMAPX_HOST_DIR:-/srv/openmapx}/infra/docker",
+        "${OPENMAPX_HOST_DIR}/infra/",
+        "${OPENMAPX_HOST_DIR}/infra/docker/data/../.trusted-config-current",
+        "${OPENMAPX_HOST_DIR}/infra/docker/data",
+        "@infra:data/../state/ops-agent",
+        "@infra:../..",
+        "@service:pelias:../../infra/docker/state",
+        "../../infra/docker/state/ops-agent/jobs-v1.json",
+        "config/data-manager.json",
+      ]);
+      manifest("photon", [
+        "${OPENMAPX_STATE_DIR}/ops-agent",
+        "${OPENMAPX_HOST_DIR}/${OPENMAPX_STATE_SUBDIR}",
+        "@infra:data/${OPENMAPX_STATE_SUBDIR}",
+        "/srv/openmapx/infra/docker/state",
+      ]);
+      manifest("ops-agent", ["${OPENMAPX_HOST_DIR}/infra/docker/state"]);
+      expect(findAuthorityViolations(root).map((violation) => violation.detail)).toEqual([
+        ...[
+          "${OPENMAPX_HOST_DIR}/infra/docker/state/ops-agent",
+          "$OPENMAPX_HOST_DIR/infra/docker/state",
+          "${OPENMAPX_HOST_DIR:-/srv/openmapx}/infra/docker",
+          "${OPENMAPX_HOST_DIR}/infra/",
+          "${OPENMAPX_HOST_DIR}/infra/docker/data/../.trusted-config-current",
+          "@infra:data/../state/ops-agent",
+          "@infra:../..",
+          "@service:pelias:../../infra/docker/state",
+          "../../infra/docker/state/ops-agent/jobs-v1.json",
+        ].map((source) => `service "data-manager" mounts the operations agent's state (${source})`),
+        ...[
+          "${OPENMAPX_STATE_DIR}/ops-agent",
+          "${OPENMAPX_HOST_DIR}/${OPENMAPX_STATE_SUBDIR}",
+          "@infra:data/${OPENMAPX_STATE_SUBDIR}",
+          "/srv/openmapx/infra/docker/state",
+        ].map(
+          (source) =>
+            `service "photon" mounts a host path this gate cannot place in the checkout (${source})`,
+        ),
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // biome-ignore-end lint/suspicious/noTemplateCurlyInString: literal Compose variable sources under test
 
   it("declares no Docker provider anywhere in production service configuration", () => {
     // Traefik's socket provider was host authority by another name.

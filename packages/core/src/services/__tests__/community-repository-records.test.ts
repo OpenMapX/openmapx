@@ -149,7 +149,9 @@ describe("community repository records", () => {
       join(checkout, "svc", "service.json"),
       manifest("community-one", "attacker.example.test/one"),
     );
-    expect(() => loadRecordedCommunityServices(root)).toThrow("Community service records rejected");
+    expect(() => loadRecordedCommunityServices(root)).toThrow(
+      `Community repository ${REPOSITORY} no longer matches the service manifests the operations agent recorded when it installed it. Delete services/.community/${REPOSITORY} and services/.community/.repository-${REPOSITORY}.json, then install its extension again.`,
+    );
   });
 
   it("loads nothing without a community directory", () => {

@@ -37,6 +37,8 @@ import {
 import { applyServiceSelection } from "../lib/service-selection";
 
 const {
+  agentStatePaths,
+  prepareAgentStateDirectories,
   withConfigurationGenerationWriter,
   embeddedBuiltInIntegrationManifests,
   loadIntegrationSchemas,
@@ -196,10 +198,14 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   const paths = repoPaths(opts.rootDir);
   assertCliDeploymentSecrets();
   return withConfigurationGenerationWriter(paths.infraDir, async (writer) => {
-    ensurePlatformPrivateDirectory(join(paths.infraDir, "data", "ops-agent", "trusted-config"));
+    // Moves the agent's mounted state out of data-manager's data directory the
+    // first time a generation mounts it from its new place.
+    prepareAgentStateDirectories(paths.infraDir);
+    const agentState = agentStatePaths(paths.infraDir);
+    ensurePlatformPrivateDirectory(agentState.trustedConfig);
     const erasureDirectory = join(paths.infraDir, "data", "erasure");
     ensurePlatformPrivateDirectory(erasureDirectory);
-    ensurePlatformPrivateDirectory(join(paths.infraDir, "data", "privacy-extraction"));
+    ensurePlatformPrivateDirectory(agentState.privacyExtraction);
     ensurePlatformPrivateDirectory(join(paths.infraDir, "backups"));
     const redisPasswordPath = join(paths.infraDir, "secrets", "redis-password");
     const redisAclPath = join(paths.infraDir, "secrets", "redis-acl.conf");

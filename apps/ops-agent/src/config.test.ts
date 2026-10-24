@@ -14,7 +14,7 @@ describe("ops-agent configuration", () => {
       apiTokenFile: "/run/secrets/ops-agent-api-token",
       dataManagerTokenFile: "/run/secrets/ops-agent-data-manager-token",
       rootDir: "/srv/openmapx",
-      journalFile: "/srv/openmapx/infra/docker/data/ops-agent/jobs-v1.json",
+      journalFile: "/srv/openmapx/infra/docker/state/ops-agent/jobs-v1.json",
       trustedConfigDirectory: "/var/lib/openmapx/trusted-config",
       host: "0.0.0.0",
       port: 4300,

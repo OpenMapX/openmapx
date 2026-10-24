@@ -13,7 +13,7 @@ import {
   loadConfiguredResourceAuthority,
   pruneBackupRetention,
 } from "./administrative-runtime";
-import { isTerminalHandoff, readAgentHandoff } from "./agent-handoff";
+import { AGENT_HANDOFF_LABEL, isTerminalHandoff, readAgentHandoff } from "./agent-handoff";
 import {
   CommunityRepositoryStore,
   installCommunityRepositoryRuntime,
@@ -23,8 +23,9 @@ import {
   createDockerDawarichCollector,
   createDockerDawarichRuntimeInspector,
 } from "./dawarich-subject-export";
-import { createDockerRuntime } from "./docker-runtime";
+import { createDockerRuntime, runContainedProcess } from "./docker-runtime";
 import { openOpsJobJournal } from "./journal";
+import { importLegacyAgentState, retireLegacyAgentState } from "./legacy-state";
 import { createProductionRegistryResourceClaimer } from "./policy";
 import type { PrivacyBackupExtractionRouteOptions } from "./privacy-backup-extraction";
 import {
@@ -135,6 +136,29 @@ async function main(): Promise<void> {
     for (const service of builtInServices) {
       service.enabled = bootstrapEnabledServiceIds.has(service.manifest.id);
     }
+    // Releases before this one kept the journal and handoff record where
+    // data-manager can write; import them once, before anything reads them.
+    const handoffHelperRunning = async (handoffId?: string) =>
+      (
+        await runContainedProcess(
+          "docker",
+          [
+            "ps",
+            "--quiet",
+            "--filter",
+            `label=${AGENT_HANDOFF_LABEL}${handoffId === undefined ? "" : `=${handoffId}`}`,
+          ],
+          { signal: AbortSignal.timeout(30_000), timeout: 30_000, maxBuffer: 64 * 1024 },
+        )
+      ).stdout.trim() !== "";
+    const legacyState = { rootDir: config.rootDir, handoffHelperRunning };
+    const imported = await importLegacyAgentState(legacyState);
+    if (imported) {
+      process.stderr.write(
+        `Imported the agent state from infra/docker/data/ops-agent: journal ${imported.journal}, handoff record ${imported.handoff}\n`,
+      );
+    }
+    await retireLegacyAgentState(legacyState).catch(() => false);
     const journal = await openOpsJobJournal(config.journalFile);
     await initializeTrustedSnapshotDirectory(config.trustedConfigDirectory, {
       allowedUids: [uid],
@@ -186,7 +210,11 @@ async function main(): Promise<void> {
       ? createDockerDawarichCollector({ inspect: dawarichInspector })
       : undefined;
     const administrativeCli = createDefaultFixedCli(config.rootDir);
-    const releaseEffects = createDefaultReleaseEffects(config.rootDir, administrativeCli);
+    const releaseEffects = createDefaultReleaseEffects(config.rootDir, administrativeCli, {
+      afterHandoffSettled: async () => {
+        await retireLegacyAgentState(legacyState);
+      },
+    });
     await releaseEffects.initialize?.();
     createTransitousLockRuntime(runtime, { rootDir: config.rootDir });
     createAdministrativeRuntime(runtime, {

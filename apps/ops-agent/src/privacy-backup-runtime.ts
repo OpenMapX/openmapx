@@ -29,7 +29,13 @@ import { PrivacyBackupExtractionError as BackupError } from "./privacy-backup-ex
 
 const SAFE_BACKUP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const SCRATCH_MARKER = "openmapx-privacy-backup-extraction-v1";
-const SCRATCH_ROOT_RELATIVE = ["infra", "docker", "data", "privacy-extraction"] as const;
+const SCRATCH_ROOT_RELATIVE = [
+  "infra",
+  "docker",
+  "state",
+  "ops-agent",
+  "privacy-extraction",
+] as const;
 const DEPLOYMENT_SCRATCH_ROOT = "/var/lib/openmapx/privacy-extraction";
 const COLLECTOR_ENTRYPOINT = "/usr/local/bin/openmapx-backup-subject-export";
 const MAX_RUNTIME_SECONDS = 15 * 60;

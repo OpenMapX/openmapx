@@ -43,7 +43,7 @@ const oldAgentImage = `sha256:${"9".repeat(64)}`;
 function fixture(options: { agent: "old" | "current"; helperStarts?: boolean }) {
   const rootDir = mkdtempSync(join(tmpdir(), "openmapx-agent-update-"));
   roots.push(rootDir);
-  mkdirSync(join(rootDir, "infra", "docker", "data", "ops-agent"), {
+  mkdirSync(join(rootDir, "infra", "docker", "state", "ops-agent"), {
     recursive: true,
     mode: 0o700,
   });
@@ -203,6 +203,62 @@ describe("operations agent update", () => {
     expect(readAgentHandoff(f.rootDir)).toMatchObject({ phase: "failed" });
   });
 
+  it("settles a handoff imported from an earlier release once its helper has exited", async () => {
+    const f = await resolved({ agent: "current" });
+    // The earlier release's helper records its outcome where that release kept
+    // its state; this agent took over the record when it started.
+    writeAgentHandoff(f.rootDir, {
+      version: 1,
+      handoffId: "handoff-1",
+      releaseId: release,
+      digest,
+      phase: "recreated",
+      previousOverlay: null,
+      createdAt: "2026-10-20T10:00:00.000Z",
+      updatedAt: "2026-10-20T10:00:00.000Z",
+      importedFromLegacy: true,
+    });
+    const settled = vi.fn(async () => {});
+    const effects = createDefaultReleaseEffects(f.rootDir, f.cli, {
+      runDocker: f.docker,
+      verifyAppliedRelease: async () => true,
+      afterHandoffSettled: settled,
+    });
+    await expect(effects.inspectAgentHandoff?.("handoff-1")).resolves.toEqual({
+      handoffId: "handoff-1",
+      phase: "applied",
+    });
+    expect(settled).toHaveBeenCalledOnce();
+    expect(readAgentHandoff(f.rootDir)).toMatchObject({ phase: "applied" });
+  });
+
+  it("leaves an imported handoff alone while its helper still runs", async () => {
+    const f = await resolved({ agent: "current" });
+    const record: AgentHandoffRecord = {
+      version: 1,
+      handoffId: "handoff-1",
+      releaseId: release,
+      digest,
+      phase: "recreated",
+      previousOverlay: null,
+      createdAt: "2026-10-20T10:00:00.000Z",
+      updatedAt: "2026-10-20T10:00:00.000Z",
+      importedFromLegacy: true,
+    };
+    writeAgentHandoff(f.rootDir, record);
+    const helperRunning = vi.fn(async (args: readonly string[]) =>
+      args.join(" ").includes("label=") ? `${"e".repeat(64)}\n` : f.docker(args),
+    );
+    const effects = createDefaultReleaseEffects(f.rootDir, f.cli, {
+      runDocker: helperRunning,
+      verifyAppliedRelease: async () => true,
+    });
+    await expect(effects.inspectAgentHandoff?.("handoff-1")).resolves.toEqual({
+      handoffId: "handoff-1",
+      phase: "recreated",
+    });
+  });
+
   it("reports the phase of the requested handoff only", async () => {
     const f = await resolved({ agent: "old" });
     await expect(f.effects.inspectAgentHandoff?.("handoff-1")).resolves.toEqual({
@@ -307,6 +363,46 @@ describe("release application after an agent handoff", () => {
     );
     expect(readFileSync(overlay, "utf8")).toBe("pre-handoff-overlay\n");
     expect(readAgentHandoff(f.rootDir)?.consumed).toBe(true);
+  });
+
+  it("takes an imported handoff's rollback target from the agent's own release state", async () => {
+    const f = await resolved({ agent: "current" });
+    const overlay = join(f.rootDir, "infra", "docker", "docker-compose.release.yml");
+    // An earlier apply recorded the release the application services run.
+    await f.effects.apply(release, [...services], f.context);
+    writeFileSync(overlay, "overlay-written-by-the-earlier-release-helper\n");
+    // Whatever the old location held, the imported record's overlay is never used.
+    writeAgentHandoff(f.rootDir, {
+      ...handoff("applied"),
+      previousOverlay: "services:\n  app-api:\n    image: attacker.invalid/app-api\n",
+      importedFromLegacy: true,
+    });
+    f.cli.mockImplementationOnce(async () => {
+      throw new Error("services update failed");
+    });
+
+    await expect(f.effects.apply(release, [...services], f.context)).rejects.toThrow(
+      "services update failed",
+    );
+    const restored = readFileSync(overlay, "utf8");
+    expect(restored).not.toContain("attacker.invalid");
+    expect(restored.startsWith("x-openmapx-release:")).toBe(true);
+    expect(restored).toContain(`"release":"${release}"`);
+  });
+
+  it("never restores an overlay from an imported handoff that did not keep this agent", async () => {
+    const f = await resolved({ agent: "old" });
+    const overlay = join(f.rootDir, "infra", "docker", "docker-compose.release.yml");
+    writeFileSync(overlay, "current-overlay\n");
+    writeAgentHandoff(f.rootDir, {
+      ...handoff("recreated"),
+      previousOverlay: "services:\n  app-api:\n    image: attacker.invalid/app-api\n",
+      importedFromLegacy: true,
+    });
+    await expect(f.effects.inspectAgentHandoff?.("handoff-1")).resolves.toMatchObject({
+      phase: "rolled_back",
+    });
+    expect(readFileSync(overlay, "utf8")).toBe("current-overlay\n");
   });
 
   it("uses the current overlay again once the handoff was consumed", async () => {
