@@ -175,6 +175,14 @@ agent did not install, or whose files changed, is left out and reported (in the
 agent's startup log and in **Run diagnostics**) without affecting the others.
 Install it again to fix it.
 
+Each record also names its owner: the extension that installed it, or the
+operator for an install made with the CLI. Only that owner changes or removes
+it, so an extension and a manual install don't replace each other by accident.
+This is bookkeeping, not a security boundary: `app-api` and the CLI reach the
+agent with the same credentials, and `app-api` can install any artifact as an
+admin anyway. What the agent guarantees is that every installed file is one it
+verified and recorded.
+
 ### The service sandbox
 
 The sandbox is derived from provenance, not the manifest's `quality` label:

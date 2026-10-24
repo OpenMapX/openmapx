@@ -268,7 +268,8 @@ export class IntegrationStore {
     const path = join(integrationUploadsDirectory(this.infraDir), `${sha256}.tar.gz`);
     let fd: number;
     try {
-      fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+      // Read-only: nothing is created, so the mode is never applied.
+      fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o600);
     } catch {
       throw new Error("No uploaded integration archive has that SHA-256");
     }
@@ -339,6 +340,13 @@ export class IntegrationStore {
    * named in its record, or the operator for one installed without an
    * extension. A directory the agent holds no record of is never taken over by
    * an extension; the operator, who installed it by hand, may replace it.
+   *
+   * This is bookkeeping, not a security boundary. It keeps one extension, or a
+   * manual install, from replacing another's integration by accident. app-api
+   * and the fixed CLI reach the agent as the same `api` principal, so app-api
+   * can act as the operator by leaving out `extensionId`; it is the admin and
+   * may install any artifact anyway. What the agent enforces is that every
+   * installed file is one it verified and recorded.
    */
   private assertOwner(
     integrationId: string,
@@ -659,6 +667,7 @@ export class IntegrationStore {
           const fd = openSync(
             join(this.target(record.integrationId), "manifest.json"),
             constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+            0o600, // read-only: never applied
           );
           try {
             if (fstatSync(fd).isFile()) actual = sha256Hex(readFileSync(fd));

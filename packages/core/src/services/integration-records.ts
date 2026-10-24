@@ -43,7 +43,11 @@ export interface IntegrationFileDigest {
 
 /** What the agent holds for one installed integration. */
 export interface IntegrationInstallation {
-  /** The extension that installed it, or null for the operator (host CLI). */
+  /**
+   * The extension that installed it, or null for the operator (host CLI).
+   * Bookkeeping that keeps installers from replacing each other's
+   * integrations; every installer reaches the agent as the same principal.
+   */
   extensionId: string | null;
   /** `needs_reinstall` when nothing proves where its files came from. */
   status: "ok" | "needs_reinstall";
@@ -221,7 +225,12 @@ function assertOwnDirectory(path: string, uid: number): void {
 }
 
 function readRecordBytes(path: string, uid: number): Buffer {
-  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  // Read-only: nothing is created, so the mode is never applied.
+  const fd = openSync(
+    path,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    0o600,
+  );
   try {
     const stats = fstatSync(fd);
     if (
