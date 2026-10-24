@@ -1,6 +1,7 @@
 import { chmodSync, lstatSync, mkdirSync, rmdirSync, type Stats } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { tightenCustomIntegrations } from "./custom-integrations-modes";
 
 const LOCK_NAME = ".trusted-config-writer";
 const WAIT_MS = 5_000;
@@ -76,6 +77,11 @@ export async function acquireConfigurationOwnership(
     }
   }
   const held = lstatSync(path);
+  // Every writer passes here before it reads what it renders, including the
+  // installed integrations' schemas, which the agent loads only from files
+  // nobody else can write. Their owner removes the group and other write an
+  // earlier installer or the umask left, as for infra/docker above.
+  tightenCustomIntegrations(join(infraDir, "..", ".."), owner);
   let released = false;
   return () => {
     if (released) throw new Error("Configuration ownership already released");

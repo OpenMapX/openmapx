@@ -85,7 +85,9 @@ export interface LoadTrustedIntegrationSchemasOptions {
  * integrations under `custom_integrations/` are not part of any release:
  * they keep the owner and mode checks, anchored at that directory. The
  * installer writes fixed modes and refuses anything these checks would
- * reject (`assertTrustedIntegrationDirectory`).
+ * reject (`assertTrustedIntegrationDirectory`), and the configuration writer
+ * removes the group and other write earlier installs left
+ * (`tightenCustomIntegrations`).
  */
 export function loadTrustedIntegrationSchemas(
   rootDir: string,

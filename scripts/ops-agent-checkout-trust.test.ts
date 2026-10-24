@@ -1,6 +1,7 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -335,6 +336,61 @@ describe("an integration installed into a umask-002 checkout", () => {
     const agent = await startAgent(checkout);
     await expectTrustedConfigurationCommitted(checkout, agent, "installed-integration", {
       integrationConfigs: [{ integrationId: "loose-modes", values: { region: "eu" } }],
+    });
+    agent.stop();
+  }, 120_000);
+});
+
+describe("an integration an earlier installer left group-writable", () => {
+  it("loads after a render and an agent restart, without being installed again", async () => {
+    const checkout = await umask002Checkout();
+    const custom = join(checkout, "custom_integrations");
+    const integration = join(custom, "legacy");
+    const manifest = join(integration, "manifest.json");
+    // As the installer wrote it before it fixed its modes: under umask 002,
+    // directories 0775 and files 0664.
+    const writeLegacyInstall = () =>
+      runUnderUmask002(process.execPath, [
+        "-e",
+        [
+          'const { mkdirSync, writeFileSync } = require("node:fs");',
+          "mkdirSync(process.argv[1], { recursive: true });",
+          "writeFileSync(process.argv[2], process.argv[3]);",
+        ].join(" "),
+        integration,
+        manifest,
+        JSON.stringify({
+          id: "legacy",
+          name: "legacy",
+          version: "1.0.0",
+          domains: ["map-overlay"],
+          quality: "community",
+          platform: "1.0",
+          configSchema: { type: "object", properties: { region: { enum: ["eu", "us"] } } },
+        }),
+      ]);
+    const modes = () => [custom, integration, manifest].map((path) => statSync(path).mode & 0o777);
+    await writeLegacyInstall();
+    expect(modes()).toEqual([0o775, 0o775, 0o664]);
+    expect(() => services.loadTrustedIntegrationSchemas(checkout)).toThrow(
+      "Trusted integration registry rejected",
+    );
+
+    // The fixed CLI's render takes the configuration writer, which removes
+    // the group write before it reads the integration schemas.
+    const rendered = await cli(checkout, "compose", "render");
+    expect(rendered.stdout, rendered.stderr).toContain("Rendered");
+    expect(modes()).toEqual([0o755, 0o755, 0o644]);
+    expect([...services.loadTrustedIntegrationSchemas(checkout).keys()]).toContain("legacy");
+
+    // An upgraded agent starts before anything renders: it takes the writer
+    // before its first authority load.
+    for (const path of [custom, integration]) chmodSync(path, 0o775);
+    chmodSync(manifest, 0o664);
+    const agent = await startAgent(checkout);
+    expect(modes()).toEqual([0o755, 0o755, 0o644]);
+    await expectTrustedConfigurationCommitted(checkout, agent, "legacy-integration", {
+      integrationConfigs: [{ integrationId: "legacy", values: { region: "eu" } }],
     });
     agent.stop();
   }, 120_000);

@@ -115,6 +115,10 @@ async function main(): Promise<void> {
       rootDir: config.rootDir,
       builtInAuthorityDigest: releaseAuthority.digest,
     };
+    // Taking the configuration writer first removes the group and other write
+    // an earlier installer left on custom_integrations, before any authority
+    // load reads the installed integrations.
+    await initializeTrustedConfigurationRuntime(paths.infraDir);
     // The agent is the only writer of services/.community. An interrupted
     // repository transaction is undone before any authority load, which
     // refuses a checkout it cannot validate.
@@ -166,7 +170,6 @@ async function main(): Promise<void> {
       token: apiToken,
       journalRecords: journal.records(),
     });
-    await initializeTrustedConfigurationRuntime(paths.infraDir);
     const authorityLoader = createTrustedConfigurationAuthorityLoader({
       ...authorityOptions,
       builtInServices,
