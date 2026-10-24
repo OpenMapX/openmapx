@@ -174,6 +174,74 @@ describe("Gate C — host authority", () => {
     }
   });
 
+  // biome-ignore-start lint/suspicious/noTemplateCurlyInString: literal Compose variable sources under test
+  it("rejects the agent's state reached through any other form of source", () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-authority-"));
+    try {
+      const manifest = (id: string, sources: string[]) => {
+        mkdirSync(join(root, "services", id), { recursive: true });
+        writeFileSync(
+          join(root, "services", id, "service.json"),
+          JSON.stringify({
+            id,
+            bindMounts: sources.map((source) => ({ source, target: `/mnt/${id}` })),
+          }),
+        );
+      };
+      manifest("app-api", [
+        "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/custom_integrations",
+        "${OPENMAPX_HOST_DIR}/infra/docker/state/ops-agent/trusted-config",
+        "@infra:data/../state/ops-agent/trusted-config/",
+      ]);
+      manifest("data-manager", [
+        "${OPENMAPX_HOST_DIR}/infra/docker/state/ops-agent",
+        "$OPENMAPX_HOST_DIR/infra/docker/state",
+        "${OPENMAPX_HOST_DIR:-/srv/openmapx}/infra/docker",
+        "${OPENMAPX_HOST_DIR}/infra/",
+        "${OPENMAPX_HOST_DIR}/infra/docker/data/../.trusted-config-current",
+        "${OPENMAPX_HOST_DIR}/infra/docker/data",
+        "@infra:data/../state/ops-agent",
+        "@infra:../..",
+        "@service:pelias:../../infra/docker/state",
+        "../../infra/docker/state/ops-agent/jobs-v1.json",
+        "config/data-manager.json",
+      ]);
+      manifest("photon", [
+        "${OPENMAPX_STATE_DIR}/ops-agent",
+        "${OPENMAPX_HOST_DIR}/${OPENMAPX_STATE_SUBDIR}",
+        "@infra:data/${OPENMAPX_STATE_SUBDIR}",
+        "/srv/openmapx/infra/docker/state",
+      ]);
+      manifest("ops-agent", ["${OPENMAPX_HOST_DIR}/infra/docker/state"]);
+      expect(findAuthorityViolations(root).map((violation) => violation.detail)).toEqual([
+        ...[
+          "${OPENMAPX_HOST_DIR}/infra/docker/state/ops-agent",
+          "$OPENMAPX_HOST_DIR/infra/docker/state",
+          "${OPENMAPX_HOST_DIR:-/srv/openmapx}/infra/docker",
+          "${OPENMAPX_HOST_DIR}/infra/",
+          "${OPENMAPX_HOST_DIR}/infra/docker/data/../.trusted-config-current",
+          "@infra:data/../state/ops-agent",
+          "@infra:../..",
+          "@service:pelias:../../infra/docker/state",
+          "../../infra/docker/state/ops-agent/jobs-v1.json",
+        ].map((source) => `service "data-manager" mounts the operations agent's state (${source})`),
+        ...[
+          "${OPENMAPX_STATE_DIR}/ops-agent",
+          "${OPENMAPX_HOST_DIR}/${OPENMAPX_STATE_SUBDIR}",
+          "@infra:data/${OPENMAPX_STATE_SUBDIR}",
+          "/srv/openmapx/infra/docker/state",
+        ].map(
+          (source) =>
+            `service "photon" mounts a host path this gate cannot place in the checkout (${source})`,
+        ),
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // biome-ignore-end lint/suspicious/noTemplateCurlyInString: literal Compose variable sources under test
+
   it("declares no Docker provider anywhere in production service configuration", () => {
     // Traefik's socket provider was host authority by another name.
     const traefik = readFileSync(
