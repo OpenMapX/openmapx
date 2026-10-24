@@ -125,6 +125,37 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     extensionId: "maps-bundle",
   },
   "communityServices.inspect": { kind: "communityServices.inspect" },
+  "integration.inspect": {
+    kind: "integration.inspect",
+    source: {
+      kind: "artifact",
+      url: "https://example.test/weather-radar-1.0.0.tar.gz",
+      sha256: "c".repeat(64),
+    },
+  },
+  "integration.publish": {
+    kind: "integration.publish",
+    integrationId: "weather-radar",
+    source: { kind: "upload", sha256: "c".repeat(64) },
+    extensionId: "maps-bundle",
+  },
+  "integration.settle": {
+    kind: "integration.settle",
+    integrationId: "weather-radar",
+    transactionId: `itx1_${"d".repeat(24)}`,
+    outcome: "rollback",
+  },
+  "integration.remove": {
+    kind: "integration.remove",
+    integrationId: "weather-radar",
+    extensionId: "maps-bundle",
+  },
+  "integration.adopt": {
+    kind: "integration.adopt",
+    integrationId: "weather-radar",
+    extensionId: "maps-bundle",
+  },
+  "installedIntegrations.inspect": { kind: "installedIntegrations.inspect" },
   "serviceSelection.apply": {
     expectedCurrentRevisionId: null,
     kind: "serviceSelection.apply",

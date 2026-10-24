@@ -53,6 +53,12 @@ export const OPS_OPERATION_KINDS = [
   "serviceRepository.settle",
   "serviceRepository.remove",
   "communityServices.inspect",
+  "integration.inspect",
+  "integration.publish",
+  "integration.settle",
+  "integration.remove",
+  "integration.adopt",
+  "installedIntegrations.inspect",
   "serviceSelection.apply",
   "serviceSelection.inspect",
   "serviceConfig.apply",
@@ -169,6 +175,12 @@ export const OPS_KIND_POLICIES = {
   "serviceRepository.settle": asyncEffect("api", 5 * 60_000),
   "serviceRepository.remove": asyncEffect("api", 5 * 60_000),
   "communityServices.inspect": sync("api", 15_000, 1024 * 1024),
+  "integration.inspect": asyncEffect("api", 5 * 60_000, 256 * 1024),
+  "integration.publish": asyncEffect("api", 10 * 60_000),
+  "integration.settle": asyncEffect("api", 5 * 60_000),
+  "integration.remove": asyncEffect("api", 5 * 60_000),
+  "integration.adopt": asyncEffect("api", 10 * 60_000),
+  "installedIntegrations.inspect": sync("api", 15_000, 1024 * 1024),
   "serviceSelection.apply": asyncEffect("api", 2 * 60_000),
   "serviceSelection.inspect": sync("api", 15_000),
   "serviceConfig.apply": asyncEffect("api", 2 * 60_000),
@@ -273,6 +285,28 @@ const repositoryRecoverySchema = z.strictObject({
 // A service manifest as read from a checkout. Its receiver validates it with
 // the service manifest rules; the result size limit bounds it here.
 const serviceManifestObjectSchema = z.record(z.string().max(256), z.unknown());
+
+// Installed integrations. The ops-agent owns `custom_integrations/<id>` and
+// records the SHA-256 of every file it installed there.
+const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
+const integrationTransactionIdSchema = z.string().regex(/^itx1_[a-f0-9]{24}$/);
+// An HTTPS artifact pinned by its SHA-256, or an archive the operator staged
+// in the agent's state directory, named by its SHA-256.
+export const integrationSourceSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("artifact"),
+    url: z
+      .string()
+      .max(2_048)
+      .regex(/^https:\/\/[^\s]+$/),
+    sha256: sha256Schema,
+  }),
+  z.strictObject({ kind: z.literal("upload"), sha256: sha256Schema }),
+]);
+const integrationFileSchema = z.strictObject({
+  path: z.string().min(1).max(1_024),
+  sha256: sha256Schema,
+});
 const transitousLockRecordSchema = z.strictObject({
   ref: transitousRefSchema,
   submodules: transitousSubmodulesSchema,
@@ -403,6 +437,39 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
     extensionId: serviceIdSchema,
   }),
   kindOnly("communityServices.inspect"),
+  // Fetches an integration archive into staging, validates it and discards it.
+  // Validation problems are part of the result, not a failure.
+  z.strictObject({ kind: z.literal("integration.inspect"), source: integrationSourceSchema }),
+  // Installs the archive as `custom_integrations/<integrationId>`. The previous
+  // copy is kept until the transaction is settled. Without `extensionId` the
+  // operator installs it (the host CLI); only that owner may change it again.
+  z.strictObject({
+    kind: z.literal("integration.publish"),
+    integrationId: serviceIdSchema,
+    source: integrationSourceSchema,
+    extensionId: serviceIdSchema.optional(),
+  }),
+  z.strictObject({
+    kind: z.literal("integration.settle"),
+    integrationId: serviceIdSchema,
+    transactionId: integrationTransactionIdSchema,
+    outcome: z.enum(["commit", "rollback"]),
+  }),
+  z.strictObject({
+    kind: z.literal("integration.remove"),
+    integrationId: serviceIdSchema,
+    extensionId: serviceIdSchema.optional(),
+  }),
+  // Records an integration installed before the agent kept records, but only
+  // when its files match `source` fetched again; anything else needs a
+  // reinstall. Without a source nothing can be verified.
+  z.strictObject({
+    kind: z.literal("integration.adopt"),
+    integrationId: serviceIdSchema,
+    extensionId: serviceIdSchema.optional(),
+    source: integrationSourceSchema.optional(),
+  }),
+  kindOnly("installedIntegrations.inspect"),
   z.strictObject({
     kind: z.literal("serviceSelection.apply"),
     revisionId: stableIdSchema,
@@ -1063,6 +1130,48 @@ export const OPS_RESULT_SCHEMAS = {
       )
       .max(256),
   }),
+  "integration.inspect": z.strictObject({
+    integrationId: serviceIdSchema.nullable(),
+    valid: z.boolean(),
+    problems: z.array(z.string().max(1_024)).max(64),
+    manifest: serviceManifestObjectSchema.nullable(),
+  }),
+  "integration.publish": z.strictObject({
+    integrationId: serviceIdSchema,
+    transactionId: integrationTransactionIdSchema,
+    manifestSha256: sha256Schema,
+  }),
+  "integration.settle": z.strictObject({
+    integrationId: serviceIdSchema,
+    outcome: z.enum(["commit", "rollback"]),
+    changed: z.boolean(),
+  }),
+  "integration.remove": z.strictObject({
+    integrationId: serviceIdSchema,
+    removed: z.boolean(),
+  }),
+  "integration.adopt": z.strictObject({
+    integrationId: serviceIdSchema,
+    status: z.enum(["recorded", "needs_reinstall"]),
+    reason: z.string().max(1_024).nullable(),
+  }),
+  "installedIntegrations.inspect": z.strictObject({
+    integrations: z
+      .array(
+        z.strictObject({
+          integrationId: serviceIdSchema,
+          extensionId: serviceIdSchema.nullable(),
+          status: z.enum(["ok", "needs_reinstall"]),
+          reason: z.string().max(1_024).nullable(),
+          source: integrationSourceSchema.nullable(),
+          files: z.array(integrationFileSchema).max(128),
+          pending: z.strictObject({ transactionId: integrationTransactionIdSchema }).nullable(),
+        }),
+      )
+      .max(256),
+    // Directories under custom_integrations the agent holds no record of.
+    unrecorded: z.array(serviceIdSchema).max(256),
+  }),
   "serviceSelection.apply": revision,
   "serviceSelection.inspect": z.strictObject({
     source: z.enum(["env", "file", "default"]),
@@ -1354,7 +1463,7 @@ export function opsResourceId(operation: OpsOperation): string {
   if ("preparedRunId" in operation) return operation.preparedRunId;
   if ("candidateId" in operation) return operation.candidateId;
   if ("repository" in operation) return operation.repository;
-  if ("extensionId" in operation) return operation.extensionId;
+  if ("extensionId" in operation && operation.extensionId) return operation.extensionId;
   if ("integrationId" in operation) return operation.integrationId;
   if ("regionId" in operation && operation.regionId) return operation.regionId;
   if ("dataTypeId" in operation) return operation.dataTypeId;
