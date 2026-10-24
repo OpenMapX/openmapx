@@ -27,8 +27,9 @@ checkout should know that the ops-agent now ignores those edits; the host
 ## Required action
 
 None. Keep the checkout at the selected release: services still mount their
-configuration files from it. The agent's startup log and `pnpm openmapx check`
-report built-in services that are missing from, changed in or not in the
-release. The other permission checks still apply until a follow-up change: the
+configuration files from it. The agent's startup log and **Run diagnostics**
+under Maintenance in the admin panel report built-in services that are missing
+from, changed in or not in the release. The host `pnpm openmapx check` runs the
+checkout's own manifests and does not compare them. The other permission checks still apply until a follow-up change: the
 checkout directory, `services/`, integration manifests and their directories
 must not be writable by the group or others.

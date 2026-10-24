@@ -114,8 +114,11 @@ git ls-tree -rd --name-only -z HEAD | xargs -0 chmod go-w
 ```
 
 Keep the checkout at the selected release: the services still mount their
-configuration files from it. `pnpm openmapx check` and the ops-agent's startup
-log say when the checkout's built-in services differ from the release's.
+configuration files from it. The ops-agent's startup log
+(`pnpm openmapx services logs ops-agent`) and **Run diagnostics** under
+Maintenance in the admin panel say when the checkout's built-in services differ
+from the release's. The host `pnpm openmapx check` cannot: it runs the
+checkout's own code and manifests.
 
 The checkout has changed, but running containers still use their existing
 images. Continue with release selection and replacement.

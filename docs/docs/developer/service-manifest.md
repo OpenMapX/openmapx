@@ -29,9 +29,10 @@ host checkout. The ops-agent image's runtime bundle embeds every
 `services/<id>/service.json` when it is built, so a release pins the manifests
 together with the agent image, and the checkout's copies and their file
 permissions do not decide what runs. The checkout still supplies everything a
-manifest mounts from its service directory. The agent logs at startup, and
-`pnpm openmapx check` warns, when the checkout's built-in manifests differ from
-the release's (missing, changed, or not in the release). Rendering warns when an
+manifest mounts from its service directory. The agent logs at startup, and the
+fixed CLI's `check` (the admin panel's **Run diagnostics**) warns, when the
+checkout's built-in manifests differ from the release's (missing, changed, or
+not in the release). Rendering warns when an
 enabled service mounts a file the checkout does not have. Run from source (the
 host `pnpm openmapx`, tsx and tests), the code reads the checkout it runs from.
 Adding a built-in service means adding its directory, its ID to
