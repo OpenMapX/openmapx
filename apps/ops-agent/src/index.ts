@@ -52,6 +52,12 @@ import { createTrustedConfigurationAuthorityLoader } from "./trusted-configurati
 async function main(): Promise<void> {
   const config = loadOpsAgentConfig();
   janitorPrivacyBackupScratch(config.rootDir, process.env.OPS_PRIVACY_BACKUP_SCRATCH_ROOT);
+  // The release's built-in manifests apply either way; a checkout that differs
+  // still supplies the configuration files those services mount.
+  const drift = services.describeBuiltInServiceDrift(
+    services.inspectBuiltInServiceDrift(config.rootDir),
+  );
+  if (drift) process.stderr.write(`${drift}\n`);
   await afterValidatedServiceAuthority(config.rootDir, async (releaseAuthority) => {
     const [apiToken, dataManagerToken] = await Promise.all([
       readOpsTokenFile(config.apiTokenFile),

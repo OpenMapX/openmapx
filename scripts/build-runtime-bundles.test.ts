@@ -438,6 +438,48 @@ describe("runtime bundles", () => {
     );
   });
 
+  it("replaces a listed module with its bundle variant, with that variant's assets", async () => {
+    const files = {
+      "lib/src/source.ts": "export const manifest = () => null;",
+      "lib/src/source.bundle.ts":
+        'import { readFileSync } from "node:fs";\nexport const manifest = () => readFileSync(new URL("./manifest.json", import.meta.url), "utf8");',
+      "lib/src/manifest.json": '{"embedded":true}',
+      "app/src/main.ts":
+        'import { manifest } from "../../lib/src/source";\nconsole.log(manifest());',
+    };
+    const plain = await buildRuntimeBundle(workspace(files), "fixture", config);
+    expect(text(plain, "main.mjs")).toContain("() => null");
+    expect([...plain.files.keys()].some((name) => name.startsWith("assets/"))).toBe(false);
+
+    const replaced = await buildRuntimeBundle(workspace(files), "fixture", {
+      ...config,
+      replaceModules: { "lib/src/source.ts": "lib/src/source.bundle.ts" },
+    });
+    expect(text(replaced, "main.mjs")).not.toContain("() => null");
+    const assets = [...replaced.files.keys()].filter((name) => name.startsWith("assets/"));
+    expect(assets).toHaveLength(1);
+    expect(replaced.files.get(assets[0] as string)?.toString()).toBe('{"embedded":true}');
+    expect(replaced.sources).toContain("lib/src/source.bundle.ts");
+    expect(replaced.sources).not.toContain("lib/src/source.ts");
+  });
+
+  it("rejects a replacement that does not exist or that nothing imports", async () => {
+    await expect(
+      buildRuntimeBundle(workspace(), "fixture", {
+        ...config,
+        replaceModules: { "lib/src/tools.ts": "lib/src/tools.bundle.ts" },
+      }),
+    ).rejects.toThrow("replaceModules names lib/src/tools.bundle.ts, which does not exist");
+    await expect(
+      buildRuntimeBundle(workspace({ "lib/src/other.ts": "export const other = 1;" }), "fixture", {
+        ...config,
+        replaceModules: { "lib/src/other.ts": "lib/src/tools.ts" },
+      }),
+    ).rejects.toThrow(
+      "replaceModules replaces lib/src/other.ts, which the bundle does not include",
+    );
+  });
+
   it("builds every repository bundle deterministically", async () => {
     const root = resolve(import.meta.dirname, "..");
     for (const image of Object.keys(RUNTIME_BUNDLES)) {

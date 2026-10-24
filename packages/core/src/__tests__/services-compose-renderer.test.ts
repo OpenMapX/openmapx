@@ -719,7 +719,7 @@ describe("renderServiceSnippet", () => {
       expect(warnings[0]).toContain("/repo/infra/docker/secrets/transitous-feed-proxy.age");
     });
 
-    it("preserves existing behaviour for non-optional mounts whose source does not exist", () => {
+    it("still emits a non-optional mount whose checkout source is missing, with an advisory", () => {
       const warnings: string[] = [];
       const snippet = renderServiceSnippet(
         svc("svc", {
@@ -736,10 +736,30 @@ describe("renderServiceSnippet", () => {
           warnings,
         },
       );
-      // No `optional` flag → emit the mount unchanged, no advisory.
+      // No `optional` flag → emit the mount unchanged, and say the checkout
+      // lacks the file the release's manifest mounts.
       expect(snippet.volumes).toEqual([
         "../../services/svc/config/missing.json:/etc/missing.json:ro",
       ]);
+      expect(warnings).toEqual([
+        'service "svc": bind-mount source config/missing.json is not present at /repo/services/svc/config/missing.json; update the checkout to the selected release',
+      ]);
+    });
+
+    it("does not report missing sources outside the checkout's service directories", () => {
+      const warnings: string[] = [];
+      renderServiceSnippet(
+        svc("svc", {
+          bindMounts: [
+            { source: "@infra:data/svc", target: "/data", readOnly: false },
+            { source: "@docker-socket", target: "/var/run/docker.sock" },
+            { source: "/etc/localtime", target: "/etc/localtime" },
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: literal docker-compose variable interpolation
+            { source: "${HOST_DIR}/custom", target: "/custom" },
+          ],
+        }),
+        { composeOutDir: "/repo/infra/docker", existsSync: () => false, warnings },
+      );
       expect(warnings).toEqual([]);
     });
   });
