@@ -43,8 +43,7 @@ host architecture and allocate memory and disk to its Linux VM. Do not assume
 that successful local startup establishes production readiness on Linux.
 
 Run the checkout and containers under compatible IDs (`UID` and `GID`, default
-`1000:1000`). The ops-agent rejects writable-by-others trusted manifests and
-directories. Clone and update with `umask 022`. The container user also needs to
+`1000:1000`). The container user also needs to
 read the registry credentials directory if private images are used.
 
 ## Hardware

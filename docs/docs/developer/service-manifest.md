@@ -38,7 +38,13 @@ host `pnpm openmapx`, tsx and tests), the code reads the checkout it runs from.
 Adding a built-in service means adding its directory, its ID to
 `RELEASE_BUILT_IN_SERVICE_IDS` and its manifest URL to
 `packages/core/src/services/embedded-built-in-services.bundle.ts`; a test fails
-until all three agree.
+until all three agree. Built-in integration manifests (`integrations/<id>/manifest.json`)
+are embedded the same way, for their configuration schemas.
+
+Community services are trusted by digest: the agent records the SHA-256 of
+every manifest it validated when it installed a repository, and the agent and
+its fixed CLI load only recorded manifests whose bytes still match
+([community extensions](../administration/community-extensions.md#what-happens-on-install)).
 
 The portable Zod schema and semantic validator live in
 `packages/extension-contracts/src/service.ts`, with provenance restrictions in

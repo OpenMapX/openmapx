@@ -17,15 +17,12 @@ can be added after you have signed in and checked the application.
 ## 1. Clone and install
 
 ```bash
-umask 022
 git clone https://github.com/OpenMapX/openmapx.git
 cd openmapx
 pnpm install --frozen-lockfile
 ```
 
-Use the Node.js and pnpm versions declared in `package.json`. Keep `umask 022`
-when pulling updates: the ops-agent rejects trusted files and directories that
-other users can modify.
+Use the Node.js and pnpm versions declared in `package.json`.
 
 ## 2. Configure your environment
 
