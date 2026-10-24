@@ -1,6 +1,8 @@
-import { join } from "node:path";
+import { mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { OpsAgentHandoffPhase } from "@openmapx/core/ops";
 import { atomicWrite } from "@openmapx/core/release-files";
+import { services as coreServices } from "@openmapx/core/server";
 import { strictReadFile } from "./durable-files";
 import {
   type AgentReleasePins,
@@ -49,10 +51,16 @@ export interface AgentHandoffRecord {
   reason?: string;
   /** Set once a release application has used this handoff's previous overlay. */
   consumed?: boolean;
+  /**
+   * Set on a handoff imported from an earlier release's state location. Its
+   * helper keeps recording there, so this agent settles it once that helper
+   * has exited.
+   */
+  importedFromLegacy?: boolean;
 }
 
 export function agentHandoffPath(rootDir: string): string {
-  return join(rootDir, "infra", "docker", "data", "ops-agent", "agent-handoff.json");
+  return coreServices.agentStatePaths(join(rootDir, "infra", "docker")).handoff;
 }
 
 export function isTerminalHandoff(phase: AgentHandoffPhase): boolean {
@@ -77,7 +85,8 @@ function parseRecord(raw: string): AgentHandoffRecord {
     typeof value.createdAt !== "string" ||
     typeof value.updatedAt !== "string" ||
     !(value.reason === undefined || typeof value.reason === "string") ||
-    !(value.consumed === undefined || typeof value.consumed === "boolean")
+    !(value.consumed === undefined || typeof value.consumed === "boolean") ||
+    !(value.importedFromLegacy === undefined || typeof value.importedFromLegacy === "boolean")
   ) {
     throw new Error("Agent handoff record rejected");
   }
@@ -85,9 +94,14 @@ function parseRecord(raw: string): AgentHandoffRecord {
 }
 
 export function readAgentHandoff(rootDir: string): AgentHandoffRecord | null {
+  return readAgentHandoffFile(agentHandoffPath(rootDir));
+}
+
+/** A handoff record at `path`, or `null` when there is none. */
+export function readAgentHandoffFile(path: string): AgentHandoffRecord | null {
   let raw: string;
   try {
-    raw = strictReadFile(agentHandoffPath(rootDir), MAX_HANDOFF_BYTES);
+    raw = strictReadFile(path, MAX_HANDOFF_BYTES);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw new Error("Agent handoff record rejected");
@@ -100,7 +114,9 @@ export function writeAgentHandoff(rootDir: string, record: AgentHandoffRecord): 
   if (Buffer.byteLength(contents, "utf8") > MAX_HANDOFF_BYTES) {
     throw new Error("Agent handoff record is too large");
   }
-  atomicWrite(agentHandoffPath(rootDir), contents);
+  const path = agentHandoffPath(rootDir);
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  atomicWrite(path, contents);
 }
 
 export function advanceAgentHandoff(

@@ -43,7 +43,7 @@ const oldAgentImage = `sha256:${"9".repeat(64)}`;
 function fixture(options: { agent: "old" | "current"; helperStarts?: boolean }) {
   const rootDir = mkdtempSync(join(tmpdir(), "openmapx-agent-update-"));
   roots.push(rootDir);
-  mkdirSync(join(rootDir, "infra", "docker", "data", "ops-agent"), {
+  mkdirSync(join(rootDir, "infra", "docker", "state", "ops-agent"), {
     recursive: true,
     mode: 0o700,
   });
@@ -201,6 +201,62 @@ describe("operations agent update", () => {
       "docker run failed",
     );
     expect(readAgentHandoff(f.rootDir)).toMatchObject({ phase: "failed" });
+  });
+
+  it("settles a handoff imported from an earlier release once its helper has exited", async () => {
+    const f = await resolved({ agent: "current" });
+    // The earlier release's helper records its outcome where that release kept
+    // its state; this agent took over the record when it started.
+    writeAgentHandoff(f.rootDir, {
+      version: 1,
+      handoffId: "handoff-1",
+      releaseId: release,
+      digest,
+      phase: "recreated",
+      previousOverlay: null,
+      createdAt: "2026-10-20T10:00:00.000Z",
+      updatedAt: "2026-10-20T10:00:00.000Z",
+      importedFromLegacy: true,
+    });
+    const settled = vi.fn(async () => {});
+    const effects = createDefaultReleaseEffects(f.rootDir, f.cli, {
+      runDocker: f.docker,
+      verifyAppliedRelease: async () => true,
+      afterHandoffSettled: settled,
+    });
+    await expect(effects.inspectAgentHandoff?.("handoff-1")).resolves.toEqual({
+      handoffId: "handoff-1",
+      phase: "applied",
+    });
+    expect(settled).toHaveBeenCalledOnce();
+    expect(readAgentHandoff(f.rootDir)).toMatchObject({ phase: "applied" });
+  });
+
+  it("leaves an imported handoff alone while its helper still runs", async () => {
+    const f = await resolved({ agent: "current" });
+    const record: AgentHandoffRecord = {
+      version: 1,
+      handoffId: "handoff-1",
+      releaseId: release,
+      digest,
+      phase: "recreated",
+      previousOverlay: null,
+      createdAt: "2026-10-20T10:00:00.000Z",
+      updatedAt: "2026-10-20T10:00:00.000Z",
+      importedFromLegacy: true,
+    };
+    writeAgentHandoff(f.rootDir, record);
+    const helperRunning = vi.fn(async (args: readonly string[]) =>
+      args.join(" ").includes("label=") ? `${"e".repeat(64)}\n` : f.docker(args),
+    );
+    const effects = createDefaultReleaseEffects(f.rootDir, f.cli, {
+      runDocker: helperRunning,
+      verifyAppliedRelease: async () => true,
+    });
+    await expect(effects.inspectAgentHandoff?.("handoff-1")).resolves.toEqual({
+      handoffId: "handoff-1",
+      phase: "recreated",
+    });
   });
 
   it("reports the phase of the requested handoff only", async () => {

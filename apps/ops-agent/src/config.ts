@@ -1,4 +1,5 @@
 import { isAbsolute, join } from "node:path";
+import { services } from "@openmapx/core/server";
 
 export interface OpsAgentConfig {
   apiTokenFile: string;
@@ -32,7 +33,7 @@ export function loadOpsAgentConfig(env: NodeJS.ProcessEnv = process.env): OpsAge
       "data-manager token file path",
     ),
     rootDir,
-    journalFile: join(rootDir, "infra", "docker", "data", "ops-agent", "jobs-v1.json"),
+    journalFile: services.agentStatePaths(join(rootDir, "infra", "docker")).journal,
     trustedConfigDirectory: absolutePath(
       env,
       "OPS_TRUSTED_CONFIG_DIR",

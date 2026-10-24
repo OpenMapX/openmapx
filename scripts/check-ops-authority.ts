@@ -21,6 +21,9 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 /** The single component allowed to reach the Docker daemon. */
 const AUTHORITY_SERVICE = "ops-agent";
 
+/** The one part of the agent's state another service may mount: app-api's snapshot queue. */
+const AGENT_TRUSTED_CONFIG_QUEUE = "state/ops-agent/trusted-config";
+
 /** Directories whose production TypeScript must not invoke Docker directly. */
 const PRODUCTION_SOURCE_ROOTS = [
   join("apps", "api", "src"),
@@ -103,6 +106,29 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
         violations.push({
           file: relative(root, manifestPath),
           detail: `service "${serviceId}" mounts the host repository root`,
+        });
+      }
+      // The agent's own state (job journal, handoff record, trusted-config
+      // queue, privacy scratch). app-api publishes into the trusted-config
+      // queue and nothing else; every other service, data-manager above all,
+      // must not be able to reach it.
+      const infraPath = source.startsWith("@infra:")
+        ? source
+            .slice("@infra:".length)
+            .replace(/^\.?\/*/, "")
+            .replace(/\/+$/, "")
+        : null;
+      const reachesAgentState =
+        infraPath !== null &&
+        (infraPath === "" ||
+          infraPath === "state" ||
+          infraPath.startsWith("state/") ||
+          infraPath.startsWith("."));
+      const allowedAgentState = serviceId === "app-api" && infraPath === AGENT_TRUSTED_CONFIG_QUEUE;
+      if (reachesAgentState && !allowedAgentState) {
+        violations.push({
+          file: relative(root, manifestPath),
+          detail: `service "${serviceId}" mounts the operations agent's state (${source})`,
         });
       }
       if (source.includes("DOCKER_CONFIG_DIR") || target.endsWith("/.docker")) {

@@ -110,6 +110,9 @@ async function commitGeneration(
           selectedRoots = desired.roots;
           allowMissingSelected = desired.source === "default";
         }
+        // This generation mounts the agent's state from its own directory;
+        // an earlier release's directories move there first.
+        coreServices.prepareAgentStateDirectories(options.infraDir);
         const committed = await writer.commit({
           services,
           integrationSchemas: authority?.integrationSchemas ?? options.integrationSchemas,

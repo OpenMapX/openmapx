@@ -146,7 +146,7 @@
       "readOnly": true
     },
     {
-      "source": "@infra:data/ops-agent/trusted-config",
+      "source": "@infra:state/ops-agent/trusted-config",
       "target": "/var/lib/openmapx/trusted-config",
       "readOnly": false
     },

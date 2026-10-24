@@ -1,4 +1,5 @@
 #!/usr/bin/env -S node --experimental-strip-types --no-warnings
+import { services as coreServices } from "@openmapx/core/server";
 import { Command } from "commander";
 import { registerBackupCommands } from "./commands/backup";
 import { registerCacheCommands } from "./commands/cache";
@@ -12,6 +13,7 @@ import { registerTransitousCommands } from "./commands/transitous-bump";
 import { registerTransportApisPinCommands } from "./commands/transport-apis-pin";
 import { registerUsersCommands } from "./commands/users";
 import { loadInfraEnv } from "./lib/infra-env";
+import { log } from "./lib/output";
 
 // Mirror Docker Compose's behaviour: auto-load infra/docker/.env so that
 // `--domain` and `SERVICE_<ID>_<KEY>` overrides resolve consistently between
@@ -39,4 +41,14 @@ registerCacheCommands(program);
 registerTransportApisPinCommands(program);
 registerTransitousCommands(program);
 
-await program.parseAsync(process.argv);
+try {
+  await program.parseAsync(process.argv);
+} catch (error) {
+  // A community repository the operations agent no longer recognizes is an
+  // operator problem with a known remedy, not a crash.
+  if (error instanceof coreServices.CommunityServiceRecordsError) {
+    log.err(error.message);
+    process.exit(1);
+  }
+  throw error;
+}

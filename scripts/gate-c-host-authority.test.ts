@@ -1,4 +1,13 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { renderCompose } from "../packages/core/src/services/compose-renderer";
@@ -113,6 +122,56 @@ describe("Gate C — host authority", () => {
       )
       .map(([id]) => id);
     expect(holders).toEqual([]);
+  });
+
+  it("keeps the operations agent's state out of every other service's reach in the rendered stack", () => {
+    // The journal, handoff record, trusted-config queue and privacy scratch
+    // live in infra/docker/state/ops-agent. data-manager, which mounts the
+    // data directory read-write as the same uid, must not reach any of it.
+    const state = "./state/ops-agent";
+    const reaching = Object.entries(services).flatMap(([id, service]) =>
+      (service.volumes ?? [])
+        .map((volume) => volume.split(":")[0] ?? "")
+        .filter(
+          (source) =>
+            source === "." ||
+            source === "./" ||
+            source === "./state" ||
+            source === state ||
+            source.startsWith(`${state}/`),
+        )
+        .map((source) => `${id} ${source}`),
+    );
+    expect(reaching.filter((entry) => !entry.startsWith(`${AUTHORITY_SERVICE} `))).toEqual([
+      "app-api ./state/ops-agent/trusted-config",
+    ]);
+    expect(services["data-manager"]?.volumes).toContain("./data:/data");
+  });
+
+  it("rejects a manifest that mounts the operations agent's state", () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-authority-"));
+    try {
+      const manifest = (id: string, sources: string[]) => {
+        mkdirSync(join(root, "services", id), { recursive: true });
+        writeFileSync(
+          join(root, "services", id, "service.json"),
+          JSON.stringify({
+            id,
+            bindMounts: sources.map((source) => ({ source, target: `/mnt/${id}` })),
+          }),
+        );
+      };
+      manifest("app-api", ["@infra:state/ops-agent/trusted-config", "@infra:state/ops-agent"]);
+      manifest("data-manager", ["@infra:data", "@infra:state", "@infra:."]);
+      manifest("ops-agent", ["@infra:state/ops-agent/trusted-config"]);
+      expect(findAuthorityViolations(root).map((violation) => violation.detail)).toEqual([
+        `service "app-api" mounts the operations agent's state (@infra:state/ops-agent)`,
+        `service "data-manager" mounts the operations agent's state (@infra:state)`,
+        `service "data-manager" mounts the operations agent's state (@infra:.)`,
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("declares no Docker provider anywhere in production service configuration", () => {

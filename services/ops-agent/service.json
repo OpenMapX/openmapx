@@ -53,12 +53,12 @@
   },
   "bindMounts": [
     {
-      "source": "@infra:data/ops-agent/trusted-config",
+      "source": "@infra:state/ops-agent/trusted-config",
       "target": "/var/lib/openmapx/trusted-config",
       "readOnly": false
     },
     {
-      "source": "@infra:data/privacy-extraction",
+      "source": "@infra:state/ops-agent/privacy-extraction",
       "target": "/var/lib/openmapx/privacy-extraction",
       "readOnly": false
     },

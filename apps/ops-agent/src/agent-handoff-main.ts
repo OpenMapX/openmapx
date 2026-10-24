@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { services } from "@openmapx/core/server";
 import { createAgentHandoffBindings } from "./administrative-runtime";
 import { runAgentHandoff } from "./agent-handoff";
 import { runContainedProcess } from "./docker-runtime";
@@ -18,7 +19,7 @@ async function main(): Promise<number> {
     process.stderr.write("Agent handoff configuration rejected\n");
     return 2;
   }
-  const journal = join(rootDir, "infra", "docker", "data", "ops-agent", "jobs-v1.json");
+  const journal = services.agentStatePaths(join(rootDir, "infra", "docker")).journal;
   const bindings = createAgentHandoffBindings(rootDir);
   const phase = await runAgentHandoff({
     rootDir,

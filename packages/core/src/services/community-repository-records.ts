@@ -44,6 +44,24 @@ const MAX_MANIFEST_BYTES = 1024 * 1024;
 const MAX_TOTAL_MANIFEST_BYTES = 16 * 1024 * 1024;
 const FAILED = "Community service records rejected";
 
+/**
+ * Why the agent's community service records cannot be loaded, worded for the
+ * operator: the CLI prints the message as it is.
+ */
+export class CommunityServiceRecordsError extends Error {
+  constructor(message: string = FAILED) {
+    super(message);
+    this.name = "CommunityServiceRecordsError";
+  }
+}
+
+function recovery(repository: string): string {
+  return (
+    `Delete services/.community/${repository} and services/.community/${communityRecordFileName(repository)}, ` +
+    "then install its extension again."
+  );
+}
+
 /** One service manifest the agent validated: its directory in the repository and its digest. */
 export interface RecordedManifest {
   /** Directory holding `service.json`, relative to the repository root ("" for the root). */
@@ -380,32 +398,48 @@ export function loadRecordedCommunityServices(
     names = readdirSync(community);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw new Error(FAILED);
+    throw new CommunityServiceRecordsError();
   }
   try {
     const repositories = names
       .map(communityRecordRepository)
       .filter((repository): repository is string => repository !== null)
       .sort();
-    if (repositories.length > MAX_REPOSITORIES) throw new Error(FAILED);
+    if (repositories.length > MAX_REPOSITORIES) throw new CommunityServiceRecordsError();
     const services: VerifiedCommunityService[] = [];
     const ids = new Set<string>();
     let totalBytes = 0;
     for (const repository of repositories) {
-      const record = readCommunityRepositoryRecord(community, repository, options.uid);
+      let record: CommunityRepositoryRecord | null;
+      try {
+        record = readCommunityRepositoryRecord(community, repository, options.uid);
+      } catch {
+        throw new CommunityServiceRecordsError(
+          `The record of community repository ${repository} is not one the operations agent wrote. ${recovery(repository)}`,
+        );
+      }
       if (!record) continue;
-      for (const entry of verifyRecordedRepository(join(community, repository), record)) {
-        if (ids.has(entry.service.manifest.id)) throw new Error(FAILED);
+      let verified: VerifiedCommunityService[];
+      try {
+        verified = verifyRecordedRepository(join(community, repository), record);
+      } catch {
+        throw new CommunityServiceRecordsError(
+          `Community repository ${repository} no longer matches the service manifests the operations agent recorded when it installed it. ${recovery(repository)}`,
+        );
+      }
+      for (const entry of verified) {
+        if (ids.has(entry.service.manifest.id)) throw new CommunityServiceRecordsError();
         ids.add(entry.service.manifest.id);
         totalBytes += entry.bytes.byteLength;
         services.push(entry);
       }
       if (services.length > MAX_MANIFESTS || totalBytes > MAX_TOTAL_MANIFEST_BYTES) {
-        throw new Error(FAILED);
+        throw new CommunityServiceRecordsError();
       }
     }
     return services;
-  } catch {
-    throw new Error(FAILED);
+  } catch (error) {
+    if (error instanceof CommunityServiceRecordsError) throw error;
+    throw new CommunityServiceRecordsError();
   }
 }

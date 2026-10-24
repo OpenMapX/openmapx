@@ -26,7 +26,7 @@ describe("trusted configuration deployment handoff", () => {
         "/var/lib/openmapx/trusted-config",
       );
       expect(service.manifest.bindMounts).toContainEqual({
-        source: "@infra:data/ops-agent/trusted-config",
+        source: "@infra:state/ops-agent/trusted-config",
         target: "/var/lib/openmapx/trusted-config",
         readOnly: false,
       });
@@ -42,8 +42,8 @@ describe("trusted configuration deployment handoff", () => {
       allServices: [manifest("ops-agent")],
     });
     expect(rendered.composeYaml).toContain(
-      "../data/ops-agent/trusted-config:/var/lib/openmapx/trusted-config",
+      "../state/ops-agent/trusted-config:/var/lib/openmapx/trusted-config",
     );
-    expect(rendered.composeYaml).not.toContain(".trusted-config-current/data/ops-agent");
+    expect(rendered.composeYaml).not.toContain(".trusted-config-current/state/ops-agent");
   });
 });

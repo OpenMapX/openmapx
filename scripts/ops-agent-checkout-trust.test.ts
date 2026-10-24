@@ -128,7 +128,7 @@ describe("a checkout written under umask 002", () => {
     expect(rendered.stdout, rendered.stderr).toContain("Rendered");
 
     const infra = join(checkout, "infra", "docker");
-    const trustedConfig = join(infra, "data", "ops-agent", "trusted-config");
+    const trustedConfig = join(infra, "state", "ops-agent", "trusted-config");
     const port = await freePort();
     const agent = spawn(process.execPath, [join(outdir, "agent.mjs")], {
       cwd: checkout,
@@ -290,6 +290,13 @@ describe("the ops-agent's fixed CLI", () => {
     );
     const tampered = await cli(checkout, "services", "list");
     expect(tampered.code).not.toBe(0);
-    expect(`${tampered.stdout}${tampered.stderr}`).not.toContain("attacker.example.test");
+    const message = `${tampered.stdout}${tampered.stderr}`;
+    expect(message).not.toContain("attacker.example.test");
+    // An operator message with the remedy, not a stack trace.
+    expect(message).toContain(
+      `Community repository ${REPOSITORY} no longer matches the service manifests the operations agent recorded when it installed it.`,
+    );
+    expect(message).toContain(`Delete services/.community/${REPOSITORY}`);
+    expect(message).not.toMatch(/\n\s+at /);
   }, 120_000);
 });
