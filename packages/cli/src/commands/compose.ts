@@ -38,7 +38,9 @@ import { applyServiceSelection } from "../lib/service-selection";
 
 const {
   withConfigurationGenerationWriter,
+  embeddedBuiltInIntegrationManifests,
   loadIntegrationSchemas,
+  loadTrustedIntegrationSchemas,
   readAppliedConfiguration,
   resolveServiceConfigFromEnv,
   ServiceRegistry,
@@ -255,7 +257,11 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
     });
     const services = registry.list();
     const known = new Set(services.map((service) => service.manifest.id));
-    const integrationSchemas = loadIntegrationSchemas(paths.root);
+    // The ops-agent's fixed CLI renders with the schemas the agent authorizes:
+    // the release's built-in integrations and the checked installed ones.
+    const integrationSchemas = embeddedBuiltInIntegrationManifests()
+      ? loadTrustedIntegrationSchemas(paths.root)
+      : loadIntegrationSchemas(paths.root);
     // The database is the admin panel's: what it saved arrives through the
     // generation it last applied. The env layer is this host's.
     const saved = readAppliedConfiguration(paths.infraDir);

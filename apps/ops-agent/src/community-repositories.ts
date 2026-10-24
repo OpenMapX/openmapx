@@ -9,7 +9,6 @@ import {
   mkdirSync,
   openSync,
   readdirSync,
-  readFileSync,
   renameSync,
   rmSync,
   writeFileSync,
@@ -18,11 +17,11 @@ import { join, relative, sep } from "node:path";
 import type { OpsOperation, OpsResultFor } from "@openmapx/core/ops";
 import {
   assertAllowedGitUrl,
+  services as coreServices,
   type GitShallowCloneOptions,
   gitShallowCloneSnapshot,
 } from "@openmapx/core/server";
 import { OpsAgentBusyError, type OpsRuntime } from "./runtime";
-import { TrustedAuthorityFilesystem } from "./trusted-authority-filesystem";
 import type { TrustedConfigurationAuthoritySnapshot } from "./trusted-config-runtime";
 import { readCommunityRepository } from "./trusted-configuration-authority";
 
@@ -43,10 +42,7 @@ import { readCommunityRepository } from "./trusted-configuration-authority";
  */
 
 const REPOSITORY = /^[a-f0-9]{16}$/;
-const TRANSACTION = /^txn1_[a-f0-9]{24}$/;
 const COMMIT = /^[a-f0-9]{40}$/;
-const SERVICE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
-const RECORD = /^\.repository-([a-f0-9]{16})\.json$/;
 const BACKUP = /^\.backup-([a-f0-9]{16})-(txn1_[a-f0-9]{24})$/;
 const STAGE = /^\.stage-[a-f0-9]{24}$/;
 const MAX_PROBLEMS = 64;
@@ -61,36 +57,17 @@ const MAX_COMMUNITY_SERVICES = 256;
 const OWNERSHIP_REJECTED = "The repository belongs to another extension";
 const PUBLISH_REJECTED = "The repository could not be installed";
 
-interface RepositoryRecovery {
-  selectionBefore: string[] | null;
-  touchedServiceIds: string[];
-  previouslyEnabledServiceIds: string[];
-}
-
-interface RepositorySource {
-  url: string | null;
-  commit: string | null;
-  extensionId: string | null;
-}
-
-interface PendingTransaction {
-  transactionId: string;
-  /**
-   * `prepared` until the new checkout is in place, `published` until settled,
-   * and `rolledBack` once the previous checkout is restored, until released.
-   */
-  phase: "prepared" | "published" | "rolledBack";
-  /** What the checkout held before; null when the repository is new. */
-  previous: RepositorySource | null;
-  next: { url: string; commit: string; extensionId: string };
-  recovery: RepositoryRecovery;
-}
-
-interface RepositoryRecord extends RepositorySource {
-  version: 1;
-  repository: string;
-  pending: PendingTransaction | null;
-}
+const {
+  communityRecordFileName,
+  communityRecordRepository,
+  COMMUNITY_RECORD_VERSION,
+  manifestSha256,
+  readCommunityRepositoryRecord,
+  TrustedAuthorityFilesystem,
+} = coreServices;
+type RepositorySource = coreServices.CommunityRepositorySource;
+type PendingTransaction = coreServices.CommunityRepositoryPending;
+type RepositoryRecord = coreServices.CommunityRepositoryRecord;
 
 export type CommunityRepositoryClone = (
   options: Required<Pick<GitShallowCloneOptions, "url" | "ref" | "targetDir">> &
@@ -107,73 +84,6 @@ export interface CommunityRepositoryStoreOptions {
 
 export function communityRepositoryId(canonicalUrl: string): string {
   return createHash("sha256").update(canonicalUrl).digest("hex").slice(0, 16);
-}
-
-function stringList(value: unknown): string[] | null {
-  return Array.isArray(value) &&
-    value.length <= 256 &&
-    value.every((item) => typeof item === "string" && SERVICE_ID.test(item))
-    ? [...value]
-    : null;
-}
-
-function parseSource(value: unknown): RepositorySource | null {
-  if (!value || typeof value !== "object") return null;
-  const source = value as Record<string, unknown>;
-  const url = source.url;
-  const commit = source.commit;
-  const extensionId = source.extensionId;
-  if (url !== null && typeof url !== "string") return null;
-  if (commit !== null && (typeof commit !== "string" || !COMMIT.test(commit))) return null;
-  if (extensionId !== null && (typeof extensionId !== "string" || !SERVICE_ID.test(extensionId)))
-    return null;
-  return { url, commit, extensionId } as RepositorySource;
-}
-
-function parseRecord(raw: unknown, repository: string): RepositoryRecord {
-  const rejected = new Error(`Repository record ${repository} is invalid`);
-  if (!raw || typeof raw !== "object") throw rejected;
-  const record = raw as Record<string, unknown>;
-  const source = parseSource(record);
-  if (record.version !== 1 || record.repository !== repository || !source) throw rejected;
-  let pending: PendingTransaction | null = null;
-  if (record.pending !== null) {
-    const value = record.pending as Record<string, unknown> | undefined;
-    const next = value && parseSource(value.next);
-    const recovery = value?.recovery as Record<string, unknown> | undefined;
-    const touched = stringList(recovery?.touchedServiceIds);
-    const enabled = stringList(recovery?.previouslyEnabledServiceIds);
-    const before =
-      recovery?.selectionBefore === null ? null : stringList(recovery?.selectionBefore);
-    if (
-      !value ||
-      typeof value.transactionId !== "string" ||
-      !TRANSACTION.test(value.transactionId) ||
-      (value.phase !== "prepared" && value.phase !== "published" && value.phase !== "rolledBack") ||
-      !next?.url ||
-      !next.commit ||
-      !next.extensionId ||
-      !touched ||
-      !enabled ||
-      (recovery?.selectionBefore !== null && !before)
-    ) {
-      throw rejected;
-    }
-    const previous = value.previous === null ? null : parseSource(value.previous);
-    if (value.previous !== null && !previous) throw rejected;
-    pending = {
-      transactionId: value.transactionId,
-      phase: value.phase,
-      previous,
-      next: { url: next.url, commit: next.commit, extensionId: next.extensionId },
-      recovery: {
-        selectionBefore: before,
-        touchedServiceIds: touched,
-        previouslyEnabledServiceIds: enabled,
-      },
-    };
-  }
-  return { version: 1, repository, ...source, pending };
 }
 
 function syncDirectory(path: string): void {
@@ -242,7 +152,7 @@ export class CommunityRepositoryStore {
   }
 
   private recordPath(repository: string): string {
-    return join(this.community, `.repository-${repository}.json`);
+    return join(this.community, communityRecordFileName(repository));
   }
 
   private backupPath(repository: string, transactionId: string): string {
@@ -255,10 +165,9 @@ export class CommunityRepositoryStore {
     chmodSync(this.community, 0o755);
   }
 
+  /** Records are the agent's own files, so they are read strictly. */
   private readRecord(repository: string): RepositoryRecord | null {
-    const path = this.recordPath(repository);
-    if (!existsSync(path)) return null;
-    return parseRecord(JSON.parse(readFileSync(path, "utf8")), repository);
+    return readCommunityRepositoryRecord(this.community, repository, this.options.uid);
   }
 
   private writeRecord(record: RepositoryRecord): void {
@@ -390,7 +299,12 @@ export class CommunityRepositoryStore {
       rmSync(checkout, { recursive: true, force: true });
     }
     syncDirectory(this.community);
-    const previous = pending.previous ?? { url: null, commit: null, extensionId: null };
+    const previous = pending.previous ?? {
+      url: null,
+      commit: null,
+      extensionId: null,
+      manifests: null,
+    };
     if (keepNote) {
       this.writeRecord({ ...record, ...previous, pending: { ...pending, phase: "rolledBack" } });
     } else if (pending.previous === null) {
@@ -422,9 +336,9 @@ export class CommunityRepositoryStore {
     }
     const pendingBackups = new Set<string>();
     for (const name of entries) {
-      const match = RECORD.exec(name);
-      if (!match?.[1]) continue;
-      const record = this.readRecord(match[1]);
+      const repository = communityRecordRepository(name);
+      if (!repository) continue;
+      const record = this.readRecord(repository);
       if (!record?.pending) continue;
       if (record.pending.phase === "prepared") {
         this.restorePrevious(record, record.pending, false);
@@ -511,13 +425,27 @@ export class CommunityRepositoryStore {
         const checkout = this.checkout(repository);
         const previous: RepositorySource | null =
           record && existsSync(checkout)
-            ? { url: record.url, commit: record.commit, extensionId: record.extensionId }
+            ? {
+                url: record.url,
+                commit: record.commit,
+                extensionId: record.extensionId,
+                manifests: record.manifests,
+              }
             : null;
         pending = {
           transactionId: `txn1_${randomBytes(12).toString("hex")}`,
           phase: "prepared",
           previous,
-          next: { url: canonical, commit: staged.commit, extensionId: operation.extensionId },
+          next: {
+            url: canonical,
+            commit: staged.commit,
+            extensionId: operation.extensionId,
+            // Readers load exactly these manifests, by digest: the bytes this
+            // publish validated.
+            manifests: staged.reading.services
+              .map(({ path, bytes }) => ({ path, sha256: manifestSha256(bytes) }))
+              .sort((left, right) => left.path.localeCompare(right.path)),
+          },
           recovery: {
             selectionBefore: operation.recovery.selectionBefore,
             touchedServiceIds: [...operation.recovery.touchedServiceIds],
@@ -525,11 +453,12 @@ export class CommunityRepositoryStore {
           },
         };
         current = {
-          version: 1,
+          version: COMMUNITY_RECORD_VERSION,
           repository,
           url: previous?.url ?? null,
           commit: previous?.commit ?? null,
           extensionId: previous?.extensionId ?? null,
+          manifests: previous?.manifests ?? null,
           pending,
         };
         this.writeRecord(current);
@@ -628,7 +557,7 @@ export class CommunityRepositoryStore {
     if (existsSync(this.community)) {
       for (const name of readdirSync(this.community)) {
         if (REPOSITORY.test(name)) repositories.add(name);
-        const record = RECORD.exec(name)?.[1];
+        const record = communityRecordRepository(name);
         if (record) repositories.add(record);
       }
     }

@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { closeSync, constants, fstatSync, openSync, readdirSync, readSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   type BuiltInServiceManifestSource,
   checkoutBuiltInServiceManifests,
+  readRegularFileBytes,
 } from "./built-in-service-source";
 import { embeddedBuiltInServiceManifests } from "./embedded-built-in-services";
 import { validateServiceManifest } from "./manifest-schema";
@@ -78,27 +79,6 @@ export function builtInServiceManifestSource(rootDir: string): BuiltInServiceMan
   );
 }
 
-function readManifestBytes(path: string): Buffer {
-  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-  try {
-    const metadata = fstatSync(fd);
-    if (!metadata.isFile() || metadata.size < 2 || metadata.size > MAX_MANIFEST_BYTES) {
-      throw new Error("invalid");
-    }
-    const bytes = Buffer.alloc(metadata.size);
-    let offset = 0;
-    while (offset < bytes.length) {
-      const read = readSync(fd, bytes, offset, bytes.length - offset, offset);
-      if (read === 0) throw new Error("invalid");
-      offset += read;
-    }
-    if (readSync(fd, Buffer.alloc(1), 0, 1, offset) !== 0) throw new Error("invalid");
-    return bytes;
-  } finally {
-    closeSync(fd);
-  }
-}
-
 function sourceIds(source: BuiltInServiceManifestSource): string[] {
   const ids = [...source.ids].sort();
   if (
@@ -127,7 +107,7 @@ export function readBuiltInServices(
   const services: LoadedService[] = [];
   const digest = createHash("sha256").update("openmapx-release-service-authority-v1\0");
   for (const id of serviceIds) {
-    const bytes = readManifestBytes(source.manifestPath(id));
+    const bytes = readRegularFileBytes(source.manifestPath(id), MAX_MANIFEST_BYTES);
     const raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as unknown;
     const validation = validateServiceManifest(raw, { firstParty: true });
     if (!validation.valid || !raw || typeof raw !== "object" || Array.isArray(raw)) {
@@ -203,13 +183,13 @@ export function inspectBuiltInServiceDrift(
     let release: Buffer;
     let current: Buffer;
     try {
-      release = readManifestBytes(source.manifestPath(id));
+      release = readRegularFileBytes(source.manifestPath(id), MAX_MANIFEST_BYTES);
     } catch {
       changed.push(id);
       continue;
     }
     try {
-      current = readManifestBytes(checkout.manifestPath(id));
+      current = readRegularFileBytes(checkout.manifestPath(id), MAX_MANIFEST_BYTES);
     } catch (error) {
       ((error as NodeJS.ErrnoException).code === "ENOENT" ? missing : changed).push(id);
       continue;

@@ -1,19 +1,17 @@
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
-import {
-  TrustedAuthorityFilesystem,
-  type TrustedAuthorityReadHooks,
-} from "./trusted-authority-filesystem";
 import type { TrustedConfigurationAuthoritySnapshot } from "./trusted-config-runtime";
-import { loadTrustedIntegrationSchemas } from "./trusted-integration-registry";
 
-const { assertTrustedConfigurationSchema } = coreServices;
+const {
+  assertTrustedConfigurationSchema,
+  loadRecordedCommunityServices,
+  loadTrustedIntegrationSchemas,
+} = coreServices;
+type TrustedAuthorityFilesystem = InstanceType<typeof coreServices.TrustedAuthorityFilesystem>;
 
 const FAILED = "Trusted configuration authority rejected";
-const REPOSITORY = /^[a-f0-9]{16}$/;
 const SERVICE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
-const MAX_REPOSITORIES = 256;
 const MAX_DIRECTORIES = 4_096;
 const MAX_DIRECTORY_ENTRIES = 2_048;
 const MAX_MANIFESTS = 256;
@@ -144,49 +142,6 @@ export function readCommunityRepository(
   return { services, problems };
 }
 
-function loadCommunityServices(
-  rootDir: string,
-  filesystem: TrustedAuthorityFilesystem,
-): { services: coreServices.LoadedService[]; manifestBytes: Uint8Array[] } {
-  const servicesRoot = join(rootDir, "services");
-  const community = join(servicesRoot, ".community");
-  filesystem.openDirectory(servicesRoot);
-  try {
-    filesystem.openDirectory(community);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { services: [], manifestBytes: [] };
-    }
-    throw error;
-  }
-  const repositoryEntries = filesystem.listDirectory(community);
-  const repositories = repositoryEntries.filter(
-    (entry) => entry.isDirectory() && REPOSITORY.test(entry.name),
-  );
-  if (repositories.length > MAX_REPOSITORIES) throw new Error(FAILED);
-  // Dot-prefixed entries are the operations agent's own staging, backups and
-  // repository records; every other entry must be a repository checkout.
-  for (const entry of repositoryEntries) {
-    if (entry.name.startsWith(".")) continue;
-    if (!entry.isDirectory() || !REPOSITORY.test(entry.name)) throw new Error(FAILED);
-  }
-
-  const services: coreServices.LoadedService[] = [];
-  const manifestBytes: Uint8Array[] = [];
-  const budget = createCommunityReadBudget();
-  for (const repository of repositories.sort((left, right) =>
-    left.name.localeCompare(right.name),
-  )) {
-    const reading = readCommunityRepository(filesystem, join(community, repository.name), budget);
-    if (reading.problems.length > 0) throw new Error(FAILED);
-    for (const entry of reading.services) {
-      services.push(entry.service);
-      manifestBytes.push(entry.bytes);
-    }
-  }
-  return { services, manifestBytes };
-}
-
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (value && typeof value === "object") {
@@ -208,7 +163,7 @@ export function createTrustedConfigurationAuthorityLoader(options: {
   rootDir: string;
   builtInServices: readonly coreServices.LoadedService[];
   builtInAuthorityDigest?: string;
-  hooks?: TrustedAuthorityReadHooks;
+  hooks?: coreServices.TrustedAuthorityReadHooks;
 }): () => Promise<TrustedConfigurationAuthoritySnapshot> {
   const builtInIds = new Set<string>();
   const builtIns = options.builtInServices.map((service) => {
@@ -224,23 +179,21 @@ export function createTrustedConfigurationAuthorityLoader(options: {
     return structuredClone(service);
   });
   return async () => {
-    let filesystem: TrustedAuthorityFilesystem | undefined;
     try {
-      filesystem = new TrustedAuthorityFilesystem(
-        options.rootDir,
-        process.geteuid?.() ?? 0,
-        options.hooks,
+      // Built-ins come from the release; community services only as the agent
+      // recorded them, by digest; integration schemas from the release, plus
+      // the checked installed ones. None of it rests on the checkout's file
+      // permissions.
+      const community = loadRecordedCommunityServices(options.rootDir).map(
+        ({ service }) => service,
       );
-      const community = loadCommunityServices(options.rootDir, filesystem);
-      const services = [
-        ...builtIns.map((service) => structuredClone(service)),
-        ...community.services,
-      ];
+      const services = [...builtIns.map((service) => structuredClone(service)), ...community];
       if (new Set(services.map((service) => service.manifest.id)).size !== services.length) {
         throw new Error(FAILED);
       }
-      const integrationSchemas = loadTrustedIntegrationSchemas(options.rootDir, { filesystem });
-      filesystem.recheck();
+      const integrationSchemas = loadTrustedIntegrationSchemas(options.rootDir, {
+        ...(options.hooks ? { hooks: options.hooks } : {}),
+      });
       const digest = createHash("sha256").update("openmapx-trusted-authority-v1\0");
       if (options.builtInAuthorityDigest) {
         if (!/^release1_[A-Za-z0-9_-]{43}$/.test(options.builtInAuthorityDigest)) {
@@ -264,7 +217,6 @@ export function createTrustedConfigurationAuthorityLoader(options: {
           .update(canonicalJson(schema))
           .update("\0");
       }
-      filesystem.recheck();
       const snapshot: TrustedConfigurationAuthoritySnapshot = {
         revisionId: `authority1_${digest.digest("base64url")}`,
         services,
@@ -274,8 +226,6 @@ export function createTrustedConfigurationAuthorityLoader(options: {
       return snapshot;
     } catch {
       throw new Error(FAILED);
-    } finally {
-      filesystem?.close();
     }
   };
 }

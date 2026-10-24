@@ -1,4 +1,4 @@
-import type { BuiltInServiceManifestSource } from "./built-in-service-source";
+import type { BuiltInManifestSource } from "./built-in-service-source";
 
 /**
  * The release's built-in service manifests embedded in this process's runtime
@@ -10,6 +10,11 @@ import type { BuiltInServiceManifestSource } from "./built-in-service-source";
  * The choice is made when the bundle is built, so no setting can switch a
  * bundled agent back to the checkout.
  */
-export function embeddedBuiltInServiceManifests(): BuiltInServiceManifestSource | null {
+export function embeddedBuiltInServiceManifests(): BuiltInManifestSource | null {
+  return null;
+}
+
+/** The built-in integration manifests embedded the same way, or `null` from source. */
+export function embeddedBuiltInIntegrationManifests(): BuiltInManifestSource | null {
   return null;
 }

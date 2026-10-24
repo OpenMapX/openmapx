@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { loadRecordedCommunityServices } from "./community-repository-records";
 import { embeddedBuiltInServiceManifests } from "./embedded-built-in-services";
 import { findServiceManifestDirs } from "./manifest-discovery";
 import { validateServiceManifest } from "./manifest-schema";
@@ -20,7 +21,8 @@ export interface ServiceRegistryOptions {
   builtInServices?: readonly LoadedService[];
   /**
    * Community services supplied by the caller instead of scanning
-   * `communityDir`. The app-api container has no host checkout, so it reads
+   * `communityDir` (or, from the ops-agent bundle, reading the agent's
+   * repository records). The app-api container has no host checkout, so it reads
    * them from the operations agent, which owns `services/.community`. Each
    * must already have passed the community manifest rules.
    */
@@ -52,6 +54,13 @@ export class ServiceRegistry {
     if (this.opts.communityServices) {
       for (const service of this.opts.communityServices)
         this.addCommunityService(service, warnings);
+    } else if (embeddedBuiltInServiceManifests()) {
+      // The ops-agent bundle (the agent and its fixed CLI) loads only the
+      // community manifests the agent recorded when it installed them, by
+      // digest, never whatever else sits in the checkout.
+      for (const { service } of loadRecordedCommunityServices(this.opts.rootDir)) {
+        this.addCommunityService(service, warnings);
+      }
     } else if (existsSync(communityDir)) {
       this.scanCommunityDir(communityDir, warnings);
     }

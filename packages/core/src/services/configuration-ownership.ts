@@ -1,4 +1,4 @@
-import { lstatSync, mkdirSync, rmdirSync, type Stats } from "node:fs";
+import { chmodSync, lstatSync, mkdirSync, rmdirSync, type Stats } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -25,7 +25,18 @@ export async function acquireConfigurationOwnership(
     throw new Error("Configuration ownership requires Linux or macOS local POSIX storage");
   }
   const owner = process.geteuid?.();
-  const root = lstatSync(infraDir);
+  let root = lstatSync(infraDir);
+  // infra/docker holds the current-generation pointer and this lock, so only
+  // its owner may write it. Git creates it with the checkout's umask (group-
+  // writable under 002); its owner, the stack-operating user that every
+  // writer runs as, takes the group and other write bits away instead of
+  // asking the operator to.
+  if (root.isDirectory() && !root.isSymbolicLink() && root.uid === owner) {
+    if ((root.mode & 0o022) !== 0) {
+      chmodSync(infraDir, root.mode & 0o7755);
+      root = lstatSync(infraDir);
+    }
+  }
   if (
     !root.isDirectory() ||
     root.isSymbolicLink() ||

@@ -1,7 +1,9 @@
 import {
   chmodSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   renameSync,
   rmSync,
   symlinkSync,
@@ -9,7 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { services } from "@openmapx/core/server";
+import { services } from "@openmapx/core/server";
 import { afterEach, describe, expect, it } from "vitest";
 import { createTrustedConfigurationAuthorityLoader } from "./trusted-configuration-authority";
 
@@ -42,25 +44,50 @@ function fixture(): string {
   return root;
 }
 
-function installService(root: string): string {
-  const directory = join(root, "services", ".community", "0123456789abcdef", "services", "live");
-  mkdirSync(directory, { recursive: true, mode: 0o755 });
+const REPOSITORY = "0123456789abcdef";
+
+function serviceManifest(id = "community-live"): string {
+  return JSON.stringify({
+    id,
+    name: "Community Live",
+    version: "1.0.0",
+    quality: "community",
+    container: {
+      image: `registry.example.test/${id}`,
+      tag: "1.0.0",
+      digest: `sha256:${"a".repeat(64)}`,
+    },
+    configSchema: { type: "object", properties: { region: { enum: ["eu"] } } },
+  });
+}
+
+/** What the agent's record holds once it has published `paths`. */
+function writeRecord(root: string, paths: string[]): void {
+  const repository = join(root, "services", ".community", REPOSITORY);
   writeFileSync(
-    join(directory, "service.json"),
+    join(root, "services", ".community", services.communityRecordFileName(REPOSITORY)),
     JSON.stringify({
-      id: "community-live",
-      name: "Community Live",
-      version: "1.0.0",
-      quality: "community",
-      container: {
-        image: "registry.example.test/community-live",
-        tag: "1.0.0",
-        digest: `sha256:${"a".repeat(64)}`,
-      },
-      configSchema: { type: "object", properties: { region: { enum: ["eu"] } } },
+      version: services.COMMUNITY_RECORD_VERSION,
+      repository: REPOSITORY,
+      url: "https://example.test/live.git",
+      commit: "c".repeat(40),
+      extensionId: "live-extension",
+      manifests: paths.map((path) => ({
+        path,
+        sha256: services.manifestSha256(readFileSync(join(repository, path, "service.json"))),
+      })),
+      pending: null,
     }),
     { mode: 0o644 },
   );
+}
+
+/** A repository installed and recorded the way the agent publishes one. */
+function installService(root: string): string {
+  const directory = join(root, "services", ".community", REPOSITORY, "services", "live");
+  mkdirSync(directory, { recursive: true, mode: 0o755 });
+  writeFileSync(join(directory, "service.json"), serviceManifest(), { mode: 0o644 });
+  writeRecord(root, ["services/live"]);
   return directory;
 }
 
@@ -89,7 +116,7 @@ describe("refreshed trusted configuration authority", () => {
     expect(initial.services.map((service) => service.manifest.id)).toEqual(["alpha"]);
     expect(initial.integrationSchemas).toEqual(new Map());
 
-    const serviceDirectory = installService(root);
+    installService(root);
     const integrationDirectory = installIntegration(root);
     const installed = await load();
     expect(installed.services.map((service) => service.manifest.id).sort()).toEqual([
@@ -108,7 +135,8 @@ describe("refreshed trusted configuration authority", () => {
     });
     expect(updated.revisionId).not.toBe(installed.revisionId);
 
-    rmSync(serviceDirectory, { recursive: true });
+    rmSync(join(root, "services", ".community", REPOSITORY), { recursive: true });
+    rmSync(join(root, "services", ".community", services.communityRecordFileName(REPOSITORY)));
     rmSync(integrationDirectory, { recursive: true });
     const removed = await load();
     expect(removed.services.map((service) => service.manifest.id)).toEqual(["alpha"]);
@@ -130,50 +158,98 @@ describe("refreshed trusted configuration authority", () => {
     symlinkSync(target, manifest);
     await expect(load()).rejects.toThrow("Trusted configuration authority rejected");
 
-    rmSync(serviceDirectory, { recursive: true });
+    rmSync(join(root, "services", ".community", REPOSITORY), { recursive: true });
+    rmSync(join(root, "services", ".community", services.communityRecordFileName(REPOSITORY)));
     const integrationDirectory = installIntegration(root);
     chmodSync(integrationDirectory, 0o777);
     await expect(load()).rejects.toThrow("Trusted configuration authority rejected");
   });
 
-  it("rejects a community repository parent replaced by a symlink after validation", async () => {
+  it("rejects a recorded repository replaced by a symlink to identical bytes", async () => {
     const root = fixture();
-    const serviceDirectory = installService(root);
-    const repository = join(root, "services", ".community", "0123456789abcdef");
+    installService(root);
+    const repository = join(root, "services", ".community", REPOSITORY);
     const outside = mkdtempSync(join(tmpdir(), "openmapx-swapped-service-"));
     roots.push(outside);
-    const replacement = join(outside, "services", "live");
-    mkdirSync(replacement, { recursive: true, mode: 0o755 });
-    writeFileSync(
-      join(replacement, "service.json"),
-      JSON.stringify({
-        id: "escaped-service",
-        name: "Escaped",
-        version: "1.0.0",
-        quality: "community",
-        container: {
-          image: "registry.example.test/escaped",
-          digest: `sha256:${"b".repeat(64)}`,
-        },
-      }),
-      { mode: 0o644 },
-    );
-    let swapped = false;
+    mkdirSync(join(outside, "services", "live"), { recursive: true });
+    writeFileSync(join(outside, "services", "live", "service.json"), serviceManifest());
+    renameSync(repository, `${repository}.original`);
+    symlinkSync(outside, repository);
     const load = createTrustedConfigurationAuthorityLoader({
       rootDir: root,
       builtInServices: [builtIn()],
-      hooks: {
-        beforeManifestOpen: (kind) => {
-          if (kind !== "service" || swapped) return;
-          swapped = true;
-          renameSync(repository, `${repository}.original`);
-          symlinkSync(outside, repository);
-        },
-      },
     });
-
     await expect(load()).rejects.toThrow("Trusted configuration authority rejected");
-    expect(serviceDirectory).toContain("services/live");
+  });
+
+  it("loads community services by their recorded digests, not by file permissions", async () => {
+    const root = fixture();
+    const serviceDirectory = installService(root);
+    const load = createTrustedConfigurationAuthorityLoader({
+      rootDir: root,
+      builtInServices: [builtIn()],
+    });
+    // A umask of 002 makes the checkout group-writable; the digests still hold.
+    for (const path of [
+      root,
+      join(root, "services"),
+      join(root, "services", ".community"),
+      join(root, "services", ".community", REPOSITORY),
+      serviceDirectory,
+    ]) {
+      chmodSync(path, 0o775);
+    }
+    chmodSync(join(serviceDirectory, "service.json"), 0o664);
+    expect((await load()).services.map((service) => service.manifest.id).sort()).toEqual([
+      "alpha",
+      "community-live",
+    ]);
+
+    // A manifest the record does not list, and a repository without a record,
+    // are never loaded.
+    mkdirSync(join(serviceDirectory, "..", "extra"));
+    writeFileSync(join(serviceDirectory, "..", "extra", "service.json"), serviceManifest("extra"));
+    mkdirSync(join(root, "services", ".community", "fedcba9876543210"));
+    writeFileSync(
+      join(root, "services", ".community", "fedcba9876543210", "service.json"),
+      serviceManifest("unrecorded"),
+    );
+    expect((await load()).services.map((service) => service.manifest.id).sort()).toEqual([
+      "alpha",
+      "community-live",
+    ]);
+
+    // Changed bytes fail closed, as an invalid manifest always has.
+    writeFileSync(
+      join(serviceDirectory, "service.json"),
+      serviceManifest().replace("registry.example.test", "attacker.example.test"),
+    );
+    await expect(load()).rejects.toThrow("Trusted configuration authority rejected");
+  });
+
+  it("reads repository records strictly", async () => {
+    const recordPath = (root: string) =>
+      join(root, "services", ".community", services.communityRecordFileName(REPOSITORY));
+    const load = (root: string) =>
+      createTrustedConfigurationAuthorityLoader({ rootDir: root, builtInServices: [builtIn()] })();
+    for (const failure of ["writable", "symlink", "version-1", "hardlink"] as const) {
+      const root = fixture();
+      installService(root);
+      const path = recordPath(root);
+      if (failure === "writable") {
+        chmodSync(path, 0o664);
+      } else if (failure === "symlink") {
+        renameSync(path, `${path}.real`);
+        symlinkSync(`${path}.real`, path);
+      } else if (failure === "version-1") {
+        const record = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+        const { manifests: _manifests, ...legacy } = record;
+        writeFileSync(path, JSON.stringify({ ...legacy, version: 1 }));
+      } else {
+        linkSync(path, `${path}.link`);
+      }
+      await expect(load(root), failure).rejects.toThrow("Trusted configuration authority rejected");
+    }
   });
 
   it("rejects an integration parent replaced by a symlink after validation", async () => {
