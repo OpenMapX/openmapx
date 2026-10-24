@@ -14,7 +14,8 @@ import {
 
 const FAILED = "Trusted integration registry rejected";
 const MAX_MANIFESTS = 256;
-const MAX_MANIFEST_BYTES = 128 * 1024;
+/** The largest integration manifest the operations agent reads. */
+export const MAX_INTEGRATION_MANIFEST_BYTES = 128 * 1024;
 const MAX_TOTAL_BYTES = 4 * 1024 * 1024;
 const ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
@@ -32,6 +33,36 @@ function parseSchema(
   if (!schema || typeof schema !== "object" || Array.isArray(schema)) throw new Error();
   assertTrustedConfigurationSchema(schema as Record<string, unknown>);
   return { id: record.id, schema: schema as Record<string, unknown> };
+}
+
+function readIntegrationManifest(filesystem: TrustedAuthorityFilesystem, directory: string) {
+  return filesystem.readManifest(
+    join(directory, "manifest.json"),
+    "integration",
+    MAX_INTEGRATION_MANIFEST_BYTES,
+  );
+}
+
+/**
+ * Throws unless the operations agent would load `directory` as the installed
+ * integration `id`: the directory and its `manifest.json` owned by `uid` and
+ * not group- or other-writable, the manifest a single-link regular file of at
+ * most 128 KiB, in UTF-8, declaring `id` and a configuration schema the agent
+ * accepts. The installer runs it on what it is about to install, so an
+ * installed integration cannot stop the agent from loading the others.
+ */
+export function assertTrustedIntegrationDirectory(
+  directory: string,
+  id: string,
+  uid: number = process.geteuid?.() ?? 0,
+): void {
+  const filesystem = new TrustedAuthorityFilesystem(directory, uid);
+  try {
+    parseSchema(readIntegrationManifest(filesystem, directory), id);
+    filesystem.recheck();
+  } finally {
+    filesystem.close();
+  }
 }
 
 export interface LoadTrustedIntegrationSchemasOptions {
@@ -52,8 +83,9 @@ export interface LoadTrustedIntegrationSchemasOptions {
  * Built-in manifests come from the release when bundled, so the checkout's
  * `integrations/` and its file permissions do not decide them. Installed
  * integrations under `custom_integrations/` are not part of any release:
- * they keep the owner and mode checks, anchored at that directory, until
- * their installer controls the modes it writes.
+ * they keep the owner and mode checks, anchored at that directory. The
+ * installer writes fixed modes and refuses anything these checks would
+ * reject (`assertTrustedIntegrationDirectory`).
  */
 export function loadTrustedIntegrationSchemas(
   rootDir: string,
@@ -76,7 +108,7 @@ export function loadTrustedIntegrationSchemas(
       checkoutBuiltInIntegrationManifests(rootDir);
     for (const id of builtIns.ids) {
       if (!ID.test(id)) throw new Error();
-      add(id, readRegularFileBytes(builtIns.manifestPath(id), MAX_MANIFEST_BYTES));
+      add(id, readRegularFileBytes(builtIns.manifestPath(id), MAX_INTEGRATION_MANIFEST_BYTES));
     }
 
     const custom = join(rootDir, "custom_integrations");
@@ -99,11 +131,7 @@ export function loadTrustedIntegrationSchemas(
         filesystem.openDirectory(directory);
         let bytes: Uint8Array;
         try {
-          bytes = filesystem.readManifest(
-            join(directory, "manifest.json"),
-            "integration",
-            MAX_MANIFEST_BYTES,
-          );
+          bytes = readIntegrationManifest(filesystem, directory);
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
           throw error;

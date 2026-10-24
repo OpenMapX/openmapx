@@ -220,7 +220,9 @@ export {
   type TrustedAuthorityReadHooks,
 } from "./trusted-authority-filesystem";
 export {
+  assertTrustedIntegrationDirectory,
   type LoadTrustedIntegrationSchemasOptions,
   loadTrustedIntegrationSchemas,
+  MAX_INTEGRATION_MANIFEST_BYTES,
 } from "./trusted-integration-schemas";
 export * from "./types";
