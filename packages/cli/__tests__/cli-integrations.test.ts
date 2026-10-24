@@ -937,8 +937,23 @@ describe("installIntegration (what the operations agent loads)", () => {
     });
   const install = (source: string, sourceKind: "artifact" | "source" = "artifact") =>
     installIntegration({ source, sourceKind, rootDir: tmp });
-  /** The integration schemas the agent's loader returns, or its error. */
-  const agentLoads = () => [...services.loadTrustedIntegrationSchemas(tmp).keys()];
+  /**
+   * The installed integrations the agent's per-integration check accepts. The
+   * agent itself loads only what it installed and recorded; this is what a
+   * direct install leaves for it to verify.
+   */
+  const agentLoads = () =>
+    readdirSync(join(tmp, "custom_integrations"))
+      .filter((name) => !name.startsWith("."))
+      .filter((name) => {
+        try {
+          services.assertTrustedIntegrationDirectory(join(tmp, "custom_integrations", name), name);
+          return true;
+        } catch {
+          return false;
+        }
+      })
+      .sort();
   const mode = (path: string) => lstatSync(path).mode & 0o777;
 
   /** A Debian or Ubuntu login shell's umask while `run` runs. */
@@ -1073,14 +1088,6 @@ describe("installIntegration (what the operations agent loads)", () => {
       writeTarFixture(artifact, [{ name: "manifest.json", data }]);
       await expectArtifactRejection(artifact, id, message);
     }
-    expect(agentLoads()).toEqual(["kept"]);
-  });
-
-  it("takes over a group-writable custom_integrations it owns", async () => {
-    mkdirSync(join(tmp, "custom_integrations"));
-    chmodSync(join(tmp, "custom_integrations"), 0o775);
-    await installKept();
-    expect(mode(join(tmp, "custom_integrations"))).toBe(0o755);
     expect(agentLoads()).toEqual(["kept"]);
   });
 
