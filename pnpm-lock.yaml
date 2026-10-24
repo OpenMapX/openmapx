@@ -702,7 +702,7 @@ importers:
         version: 0.1.1
       maplibre-gl:
         specifier: ^6.13.0
-        version: 6.13.0
+        version: 6.14.0
       maplibre-theme:
         specifier: ^1.0.0
         version: 1.0.0
@@ -1576,7 +1576,7 @@ importers:
         version: link:../../packages/core
       maplibre-gl:
         specifier: ^6.13.0
-        version: 6.13.0
+        version: 6.14.0
       zustand:
         specifier: ^5.0.15
         version: 5.0.15(@types/react@19.3.0)(immer@11.1.21)(react@19.3.0)(use-sync-external-store@1.7.0(react@19.3.0))
@@ -10206,8 +10206,8 @@ packages:
   maplibre-contour@0.1.1:
     resolution: {integrity: sha512-0m267124bx+LJ5zM1mpB23uvO4sCrgOb4dWgwbUbGWGsDsWNA4g93XTXPoRQga6GAD6TDI7tzyowBzdADSPusg==}
 
-  maplibre-gl@6.13.0:
-    resolution: {integrity: sha512-ELXk4h+xl0URFQEnVbAN6MGn61P6jq4amUWHiskLVsvHCaKdf1Zq6G8UNOD0AQ3UaXoL5ECc8ovz8yqYEBGPKw==}
+  maplibre-gl@6.14.0:
+    resolution: {integrity: sha512-L7U9y9TyPJ3P/JJbW+eH+A3FzdPq+3fnZFqqeCwf/S6cRGganHwVI5b/C8/zOYzreUzsloDPZVVaMQA94wOt4A==}
     engines: {node: '>=16.14.0', npm: '>=8.1.0'}
 
   maplibre-theme@1.0.0:
@@ -20411,7 +20411,7 @@ snapshots:
 
   maplibre-contour@0.1.1: {}
 
-  maplibre-gl@6.13.0:
+  maplibre-gl@6.14.0:
     dependencies:
       '@mapbox/point-geometry': 1.1.0
       '@mapbox/tiny-sdf': 2.3.0
