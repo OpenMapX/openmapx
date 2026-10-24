@@ -268,8 +268,7 @@ export class IntegrationStore {
     const path = join(integrationUploadsDirectory(this.infraDir), `${sha256}.tar.gz`);
     let fd: number;
     try {
-      // Read-only: nothing is created, so the mode is never applied.
-      fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o600);
+      fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     } catch {
       throw new Error("No uploaded integration archive has that SHA-256");
     }
@@ -667,7 +666,6 @@ export class IntegrationStore {
           const fd = openSync(
             join(this.target(record.integrationId), "manifest.json"),
             constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-            0o600, // read-only: never applied
           );
           try {
             if (fstatSync(fd).isFile()) actual = sha256Hex(readFileSync(fd));

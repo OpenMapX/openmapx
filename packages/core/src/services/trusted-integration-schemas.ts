@@ -34,12 +34,7 @@ function parseSchema(
 
 /** A regular file of at most `maxBytes`, opened without following a symbolic link. */
 function readManifestFile(path: string, maxBytes: number): Buffer {
-  // Read-only: nothing is created, so the mode is never applied.
-  const fd = openSync(
-    path,
-    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-    0o600,
-  );
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const stats = fstatSync(fd);
     if (!stats.isFile() || stats.size < 2 || stats.size > maxBytes) throw new Error();

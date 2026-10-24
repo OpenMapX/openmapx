@@ -225,12 +225,7 @@ function assertOwnDirectory(path: string, uid: number): void {
 }
 
 function readRecordBytes(path: string, uid: number): Buffer {
-  // Read-only: nothing is created, so the mode is never applied.
-  const fd = openSync(
-    path,
-    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-    0o600,
-  );
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const stats = fstatSync(fd);
     if (
