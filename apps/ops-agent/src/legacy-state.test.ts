@@ -104,6 +104,27 @@ describe("importing an earlier release's agent state", () => {
     ]);
   });
 
+  it("discards a journal with more unfinished jobs than an agent ever leaves", async () => {
+    const f = fixture();
+    const planted = Array.from({ length: 17 }, (_, index) => {
+      const backupId = `planted-${index}`;
+      const plantedOperation = { kind: "backup.create", backupId } as const;
+      return {
+        ...job,
+        operation: plantedOperation,
+        operationId: `job1_${String(index).padStart(24, "0")}`,
+        operationKey: `opk1_${String(index).padStart(24, "0")}`,
+        fingerprint: opsOperationFingerprint(plantedOperation),
+        resourceId: opsResourceId(plantedOperation),
+      };
+    });
+    await (await openOpsJobJournal(f.legacy.journal)).replace(planted);
+    await expect(importLegacyAgentState(f.options)).resolves.toMatchObject({
+      journal: "discarded",
+    });
+    expect(existsSync(f.current.journal)).toBe(false);
+  });
+
   it("imports once and never reads the old location again", async () => {
     const f = fixture();
     await importLegacyAgentState(f.options);

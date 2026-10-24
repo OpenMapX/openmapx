@@ -6,6 +6,12 @@ import { isTerminalHandoff, readAgentHandoffFile, writeAgentHandoff } from "./ag
 import { readOpsJobJournalSnapshot } from "./journal";
 
 const UNFINISHED = new Set(["queued", "running", "termination_pending"]);
+/**
+ * An agent runs at most four operations at once. A journal with more
+ * unfinished jobs than this was not left by one; importing it would fill the
+ * job table with records that are never pruned and refuse every operation.
+ */
+const MAX_IMPORTED_UNFINISHED = 16;
 
 /**
  * Releases before the agent's state moved to `infra/docker/state/ops-agent`
@@ -81,6 +87,7 @@ export async function importLegacyAgentState(
       const unfinished = (await readOpsJobJournalSnapshot(legacy.journal)).filter((job) =>
         UNFINISHED.has(job.state),
       );
+      if (unfinished.length > MAX_IMPORTED_UNFINISHED) throw new Error("implausible journal");
       atomicWrite(current.journal, JSON.stringify({ version: 1, jobs: unfinished }));
       journal = "imported";
     } catch {
