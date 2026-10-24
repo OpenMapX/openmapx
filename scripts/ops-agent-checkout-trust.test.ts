@@ -1,10 +1,19 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
+import { gzipSync } from "node:zlib";
 import { OpsClient } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -16,6 +25,7 @@ import {
   consumePublishedTrustedConfiguration,
   publishTrustedConfigurationSnapshot,
 } from "../apps/api/src/services/trusted-config-publisher";
+import { installIntegration } from "../packages/integration-framework/src/installer";
 import {
   buildRuntimeBundle,
   RUNTIME_BUNDLES,
@@ -112,6 +122,106 @@ async function freePort(): Promise<number> {
   });
 }
 
+interface RunningAgent {
+  port: number;
+  output: () => string;
+  stop: () => void;
+}
+
+/** Starts the bundled agent on a checkout and waits until it reports healthy. */
+async function startAgent(checkout: string): Promise<RunningAgent> {
+  const infra = join(checkout, "infra", "docker");
+  const port = await freePort();
+  const agent = spawn(process.execPath, [join(outdir, "agent.mjs")], {
+    cwd: checkout,
+    env: {
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      OPENMAPX_ROOT_DIR: checkout,
+      OPS_AGENT_API_TOKEN_FILE: join(infra, "secrets", "ops-agent-api-token"),
+      OPS_AGENT_DATA_MANAGER_TOKEN_FILE: join(infra, "secrets", "ops-agent-data-manager-token"),
+      OPS_TRUSTED_CONFIG_DIR: join(infra, "state", "ops-agent", "trusted-config"),
+      HOST: "127.0.0.1",
+      PORT: String(port),
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  agents.push(agent);
+  let output = "";
+  agent.stdout?.on("data", (chunk) => {
+    output += chunk;
+  });
+  agent.stderr?.on("data", (chunk) => {
+    output += chunk;
+  });
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    if (agent.exitCode !== null) throw new Error(`The agent exited: ${output}`);
+    const healthy = await fetch(`http://127.0.0.1:${port}/health`)
+      .then((response) => response.ok)
+      .catch(() => false);
+    if (healthy) break;
+    if (Date.now() > deadline) throw new Error(`The agent never became healthy: ${output}`);
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  }
+  return { port, output: () => output, stop: () => agent.kill("SIGTERM") };
+}
+
+/**
+ * Publishes a trusted-configuration request as app-api does, asks the agent
+ * to render it, and expects a committed generation.
+ */
+async function expectTrustedConfigurationCommitted(
+  checkout: string,
+  agent: RunningAgent,
+  name: string,
+  payload: Partial<Parameters<typeof publishTrustedConfigurationSnapshot>[0]["payload"]>,
+): Promise<void> {
+  const infra = join(checkout, "infra", "docker");
+  const trustedConfig = join(infra, "state", "ops-agent", "trusted-config");
+  const tokenFile = join(infra, "secrets", "ops-agent-api-token");
+  const token = readFileSync(tokenFile, "utf8").trim();
+  const directory = statSync(trustedConfig);
+  const operationKey = createDurableOpsKey("stack.render", name);
+  const before = services.currentConfigurationGeneration(infra);
+  const sealed = await publishTrustedConfigurationSnapshot({
+    directory: trustedConfig,
+    token,
+    ownerUid: directory.uid,
+    ownerGid: directory.gid,
+    operationKey,
+    operationForRevision: (revisionId) => ({
+      kind: "stack.render",
+      revisionId,
+      expectedCurrentRevisionId: before,
+    }),
+    payload: {
+      domain: `${name}.example.test`,
+      serviceConfigs: [],
+      integrationConfigs: [],
+      serviceSecrets: [],
+      ...payload,
+    },
+  });
+  const client = new OpsClient({ baseUrl: `http://127.0.0.1:${agent.port}`, tokenFile });
+  const consumed = await consumePublishedTrustedConfiguration(sealed, () =>
+    executeTrustedConfigurationAndWait(
+      client,
+      sealed.operation as Parameters<typeof executeTrustedConfigurationAndWait>[1],
+      operationKey,
+    ),
+  );
+  expect(consumed.submission.status, agent.output()).toBe("fulfilled");
+  const result = consumed.submission.status === "fulfilled" ? consumed.submission.value : undefined;
+  expect(result, `${JSON.stringify(result)}\n${agent.output()}`).toMatchObject({
+    outcome: "committed",
+  });
+  expect(services.currentConfigurationGeneration(infra)).not.toBe(before);
+  expect(
+    readFileSync(join(infra, ".trusted-config-current", "docker-compose.generated.yml"), "utf8"),
+  ).toContain(`${name}.example.test`);
+}
+
 describe("a checkout written under umask 002", () => {
   it("gets the bundled agent through startup and a trusted-configuration request", async () => {
     const checkout = await umask002Checkout();
@@ -127,82 +237,106 @@ describe("a checkout written under umask 002", () => {
     const rendered = await cli(checkout, "compose", "render");
     expect(rendered.stdout, rendered.stderr).toContain("Rendered");
 
-    const infra = join(checkout, "infra", "docker");
-    const trustedConfig = join(infra, "state", "ops-agent", "trusted-config");
-    const port = await freePort();
-    const agent = spawn(process.execPath, [join(outdir, "agent.mjs")], {
-      cwd: checkout,
-      env: {
-        PATH: process.env.PATH,
-        HOME: process.env.HOME,
-        OPENMAPX_ROOT_DIR: checkout,
-        OPS_AGENT_API_TOKEN_FILE: join(infra, "secrets", "ops-agent-api-token"),
-        OPS_AGENT_DATA_MANAGER_TOKEN_FILE: join(infra, "secrets", "ops-agent-data-manager-token"),
-        OPS_TRUSTED_CONFIG_DIR: trustedConfig,
-        HOST: "127.0.0.1",
-        PORT: String(port),
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    agents.push(agent);
-    let output = "";
-    agent.stdout?.on("data", (chunk) => {
-      output += chunk;
-    });
-    agent.stderr?.on("data", (chunk) => {
-      output += chunk;
-    });
-    const deadline = Date.now() + 30_000;
-    for (;;) {
-      if (agent.exitCode !== null) throw new Error(`The agent exited: ${output}`);
-      const healthy = await fetch(`http://127.0.0.1:${port}/health`)
-        .then((response) => response.ok)
-        .catch(() => false);
-      if (healthy) break;
-      if (Date.now() > deadline) throw new Error(`The agent never became healthy: ${output}`);
-      await new Promise((resolveWait) => setTimeout(resolveWait, 100));
-    }
+    const agent = await startAgent(checkout);
+    await expectTrustedConfigurationCommitted(checkout, agent, "umask-002-checkout", {});
+    agent.stop();
+  }, 120_000);
+});
 
-    const tokenFile = join(infra, "secrets", "ops-agent-api-token");
-    const token = readFileSync(tokenFile, "utf8").trim();
-    const directory = statSync(trustedConfig);
-    const operationKey = createDurableOpsKey("stack.render", "umask-002-checkout");
-    const before = services.currentConfigurationGeneration(infra);
-    const sealed = await publishTrustedConfigurationSnapshot({
-      directory: trustedConfig,
-      token,
-      ownerUid: directory.uid,
-      ownerGid: directory.gid,
-      operationKey,
-      operationForRevision: (revisionId) => ({
-        kind: "stack.render",
-        revisionId,
-        expectedCurrentRevisionId: before,
-      }),
-      payload: {
-        domain: "umask.example.test",
-        serviceConfigs: [],
-        integrationConfigs: [],
-        serviceSecrets: [],
-      },
-    });
-    const client = new OpsClient({ baseUrl: `http://127.0.0.1:${port}`, tokenFile });
-    const consumed = await consumePublishedTrustedConfiguration(sealed, () =>
-      executeTrustedConfigurationAndWait(
-        client,
-        sealed.operation as Parameters<typeof executeTrustedConfigurationAndWait>[1],
-        operationKey,
-      ),
+/** A one-entry-per-file ustar archive; `mode` and links as an archive may declare them. */
+function tarGz(
+  entries: Array<{
+    name: string;
+    data?: string;
+    mode?: number;
+    type?: "0" | "1" | "2";
+    link?: string;
+  }>,
+): Buffer {
+  const blocks = entries.flatMap((entry) => {
+    const payload = Buffer.from(entry.data ?? "", "utf8");
+    const header = Buffer.alloc(512);
+    const octal = (offset: number, length: number, value: number) =>
+      header.write(`${value.toString(8).padStart(length - 1, "0")}\0`, offset, length, "ascii");
+    header.write(entry.name, 0, 100, "utf8");
+    octal(100, 8, entry.mode ?? 0o644);
+    octal(108, 8, 0);
+    octal(116, 8, 0);
+    octal(124, 12, payload.length);
+    octal(136, 12, 0);
+    header.fill(0x20, 148, 156);
+    header.write(entry.type ?? "0", 156, 1, "ascii");
+    if (entry.link) header.write(entry.link, 157, 100, "utf8");
+    header.write("ustar\0", 257, 6, "ascii");
+    header.write("00", 263, 2, "ascii");
+    octal(
+      148,
+      8,
+      header.reduce((sum, byte) => sum + byte, 0),
     );
-    expect(consumed.submission.status, output).toBe("fulfilled");
-    const result =
-      consumed.submission.status === "fulfilled" ? consumed.submission.value : undefined;
-    expect(result, `${JSON.stringify(result)}\n${output}`).toMatchObject({ outcome: "committed" });
-    expect(services.currentConfigurationGeneration(infra)).not.toBe(before);
-    expect(
-      readFileSync(join(infra, ".trusted-config-current", "docker-compose.generated.yml"), "utf8"),
-    ).toContain("umask.example.test");
-    agent.kill("SIGTERM");
+    return [header, payload, Buffer.alloc((512 - (payload.length % 512)) % 512)];
+  });
+  return gzipSync(Buffer.concat([...blocks, Buffer.alloc(1024)]));
+}
+
+describe("an integration installed into a umask-002 checkout", () => {
+  it("installs or is refused without breaking trusted-configuration requests", async () => {
+    const checkout = await umask002Checkout();
+    const manifest = (id: string) =>
+      JSON.stringify({
+        id,
+        name: id,
+        version: "1.0.0",
+        domains: ["map-overlay"],
+        quality: "community",
+        platform: "1.0",
+        configSchema: { type: "object", properties: { region: { enum: ["eu", "us"] } } },
+      });
+    const artifacts = join(checkout, "..", "artifacts");
+    mkdirSync(artifacts);
+    const install = async (name: string, entries: Parameters<typeof tarGz>[0]) => {
+      const source = join(artifacts, `${name}.tar.gz`);
+      writeFileSync(source, tarGz(entries));
+      const previous = process.umask(0o002);
+      try {
+        return await installIntegration({ rootDir: checkout, source, sourceKind: "artifact" });
+      } finally {
+        process.umask(previous);
+      }
+    };
+
+    // As app-api's Store installs them: an archive declaring loose modes,
+    // and two whose manifest.json the agent would refuse to read.
+    await expect(
+      install("loose-modes", [
+        { name: "manifest.json", data: manifest("loose-modes"), mode: 0o666 },
+        { name: "strings/en.json", data: "{}", mode: 0o664 },
+      ]),
+    ).resolves.toMatchObject({ id: "loose-modes" });
+    await expect(
+      install("hard-linked", [
+        { name: "copy.json", data: manifest("hard-linked") },
+        { name: "manifest.json", type: "1", link: "copy.json" },
+      ]),
+    ).rejects.toThrow("must not be hard-linked");
+    await expect(
+      install("symlinked", [
+        { name: "real.json", data: manifest("symlinked") },
+        { name: "manifest.json", type: "2", link: "real.json" },
+      ]),
+    ).rejects.toThrow("not a symbolic link");
+    expect(readdirSync(join(checkout, "custom_integrations")).sort()).toEqual([
+      ".staging",
+      "loose-modes",
+    ]);
+
+    const rendered = await cli(checkout, "compose", "render");
+    expect(rendered.stdout, rendered.stderr).toContain("Rendered");
+    const agent = await startAgent(checkout);
+    await expectTrustedConfigurationCommitted(checkout, agent, "installed-integration", {
+      integrationConfigs: [{ integrationId: "loose-modes", values: { region: "eu" } }],
+    });
+    agent.stop();
   }, 120_000);
 });
 
