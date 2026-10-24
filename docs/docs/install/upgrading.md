@@ -200,10 +200,12 @@ The agent keeps its own state, the job journal, this handoff record, the
 trusted-configuration queue it shares with `app-api` and its privacy-extraction
 scratch, in `infra/docker/state/ops-agent/`. Releases before it kept them in
 `infra/docker/data/`, which data-manager can write. The first agent of a newer
-release imports the journal from there, and the handoff record only while the
-helper replacing it is still running. The first configuration render moves the
-queue and the scratch directory, which running containers keep using. Nothing
-needs doing by hand. An older agent started afterwards, for example by
+release imports from there only the jobs the previous agent left unfinished,
+which then read as failed and needing recovery, and the handoff record only
+while the helper replacing it is still running, without its previous overlay.
+Finished job history is not carried over. The first configuration render moves
+the queue and the scratch directory, which running containers keep using.
+Nothing needs doing by hand. An older agent started afterwards, for example by
 selecting an earlier release, finds no job history.
 
 The update then replaces API, web, data-manager and transitous-runner without

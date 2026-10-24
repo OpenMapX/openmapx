@@ -33,9 +33,13 @@ Every Docker deployment.
 
 ## Required action
 
-None. The first agent of this release imports the journal from the old
-location, and a handoff record only while the helper replacing the previous
-agent is still running; it discards any other record unread. The first
+None. The first agent of this release imports from the old location only the
+jobs the previous agent left unfinished, which then read as failed and needing
+recovery; finished job history is not carried over, because data-manager could
+have written its results. It imports a handoff record only while the helper
+replacing the previous agent is still running, and never its previous overlay:
+a later rollback takes that from the agent's own release state. Any other
+record is discarded unread. The first
 configuration render moves the queue and the scratch directory, which running
 containers keep using. An older agent started afterwards, for example by
 selecting an earlier release, starts with no job history.
