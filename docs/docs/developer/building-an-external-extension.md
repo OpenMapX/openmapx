@@ -336,10 +336,13 @@ pnpm openmapx integrations install \
   --artifact --sha256 <hash>
 ```
 
-The installer downloads, verifies the mandatory checksum, extracts into a staging area,
-rejects runtime entry points, validates the manifest and artifact contract, and atomically swaps the result
-into `custom_integrations/conditions/`. The bundled files persist there across
-upgrades until you remove the integration.
+The operations agent downloads the artifact, verifies the mandatory checksum,
+extracts it into a staging area, rejects runtime entry points and links,
+validates the manifest and artifact contract, and atomically swaps the result
+into `custom_integrations/conditions/`, recording the SHA-256 of every file. The
+bundled files persist there across upgrades until you remove the integration.
+The agent loads only integrations it installed this way, so copy files into
+`custom_integrations/` by hand and they are ignored.
 
 For distribution, wrap the artifact in an [`extension.json`](#bundle-it-as-an-extension)
 so an operator installs it from the **Extensions** store (or

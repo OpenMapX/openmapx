@@ -135,9 +135,10 @@ unchanged. The normal sequence is:
 2. **Enable + render + start** the service(s): `compose render` regenerates the
    stack and the container is brought up. Database initialization and migration behavior belongs to the installed service;
    inspect its startup logs.
-3. **Install each integration artifact**: the `.tar.gz` is downloaded
-   (HTTPS only), its SHA-256 verified before extraction, unpacked into
-   `custom_integrations/<id>/`, and the integration host is hot-reloaded.
+3. **Install each integration artifact**: the operations agent downloads the
+   `.tar.gz` (HTTPS only), verifies its SHA-256 before extraction, unpacks it
+   into `custom_integrations/<id>/` and records the SHA-256 of every file it
+   wrote. The integration host is then hot-reloaded.
 4. **Record** the installed extension and its components.
 
 The operations agent owns `services/.community/` on the host, the way it owns
@@ -158,9 +159,21 @@ anything, as an invalid manifest always has. Recover by deleting that
 repository's directory and record under `services/.community/` and installing
 the extension again. Records are the agent's own files: they must be owned by
 its user and writable only by it. Repositories installed before records carried
-digests are refused the same way. `custom_integrations/` is
-written by `app-api`. Both locations are gitignored and live on the host, so
-installs survive container restarts.
+digests are refused the same way. Both locations are gitignored and live on the
+host, so installs survive container restarts.
+
+The agent owns `custom_integrations/` the same way. It installs, updates, rolls
+back and removes integrations; `app-api` mounts the directory read-only and
+`pnpm openmapx integrations install` and `remove` ask the agent too. For each
+integration the agent records the SHA-256 of every file it installed, in its
+own state directory (`infra/docker/state/ops-agent/integrations/`), which no
+other service mounts. The agent, and the CLI it runs, load an installed
+integration's configuration schema only while its `manifest.json` has exactly
+the recorded bytes; `app-api` serves only the files whose bytes match. File
+owners and modes in `custom_integrations/` decide nothing. An integration the
+agent did not install, or whose files changed, is left out and reported (in the
+agent's startup log and in **Run diagnostics**) without affecting the others.
+Install it again to fix it.
 
 ### The service sandbox
 
@@ -201,17 +214,17 @@ entry points are also rejected; executable behavior must move into an isolated
 service. These reduce the blast radius of a
 malformed archive. They cannot establish that the author's code is safe.
 
-The operations agent reads the configuration schema of every installed
-integration, and loads one only from files its own account owns and nobody
-else can write. A single integration it refuses stops it from authorizing any
-configuration change. The installer therefore gives installed files fixed
-modes (`0755` for directories, `0644` for files), whatever the archive or the
-umask declares. It also refuses an integration the agent would not load:
+The agent also refuses an archive it would not load, before it replaces
+anything:
 
-- a `manifest.json` that is a symbolic link, hard-linked to another file,
-  larger than 128 KiB or not UTF-8;
+- an entry that is a symbolic link or a hard link;
+- a `manifest.json` larger than 128 KiB or not UTF-8;
 - a configuration schema the agent does not accept;
-- an id longer than 64 characters.
+- an id longer than 64 characters, or the id of a built-in integration;
+- more than 128 files, or more than 4,096 across all installed integrations.
+
+Installed files get fixed modes (`0755` for directories, `0644` for files),
+whatever the archive declares.
 
 ### Preview, admission and failures
 

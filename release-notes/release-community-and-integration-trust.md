@@ -25,11 +25,9 @@ clone and pull with umask `022`.
 - The configuration writer removes group and other write access from
   `infra/docker`, which holds the current configuration pointer, when its own
   user owns it, instead of refusing to render.
-- Installed integrations under `custom_integrations/` keep their owner and mode
-  checks. Their installer gives installed files fixed modes and refuses an
-  integration those checks, or the agent's schema check, would reject, so one
-  installed integration can no longer stop the agent from authorizing
-  configuration changes.
+- Installed integrations under `custom_integrations/` are trusted by the
+  digests the operations agent records when it installs them; see
+  `agent-owned-integrations.md`.
 
 It also fixes trusted configuration requests (applying settings, the service
 selection or secrets from the admin panel): the agent bound each request to one
@@ -47,9 +45,3 @@ None. If the agent refuses to start with "Trusted configuration authority
 rejected" because of a repository installed by an earlier release, delete that
 repository's directory and its `.repository-<hash>.json` under
 `services/.community/` and install the extension again.
-
-If it rejects its authority with "Trusted integration registry rejected"
-because of an integration installed earlier, for example with
-`pnpm openmapx integrations install` under a umask of `002`, install that
-integration again, from the admin panel or with the same command. The installer
-replaces its files with the modes the agent loads.
