@@ -50,8 +50,10 @@ COPY --parents \
     ./
 COPY apps/ops-agent/ apps/ops-agent/
 # The CLI imports these data-manager modules and, for `transit-registry bump`,
-# this integration.
+# this integration. The bundle embeds every built-in service manifest: the
+# agent and its CLI run the release's manifests, not the host checkout's.
 COPY --parents \
+    services/*/service.json \
     services/data-manager/src/transitous-lock.ts \
     services/data-manager/src/gbfs-catalog-lock.ts \
     services/data-manager/src/utils/atomic-write.ts \

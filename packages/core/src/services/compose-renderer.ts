@@ -654,6 +654,22 @@ export function renderServiceSnippet(
       );
       continue;
     }
+    // A built-in service's manifest comes from the release, but the files it
+    // mounts from a service directory come from the checkout. When the checkout
+    // lacks one (it predates the release), Docker would create an empty
+    // root-owned directory in its place.
+    if (
+      service.isBuiltIn &&
+      resolved.absoluteHostPath &&
+      !isAbsolute(bm.source) &&
+      !bm.source.startsWith(INFRA_BIND_PREFIX) &&
+      !SPECIAL_BIND_SOURCE_PATHS[bm.source] &&
+      !exists(resolved.absoluteHostPath)
+    ) {
+      ctx.warnings?.push(
+        `service "${m.id}": bind-mount source ${bm.source} is not present at ${resolved.absoluteHostPath}; update the checkout to the selected release`,
+      );
+    }
     // readOnly defaults to true for bind mounts (config files, docker socket)
     const readOnly = bm.readOnly !== false;
     volumes.push(`${resolved.src}:${bm.target}${readOnly ? ":ro" : ""}`);

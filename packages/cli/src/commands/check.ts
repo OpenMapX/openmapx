@@ -1,5 +1,6 @@
 import { statSync } from "node:fs";
 import { join } from "node:path";
+import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
 import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
 import { dockerCompose, dockerRun } from "../lib/docker";
@@ -177,6 +178,12 @@ export function registerCheckCommand(program: Command): void {
       }
       const permissionWarning = envFilePermissionWarning(envPath, envMode);
       if (permissionWarning) log.warn(permissionWarning);
+      // Only the ops-agent's fixed CLI runs embedded manifests; from source the
+      // checkout is what runs, so there is nothing to compare.
+      const drift = coreServices.describeBuiltInServiceDrift(
+        coreServices.inspectBuiltInServiceDrift(repoPaths().root),
+      );
+      if (drift) log.warn(drift);
 
       const result = await dockerComposeAfterDeploymentSecretCheck(["ps", "--format", "json"]);
       if (result.exitCode !== 0) {

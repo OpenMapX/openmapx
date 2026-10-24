@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
-import { constants, type Stats } from "node:fs";
-import { type FileHandle, lstat, open, opendir } from "node:fs/promises";
+import { closeSync, constants, fstatSync, openSync, readdirSync, readSync } from "node:fs";
 import { join, resolve } from "node:path";
+import {
+  type BuiltInServiceManifestSource,
+  checkoutBuiltInServiceManifests,
+} from "./built-in-service-source";
+import { embeddedBuiltInServiceManifests } from "./embedded-built-in-services";
 import { validateServiceManifest } from "./manifest-schema";
 import type { LoadedService, ServiceManifest } from "./types";
 
@@ -47,22 +51,98 @@ export const RELEASE_NEVER_MANAGE_SERVICE_IDS = Object.freeze([
 const SERVICE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const MAX_MANIFEST_BYTES = 1024 * 1024;
 
-interface CapturedDirectory {
-  path: string;
-  handle: FileHandle;
-  dev: number;
-  ino: number;
-}
-
 export interface ReleaseServiceAuthorityCapture {
   readonly serviceIds: readonly string[];
   readonly services: readonly LoadedService[];
   readonly digest: string;
 }
 
-export interface ReleaseServiceAuthorityCaptureHooks {
-  beforeManifestOpen?(id: string, path: string): void;
-  afterFirstManifestRead?(id: string, path: string): void;
+export interface BuiltInServiceReadOptions {
+  /**
+   * Where the manifests are read from. Defaults to the release's copies
+   * embedded in the runtime bundle, or to the checkout when running from
+   * source.
+   */
+  source?: BuiltInServiceManifestSource;
+}
+
+/**
+ * The built-in manifests this process runs: the release's own copies in the
+ * ops-agent's runtime bundle, otherwise the checkout's (source, tests and the
+ * host CLI, where the running code comes from that same checkout).
+ */
+export function builtInServiceManifestSource(rootDir: string): BuiltInServiceManifestSource {
+  return (
+    embeddedBuiltInServiceManifests() ??
+    checkoutBuiltInServiceManifests(rootDir, RELEASE_BUILT_IN_SERVICE_IDS)
+  );
+}
+
+function readManifestBytes(path: string): Buffer {
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const metadata = fstatSync(fd);
+    if (!metadata.isFile() || metadata.size < 2 || metadata.size > MAX_MANIFEST_BYTES) {
+      throw new Error("invalid");
+    }
+    const bytes = Buffer.alloc(metadata.size);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const read = readSync(fd, bytes, offset, bytes.length - offset, offset);
+      if (read === 0) throw new Error("invalid");
+      offset += read;
+    }
+    if (readSync(fd, Buffer.alloc(1), 0, 1, offset) !== 0) throw new Error("invalid");
+    return bytes;
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function sourceIds(source: BuiltInServiceManifestSource): string[] {
+  const ids = [...source.ids].sort();
+  if (
+    ids.some((id) => !SERVICE_ID.test(id)) ||
+    new Set(ids).size !== ids.length ||
+    RELEASE_NEVER_MANAGE_SERVICE_IDS.some((id) => !ids.includes(id))
+  ) {
+    throw new Error("invalid");
+  }
+  return ids;
+}
+
+/**
+ * Reads and validates every built-in service manifest. Each service's
+ * directory is still `<rootDir>/services/<id>`: Compose resolves its relative
+ * bind mounts there, so configuration files keep coming from the checkout.
+ * Throws on any missing, malformed or invalid manifest.
+ */
+export function readBuiltInServices(
+  rootDir: string,
+  options: BuiltInServiceReadOptions = {},
+): ReleaseServiceAuthorityCapture {
+  const source = options.source ?? builtInServiceManifestSource(rootDir);
+  const servicesDir = join(resolve(rootDir), "services");
+  const serviceIds = sourceIds(source);
+  const services: LoadedService[] = [];
+  const digest = createHash("sha256").update("openmapx-release-service-authority-v1\0");
+  for (const id of serviceIds) {
+    const bytes = readManifestBytes(source.manifestPath(id));
+    const raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as unknown;
+    const validation = validateServiceManifest(raw, { firstParty: true });
+    if (!validation.valid || !raw || typeof raw !== "object" || Array.isArray(raw)) {
+      throw new Error("invalid");
+    }
+    if ((raw as Record<string, unknown>).id !== id) throw new Error("invalid");
+    digest.update(id).update("\0").update(bytes).update("\0");
+    services.push({
+      manifest: raw as ServiceManifest,
+      directory: join(servicesDir, id),
+      isBuiltIn: true,
+      enabled: true,
+    });
+  }
+  return { serviceIds, services, digest: `release1_${digest.digest("base64url")}` };
 }
 
 function deepFreeze(value: unknown): void {
@@ -71,202 +151,97 @@ function deepFreeze(value: unknown): void {
   Object.freeze(value);
 }
 
-async function openCapturedDirectory(path: string): Promise<CapturedDirectory> {
-  const handle = await open(
-    path,
-    constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
-  );
-  try {
-    const metadata = await handle.stat();
-    if (!metadata.isDirectory() || (metadata.mode & 0o022) !== 0) throw new Error("invalid");
-    return { path, handle, dev: metadata.dev, ino: metadata.ino };
-  } catch (error) {
-    await handle.close();
-    throw error;
-  }
-}
-
-async function recheckDirectory(directory: CapturedDirectory): Promise<void> {
-  const opened = await directory.handle.stat();
-  const currentHandle = await open(
-    directory.path,
-    constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
-  );
-  try {
-    const current = await currentHandle.stat();
-    if (
-      !opened.isDirectory() ||
-      !current.isDirectory() ||
-      (opened.mode & 0o022) !== 0 ||
-      (current.mode & 0o022) !== 0 ||
-      opened.dev !== directory.dev ||
-      opened.ino !== directory.ino ||
-      current.dev !== directory.dev ||
-      current.ino !== directory.ino
-    ) {
-      throw new Error("invalid");
-    }
-  } finally {
-    await currentHandle.close();
-  }
-}
-
-async function recheckDirectories(directories: readonly CapturedDirectory[]): Promise<void> {
-  for (const directory of directories) await recheckDirectory(directory);
-}
-
-async function readCapturedManifest(
-  path: string,
-  directories: readonly CapturedDirectory[],
-  beforeOpen: () => void,
-  afterFirstRead: () => void,
-): Promise<{ bytes: Buffer; raw: unknown }> {
-  await recheckDirectories(directories);
-  beforeOpen();
-  await recheckDirectories(directories);
-  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-  try {
-    const metadata = await handle.stat();
-    const pathnameMetadata = await lstat(path);
-    if (
-      !metadata.isFile() ||
-      !pathnameMetadata.isFile() ||
-      pathnameMetadata.isSymbolicLink() ||
-      metadata.nlink !== 1 ||
-      metadata.size < 2 ||
-      metadata.size > MAX_MANIFEST_BYTES ||
-      (metadata.mode & 0o022) !== 0 ||
-      !sameManifestMetadata(metadata, pathnameMetadata)
-    )
-      throw new Error("invalid");
-    const bytes = await readExactManifest(handle, metadata.size);
-    afterFirstRead();
-    const afterFirst = await handle.stat();
-    const pathnameAfterFirst = await lstat(path);
-    await recheckDirectories(directories);
-    const second = await readExactManifest(handle, metadata.size);
-    const afterSecond = await handle.stat();
-    const pathnameAfterSecond = await lstat(path);
-    await recheckDirectories(directories);
-    if (
-      !sameManifestMetadata(metadata, afterFirst) ||
-      !sameManifestMetadata(metadata, pathnameAfterFirst) ||
-      !sameManifestMetadata(metadata, afterSecond) ||
-      !sameManifestMetadata(metadata, pathnameAfterSecond) ||
-      !bytes.equals(second)
-    ) {
-      throw new Error("invalid");
-    }
-    return {
-      bytes,
-      raw: JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as unknown,
-    };
-  } finally {
-    await handle.close();
-  }
-}
-
-function sameManifestMetadata(left: Stats, right: Stats): boolean {
-  return (
-    left.isFile() === right.isFile() &&
-    left.dev === right.dev &&
-    left.ino === right.ino &&
-    left.nlink === right.nlink &&
-    left.uid === right.uid &&
-    left.gid === right.gid &&
-    left.mode === right.mode &&
-    left.size === right.size &&
-    left.mtimeMs === right.mtimeMs &&
-    left.ctimeMs === right.ctimeMs
-  );
-}
-
-async function readExactManifest(handle: FileHandle, size: number): Promise<Buffer> {
-  const bytes = Buffer.alloc(size);
-  const result = await handle.read(bytes, 0, bytes.length, 0);
-  if (result.bytesRead !== bytes.length) throw new Error("invalid");
-  const trailing = Buffer.alloc(1);
-  if ((await handle.read(trailing, 0, 1, size)).bytesRead !== 0) throw new Error("invalid");
-  return bytes;
-}
-
+/**
+ * The built-in services this agent may render and run, as one immutable
+ * snapshot. A bundled agent takes them from its release, so neither the
+ * checkout's contents nor its file permissions decide what runs.
+ */
 export async function captureReleaseServiceAuthority(
   rootDir: string,
-  hooks: ReleaseServiceAuthorityCaptureHooks = {},
+  options: BuiltInServiceReadOptions = {},
 ): Promise<ReleaseServiceAuthorityCapture> {
-  const directories: CapturedDirectory[] = [];
   try {
-    const fixedRoot = resolve(rootDir);
-    const servicesDir = join(fixedRoot, "services");
-    directories.push(await openCapturedDirectory(fixedRoot));
-    directories.push(await openCapturedDirectory(servicesDir));
-    await recheckDirectories(directories);
-    const expected = new Set<string>([
-      ...RELEASE_BUILT_IN_SERVICE_IDS,
-      ...RELEASE_NEVER_MANAGE_SERVICE_IDS,
-    ]);
-    const found = new Set<string>();
-    const directory = await opendir(servicesDir);
-    try {
-      for await (const entry of directory) {
-        if (entry.name === ".community" || entry.name.startsWith(".")) continue;
-        if (!SERVICE_ID.test(entry.name) || !entry.isDirectory() || !expected.has(entry.name)) {
-          throw new Error("invalid");
-        }
-        if (found.has(entry.name)) throw new Error("invalid");
-        found.add(entry.name);
-      }
-    } finally {
-      await directory.close().catch(() => undefined);
-    }
-    await recheckDirectories(directories);
-    if (found.size !== expected.size || [...expected].some((id) => !found.has(id))) {
-      throw new Error("invalid");
-    }
-    const services: LoadedService[] = [];
-    const digest = createHash("sha256").update("openmapx-release-service-authority-v1\0");
-    for (const id of [...expected].sort()) {
-      const serviceDir = join(servicesDir, id);
-      const capturedDirectory = await openCapturedDirectory(serviceDir);
-      directories.push(capturedDirectory);
-      const manifestPath = join(serviceDir, "service.json");
-      const { bytes, raw } = await readCapturedManifest(
-        manifestPath,
-        directories,
-        () => hooks.beforeManifestOpen?.(id, manifestPath),
-        () => hooks.afterFirstManifestRead?.(id, manifestPath),
-      );
-      const validation = validateServiceManifest(raw, { firstParty: true });
-      if (!validation.valid || !raw || typeof raw !== "object" || Array.isArray(raw)) {
-        throw new Error("invalid");
-      }
-      if ((raw as Record<string, unknown>).id !== id) throw new Error("invalid");
-      digest.update(id).update("\0").update(bytes).update("\0");
-      services.push({
-        manifest: raw as ServiceManifest,
-        directory: serviceDir,
-        isBuiltIn: true,
-        enabled: true,
-      });
-    }
-    await recheckDirectories(directories);
-    const snapshot: ReleaseServiceAuthorityCapture = {
-      serviceIds: [...expected].sort(),
-      services,
-      digest: `release1_${digest.digest("base64url")}`,
-    };
+    const snapshot = readBuiltInServices(rootDir, options);
     deepFreeze(snapshot);
     return snapshot;
   } catch {
     throw new Error("Release service authority is unavailable");
-  } finally {
-    await Promise.all(
-      directories.map((directory) => directory.handle.close().catch(() => undefined)),
-    );
   }
 }
 
 export async function validateReleaseServiceAuthority(rootDir: string): Promise<Set<string>> {
   const snapshot = await captureReleaseServiceAuthority(rootDir);
   return new Set(snapshot.serviceIds);
+}
+
+/** How the checkout's built-in services differ from the release's. */
+export interface BuiltInServiceDrift {
+  /** Release services the checkout has no manifest for. */
+  readonly missing: readonly string[];
+  /** Release services whose checkout manifest has different bytes or cannot be read. */
+  readonly changed: readonly string[];
+  /** Checkout service directories the release does not have. */
+  readonly unexpected: readonly string[];
+}
+
+/**
+ * Compares the checkout's built-in manifests with the release's embedded
+ * ones. Returns `null` when running from source, where the checkout is the
+ * source. Never throws: drift does not change what runs, the release's
+ * manifests do, but configuration files still come from the checkout.
+ */
+export function inspectBuiltInServiceDrift(
+  rootDir: string,
+  source: BuiltInServiceManifestSource | null = embeddedBuiltInServiceManifests(),
+): BuiltInServiceDrift | null {
+  if (!source?.embedded) return null;
+  const ids = [...source.ids].sort();
+  const checkout = checkoutBuiltInServiceManifests(rootDir, ids);
+  const missing: string[] = [];
+  const changed: string[] = [];
+  for (const id of ids) {
+    let release: Buffer;
+    let current: Buffer;
+    try {
+      release = readManifestBytes(source.manifestPath(id));
+    } catch {
+      changed.push(id);
+      continue;
+    }
+    try {
+      current = readManifestBytes(checkout.manifestPath(id));
+    } catch (error) {
+      ((error as NodeJS.ErrnoException).code === "ENOENT" ? missing : changed).push(id);
+      continue;
+    }
+    if (!release.equals(current)) changed.push(id);
+  }
+  const unexpected: string[] = [];
+  try {
+    for (const entry of readdirSync(join(resolve(rootDir), "services"), { withFileTypes: true })) {
+      if (entry.name.startsWith(".") || entry.name.startsWith("_") || !entry.isDirectory()) {
+        continue;
+      }
+      if (!ids.includes(entry.name)) unexpected.push(entry.name);
+    }
+  } catch {
+    // A checkout without services/ reports every release service as missing.
+  }
+  return { missing, changed, unexpected: unexpected.sort() };
+}
+
+/** One line for an operator, or `null` when the checkout matches the release. */
+export function describeBuiltInServiceDrift(drift: BuiltInServiceDrift | null): string | null {
+  if (!drift) return null;
+  const parts = [
+    drift.missing.length > 0 ? `missing ${drift.missing.join(", ")}` : null,
+    drift.changed.length > 0 ? `changed ${drift.changed.join(", ")}` : null,
+    drift.unexpected.length > 0 ? `not in this release ${drift.unexpected.join(", ")}` : null,
+  ].filter((part): part is string => part !== null);
+  if (parts.length === 0) return null;
+  return (
+    `The checkout's built-in services differ from this release (${parts.join("; ")}). ` +
+    "The release's service manifests apply; update the checkout to the selected release, " +
+    "because the services still mount their configuration files from it."
+  );
 }

@@ -1,4 +1,8 @@
 export {
+  type BuiltInServiceManifestSource,
+  checkoutBuiltInServiceManifests,
+} from "./built-in-service-source";
+export {
   type CapabilityCheck,
   type CapabilityKind,
   type CapabilityWarning,
@@ -75,6 +79,7 @@ export {
   stackComposeArgs,
   writeServiceSelectionFile,
 } from "./deployment";
+export { embeddedBuiltInServiceManifests } from "./embedded-built-in-services";
 export {
   type ExtensionComponentRef,
   type ExtensionIntegrationComponent,
@@ -96,11 +101,16 @@ export {
 } from "./manifest-schema";
 export { ServiceRegistry, type ServiceRegistryOptions } from "./registry";
 export {
+  type BuiltInServiceDrift,
+  type BuiltInServiceReadOptions,
+  builtInServiceManifestSource,
   captureReleaseServiceAuthority,
+  describeBuiltInServiceDrift,
+  inspectBuiltInServiceDrift,
   RELEASE_BUILT_IN_SERVICE_IDS,
   RELEASE_NEVER_MANAGE_SERVICE_IDS,
   type ReleaseServiceAuthorityCapture,
-  type ReleaseServiceAuthorityCaptureHooks,
+  readBuiltInServices,
   validateReleaseServiceAuthority,
 } from "./release-authority-inventory";
 export {
