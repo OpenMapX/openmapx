@@ -970,6 +970,22 @@ export function createDefaultReleaseEffects(
     };
   };
   const readState = () => readReleasePointer(paths.state, true);
+  /**
+   * The overlay of the release the agent last applied, from its own release
+   * store. A handoff imported from an earlier release's state location keeps
+   * no previous overlay, because data-manager could write that file; this is
+   * its rollback target instead. Without a recorded release it is the current
+   * overlay, which leaves the application services where they are.
+   */
+  const releaseStateOverlay = (): string | null => {
+    try {
+      const { releaseId } = readState();
+      if (releaseId) return coreServices.renderReleaseCompose(loadManifest(releaseId));
+    } catch {
+      // Unreadable release state: no derived target.
+    }
+    return readOverlay();
+  };
   const configurationIdentity = () =>
     releaseDigest(JSON.stringify(coreServices.releaseSelection()));
   const selectionReceipts = (): Record<
@@ -1528,7 +1544,11 @@ export function createDefaultReleaseEffects(
           handoff?.phase === "applied" && handoff.releaseId === releaseId && !handoff.consumed
             ? handoff
             : undefined;
-        const previousOverlay = afterHandoff ? afterHandoff.previousOverlay : readOverlay();
+        const previousOverlay = !afterHandoff
+          ? readOverlay()
+          : afterHandoff.importedFromLegacy
+            ? releaseStateOverlay()
+            : afterHandoff.previousOverlay;
         const previousState = existsSync(paths.state)
           ? strictReadFile(paths.state, MAX_RELEASE_STATE_BYTES)
           : null;

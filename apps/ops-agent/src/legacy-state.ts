@@ -3,8 +3,9 @@ import { join } from "node:path";
 import { atomicWrite } from "@openmapx/core/release-files";
 import { services } from "@openmapx/core/server";
 import { isTerminalHandoff, readAgentHandoffFile, writeAgentHandoff } from "./agent-handoff";
-import { strictReadFile } from "./durable-files";
-import { OPS_JOB_JOURNAL_MAX_BYTES, readOpsJobJournalSnapshot } from "./journal";
+import { readOpsJobJournalSnapshot } from "./journal";
+
+const UNFINISHED = new Set(["queued", "running", "termination_pending"]);
 
 /**
  * Releases before the agent's state moved to `infra/docker/state/ops-agent`
@@ -12,9 +13,10 @@ import { OPS_JOB_JOURNAL_MAX_BYTES, readOpsJobJournalSnapshot } from "./journal"
  * data-manager can write. The first agent of this release imports them once,
  * then never reads that location again.
  *
- * - The journal is copied, so jobs the previous agent left unfinished keep
- *   their records. The old copy stays until no handoff helper is running: a
- *   helper that rolls back to the previous agent hands it its own journal.
+ * - The jobs the previous agent left unfinished are copied, so they keep
+ *   their records; its finished history is not. The old copy stays until no
+ *   handoff helper is running: a helper that rolls back to the previous agent
+ *   hands it its own journal.
  * - The handoff record is imported only while a helper container labelled
  *   with its ID runs, which proves a self-update into this agent is under way.
  *   Any other record there is discarded unread: its previous overlay would be
@@ -71,10 +73,15 @@ export async function importLegacyAgentState(
   let journal: LegacyImportOutcome = "absent";
   if (isRegularFile(legacy.journal) && !exists(current.journal)) {
     try {
-      // Parsing proves it is a journal this agent can open; the bytes are
-      // copied as they are.
-      await readOpsJobJournalSnapshot(legacy.journal);
-      atomicWrite(current.journal, strictReadFile(legacy.journal, OPS_JOB_JOURNAL_MAX_BYTES));
+      // Only jobs the previous agent left unfinished. Opening the journal
+      // turns each into a failed, recovery-required record, so the API learns
+      // how it ended; none is run again. A finished record is not imported:
+      // data-manager could have written its result, which would then answer
+      // a lookup or a replayed submission in place of a real run.
+      const unfinished = (await readOpsJobJournalSnapshot(legacy.journal)).filter((job) =>
+        UNFINISHED.has(job.state),
+      );
+      atomicWrite(current.journal, JSON.stringify({ version: 1, jobs: unfinished }));
       journal = "imported";
     } catch {
       journal = "discarded";
@@ -91,7 +98,15 @@ export async function importLegacyAgentState(
         !isTerminalHandoff(record.phase) &&
         (await options.handoffHelperRunning(record.handoffId))
       ) {
-        writeAgentHandoff(options.rootDir, { ...record, importedFromLegacy: true });
+        // Only its identity and phase are taken over. Its previous overlay is
+        // not: a rollback would restore it, and data-manager can write the
+        // file. A release application after this handoff derives its rollback
+        // target from the agent's own release state instead.
+        writeAgentHandoff(options.rootDir, {
+          ...record,
+          previousOverlay: null,
+          importedFromLegacy: true,
+        });
         handoff = "imported";
       }
     } catch {

@@ -510,6 +510,17 @@ export async function reconcileAgentHandoff(options: AgentHandoffReconcileOption
     advanceAgentHandoff(options.rootDir, record, { phase: "applied" }, options.now);
     return;
   }
+  if (record.importedFromLegacy) {
+    // Its helper, from the earlier release, restores the previous agent and
+    // overlay itself; an imported record carries no overlay to restore.
+    advanceAgentHandoff(
+      options.rootDir,
+      record,
+      { phase: "rolled_back", reason: "The replacement helper did not keep this agent" },
+      options.now,
+    );
+    return;
+  }
   await options.withStoreLock(() => options.restoreOverlay(record.previousOverlay));
   advanceAgentHandoff(
     options.rootDir,

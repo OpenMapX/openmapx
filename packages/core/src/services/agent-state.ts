@@ -1,4 +1,4 @@
-import { lstatSync, mkdirSync, renameSync } from "node:fs";
+import { chmodSync, lstatSync, mkdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -74,6 +74,17 @@ export function prepareAgentStateDirectories(infraDir: string): void {
     [legacy.privacyExtraction, current.privacyExtraction],
   ] as const) {
     if (entryKind(to) === "missing" && entryKind(from) === "directory") renameSync(from, to);
-    if (entryKind(to) === "missing") mkdirSync(to, { mode: 0o700 });
+    // data-manager can swap the old path for a symlink between the check and
+    // the rename, and Compose would mount whatever a symlink here names. So
+    // what arrived is checked again: anything but a real directory of this
+    // user is moved aside, never followed, and replaced by a fresh one.
+    const arrived = entryKind(to) === "directory" ? lstatSync(to) : null;
+    if (!arrived || arrived.uid !== process.geteuid?.()) {
+      if (entryKind(to) !== "missing") {
+        renameSync(to, `${to}.rejected-${process.pid}-${Date.now()}`);
+      }
+      mkdirSync(to, { mode: 0o700 });
+    }
+    chmodSync(to, 0o700);
   }
 }

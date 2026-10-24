@@ -365,6 +365,46 @@ describe("release application after an agent handoff", () => {
     expect(readAgentHandoff(f.rootDir)?.consumed).toBe(true);
   });
 
+  it("takes an imported handoff's rollback target from the agent's own release state", async () => {
+    const f = await resolved({ agent: "current" });
+    const overlay = join(f.rootDir, "infra", "docker", "docker-compose.release.yml");
+    // An earlier apply recorded the release the application services run.
+    await f.effects.apply(release, [...services], f.context);
+    writeFileSync(overlay, "overlay-written-by-the-earlier-release-helper\n");
+    // Whatever the old location held, the imported record's overlay is never used.
+    writeAgentHandoff(f.rootDir, {
+      ...handoff("applied"),
+      previousOverlay: "services:\n  app-api:\n    image: attacker.invalid/app-api\n",
+      importedFromLegacy: true,
+    });
+    f.cli.mockImplementationOnce(async () => {
+      throw new Error("services update failed");
+    });
+
+    await expect(f.effects.apply(release, [...services], f.context)).rejects.toThrow(
+      "services update failed",
+    );
+    const restored = readFileSync(overlay, "utf8");
+    expect(restored).not.toContain("attacker.invalid");
+    expect(restored.startsWith("x-openmapx-release:")).toBe(true);
+    expect(restored).toContain(`"release":"${release}"`);
+  });
+
+  it("never restores an overlay from an imported handoff that did not keep this agent", async () => {
+    const f = await resolved({ agent: "old" });
+    const overlay = join(f.rootDir, "infra", "docker", "docker-compose.release.yml");
+    writeFileSync(overlay, "current-overlay\n");
+    writeAgentHandoff(f.rootDir, {
+      ...handoff("recreated"),
+      previousOverlay: "services:\n  app-api:\n    image: attacker.invalid/app-api\n",
+      importedFromLegacy: true,
+    });
+    await expect(f.effects.inspectAgentHandoff?.("handoff-1")).resolves.toMatchObject({
+      phase: "rolled_back",
+    });
+    expect(readFileSync(overlay, "utf8")).toBe("current-overlay\n");
+  });
+
   it("uses the current overlay again once the handoff was consumed", async () => {
     const f = await resolved({ agent: "current" });
     const overlay = join(f.rootDir, "infra", "docker", "docker-compose.release.yml");

@@ -50,9 +50,24 @@ const job = {
   updatedAt: "2026-10-20T10:00:01.000Z",
 };
 
+const finishedOperation = { kind: "backup.delete", backupId: "nightly-20261019" } as const;
+const finished = {
+  role: "api" as const,
+  operation: finishedOperation,
+  operationId: `job1_${"c".repeat(24)}`,
+  operationKey: `opk1_${"d".repeat(24)}`,
+  fingerprint: opsOperationFingerprint(finishedOperation),
+  resourceId: opsResourceId(finishedOperation),
+  state: "failed" as const,
+  errorClass: "runtime" as const,
+  submittedAt: "2026-10-19T10:00:00.000Z",
+  updatedAt: "2026-10-19T10:00:01.000Z",
+  terminalAt: "2026-10-19T10:00:01.000Z",
+};
+
 /** The journal as the previous agent's own writer left it. */
 async function writeLegacyJournal(path: string): Promise<void> {
-  await (await openOpsJobJournal(path)).replace([job]);
+  await (await openOpsJobJournal(path)).replace([job, finished]);
 }
 
 function handoff(phase: string, overrides: Record<string, unknown> = {}) {
@@ -77,8 +92,16 @@ describe("importing an earlier release's agent state", () => {
       journal: "imported",
       handoff: "absent",
     });
+    // Only the unfinished job: a finished record's result could have been
+    // written by data-manager and would answer lookups in place of a real run.
     const journal = await openOpsJobJournal(f.current.journal);
-    expect(journal.records().map((record) => record.operationId)).toEqual([job.operationId]);
+    expect(journal.records()).toEqual([
+      expect.objectContaining({
+        operationId: job.operationId,
+        state: "failed",
+        errorClass: "recovery_required",
+      }),
+    ]);
   });
 
   it("imports once and never reads the old location again", async () => {
@@ -124,9 +147,11 @@ describe("importing an earlier release's agent state", () => {
     await expect(importLegacyAgentState(f.options)).resolves.toMatchObject({
       handoff: "imported",
     });
+    // Never the previous overlay a rollback would restore.
     expect(readAgentHandoff(f.rootDir)).toMatchObject({
       handoffId: "handoff-1",
       phase: "recreated",
+      previousOverlay: null,
       importedFromLegacy: true,
     });
   });
