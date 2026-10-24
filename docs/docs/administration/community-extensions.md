@@ -213,13 +213,6 @@ umask declares. It also refuses an integration the agent would not load:
 - a configuration schema the agent does not accept;
 - an id longer than 64 characters.
 
-Integrations installed before the installer fixed its modes can be
-group-writable, for example when installed under a umask of `002`. Every
-render and the agent's startup remove group and other write from
-`custom_integrations/` and from each directory and regular file in it that the
-agent's user owns. Symbolic links are never followed or changed. An entry
-another user owns is left alone, and the agent refuses to load it.
-
 ### Preview, admission and failures
 
 Extension previews have an independent limit of one request per 30 seconds per
