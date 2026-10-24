@@ -183,7 +183,7 @@ it pulls every digest-pinned image while the services keep running, then writes
 When the release changes the ops-agent image or its privacy-backup helper pin,
 the agent is updated first. It refuses while other agent operations are running,
 and refuses new ones until the handoff finishes.
-It records the handoff in `infra/docker/data/ops-agent/agent-handoff.json` and
+It records the handoff in `infra/docker/state/ops-agent/agent-handoff.json` and
 starts a helper container from its own image, which:
 
 1. writes the release overlay;
@@ -195,6 +195,16 @@ agent. The update then stops with **Host update required**, before any other
 service changes. A new agent can fail to start when the release needs a newer
 host checkout, for example for a new service manifest. In that case, run the
 host commands shown in the panel.
+
+The agent keeps its own state, the job journal, this handoff record, the
+trusted-configuration queue it shares with `app-api` and its privacy-extraction
+scratch, in `infra/docker/state/ops-agent/`. Releases before it kept them in
+`infra/docker/data/`, which data-manager can write. The first agent of a newer
+release imports the journal from there, and the handoff record only while the
+helper replacing it is still running. The first configuration render moves the
+queue and the scratch directory, which running containers keep using. Nothing
+needs doing by hand. An older agent started afterwards, for example by
+selecting an earlier release, finds no job history.
 
 The update then replaces API, web, data-manager and transitous-runner without
 restarting their dependencies. If that step fails, those four services return

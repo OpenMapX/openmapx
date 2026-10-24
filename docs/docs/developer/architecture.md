@@ -186,7 +186,11 @@ bounded structured audit fields. It is reachable solely on the private
 
 `ops-agent` is the sole owner of the Docker socket and trusted repository write
 mounts, including the community service checkouts under `services/.community/`. `app-api` and `data-manager` submit typed operations instead of receiving
-that host authority themselves. The built-in service manifests the agent and its
+that host authority themselves. The agent's own state (job journal, self-update
+handoff record, trusted-configuration queue and privacy-extraction scratch) lives
+in `infra/docker/state/ops-agent/`, outside the data directory data-manager
+mounts; `app-api` mounts only the queue, and `pnpm check-ops-authority` keeps it
+that way. The built-in service manifests the agent and its
 fixed CLI render come from the agent's own image, not from the host checkout.
 A process cannot recreate its own container, so
 to update itself the agent starts a short-lived helper container from its own
