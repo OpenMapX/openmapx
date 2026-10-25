@@ -40,6 +40,11 @@ have written its results. It imports a handoff record only while the helper
 replacing the previous agent is still running, and never its previous overlay:
 a later rollback takes that from the agent's own release state. Any other
 record is discarded unread. The first
-configuration render moves the queue and the scratch directory, which running
-containers keep using. An older agent started afterwards, for example by
+configuration render, or the new agent's start, moves the queue and the scratch
+directory, which running containers keep using. Where `infra/docker/data` is a
+filesystem of its own, they can't be moved: the new locations start empty, and
+nothing is copied from the old ones. The agent reads its queue from the new
+location whatever its own container mounts, so it and `app-api` share it once
+`app-api` is replaced; a trusted-configuration request made during the update
+itself may end without being applied, and can be repeated. An older agent started afterwards, for example by
 selecting an earlier release, starts with no job history.

@@ -203,9 +203,16 @@ scratch, in `infra/docker/state/ops-agent/`. Releases before it kept them in
 release imports from there only the jobs the previous agent left unfinished,
 which then read as failed and needing recovery, and the handoff record only
 while the helper replacing it is still running, without its previous overlay.
-Finished job history is not carried over. The first configuration render moves
-the queue and the scratch directory, which running containers keep using.
-Nothing needs doing by hand. An older agent started afterwards, for example by
+Finished job history is not carried over. The first configuration render, or
+the new agent's start, moves the queue and the scratch directory; running
+containers keep using them. When `infra/docker/data` is a filesystem of its own
+(a separate dataset or disk), they can't be moved: the new locations start
+empty and nothing is copied from the old ones, which data-manager could have
+written. The agent reads its queue from the new location whatever its own
+container mounts, so it meets `app-api` there once `app-api` has been replaced;
+a request made in between, during the update, ends without being applied. The
+old directories stay in `infra/docker/data/` for containers that still mount
+them. Nothing needs doing by hand. An older agent started afterwards, for example by
 selecting an earlier release, finds no job history.
 
 The update then replaces API, web, data-manager and transitous-runner without

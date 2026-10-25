@@ -56,14 +56,19 @@ function entryKind(path: string): "missing" | "directory" | "other" {
 
 /**
  * Prepares the directories containers bind-mount from the agent's state: the
- * trusted-configuration queue and the privacy-extraction scratch. Run by every
- * configuration generation commit, under the writer lock, because that is
- * where their mounts move from the old location to the new one.
+ * trusted-configuration queue and the privacy-extraction scratch. Run under
+ * the writer lock by every configuration generation commit, where their mounts
+ * move from the old location to the new one, and by the agent at startup.
  *
- * An old directory is renamed rather than copied: a container still running
- * with the old mount (the agent after a self-update, app-api until it is
- * recreated) keeps the same directory. Anything other than a real directory at
- * the old path is left alone, and a missing target is created owner-only.
+ * On the same filesystem an old directory is renamed: app-api, while it still
+ * runs with the old mount, keeps the same directory as the agent. When the
+ * data directory is a filesystem of its own the rename is impossible, and a
+ * fresh, empty directory is created instead. Nothing is copied from the old
+ * one: data-manager could have written it. The old directory is left for the
+ * containers still mounting it, and a snapshot queued there is not carried
+ * over; its request ends uncommitted, as any request interrupted by an update.
+ * Anything other than a real directory at the old path is left alone, and a
+ * missing target is created owner-only.
  */
 export function prepareAgentStateDirectories(infraDir: string): void {
   const current = agentStatePaths(infraDir);
@@ -73,7 +78,14 @@ export function prepareAgentStateDirectories(infraDir: string): void {
     [legacy.trustedConfig, current.trustedConfig],
     [legacy.privacyExtraction, current.privacyExtraction],
   ] as const) {
-    if (entryKind(to) === "missing" && entryKind(from) === "directory") renameSync(from, to);
+    if (entryKind(to) === "missing" && entryKind(from) === "directory") {
+      try {
+        renameSync(from, to);
+      } catch (error) {
+        // A data directory on its own filesystem: start from an empty one below.
+        if ((error as NodeJS.ErrnoException).code !== "EXDEV") throw error;
+      }
+    }
     // data-manager can swap the old path for a symlink between the check and
     // the rename, and Compose would mount whatever a symlink here names. So
     // what arrived is checked again: anything but a real directory of this

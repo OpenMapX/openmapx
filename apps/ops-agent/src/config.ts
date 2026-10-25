@@ -34,11 +34,13 @@ export function loadOpsAgentConfig(env: NodeJS.ProcessEnv = process.env): OpsAge
     ),
     rootDir,
     journalFile: services.agentStatePaths(join(rootDir, "infra", "docker")).journal,
-    trustedConfigDirectory: absolutePath(
-      env,
-      "OPS_TRUSTED_CONFIG_DIR",
-      "trusted configuration directory",
-    ),
+    // Opened through the checkout, not the container's own mount: an agent
+    // recreated from an earlier generation still mounts the old location, and
+    // when the data directory is a filesystem of its own that is no longer
+    // the directory app-api uses. OPS_TRUSTED_CONFIG_DIR stays set for agents
+    // of earlier releases.
+    trustedConfigDirectory: services.agentStatePaths(join(rootDir, "infra", "docker"))
+      .trustedConfig,
     host: env.HOST?.trim() || "0.0.0.0",
     port,
     ...(env.OPS_PRIVACY_BACKUP_CAPABILITY_KEY_FILE?.trim()
