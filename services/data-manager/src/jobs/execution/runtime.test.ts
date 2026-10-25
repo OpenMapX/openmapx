@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, existsSync as requireExists, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, existsSync as requireExists, rmSync, statSync } from "node:fs";
+import { connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
@@ -13,6 +14,62 @@ import { buildJobContext } from "../transitous/pipeline.js";
 import { createDataExecutionRuntime } from "./runtime.js";
 import { createPostgresDataExecutionStore } from "./store.js";
 import { publishDataChange, withDataSqlCancellation } from "./worker-scope.js";
+
+/** Relay real PostgreSQL traffic; hold only the separate CancelRequest packet.
+ * This makes the active-query/worker-finality ordering observable without
+ * replacing the driver, query promises, backend or SQL cancellation. */
+async function heldPostgresCancellation(url: string) {
+  const target = new URL(url),
+    host = target.hostname,
+    port = Number(target.port),
+    held: Array<() => void> = [];
+  let released = false,
+    packets = 0;
+  const server = createServer((client) => {
+    const upstream = connect({ host, port });
+    upstream.on("error", () => client.destroy());
+    client.on("error", () => upstream.destroy());
+    upstream.pipe(client);
+    let first = Buffer.alloc(0);
+    const initial = (chunk: Buffer) => {
+      first = Buffer.concat([first, chunk]);
+      if (first.length < 8) return;
+      client.removeListener("data", initial);
+      client.pause();
+      const forward = () => {
+        upstream.write(first);
+        client.pipe(upstream);
+        client.resume();
+      };
+      if (first.readInt32BE(0) === 16 && first.readInt32BE(4) === 80877102) {
+        packets++;
+        if (!released) {
+          held.push(forward);
+          return;
+        }
+      }
+      forward();
+    };
+    client.on("data", initial);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw Error("PG relay address missing");
+  target.hostname = "127.0.0.1";
+  target.port = String(address.port);
+  return {
+    url: target.toString(),
+    packets: () => packets,
+    release() {
+      released = true;
+      for (const send of held.splice(0)) send();
+    },
+    close: () =>
+      new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      ),
+  };
+}
 
 describe.skipIf(
   !process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL &&
@@ -621,6 +678,194 @@ describe.skipIf(
   !process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL &&
     process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1",
 )("locked production Drizzle and postgres query cancellation", () => {
+  it.each([
+    ["execute", "already-aborted"],
+    ["forEach", "already-aborted"],
+    ["execute", "consume-after-abort"],
+    ["forEach", "consume-after-abort"],
+  ] as const)(
+    "R2-I2 awaits actual eager SQL containment (%s, %s)",
+    async (method, mode) => {
+      const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
+      if (!url) throw Error("Explicit owned PostgreSQL required");
+      const sql = postgres(url, { max: 5 }),
+        proxy = await heldPostgresCancellation(url),
+        workerRaw = postgres(proxy.url, { max: 1 });
+      const db = drizzle(withDataSqlCancellation(workerRaw)),
+        suffix = randomUUID().replaceAll("-", ""),
+        table = `fix2_eager_${suffix}`,
+        prior = `fix2_prior_${suffix}`,
+        fn = `fix2_hit_${suffix}`;
+      await sql.unsafe(`CREATE TABLE data_manager.${table}(hits int NOT NULL)`);
+      await sql.unsafe(`INSERT INTO data_manager.${table} VALUES(0)`);
+      await sql.unsafe(`CREATE TABLE data_manager.${prior}(value int NOT NULL)`);
+      await sql.unsafe(
+        `CREATE FUNCTION data_manager.${fn}() RETURNS int LANGUAGE plpgsql AS $$ BEGIN UPDATE data_manager.${table} SET hits=hits+1; RETURN 1; END $$`,
+      );
+      const root = mkdtempSync(join(tmpdir(), "omx-eager-sql-"));
+      mkdirSync(join(root, "data"), { mode: 0o700 });
+      await control.provisionControlInstallation(root);
+      const installation = control.openControlInstallation({
+        infraDir: root,
+        role: "data-manager",
+        serviceIds: ["data-manager"],
+      });
+      const journal = control.createDataExecutionControlJournal(installation, sql),
+        store = createPostgresDataExecutionStore(sql, { controlJournal: journal });
+      let start = () => {},
+        consume = () => {},
+        ready = () => {},
+        unlock = () => {},
+        locked = () => {};
+      const startGate = new Promise<void>((resolve) => {
+          start = resolve;
+        }),
+        consumeGate = new Promise<void>((resolve) => {
+          consume = resolve;
+        }),
+        readyGate = new Promise<void>((resolve) => {
+          ready = resolve;
+        });
+      const lockGate = new Promise<void>((resolve) => {
+          unlock = resolve;
+        }),
+        lockReady = new Promise<void>((resolve) => {
+          locked = resolve;
+        });
+      const locker =
+        mode === "consume-after-abort"
+          ? sql.begin(async (tx) => {
+              await tx.unsafe(`LOCK TABLE data_manager.${table} IN ACCESS EXCLUSIVE MODE`);
+              locked();
+              await lockGate;
+            })
+          : Promise.resolve();
+      if (mode === "consume-after-abort") await lockReady;
+      let querySettled = false,
+        queryRejected = false,
+        callbacks = 0,
+        fluentIdentity = false;
+      const active = async () =>
+        Number(
+          (
+            await sql`SELECT count(*)::int AS count FROM pg_stat_activity WHERE query LIKE ${"%" + fn + "%"} AND state='active' AND wait_event_type='Lock'`
+          )[0]?.count,
+        );
+      const runtime = createDataExecutionRuntime({
+        store,
+        dispatch: async (_input, context) => {
+          await publishDataChange(async () => {
+            await db.$client.unsafe(`INSERT INTO data_manager.${prior} VALUES(1)`);
+          });
+          ready();
+          await startGate;
+          try {
+            const query = db.$client.unsafe(`SELECT data_manager.${fn}()`);
+            const eager =
+              method === "execute"
+                ? query.execute()
+                : query.forEach(() => {
+                    callbacks++;
+                  });
+            fluentIdentity = Object.is(eager, query);
+            if (mode === "consume-after-abort") await consumeGate;
+            await eager;
+          } catch (error) {
+            queryRejected = true;
+            throw error;
+          } finally {
+            querySettled = true;
+          }
+          context.signal.throwIfAborted();
+          return { kind: "download-fonts", completed: true };
+        },
+      });
+      let id: string | undefined;
+      try {
+        const deadline = Date.now() + 60000,
+          operationKey = createControlRootOperationKey({
+            notAfter: deadline,
+            nonce: randomBytes(16),
+          });
+        const admitted = await runtime.admit(
+          { kind: "download-fonts" },
+          { operationKey, requestedDeadlineAt: deadline },
+        );
+        id = admitted.id;
+        await readyGate;
+        const lock = join(root, "data/.admin-target-control/locks/data-manager"),
+          inode = statSync(lock).ino;
+        if (mode === "consume-after-abort") {
+          start();
+          await expect.poll(active, { timeout: 5000 }).toBe(1);
+        }
+        await runtime.requestCancel({ id, operationKey, fingerprint: admitted.fingerprint });
+        start();
+        consume();
+        if (mode === "consume-after-abort") {
+          await expect
+            .poll(
+              async () => {
+                const row = await store.inspect(id!);
+                return {
+                  active: await active(),
+                  querySettled,
+                  cancelPackets: proxy.packets(),
+                  status: row?.status.status,
+                  finished: row?.finishedAt !== null,
+                  fence: requireExists(lock),
+                };
+              },
+              { timeout: 5000 },
+            )
+            .toEqual({
+              active: 1,
+              querySettled: false,
+              cancelPackets: 1,
+              status: "cancel_pending",
+              finished: false,
+              fence: true,
+            });
+          expect(statSync(lock).ino).toBe(inode);
+        }
+        proxy.release();
+        await expect.poll(() => querySettled, { timeout: 5000 }).toBe(true);
+        expect(queryRejected).toBe(true);
+        expect(fluentIdentity).toBe(true);
+        unlock();
+        await locker;
+        await expect
+          .poll(async () => (await store.inspect(id!))?.status.status, { timeout: 15000 })
+          .toBe("canceled");
+        // A direct query behind the eager request on its one real connection is
+        // a completion barrier, so an unobserved late write cannot evade the hit check.
+        await workerRaw`SELECT 1`;
+        expect((await sql.unsafe(`SELECT hits FROM data_manager.${table}`))[0]?.hits).toBe(0);
+        expect((await sql.unsafe(`SELECT value FROM data_manager.${prior}`))[0]?.value).toBe(1);
+        expect(callbacks).toBe(0);
+        expect(requireExists(lock)).toBe(false);
+      } finally {
+        proxy.release();
+        start();
+        consume();
+        unlock();
+        await locker;
+        await workerRaw`SELECT 1`;
+        await runtime.close();
+        if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+        await workerRaw.end();
+        await proxy.close();
+        journal.close();
+        control.closeControlInstallation(installation);
+        await sql.unsafe(`DROP FUNCTION data_manager.${fn}()`);
+        await sql.unsafe(`DROP TABLE data_manager.${table}`);
+        await sql.unsafe(`DROP TABLE data_manager.${prior}`);
+        await sql.end();
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+    60000,
+  );
   it.each([
     "mapped-held",
     "mapped-aborted",

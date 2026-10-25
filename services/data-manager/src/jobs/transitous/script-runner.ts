@@ -46,44 +46,48 @@ export async function cancelAndSettleRetainedTransitousScripts(
   if (!attempts.length) return "settled";
   const endpoint = process.env.TRANSITOUS_RUNNER_URL?.replace(/\/+$/, "");
   if (!endpoint) return "pending";
-  const signal = AbortSignal.timeout(30000);
-  let pending = false;
-  for (const request of attempts) {
-    const control = async (action: "cancel" | "inspect" | "acknowledge") => {
-      const response = await fetch(`${endpoint}/v1/run/${action}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(request),
-        signal,
-      });
-      if (!response.ok) throw Error("Original runner outcome is unknown");
-      return runnerResponseBody(response);
-    };
-    try {
-      for (;;) {
-        signal.throwIfAborted();
-        try {
-          await control("cancel");
-        } catch {
-          /* Lost cancel response permits only exact observation. */
-        }
-        const state = transitousRunnerStatusSchema.parse(await control("inspect"));
-        if (state.state === "terminal") {
-          journal.completeRunnerAttempt(context.authority, request, state.result);
+  // Start every original cancellation independently. An unknown sibling or a
+  // hung control must not spend another attempt's delivery/observation budget.
+  const pending = await Promise.all(
+    attempts.map(async (request) => {
+      const settlement = AbortSignal.timeout(30000);
+      const control = async (action: "cancel" | "inspect" | "acknowledge") => {
+        const response = await fetch(`${endpoint}/v1/run/${action}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(request),
+          signal: AbortSignal.any([settlement, AbortSignal.timeout(5000)]),
+        });
+        if (!response.ok) throw Error("Original runner outcome is unknown");
+        return runnerResponseBody(response);
+      };
+      try {
+        for (;;) {
+          settlement.throwIfAborted();
           try {
-            await control("acknowledge");
+            await control("cancel");
           } catch {
-            /* Original result is retained. */
+            /* Lost cancel response permits only exact observation. */
           }
-          break;
+          const state = transitousRunnerStatusSchema.parse(await control("inspect"));
+          if (state.state === "terminal") {
+            journal.completeRunnerAttempt(context.authority, request, state.result);
+            try {
+              await control("acknowledge");
+            } catch {
+              /* Original result is retained. */
+            }
+            break;
+          }
+          await runnerDelay(100, undefined, { signal: settlement });
         }
-        await runnerDelay(100, undefined, { signal });
+        return false;
+      } catch {
+        return true;
       }
-    } catch {
-      pending = true;
-    }
-  }
-  return pending ? "pending" : "settled";
+    }),
+  );
+  return pending.some(Boolean) ? "pending" : "settled";
 }
 
 /**

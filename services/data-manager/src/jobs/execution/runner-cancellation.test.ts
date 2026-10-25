@@ -1,5 +1,5 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -14,6 +14,7 @@ import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import * as control from "@openmapx/core/build-artifacts";
 import { createControlRootOperationKey } from "@openmapx/core/ops";
+import { transitousRunnerRequestSchema } from "@openmapx/core/transitous-runner";
 import { build } from "esbuild";
 import postgres from "postgres";
 import { afterAll, beforeAll, expect, it } from "vitest";
@@ -94,6 +95,211 @@ function processPeer(file: string, initial: unknown, env: NodeJS.ProcessEnv = pr
     },
   };
 }
+
+it.skipIf(
+  !process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL &&
+    process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1",
+)(
+  "R2-I1 cancels live runner B after DM replacement while authentic attempt A exhausts its control budget",
+  async () => {
+    const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
+    if (!url) throw Error("Explicit owned PostgreSQL required");
+    const sql = postgres(url, { max: 4 }),
+      root = mkdtempSync(join(tmpdir(), "omx-runner-union-crash-"));
+    mkdirSync(join(root, "data"), { mode: 0o700 });
+    await control.provisionControlInstallation(root);
+    const catalog = join(root, "catalog"),
+      ready = join(catalog, "ready"),
+      keyFile = join(root, "runner-key"),
+      token = "b".repeat(43);
+    mkdirSync(join(catalog, "src"), { recursive: true });
+    writeFileSync(keyFile, "7".repeat(32), { mode: 0o600 });
+    writeFileSync(
+      join(catalog, "src/generate-attribution.py"),
+      "print('public synthetic attempt A')\n",
+    );
+    writeFileSync(
+      join(catalog, "src/garbage-collect.py"),
+      "import os,time\nfrom pathlib import Path\nPath('ready').write_text(str(os.getpid()))\nwhile not Path('release').exists(): time.sleep(0.05)\n",
+    );
+    const runner = buildTransitousRunnerServer({
+      catalogDir: catalog,
+      stagingDir: root,
+      capabilityKey: Buffer.from("7".repeat(32)),
+    });
+    let releaseA = () => {},
+      aControls = 0,
+      bCancels = 0,
+      bInspections = 0,
+      bAcks = 0,
+      posts = 0;
+    const heldA = new Promise<void>((resolve) => {
+      releaseA = resolve;
+    });
+    const originalDigests = new Map<string, string>(),
+      controlledDigests: Array<[string, string]> = [];
+    const digest = (value: unknown) =>
+      createHash("sha256").update(JSON.stringify(value)).digest("hex");
+    runner.addHook("preHandler", async (request, reply) => {
+      const body = transitousRunnerRequestSchema.parse(request.body),
+        name = body.run.script;
+      if (request.url === "/v1/run") {
+        posts++;
+        originalDigests.set(name, digest(body));
+        return;
+      }
+      controlledDigests.push([name, digest(body)]);
+      if (name === "generate-attribution") {
+        if (request.url === "/v1/run/cancel") {
+          aControls++;
+          await heldA;
+        } else if (request.url === "/v1/run/inspect")
+          return reply.code(503).send({ error: "synthetic unknown A" });
+      } else {
+        if (request.url === "/v1/run/cancel") bCancels++;
+        if (request.url === "/v1/run/inspect") bInspections++;
+        if (request.url === "/v1/run/acknowledge") bAcks++;
+      }
+    });
+    runner.addHook("onSend", async (request, reply, payload) => {
+      const body = transitousRunnerRequestSchema.parse(request.body);
+      if (request.url === "/v1/run" && body.run.script === "generate-attribution")
+        reply.raw.destroy();
+      if (
+        request.url === "/v1/run/cancel" &&
+        body.run.script === "garbage-collect" &&
+        bCancels === 1
+      )
+        reply.raw.destroy();
+      return payload;
+    });
+    let dm: ReturnType<typeof processPeer> | undefined, id: string | undefined;
+    try {
+      await runner.listen({ host: "127.0.0.1", port: 0 });
+      const address = runner.server.address();
+      if (!address || typeof address === "string") throw Error("Runner endpoint missing");
+      const env = {
+        ...process.env,
+        DATABASE_URL: url,
+        TRANSITOUS_RUNNER_URL: `http://127.0.0.1:${address.port}`,
+        TRANSITOUS_RUNNER_CAPABILITY_KEY_FILE: keyFile,
+      };
+      const start = async (replacement: boolean) => {
+        dm = processPeer(dmBundle, { root, token, mode: "python-union", replacement }, env);
+        return `http://127.0.0.1:${(await dm.next("ready")).port}`;
+      };
+      let base = await start(false);
+      const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        input = {
+          countries: ["de"],
+          idempotencyKey: "fix2-union-" + randomUUID(),
+          triggeredBy: "synthetic:operator",
+        };
+      const admitted = await fetch(base + "/transit/sync", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(input),
+      });
+      expect(admitted.status).toBe(202);
+      id = (await admitted.json()).jobId;
+      if (!id) throw Error("Original admission missing");
+      await expect.poll(() => existsSync(ready), { timeout: 15000 }).toBe(true);
+      dm!.send({ type: "probe", id });
+      expect((await dm!.next("probe")).pendingRunners).toBe(2);
+      expect(posts).toBe(2);
+      const [original] = await sql`SELECT * FROM data_manager.jobs WHERE id=${id}`;
+      if (!original) throw Error("Original row missing");
+      const lock = join(root, "data/.admin-target-control/locks/motis"),
+        inode = statSync(lock).ino;
+      const proof = join(
+        root,
+        `control-private/data-manager/observations/worker-${original.operation_key}.json`,
+      );
+      await dm!.kill();
+      dm = undefined;
+      expect(existsSync(proof)).toBe(false);
+      base = await start(true);
+      const retry = await fetch(base + "/transit/sync", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(input),
+      });
+      expect(retry.status).toBe(202);
+      expect((await retry.json()).jobId).toBe(id);
+      const observer = await fetch(base + `/executions/${id}`, { headers });
+      await observer.body?.cancel();
+      expect(bCancels).toBe(0);
+      const canceledAt = Date.now();
+      const response = await fetch(base + `/executions/${id}/cancel`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          operationKey: original.operation_key,
+          fingerprint: original.execution_fingerprint,
+        }),
+      });
+      expect(response.status, await response.text()).toBe(200);
+      // A's authenticated cancellation transport is held indefinitely. B must
+      // receive its own cancel immediately, before A's control/settlement budget.
+      await expect.poll(() => aControls, { timeout: 5000 }).toBeGreaterThan(0);
+      await expect.poll(() => bCancels, { timeout: 5000 }).toBeGreaterThan(0);
+      const pid = Number(readFileSync(ready, "utf8"));
+      await expect
+        .poll(
+          () => {
+            try {
+              process.kill(-pid, 0);
+              return true;
+            } catch (e) {
+              if ((e as NodeJS.ErrnoException).code === "ESRCH") return false;
+              throw e;
+            }
+          },
+          { timeout: 5000 },
+        )
+        .toBe(false);
+      await expect.poll(() => bAcks, { timeout: 5000 }).toBe(1);
+      expect(bInspections).toBeGreaterThan(0);
+      // Keep A unknown past the original full observation budget. No sibling
+      // result or exhausted read budget can discharge the dead local worker.
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.max(0, canceledAt + 31000 - Date.now())),
+      );
+      dm!.send({ type: "probe", id });
+      const probe = await dm!.next("probe");
+      expect(probe).toMatchObject({ dispatches: 0, pendingRunners: 1 });
+      const [current] = await sql`SELECT * FROM data_manager.jobs WHERE id=${id}`;
+      expect(current?.status).toBe("cancel_pending");
+      expect(current?.finished_at).toBeNull();
+      expect(current?.execution_state.publication).toBe("unknown");
+      for (const key of [
+        "id",
+        "operation_key",
+        "operation_fingerprint",
+        "execution_fingerprint",
+        "execution_input",
+        "deadline_at",
+        "triggered_by",
+      ])
+        expect(current?.[key]).toEqual(original[key]);
+      expect(statSync(lock).ino).toBe(inode);
+      expect(existsSync(proof)).toBe(false);
+      expect(posts).toBe(2);
+      for (const [name, controlDigest] of controlledDigests)
+        expect(controlDigest).toBe(originalDigests.get(name));
+    } finally {
+      releaseA();
+      if (dm) await dm.kill();
+      writeFileSync(join(catalog, "release"), "release");
+      runner.server.closeAllConnections();
+      await runner.close();
+      if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      await sql.end();
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+  60000,
+);
 
 it
   .skipIf(

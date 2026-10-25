@@ -26,7 +26,7 @@ if (initial.done) throw Error("Missing fixture startup");
 const { root, token, mode, replacement } = JSON.parse(initial.value) as {
   root: string;
   token: string;
-  mode: "agent" | "python";
+  mode: "agent" | "python" | "python-union";
   replacement: boolean;
 };
 const installation = control.openControlInstallation({
@@ -65,6 +65,18 @@ const runtime = createDataExecutionRuntime({
     if (replacement) throw Error("Recovery must never redispatch");
     if (mode === "agent") return dispatcher.dispatch(input, context);
     if (input.kind !== "transit-sync") throw Error("Fixture selects transit only");
+    if (mode === "python-union") {
+      // The real feed loop proceeds after an unresolved script failure. Keep
+      // that authentic first request retained before starting the second run.
+      let rejected = false;
+      try {
+        await runner({ script: "generate-attribution" });
+      } catch {
+        rejected = true;
+      }
+      if (!rejected) throw Error("The first script must have an unresolved response");
+      send({ type: "first-runner-pending" });
+    }
     await runner({ script: "garbage-collect" });
     context.signal.throwIfAborted();
     return {
@@ -97,8 +109,17 @@ const address = app.server.address();
 if (!address || typeof address === "string") throw Error("Missing DM endpoint");
 send({ type: "ready", port: address.port });
 for await (const line of { [Symbol.asyncIterator]: () => messages }) {
-  const command = JSON.parse(line) as { type: string };
-  if (command.type === "probe") send({ type: "probe", dispatches });
+  const command = JSON.parse(line) as { type: string; id?: string };
+  if (command.type === "probe") {
+    const record = command.id ? await store.inspect(command.id) : undefined;
+    const pendingRunners =
+      record?.input.kind === "transit-sync"
+        ? journal.pendingRunnerAttempts(
+            control.restoreAdmittedControlExecution(installation, record.execution),
+          ).length
+        : undefined;
+    send({ type: "probe", dispatches, pendingRunners });
+  }
   if (command.type === "reconcile") {
     await runtime.reconcile();
     send({ type: "reconciled" });

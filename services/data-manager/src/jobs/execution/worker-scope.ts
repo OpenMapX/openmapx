@@ -75,12 +75,16 @@ function ownedQuery<T>(query: T): T {
   )
     return query;
   const cancel = query.cancel.bind(query);
-  let consumed: Promise<unknown> | undefined;
-  const consume = () => {
+  let consumed: Promise<unknown> | undefined,
+    started = false;
+  const consume = (eager?: () => void) => {
     if (consumed) return consumed;
     const signal = dataWorkerSignal();
     if (signal?.aborted) {
       consumed = Promise.reject(signal.reason);
+      // Eager callers may attach their consumer later. Keep the original
+      // rejection observable then, without an unhandled-rejection gap now.
+      void consumed.catch(() => {});
       return consumed;
     }
     const abort = () => {
@@ -88,6 +92,8 @@ function ownedQuery<T>(query: T): T {
     };
     signal?.addEventListener("abort", abort, { once: true });
     try {
+      started = true;
+      eager?.();
       const then = Reflect.get(query, "then");
       if (typeof then !== "function") throw Error("PostgreSQL query is not thenable");
       consumed = Promise.resolve(Reflect.apply(then, query, [])).finally(() =>
@@ -97,6 +103,7 @@ function ownedQuery<T>(query: T): T {
       signal?.removeEventListener("abort", abort);
       consumed = Promise.reject(error);
     }
+    void consumed.catch(() => {});
     return consumed;
   };
   const wrapped = new Proxy(query, {
@@ -112,6 +119,17 @@ function ownedQuery<T>(query: T): T {
       if (property === "finally")
         return (settled?: (() => void) | null) => consume().finally(settled);
       if (typeof value !== "function") return value;
+      if (property === "execute" || property === "forEach")
+        return (...args: unknown[]) => {
+          if (!consumed)
+            void consume(() => {
+              Reflect.apply(value, target, args);
+            });
+          else if (started) Reflect.apply(value, target, args);
+          // A started query always retains its real settlement promise, even
+          // when its eventual consumer arrives after cancellation.
+          return wrapped;
+        };
       return (...args: unknown[]) => {
         const result = Reflect.apply(value, target, args);
         return result === target ? wrapped : result;
