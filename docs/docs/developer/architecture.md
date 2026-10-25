@@ -190,7 +190,9 @@ that host authority themselves. The agent's own state (job journal, self-update
 handoff record, trusted-configuration queue and privacy-extraction scratch) lives
 in `infra/docker/state/ops-agent/`, outside the data directory data-manager
 mounts; `app-api` mounts only the queue, and `pnpm check-ops-authority` keeps it
-that way. The built-in service manifests the agent and its
+that way. `app-api` reads the release and active Transitous pins through the
+read-only `transitousPin.inspect` operation. The proposal and every change stay
+`data-manager`'s operations, which the admin panel's bump goes through. The built-in service manifests the agent and its
 fixed CLI render come from the agent's own image, not from the host checkout.
 A process cannot recreate its own container, so
 to update itself the agent starts a short-lived helper container from its own
