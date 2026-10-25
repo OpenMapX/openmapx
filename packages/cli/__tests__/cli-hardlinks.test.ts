@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { applyGeneratedHardlinks, applyHardlinkPlan } from "../src/lib/hardlinks";
+import { applyGeneratedHardlinks, applyHardlinkPlan, DATA_ROOT_MODE } from "../src/lib/hardlinks";
 
 let tmp: string;
 
@@ -164,6 +164,8 @@ describe("cli hardlink helpers", () => {
     const dataRoot = join(tmp, "infra", "docker", "data");
     rmSync(dataRoot, { recursive: true, force: true });
     writeFileSync(planPath(), "[]");
+    // Its mode is explicit, not the umask's.
+    const umask = process.umask(0o002);
 
     const result = await applyGeneratedHardlinks({
       rootDir: tmp,
@@ -176,8 +178,10 @@ describe("cli hardlink helpers", () => {
     expect(result.linked).toBe(0);
     expect(result.pruned).toBe(0);
     expect(result.via).toBe("local");
+    process.umask(umask);
     expect(existsSync(dataRoot)).toBe(true);
     expect(statSync(dataRoot).isDirectory()).toBe(true);
+    expect(statSync(dataRoot).mode & 0o777).toBe(DATA_ROOT_MODE);
   });
 
   it("falls through to the local linker when the data-manager probe fails", async () => {

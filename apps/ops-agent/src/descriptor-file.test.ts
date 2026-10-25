@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   fstatSync,
   linkSync,
   mkdirSync,
@@ -109,6 +110,39 @@ describe("descriptor-anchored bounded reads", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it("allows group write only where the anchor's writers share this user", () => {
+    const { root, file } = fixture("shared");
+    for (const directory of [root, join(root, "one"), join(root, "one", "two")]) {
+      chmodSync(directory, 0o775);
+    }
+    chmodSync(file, 0o664);
+    expect(() =>
+      readDescriptorAnchoredUtf8(root, ["one", "two", "value.json"], { maximumBytes: 64 }),
+    ).toThrow();
+    expect(
+      readDescriptorAnchoredUtf8(root, ["one", "two", "value.json"], {
+        maximumBytes: 64,
+        allowGroupWritable: true,
+      }),
+    ).toBe("shared");
+    // Not writable by others, and still this user's own, with one link.
+    chmodSync(file, 0o666);
+    expect(() =>
+      readDescriptorAnchoredUtf8(root, ["one", "two", "value.json"], {
+        maximumBytes: 64,
+        allowGroupWritable: true,
+      }),
+    ).toThrow();
+    chmodSync(file, 0o664);
+    linkSync(file, join(root, "alias.json"));
+    expect(() =>
+      readDescriptorAnchoredUtf8(root, ["one", "two", "value.json"], {
+        maximumBytes: 64,
+        allowGroupWritable: true,
+      }),
+    ).toThrow();
   });
 
   it("reads an exact stable regular file through opened directory descriptors", () => {

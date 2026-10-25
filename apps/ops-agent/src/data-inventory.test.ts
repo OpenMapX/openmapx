@@ -1,4 +1,12 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  linkSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -26,7 +34,10 @@ function umask002Checkout(): { root: string; data: string } {
     join(data, "motis", "slot-state.json"),
     JSON.stringify({ activeSlot: "B", previousHealthySlot: "A" }),
   );
-  writeFileSync(join(root, "infra", "docker", "transitous.lock.proposed.json"), "{}");
+  // The agent writes it owner-only.
+  writeFileSync(join(root, "infra", "docker", "transitous.lock.proposed.json"), "{}", {
+    mode: 0o600,
+  });
   // data-manager writes the data directory's contents with a umask of 022.
   for (const path of ["osm", "valhalla", "motis", join("motis", "live")]) {
     chmodSync(join(data, path), 0o755);
@@ -62,7 +73,50 @@ describe("data inventory", () => {
   );
 
   it.runIf(process.platform === "linux")(
-    "does not read through a data directory others can write",
+    "reads a fresh install's data directory, which the umask left group-writable",
+    async () => {
+      const { root, data } = umask002Checkout();
+      // Created by the CLI's first commands and written by data-manager, both
+      // as this user, under a umask of 002.
+      chmodSync(data, 0o775);
+      for (const path of ["osm", "valhalla", "motis", join("motis", "live")]) {
+        chmodSync(join(data, path), 0o775);
+      }
+      for (const path of [
+        join("osm", "germany-latest.osm.pbf"),
+        join("motis", "slot-state.json"),
+      ]) {
+        chmodSync(join(data, path), 0o664);
+      }
+      const inventory = await inspectDataInventory(root);
+      expect(inventory.osm).toMatchObject({ found: true, filename: "germany-latest.osm.pbf" });
+      expect(inventory.builds).toContainEqual(
+        expect.objectContaining({ target: "valhalla", built: true }),
+      );
+      expect(inventory.motisTransitous).toMatchObject({ activeSlot: "B" });
+    },
+  );
+
+  it.runIf(process.platform === "linux")(
+    "still opens nothing through a link in the data directory",
+    async () => {
+      const { root, data } = umask002Checkout();
+      chmodSync(data, 0o775);
+      // A directory swapped for a symlink, and a status file hard-linked.
+      const elsewhere = join(root, "elsewhere");
+      mkdirSync(elsewhere, { mode: 0o755 });
+      writeFileSync(join(elsewhere, "planted-latest.osm.pbf"), "pbf", { mode: 0o644 });
+      rmSync(join(data, "osm"), { recursive: true });
+      symlinkSync(elsewhere, join(data, "osm"));
+      linkSync(join(data, "motis", "slot-state.json"), join(root, "slot-state-alias.json"));
+      const inventory = await inspectDataInventory(root);
+      expect(inventory.osm).toEqual({ found: false });
+      expect(inventory.motisTransitous).toMatchObject({ activeSlot: null });
+    },
+  );
+
+  it.runIf(process.platform === "linux")(
+    "does not read through a data directory anyone can write",
     async () => {
       const { root, data } = umask002Checkout();
       chmodSync(data, 0o777);

@@ -7,6 +7,7 @@ import {
   parseMotisConfigExpectations,
 } from "@openmapx/transitous-core";
 import {
+  type DescriptorWriteModeOption,
   listDescriptorAnchoredDirectory,
   readDescriptorAnchoredUtf8,
   statDescriptorAnchoredEntry,
@@ -63,15 +64,28 @@ function isDirectory(path: string): boolean {
 }
 
 /**
- * Reads `path` anchored at `anchor`: the data directory (or `infra/docker` for
- * its own files), which the stack creates for its user, never the checkout
- * root, which git leaves group-writable under a umask of 002.
+ * How the data directory is read. data-manager writes it as this same user by
+ * design, so its group write bit protects nothing and is not required: a fresh
+ * install's directory may be 0775. Every entry must still be this user's own,
+ * with one link for a file and no other write, and is opened without following
+ * links.
  */
-function readBoundedUtf8(anchor: string, path: string): string | null {
+const DATA_DIRECTORY: DescriptorWriteModeOption = { allowGroupWritable: true };
+
+/**
+ * Reads `path` anchored at `anchor`: the data directory (or `infra/docker` for
+ * its own files, strictly), never the checkout root.
+ */
+function readBoundedUtf8(
+  anchor: string,
+  path: string,
+  writeModes: DescriptorWriteModeOption = DATA_DIRECTORY,
+): string | null {
   try {
     const child = relative(anchor, path);
     if (!child || child.startsWith(`..${sep}`) || child === "..") return null;
     return readDescriptorAnchoredUtf8(anchor, child.split(sep), {
+      ...writeModes,
       maximumBytes: MAX_STATUS_FILE_BYTES,
     });
   } catch {
@@ -120,6 +134,7 @@ function inspectOsm(dataRoot: string): DataInventory["osm"] {
   try {
     const child = relative(dataRoot, directory);
     entries = listDescriptorAnchoredDirectory(dataRoot, child ? child.split(sep) : [], {
+      ...DATA_DIRECTORY,
       maximumEntries: MAX_DIRECTORY_ENTRIES,
     });
   } catch {
@@ -139,7 +154,11 @@ function inspectOsm(dataRoot: string): DataInventory["osm"] {
   const child = relative(dataRoot, directory);
   let metadata: ReturnType<typeof statDescriptorAnchoredEntry>;
   try {
-    metadata = statDescriptorAnchoredEntry(dataRoot, [...(child ? child.split(sep) : []), name]);
+    metadata = statDescriptorAnchoredEntry(
+      dataRoot,
+      [...(child ? child.split(sep) : []), name],
+      DATA_DIRECTORY,
+    );
   } catch {
     return { found: false };
   }
@@ -162,7 +181,11 @@ function inspectBuilds(dataRoot: string): DataInventory["builds"] {
     try {
       // Descriptor-anchored so that a renamed or hardlinked path cannot
       // fabricate a built status or timestamp.
-      const metadata = statDescriptorAnchoredEntry(dataRoot, relativePath.split("/"));
+      const metadata = statDescriptorAnchoredEntry(
+        dataRoot,
+        relativePath.split("/"),
+        DATA_DIRECTORY,
+      );
       return metadata.type === "directory"
         ? { target: key, built: true, builtAt: new Date(metadata.modifiedAtMs).toISOString() }
         : { target: key, built: false };
@@ -399,7 +422,7 @@ async function inspectMotis(infraDir: string, dataRoot: string): Promise<MotisIn
         ? capacity.freeDiskBytes
         : null,
     pinProposalPending:
-      readBoundedUtf8(infraDir, join(infraDir, "transitous.lock.proposed.json")) !== null,
+      readBoundedUtf8(infraDir, join(infraDir, "transitous.lock.proposed.json"), {}) !== null,
     crowdsourceState: "disabled-pending-review" as const,
     gbfsCatalog: inspectGbfsCatalog(dataRoot, motisDir),
   };

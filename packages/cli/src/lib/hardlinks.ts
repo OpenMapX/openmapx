@@ -34,6 +34,8 @@ import {
 import { dataManagerUrl } from "./data-manager-url";
 import { repoPaths } from "./paths";
 
+/** The data root's mode when the CLI creates it: the owner writes, everyone traverses. */
+export const DATA_ROOT_MODE = 0o755;
 export type { ApplyHardlinkResult, HardlinkEntry };
 export { applyHardlinkPlan };
 
@@ -139,8 +141,9 @@ export async function applyGeneratedHardlinks(
 
   const { plan, dataRoot } = readGeneratedHardlinkPlan(opts.rootDir);
   // Pre-create the host data root as the invoking user so docker doesn't
-  // auto-create it as root on first compose up.
-  mkdirSync(dataRoot, { recursive: true });
+  // auto-create it as root on first compose up. Its mode is explicit rather
+  // than the process umask's; the services that mount it run as other users.
+  mkdirSync(dataRoot, { recursive: true, mode: DATA_ROOT_MODE });
 
   if (!opts.forceLocal) {
     const baseUrl = opts.dataManagerUrl ?? dataManagerUrl();
