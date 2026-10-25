@@ -33,6 +33,14 @@ vi.mock("../../db/schema.js", () => ({
 const PUBLIC_JWK = { kty: "EC", crv: "P-256", x: "x".repeat(43), y: "y".repeat(43) };
 const PRIVATE_JWK = { ...PUBLIC_JWK, d: "d".repeat(43) };
 
+function webauthnWraps(count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    wrapType: "webauthn" as const,
+    label: `Passkey ${index + 1}`,
+    identityString: `AGE-PLUGIN-FIDO2PRF-${index + 1}`,
+  }));
+}
+
 describe("reviews-keypair validation helpers", () => {
   // Imported after the vi.mock calls so the route module's mocked deps resolve.
   let isMangrovePublicJwk: typeof import("../reviews-keypair.js").isMangrovePublicJwk;
@@ -148,6 +156,27 @@ describe("reviews-keypair validation helpers", () => {
         wraps: [passWrap, webauthnWrap],
       });
       expect(state.wraps).toHaveLength(2);
+    });
+
+    it("accepts exactly 32 wraps", () => {
+      const state = validateEncryptedState({
+        recipientsCiphertext: "r",
+        wraps: webauthnWraps(32),
+      });
+      expect(state.wraps).toHaveLength(32);
+    });
+
+    it("rejects more than 32 wraps before validating individual entries", () => {
+      try {
+        validateEncryptedState({
+          recipientsCiphertext: "r",
+          wraps: Array.from({ length: 33 }, () => ({})),
+        });
+        throw new Error("expected validateEncryptedState to throw");
+      } catch (err) {
+        expect((err as { statusCode?: number }).statusCode).toBe(400);
+        expect((err as Error).message).toBe("At most 32 keypair wraps are supported");
+      }
     });
 
     it.each([
@@ -290,6 +319,19 @@ describe("reviews-keypair routes", () => {
     expect(dbMock.db.transaction).toHaveBeenCalledTimes(1);
   });
 
+  it("POST rejects more than 32 encrypted-keypair wraps before write work", async () => {
+    dbMock.queueSelect([]);
+    const res = await post({
+      mode: "encrypted",
+      publicJwk: PUBLIC_JWK,
+      recipientsCiphertext: "ct",
+      wraps: webauthnWraps(33),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: "At most 32 keypair wraps are supported" });
+    expect(dbMock.db.transaction).not.toHaveBeenCalled();
+  });
+
   it("PUT returns 404 when there is no keypair", async () => {
     dbMock.queueSelect([]);
     const res = await put({
@@ -316,6 +358,17 @@ describe("reviews-keypair routes", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(dbMock.db.transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("PUT rejects more than 32 encrypted-keypair wraps before write work", async () => {
+    dbMock.queueSelect([{ mode: "encrypted" }]);
+    const res = await put({
+      recipientsCiphertext: "ct",
+      wraps: webauthnWraps(33),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: "At most 32 keypair wraps are supported" });
+    expect(dbMock.db.transaction).not.toHaveBeenCalled();
   });
 
   it("DELETE wipes the keypair and wraps in a transaction", async () => {

@@ -68,6 +68,10 @@ Choose how it is stored:
 | Passphrase + passkey | Adds a supported device credential as another unlock method; retain the passphrase as recovery |
 | Unencrypted          | The server stores a readable private key; setup requires an explicit confirmation              |
 
+An encrypted key supports at most 32 total unlock methods: one passphrase and
+up to 31 passkeys, or up to 32 passkeys without a passphrase. Adding another
+method requires removing an existing one first.
+
 In encrypted modes, the unlocked private key stays in browser memory and locks
 after 15 minutes without a key operation. Signing out clears the session key.
 The review-key passphrase is separate from your OpenMapX sign-in password.
