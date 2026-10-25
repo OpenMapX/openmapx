@@ -1,10 +1,14 @@
 import { createHash } from "node:crypto";
 import {
   chmodSync,
+  closeSync,
+  constants,
+  fstatSync,
   linkSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readdirSync,
   readFileSync,
   rmSync,
@@ -137,10 +141,22 @@ function snapshot(infraDir: string): Record<string, string> {
     entries[directory] = `dir ${lstatSync(directory).mode}`;
     for (const name of readdirSync(directory)) {
       const path = join(directory, name);
-      const stats = lstatSync(path);
-      entries[path] = stats.isSymbolicLink()
-        ? "symlink"
-        : `${stats.mode} ${stats.nlink} ${stats.isFile() ? readFileSync(path, "utf8") : "dir"}`;
+      // Opened once, without following a link, and read through the descriptor.
+      let descriptor: number;
+      try {
+        descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ELOOP") throw error;
+        entries[path] = "symlink";
+        continue;
+      }
+      try {
+        const stats = fstatSync(descriptor);
+        entries[path] =
+          `${stats.mode} ${stats.nlink} ${stats.isFile() ? readFileSync(descriptor, "utf8") : "dir"}`;
+      } finally {
+        closeSync(descriptor);
+      }
     }
   }
   entries[legacy.overlay] = readFileSync(legacy.overlay, "utf8");

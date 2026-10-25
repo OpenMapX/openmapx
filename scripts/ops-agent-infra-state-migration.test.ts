@@ -2,11 +2,15 @@ import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
   chmodSync,
+  closeSync,
+  constants,
   cpSync,
   existsSync,
+  fstatSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readdirSync,
   readFileSync,
   readlinkSync,
@@ -222,13 +226,25 @@ describe.skipIf(!SEPARATE || process.platform !== "linux")(
     /** Every file the earlier release keeps in infra/docker, to prove none changed. */
     function snapshotLegacy(infra: string): Record<string, string> {
       const entries: Record<string, string> = {};
+      // Each entry is opened once, without following a link, and read through it.
       const walk = (path: string) => {
-        const stats = lstatSync(path);
-        if (stats.isSymbolicLink()) entries[path] = `-> ${readlinkSync(path)}`;
-        else if (stats.isDirectory()) {
-          entries[path] = `dir ${stats.mode}`;
-          for (const name of readdirSync(path)) walk(join(path, name));
-        } else entries[path] = `${stats.mode} ${digestOf(readFileSync(path, "utf8"))}`;
+        let descriptor: number;
+        try {
+          descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ELOOP") throw error;
+          entries[path] = `-> ${readlinkSync(path)}`;
+          return;
+        }
+        try {
+          const stats = fstatSync(descriptor);
+          if (stats.isDirectory()) {
+            entries[path] = `dir ${stats.mode}`;
+            for (const name of readdirSync(path)) walk(join(path, name));
+          } else entries[path] = `${stats.mode} ${digestOf(readFileSync(descriptor, "utf8"))}`;
+        } finally {
+          closeSync(descriptor);
+        }
       };
       for (const name of [
         ".trusted-config-current",
