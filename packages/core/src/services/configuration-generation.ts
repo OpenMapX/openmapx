@@ -9,7 +9,6 @@ import {
   mkdirSync,
   openSync,
   readdirSync,
-  readFileSync,
   readlinkSync,
   readSync,
   renameSync,
@@ -669,6 +668,15 @@ export function readAppliedServiceIds(
   return new Set(expanded.enabledIds);
 }
 
+function readOwnGenerationFile(path: string, modes: readonly bigint[]): string {
+  return readGenerationFile(
+    path,
+    lstatSync(path, { bigint: true }),
+    MAX_GENERATION_BYTES,
+    modes,
+  ).contents.toString("utf8");
+}
+
 /**
  * The config, integration config and secrets of the applied generation — what
  * the admin panel last applied — for a render that cannot read the database.
@@ -679,7 +687,12 @@ export function readAppliedConfiguration(
   const empty = { serviceConfigs: [], integrationConfigs: [], serviceSecrets: [] };
   const generation = appliedGenerationDirectory(infraDir);
   if (!generation) return empty;
-  const resolved = JSON.parse(readFileSync(join(generation, RESOLVED_CONFIG_FILE), "utf-8")) as {
+  // Each file is opened without following links and must be this user's
+  // own, as the generation's tree was checked: while migrating, the earlier
+  // generation sits below infra/docker, whose entries its group may rename.
+  const resolved = JSON.parse(
+    readOwnGenerationFile(join(generation, RESOLVED_CONFIG_FILE), [0o400n, 0o600n]),
+  ) as {
     serviceConfigs?: ConfigurationInput["serviceConfigs"];
     integrationConfigs?: ConfigurationInput["integrationConfigs"];
   };
@@ -689,7 +702,7 @@ export function readAppliedConfiguration(
     for (const serviceId of readdirSync(secretsRoot).sort()) {
       const values: Record<string, string> = {};
       for (const key of readdirSync(join(secretsRoot, serviceId)).sort()) {
-        values[key] = readFileSync(join(secretsRoot, serviceId, key), "utf-8");
+        values[key] = readOwnGenerationFile(join(secretsRoot, serviceId, key), [0o444n]);
       }
       serviceSecrets.push({ serviceId, values });
     }
@@ -710,9 +723,9 @@ export function inspectAppliedConfiguration(
   const revisionId = currentConfigurationGeneration(infraDir);
   if (revisionId === null) return { revisionId, integrationConfigDigests: [] };
   const resolved = JSON.parse(
-    readFileSync(
+    readOwnGenerationFile(
       join(infraDir, CONFIGURATION_GENERATIONS, revisionId, RESOLVED_CONFIG_FILE),
-      "utf8",
+      [0o400n, 0o600n],
     ),
   );
   const { integrationConfigs } = trustedConfigurationPayloadSchema.parse({
