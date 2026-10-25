@@ -9,13 +9,14 @@ import {
   readSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
+import { agentStatePaths } from "./agent-state";
 import { readRegularFileBytes } from "./built-in-service-source";
 import { communityServiceManifestProblems } from "./community-manifest";
 import type { LoadedService, ServiceManifest } from "./types";
 
 /**
  * The operations agent's records of the community service repositories it
- * installed under `services/.community/`.
+ * installed in its community store, `infra/docker/state/ops-agent/community/`.
  *
  * Each record lists, for every service the agent validated when it installed
  * a commit, the manifest's directory in the repository and the SHA-256 of its
@@ -57,7 +58,7 @@ export class CommunityServiceRecordsError extends Error {
 
 function recovery(repository: string): string {
   return (
-    `Delete services/.community/${repository} and services/.community/${communityRecordFileName(repository)}, ` +
+    `Delete infra/docker/state/ops-agent/community/${repository} and infra/docker/state/ops-agent/community/${communityRecordFileName(repository)}, ` +
     "then install its extension again."
   );
 }
@@ -383,7 +384,7 @@ export interface LoadRecordedCommunityServicesOptions {
 
 /**
  * Every community service the operations agent recorded under
- * `<rootDir>/services/.community`, verified against its digest. Repository
+ * in its community store under `<rootDir>/infra/docker`, verified against its digest. Repository
  * directories without a record are ignored. Throws when a record is invalid,
  * a checkout matches none of its recorded states, or the services exceed the
  * agent's limits.
@@ -392,7 +393,7 @@ export function loadRecordedCommunityServices(
   rootDir: string,
   options: LoadRecordedCommunityServicesOptions = {},
 ): VerifiedCommunityService[] {
-  const community = join(resolve(rootDir), "services", ".community");
+  const community = agentStatePaths(join(resolve(rootDir), "infra", "docker")).community;
   let names: string[];
   try {
     names = readdirSync(community);

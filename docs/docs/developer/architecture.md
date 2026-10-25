@@ -40,7 +40,6 @@ openmapx/
 │   └── mobile/               Expo native host for the map and navigation
 ├── packages/                 shared libraries (see below)
 ├── integrations/             built-in application features (manifest.json each)
-├── custom_integrations/      community integrations (gitignored)
 ├── services/                 built-in service plugins (service.json each)
 │   ├── data-manager/         data preparation, publication and supervision
 │   └── ops-agent/            private deployment manifest for the operations broker
@@ -53,9 +52,11 @@ under `infra/docker/`. That directory also contains operator input and durable
 state, including `.env`, service selection, secrets, and data; it is not a
 throwaway build directory. Do not hand-edit generated Compose output.
 
-`custom_integrations/` holds installed declarative integration artifacts.
-Community service repositories live under `services/.community/`, owned by the
-operations agent. Built-in integrations run trusted host code; installed
+Installed declarative integration artifacts and community service repositories
+live in the operations agent's state, in
+`infra/docker/state/ops-agent/custom-integrations/` and
+`infra/docker/state/ops-agent/community/`; `app-api` mounts the first read-only
+at `/app/custom_integrations`. Built-in integrations run trusted host code; installed
 community integrations cannot load arbitrary JavaScript into the API or web
 process. Their executable behavior belongs in separate service containers.
 
@@ -185,12 +186,13 @@ bounded structured audit fields. It is reachable solely on the private
 `openmapx` network.
 
 `ops-agent` is the sole owner of the Docker socket and trusted repository write
-mounts, including the community service checkouts under `services/.community/`. `app-api` and `data-manager` submit typed operations instead of receiving
+mounts, including its stores of community service checkouts and installed
+integrations. `app-api` and `data-manager` submit typed operations instead of receiving
 that host authority themselves. The agent's own state (job journal, self-update
 handoff record, trusted-configuration queue and privacy-extraction scratch) lives
 in `infra/docker/state/ops-agent/`, outside the data directory data-manager
-mounts; `app-api` mounts only the queue, and `pnpm check-ops-authority` keeps it
-that way. `app-api` reads the release and active Transitous pins through the
+mounts; `app-api` mounts only the queue and, read-only, the integration store,
+and `pnpm check-ops-authority` keeps it that way. `app-api` reads the release and active Transitous pins through the
 read-only `transitousPin.inspect` operation. The proposal and every change stay
 `data-manager`'s operations, which the admin panel's bump goes through. The built-in service manifests the agent and its
 fixed CLI render come from the agent's own image, not from the host checkout.
@@ -341,8 +343,8 @@ graph LR
 
 </div>
 
-1. Discover: scan `integrations/` and `custom_integrations/` for
-   `manifest.json`.
+1. Discover: scan `integrations/` and the installed integrations (mounted at
+   `custom_integrations/`) for `manifest.json`.
 2. Validate: apply the manifest schema and business rules. Invalid manifests
    are skipped with a warning. Required host configuration can still fail
    startup, including a missing `OPENMAPX_SECRETS_KEY` for discovered

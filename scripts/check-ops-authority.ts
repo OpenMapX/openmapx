@@ -24,8 +24,10 @@ const AUTHORITY_SERVICE = "ops-agent";
 /** The agent's state, relative to the checkout. */
 const AGENT_STATE = "infra/docker/state";
 
-/** The one part of the agent's state another service may mount: app-api's snapshot queue. */
+/** The parts of the agent's state another service may mount: app-api's snapshot queue… */
 const AGENT_TRUSTED_CONFIG_QUEUE = `${AGENT_STATE}/ops-agent/trusted-config`;
+/** …and, read-only, the integrations the agent installed, which app-api loads. */
+const AGENT_INTEGRATION_STORE = `${AGENT_STATE}/ops-agent/custom-integrations`;
 
 /** `$OPENMAPX_HOST_DIR`, `${OPENMAPX_HOST_DIR}` or `${OPENMAPX_HOST_DIR:?…}`, then the rest of the path. */
 const HOST_DIR_SOURCE =
@@ -131,11 +133,13 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
   for (const manifestPath of serviceManifests(root)) {
     const serviceId = relative(root, dirname(manifestPath)).split(/[/\\]/).at(-1) as string;
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
-      bindMounts?: Array<{ source?: unknown; target?: unknown }>;
+      bindMounts?: Array<{ source?: unknown; target?: unknown; readOnly?: unknown }>;
     };
     for (const mount of manifest.bindMounts ?? []) {
       const source = typeof mount.source === "string" ? mount.source : "";
       const target = typeof mount.target === "string" ? mount.target : "";
+      // Bind mounts are read-only unless a manifest says otherwise.
+      const readOnly = mount.readOnly !== false;
       if (serviceId === AUTHORITY_SERVICE) continue;
 
       const isSocket = source === "@docker-socket" || target.includes("docker.sock");
@@ -157,8 +161,9 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
         });
       }
       // The agent's own state (job journal, handoff record, trusted-config
-      // queue, privacy scratch). app-api publishes into the trusted-config
-      // queue and nothing else; every other service, data-manager above all,
+      // queue, privacy scratch, stores). app-api publishes into the trusted-config
+      // queue and reads the integration store, and nothing else; every other
+      // service, data-manager above all,
       // must not be able to reach it, by whichever form of source. A source
       // this gate cannot resolve is refused rather than assumed to be safe.
       if (source !== "@docker-socket") {
@@ -170,7 +175,10 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
           });
         } else if (
           reachesAgentState(path) &&
-          !(serviceId === "app-api" && path === AGENT_TRUSTED_CONFIG_QUEUE)
+          !(
+            serviceId === "app-api" &&
+            (path === AGENT_TRUSTED_CONFIG_QUEUE || (path === AGENT_INTEGRATION_STORE && readOnly))
+          )
         ) {
           violations.push({
             file: relative(root, manifestPath),

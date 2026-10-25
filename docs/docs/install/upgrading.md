@@ -533,8 +533,41 @@ If the agent is unreachable when `app-api` starts, `app-api` logs
 `Interrupted extension changes could not be recovered yet` and serves normally;
 the next extension job retries the recovery and fails, without changing
 anything, until it succeeds. Do not delete `.repository-*`, `.backup-*` or
-`.stage-*` entries under `services/.community/` by hand. The agent removes
-leftover staging directories itself when it starts.
+`.stage-*` entries in `infra/docker/state/ops-agent/community/` by hand. The
+agent removes leftover staging directories itself when it starts.
+
+### Installed integrations and community repositories move into the agent's state
+
+Releases before this one kept the operations agent's two stores in the
+checkout: installed integrations in `custom_integrations/` and community
+service repositories in `services/.community/`. They now live in its state
+directory, in `infra/docker/state/ops-agent/custom-integrations/` and
+`infra/docker/state/ops-agent/community/`, both owner-only. `app-api` mounts the
+integration store read-only at the same path as before, `/app/custom_integrations`,
+so `OPENMAPX_CUSTOM_INTEGRATIONS_DIR` doesn't change.
+
+The first configuration render of this release, or the new agent's start after
+a panel self-update, copies both stores once. The agent first undoes any change
+an earlier agent left unfinished, then copies each entry only when it matches
+the agent's records: an integration's files by the SHA-256 the agent recorded
+for each, a repository's service manifests by theirs, together with the copy an
+unfinished change keeps for rolling back. Anything that matches none of its
+recorded states, and anything without a record, is not copied. The render's
+output and the agent's log name each one and why, and so do
+`pnpm openmapx check` and **Run diagnostics** for as long as it is still in the
+checkout: install it again through the admin panel, then delete it.
+
+Nothing is moved: the earlier copies stay where they were. From then on the
+agent installs, updates and removes only in the new stores. After a panel
+self-update, `app-api` keeps reading the earlier copies until the new agent's
+render recreates it with the new mount; anything installed in between is in
+the new store and loads then.
+
+On a rollback to an earlier release, its agent sees the stores in the checkout
+as they were at the copy: installs and removals made after the update aren't
+visible there. The integration records in `infra/docker/state/ops-agent/integrations/`
+are shared by both releases, so such an integration shows as needing a
+reinstall, or one removed after the update as not installed through the agent.
 
 ## Air-quality API compatibility
 

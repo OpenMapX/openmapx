@@ -77,7 +77,7 @@ RUN node scripts/copy-runtime-packages.mjs /tmp/runtime-packages.json /app /runt
 FROM node:24.22.1-alpine@sha256:6a1c190e17215d844926b0677f4bf87273ff7d5e54db06d3b5b5863ab0b09a3d AS runner
 WORKDIR /app
 # The pinned base predates Alpine's OpenSSL fix for CVE-2026-14456.
-# git fetches community service repositories into services/.community.
+# git fetches community service repositories into the agent's community store.
 RUN apk upgrade --no-cache libcrypto3 libssl3 && \
     apk add --no-cache ca-certificates curl docker-cli docker-cli-compose git tini && \
     rm -rf /usr/local/lib/node_modules/npm && \

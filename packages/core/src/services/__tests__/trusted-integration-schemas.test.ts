@@ -47,11 +47,18 @@ function fixture() {
   });
   mkdirSync(join(root, "integrations", "_template"), { recursive: true });
   writeManifest(join(root, "integrations", "_template"), "__ID__", {});
-  mkdirSync(join(root, "custom_integrations", "overlay-demo"), { recursive: true, mode: 0o755 });
-  chmodSync(join(root, "custom_integrations"), 0o755);
-  writeManifest(join(root, "custom_integrations", "overlay-demo"), "overlay-demo", {
-    properties: { layers: { type: "array" } },
-  });
+  mkdirSync(
+    join(root, "infra", "docker", "state", "ops-agent", "custom-integrations", "overlay-demo"),
+    { recursive: true, mode: 0o755 },
+  );
+  chmodSync(join(root, "infra", "docker", "state", "ops-agent", "custom-integrations"), 0o755);
+  writeManifest(
+    join(root, "infra", "docker", "state", "ops-agent", "custom-integrations", "overlay-demo"),
+    "overlay-demo",
+    {
+      properties: { layers: { type: "array" } },
+    },
+  );
   return root;
 }
 
@@ -64,7 +71,16 @@ function record(root: string, id: string, overrides: Record<string, unknown> = {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   chmodSync(join(root, "infra", "docker", "state", "ops-agent"), 0o700);
   chmodSync(directory, 0o700);
-  const path = join(root, "custom_integrations", id, "manifest.json");
+  const path = join(
+    root,
+    "infra",
+    "docker",
+    "state",
+    "ops-agent",
+    "custom-integrations",
+    id,
+    "manifest.json",
+  );
   const manifest = existsSync(path) ? readFileSync(path) : Buffer.from("");
   writeFileSync(
     join(directory, `${id}.json`),
@@ -160,9 +176,24 @@ describe("trusted integration schemas", () => {
   it("trusts an installed integration by its recorded bytes, whatever its modes", () => {
     const root = fixture();
     record(root, "overlay-demo");
-    chmodSync(join(root, "custom_integrations"), 0o777);
-    chmodSync(join(root, "custom_integrations", "overlay-demo"), 0o775);
-    chmodSync(join(root, "custom_integrations", "overlay-demo", "manifest.json"), 0o666);
+    chmodSync(join(root, "infra", "docker", "state", "ops-agent", "custom-integrations"), 0o777);
+    chmodSync(
+      join(root, "infra", "docker", "state", "ops-agent", "custom-integrations", "overlay-demo"),
+      0o775,
+    );
+    chmodSync(
+      join(
+        root,
+        "infra",
+        "docker",
+        "state",
+        "ops-agent",
+        "custom-integrations",
+        "overlay-demo",
+        "manifest.json",
+      ),
+      0o666,
+    );
     const authority = loadTrustedIntegrationAuthority(root);
     expect(authority.schemas.has("overlay-demo")).toBe(true);
     expect(authority.problems).toEqual([]);
@@ -171,21 +202,66 @@ describe("trusted integration schemas", () => {
   it("leaves out and reports what the agent did not record, or what changed", () => {
     const root = fixture();
     const install = (id: string, schema: Record<string, unknown>) => {
-      mkdirSync(join(root, "custom_integrations", id));
-      writeManifest(join(root, "custom_integrations", id), id, schema);
+      mkdirSync(join(root, "infra", "docker", "state", "ops-agent", "custom-integrations", id));
+      writeManifest(
+        join(root, "infra", "docker", "state", "ops-agent", "custom-integrations", id),
+        id,
+        schema,
+      );
     };
     install("unrecorded", {});
     install("changed", {});
     record(root, "changed");
-    writeManifest(join(root, "custom_integrations", "changed"), "changed", {
-      properties: { tampered: { type: "string" } },
-    });
+    writeManifest(
+      join(root, "infra", "docker", "state", "ops-agent", "custom-integrations", "changed"),
+      "changed",
+      {
+        properties: { tampered: { type: "string" } },
+      },
+    );
     install("linked", {});
     record(root, "linked");
     const real = join(root, "real-manifest.json");
-    writeFileSync(real, readFileSync(join(root, "custom_integrations", "linked", "manifest.json")));
-    rmSync(join(root, "custom_integrations", "linked", "manifest.json"));
-    symlinkSync(real, join(root, "custom_integrations", "linked", "manifest.json"));
+    writeFileSync(
+      real,
+      readFileSync(
+        join(
+          root,
+          "infra",
+          "docker",
+          "state",
+          "ops-agent",
+          "custom-integrations",
+          "linked",
+          "manifest.json",
+        ),
+      ),
+    );
+    rmSync(
+      join(
+        root,
+        "infra",
+        "docker",
+        "state",
+        "ops-agent",
+        "custom-integrations",
+        "linked",
+        "manifest.json",
+      ),
+    );
+    symlinkSync(
+      real,
+      join(
+        root,
+        "infra",
+        "docker",
+        "state",
+        "ops-agent",
+        "custom-integrations",
+        "linked",
+        "manifest.json",
+      ),
+    );
     install("unsupported", { properties: { layers: { type: "array", contains: {} } } });
     record(root, "unsupported");
     install("routing-demo-copy", {});
@@ -220,8 +296,14 @@ describe("trusted integration schemas", () => {
   it("refuses a built-in id and an unreadable record without failing the others", () => {
     const root = fixture();
     record(root, "overlay-demo");
-    mkdirSync(join(root, "custom_integrations", "routing-demo"));
-    writeManifest(join(root, "custom_integrations", "routing-demo"), "routing-demo", {});
+    mkdirSync(
+      join(root, "infra", "docker", "state", "ops-agent", "custom-integrations", "routing-demo"),
+    );
+    writeManifest(
+      join(root, "infra", "docker", "state", "ops-agent", "custom-integrations", "routing-demo"),
+      "routing-demo",
+      {},
+    );
     record(root, "routing-demo");
     const directory = integrationRecordsDirectory(join(root, "infra", "docker"));
     writeFileSync(join(directory, "broken.json"), "{", { mode: 0o600 });
@@ -238,11 +320,37 @@ describe("trusted integration schemas", () => {
 
   it("accepts the files a transaction is installing while it is being prepared", () => {
     const root = fixture();
-    const before = readFileSync(join(root, "custom_integrations", "overlay-demo", "manifest.json"));
-    writeManifest(join(root, "custom_integrations", "overlay-demo"), "overlay-demo", {
-      properties: { layers: { type: "array" }, opacity: { type: "number" } },
-    });
-    const after = readFileSync(join(root, "custom_integrations", "overlay-demo", "manifest.json"));
+    const before = readFileSync(
+      join(
+        root,
+        "infra",
+        "docker",
+        "state",
+        "ops-agent",
+        "custom-integrations",
+        "overlay-demo",
+        "manifest.json",
+      ),
+    );
+    writeManifest(
+      join(root, "infra", "docker", "state", "ops-agent", "custom-integrations", "overlay-demo"),
+      "overlay-demo",
+      {
+        properties: { layers: { type: "array" }, opacity: { type: "number" } },
+      },
+    );
+    const after = readFileSync(
+      join(
+        root,
+        "infra",
+        "docker",
+        "state",
+        "ops-agent",
+        "custom-integrations",
+        "overlay-demo",
+        "manifest.json",
+      ),
+    );
     const installed = (bytes: Buffer) => ({
       extensionId: "demo-extension",
       status: "ok",
@@ -279,7 +387,9 @@ describe("trusted integration schemas", () => {
 
   it("loads no installed schemas when custom_integrations does not exist", () => {
     const root = fixture();
-    rmSync(join(root, "custom_integrations"), { recursive: true });
+    rmSync(join(root, "infra", "docker", "state", "ops-agent", "custom-integrations"), {
+      recursive: true,
+    });
     expect([...loadTrustedIntegrationSchemas(root).keys()]).toEqual(["routing-demo"]);
   });
 });

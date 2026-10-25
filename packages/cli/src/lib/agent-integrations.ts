@@ -15,7 +15,7 @@ import { repoPaths } from "./paths";
 
 /**
  * Installed integrations belong to the operations agent: it alone writes
- * `custom_integrations/` and records what it installed, and it loads nothing
+ * its integration store and records what it installed, and it loads nothing
  * else. Its fixed CLI asks it over its own port; the host CLI runs that fixed
  * CLI in the agent's container.
  */

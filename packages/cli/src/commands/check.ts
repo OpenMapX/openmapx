@@ -476,6 +476,11 @@ export function registerCheckCommand(program: Command): void {
       // Integrations the operations agent installed are trusted by its records;
       // only its fixed CLI reads them, so a check from source has none to report.
       for (const warning of installedIntegrationWarnings(repoPaths().root)) log.warn(warning);
+      // What the one-time copy of the agent's stores left in the checkout, for
+      // as long as it is still there.
+      for (const warning of coreServices.agentStoresLeftBehind(repoPaths().infraDir)) {
+        log.warn(warning);
+      }
       // The render reports a key file it did not copy once; this repeats it
       // while the keys are still missing.
       const keysLeftBehind = transitousApiKeysLeftBehindWarning();

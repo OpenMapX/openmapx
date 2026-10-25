@@ -49,7 +49,8 @@ function renderFullStack(): Record<string, RenderedService> {
       enabled: true,
     }),
   );
-  const compose = renderCompose(loaded, { domain: "maps.example.test" });
+  // Every optional source present, so each mount is rendered and inspected.
+  const compose = renderCompose(loaded, { domain: "maps.example.test", existsSync: () => true });
   // Parsed without a YAML dependency: the renderer emits two-space-indented
   // service keys under a single top-level `services:` block, and this gate only
   // needs each service's volume lines.
@@ -144,8 +145,45 @@ describe("Gate C — host authority", () => {
     );
     expect(reaching.filter((entry) => !entry.startsWith(`${AUTHORITY_SERVICE} `))).toEqual([
       "app-api ./state/ops-agent/trusted-config",
+      "app-api ./state/ops-agent/custom-integrations",
     ]);
+    // app-api reads the integrations the agent installed; it never writes them.
+    const store = (services["app-api"]?.volumes ?? []).filter((volume) =>
+      volume.startsWith("./state/ops-agent/custom-integrations:"),
+    );
+    expect(store).toHaveLength(1);
+    expect(store[0]).toMatch(/\/app\/custom_integrations\}:ro$/);
     expect(services["data-manager"]?.volumes).toContain("./data:/data");
+  });
+
+  it("lets app-api mount the agent's integration store read-only, and no one else", () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-authority-"));
+    try {
+      const manifest = (id: string, mounts: Array<{ source: string; readOnly?: boolean }>) => {
+        mkdirSync(join(root, "services", id), { recursive: true });
+        writeFileSync(
+          join(root, "services", id, "service.json"),
+          JSON.stringify({
+            id,
+            bindMounts: mounts.map((mount) => ({ ...mount, target: `/mnt/${id}` })),
+          }),
+        );
+      };
+      const store = "@infra:state/ops-agent/custom-integrations";
+      manifest("app-api", [{ source: store, readOnly: true }, { source: store }]);
+      manifest("app-web", [{ source: store, readOnly: true }]);
+      manifest("data-manager", [{ source: store, readOnly: false }]);
+      expect(findAuthorityViolations(root).map((violation) => violation.detail)).toEqual([
+        `service "app-web" mounts the operations agent's state (${store})`,
+        `service "data-manager" mounts the operations agent's state (${store})`,
+      ]);
+      manifest("app-api", [{ source: store, readOnly: false }]);
+      expect(findAuthorityViolations(root).map((violation) => violation.detail)).toContain(
+        `service "app-api" mounts the operations agent's state (${store})`,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("rejects a manifest that mounts the operations agent's state", () => {

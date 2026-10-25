@@ -72,7 +72,10 @@ function fixture(snapshots: Record<string, Snapshot>) {
   roots.push(root);
   chmodSync(root, 0o755);
   mkdirSync(join(root, "services"), { mode: 0o755 });
-  mkdirSync(join(root, "custom_integrations"), { mode: 0o755 });
+  mkdirSync(join(root, "infra", "docker", "state", "ops-agent", "custom-integrations"), {
+    recursive: true,
+    mode: 0o755,
+  });
   const clones: string[] = [];
   const clone: CommunityRepositoryClone = async ({ url, ref, targetDir }) => {
     clones.push(`${url}@${ref}`);
@@ -94,7 +97,7 @@ function fixture(snapshots: Record<string, Snapshot>) {
     loadAuthority,
     clone,
   });
-  const community = join(root, "services", ".community");
+  const community = join(root, "infra", "docker", "state", "ops-agent", "community");
   return { root, community, store, loadAuthority, clones };
 }
 

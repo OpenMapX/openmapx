@@ -277,7 +277,8 @@ export function readDesiredSelection(
  */
 export function loadIntegrationSchemas(rootDir: string): Map<string, Record<string, unknown>> {
   const found = new Map<string, Record<string, unknown>>();
-  for (const base of [join(rootDir, "integrations"), join(rootDir, "custom_integrations")]) {
+  const installed = join(rootDir, "infra", "docker", "state", "ops-agent", "custom-integrations");
+  for (const base of [join(rootDir, "integrations"), installed]) {
     if (!existsSync(base)) continue;
     for (const entry of readdirSync(base, { withFileTypes: true })) {
       if (entry.name.startsWith("_") || !entry.isDirectory()) continue;

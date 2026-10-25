@@ -28,7 +28,8 @@ import { readCommunityRepository } from "./trusted-configuration-authority";
 /**
  * The operations agent's community service repositories.
  *
- * The agent is the only writer of `services/.community`. Each repository is a
+ * The agent is the only writer of its community store,
+ * `infra/docker/state/ops-agent/community`. Each repository is a
  * checkout of one exact commit in `<repository>/`, where the repository id is
  * the first 16 hex digits of the SHA-256 of its canonical URL, described by
  * `.repository-<repository>.json`. Installing a commit is a transaction: the
@@ -76,6 +77,11 @@ export type CommunityRepositoryClone = (
 
 export interface CommunityRepositoryStoreOptions {
   rootDir: string;
+  /**
+   * The store; the agent's own, in its state directory, unless named. Only
+   * the startup recovery of an earlier release's store names another.
+   */
+  directory?: string;
   /** Owner every checkout must have; the authority snapshot rejects anything else. */
   uid: number;
   loadAuthority: () => Promise<TrustedConfigurationAuthoritySnapshot>;
@@ -129,7 +135,9 @@ export class CommunityRepositoryStore {
   private needsRecovery = false;
 
   constructor(private readonly options: CommunityRepositoryStoreOptions) {
-    this.community = join(options.rootDir, "services", ".community");
+    this.community =
+      options.directory ??
+      coreServices.agentStatePaths(join(options.rootDir, "infra", "docker")).community;
     this.clone = options.clone ?? gitShallowCloneSnapshot;
   }
 
@@ -160,9 +168,8 @@ export class CommunityRepositoryStore {
   }
 
   private ensureCommunity(): void {
-    mkdirSync(join(this.options.rootDir, "services"), { recursive: true, mode: 0o755 });
-    mkdirSync(this.community, { recursive: true, mode: 0o755 });
-    chmodSync(this.community, 0o755);
+    mkdirSync(this.community, { recursive: true, mode: 0o700 });
+    chmodSync(this.community, 0o700);
   }
 
   /** Records are the agent's own files, so they are read strictly. */

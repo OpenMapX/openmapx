@@ -39,8 +39,14 @@ function fixture(): string {
   const root = mkdtempSync(join(tmpdir(), "openmapx-live-authority-"));
   roots.push(root);
   chmodSync(root, 0o755);
-  mkdirSync(join(root, "services", ".community"), { recursive: true, mode: 0o755 });
-  mkdirSync(join(root, "custom_integrations"), { mode: 0o755 });
+  mkdirSync(join(root, "infra", "docker", "state", "ops-agent", "community"), {
+    recursive: true,
+    mode: 0o755,
+  });
+  mkdirSync(join(root, "infra", "docker", "state", "ops-agent", "custom-integrations"), {
+    recursive: true,
+    mode: 0o755,
+  });
   return root;
 }
 
@@ -63,9 +69,17 @@ function serviceManifest(id = "community-live"): string {
 
 /** What the agent's record holds once it has published `paths`. */
 function writeRecord(root: string, paths: string[]): void {
-  const repository = join(root, "services", ".community", REPOSITORY);
+  const repository = join(root, "infra", "docker", "state", "ops-agent", "community", REPOSITORY);
   writeFileSync(
-    join(root, "services", ".community", services.communityRecordFileName(REPOSITORY)),
+    join(
+      root,
+      "infra",
+      "docker",
+      "state",
+      "ops-agent",
+      "community",
+      services.communityRecordFileName(REPOSITORY),
+    ),
     JSON.stringify({
       version: services.COMMUNITY_RECORD_VERSION,
       repository: REPOSITORY,
@@ -84,7 +98,17 @@ function writeRecord(root: string, paths: string[]): void {
 
 /** A repository installed and recorded the way the agent publishes one. */
 function installService(root: string): string {
-  const directory = join(root, "services", ".community", REPOSITORY, "services", "live");
+  const directory = join(
+    root,
+    "infra",
+    "docker",
+    "state",
+    "ops-agent",
+    "community",
+    REPOSITORY,
+    "services",
+    "live",
+  );
   mkdirSync(directory, { recursive: true, mode: 0o755 });
   writeFileSync(join(directory, "service.json"), serviceManifest(), { mode: 0o644 });
   writeRecord(root, ["services/live"]);
@@ -93,7 +117,15 @@ function installService(root: string): string {
 
 /** An integration installed and recorded the way the agent installs one. */
 function installIntegration(root: string, allowed = "eu"): string {
-  const directory = join(root, "custom_integrations", "integration-live");
+  const directory = join(
+    root,
+    "infra",
+    "docker",
+    "state",
+    "ops-agent",
+    "custom-integrations",
+    "integration-live",
+  );
   mkdirSync(directory, { recursive: true, mode: 0o755 });
   writeFileSync(
     join(directory, "manifest.json"),
@@ -157,8 +189,20 @@ describe("refreshed trusted configuration authority", () => {
     });
     expect(updated.revisionId).not.toBe(installed.revisionId);
 
-    rmSync(join(root, "services", ".community", REPOSITORY), { recursive: true });
-    rmSync(join(root, "services", ".community", services.communityRecordFileName(REPOSITORY)));
+    rmSync(join(root, "infra", "docker", "state", "ops-agent", "community", REPOSITORY), {
+      recursive: true,
+    });
+    rmSync(
+      join(
+        root,
+        "infra",
+        "docker",
+        "state",
+        "ops-agent",
+        "community",
+        services.communityRecordFileName(REPOSITORY),
+      ),
+    );
     rmSync(integrationDirectory, { recursive: true });
     rmSync(
       join(
@@ -186,8 +230,20 @@ describe("refreshed trusted configuration authority", () => {
     symlinkSync(target, manifest);
     await expect(load()).rejects.toThrow("Trusted configuration authority rejected");
 
-    rmSync(join(root, "services", ".community", REPOSITORY), { recursive: true });
-    rmSync(join(root, "services", ".community", services.communityRecordFileName(REPOSITORY)));
+    rmSync(join(root, "infra", "docker", "state", "ops-agent", "community", REPOSITORY), {
+      recursive: true,
+    });
+    rmSync(
+      join(
+        root,
+        "infra",
+        "docker",
+        "state",
+        "ops-agent",
+        "community",
+        services.communityRecordFileName(REPOSITORY),
+      ),
+    );
     const integrationDirectory = installIntegration(root);
     chmodSync(integrationDirectory, 0o777);
     chmodSync(join(integrationDirectory, "manifest.json"), 0o666);
@@ -207,7 +263,7 @@ describe("refreshed trusted configuration authority", () => {
   it("rejects a recorded repository replaced by a symlink to identical bytes", async () => {
     const root = fixture();
     installService(root);
-    const repository = join(root, "services", ".community", REPOSITORY);
+    const repository = join(root, "infra", "docker", "state", "ops-agent", "community", REPOSITORY);
     const outside = mkdtempSync(join(tmpdir(), "openmapx-swapped-service-"));
     roots.push(outside);
     mkdirSync(join(outside, "services", "live"), { recursive: true });
@@ -228,12 +284,11 @@ describe("refreshed trusted configuration authority", () => {
       rootDir: root,
       builtInServices: [builtIn()],
     });
-    // A umask of 002 makes the checkout group-writable; the digests still hold.
+    // Group-writable files and directories; the digests still hold.
     for (const path of [
       root,
-      join(root, "services"),
-      join(root, "services", ".community"),
-      join(root, "services", ".community", REPOSITORY),
+      join(root, "infra", "docker", "state", "ops-agent", "community"),
+      join(root, "infra", "docker", "state", "ops-agent", "community", REPOSITORY),
       serviceDirectory,
     ]) {
       chmodSync(path, 0o775);
@@ -248,9 +303,18 @@ describe("refreshed trusted configuration authority", () => {
     // are never loaded.
     mkdirSync(join(serviceDirectory, "..", "extra"));
     writeFileSync(join(serviceDirectory, "..", "extra", "service.json"), serviceManifest("extra"));
-    mkdirSync(join(root, "services", ".community", "fedcba9876543210"));
+    mkdirSync(join(root, "infra", "docker", "state", "ops-agent", "community", "fedcba9876543210"));
     writeFileSync(
-      join(root, "services", ".community", "fedcba9876543210", "service.json"),
+      join(
+        root,
+        "infra",
+        "docker",
+        "state",
+        "ops-agent",
+        "community",
+        "fedcba9876543210",
+        "service.json",
+      ),
       serviceManifest("unrecorded"),
     );
     expect((await load()).services.map((service) => service.manifest.id).sort()).toEqual([
@@ -268,7 +332,15 @@ describe("refreshed trusted configuration authority", () => {
 
   it("reads repository records strictly", async () => {
     const recordPath = (root: string) =>
-      join(root, "services", ".community", services.communityRecordFileName(REPOSITORY));
+      join(
+        root,
+        "infra",
+        "docker",
+        "state",
+        "ops-agent",
+        "community",
+        services.communityRecordFileName(REPOSITORY),
+      );
     const load = (root: string) =>
       createTrustedConfigurationAuthorityLoader({ rootDir: root, builtInServices: [builtIn()] })();
     for (const failure of ["writable", "symlink", "version-1", "hardlink"] as const) {
@@ -294,7 +366,7 @@ describe("refreshed trusted configuration authority", () => {
   it("leaves out an integration whose directory is swapped for other bytes during the read", async () => {
     const root = fixture();
     installIntegration(root);
-    const integrations = join(root, "custom_integrations");
+    const integrations = join(root, "infra", "docker", "state", "ops-agent", "custom-integrations");
     const outside = mkdtempSync(join(tmpdir(), "openmapx-swapped-integration-"));
     roots.push(outside);
     const replacement = join(outside, "integration-live");

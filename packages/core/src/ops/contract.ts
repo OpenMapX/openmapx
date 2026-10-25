@@ -259,8 +259,8 @@ const transitousSubmodulesSchema = z.record(
 );
 const actorLabelSchema = z.string().min(1).max(128);
 
-// Community service repositories. The ops-agent owns their checkouts under
-// `services/.community/<repository>`, where the repository id is the first 16
+// Community service repositories. The ops-agent owns their checkouts in its
+// community store, as `<repository>`, where the repository id is the first 16
 // hex digits of the SHA-256 of the canonical URL.
 const repositoryIdSchema = z.string().regex(/^[a-f0-9]{16}$/);
 const gitCommitSchema = z.string().regex(/^[a-f0-9]{40}$/);
@@ -289,7 +289,7 @@ const repositoryRecoverySchema = z.strictObject({
 // the service manifest rules; the result size limit bounds it here.
 const serviceManifestObjectSchema = z.record(z.string().max(256), z.unknown());
 
-// Installed integrations. The ops-agent owns `custom_integrations/<id>` and
+// Installed integrations. The ops-agent owns `<integration store>/<id>` and
 // records the SHA-256 of every file it installed there.
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
 const integrationTransactionIdSchema = z.string().regex(/^itx1_[a-f0-9]{24}$/);
@@ -443,7 +443,7 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   // Fetches an integration archive into staging, validates it and discards it.
   // Validation problems are part of the result, not a failure.
   z.strictObject({ kind: z.literal("integration.inspect"), source: integrationSourceSchema }),
-  // Installs the archive as `custom_integrations/<integrationId>`. The previous
+  // Installs the archive as `<integration store>/<integrationId>`. The previous
   // copy is kept until the transaction is settled. Without `extensionId` the
   // operator installs it (the host CLI). The owner is bookkeeping, not a
   // boundary: app-api and the fixed CLI share the `api` principal.
@@ -1174,7 +1174,7 @@ export const OPS_RESULT_SCHEMAS = {
         }),
       )
       .max(256),
-    // Directories under custom_integrations the agent holds no record of.
+    // Directories in the integration store the agent holds no record of.
     unrecorded: z.array(serviceIdSchema).max(256),
   }),
   "serviceSelection.apply": revision,

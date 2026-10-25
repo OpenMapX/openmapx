@@ -18,6 +18,12 @@ export interface AgentStatePaths {
   privacyExtraction: string;
   /** Written once the agent has imported, or declined, what the old location held. */
   legacyImport: string;
+  /** The community service repositories the agent installed. */
+  community: string;
+  /** The integrations the agent installed; app-api mounts it read-only. */
+  customIntegrations: string;
+  /** Written once both stores were copied from the checkout, with what was left behind. */
+  storesMigration: string;
 }
 
 export function agentStatePaths(infraDir: string): AgentStatePaths {
@@ -29,6 +35,9 @@ export function agentStatePaths(infraDir: string): AgentStatePaths {
     trustedConfig: join(directory, "trusted-config"),
     privacyExtraction: join(directory, "privacy-extraction"),
     legacyImport: join(directory, "legacy-import.json"),
+    community: join(directory, "community"),
+    customIntegrations: join(directory, "custom-integrations"),
+    storesMigration: join(directory, "stores-migration.json"),
   };
 }
 

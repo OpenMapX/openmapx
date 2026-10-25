@@ -339,10 +339,11 @@ pnpm openmapx integrations install \
 The operations agent downloads the artifact, verifies the mandatory checksum,
 extracts it into a staging area, rejects runtime entry points and links,
 validates the manifest and artifact contract, and atomically swaps the result
-into `custom_integrations/conditions/`, recording the SHA-256 of every file. The
-bundled files persist there across upgrades until you remove the integration.
-The agent loads only integrations it installed this way, so copy files into
-`custom_integrations/` by hand and they are ignored.
+into `conditions/` in its integration store
+(`infra/docker/state/ops-agent/custom-integrations/`), recording the SHA-256 of
+every file. The bundled files persist there across upgrades until you remove the
+integration. The agent loads only integrations it installed this way, so copy
+files into the store by hand and they are ignored.
 
 For distribution, wrap the artifact in an [`extension.json`](#bundle-it-as-an-extension)
 so an operator installs it from the **Extensions** store (or
@@ -410,7 +411,7 @@ pnpm openmapx users verify your-test-email@example.org
 pnpm openmapx users promote your-test-email@example.org
 ```
 
-Sign out and back in after promotion. Keep `OPENMAPX_CUSTOM_INTEGRATIONS_DIR` unset for this recipe so the API and installer both use the checkout's `custom_integrations/` directory.
+Sign out and back in after promotion. Keep `OPENMAPX_CUSTOM_INTEGRATIONS_DIR` unset for this recipe so the host-run API reads the operations agent's integration store, `infra/docker/state/ops-agent/custom-integrations/`, where the installer puts the integration.
 
 ### Install and repeat the authoring loop
 
@@ -644,9 +645,9 @@ declared protocol major differs from the host, or whose required minor exceeds t
 `manifest.json` and test against each OpenMapX release before publishing a new
 artifact.
 
-**Bundle persistence.** Installed integration bundles live under
-`custom_integrations/<id>/` on the host. This directory is a bind-mount that
-survives container restarts; removing the integration with
+**Bundle persistence.** Installed integration bundles live in
+`infra/docker/state/ops-agent/custom-integrations/<id>/` on the host, which
+app-api bind-mounts read-only; they survive container restarts; removing the integration with
 `pnpm openmapx integrations remove <id>` deletes the integration artifact. For a
 bundle managed by the Extensions store, use `pnpm openmapx ext remove <id>` so
 component ownership and installed-extension bookkeeping are updated together.

@@ -135,7 +135,7 @@ function agentArtifactSource(source: string | undefined, sha256: string | undefi
 export function registerIntegrationsCommands(program: Command): void {
   const integrations = program
     .command("integrations")
-    .description("Manage community integrations under custom_integrations/");
+    .description("Manage community integrations in the operations agent's integration store");
 
   integrations
     .command("scaffold <id>")

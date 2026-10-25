@@ -1,5 +1,6 @@
 import { closeSync, constants, fstatSync, openSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { agentStatePaths } from "./agent-state";
 import {
   type BuiltInManifestSource,
   checkoutBuiltInIntegrationManifests,
@@ -88,10 +89,10 @@ const REINSTALL =
  * the operations agent and the fixed CLI it runs authorize them.
  *
  * Built-in manifests come from the release when bundled. An installed
- * integration under `custom_integrations/` is loaded only as the agent
+ * integration in the agent's integration store is loaded only as the agent
  * recorded it when it installed it: its `manifest.json` must have exactly the
  * bytes of the record, which lives in the agent's own state directory. File
- * owners and modes in `custom_integrations/` decide nothing. One that is not
+ * owners and modes in the store decide nothing. One that is not
  * recorded, or no longer matches, is left out and reported, so it cannot keep
  * the agent from authorizing the others.
  */
@@ -123,7 +124,7 @@ export function loadTrustedIntegrationAuthority(
     throw new Error(FAILED);
   }
 
-  const custom = join(rootDir, "custom_integrations");
+  const custom = agentStatePaths(join(rootDir, "infra", "docker")).customIntegrations;
   for (const integrationId of records.unreadable) {
     problems.push({ integrationId, problem: `Its install record could not be read. ${REINSTALL}` });
   }
@@ -177,7 +178,7 @@ export function loadTrustedIntegrationAuthority(
       .filter((entry) => entry.isDirectory() && ID.test(entry.name))
       .map((entry) => entry.name);
   } catch {
-    // No custom_integrations directory: nothing is installed.
+    // No integration store: nothing is installed.
   }
   for (const name of entries.sort()) {
     if (records.records.has(name) || records.unreadable.includes(name)) continue;

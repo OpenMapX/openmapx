@@ -32,7 +32,7 @@ function manifest(id: string, image = `registry.example.test/${id}`): string {
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "openmapx-community-records-"));
   roots.push(root);
-  const community = join(root, "services", ".community");
+  const community = join(root, "infra", "docker", "state", "ops-agent", "community");
   const checkout = join(community, REPOSITORY);
   mkdirSync(join(checkout, "svc"), { recursive: true });
   writeFileSync(join(checkout, "svc", "service.json"), manifest("community-one"));
@@ -150,7 +150,7 @@ describe("community repository records", () => {
       manifest("community-one", "attacker.example.test/one"),
     );
     expect(() => loadRecordedCommunityServices(root)).toThrow(
-      `Community repository ${REPOSITORY} no longer matches the service manifests the operations agent recorded when it installed it. Delete services/.community/${REPOSITORY} and services/.community/.repository-${REPOSITORY}.json, then install its extension again.`,
+      `Community repository ${REPOSITORY} no longer matches the service manifests the operations agent recorded when it installed it. Delete infra/docker/state/ops-agent/community/${REPOSITORY} and infra/docker/state/ops-agent/community/.repository-${REPOSITORY}.json, then install its extension again.`,
     );
   });
 

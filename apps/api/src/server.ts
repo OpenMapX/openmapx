@@ -594,9 +594,11 @@ try {
 // are loaded, and their files are checked against the digests it recorded.
 const runtimeRootDir = join(import.meta.dirname ?? ".", "..", "..", "..");
 const integrationsDir = join(runtimeRootDir, "integrations");
+// The container always names its mount; an API run from the host checkout
+// reads the agent's integration store there directly.
 const customIntegrationsDir =
   process.env.OPENMAPX_CUSTOM_INTEGRATIONS_DIR?.trim() ||
-  join(runtimeRootDir, "custom_integrations");
+  join(runtimeRootDir, "infra", "docker", "state", "ops-agent", "custom-integrations");
 warnAboutLegacyInstallJournals(customIntegrationsDir, (message) => server.log.warn(message));
 setInstalledIntegrationResolver(() =>
   readLoadableIntegrations({

@@ -26,12 +26,13 @@ import { OpsAgentBusyError, type OpsRuntime } from "./runtime";
 /**
  * The operations agent's installed integrations.
  *
- * The agent is the only writer of `custom_integrations/`. It fetches each
- * integration archive itself, checks its SHA-256, validates and installs it as
- * `custom_integrations/<id>`, and records the SHA-256 of every file it wrote
- * in `infra/docker/state/ops-agent/integrations/<id>.json`. Readers trust an
- * installed integration only while its bytes match that record, so file
- * owners and modes in `custom_integrations/` decide nothing.
+ * The agent is the only writer of its integration store,
+ * `infra/docker/state/ops-agent/custom-integrations/`, which app-api mounts
+ * read-only. It fetches each integration archive itself, checks its SHA-256,
+ * validates and installs it as `<store>/<id>`, and records the SHA-256 of
+ * every file it wrote in `infra/docker/state/ops-agent/integrations/<id>.json`.
+ * Readers trust an installed integration only while its bytes match that
+ * record, so file owners and modes in the store decide nothing.
  *
  * Installing is a transaction: the previous copy moves to
  * `.agent-backup-<id>-<transaction>` until the API settles it, because only
@@ -95,6 +96,11 @@ const defaultDownload: IntegrationArtifactDownload = async ({
 
 export interface IntegrationStoreOptions {
   rootDir: string;
+  /**
+   * The store; the agent's own, in its state directory, unless named. Only
+   * the startup recovery of an earlier release's store names another.
+   */
+  directory?: string;
   /** Owner of the agent's records. */
   uid: number;
   /** Ids an installed integration may not take: the release's built-in integrations. */
@@ -202,8 +208,9 @@ export class IntegrationStore {
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly options: IntegrationStoreOptions) {
-    this.custom = join(options.rootDir, "custom_integrations");
     this.infraDir = join(options.rootDir, "infra", "docker");
+    this.custom =
+      options.directory ?? coreServices.agentStatePaths(this.infraDir).customIntegrations;
     this.download = options.download ?? defaultDownload;
   }
 
@@ -224,7 +231,7 @@ export class IntegrationStore {
   }
 
   private ensureDirectories(): void {
-    mkdirSync(this.custom, { recursive: true, mode: 0o755 });
+    mkdirSync(this.custom, { recursive: true, mode: 0o700 });
     mkdirSync(integrationRecordsDirectory(this.infraDir), { recursive: true, mode: 0o700 });
   }
 

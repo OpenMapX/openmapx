@@ -1,6 +1,7 @@
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { services } from "@openmapx/core/server";
 import { Command } from "commander";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { registerCheckCommand } from "../src/commands/check";
@@ -64,4 +65,35 @@ it("reports Transitous keys a refused copy left behind on every check", async ()
   );
   expect(reported.join("\n")).not.toContain("secret-value");
   expect(vi.mocked(dockerCompose)).toHaveBeenCalled();
+});
+
+it("reports what the copy of the agent's stores left in the checkout while it is there", async () => {
+  mkdirSync(join(tmp, "custom_integrations", "hand-placed"), { recursive: true });
+  services.prepareAgentStores(join(tmp, "infra", "docker"));
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const check = async () => {
+    const program = new Command();
+    registerCheckCommand(program);
+    await expect(program.parseAsync(["check"], { from: "user" })).rejects.toThrow("exit:1");
+  };
+  const leftBehind = () =>
+    errors.mock.calls
+      .flat()
+      .map(String)
+      .filter((line) => line.includes("was not copied into the operations agent's state"));
+
+  await check();
+  await check();
+  expect(leftBehind()).toEqual([
+    expect.stringContaining(
+      "The integration hand-placed in custom_integrations was not copied into the operations agent's state: the agent holds no record of it.",
+    ),
+    expect.stringContaining("The integration hand-placed in custom_integrations"),
+  ]);
+
+  // Gone once the operator deletes it.
+  rmSync(join(tmp, "custom_integrations", "hand-placed"), { recursive: true });
+  errors.mockClear();
+  await check();
+  expect(leftBehind()).toEqual([]);
 });

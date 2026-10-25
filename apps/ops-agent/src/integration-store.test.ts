@@ -131,7 +131,10 @@ function record(f: Fixture, id: string) {
 
 const loads = (f: Fixture) => [...services.loadTrustedIntegrationSchemas(f.root).keys()];
 const installed = (f: Fixture, id: string, path = "manifest.json") =>
-  readFileSync(join(f.root, "custom_integrations", id, path), "utf8");
+  readFileSync(
+    join(f.root, "infra", "docker", "state", "ops-agent", "custom-integrations", id, path),
+    "utf8",
+  );
 
 describe("integration store", () => {
   it("installs an artifact, records every file and loads it by those digests", async () => {
@@ -216,7 +219,9 @@ describe("integration store", () => {
       source: { url: first.url },
     });
     expect(loads(f)).toEqual(["weather-radar"]);
-    expect(readdirSync(join(f.root, "custom_integrations"))).toEqual(["weather-radar"]);
+    expect(
+      readdirSync(join(f.root, "infra", "docker", "state", "ops-agent", "custom-integrations")),
+    ).toEqual(["weather-radar"]);
   });
 
   it("removes a fresh install on rollback, leaving no record", async () => {
@@ -232,7 +237,19 @@ describe("integration store", () => {
       transactionId: published.transactionId,
       outcome: "rollback",
     });
-    expect(existsSync(join(f.root, "custom_integrations", "weather-radar"))).toBe(false);
+    expect(
+      existsSync(
+        join(
+          f.root,
+          "infra",
+          "docker",
+          "state",
+          "ops-agent",
+          "custom-integrations",
+          "weather-radar",
+        ),
+      ),
+    ).toBe(false);
     expect(record(f, "weather-radar")).toBeUndefined();
   });
 
@@ -281,7 +298,9 @@ describe("integration store", () => {
         source: { kind: "artifact", url: builtIn.url, sha256: builtIn.sha256 },
       }),
     ).rejects.toThrow("reserved");
-    expect(readdirSync(join(f.root, "custom_integrations"))).toEqual([]);
+    expect(
+      readdirSync(join(f.root, "infra", "docker", "state", "ops-agent", "custom-integrations")),
+    ).toEqual([]);
   });
 
   it("lets only an integration's owner change it, and never adopts an unrecorded copy", async () => {
@@ -319,12 +338,35 @@ describe("integration store", () => {
       integrationId: "weather-radar",
       extensionId: "radar-bundle",
     });
-    expect(existsSync(join(f.root, "custom_integrations", "weather-radar"))).toBe(false);
+    expect(
+      existsSync(
+        join(
+          f.root,
+          "infra",
+          "docker",
+          "state",
+          "ops-agent",
+          "custom-integrations",
+          "weather-radar",
+        ),
+      ),
+    ).toBe(false);
 
     // A copy placed by hand: an extension may not take it over; the operator may replace it.
-    mkdirSync(join(f.root, "custom_integrations", "weather-radar"));
+    mkdirSync(
+      join(f.root, "infra", "docker", "state", "ops-agent", "custom-integrations", "weather-radar"),
+    );
     writeFileSync(
-      join(f.root, "custom_integrations", "weather-radar", "manifest.json"),
+      join(
+        f.root,
+        "infra",
+        "docker",
+        "state",
+        "ops-agent",
+        "custom-integrations",
+        "weather-radar",
+        "manifest.json",
+      ),
       JSON.stringify(manifest("weather-radar")),
     );
     await expect(publish("radar-bundle")).rejects.toThrow("another owner");
@@ -365,10 +407,21 @@ describe("integration store", () => {
       signal,
     );
     writeFileSync(
-      join(f.root, "custom_integrations", "weather-radar", "manifest.json"),
+      join(
+        f.root,
+        "infra",
+        "docker",
+        "state",
+        "ops-agent",
+        "custom-integrations",
+        "weather-radar",
+        "manifest.json",
+      ),
       JSON.stringify(manifest("weather-radar", "us")),
     );
-    mkdirSync(join(f.root, "custom_integrations", "hand-placed"));
+    mkdirSync(
+      join(f.root, "infra", "docker", "state", "ops-agent", "custom-integrations", "hand-placed"),
+    );
     const listed = await f.store.list();
     expect(listed.integrations).toMatchObject([
       { integrationId: "weather-radar", status: "needs_reinstall" },
@@ -407,8 +460,28 @@ describe("integration store", () => {
       }),
       { mode: 0o600 },
     );
-    mkdirSync(join(f.root, "custom_integrations", `.agent-stage-${"a".repeat(24)}`));
-    mkdirSync(join(f.root, "custom_integrations", `.agent-backup-gone-itx1_${"b".repeat(24)}`));
+    mkdirSync(
+      join(
+        f.root,
+        "infra",
+        "docker",
+        "state",
+        "ops-agent",
+        "custom-integrations",
+        `.agent-stage-${"a".repeat(24)}`,
+      ),
+    );
+    mkdirSync(
+      join(
+        f.root,
+        "infra",
+        "docker",
+        "state",
+        "ops-agent",
+        "custom-integrations",
+        `.agent-backup-gone-itx1_${"b".repeat(24)}`,
+      ),
+    );
     expect(loads(f)).toEqual(["weather-radar"]);
 
     await f.store.recover();
@@ -416,7 +489,9 @@ describe("integration store", () => {
       "eu",
     ]);
     expect(record(f, "weather-radar")).toMatchObject({ pending: null, source: { url: first.url } });
-    expect(readdirSync(join(f.root, "custom_integrations"))).toEqual(["weather-radar"]);
+    expect(
+      readdirSync(join(f.root, "infra", "docker", "state", "ops-agent", "custom-integrations")),
+    ).toEqual(["weather-radar"]);
     expect(update.transactionId).toMatch(/^itx1_/);
   });
 
@@ -431,8 +506,21 @@ describe("integration store", () => {
       );
       mkdirSync(work);
       const tree = extractIntegrationArchive(source.path, join(work, "x"), join(work, "y"));
-      mkdirSync(join(f.root, "custom_integrations"), { recursive: true });
-      renameSync(tree, join(f.root, "custom_integrations", "weather-radar"));
+      mkdirSync(join(f.root, "infra", "docker", "state", "ops-agent", "custom-integrations"), {
+        recursive: true,
+      });
+      renameSync(
+        tree,
+        join(
+          f.root,
+          "infra",
+          "docker",
+          "state",
+          "ops-agent",
+          "custom-integrations",
+          "weather-radar",
+        ),
+      );
       return source;
     }
     const adopt = (f: Fixture, source?: { url: string; sha256: string }) =>
@@ -468,7 +556,16 @@ describe("integration store", () => {
       const f = fixture();
       const source = await legacyInstall(f);
       writeFileSync(
-        join(f.root, "custom_integrations", "weather-radar", "manifest.json"),
+        join(
+          f.root,
+          "infra",
+          "docker",
+          "state",
+          "ops-agent",
+          "custom-integrations",
+          "weather-radar",
+          "manifest.json",
+        ),
         JSON.stringify(manifest("weather-radar", "us")),
       );
       await expect(adopt(f, source)).resolves.toMatchObject({ status: "needs_reinstall" });
@@ -505,7 +602,19 @@ describe("integration store", () => {
     it("lets the owner reinstall it once marked", async () => {
       const f = fixture();
       const source = await legacyInstall(f);
-      writeFileSync(join(f.root, "custom_integrations", "weather-radar", "extra.json"), "{}");
+      writeFileSync(
+        join(
+          f.root,
+          "infra",
+          "docker",
+          "state",
+          "ops-agent",
+          "custom-integrations",
+          "weather-radar",
+          "extra.json",
+        ),
+        "{}",
+      );
       await adopt(f, source);
       const published = await f.store.publish(
         {
@@ -522,9 +631,20 @@ describe("integration store", () => {
         transactionId: published.transactionId,
         outcome: "commit",
       });
-      expect(existsSync(join(f.root, "custom_integrations", "weather-radar", "extra.json"))).toBe(
-        false,
-      );
+      expect(
+        existsSync(
+          join(
+            f.root,
+            "infra",
+            "docker",
+            "state",
+            "ops-agent",
+            "custom-integrations",
+            "weather-radar",
+            "extra.json",
+          ),
+        ),
+      ).toBe(false);
       expect(loads(f)).toEqual(["weather-radar"]);
     });
   });
