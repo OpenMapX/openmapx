@@ -16505,7 +16505,8 @@
                               "type": "object",
                               "properties": {
                                 "repo": {
-                                  "type": "string"
+                                  "type": "string",
+                                  "maxLength": 2048
                                 },
                                 "ref": {
                                   "type": "string",
@@ -16536,7 +16537,8 @@
                               "type": "object",
                               "properties": {
                                 "artifact": {
-                                  "type": "string"
+                                  "type": "string",
+                                  "maxLength": 2048
                                 },
                                 "sha256": {
                                   "type": "string",
@@ -17174,7 +17176,8 @@
                         "type": "object",
                         "properties": {
                           "repo": {
-                            "type": "string"
+                            "type": "string",
+                            "maxLength": 2048
                           },
                           "ref": {
                             "type": "string",
@@ -17205,7 +17208,8 @@
                         "type": "object",
                         "properties": {
                           "artifact": {
-                            "type": "string"
+                            "type": "string",
+                            "maxLength": 2048
                           },
                           "sha256": {
                             "type": "string",

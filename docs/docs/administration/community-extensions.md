@@ -53,8 +53,9 @@ Open **Extensions** in the admin panel. It has three tabs:
   published, and **Uninstall**.
 - **Sources**: the catalog sources the Browse list is merged from. The default
   OpenMapX catalog is built in and cannot be removed; you can add your own
-  (HTTPS only, no credentials in the URL) and they appear as the **community**
-  tier.
+  (HTTPS only, with no username, password, query, or fragment) and they appear
+  as the **community** tier. The same locator rule applies to direct manifest
+  URLs and every artifact or service repository declared by an extension.
 
 Select an entry, inspect the preview and confirm the installation. For an
 extension outside a catalog, use **Install from URL** with its `extension.json`
@@ -178,6 +179,12 @@ Install it again to fix it.
 Each record also names its owner: the extension that installed it, or the
 operator for an install made with the CLI. Only that owner changes or removes
 it, so an extension and a manual install don't replace each other by accident.
+
+### Upgrading from credential-bearing extension URLs
+
+The upgrade migration removes legacy unsafe extension locators from PostgreSQL job and provenance state. API startup also drops unsafe custom catalog sources and invalidates their cached entries without converting a query-dependent URL into a different acquisition. Operations-agent startup repairs affected integration records before recovery: installed files remain in place, but an installation whose recorded artifact locator was unsafe is marked as needing reinstall and is not trusted again until a clean extension is installed.
+
+Before upgrading, identify any extension acquisition URL containing a username, password, query, or fragment. Publish the manifest, artifact, or repository at a stable credential-free HTTPS URL, then reinstall the affected extension from that URL. Rotate every credential or signed token that appeared in an old URL; cleanup removes active platform copies but cannot revoke the value. Existing database, Redis, filesystem, log, or external backups can retain historical values, so apply the same retention and secure-erasure policy to those backups and any exported diagnostics.
 This is bookkeeping, not a security boundary: `app-api` and the CLI reach the
 agent with the same credentials, and `app-api` can install any artifact as an
 admin anyway. What the agent guarantees is that every installed file is one it

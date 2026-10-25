@@ -590,6 +590,8 @@ The input can include `config` and `readiness`. Do not combine `--input` with me
 
 Publish `extension.json` at an HTTPS URL after the artifacts and service revision it references are available. Catalog verification binds the exact manifest bytes to a SHA-256 pin; a moving URL or catalog inclusion alone does not establish verified trust. Updates to verified content require reviewed pins for the new version. Direct-URL installs remain community trust. See [Community extensions](../administration/community-extensions.md) for the current catalog and update rules.
 
+Manifest, integration-artifact, service-repository, and custom-catalog URLs must use HTTPS and must not contain a username, password, query, or fragment. Put authentication in a reviewed runtime credential flow instead of a signed or credential-bearing acquisition URL; OpenMapX persists extension provenance and does not support request-only secrets for extension downloads. Service repositories are also limited to the supported public Git hosts and default HTTPS port. The authoring CLI applies the same locator contract when validating or emitting a bundle.
+
 ### End-to-end install
 
 The operator queues one installation job for the bundle. It installs the
