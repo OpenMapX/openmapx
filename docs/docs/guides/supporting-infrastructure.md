@@ -117,7 +117,7 @@ For a health check without printing the password:
 
 ```bash
 docker compose --env-file infra/docker/.env \
-  -f infra/docker/.trusted-config-current/docker-compose.generated.yml \
+  -f infra/docker/state/ops-agent/configuration/current/docker-compose.generated.yml \
   exec -T redis sh -c 'REDISCLI_AUTH="$(cat /run/secrets/redis-password)" exec redis-cli ping'
 ```
 

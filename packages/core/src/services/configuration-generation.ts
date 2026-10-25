@@ -9,7 +9,6 @@ import {
   mkdirSync,
   openSync,
   readdirSync,
-  readFileSync,
   readlinkSync,
   readSync,
   renameSync,
@@ -17,7 +16,7 @@ import {
   symlinkSync,
 } from "node:fs";
 import { open } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { configurationProjectionFingerprint, type OpsResultFor } from "../ops";
 import type { ConfigurationApplyResult } from "../ops/contract";
 import {
@@ -47,7 +46,11 @@ import {
   CURRENT_CONFIGURATION,
   GENERATED_COMPOSE_FILE,
   GENERATED_HARDLINK_PLAN_FILE,
+  LEGACY_CONFIGURATION_GENERATIONS,
+  LEGACY_CURRENT_CONFIGURATION,
+  readServiceSelectionFile,
   SERVICE_SELECTION_FILE,
+  writeServiceSelectionFile,
 } from "./deployment";
 import { buildAppApiServiceEnv, expandServiceSelection } from "./selection";
 import { renderTraefikDynamicConfiguration, renderTraefikDynamicYaml } from "./traefik-renderer";
@@ -493,26 +496,120 @@ function generationDigest(path: string): string {
   return digest.digest("base64url");
 }
 
-/** The applied generation's name, or null before the first render. */
-export function currentConfigurationGeneration(infraDir: string): string | null {
-  const current = join(infraDir, CURRENT_CONFIGURATION);
+/** Where a pointer and its generations live, relative to `infra/docker`. */
+interface GenerationLayout {
+  pointer: string;
+  generations: string;
+}
+
+const LAYOUT: GenerationLayout = {
+  pointer: CURRENT_CONFIGURATION,
+  generations: CONFIGURATION_GENERATIONS,
+};
+const LEGACY_LAYOUT: GenerationLayout = {
+  pointer: LEGACY_CURRENT_CONFIGURATION,
+  generations: LEGACY_CONFIGURATION_GENERATIONS,
+};
+
+/** A pointer's link text: the generation, relative to the pointer's directory. */
+function pointerTarget(layout: GenerationLayout, revisionId: string): string {
+  return join(relativeTo(dirname(layout.pointer), layout.generations), revisionId);
+}
+
+function relativeTo(from: string, to: string): string {
+  const fromParts = from === "." ? [] : from.split("/");
+  const toParts = to.split("/");
+  let common = 0;
+  while (common < fromParts.length && fromParts[common] === toParts[common]) common += 1;
+  return [...fromParts.slice(common).map(() => ".."), ...toParts.slice(common)].join("/");
+}
+
+function generationAt(infraDir: string, layout: GenerationLayout): string | null {
+  const current = join(infraDir, layout.pointer);
   let target: string;
   try {
-    if (!lstatSync(current).isSymbolicLink()) throw new Error(UNSAFE);
+    const stats = lstatSync(current);
+    // The pointer is this user's: one swapped in by anyone else is refused.
+    if (!stats.isSymbolicLink() || stats.uid !== (process.geteuid?.() ?? 0)) {
+      throw new Error(UNSAFE);
+    }
     target = readlinkSync(current);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
   }
-  if (!new RegExp(`^${CONFIGURATION_GENERATIONS}/cfg1_[A-Za-z0-9_-]{43}$`).test(target)) {
-    throw new Error(`${current} points outside ${CONFIGURATION_GENERATIONS}`);
+  const expected = pointerTarget(layout, "cfg1_");
+  if (
+    !target.startsWith(expected) ||
+    !/^cfg1_[A-Za-z0-9_-]{43}$/.test(target.slice(expected.length - "cfg1_".length))
+  ) {
+    throw new Error(`${current} points outside ${layout.generations}`);
   }
-  const absolute = resolve(infraDir, target);
-  if (!absolute.startsWith(`${resolve(infraDir, CONFIGURATION_GENERATIONS)}/`)) {
-    throw new Error(`${current} points outside ${CONFIGURATION_GENERATIONS}`);
+  const absolute = resolve(dirname(current), target);
+  if (!absolute.startsWith(`${resolve(infraDir, layout.generations)}/`)) {
+    throw new Error(`${current} points outside ${layout.generations}`);
   }
   safeGenerationTree(absolute);
   return basename(absolute);
+}
+
+/** The applied generation's name, or null before the first render. */
+export function currentConfigurationGeneration(infraDir: string): string | null {
+  return generationAt(infraDir, LAYOUT);
+}
+
+/**
+ * Whether this is the first render since releases kept the configuration in
+ * `infra/docker` itself: no current generation in the agent's state yet, and
+ * one the earlier release applied. Only then is the earlier one read, once, to
+ * carry the applied settings and selection over; afterwards nothing reads it.
+ */
+export function configurationMigrationPending(infraDir: string): boolean {
+  if (currentConfigurationGeneration(infraDir) !== null) return false;
+  try {
+    return generationAt(infraDir, LEGACY_LAYOUT) !== null;
+  } catch (error) {
+    // Rendering without it would silently drop the settings it holds.
+    throw new Error(
+      `The earlier release's applied configuration (infra/docker/${LEGACY_CURRENT_CONFIGURATION}) cannot be verified as this user's own (${(error as Error).message}), so it is not carried over. Remove infra/docker/${LEGACY_CURRENT_CONFIGURATION} to render without it; the admin panel applies its saved settings again.`,
+    );
+  }
+}
+
+/** The generation readers carry settings from: the current one, or while migrating the earlier release's. */
+function appliedGenerationDirectory(infraDir: string): string | null {
+  const active = currentConfigurationGeneration(infraDir);
+  if (active) return join(infraDir, CONFIGURATION_GENERATIONS, active);
+  if (!configurationMigrationPending(infraDir)) return null;
+  const legacy = generationAt(infraDir, LEGACY_LAYOUT);
+  return legacy ? join(infraDir, LEGACY_CONFIGURATION_GENERATIONS, legacy) : null;
+}
+
+/**
+ * On the first render of this release, carry the earlier release's applied
+ * selection over as `service-selection.json` in the agent's state, unless one
+ * exists there. It is taken from the applied generation, which only this user
+ * can have written, never from the earlier `infra/docker/service-selection.json`.
+ * Call under writer ownership.
+ */
+export function migrateLegacyServiceSelection(infraDir: string): boolean {
+  if (!configurationMigrationPending(infraDir)) return false;
+  if (readServiceSelectionFile(infraDir) !== null) return false;
+  const directory = appliedGenerationDirectory(infraDir);
+  if (!directory) return false;
+  const path = join(directory, SERVICE_SELECTION_FILE);
+  const { contents } = readGenerationFile(path, lstatSync(path, { bigint: true }), 64 * 1024, [
+    0o400n,
+    0o600n,
+  ]);
+  const raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(contents)) as {
+    selected?: unknown;
+  };
+  if (!Array.isArray(raw.selected) || raw.selected.some((id) => typeof id !== "string")) {
+    throw new Error(`Malformed applied service selection at ${path}`);
+  }
+  writeServiceSelectionFile(infraDir, raw.selected as string[]);
+  return true;
 }
 
 function hasGenerations(infraDir: string): boolean {
@@ -571,6 +668,15 @@ export function readAppliedServiceIds(
   return new Set(expanded.enabledIds);
 }
 
+function readOwnGenerationFile(path: string, modes: readonly bigint[]): string {
+  return readGenerationFile(
+    path,
+    lstatSync(path, { bigint: true }),
+    MAX_GENERATION_BYTES,
+    modes,
+  ).contents.toString("utf8");
+}
+
 /**
  * The config, integration config and secrets of the applied generation — what
  * the admin panel last applied — for a render that cannot read the database.
@@ -579,10 +685,14 @@ export function readAppliedConfiguration(
   infraDir: string,
 ): Omit<ConfigurationInput, "domain" | "selectedRoots"> {
   const empty = { serviceConfigs: [], integrationConfigs: [], serviceSecrets: [] };
-  const active = currentConfigurationGeneration(infraDir);
-  if (!active) return empty;
-  const generation = join(infraDir, CONFIGURATION_GENERATIONS, active);
-  const resolved = JSON.parse(readFileSync(join(generation, RESOLVED_CONFIG_FILE), "utf-8")) as {
+  const generation = appliedGenerationDirectory(infraDir);
+  if (!generation) return empty;
+  // Each file is opened without following links and must be this user's
+  // own, as the generation's tree was checked: while migrating, the earlier
+  // generation sits below infra/docker, whose entries its group may rename.
+  const resolved = JSON.parse(
+    readOwnGenerationFile(join(generation, RESOLVED_CONFIG_FILE), [0o400n, 0o600n]),
+  ) as {
     serviceConfigs?: ConfigurationInput["serviceConfigs"];
     integrationConfigs?: ConfigurationInput["integrationConfigs"];
   };
@@ -592,7 +702,7 @@ export function readAppliedConfiguration(
     for (const serviceId of readdirSync(secretsRoot).sort()) {
       const values: Record<string, string> = {};
       for (const key of readdirSync(join(secretsRoot, serviceId)).sort()) {
-        values[key] = readFileSync(join(secretsRoot, serviceId, key), "utf-8");
+        values[key] = readOwnGenerationFile(join(secretsRoot, serviceId, key), [0o444n]);
       }
       serviceSecrets.push({ serviceId, values });
     }
@@ -613,9 +723,9 @@ export function inspectAppliedConfiguration(
   const revisionId = currentConfigurationGeneration(infraDir);
   if (revisionId === null) return { revisionId, integrationConfigDigests: [] };
   const resolved = JSON.parse(
-    readFileSync(
+    readOwnGenerationFile(
       join(infraDir, CONFIGURATION_GENERATIONS, revisionId, RESOLVED_CONFIG_FILE),
-      "utf8",
+      [0o400n, 0o600n],
     ),
   );
   const { integrationConfigs } = trustedConfigurationPayloadSchema.parse({
@@ -681,21 +791,20 @@ async function initializeOwnedConfigurationGenerations(infraDir: string): Promis
     complete.push({ name: entry.name, path, mtimeMs: lstatSync(path).mtimeMs });
   }
   const pointerTemporaries: string[] = [];
-  const pointerName = new RegExp(`^\\.\\${CURRENT_CONFIGURATION}\\.[a-f0-9]{32}\\.tmp$`);
-  for (const entry of readdirSync(infraDir, { withFileTypes: true })) {
+  const pointerDirectory = dirname(join(infraDir, CURRENT_CONFIGURATION));
+  const pointerName = new RegExp(`^\\.${basename(CURRENT_CONFIGURATION)}\\.[a-f0-9]{32}\\.tmp$`);
+  const targetName = new RegExp(`^${pointerTarget(LAYOUT, "cfg1_")}[A-Za-z0-9_-]{43}$`);
+  for (const entry of readdirSync(pointerDirectory, { withFileTypes: true })) {
     if (!pointerName.test(entry.name)) continue;
-    const path = join(infraDir, entry.name);
+    const path = join(pointerDirectory, entry.name);
     const stats = lstatSync(path);
     if (!stats.isSymbolicLink() || stats.uid !== owner) throw new Error(UNSAFE);
-    const target = readlinkSync(path);
-    if (!new RegExp(`^${CONFIGURATION_GENERATIONS}/cfg1_[A-Za-z0-9_-]{43}$`).test(target)) {
-      throw new Error(UNSAFE);
-    }
+    if (!targetName.test(readlinkSync(path))) throw new Error(UNSAFE);
     pointerTemporaries.push(path);
   }
   for (const path of [...temporaryPaths, ...pointerTemporaries]) rmSync(path, { recursive: true });
   if (temporaryPaths.length > 0) await syncDirectory(generations);
-  if (pointerTemporaries.length > 0) await syncDirectory(infraDir);
+  if (pointerTemporaries.length > 0) await syncDirectory(pointerDirectory);
   // Keep space for the next generation and prune only after every existing
   // entry has passed validation.
   const removable = complete
@@ -887,16 +996,17 @@ async function commitOwnedConfigurationGeneration(
       });
     }
     if (currentRevisionId !== revisionId) {
-      const pointerTemporary = join(infraDir, `.${CURRENT_CONFIGURATION}.${nonce}.tmp`);
-      symlinkSync(join(CONFIGURATION_GENERATIONS, revisionId), pointerTemporary);
-      renameSync(pointerTemporary, join(infraDir, CURRENT_CONFIGURATION));
+      const pointer = join(infraDir, CURRENT_CONFIGURATION);
+      const pointerTemporary = join(dirname(pointer), `.${basename(pointer)}.${nonce}.tmp`);
+      symlinkSync(pointerTarget(LAYOUT, revisionId), pointerTemporary);
+      renameSync(pointerTemporary, pointer);
       // The rename is the commit point. Record evidence BEFORE any fallible sync/follow-up.
       committed = {
         revisionId,
         enabledServiceIds: resolved.enabledIdsOrdered,
         warnings: rendered.warnings ?? [],
       };
-      await syncDirectory(infraDir);
+      await syncDirectory(dirname(join(infraDir, CURRENT_CONFIGURATION)));
     } else {
       committed = {
         revisionId,

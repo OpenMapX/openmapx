@@ -75,7 +75,7 @@ pnpm openmapx services enable valhalla photon          # add services to the sel
 pnpm openmapx services disable osrm                    # remove services from the selection
 ```
 
-These commands persist the change to `infra/docker/service-selection.json`, a
+These commands persist the change to `infra/docker/state/ops-agent/service-selection.json`, a
 deployment file. For example, a selection retaining the default app roots is:
 
 ```json
@@ -109,7 +109,7 @@ The selection is resolved from the first source that's present, in this order:
 
 1. an explicit `--services` flag on `compose render` / `compose up`
 2. the `OPENMAPX_ENABLED_SERVICES` environment variable
-3. `infra/docker/service-selection.json`
+3. `infra/docker/state/ops-agent/service-selection.json`
 4. the built-in core defaults
 
 When `OPENMAPX_ENABLED_SERVICES` is set, `enable` and `disable` refuse to edit
@@ -117,7 +117,7 @@ the file. Edit the environment selection instead, or unset it to resume file-bas
 selection.
 
 The admin panel works on the same selection: **Save Selection** writes
-`infra/docker/service-selection.json` too, and its Services page shows the
+`infra/docker/state/ops-agent/service-selection.json` too, and its Services page shows the
 selection exactly as `services selected` does.
 
 :::note[Selection is not the same as running]
@@ -170,8 +170,8 @@ pnpm openmapx compose render
 ```
 
 Each render writes a **configuration generation** under
-`infra/docker/.trusted-config-generations/` and points
-`infra/docker/.trusted-config-current` at it. A generation holds:
+`infra/docker/state/ops-agent/configuration/generations/` and points
+`infra/docker/state/ops-agent/configuration/current` at it. A generation holds:
 
 - `docker-compose.generated.yml`: the compose file of the stack
 - `docker-compose.generated.hardlinks.json`: the plan that maps each consumer
@@ -189,7 +189,7 @@ its environment. To run Compose by hand, name both:
 
 ```bash
 docker compose --env-file infra/docker/.env \
-  -f infra/docker/.trusted-config-current/docker-compose.generated.yml ps
+  -f infra/docker/state/ops-agent/configuration/current/docker-compose.generated.yml ps
 ```
 
 Rendering the same configuration produces the same stack content. Re-render any time the manifests, your

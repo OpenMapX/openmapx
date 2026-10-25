@@ -105,21 +105,37 @@ export function selectedRootsForEdit(rootDir?: string): string[] {
   return readServiceSelection(rootDir)?.selected ?? [...DEFAULT_SELECTED_SERVICE_IDS];
 }
 
+/**
+ * Read, change and write the selection under the configuration writer lock, so
+ * an edit never interleaves with a render or the agent's apply, which read and
+ * write the same file.
+ */
+async function editSelectedServices(
+  edit: (selected: string[]) => string[],
+  rootDir?: string,
+): Promise<ServiceSelectionState> {
+  const release = await coreServices.acquireConfigurationOwnership(repoPaths(rootDir).infraDir);
+  try {
+    const selected = edit(selectedRootsForEdit(rootDir));
+    writeServiceSelection({ selected }, rootDir);
+    return { selected };
+  } finally {
+    release();
+  }
+}
+
 export function enableSelectedServices(
   ids: Iterable<string>,
   rootDir?: string,
-): ServiceSelectionState {
-  const selected = normalizeServiceIds([...selectedRootsForEdit(rootDir), ...ids]);
-  writeServiceSelection({ selected }, rootDir);
-  return { selected };
+): Promise<ServiceSelectionState> {
+  const added = [...ids];
+  return editSelectedServices((selected) => normalizeServiceIds([...selected, ...added]), rootDir);
 }
 
 export function disableSelectedServices(
   ids: Iterable<string>,
   rootDir?: string,
-): ServiceSelectionState {
+): Promise<ServiceSelectionState> {
   const disabled = new Set(normalizeServiceIds(ids));
-  const selected = selectedRootsForEdit(rootDir).filter((id) => !disabled.has(id));
-  writeServiceSelection({ selected }, rootDir);
-  return { selected };
+  return editSelectedServices((selected) => selected.filter((id) => !disabled.has(id)), rootDir);
 }

@@ -20,6 +20,7 @@ import {
   appendErasureRequest,
   initializeErasureJournal,
 } from "@openmapx/core/erasure-journal";
+import { services } from "@openmapx/core/server";
 import { execa } from "execa";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { restoreBackup } from "../src/commands/backup";
@@ -97,8 +98,8 @@ while :; do sleep 3600; done
   );
   writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
   mkdirSync(join(root, "services"));
-  mkdirSync(join(infra, ".trusted-config-current"));
-  const composeFile = join(infra, ".trusted-config-current", "docker-compose.generated.yml");
+  mkdirSync(join(infra, services.CURRENT_CONFIGURATION), { recursive: true });
+  const composeFile = join(infra, services.CURRENT_CONFIGURATION, "docker-compose.generated.yml");
   writeFileSync(
     composeFile,
     `name: ${project}

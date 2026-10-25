@@ -51,6 +51,9 @@ import {
 } from "./trusted-config-source";
 import { createTrustedConfigurationAuthorityLoader } from "./trusted-configuration-authority";
 
+/** How often the agent checks again whether the earlier releases' lock can be retired. */
+const LEGACY_WRITER_RETRY_MS = 10_000;
+
 async function main(): Promise<void> {
   const config = loadOpsAgentConfig();
   // Privacy scratch, like the trusted-configuration queue, is reached through
@@ -142,6 +145,25 @@ async function main(): Promise<void> {
         ),
     });
     await integrationStore.recover();
+    // Releases before this one kept the applied configuration, the selection
+    // and the release state in infra/docker itself. After a panel self-update
+    // this agent starts before anything has rendered with its code, so it
+    // renders once now: the render carries them into the agent's state and
+    // nothing reads the earlier files again. A failure stops the agent, so a
+    // self-update rolls back to the agent that still uses them.
+    if (services.configurationMigrationPending(paths.infraDir)) {
+      process.stderr.write("Moving the applied configuration into the agent's state directory\n");
+      await createDefaultFixedCli(config.rootDir)(["compose", "render"], {
+        signal: AbortSignal.timeout(10 * 60_000),
+        emitLog: (_stream, message) => process.stderr.write(`${message}\n`),
+      });
+    }
+    // Compose interpolates infra/docker/.env into every service; one that is
+    // not the operator's alone is refused by every stack command.
+    const environmentProblem = services.deploymentEnvironmentFileProblem(
+      join(paths.infraDir, ".env"),
+    );
+    if (environmentProblem) process.stderr.write(`${environmentProblem}\n`);
     // The operator's selection can name installed community services as well
     // as built-in ones.
     const communityServices = (
@@ -177,6 +199,28 @@ async function main(): Promise<void> {
       );
     }
     await retireLegacyAgentState(legacyState).catch(() => false);
+    // Writers stop also taking the earlier releases' lock in infra/docker
+    // once no agent of an earlier release can run: this one has started, and
+    // no handoff helper runs that could roll back to one. After a panel
+    // self-update the helper that started this agent is still running, so
+    // the check repeats until it has exited.
+    const retireLegacyWriter = async (): Promise<boolean> => {
+      if (!services.legacyConfigurationWriterActive(paths.infraDir)) return true;
+      if (await handoffHelperRunning()) return false;
+      services.retireLegacyConfigurationWriter(paths.infraDir);
+      process.stderr.write("Writers no longer take the earlier releases' lock in infra/docker\n");
+      return true;
+    };
+    if (!(await retireLegacyWriter().catch(() => false))) {
+      const retry = setInterval(() => {
+        retireLegacyWriter()
+          .then((retired) => {
+            if (retired) clearInterval(retry);
+          })
+          .catch(() => undefined);
+      }, LEGACY_WRITER_RETRY_MS);
+      retry.unref();
+    }
     const journal = await openOpsJobJournal(config.journalFile);
     // After a self-update this agent starts before anything has rendered with
     // its code, so the state directories it opens may not exist yet.
@@ -205,7 +249,9 @@ async function main(): Promise<void> {
       `${authority.revisionId.slice(0, 48)}-${loadConfiguredResourceAuthority().revisionId}`;
     const runtime = createDockerRuntime({
       stack: paths,
-      fileExists: existsSync,
+      // The overlay is used only as this user's own file, as everywhere else.
+      fileExists: (path) =>
+        path === paths.composeReleasePath ? services.ownedStateFilePresent(path) : existsSync(path),
       trafficDataRoot: join(paths.infraDir, "data"),
     });
     installTrustedConfigurationRuntime(runtime, {
@@ -240,6 +286,12 @@ async function main(): Promise<void> {
     const releaseEffects = createDefaultReleaseEffects(config.rootDir, administrativeCli, {
       afterHandoffSettled: async () => {
         await retireLegacyAgentState(legacyState);
+        await retireLegacyWriter();
+      },
+      // What stayed behind in the earlier releases' store, and why; also in
+      // the render's output when the render migrated it.
+      onLegacyReleaseMigration: (migration) => {
+        for (const problem of migration.problems) process.stderr.write(`${problem}\n`);
       },
     });
     await releaseEffects.initialize?.();

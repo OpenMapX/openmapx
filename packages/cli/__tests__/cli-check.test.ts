@@ -1,8 +1,13 @@
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { services } from "@openmapx/core/server";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildProbeArgs,
   composeNetworkName,
   DEEP_PROBES,
+  deploymentStateErrors,
   dockerComposeAfterDeploymentSecretCheck,
   envFilePermissionWarning,
   PROBE_IMAGE,
@@ -159,5 +164,29 @@ describe("DEEP_PROBES", () => {
     expect(overpass).not.toBeNull();
     expect(overpass?.path).toContain("%5Btimeout%3A");
     expect(overpass?.expect).toBe("elements");
+  });
+});
+
+describe("deploymentStateErrors", () => {
+  it("reports an unsafe .env and a held release selection", async () => {
+    const infraDir = mkdtempSync(join(tmpdir(), "openmapx-check-state-"));
+    try {
+      expect(deploymentStateErrors(infraDir)).toEqual([]);
+      writeFileSync(join(infraDir, ".env"), "DOMAIN=example.test\n", { mode: 0o600 });
+      chmodSync(join(infraDir, ".env"), 0o664);
+      writeFileSync(
+        services.legacyReleaseStatePaths(infraDir).overlay,
+        "services:\n  app-api:\n    image: hand-edited\n",
+        { mode: 0o600 },
+      );
+      mkdirSync(join(infraDir, "state", "ops-agent"), { recursive: true, mode: 0o700 });
+      await services.migrateLegacyReleaseState(infraDir);
+      const errors = deploymentStateErrors(infraDir);
+      expect(errors).toHaveLength(2);
+      expect(errors[0]).toContain("no group or other write");
+      expect(errors[1]).toContain("pnpm openmapx compose release");
+    } finally {
+      rmSync(infraDir, { recursive: true, force: true });
+    }
   });
 });

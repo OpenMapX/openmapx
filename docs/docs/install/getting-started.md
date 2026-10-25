@@ -99,11 +99,11 @@ pnpm openmapx compose release --status
 ```
 
 Render creates platform secret files and a configuration generation under
-`infra/docker/.trusted-config-generations/`. The
-`infra/docker/.trusted-config-current` pointer selects the generated Compose
+`infra/docker/state/ops-agent/configuration/generations/`. The
+`infra/docker/state/ops-agent/configuration/current` pointer selects the generated Compose
 file and hardlink plan. Keep these deployment files; do not edit generated YAML.
 
-Release resolution writes `infra/docker/docker-compose.release.yml`, pinning the
+Release resolution writes `infra/docker/state/ops-agent/releases/docker-compose.release.yml`, pinning the
 complete application image set. If the registry cannot be reached, restore
 access before continuing. `--status` reports the local selection; it does not
 inspect running containers. See [Upgrading](./upgrading.md) for channel and pin

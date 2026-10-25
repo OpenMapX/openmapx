@@ -221,7 +221,10 @@ async function expectTrustedConfigurationCommitted(
   });
   expect(services.currentConfigurationGeneration(infra)).not.toBe(before);
   expect(
-    readFileSync(join(infra, ".trusted-config-current", "docker-compose.generated.yml"), "utf8"),
+    readFileSync(
+      join(infra, services.CURRENT_CONFIGURATION, "docker-compose.generated.yml"),
+      "utf8",
+    ),
   ).toContain(`${name}.example.test`);
 }
 
@@ -234,15 +237,20 @@ describe("a checkout written under umask 002", () => {
       join(checkout, "services", "valhalla", "service.json"),
       join(checkout, "integrations"),
       join(checkout, "integrations", "air-quality", "manifest.json"),
+      join(checkout, "infra", "docker"),
     ]) {
       expect(statSync(path).mode & 0o020, path).toBe(0o020);
     }
+    const infraMode = statSync(join(checkout, "infra", "docker")).mode;
     const rendered = await cli(checkout, "compose", "render");
     expect(rendered.stdout, rendered.stderr).toContain("Rendered");
 
     const agent = await startAgent(checkout);
     await expectTrustedConfigurationCommitted(checkout, agent, "umask-002-checkout", {});
     agent.stop();
+    // The agent's state is its own directory; a group-writable infra/docker is
+    // fine as it is, and nothing changes its mode.
+    expect(statSync(join(checkout, "infra", "docker")).mode).toBe(infraMode);
   }, 120_000);
 });
 
@@ -489,7 +497,13 @@ describe("the ops-agent's fixed CLI", () => {
     const rendered = await cli(checkout, "compose", "render");
     expect(rendered.stdout, rendered.stderr).toContain("Rendered");
     const compose = readFileSync(
-      join(checkout, "infra", "docker", ".trusted-config-current", "docker-compose.generated.yml"),
+      join(
+        checkout,
+        "infra",
+        "docker",
+        services.CURRENT_CONFIGURATION,
+        "docker-compose.generated.yml",
+      ),
       "utf8",
     );
     expect(compose).toContain("INTEGRATION_AIR_QUALITY_ENABLED");

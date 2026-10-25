@@ -8,6 +8,7 @@ import {
   renderServiceSnippet,
   resolveProxyHost,
 } from "../services/compose-renderer";
+import { CURRENT_CONFIGURATION } from "../services/deployment";
 import type { LoadedService } from "../services/types";
 
 function svc(id: string, opts: Partial<LoadedService["manifest"]> = {}): LoadedService {
@@ -644,11 +645,11 @@ describe("renderServiceSnippet", () => {
         bindMounts: [{ source: "@infra:data/osm", target: "/data/osm", readOnly: false }],
       }),
       {
-        composeOutDir: "/repo/infra/docker/.trusted-config-current",
+        composeOutDir: `/repo/infra/docker/${CURRENT_CONFIGURATION}`,
         infraDir: "/repo/infra/docker",
       },
     );
-    expect(snippet.volumes).toEqual(["../data/osm:/data/osm"]);
+    expect(snippet.volumes).toEqual(["../../../../data/osm:/data/osm"]);
   });
 
   it("reads env files from the infra root, wherever the compose file lives", () => {
@@ -657,10 +658,10 @@ describe("renderServiceSnippet", () => {
     });
     expect(
       renderServiceSnippet(service, {
-        composeOutDir: "/repo/infra/docker/.trusted-config-current",
+        composeOutDir: `/repo/infra/docker/${CURRENT_CONFIGURATION}`,
         infraDir: "/repo/infra/docker",
       }).env_file,
-    ).toEqual(["../.env"]);
+    ).toEqual(["../../../../.env"]);
     expect(renderServiceSnippet(service, { composeOutDir: "/repo/infra/docker" }).env_file).toEqual(
       [".env"],
     );

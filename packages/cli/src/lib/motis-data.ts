@@ -68,9 +68,10 @@ export const DEFAULT_TRANSITOUS_TOOLS_IMAGE =
 export function resolveTransitousToolsImage(rootDir?: string): string {
   const fromEnv = process.env.OPENMAPX_TRANSITOUS_TOOLS_IMAGE;
   const selection = coreServices.releaseSelection();
-  const overlayPath = repoPaths(rootDir).composeReleasePath;
-  if (existsSync(overlayPath)) {
-    const selected = coreServices.parseReleaseComposeSelection(readFileSync(overlayPath, "utf8"));
+  // Read as the agent reads it: its own file, or nothing.
+  const overlay = coreServices.readReleaseOverlay(repoPaths(rootDir).infraDir);
+  if (overlay !== null) {
+    const selected = coreServices.parseReleaseComposeSelection(overlay);
     const pinned = selected.images["transitous-tools"];
     if (!selected.release || !pinned)
       throw new Error("Release overlay is malformed; explicitly reselect or clear it");

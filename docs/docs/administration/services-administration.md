@@ -32,7 +32,7 @@ dependencies. It is shared with `openmapx services selected` and the CLI's
 3. Review **Compose preview**, then start or update the affected services.
 
 Saving publishes a generated configuration; it does not start or stop containers.
-The selection file is `infra/docker/service-selection.json`.
+The selection file is `infra/docker/state/ops-agent/service-selection.json`.
 A nonempty `OPENMAPX_ENABLED_SERVICES` override takes precedence and disables
 editing. Empty, whitespace-only or comma-only overrides are treated as unset.
 

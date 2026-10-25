@@ -215,6 +215,59 @@ old directories stay in `infra/docker/data/` for containers that still mount
 them. Nothing needs doing by hand. An older agent started afterwards, for example by
 selecting an earlier release, finds no job history.
 
+The applied configuration, the service selection and the release state are in
+that directory too: `configuration/`, `service-selection.json` and `releases/`
+(the store, the evidence and `docker-compose.release.yml`). Releases before it
+kept them in `infra/docker` itself (`.trusted-config-current`,
+`.trusted-config-generations/`, `service-selection.json`, `.ops-agent-releases/`,
+`.release-evidence/` and `docker-compose.release.yml`), where a checkout cloned
+under a umask of `002` lets other accounts of its group write. The first
+configuration render of the newer release, or its agent's start after a panel
+self-update, copies them across:
+
+- the applied configuration, with the selection its generation applied; the
+  old `service-selection.json` is never read;
+- the release manifests and pointers that are the deployment user's own files
+  and pass the store's checks; anything else stays behind, named in the render's
+  output or the agent's log;
+- the release overlay, rendered again from the manifest it selected or, when
+  `compose release` selected it and the store holds no manifest of it, from its
+  own pins and evidence, once they give exactly its bytes again.
+
+Nothing is moved, so this works when `infra/docker/data` is a filesystem of its
+own. The old files stay as they were, for rolling back to an earlier release,
+and are never read again. Until the newer agent runs with no self-update helper
+left, every configuration writer also takes the earlier releases' lock in
+`infra/docker`, so an earlier agent can't apply configuration at the same time.
+A rollback restores an earlier agent with the configuration it left; anything
+applied after the update is not carried back.
+
+When the earlier agent left a release update unfinished
+(`.ops-agent-releases/transaction.json`), the release state is not copied; the
+render's output and the agent's log say so, and the next render or agent start
+tries again once that agent has recovered the update.
+
+While the release the earlier overlay selected has not come over, for that
+reason or because the overlay could not be verified, no release is selected or
+applied automatically: resolving one would replace the running release with
+whatever is newest. `services update` and `services start` of the release's services, `compose up` and
+`compose pull` refuse, and so do **Check for updates** and **Update** in the
+admin panel, which report **Host update required**; the job log, the command
+and **Run diagnostics** name the reason. To continue, either:
+
+- let the earlier agent finish its update, then render again; or
+- select a release explicitly with `pnpm openmapx compose release`, or clear the
+  selection with `pnpm openmapx compose release --clear` to let the next start
+  resolve one.
+
+Rendering stops, with the reason, when:
+
+- `infra/docker/.trusted-config-current` is not the deployment user's own: remove
+  it, and the admin panel applies its saved settings again;
+- `infra/docker/.env` is not the deployment user's own regular file, has more
+  than one link, or its group or others can write it: run
+  `chown "$(id -u)" infra/docker/.env && chmod 600 infra/docker/.env`.
+
 The update then replaces API, web, data-manager and transitous-runner without
 restarting their dependencies. If that step fails, those four services return
 to the images they ran before the update; the verified new agent stays.
@@ -240,9 +293,9 @@ explicitly:
 pnpm openmapx compose release --clear
 ```
 
-This idempotent command removes only `infra/docker/docker-compose.release.yml`.
-It makes no Docker calls and preserves running containers, `.release-evidence`
-files that they may still mount, and `.ops-agent-releases` manifests and recorded
+This idempotent command removes only `infra/docker/state/ops-agent/releases/docker-compose.release.yml`.
+It makes no Docker calls and preserves running containers, `state/ops-agent/releases/evidence`
+files that they may still mount, and `state/ops-agent/releases/store` manifests and recorded
 running state. It refuses to clear while the release store is locked or an update
 transaction awaits completion or recovery. `--clear` cannot be combined with
 `--status`.

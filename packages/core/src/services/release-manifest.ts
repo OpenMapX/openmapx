@@ -15,16 +15,21 @@ import {
   fstatSync,
   fsyncSync,
   lstatSync,
-  mkdirSync,
   openSync,
   readFileSync,
   renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { JSON_SCHEMA, load } from "js-yaml";
 import z from "zod/v4";
+import {
+  ensureReleaseStateDirectory,
+  type ReleaseStateOptions,
+  releaseEvidenceReference,
+  releaseStatePaths,
+} from "./release-state";
 
 export const RELEASE_MANIFEST_CONTAINER_PATH = "/release-manifest.json";
 /** Runtime services whose images the release overlay pins as one release. */
@@ -40,7 +45,6 @@ export const PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV = "OPS_PRIVACY_BACKUP_COLLECTOR_
 export const PRIVACY_RELEASE_VALIDATION_EVIDENCE_ENV = "PRIVACY_EXPORT_VALIDATION_EVIDENCE_FILE";
 export const PRIVACY_RELEASE_VALIDATION_EVIDENCE_PATH =
   "/run/openmapx/privacy-release-validation.json";
-const PRIVACY_RELEASE_EVIDENCE_DIRECTORY = ".release-evidence";
 
 /** The seven application images; documentation publishes independently. */
 export const RELEASE_IMAGE_NAMES = [
@@ -53,6 +57,7 @@ export const RELEASE_IMAGE_NAMES = [
   "transitous-tools",
 ] as const;
 const DIGEST = "sha256:[a-f0-9]{64}";
+const RELEASE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 export const RELEASE_SELECTOR_ENV = "OPENMAPX_RELEASE";
 export const RELEASE_REPOSITORY_ENV = "OPENMAPX_RELEASE_MANIFEST_REPOSITORY";
@@ -314,10 +319,7 @@ export function parseReleaseManifest(
     product?: unknown;
   };
   if (candidate.schemaVersion !== 1) throw new Error("Unsupported release lockfile schemaVersion");
-  if (
-    typeof candidate.release !== "string" ||
-    !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(candidate.release)
-  ) {
+  if (typeof candidate.release !== "string" || !RELEASE_ID_PATTERN.test(candidate.release)) {
     throw new Error("Release lockfile release must be a non-empty string");
   }
   if (!candidate.images || typeof candidate.images !== "object") {
@@ -397,64 +399,77 @@ export function canonicalReleaseManifest(manifest: ReleaseManifest): string {
   });
 }
 
-function privacyReleaseValidationEvidenceContents(manifest: ReleaseManifest): string {
-  return `${JSON.stringify(manifest.privacyReleaseValidation)}\n`;
+/**
+ * What an overlay is rendered from: its release's identity and pins, and the
+ * privacy validation evidence it mounts.
+ */
+interface ReleaseOverlaySource {
+  /** The `x-openmapx-release` metadata, as the overlay's first line carries it. */
+  metadata: string;
+  images: ReleaseManifest["images"];
+  evidence: string;
 }
 
-function privacyReleaseValidationEvidenceFilename(manifest: ReleaseManifest): string {
-  const digest = createHash("sha256")
-    .update(privacyReleaseValidationEvidenceContents(manifest))
-    .digest("hex");
-  return `privacy-release-validation-${digest}.json`;
+function overlaySource(manifest: ReleaseManifest): ReleaseOverlaySource {
+  return {
+    metadata: JSON.stringify({
+      release: manifest.release,
+      images: Object.fromEntries(RELEASE_IMAGE_NAMES.map((name) => [name, manifest.images[name]])),
+      ...(manifest.product ? { product: manifest.product } : {}),
+      digest: createHash("sha256").update(canonicalReleaseManifest(manifest)).digest("hex"),
+    }),
+    images: manifest.images,
+    evidence: `${JSON.stringify(manifest.privacyReleaseValidation)}\n`,
+  };
 }
 
-export function renderReleaseCompose(manifest: ReleaseManifest): string {
-  const validationEvidenceFile = privacyReleaseValidationEvidenceFilename(manifest);
+function evidenceFilename(evidence: string): string {
+  return `privacy-release-validation-${createHash("sha256").update(evidence).digest("hex")}.json`;
+}
+
+function renderOverlay(source: ReleaseOverlaySource, evidenceReference: string): string {
+  const { images } = source;
   return [
-    `x-openmapx-release: ${JSON.stringify({ release: manifest.release, images: Object.fromEntries(RELEASE_IMAGE_NAMES.map((name) => [name, manifest.images[name]])), ...(manifest.product ? { product: manifest.product } : {}), digest: createHash("sha256").update(canonicalReleaseManifest(manifest)).digest("hex") })}`,
+    `x-openmapx-release: ${source.metadata}`,
     "services:",
     "  app-api:",
-    `    image: ${manifest.images.api}`,
+    `    image: ${images.api}`,
     "    environment:",
-    `      ${PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV}: ${manifest.images["privacy-backup"]}`,
+    `      ${PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV}: ${images["privacy-backup"]}`,
     `      ${PRIVACY_RELEASE_VALIDATION_EVIDENCE_ENV}: \${${PRIVACY_RELEASE_VALIDATION_EVIDENCE_ENV}:-${PRIVACY_RELEASE_VALIDATION_EVIDENCE_PATH}}`,
     "    configs:",
     "      - source: privacy-release-validation",
     `        target: ${PRIVACY_RELEASE_VALIDATION_EVIDENCE_PATH}`,
     "  app-web:",
-    `    image: ${manifest.images.web}`,
+    `    image: ${images.web}`,
     "  data-manager:",
-    `    image: ${manifest.images["data-manager"]}`,
+    `    image: ${images["data-manager"]}`,
     "    environment:",
-    `      ${TRANSITOUS_TOOLS_IMAGE_ENV}: ${manifest.images["transitous-tools"]}`,
+    `      ${TRANSITOUS_TOOLS_IMAGE_ENV}: ${images["transitous-tools"]}`,
     "  ops-agent:",
-    `    image: ${manifest.images["ops-agent"]}`,
+    `    image: ${images["ops-agent"]}`,
     "    environment:",
     // biome-ignore lint/suspicious/noTemplateCurlyInString: literal Docker Compose default expression
     "      OPS_PRIVACY_BACKUP_COLLECTOR_ENABLED: ${OPS_PRIVACY_BACKUP_COLLECTOR_ENABLED:-true}",
-    `      ${PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV}: ${manifest.images["privacy-backup"]}`,
+    `      ${PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV}: ${images["privacy-backup"]}`,
     "  transitous-runner:",
-    `    image: ${manifest.images["transitous-runner"]}`,
+    `    image: ${images["transitous-runner"]}`,
     "configs:",
     "  privacy-release-validation:",
     // Compose resolves this overlay's paths against the first compose file's
-    // directory, the configuration generation; the evidence sits beside the overlay.
-    `    file: ../${PRIVACY_RELEASE_EVIDENCE_DIRECTORY}/${validationEvidenceFile}`,
+    // directory, the configuration pointer; the evidence sits beside the overlay.
+    `    file: ${evidenceReference}`,
     "",
   ].join("\n");
 }
 
-function assertPrivateDirectory(path: string): void {
-  const stat = lstatSync(path);
-  const currentUid = process.getuid?.();
-  if (
-    !stat.isDirectory() ||
-    stat.isSymbolicLink() ||
-    (stat.mode & 0o077) !== 0 ||
-    (currentUid !== undefined && stat.uid !== currentUid)
-  ) {
-    throw new Error("Release evidence directory is unsafe");
-  }
+/** The overlay of `manifest` as it is written in the release state of `infraDir`. */
+export function renderReleaseCompose(manifest: ReleaseManifest, infraDir: string): string {
+  const source = overlaySource(manifest);
+  return renderOverlay(
+    source,
+    releaseEvidenceReference(infraDir, evidenceFilename(source.evidence)),
+  );
 }
 
 function fsyncDirectory(path: string): void {
@@ -466,9 +481,9 @@ function fsyncDirectory(path: string): void {
   }
 }
 
-function readImmutableEvidence(path: string): string {
+function readImmutableEvidence(path: string, options: ReleaseStateOptions): string {
   const before = lstatSync(path);
-  const currentUid = process.getuid?.();
+  const currentUid = options.uid ?? process.geteuid?.();
   if (
     !before.isFile() ||
     before.isSymbolicLink() ||
@@ -490,25 +505,42 @@ function readImmutableEvidence(path: string): string {
   }
 }
 
-/** Publish immutable evidence first, then atomically switch the Compose overlay. */
+/**
+ * Publish immutable evidence first, then atomically switch the Compose overlay,
+ * both in the release state of `infraDir`.
+ */
 export function writeReleaseComposeArtifacts(
   manifest: ReleaseManifest,
-  overlayPath: string,
+  infraDir: string,
+  options: ReleaseStateOptions = {},
 ): { evidencePath: string; overlayPath: string } {
-  const evidenceDirectory = join(dirname(overlayPath), PRIVACY_RELEASE_EVIDENCE_DIRECTORY);
-  mkdirSync(evidenceDirectory, { recursive: true, mode: 0o700 });
-  assertPrivateDirectory(evidenceDirectory);
-  fsyncDirectory(dirname(overlayPath));
-  const evidencePath = join(evidenceDirectory, privacyReleaseValidationEvidenceFilename(manifest));
-  const evidence = privacyReleaseValidationEvidenceContents(manifest);
+  return writeOverlayArtifacts(overlaySource(manifest), infraDir, options);
+}
+
+function writeOverlayArtifacts(
+  source: ReleaseOverlaySource,
+  infraDir: string,
+  options: ReleaseStateOptions,
+): { evidencePath: string; overlayPath: string } {
+  const {
+    directory,
+    evidence: evidenceDirectory,
+    overlay: overlayPath,
+  } = releaseStatePaths(infraDir);
+  ensureReleaseStateDirectory(directory, options);
+  ensureReleaseStateDirectory(evidenceDirectory, options);
+  fsyncDirectory(directory);
+  const { evidence } = source;
+  const evidenceFile = evidenceFilename(evidence);
+  const evidencePath = join(evidenceDirectory, evidenceFile);
   if (existsSync(evidencePath)) {
-    if (readImmutableEvidence(evidencePath) !== evidence) {
+    if (readImmutableEvidence(evidencePath, options) !== evidence) {
       throw new Error("Release validation evidence is unsafe");
     }
   } else {
     const temporaryEvidence = join(
       evidenceDirectory,
-      `.${privacyReleaseValidationEvidenceFilename(manifest)}.${randomBytes(12).toString("hex")}.partial`,
+      `.${evidenceFile}.${randomBytes(12).toString("hex")}.partial`,
     );
     let descriptor: number | undefined;
     try {
@@ -537,17 +569,100 @@ export function writeReleaseComposeArtifacts(
       constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
       0o600,
     );
-    writeFileSync(overlayDescriptor, renderReleaseCompose(manifest), { encoding: "utf8" });
+    writeFileSync(
+      overlayDescriptor,
+      renderOverlay(source, releaseEvidenceReference(infraDir, evidenceFile)),
+      {
+        encoding: "utf8",
+      },
+    );
     fsyncSync(overlayDescriptor);
     closeSync(overlayDescriptor);
     overlayDescriptor = undefined;
     renameSync(temporaryOverlay, overlayPath);
-    fsyncDirectory(dirname(overlayPath));
+    fsyncDirectory(directory);
   } finally {
     if (overlayDescriptor !== undefined) closeSync(overlayDescriptor);
     rmSync(temporaryOverlay, { force: true });
   }
   return { evidencePath, overlayPath };
+}
+
+const LEGACY_EVIDENCE_REFERENCE =
+  /^ {4}file: \.\.\/\.release-evidence\/(privacy-release-validation-[a-f0-9]{64}\.json)$/m;
+
+/**
+ * Write an overlay an earlier release left in `infra/docker` again, in the
+ * release state of `infraDir`, when its release's manifest is not at hand:
+ * the host CLI selected that release without storing the manifest. `raw` must
+ * be read as the store's own files are, and is accepted only if it is exactly
+ * what that release rendered: the overlay rendered from its own metadata and
+ * from the evidence it names, which must be an immutable file of this user
+ * under its own content's digest, gives the same bytes. Throws otherwise.
+ */
+export function carryLegacyReleaseOverlay(
+  raw: string,
+  legacyEvidenceDirectory: string,
+  infraDir: string,
+  options: ReleaseStateOptions = {},
+): { evidencePath: string; overlayPath: string } {
+  const [firstLine] = raw.split("\n", 1);
+  const metadata = firstLine?.startsWith("x-openmapx-release: ")
+    ? firstLine.slice("x-openmapx-release: ".length)
+    : "";
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(metadata);
+  } catch {
+    throw new Error("it has no release metadata");
+  }
+  const images = (parsed as { images?: unknown } | null)?.images as
+    | Record<string, unknown>
+    | undefined;
+  const release = (parsed as { release?: unknown }).release;
+  const digest = (parsed as { digest?: unknown }).digest;
+  if (
+    typeof release !== "string" ||
+    !RELEASE_ID_PATTERN.test(release) ||
+    typeof digest !== "string" ||
+    !/^[a-f0-9]{64}$/.test(digest) ||
+    !images ||
+    typeof images !== "object" ||
+    !RELEASE_IMAGE_NAMES.every(
+      (name) =>
+        typeof images[name] === "string" &&
+        new RegExp(`^[a-z0-9][a-z0-9._/-]*/${name}@${DIGEST}$`).test(images[name] as string),
+    )
+  ) {
+    throw new Error("its release metadata is malformed");
+  }
+  const evidenceName = LEGACY_EVIDENCE_REFERENCE.exec(raw)?.[1];
+  if (!evidenceName) throw new Error("it names no release validation evidence");
+  const evidence = readImmutableEvidence(join(legacyEvidenceDirectory, evidenceName), options);
+  if (evidenceFilename(evidence) !== evidenceName) {
+    throw new Error("its release validation evidence does not match its name");
+  }
+  let validation: unknown;
+  try {
+    validation = JSON.parse(evidence);
+  } catch {
+    throw new Error("its release validation evidence is malformed");
+  }
+  if (
+    !privacyReleaseValidationSchema.safeParse(validation).success ||
+    evidence !== `${JSON.stringify(validation)}\n`
+  ) {
+    throw new Error("its release validation evidence is malformed");
+  }
+  const source: ReleaseOverlaySource = {
+    metadata,
+    images: images as ReleaseManifest["images"],
+    evidence,
+  };
+  if (renderOverlay(source, `../.release-evidence/${evidenceName}`) !== raw) {
+    throw new Error("it is not an overlay a release rendered");
+  }
+  return writeOverlayArtifacts(source, infraDir, options);
 }
 
 /**

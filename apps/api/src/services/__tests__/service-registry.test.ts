@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { services } from "@openmapx/core/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getServiceRegistry, initServiceRegistry } from "../service-registry";
@@ -12,6 +12,13 @@ function writeManifest(slug: string, body: Record<string, unknown>) {
   const dir = join(tmp, "services", slug);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "service.json"), JSON.stringify(body), "utf-8");
+}
+
+/** The operator's persisted selection, as `services enable` leaves it. */
+function writeSelection(selection: unknown) {
+  const path = services.serviceSelectionPath(join(tmp, "infra", "docker"));
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  writeFileSync(path, JSON.stringify(selection, null, 2), { encoding: "utf-8", mode: 0o600 });
 }
 
 const baseManifest = {
@@ -55,11 +62,7 @@ describe("initServiceRegistry", () => {
     writeManifest("redis", { ...baseManifest, id: "redis" });
     writeManifest("data-manager", { ...baseManifest, id: "data-manager" });
 
-    writeFileSync(
-      join(tmp, "infra", "docker", "service-selection.json"),
-      JSON.stringify({ selected: ["app-api", "valhalla"] }, null, 2),
-      "utf-8",
-    );
+    writeSelection({ selected: ["app-api", "valhalla"] });
 
     await initServiceRegistry();
 
@@ -75,11 +78,7 @@ describe("initServiceRegistry", () => {
     writeManifest("postgis", { ...baseManifest, id: "postgis" });
     writeManifest("valhalla", { ...baseManifest, id: "valhalla" });
 
-    writeFileSync(
-      join(tmp, "infra", "docker", "service-selection.json"),
-      JSON.stringify({ selected: ["valhalla"] }, null, 2),
-      "utf-8",
-    );
+    writeSelection({ selected: ["valhalla"] });
     process.env.OPENMAPX_ENABLED_SERVICES = "app-api,postgis";
 
     await initServiceRegistry();
@@ -107,10 +106,7 @@ describe("initServiceRegistry", () => {
         serviceSecrets: [],
       },
     });
-    writeFileSync(
-      join(tmp, "infra", "docker", "service-selection.json"),
-      JSON.stringify({ selected: ["app-api"] }),
-    );
+    writeSelection({ selected: ["app-api"] });
 
     await initServiceRegistry();
 
@@ -139,9 +135,15 @@ describe("initServiceRegistry", () => {
 
   it("fails closed on a malformed or dangling trusted selection pointer", async () => {
     writeManifest("app-api", { ...baseManifest, id: "app-api" });
+    const infraDir = join(tmp, "infra", "docker");
+    const current = join(infraDir, services.CURRENT_CONFIGURATION);
+    mkdirSync(dirname(current), { recursive: true, mode: 0o700 });
     symlinkSync(
-      join(".trusted-config-generations", `cfg1_${"z".repeat(43)}`),
-      join(tmp, "infra", "docker", ".trusted-config-current"),
+      join(
+        relative(dirname(current), join(infraDir, services.CONFIGURATION_GENERATIONS)),
+        `cfg1_${"z".repeat(43)}`,
+      ),
+      current,
     );
     await expect(initServiceRegistry()).rejects.toThrow();
   });

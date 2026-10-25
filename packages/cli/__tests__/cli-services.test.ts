@@ -1,6 +1,7 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { services as coreServices } from "@openmapx/core/server";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -94,6 +95,23 @@ describe("listServices", () => {
 });
 
 describe("service selection persistence", () => {
+  it("edits the selection only while holding the configuration writer lock", async () => {
+    writeManifest("valhalla", { ...baseManifest, id: "valhalla" });
+    const infraDir = join(tmp, "infra", "docker");
+    // A render or the agent's apply holds the lock.
+    const release = await coreServices.acquireConfigurationOwnership(infraDir);
+    const edit = enableSelectedServices(["valhalla"], tmp);
+    await new Promise((done) => setTimeout(done, 100));
+    expect(readServiceSelection(tmp)).toBeNull();
+    release();
+    expect((await edit).selected).toContain("valhalla");
+    expect(readServiceSelection(tmp)?.selected).toContain("valhalla");
+    expect(existsSync(join(infraDir, ".trusted-config-writer"))).toBe(false);
+    expect(existsSync(join(infraDir, "state", "ops-agent", "configuration", ".writer"))).toBe(
+      false,
+    );
+  });
+
   it("enables and disables root selections in infra/docker/service-selection.json", async () => {
     writeManifest("traefik", { ...baseManifest, id: "traefik" });
     writeManifest("well-known", { ...baseManifest, id: "well-known" });
@@ -104,13 +122,13 @@ describe("service selection persistence", () => {
     writeManifest("data-manager", { ...baseManifest, id: "data-manager" });
     writeManifest("valhalla", { ...baseManifest, id: "valhalla" });
 
-    enableSelectedServices(["valhalla"], tmp);
+    await enableSelectedServices(["valhalla"], tmp);
     expect(readServiceSelection(tmp)?.selected).toContain("valhalla");
     expect((await getServiceSelectionSummary(tmp)).selection.enabledIdsOrdered).toContain(
       "valhalla",
     );
 
-    disableSelectedServices(["app-api"], tmp);
+    await disableSelectedServices(["app-api"], tmp);
     expect(readServiceSelection(tmp)?.selected).not.toContain("app-api");
     expect((await getServiceSelectionSummary(tmp)).selection.enabledIdsOrdered).not.toContain(
       "app-api",

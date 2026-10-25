@@ -12,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import {
   type OpsOperation,
   opsOperationFingerprint,
@@ -94,7 +94,9 @@ function claim(
 
 /** The operator's selection, as `services enable` or the admin panel leaves it. */
 function select(infraDir: string, roots: string[]): void {
-  writeFileSync(join(infraDir, "service-selection.json"), JSON.stringify({ selected: roots }));
+  const path = services.serviceSelectionPath(infraDir);
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  writeFileSync(path, JSON.stringify({ selected: roots }), { mode: 0o600 });
 }
 
 function fixture() {
@@ -103,22 +105,29 @@ function fixture() {
   const infraDir = join(root, "infra", "docker");
   mkdirSync(infraDir, { recursive: true });
   select(infraDir, ["alpha"]);
-  const current = join(infraDir, ".trusted-config-current");
+  const current = join(infraDir, services.CURRENT_CONFIGURATION);
   return {
     root,
     infraDir,
     current,
+    generations: join(infraDir, services.CONFIGURATION_GENERATIONS),
     compose: join(current, "docker-compose.generated.yml"),
     selection: join(current, "service-selection.json"),
     hardlinks: join(current, "docker-compose.generated.hardlinks.json"),
   };
 }
 
+/** Point the current pointer at a generation, with the link text the writer uses. */
+function pointCurrentAt(paths: ReturnType<typeof fixture>, revision: string): void {
+  mkdirSync(dirname(paths.current), { recursive: true, mode: 0o700 });
+  symlinkSync(join(relative(dirname(paths.current), paths.generations), revision), paths.current);
+}
+
 async function installSentinelGeneration(paths: ReturnType<typeof fixture>): Promise<void> {
   const oldRevision = `cfg1_${"o".repeat(43)}`;
-  const oldGeneration = join(paths.infraDir, ".trusted-config-generations", oldRevision);
+  const oldGeneration = join(paths.generations, oldRevision);
   mkdirSync(oldGeneration, { recursive: true, mode: 0o700 });
-  chmodSync(join(paths.infraDir, ".trusted-config-generations"), 0o700);
+  chmodSync(paths.generations, 0o700);
   chmodSync(oldGeneration, 0o700);
   for (const name of [
     "docker-compose.generated.yml",
@@ -126,8 +135,7 @@ async function installSentinelGeneration(paths: ReturnType<typeof fixture>): Pro
     "docker-compose.generated.hardlinks.json",
   ])
     writeFileSync(join(oldGeneration, name), "sentinel", { mode: 0o600 });
-  const { symlinkSync } = await import("node:fs");
-  symlinkSync(join(".trusted-config-generations", oldRevision), paths.current);
+  pointCurrentAt(paths, oldRevision);
 }
 
 describe("ops-agent trusted configuration runtime", () => {
@@ -168,9 +176,9 @@ describe("ops-agent trusted configuration runtime", () => {
     });
     expect(JSON.parse(readFileSync(paths.selection, "utf8"))).toEqual({ selected: ["alpha"] });
     // The new selection is the operator's from now on, for the CLI too.
-    expect(
-      JSON.parse(readFileSync(join(paths.infraDir, "service-selection.json"), "utf8")),
-    ).toEqual({ selected: ["alpha"] });
+    expect(JSON.parse(readFileSync(services.serviceSelectionPath(paths.infraDir), "utf8"))).toEqual(
+      { selected: ["alpha"] },
+    );
     expect(readFileSync(paths.compose, "utf8")).toContain("alpha:");
     expect(readFileSync(paths.compose, "utf8")).not.toContain(secretValue);
     expect(JSON.parse(readFileSync(paths.hardlinks, "utf8"))).toEqual([]);
@@ -755,7 +763,7 @@ describe("ops-agent trusted configuration runtime", () => {
 
   it("rejects a dangling trusted-current pointer instead of authorizing baked selection", async () => {
     const paths = fixture();
-    symlinkSync(join(".trusted-config-generations", `cfg1_${"d".repeat(43)}`), paths.current);
+    pointCurrentAt(paths, `cfg1_${"d".repeat(43)}`);
 
     await expect(initializeTrustedConfigurationRuntime(paths.infraDir)).rejects.toThrow(
       "Trusted configuration apply failed",
@@ -897,7 +905,7 @@ describe("ops-agent trusted configuration runtime", () => {
 
   it("prunes validated inactive generations so legitimate revisions cannot brick apply", async () => {
     const paths = fixture();
-    const generations = join(paths.infraDir, ".trusted-config-generations");
+    const generations = paths.generations;
     mkdirSync(generations, { recursive: true, mode: 0o700 });
     chmodSync(generations, 0o700);
     for (let index = 0; index < 17; index += 1) {
@@ -967,7 +975,7 @@ describe("ops-agent trusted configuration runtime", () => {
         claim: claim(operation, payload({ selectedRoots: ["beta"], integrationConfigs: [] })),
       }),
     ).resolves.toMatchObject({ outcome: "not_committed", reason: "failed" });
-    expect(readFileSync(join(paths.infraDir, "service-selection.json"), "utf8")).toContain("alpha");
+    expect(readFileSync(services.serviceSelectionPath(paths.infraDir), "utf8")).toContain("alpha");
     expect(existsSync(paths.current)).toBe(false);
     await expect(
       dispatchOpsOperation(
@@ -999,9 +1007,9 @@ describe("ops-agent trusted configuration runtime", () => {
     ];
 
     function applied(paths: ReturnType<typeof fixture>): void {
-      const generation = join(paths.infraDir, ".trusted-config-generations", revisionId);
+      const generation = join(paths.generations, revisionId);
       mkdirSync(generation, { recursive: true, mode: 0o700 });
-      chmodSync(join(paths.infraDir, ".trusted-config-generations"), 0o700);
+      chmodSync(paths.generations, 0o700);
       writeFileSync(join(generation, "docker-compose.generated.yml"), "services: {}\n", {
         mode: 0o600,
       });
@@ -1013,7 +1021,7 @@ describe("ops-agent trusted configuration runtime", () => {
         JSON.stringify(plan),
         { mode: 0o600 },
       );
-      symlinkSync(join(".trusted-config-generations", revisionId), paths.current);
+      pointCurrentAt(paths, revisionId);
     }
 
     const inspect = (paths: ReturnType<typeof fixture>, inspectRevision: string) => {

@@ -1,13 +1,6 @@
-import {
-  copyFileSync,
-  existsSync,
-  linkSync,
-  mkdirSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { copyFileSync, existsSync, linkSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { atomicWrite } from "@openmapx/core/release-files";
 import { execa } from "execa";
 import { withStagedBuildDir } from "./build-staging";
 import { resolveOsmPbf } from "./osm-pbf";
@@ -153,7 +146,10 @@ function writeBuildComposeFile(
     },
   };
 
-  writeFileSync(composeFile, `${JSON.stringify(compose, null, 2)}\n`, "utf-8");
+  // A file of that name could be anything, a symbolic link included, while
+  // infra/docker is writable by more than this user: replace it through an
+  // exclusive temporary instead of writing through it.
+  atomicWrite(composeFile, `${JSON.stringify(compose, null, 2)}\n`, 0o600);
 }
 
 async function waitForElasticsearch(

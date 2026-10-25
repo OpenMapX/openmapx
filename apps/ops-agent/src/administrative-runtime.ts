@@ -72,10 +72,11 @@ const INSPECT_RELEASE_SERVICE_IDS = [
   "ops-agent",
   "transitous-runner",
 ] as const;
-const MAX_RELEASE_MANIFEST_BYTES = 32 * 1024;
-const MAX_RELEASE_STATE_BYTES = 4 * 1024;
-const MAX_RELEASE_TRANSACTION_BYTES = 128 * 1024;
-const MAX_RELEASE_STORE_ENTRIES = 64;
+const MAX_RELEASE_MANIFEST_BYTES = coreServices.RELEASE_STORE_LIMITS.manifestBytes;
+const MAX_RELEASE_STATE_BYTES = coreServices.RELEASE_STORE_LIMITS.stateBytes;
+const MAX_RELEASE_TRANSACTION_BYTES = coreServices.RELEASE_STORE_LIMITS.transactionBytes;
+const MAX_RELEASE_SELECTIONS_BYTES = coreServices.RELEASE_STORE_LIMITS.selectionsBytes;
+const MAX_RELEASE_STORE_ENTRIES = coreServices.RELEASE_STORE_LIMITS.entries;
 const BACKUP_STORE_LOCK_NAME = ".backup-store.lock";
 const MAX_RELEASE_STORE_BYTES = MAX_RELEASE_STORE_ENTRIES * MAX_RELEASE_MANIFEST_BYTES;
 const BACKUP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -153,6 +154,10 @@ export interface AdministrativeReleaseRuntimeOptions {
   releaseStoreLockHooks?: ReleaseStoreLockHooks;
   /** Runs after an inspection settled a handoff whose helper had exited. */
   afterHandoffSettled?: () => Promise<void>;
+  /** The uid the release state must belong to; the effective uid unless a test injects one. */
+  uid?: number;
+  /** Receives what the startup migration of an earlier release's state carried over. */
+  onLegacyReleaseMigration?: (migration: coreServices.LegacyReleaseStateMigration) => void;
 }
 
 type ReleaseTransactionPhase =
@@ -660,21 +665,43 @@ function emitLines(
   }
 }
 
+function infraDirectory(rootDir: string): string {
+  return join(rootDir, "infra", "docker");
+}
+
+/** The agent's release store, `state/ops-agent/releases/store`. */
 function releaseDirectory(rootDir: string): string {
-  return join(rootDir, "infra", "docker", ".ops-agent-releases");
+  return coreServices.releaseStatePaths(infraDirectory(rootDir)).store;
 }
 
 function releaseManifestPath(rootDir: string, releaseId: string): string {
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(releaseId)) {
+  if (!coreServices.RELEASE_ID_PATTERN.test(releaseId)) {
     throw new Error("Release authority rejected");
   }
   return join(releaseDirectory(rootDir), `${releaseId}.json`);
 }
 
+function stateOwner(uid?: number): number | undefined {
+  return uid ?? process.geteuid?.();
+}
+
+/**
+ * Every entry of the release store is the agent's own: a regular file of its
+ * uid with one link and no group or other write, within its size bound.
+ */
+function assertStoreEntry(path: string, maximum: number, uid: number | undefined): void {
+  const stat = lstatSync(path);
+  if (stat.size < 1 || coreServices.releaseStateFileProblem(stat, maximum, { uid }) !== null) {
+    throw new Error("Release store contains an unsafe entry");
+  }
+}
+
 export function inspectReleaseAuthority(rootDir: string, releaseId: string): boolean {
   try {
     const manifest = coreServices.parseReleaseManifest(
-      strictReadFile(releaseManifestPath(rootDir, releaseId), MAX_RELEASE_MANIFEST_BYTES),
+      strictReadFile(releaseManifestPath(rootDir, releaseId), MAX_RELEASE_MANIFEST_BYTES, {
+        owner: stateOwner(),
+      }),
     );
     return manifest.release === releaseId;
   } catch {
@@ -686,7 +713,7 @@ function releaseDigest(contents: string): string {
   return createHash("sha256").update(contents).digest("hex");
 }
 
-function immutableWrite(path: string, contents: string): void {
+function immutableWrite(path: string, contents: string, owner: number | undefined): void {
   const temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
   const descriptor = openSync(
     temporary,
@@ -708,7 +735,7 @@ function immutableWrite(path: string, contents: string): void {
       writeError = error;
     } else {
       try {
-        if (strictReadFile(path, MAX_RELEASE_MANIFEST_BYTES) !== contents) {
+        if (strictReadFile(path, MAX_RELEASE_MANIFEST_BYTES, { owner }) !== contents) {
           writeError = new Error("Release authority rejected");
         }
       } catch (readError) {
@@ -770,23 +797,32 @@ function inspectBackupManifestDigest(rootDir: string, backupId: string): string 
   }
 }
 
-function releaseStoreBindings(rootDir: string, hooks: ReleaseStoreLockHooks = {}) {
+function releaseStoreBindings(
+  rootDir: string,
+  hooks: ReleaseStoreLockHooks = {},
+  uid: number | undefined = stateOwner(),
+) {
   const directory = releaseDirectory(rootDir);
-  const infraDir = join(rootDir, "infra", "docker");
+  const infraDir = infraDirectory(rootDir);
   const repositoryPaths: coreServices.StackPaths = {
     infraDir,
     composePath: coreServices.currentConfigurationFile(
       infraDir,
       coreServices.GENERATED_COMPOSE_FILE,
     ),
-    composeReleasePath: join(infraDir, "docker-compose.release.yml"),
+    composeReleasePath: coreServices.releaseStatePaths(infraDir).overlay,
   };
   const overlay = repositoryPaths.composeReleasePath;
+  // Owner and mode are checked as for the store: an overlay someone else could
+  // write is refused, not read and not passed to Compose.
+  const readOverlay = () => coreServices.readReleaseOverlay(infraDir, { uid });
   return {
     repositoryPaths,
-    stackArgs: () => coreServices.stackComposeArgs(repositoryPaths, isRegularComposeFile),
-    readOverlay: () =>
-      existsSync(overlay) ? strictReadFile(overlay, MAX_RELEASE_MANIFEST_BYTES) : null,
+    stackArgs: () =>
+      coreServices.stackComposeArgs(repositoryPaths, (path) =>
+        path === overlay ? readOverlay() !== null : isRegularComposeFile(path),
+      ),
+    readOverlay,
     restoreOverlay: (previousOverlay: string | null) => {
       if (previousOverlay === null) durableUnlink(overlay);
       else atomicWrite(overlay, previousOverlay);
@@ -803,10 +839,17 @@ function releaseStoreBindings(rootDir: string, hooks: ReleaseStoreLockHooks = {}
 }
 
 /** Release-store access for the agent replacement helper, which runs outside the agent. */
-export function createAgentHandoffBindings(rootDir: string) {
-  const bindings = releaseStoreBindings(rootDir);
+export function createAgentHandoffBindings(rootDir: string, options: { uid?: number } = {}) {
+  const uid = stateOwner(options.uid);
+  const bindings = releaseStoreBindings(rootDir, {}, uid);
   const loadStored = (releaseId: string, digest: string) => {
-    const raw = strictReadFile(releaseManifestPath(rootDir, releaseId), MAX_RELEASE_MANIFEST_BYTES);
+    const raw = strictReadFile(
+      releaseManifestPath(rootDir, releaseId),
+      MAX_RELEASE_MANIFEST_BYTES,
+      {
+        owner: uid,
+      },
+    );
     const manifest = coreServices.parseReleaseManifest(raw);
     if (
       manifest.release !== releaseId ||
@@ -831,7 +874,8 @@ export function createAgentHandoffBindings(rootDir: string) {
     writeOverlay: (releaseId: string, digest: string) =>
       coreServices.writeReleaseComposeArtifacts(
         loadStored(releaseId, digest),
-        bindings.repositoryPaths.composeReleasePath,
+        bindings.repositoryPaths.infraDir,
+        { uid },
       ),
   };
 }
@@ -841,18 +885,24 @@ export function createDefaultReleaseEffects(
   runFixedCli: FixedCliRunner,
   runtimeOptions: AdministrativeReleaseRuntimeOptions = {},
 ): AdministrativeReleaseEffects {
-  const directory = releaseDirectory(rootDir);
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const infraDir = infraDirectory(rootDir);
+  const uid = stateOwner(runtimeOptions.uid);
+  // `releases/`, `store/` and `evidence/`: created owner-only when missing,
+  // refused when they are anyone else's. Nothing is read before the legacy
+  // migration in `initialize`.
+  const { store: directory, overlay } = coreServices.ensureReleaseStateDirectories(infraDir, {
+    uid,
+  });
   const releaseStoreLockHooks = runtimeOptions.releaseStoreLockHooks ?? {};
   const paths = {
-    overlay: join(rootDir, "infra", "docker", "docker-compose.release.yml"),
+    overlay,
     state: join(directory, "current.json"),
     latest: join(directory, "latest.json"),
     transaction: join(directory, "transaction.json"),
     selections: join(directory, "selections.json"),
   };
   const { repositoryPaths, stackArgs, restoreOverlay, withStoreLock, readOverlay } =
-    releaseStoreBindings(rootDir, releaseStoreLockHooks);
+    releaseStoreBindings(rootDir, releaseStoreLockHooks, uid);
   const manifestNames = () => {
     const entries = readdirSync(directory);
     if (entries.length > MAX_RELEASE_STORE_ENTRIES + 5)
@@ -863,42 +913,31 @@ export function createDefaultReleaseEffects(
       // The lock is agent-owned coordination state, not a stored release.
       if (name === RELEASE_STORE_LOCK_NAME) {
         const stat = lstatSync(join(directory, name));
-        if (!stat.isDirectory() || stat.isSymbolicLink()) {
-          throw new Error("Release store contains an unsafe entry");
-        }
-        continue;
-      }
-      if (["current.json", "latest.json", "transaction.json", "selections.json"].includes(name)) {
-        const stat = lstatSync(join(directory, name));
-        const maximum =
-          name === "transaction.json"
-            ? MAX_RELEASE_TRANSACTION_BYTES
-            : name === "selections.json"
-              ? 32 * 1024
-              : MAX_RELEASE_STATE_BYTES;
         if (
-          !stat.isFile() ||
+          !stat.isDirectory() ||
           stat.isSymbolicLink() ||
-          stat.nlink !== 1 ||
-          stat.size < 1 ||
-          stat.size > maximum
+          (uid !== undefined && stat.uid !== uid) ||
+          (stat.mode & 0o022) !== 0
         ) {
           throw new Error("Release store contains an unsafe entry");
         }
         continue;
       }
-      const match = /^([A-Za-z0-9][A-Za-z0-9._-]{0,127})\.json$/.exec(name);
-      if (!match) throw new Error("Release store contains an unsafe entry");
-      const stat = lstatSync(join(directory, name));
-      if (
-        !stat.isFile() ||
-        stat.isSymbolicLink() ||
-        stat.nlink !== 1 ||
-        stat.size < 1 ||
-        stat.size > MAX_RELEASE_MANIFEST_BYTES
-      ) {
-        throw new Error("Release store contains an unsafe entry");
+      if ((coreServices.RELEASE_STORE_POINTER_FILES as readonly string[]).includes(name)) {
+        const maximum =
+          name === "transaction.json"
+            ? MAX_RELEASE_TRANSACTION_BYTES
+            : name === "selections.json"
+              ? MAX_RELEASE_SELECTIONS_BYTES
+              : MAX_RELEASE_STATE_BYTES;
+        assertStoreEntry(join(directory, name), maximum, uid);
+        continue;
       }
+      const match = coreServices.RELEASE_MANIFEST_FILE_PATTERN.exec(name);
+      if (!match) throw new Error("Release store contains an unsafe entry");
+      const path = join(directory, name);
+      assertStoreEntry(path, MAX_RELEASE_MANIFEST_BYTES, uid);
+      const stat = lstatSync(path);
       bytes += stat.size;
       if (bytes > MAX_RELEASE_STORE_BYTES || names.length >= MAX_RELEASE_STORE_ENTRIES) {
         throw new Error("Release store limit exceeded");
@@ -909,7 +948,13 @@ export function createDefaultReleaseEffects(
   };
   const loadManifest = (releaseId: string) => {
     manifestNames();
-    const raw = strictReadFile(releaseManifestPath(rootDir, releaseId), MAX_RELEASE_MANIFEST_BYTES);
+    const raw = strictReadFile(
+      releaseManifestPath(rootDir, releaseId),
+      MAX_RELEASE_MANIFEST_BYTES,
+      {
+        owner: uid,
+      },
+    );
     const manifest = coreServices.parseReleaseManifest(raw);
     if (manifest.release !== releaseId || raw !== coreServices.canonicalReleaseManifest(manifest)) {
       throw new Error("Release authority rejected");
@@ -934,30 +979,17 @@ export function createDefaultReleaseEffects(
   ): { releaseId?: string; updateJobId?: string; digest?: string } => {
     try {
       const stat = lstatSync(path);
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) {
+      if (coreServices.releaseStateFileProblem(stat, MAX_RELEASE_STATE_BYTES, { uid }) !== null) {
         throw new Error("Release authority rejected");
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT" && optional) return {};
       throw new Error("Release authority rejected");
     }
-    const candidate = JSON.parse(strictReadFile(path, MAX_RELEASE_STATE_BYTES)) as unknown;
-    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
-      throw new Error("Release authority rejected");
-    }
-    const value = candidate as Record<string, unknown>;
-    if (
-      typeof value.releaseId !== "string" ||
-      !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value.releaseId) ||
-      (value.digest !== undefined &&
-        (typeof value.digest !== "string" || !/^[a-f0-9]{64}$/.test(value.digest))) ||
-      (path === paths.latest && value.digest === undefined) ||
-      (value.updateJobId !== undefined &&
-        (typeof value.updateJobId !== "string" ||
-          !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value.updateJobId)))
-    ) {
-      throw new Error("Release authority rejected");
-    }
+    const value = coreServices.parseReleasePointer(
+      strictReadFile(path, MAX_RELEASE_STATE_BYTES, { owner: uid }),
+      path === paths.latest,
+    );
     const manifest = loadManifest(value.releaseId);
     const digest = releaseDigest(coreServices.canonicalReleaseManifest(manifest));
     if (value.digest !== undefined && digest !== value.digest) {
@@ -980,7 +1012,7 @@ export function createDefaultReleaseEffects(
   const releaseStateOverlay = (): string | null => {
     try {
       const { releaseId } = readState();
-      if (releaseId) return coreServices.renderReleaseCompose(loadManifest(releaseId));
+      if (releaseId) return coreServices.renderReleaseCompose(loadManifest(releaseId), infraDir);
     } catch {
       // Unreadable release state: no derived target.
     }
@@ -988,30 +1020,11 @@ export function createDefaultReleaseEffects(
   };
   const configurationIdentity = () =>
     releaseDigest(JSON.stringify(coreServices.releaseSelection()));
-  const selectionReceipts = (): Record<
-    string,
-    { configuration: string; ociDigest: string; digest: string }
-  > => {
+  const selectionReceipts = (): coreServices.ReleaseSelectionReceipts => {
     if (!existsSync(paths.selections)) return {};
-    const value = JSON.parse(strictReadFile(paths.selections, 32 * 1024));
-    if (
-      !value ||
-      typeof value !== "object" ||
-      Array.isArray(value) ||
-      Object.keys(value).length > MAX_RELEASE_STORE_ENTRIES
-    )
-      throw new Error("Invalid release selection receipts");
-    for (const [id, receipt] of Object.entries(value) as [string, Record<string, unknown>][])
-      if (
-        !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id) ||
-        !receipt ||
-        Object.keys(receipt).sort().join() !== "configuration,digest,ociDigest" ||
-        !/^[a-f0-9]{64}$/.test(String(receipt.configuration)) ||
-        !/^[a-f0-9]{64}$/.test(String(receipt.digest)) ||
-        !/^sha256:[a-f0-9]{64}$/.test(String(receipt.ociDigest))
-      )
-        throw new Error("Invalid release selection receipt");
-    return value;
+    return coreServices.parseReleaseSelectionReceipts(
+      strictReadFile(paths.selections, MAX_RELEASE_SELECTIONS_BYTES, { owner: uid }),
+    );
   };
   const validateCandidate = async (releaseId: string, expectedDigest: string) => {
     const manifest = loadManifest(releaseId);
@@ -1092,14 +1105,16 @@ export function createDefaultReleaseEffects(
   const readTransaction = (): ReleaseTransaction | null => {
     try {
       const stat = lstatSync(paths.transaction);
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) {
+      if (
+        coreServices.releaseStateFileProblem(stat, MAX_RELEASE_TRANSACTION_BYTES, { uid }) !== null
+      ) {
         throw new Error("Release transaction rejected");
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw new Error("Release transaction rejected");
     }
-    const raw = strictReadFile(paths.transaction, MAX_RELEASE_TRANSACTION_BYTES);
+    const raw = strictReadFile(paths.transaction, MAX_RELEASE_TRANSACTION_BYTES, { owner: uid });
     const candidate = JSON.parse(raw) as unknown;
     if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
       throw new Error("Release transaction rejected");
@@ -1224,12 +1239,12 @@ export function createDefaultReleaseEffects(
       await requireCurrentAgent(manifest, context);
     }
     if (transaction.phase === "prepared") {
-      coreServices.writeReleaseComposeArtifacts(manifest, paths.overlay);
+      coreServices.writeReleaseComposeArtifacts(manifest, infraDir, { uid });
       transaction = { ...transaction, phase: "overlay_written" };
       await writeTransaction(transaction);
     }
     if (transaction.phase === "overlay_written") {
-      coreServices.writeReleaseComposeArtifacts(manifest, paths.overlay);
+      coreServices.writeReleaseComposeArtifacts(manifest, infraDir, { uid });
       await runFixedCli(["services", "update", "--no-deps", ...transaction.serviceIds], context);
       if (!(await verifyApplied(manifest, transaction.serviceIds, context))) {
         throw new Error("Release recovery verification failed");
@@ -1289,6 +1304,13 @@ export function createDefaultReleaseEffects(
   let initialization: Promise<void> | undefined;
   const initialize = (): Promise<void> => {
     initialization ??= (async () => {
+      // The releases of earlier agents come first: everything below reads the
+      // store and the overlay. Once done, this is a no-op.
+      const migration = await coreServices.migrateLegacyReleaseState(infraDir, {
+        uid,
+        lockHooks: releaseStoreLockHooks,
+      });
+      if (migration) runtimeOptions.onLegacyReleaseMigration?.(migration);
       manifestNames();
       // Recovery reads the transaction and then reopens the manifest by release
       // ID. Holding the store lock across both keeps another agent process (or
@@ -1368,7 +1390,7 @@ export function createDefaultReleaseEffects(
           ) {
             throw new Error("Release store limit exceeded");
           }
-          immutableWrite(destination, canonical);
+          immutableWrite(destination, canonical, uid);
           const receipts = selectionReceipts();
           receipts[manifest.release] = {
             configuration: configurationIdentity(),
@@ -1550,7 +1572,7 @@ export function createDefaultReleaseEffects(
             ? releaseStateOverlay()
             : afterHandoff.previousOverlay;
         const previousState = existsSync(paths.state)
-          ? strictReadFile(paths.state, MAX_RELEASE_STATE_BYTES)
+          ? strictReadFile(paths.state, MAX_RELEASE_STATE_BYTES, { owner: uid })
           : null;
         transaction = {
           version: 1,
@@ -1573,7 +1595,7 @@ export function createDefaultReleaseEffects(
       } finally {
         claimLock.release();
       }
-      coreServices.writeReleaseComposeArtifacts(manifest, paths.overlay);
+      coreServices.writeReleaseComposeArtifacts(manifest, infraDir, { uid });
       transaction = { ...transaction, phase: "overlay_written" };
       await writeTransaction(transaction);
       try {
@@ -1715,6 +1737,15 @@ export function createAdministrativeRuntime(
   const releaseEffects =
     options.releaseEffects ?? createDefaultReleaseEffects(options.rootDir, runFixedCli);
   const loadBuildAuthority = options.loadBuildAuthority ?? (async () => []);
+  // While an earlier release's selection did not come over, resolving or
+  // applying a release would upgrade to whatever is newest: the operator
+  // selects one on the host instead, which the panel's message says.
+  const assertReleaseSelectable = (context: { emitLog: FixedCliOptions["emitLog"] }) => {
+    const held = coreServices.releaseSelectionHold(infraDirectory(options.rootDir));
+    if (!held) return;
+    context.emitLog("stderr", held);
+    throw new OpsHostUpdateRequiredError();
+  };
   const buildArgs = (serviceId: string, regionId?: string): string[] => [
     "services",
     "build",
@@ -1921,25 +1952,29 @@ export function createAdministrativeRuntime(
     return { ok: true, checks: [] };
   };
   runtime["system.inspect"] = async (_operation, context) => releaseEffects.inspectSystem(context);
-  runtime["release.resolve"] = async (_operation, context) => ({
-    releaseId: await releaseEffects.resolve(context),
-  });
+  runtime["release.resolve"] = async (_operation, context) => {
+    assertReleaseSelectable(context);
+    return { releaseId: await releaseEffects.resolve(context) };
+  };
   runtime["release.pull"] = async (operation, context) => {
     await releaseEffects.pull(operation.releaseId, context);
     return { releaseId: operation.releaseId };
   };
   runtime["release.inspect"] = async () => releaseEffects.inspect();
   runtime["release.apply"] = async (operation, context) => {
+    assertReleaseSelectable(context);
     await releaseEffects.apply(operation.releaseId, [...ADMIN_RELEASE_SERVICE_IDS], context);
     return { releaseId: operation.releaseId };
   };
   runtime["appApi.replace"] = async (operation, context) => {
+    assertReleaseSelectable(context);
     await releaseEffects.apply(operation.releaseId, ["app-api"], context, operation.updateJobId);
     return { updateJobId: operation.updateJobId, replaced: true };
   };
   runtime["appApi.runtime.inspect"] = async () => releaseEffects.runtimeInspect?.() ?? {};
   runtime["agent.update"] = async (operation, context) => {
     if (!releaseEffects.updateAgent) throw new Error("Agent replacement unavailable");
+    assertReleaseSelectable(context);
     return releaseEffects.updateAgent(
       {
         releaseId: operation.releaseId,
@@ -1957,6 +1992,7 @@ export function createAdministrativeRuntime(
   runtime["system.update"] = async (operation, context) => {
     if (!releaseEffects.validateCandidate)
       throw new Error("Checked release validation unavailable");
+    assertReleaseSelectable(context);
     await releaseEffects.validateCandidate(operation.releaseId, operation.expectedDigest);
     if (operation.createBackup && operation.backupId) {
       await runFixedCli(["backup", "create", "--name", operation.backupId], context);

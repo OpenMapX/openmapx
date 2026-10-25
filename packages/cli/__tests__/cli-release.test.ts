@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { services } from "@openmapx/core/server";
 import { Command } from "commander";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerComposeCommands } from "../src/commands/compose";
@@ -70,12 +71,20 @@ afterEach(() => {
   temp = null;
 });
 
+/** A temporary `infra/docker` with its release state directory, and the overlay path in it. */
+function releaseInfra(prefix = "omx-release-") {
+  temp = mkdtempSync(join(tmpdir(), prefix));
+  const infraDir = temp;
+  const path = services.releaseStatePaths(infraDir).overlay;
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  return { infraDir, path };
+}
+
 describe("ensureReleaseOverlay", () => {
   it("writes the overlay from the resolved manifest when it is missing", async () => {
-    temp = mkdtempSync(join(tmpdir(), "omx-release-"));
-    const path = join(temp, "docker-compose.release.yml");
+    const { infraDir, path } = releaseInfra();
     const docker = fakeDocker();
-    const result = await ensureReleaseOverlay({ docker, path });
+    const result = await ensureReleaseOverlay({ docker, infraDir });
     expect(result).toEqual({ status: "resolved", path, release: "deadbeef" });
     expect(readFileSync(path, "utf-8")).toContain(`image: ghcr.io/openmapx/api@${digest("a")}`);
     expect(readFileSync(path, "utf-8")).toContain(
@@ -91,49 +100,45 @@ describe("ensureReleaseOverlay", () => {
   });
 
   it("never overwrites an existing overlay", async () => {
-    temp = mkdtempSync(join(tmpdir(), "omx-release-"));
-    const path = join(temp, "docker-compose.release.yml");
-    writeReleaseOverlay(JSON.parse(manifestJson), path);
+    const { infraDir, path } = releaseInfra();
+    writeReleaseOverlay(JSON.parse(manifestJson), { infraDir });
     const docker = fakeDocker();
-    expect(await ensureReleaseOverlay({ docker, path })).toEqual({ status: "present", path });
+    expect(await ensureReleaseOverlay({ docker, infraDir })).toEqual({ status: "present", path });
     expect(docker).not.toHaveBeenCalled();
     expect(readFileSync(path, "utf-8")).toContain("deadbeef");
   });
 
   it("reports an unpinned stack when the registry is unreachable", async () => {
-    temp = mkdtempSync(join(tmpdir(), "omx-release-"));
-    const path = join(temp, "docker-compose.release.yml");
+    const { infraDir, path } = releaseInfra();
     const docker: ReleaseDockerRunner = async () => ({
       stdout: "",
       stderr: "no network",
       exitCode: 1,
     });
-    const result = await ensureReleaseOverlay({ docker, path });
+    const result = await ensureReleaseOverlay({ docker, infraDir });
     expect(result.status).toBe("unpinned");
     expect(existsSync(path)).toBe(false);
   });
 
   it("does not write an overlay when release validation evidence is missing", async () => {
-    temp = mkdtempSync(join(tmpdir(), "omx-release-"));
-    const path = join(temp, "docker-compose.release.yml");
+    const { infraDir, path } = releaseInfra();
     const invalid = JSON.stringify({
       ...JSON.parse(manifestJson),
       privacyReleaseValidation: undefined,
     });
-    const result = await ensureReleaseOverlay({ docker: fakeDocker(invalid), path });
+    const result = await ensureReleaseOverlay({ docker: fakeDocker(invalid), infraDir });
     expect(result).toMatchObject({ status: "unpinned", reason: expect.stringMatching(/privacy/) });
     expect(existsSync(path)).toBe(false);
   });
 
   it("does not activate the release when the pinned collector cannot be pulled", async () => {
-    temp = mkdtempSync(join(tmpdir(), "omx-release-"));
-    const path = join(temp, "docker-compose.release.yml");
+    const { infraDir, path } = releaseInfra();
     const base = fakeDocker();
     const docker: ReleaseDockerRunner = async (args) =>
       args[0] === "pull" && args[1]?.includes("privacy-backup@")
         ? { stdout: "", stderr: "collector unavailable", exitCode: 1 }
         : base(args);
-    const result = await ensureReleaseOverlay({ docker, path });
+    const result = await ensureReleaseOverlay({ docker, infraDir });
     expect(result).toMatchObject({
       status: "unpinned",
       reason: expect.stringMatching(/privacy-backup/),
@@ -144,12 +149,11 @@ describe("ensureReleaseOverlay", () => {
 
 describe("ensureReleaseOverlay with a disabled channel", () => {
   it("reports disabled without touching docker or writing a file", async () => {
-    temp = mkdtempSync(join(tmpdir(), "omx-release-"));
-    const path = join(temp, "docker-compose.release.yml");
+    const { infraDir, path } = releaseInfra();
     const docker = fakeDocker();
     process.env.OPENMAPX_RELEASE = "local";
     try {
-      expect(await ensureReleaseOverlay({ docker, path })).toEqual({ status: "disabled" });
+      expect(await ensureReleaseOverlay({ docker, infraDir })).toEqual({ status: "disabled" });
     } finally {
       delete process.env.OPENMAPX_RELEASE;
     }
@@ -158,13 +162,12 @@ describe("ensureReleaseOverlay with a disabled channel", () => {
   });
 
   it("pulls a fork's manifest image and accepts its image prefix", async () => {
-    temp = mkdtempSync(join(tmpdir(), "omx-release-"));
-    const path = join(temp, "docker-compose.release.yml");
+    const { infraDir, path } = releaseInfra();
     const forkManifest = manifestJson.replaceAll("ghcr.io/openmapx", "registry.example.org/fork");
     const docker = fakeDocker(forkManifest);
     process.env.OPENMAPX_RELEASE_MANIFEST_REPOSITORY = "registry.example.org/fork/release-manifest";
     try {
-      const result = await ensureReleaseOverlay({ docker, path });
+      const result = await ensureReleaseOverlay({ docker, infraDir });
       expect(result.status).toBe("resolved");
     } finally {
       delete process.env.OPENMAPX_RELEASE_MANIFEST_REPOSITORY;
@@ -188,10 +191,9 @@ describe("touchesReleasePinnedServices", () => {
 
 describe("local release visibility", () => {
   it("reports selected pins locally and compares digests before selecting a new release", async () => {
-    temp = mkdtempSync(join(tmpdir(), "omx-release-"));
-    const path = join(temp, "docker-compose.release.yml");
+    const { infraDir, path } = releaseInfra();
     const previous = JSON.parse(manifestJson);
-    writeReleaseOverlay(previous, path);
+    writeReleaseOverlay(previous, { infraDir });
     const before = readFileSync(path, "utf8");
     expect(releaseStatusLines(path).join("\n")).toContain("Selected release: deadbeef");
     expect(readFileSync(path, "utf8")).toBe(before);
@@ -201,7 +203,7 @@ describe("local release visibility", () => {
     next.images.web = next.images.web.replace("ghcr.io/openmapx", "mirror.example/openmapx");
     const lines: string[] = [];
     await selectRelease({
-      path,
+      infraDir,
       resolve: async () => next,
       report: (line) => {
         expect(readFileSync(path, "utf8")).toBe(before);
@@ -217,12 +219,11 @@ describe("local release visibility", () => {
   });
 
   it("distinguishes disabled resolution from an existing active overlay", () => {
-    temp = mkdtempSync(join(tmpdir(), "omx-release-"));
-    const path = join(temp, "docker-compose.release.yml");
+    const { infraDir, path } = releaseInfra();
     vi.stubEnv("OPENMAPX_RELEASE", "local");
     try {
       expect(releaseStatusLines(path).join("\n")).toContain("Release pinning disabled");
-      writeReleaseOverlay(JSON.parse(manifestJson), path);
+      writeReleaseOverlay(JSON.parse(manifestJson), { infraDir });
       expect(releaseStatusLines(path).join("\n")).toContain("existing overlay still applies");
       expect(releaseStatusLines(path).join("\n")).toContain("Selected release: deadbeef");
     } finally {
@@ -231,13 +232,12 @@ describe("local release visibility", () => {
   });
 
   it("leaves selected pins intact when resolution fails", async () => {
-    temp = mkdtempSync(join(tmpdir(), "omx-release-"));
-    const path = join(temp, "docker-compose.release.yml");
-    writeReleaseOverlay(JSON.parse(manifestJson), path);
+    const { infraDir, path } = releaseInfra();
+    writeReleaseOverlay(JSON.parse(manifestJson), { infraDir });
     const before = readFileSync(path, "utf8");
     await expect(
       selectRelease({
-        path,
+        infraDir,
         resolve: async () => {
           throw new Error("offline");
         },
@@ -257,34 +257,38 @@ it("exposes read-only release status on the compose command", () => {
 });
 
 it("compares legacy pins and rejects malformed local overlays before resolution", async () => {
-  temp = mkdtempSync(join(tmpdir(), "omx-release-"));
-  const path = join(temp, "docker-compose.release.yml");
+  const { infraDir, path } = releaseInfra();
   const manifest = JSON.parse(manifestJson);
-  writeFileSync(path, `services:\n  app-api:\n    image: ${manifest.images.api}\n`);
+  writeFileSync(path, `services:\n  app-api:\n    image: ${manifest.images.api}\n`, {
+    mode: 0o600,
+  });
   const lines: string[] = [];
-  await selectRelease({ path, resolve: async () => manifest, report: (line) => lines.push(line) });
+  await selectRelease({
+    infraDir,
+    resolve: async () => manifest,
+    report: (line) => lines.push(line),
+  });
   expect(lines.join("\n")).toContain("Previous release: unknown (legacy or modified overlay)");
   expect(lines.join("\n")).toContain("api: reused");
   writeFileSync(path, "services: [");
   const resolve = vi.fn(async () => manifest);
-  await expect(selectRelease({ path, resolve })).rejects.toThrow();
+  await expect(selectRelease({ infraDir, resolve })).rejects.toThrow();
   expect(resolve).not.toHaveBeenCalled();
   expect(readFileSync(path, "utf8")).toBe("services: [");
   expect(() => releaseStatusLines(path)).toThrow();
 });
 
 it("does not report a candidate as selected when atomic overlay publication fails", async () => {
-  temp = mkdtempSync(join(tmpdir(), "omx-release-"));
-  const path = join(temp, "docker-compose.release.yml");
+  const { infraDir, path } = releaseInfra();
   const previous = JSON.parse(manifestJson);
-  writeReleaseOverlay(previous, path);
+  writeReleaseOverlay(previous, { infraDir });
   const before = readFileSync(path, "utf8");
-  chmodSync(join(temp, ".release-evidence"), 0o755);
+  chmodSync(services.releaseStatePaths(infraDir).evidence, 0o755);
   const next = { ...previous, release: "next" };
   const lines: string[] = [];
   await expect(
-    selectRelease({ path, resolve: async () => next, report: (line) => lines.push(line) }),
-  ).rejects.toThrow(/unsafe/);
+    selectRelease({ infraDir, resolve: async () => next, report: (line) => lines.push(line) }),
+  ).rejects.toThrow(/unsafe/i);
   expect(lines.join("\n")).toContain("Candidate release: next");
   expect(lines.join("\n")).not.toContain("Selected release: next");
   expect(readFileSync(path, "utf8")).toBe(before);
@@ -292,26 +296,25 @@ it("does not report a candidate as selected when atomic overlay publication fail
 
 describe("clearReleaseSelection", () => {
   function fixture() {
-    temp = mkdtempSync(join(tmpdir(), "omx-release-clear-"));
-    const path = join(temp, "docker-compose.release.yml");
-    const store = join(temp, ".ops-agent-releases");
+    const { infraDir, path } = releaseInfra("omx-release-clear-");
+    const store = services.releaseStatePaths(infraDir).store;
     mkdirSync(store, { mode: 0o700 });
-    writeReleaseOverlay(JSON.parse(manifestJson), path);
+    writeReleaseOverlay(JSON.parse(manifestJson), { infraDir });
     writeFileSync(join(store, "current.json"), "running-state");
-    return { path, store };
+    return { infraDir, path, store };
   }
 
   it("clears only the local overlay idempotently and retains running release evidence", async () => {
-    const { path, store } = fixture();
-    const evidence = join(dirname(path), ".release-evidence");
+    const { infraDir, path, store } = fixture();
+    const evidence = services.releaseStatePaths(infraDir).evidence;
     const files = readdirSync(evidence).map((name) => [
       name,
       readFileSync(join(evidence, name), "utf8"),
     ]);
     vi.stubEnv("OPENMAPX_RELEASE", "local");
     try {
-      expect(await clearReleaseSelection({ path })).toEqual({ path, cleared: true });
-      expect(await clearReleaseSelection({ path })).toEqual({ path, cleared: false });
+      expect(await clearReleaseSelection({ infraDir })).toEqual({ path, cleared: true });
+      expect(await clearReleaseSelection({ infraDir })).toEqual({ path, cleared: false });
       expect(process.env.OPENMAPX_RELEASE).toBe("local");
     } finally {
       vi.unstubAllEnvs();
@@ -325,35 +328,54 @@ describe("clearReleaseSelection", () => {
   });
 
   it("refuses an active transaction even if the overlay is absent", async () => {
-    const { path, store } = fixture();
+    const { infraDir, path, store } = fixture();
     writeFileSync(join(store, "transaction.json"), "pending transaction");
     const before = readFileSync(path, "utf8");
-    await expect(clearReleaseSelection({ path })).rejects.toThrow(/transaction/);
+    await expect(clearReleaseSelection({ infraDir })).rejects.toThrow(/transaction/);
     expect(readFileSync(path, "utf8")).toBe(before);
     rmSync(path);
-    await expect(clearReleaseSelection({ path })).rejects.toThrow(/transaction/);
+    await expect(clearReleaseSelection({ infraDir })).rejects.toThrow(/transaction/);
   });
 
   it("refuses a held or abandoned lock without changing it", async () => {
-    const { path, store } = fixture();
+    const { infraDir, path, store } = fixture();
     const lock = join(store, ".release-store.lock");
     mkdirSync(lock);
     writeFileSync(join(lock, "owner.json"), '{"acquiredAtMs":0}');
-    await expect(clearReleaseSelection({ path })).rejects.toThrow(/busy/);
+    await expect(clearReleaseSelection({ infraDir })).rejects.toThrow(/busy/);
     expect(existsSync(path)).toBe(true);
     expect(readFileSync(join(lock, "owner.json"), "utf8")).toBe('{"acquiredAtMs":0}');
   });
 
   it.each(["overlay", "store"])("refuses a symlinked %s", async (target) => {
-    const { path, store } = fixture();
+    const { infraDir, path, store } = fixture();
     const link = target === "overlay" ? path : store;
     rmSync(link, { recursive: true });
     const outside = join(dirname(path), "outside");
     mkdirSync(outside);
     writeFileSync(join(outside, "sentinel"), "retain");
     symlinkSync(outside, link);
-    await expect(clearReleaseSelection({ path })).rejects.toThrow(/unsafe/);
+    await expect(clearReleaseSelection({ infraDir })).rejects.toThrow(/unsafe/i);
     expect(readFileSync(join(outside, "sentinel"), "utf8")).toBe("retain");
+  });
+
+  it("removes only the agent state's overlay, never an earlier release's in infra/docker", async () => {
+    const { infraDir, path } = fixture();
+    const legacy = join(infraDir, "docker-compose.release.yml");
+    writeFileSync(legacy, "legacy overlay\n", { mode: 0o600 });
+    expect(await clearReleaseSelection({ infraDir })).toEqual({ path, cleared: true });
+    expect(readFileSync(legacy, "utf8")).toBe("legacy overlay\n");
+  });
+
+  it("refuses an overlay that is group-writable or someone else's", async () => {
+    const { infraDir, path } = fixture();
+    chmodSync(path, 0o620);
+    await expect(clearReleaseSelection({ infraDir })).rejects.toThrow(/group or others/);
+    chmodSync(path, 0o600);
+    // Tests cannot chown: inject the uid the state must belong to instead.
+    const foreign = (process.geteuid?.() ?? 0) + 1;
+    await expect(clearReleaseSelection({ infraDir, uid: foreign })).rejects.toThrow(/unsafe/i);
+    expect(existsSync(path)).toBe(true);
   });
 
   it("rejects --clear together with --status before taking action", async () => {
@@ -369,8 +391,8 @@ it("clears through the command without registry access even with a malformed cha
   temp = mkdtempSync(join(tmpdir(), "omx-release-clear-command-"));
   const directory = join(temp, "infra", "docker");
   mkdirSync(directory, { recursive: true });
-  const path = join(directory, "docker-compose.release.yml");
-  writeReleaseOverlay(JSON.parse(manifestJson), path);
+  const path = services.releaseStatePaths(directory).overlay;
+  writeReleaseOverlay(JSON.parse(manifestJson), { infraDir: directory });
   vi.stubEnv("OPENMAPX_ROOT_DIR", temp);
   vi.stubEnv("OPENMAPX_RELEASE", "invalid");
   vi.stubEnv("PATH", "");
@@ -418,12 +440,85 @@ it("extracts the manifest from the frozen local image ID after a mutable pointer
   ]);
 });
 
+it.each(["group-writable", "foreign"] as const)(
+  "refuses a %s overlay for status, selection and start instead of reading it",
+  async (kind) => {
+    const { infraDir, path } = releaseInfra();
+    writeReleaseOverlay(JSON.parse(manifestJson), { infraDir });
+    const before = readFileSync(path, "utf8");
+    if (kind === "group-writable") chmodSync(path, 0o620);
+    const uid = kind === "foreign" ? (process.geteuid?.() ?? 0) + 1 : undefined;
+    const docker = fakeDocker();
+    expect(() => releaseStatusLines(path, { uid })).toThrow();
+    await expect(ensureReleaseOverlay({ infraDir, docker, uid })).rejects.toThrow();
+    const resolve = vi.fn(async () => JSON.parse(manifestJson));
+    await expect(selectRelease({ infraDir, uid, resolve })).rejects.toThrow();
+    expect(resolve).not.toHaveBeenCalled();
+    expect(docker).not.toHaveBeenCalled();
+    expect(readFileSync(path, "utf8")).toBe(before);
+  },
+);
+
+it("writes evidence the overlay references from the configuration pointer", () => {
+  const { infraDir, path } = releaseInfra();
+  writeReleaseOverlay(JSON.parse(manifestJson), { infraDir });
+  const reference = /file: (\S+)/.exec(readFileSync(path, "utf8"))?.[1] ?? "";
+  expect(reference).toMatch(
+    /^\.\.\/\.\.\/releases\/evidence\/privacy-release-validation-[a-f0-9]{64}\.json$/,
+  );
+  expect(existsSync(join(infraDir, services.CURRENT_CONFIGURATION, reference))).toBe(true);
+});
+
 it("rejects a malformed existing overlay without replacing it or reaching the registry", async () => {
-  temp = mkdtempSync(join(tmpdir(), "omx-invalid-overlay-"));
-  const path = join(temp, "docker-compose.release.yml");
-  writeFileSync(path, "services: {}\n");
+  const { infraDir, path } = releaseInfra("omx-invalid-overlay-");
+  writeFileSync(path, "services: {}\n", { mode: 0o600 });
   const docker = fakeDocker();
-  await expect(ensureReleaseOverlay({ path, docker })).rejects.toThrow(/malformed/);
+  await expect(ensureReleaseOverlay({ infraDir, docker })).rejects.toThrow(/malformed/);
   expect(readFileSync(path, "utf8")).toBe("services: {}\n");
   expect(docker).not.toHaveBeenCalled();
+});
+
+describe("an earlier release's selection that did not come over", () => {
+  /** An overlay in infra/docker that no migration can carry over. */
+  function heldInfra(prefix: string) {
+    const { infraDir, path } = releaseInfra(prefix);
+    const legacy = services.legacyReleaseStatePaths(infraDir);
+    writeFileSync(legacy.overlay, "services:\n  app-api:\n    image: hand-edited\n", {
+      mode: 0o600,
+    });
+    return { infraDir, path, legacy };
+  }
+
+  it("refuses to resolve a release itself, and lets an explicit selection decide", async () => {
+    const { infraDir, path } = heldInfra("omx-release-held-");
+    const docker = fakeDocker();
+    const held = await ensureReleaseOverlay({ infraDir, docker });
+    expect(held.status).toBe("held");
+    expect(held.status === "held" && held.reason).toContain("pnpm openmapx compose release");
+    expect(docker).not.toHaveBeenCalled();
+    expect(existsSync(path)).toBe(false);
+
+    await selectRelease({ infraDir, resolve: async () => JSON.parse(manifestJson) });
+    expect(await ensureReleaseOverlay({ infraDir, docker })).toMatchObject({ status: "present" });
+    // Clearing it later leaves resolution to the next start, as `--clear` says.
+    await clearReleaseSelection({ infraDir });
+    expect(await ensureReleaseOverlay({ infraDir, docker })).toMatchObject({
+      status: "resolved",
+      release: "deadbeef",
+    });
+  });
+
+  it("refuses while the previous agent's update is unfinished, until it is cleared", async () => {
+    const { infraDir, legacy } = heldInfra("omx-release-held-transaction-");
+    mkdirSync(legacy.store, { mode: 0o700 });
+    writeFileSync(join(legacy.store, "transaction.json"), "{}", { mode: 0o600 });
+    const docker = fakeDocker();
+    const held = await ensureReleaseOverlay({ infraDir, docker });
+    expect(held.status === "held" && held.reason).toContain(
+      "the previous agent's release update is unfinished",
+    );
+    expect(docker).not.toHaveBeenCalled();
+    await clearReleaseSelection({ infraDir });
+    expect((await ensureReleaseOverlay({ infraDir, docker })).status).toBe("resolved");
+  });
 });

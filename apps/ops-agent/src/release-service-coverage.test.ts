@@ -15,7 +15,7 @@ const imageId = `sha256:${"a".repeat(64)}`;
 function fixture(mode = "matching", crash = false) {
   const root = mkdtempSync(join(tmpdir(), "openmapx-release-coverage-"));
   roots.push(root);
-  const directory = join(root, "infra/docker/.ops-agent-releases");
+  const directory = services.releaseStatePaths(join(root, "infra/docker")).store;
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const manifest = services.parseReleaseManifest(
     JSON.stringify({
@@ -35,9 +35,9 @@ function fixture(mode = "matching", crash = false) {
   writeFileSync(join(directory, "test-release.json"), services.canonicalReleaseManifest(manifest), {
     mode: 0o600,
   });
-  mkdirSync(join(root, "infra/docker/.trusted-config-current"), { recursive: true });
+  mkdirSync(join(root, "infra/docker", services.CURRENT_CONFIGURATION), { recursive: true });
   writeFileSync(
-    join(root, "infra/docker/.trusted-config-current/docker-compose.generated.yml"),
+    join(root, "infra/docker", services.CURRENT_CONFIGURATION, "docker-compose.generated.yml"),
     "services: {}\n",
   );
   const calls: string[][] = [];
@@ -96,7 +96,9 @@ describe("complete administrative release coverage", () => {
     await expect(f.effects.apply("test-release", [...ids], f.context)).rejects.toThrow(/host/i);
     expect(f.calls).toEqual([]);
     expect(existsSync(join(f.directory, "transaction.json"))).toBe(false);
-    expect(existsSync(join(f.root, "infra/docker/docker-compose.release.yml"))).toBe(false);
+    expect(existsSync(services.releaseStatePaths(join(f.root, "infra/docker")).overlay)).toBe(
+      false,
+    );
     expect(f.context.emitLog).toHaveBeenCalledWith(
       "stderr",
       expect.stringContaining(
@@ -166,7 +168,7 @@ describe("complete administrative release coverage", () => {
     async (mode) => {
       const f = fixture("matching", true);
       await expect(f.effects.apply("test-release", [...ids], f.context)).rejects.toThrow("crash");
-      const overlayPath = join(f.root, "infra/docker/docker-compose.release.yml");
+      const overlayPath = services.releaseStatePaths(join(f.root, "infra/docker")).overlay;
       const before = readFileSync(overlayPath, "utf8");
       const changed = fixture(mode);
       const recovery = createDefaultReleaseEffects(f.root, f.cli, {

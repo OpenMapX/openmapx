@@ -75,6 +75,15 @@ function safeDirectory(stat: BigIntStats, expectedUid: bigint): boolean {
   );
 }
 
+/**
+ * An anchor directory: this user's own, not merely consistent with itself, so
+ * one another account put in its place is refused.
+ */
+function safeRoot(stat: BigIntStats): boolean {
+  const owner = process.geteuid?.();
+  return safeDirectory(stat, owner === undefined ? stat.uid : BigInt(owner));
+}
+
 function safeFile(
   stat: BigIntStats,
   expectedUid: bigint,
@@ -149,7 +158,7 @@ export function readDescriptorAnchoredUtf8(
     );
     descriptors.push(rootDescriptor);
     const rootIdentity = fstatSync(rootDescriptor, { bigint: true });
-    if (!safeDirectory(rootIdentity, rootIdentity.uid)) throw new Error("unsafe root");
+    if (!safeRoot(rootIdentity)) throw new Error("unsafe root");
     opened.push({
       descriptor: rootDescriptor,
       identity: rootIdentity,
@@ -271,7 +280,7 @@ export function hashDescriptorAnchoredFile(
     );
     descriptors.push(rootDescriptor);
     const rootIdentity = fstatSync(rootDescriptor, { bigint: true });
-    if (!safeDirectory(rootIdentity, rootIdentity.uid)) throw new Error("unsafe root");
+    if (!safeRoot(rootIdentity)) throw new Error("unsafe root");
     opened.push({
       descriptor: rootDescriptor,
       identity: rootIdentity,
@@ -386,7 +395,7 @@ export function listDescriptorAnchoredDirectory(
     );
     descriptors.push(rootDescriptor);
     const rootIdentity = fstatSync(rootDescriptor, { bigint: true });
-    if (!safeDirectory(rootIdentity, rootIdentity.uid)) throw new Error("unsafe root");
+    if (!safeRoot(rootIdentity)) throw new Error("unsafe root");
     opened.push({
       descriptor: rootDescriptor,
       identity: rootIdentity,
@@ -507,7 +516,7 @@ export function statDescriptorAnchoredEntry(
     );
     descriptors.push(rootDescriptor);
     const rootIdentity = fstatSync(rootDescriptor, { bigint: true });
-    if (!safeDirectory(rootIdentity, rootIdentity.uid)) throw new Error("unsafe root");
+    if (!safeRoot(rootIdentity)) throw new Error("unsafe root");
     opened.push({
       descriptor: rootDescriptor,
       identity: rootIdentity,

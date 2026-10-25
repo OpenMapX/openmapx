@@ -13,9 +13,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { appendErasureRequest, initializeErasureJournal } from "@openmapx/core/erasure-journal";
+import { services as coreServices } from "@openmapx/core/server";
 import { execa } from "execa";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -903,12 +904,12 @@ describe("discoverBackupableServices", () => {
       id: "tileserver",
       volumes: [{ name: "openmapx-tiles", mountAt: "/data", backup: true, backupMode: "tar" }],
     });
-    mkdirSync(join(tmp, "infra", "docker"), { recursive: true });
-    writeFileSync(
-      join(tmp, "infra", "docker", "service-selection.json"),
-      JSON.stringify({ selected: ["postgis", "tileserver"] }),
-      "utf-8",
-    );
+    const selection = coreServices.serviceSelectionPath(join(tmp, "infra", "docker"));
+    mkdirSync(dirname(selection), { recursive: true, mode: 0o700 });
+    writeFileSync(selection, JSON.stringify({ selected: ["postgis", "tileserver"] }), {
+      encoding: "utf-8",
+      mode: 0o600,
+    });
 
     const out = await discoverBackupableServices({ rootDir: tmp });
 

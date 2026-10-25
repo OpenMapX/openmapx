@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   type ConfigurationInput,
@@ -11,8 +11,10 @@ import {
   withConfigurationGenerationWriter,
 } from "../configuration-generation";
 import {
+  CURRENT_CONFIGURATION,
   readDesiredSelection,
   readServiceSelectionFile,
+  serviceSelectionPath,
   stackComposeArgs,
   writeServiceSelectionFile,
 } from "../deployment";
@@ -77,7 +79,7 @@ describe("configuration generations", () => {
     expect(first.enabledServiceIds).toEqual(["alpha"]);
     expect(readAppliedServiceIds(infraDir, services)).toEqual(new Set(["alpha"]));
     const compose = readFileSync(
-      join(infraDir, ".trusted-config-current", "docker-compose.generated.yml"),
+      join(infraDir, CURRENT_CONFIGURATION, "docker-compose.generated.yml"),
       "utf8",
     );
     expect(compose).toContain("alpha:");
@@ -130,7 +132,7 @@ describe("configuration generations", () => {
 
     expect(readAppliedConfiguration(infraDir)).toEqual(saved);
     const compose = readFileSync(
-      join(infraDir, ".trusted-config-current", "docker-compose.generated.yml"),
+      join(infraDir, CURRENT_CONFIGURATION, "docker-compose.generated.yml"),
       "utf8",
     );
     expect(compose).not.toContain("beta:");
@@ -141,7 +143,7 @@ describe("configuration generations", () => {
       input: input({ ...saved, selectedRoots: ["alpha", "beta"] }),
     });
     const enabled = readFileSync(
-      join(infraDir, ".trusted-config-current", "docker-compose.generated.yml"),
+      join(infraDir, CURRENT_CONFIGURATION, "docker-compose.generated.yml"),
       "utf8",
     );
     expect(enabled).toContain("PUBLIC_SETTING: kept");
@@ -224,7 +226,9 @@ describe("desired selection", () => {
 
   it("rejects a malformed selection file", () => {
     const { infraDir } = checkout();
-    writeFileSync(join(infraDir, "service-selection.json"), '{"selected":"valhalla"}');
+    const path = serviceSelectionPath(infraDir);
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    writeFileSync(path, '{"selected":"valhalla"}', { mode: 0o600 });
     expect(() => readDesiredSelection(infraDir, {})).toThrow(/expected "selected" array/);
   });
 });
@@ -233,7 +237,7 @@ describe("stack compose arguments", () => {
   it("addresses the stack as one project with the deployment environment", () => {
     const paths = {
       infraDir: "/stack",
-      composePath: "/stack/.trusted-config-current/docker-compose.generated.yml",
+      composePath: `/stack/${CURRENT_CONFIGURATION}/docker-compose.generated.yml`,
       composeReleasePath: "/stack/docker-compose.release.yml",
     };
     expect(stackComposeArgs(paths, () => true)).toEqual([
@@ -241,14 +245,14 @@ describe("stack compose arguments", () => {
       "--env-file",
       "/stack/.env",
       "-f",
-      "/stack/.trusted-config-current/docker-compose.generated.yml",
+      `/stack/${CURRENT_CONFIGURATION}/docker-compose.generated.yml`,
       "-f",
       "/stack/docker-compose.release.yml",
     ]);
     expect(stackComposeArgs(paths, () => false)).toEqual([
       "compose",
       "-f",
-      "/stack/.trusted-config-current/docker-compose.generated.yml",
+      `/stack/${CURRENT_CONFIGURATION}/docker-compose.generated.yml`,
     ]);
   });
 });

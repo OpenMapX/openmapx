@@ -702,7 +702,7 @@ produce warnings rather than errors, so the manifest still loads.
 
 CLI rendering and trusted ops configuration apply share a single writer boundary
 in core. `withConfigurationGenerationWriter(infraDir, run, signal?)` acquires
-`.trusted-config-writer` before reading inputs and holds it through staging,
+`state/ops-agent/configuration/.writer` before reading inputs and holds it through staging,
 initialization/pruning, pointer activation, follow-up files and cleanup. Its
 callback may commit once. Standalone `commitConfigurationGeneration` and
 `initializeConfigurationGenerations` acquire the same ownership.
