@@ -351,6 +351,34 @@ describe("transitousApiKeysLeftBehindWarning", () => {
     );
   });
 
+  it("prints no name that could carry terminal controls, only counts it", () => {
+    writeLegacy(
+      {
+        "de/BVG": "one",
+        "de/\u001b]8;;https://evil.example\u0007click\u001b]8;;\u0007": "two",
+        "de/‮gnp.exe": "three",
+        "de/line\nbreak": "four",
+      },
+      0o664,
+    );
+    ensureTransitousApiKeysFile(tmp);
+
+    const warning = transitousApiKeysLeftBehindWarning(tmp) ?? "";
+    expect(warning).toContain("sets 4 keys that");
+    expect(warning).toContain("(de/BVG and 3 more)");
+    const controls = [...warning].filter((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return (
+        code < 0x20 ||
+        (code >= 0x7f && code <= 0x9f) ||
+        (code >= 0x202a && code <= 0x202e) ||
+        (code >= 0x2066 && code <= 0x2069)
+      );
+    });
+    expect(controls).toEqual([]);
+    expect(warning).not.toContain("evil.example");
+  });
+
   it("lists at most ten names", () => {
     const keys = Object.fromEntries(
       Array.from({ length: 12 }, (_, index) => [`de/S${String(index).padStart(2, "0")}`, "k"]),

@@ -40,6 +40,9 @@ export { DEFAULT_TRANSITOUS_REPO_URL };
 export const TRANSITOUS_API_KEYS_DIRECTORY = "transitous-api-keys";
 export const TRANSITOUS_API_KEYS_FILENAME = "api-keys.json";
 const TRANSITOUS_API_KEYS_MODE = 0o600;
+/** A key name that is safe to print: letters, digits and plain punctuation, no controls. */
+const SHOWN_KEY_NAME =
+  /^[\p{L}\p{N}][\p{L}\p{N} ._()&'+-]{0,63}\/[\p{L}\p{N}][\p{L}\p{N} ._()&'+,-]{0,127}$/u;
 const MAX_TRANSITOUS_API_KEYS_BYTES = 1024 * 1024;
 
 export function transitousApiKeysPath(infraDir: string): string {
@@ -254,8 +257,12 @@ export function transitousApiKeysLeftBehindWarning(rootDir?: string): string | n
     "reason" in refusal
       ? `it was not copied because ${refusal.reason}`
       : `${shownCurrent} already existed, so it is no longer copied`;
-  const shown = missing.slice(0, 10).join(", ");
-  const more = missing.length > 10 ? ` and ${missing.length - 10} more` : "";
+  // The earlier file may be one others could write: only names shaped like
+  // the template's `<region>/<source>` reach a terminal or the panel's log.
+  const printable = missing.filter((name) => SHOWN_KEY_NAME.test(name));
+  const shown = printable.slice(0, 10).join(", ") || "none shown";
+  const unshown = missing.length - Math.min(printable.length, 10);
+  const more = unshown > 0 ? ` and ${unshown} more` : "";
   return `The earlier Transitous API keys file ${shownLegacy} sets ${missing.length} key${missing.length === 1 ? "" : "s"} that ${shownCurrent} doesn't (${shown}${more}): ${why}. ${fix}`;
 }
 
