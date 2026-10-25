@@ -302,13 +302,6 @@
       "when": 1792873638631,
       "tag": "0042_integration_install_transactions",
       "breakpoints": true
-    },
-    {
-      "idx": 43,
-      "version": "7",
-      "when": 1792945247133,
-      "tag": "0043_scrub_extension_url_credentials",
-      "breakpoints": true
     }
   ]
 }

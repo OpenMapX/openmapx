@@ -1137,21 +1137,6 @@ describe("removeExtension", () => {
     expect(renderMock).toHaveBeenCalledTimes(1);
   });
 
-  it("does not repeat a legacy repository locator while removing it", async () => {
-    const legacy =
-      "https://sentinel-user:sentinel-password@example.test/private?token=sentinel-query";
-    dbMock.queueSelect([{ id: "bundle-x" }]);
-    dbMock.queueSelect([{ extensionId: "bundle-x", kind: "service", componentId: "svc-one" }]);
-    dbMock.queueSelect([{ hash: REPO_ONE, url: legacy }]);
-    const ctx = makeCtx();
-
-    await removeExtension(ctx, "bundle-x");
-
-    expect(JSON.stringify(vi.mocked(ctx.log).mock.calls)).not.toMatch(
-      /sentinel-|example\.test|\/private/,
-    );
-  });
-
   it("keeps the extension record when the agent cannot remove its repository", async () => {
     dbMock.queueSelect([{ id: "bundle-x" }]);
     dbMock.queueSelect([{ extensionId: "bundle-x", kind: "service", componentId: "svc-one" }]);

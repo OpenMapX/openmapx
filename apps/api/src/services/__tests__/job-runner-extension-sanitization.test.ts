@@ -173,7 +173,7 @@ describe("extension job durable boundaries", () => {
     expect(persisted?.opsProjection.operations).toEqual(operations);
   });
 
-  it("redacts schemes containing legacy parser whitespace as a complete value", async () => {
+  it("redacts schemes containing URL-parser whitespace as a complete value", async () => {
     jobRunner.register("extension.install", async (ctx) => {
       await ctx.log(combinedWhitespaceUrl);
       await ctx.checkpoint({ diagnostic: `failed\t${spacedQuery}` });

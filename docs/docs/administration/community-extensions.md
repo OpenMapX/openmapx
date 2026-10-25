@@ -185,12 +185,6 @@ agent with the same credentials, and `app-api` can install any artifact as an
 admin anyway. What the agent guarantees is that every installed file is one it
 verified and recorded.
 
-### Upgrading from credential-bearing extension URLs
-
-The upgrade migration removes legacy unsafe extension locators from PostgreSQL job and provenance state. API startup also drops unsafe custom catalog sources and invalidates their cached entries without converting a query-dependent URL into a different acquisition. Operations-agent startup repairs affected integration records before recovery: installed files remain in place, but an installation whose recorded artifact locator was unsafe is marked as needing reinstall and is not trusted again until a clean extension is installed.
-
-Before upgrading, identify any extension acquisition URL containing a username, password, query, or fragment. Publish the manifest, artifact, or repository at a stable credential-free HTTPS URL, then reinstall the affected extension from that URL. Rotate every credential or signed token that appeared in an old URL; cleanup removes active platform copies but cannot revoke the value. Existing database, Redis, filesystem, log, or external backups can retain historical values, so apply the same retention and secure-erasure policy to those backups and any exported diagnostics.
-
 ### The service sandbox
 
 The sandbox is derived from provenance, not the manifest's `quality` label:

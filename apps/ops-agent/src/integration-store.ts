@@ -264,11 +264,6 @@ export class IntegrationStore {
     syncDirectory(directory);
   }
 
-  /** Atomically remove legacy unsafe locators before any recovery decision trusts them. */
-  private repairRecordLocators(): void {
-    for (const record of this.reading().repairable.values()) this.writeRecord(record);
-  }
-
   private deleteRecord(integrationId: string): void {
     rmSync(coreServices.integrationRecordPath(this.infraDir, integrationId), { force: true });
     syncDirectory(integrationRecordsDirectory(this.infraDir));
@@ -420,7 +415,6 @@ export class IntegrationStore {
    */
   async recover(): Promise<void> {
     await this.serialize(async () => {
-      this.repairRecordLocators();
       if (!existsSync(this.custom)) return;
       for (const name of readdirSync(this.custom)) {
         if (STAGE.test(name)) rmSync(join(this.custom, name), { recursive: true, force: true });

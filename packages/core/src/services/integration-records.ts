@@ -221,57 +221,6 @@ export function parseIntegrationRecord(value: unknown, integrationId: string): I
   return { version: INTEGRATION_RECORD_VERSION, integrationId, ...installation, pending };
 }
 
-export function repairIntegrationRecordLocators(
-  value: unknown,
-  integrationId: string,
-): { record: IntegrationRecord; changed: boolean } {
-  if (!isRecord(value)) throw new Error();
-  const repairInstallation = (
-    raw: Record<string, unknown>,
-  ): { value: Record<string, unknown>; changed: boolean } => {
-    const source = raw.source;
-    if (!isRecord(source) || source.kind !== "artifact") return { value: raw, changed: false };
-    try {
-      if (typeof source.url !== "string") throw new Error();
-      const canonical = canonicalExtensionLocator(source.url);
-      if (canonical === source.url) return { value: raw, changed: false };
-      return { value: { ...raw, source: { ...source, url: canonical } }, changed: true };
-    } catch {
-      return {
-        value: {
-          ...raw,
-          status: "needs_reinstall",
-          reason: "Its recorded artifact locator is no longer accepted; reinstall it.",
-          source: null,
-          files: [],
-        },
-        changed: true,
-      };
-    }
-  };
-
-  const current = repairInstallation(value);
-  let repaired = current.value;
-  let changed = current.changed;
-  if (isRecord(repaired.pending)) {
-    const pending = repaired.pending;
-    const previous = isRecord(pending.previous)
-      ? repairInstallation(pending.previous)
-      : { value: pending.previous, changed: false };
-    const next = isRecord(pending.next)
-      ? repairInstallation(pending.next)
-      : { value: pending.next, changed: false };
-    if (previous.changed || next.changed) {
-      repaired = {
-        ...repaired,
-        pending: { ...pending, previous: previous.value, next: next.value },
-      };
-      changed = true;
-    }
-  }
-  return { record: parseIntegrationRecord(repaired, integrationId), changed };
-}
-
 /** The agent's own directory: owned by `uid` and reachable by nobody else. */
 function assertOwnDirectory(path: string, uid: number): void {
   const stats = lstatSync(path);
@@ -301,8 +250,6 @@ function readRecordBytes(path: string, uid: number): Buffer {
 
 export interface IntegrationRecordsReading {
   records: Map<string, IntegrationRecord>;
-  /** Structurally valid records whose locators must be atomically rewritten before trust. */
-  repairable: Map<string, IntegrationRecord>;
   /** Record files that could not be read, by integration id. */
   unreadable: string[];
 }
@@ -319,13 +266,11 @@ export function readIntegrationRecords(
 ): IntegrationRecordsReading {
   const directory = integrationRecordsDirectory(infraDir);
   const records = new Map<string, IntegrationRecord>();
-  const repairable = new Map<string, IntegrationRecord>();
   const unreadable: string[] = [];
   try {
     lstatSync(directory);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT")
-      return { records, repairable, unreadable };
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { records, unreadable };
     throw error;
   }
   assertOwnDirectory(directory, uid);
@@ -336,18 +281,12 @@ export function readIntegrationRecords(
     try {
       const bytes = readRecordBytes(join(directory, name), uid);
       const parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-      const repaired = repairIntegrationRecordLocators(parsed, integrationId);
-      if (repaired.changed) {
-        repairable.set(integrationId, repaired.record);
-        unreadable.push(integrationId);
-      } else {
-        records.set(integrationId, repaired.record);
-      }
+      records.set(integrationId, parseIntegrationRecord(parsed, integrationId));
     } catch {
       unreadable.push(integrationId);
     }
   }
-  return { records, repairable, unreadable };
+  return { records, unreadable };
 }
 
 /**

@@ -1,9 +1,8 @@
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import { mkdir, open, opendir, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import {
-  integrationSourceSchema,
   OPS_PUBLIC_ERROR_MESSAGES,
   type OpsErrorClass,
   type OpsJobState,
@@ -75,118 +74,6 @@ function iso(value: unknown): value is string {
   );
 }
 
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .filter(([, child]) => child !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
-function parseOperation(
-  value: unknown,
-  fingerprint: string,
-): { operation: OpsOperation; fingerprint: string } {
-  const current = opsOperationSchema.safeParse(value);
-  if (current.success) {
-    const normalizedFingerprint = opsOperationFingerprint(current.data);
-    if (normalizedFingerprint !== fingerprint) throw new Error("invalid");
-    return { operation: current.data, fingerprint: normalizedFingerprint };
-  }
-
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid");
-  const legacy = value as Record<string, unknown>;
-  if (
-    legacy.kind !== "integration.inspect" &&
-    legacy.kind !== "integration.publish" &&
-    legacy.kind !== "integration.adopt"
-  ) {
-    throw new Error("invalid");
-  }
-  if (!legacy.source || typeof legacy.source !== "object" || Array.isArray(legacy.source)) {
-    throw new Error("invalid");
-  }
-  const source = legacy.source as Record<string, unknown>;
-  if (
-    !exactKeys(source, ["kind", "url", "sha256"]) ||
-    source.kind !== "artifact" ||
-    typeof source.url !== "string" ||
-    source.url.length > 2_048 ||
-    !/^https:\/\/[^\s]+$/.test(source.url) ||
-    typeof source.sha256 !== "string" ||
-    !/^[a-f0-9]{64}$/.test(source.sha256)
-  ) {
-    throw new Error("invalid");
-  }
-  const legacyFingerprint = createHash("sha256").update(canonicalJson(legacy)).digest("hex");
-  if (legacyFingerprint !== fingerprint) throw new Error("invalid");
-  const operation = opsOperationSchema.parse({
-    ...legacy,
-    source: { kind: "upload", sha256: source.sha256 },
-  });
-  return { operation, fingerprint: opsOperationFingerprint(operation) };
-}
-
-function parseResult(kind: OpsOperation["kind"], value: unknown): unknown {
-  try {
-    return parseBoundedOpsResult(kind, value);
-  } catch (error) {
-    if (kind !== "installedIntegrations.inspect") throw error;
-  }
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid");
-  const raw = value as Record<string, unknown>;
-  if (!Array.isArray(raw.integrations)) throw new Error("invalid");
-  const legacyIndexes = new Set<number>();
-  const validationIntegrations = raw.integrations.map((value, index) => {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-    const integration = value as Record<string, unknown>;
-    const source = integration.source;
-    if (
-      !source ||
-      typeof source !== "object" ||
-      Array.isArray(source) ||
-      integrationSourceSchema.safeParse(source).success
-    ) {
-      return value;
-    }
-    const legacy = source as Record<string, unknown>;
-    if (
-      !exactKeys(legacy, ["kind", "url", "sha256"]) ||
-      legacy.kind !== "artifact" ||
-      typeof legacy.url !== "string" ||
-      legacy.url.length > 2_048 ||
-      !/^https:\/\/[^\s]+$/.test(legacy.url) ||
-      typeof legacy.sha256 !== "string" ||
-      !/^[a-f0-9]{64}$/.test(legacy.sha256)
-    ) {
-      return value;
-    }
-    legacyIndexes.add(index);
-    return {
-      ...integration,
-      source: { kind: "upload", sha256: legacy.sha256 },
-    };
-  });
-  if (legacyIndexes.size === 0) throw new Error("invalid");
-  parseBoundedOpsResult(kind, { ...raw, integrations: validationIntegrations });
-  const integrations = raw.integrations.map((value, index) => {
-    if (!legacyIndexes.has(index)) return value;
-    const integration = value as Record<string, unknown>;
-    return {
-      ...integration,
-      status: "needs_reinstall",
-      reason: "Its recorded artifact locator is no longer accepted; reinstall it.",
-      source: null,
-      files: [],
-    };
-  });
-  return parseBoundedOpsResult(kind, { ...raw, integrations });
-}
-
 function parseJob(value: unknown): PersistedOpsJob {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid");
   const raw = value as Record<string, unknown>;
@@ -225,17 +112,18 @@ function parseJob(value: unknown): PersistedOpsJob {
   ) {
     throw new Error("invalid");
   }
-  const parsedOperation = parseOperation(raw.operation, raw.fingerprint);
-  const operation = parsedOperation.operation;
-  if (opsResourceId(operation) !== raw.resourceId) {
+  const operation = opsOperationSchema.parse(raw.operation);
+  if (
+    opsOperationFingerprint(operation) !== raw.fingerprint ||
+    opsResourceId(operation) !== raw.resourceId
+  ) {
     throw new Error("invalid");
   }
   const state = raw.state as OpsJobState;
-  let result = raw.result;
   if (state === "succeeded") {
     if (raw.result === undefined || raw.errorClass !== undefined || raw.terminalAt === undefined)
       throw new Error("invalid");
-    result = parseResult(operation.kind, raw.result);
+    parseBoundedOpsResult(operation.kind, raw.result);
   } else if (state === "failed" || state === "timed_out") {
     if (raw.result !== undefined || raw.errorClass === undefined || raw.terminalAt === undefined)
       throw new Error("invalid");
@@ -246,12 +134,7 @@ function parseJob(value: unknown): PersistedOpsJob {
   ) {
     throw new Error("invalid");
   }
-  return {
-    ...(raw as unknown as PersistedOpsJob),
-    operation,
-    fingerprint: parsedOperation.fingerprint,
-    ...(state === "succeeded" ? { result } : {}),
-  };
+  return raw as unknown as PersistedOpsJob;
 }
 
 function parseFile(bytes: Uint8Array, maxEntries: number): PersistedOpsJob[] {

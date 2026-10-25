@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -11,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { opsOperationFingerprint } from "@openmapx/core/ops";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -46,20 +45,6 @@ function job(overrides: Partial<PersistedOpsJob> = {}): PersistedOpsJob {
     updatedAt: "2026-08-23T18:00:00.000Z",
     ...overrides,
   };
-}
-
-function legacyFingerprint(value: unknown): string {
-  const canonical = (item: unknown): string => {
-    if (Array.isArray(item)) return `[${item.map(canonical).join(",")}]`;
-    if (item && typeof item === "object") {
-      return `{${Object.entries(item as Record<string, unknown>)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, child]) => `${JSON.stringify(key)}:${canonical(child)}`)
-        .join(",")}}`;
-    }
-    return JSON.stringify(item);
-  };
-  return createHash("sha256").update(canonical(value)).digest("hex");
 }
 
 describe("durable ops job journal", () => {
@@ -167,181 +152,6 @@ describe("durable ops job journal", () => {
     expect(terminal.records()).toEqual([
       expect.objectContaining({ state: "succeeded", result: { changed: true } }),
     ]);
-  });
-
-  it.each(["integration.inspect", "integration.publish", "integration.adopt"] as const)(
-    "scrubs a legacy unsafe %s operation before startup reconciliation",
-    async (kind) => {
-      const path = join(root(), "journal", "jobs-v1.json");
-      mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-      const sha256 = "a".repeat(64);
-      const operation = {
-        kind,
-        ...(kind === "integration.inspect" ? {} : { integrationId: "weather-radar" }),
-        source: {
-          kind: "artifact",
-          url: "https://sentinel-user:sentinel-password@example.test/archive.tgz?token=sentinel",
-          sha256,
-        },
-      };
-      writeFileSync(
-        path,
-        JSON.stringify({
-          version: 1,
-          jobs: [
-            {
-              role: "api",
-              operation,
-              operationId: "job1_legacyOperation0",
-              operationKey: "opk1_legacyOperation0",
-              fingerprint: legacyFingerprint(operation),
-              resourceId: kind === "integration.inspect" ? kind : "weather-radar",
-              state: "queued",
-              submittedAt: "2026-08-23T18:00:00.000Z",
-              updatedAt: "2026-08-23T18:00:00.000Z",
-            },
-          ],
-        }),
-        { mode: 0o600 },
-      );
-
-      const journal = await openOpsJobJournal(path, {
-        now: () => new Date("2026-08-23T18:01:00.000Z"),
-      });
-
-      expect(journal.records()).toEqual([
-        expect.objectContaining({
-          operation: expect.objectContaining({ source: { kind: "upload", sha256 } }),
-          state: "failed",
-          errorClass: "recovery_required",
-        }),
-      ]);
-      expect(readFileSync(path, "utf8")).not.toMatch(/sentinel-|example\.test|archive\.tgz/);
-      await expect(openOpsJobJournal(path)).resolves.toBeDefined();
-    },
-  );
-
-  it("scrubs legacy unsafe inventory results without blocking startup", async () => {
-    const path = join(root(), "journal", "jobs-v1.json");
-    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-    const operation = { kind: "installedIntegrations.inspect" } as const;
-    const sha256 = "a".repeat(64);
-    const unsafeUrls = [
-      "https://sentinel-user:sentinel-password@example.test/archive.tgz",
-      "https://example.test/archive.tgz?token=sentinel-query",
-      "https://example.test/archive.tgz#sentinel-fragment",
-    ];
-    const safeIntegration = {
-      integrationId: "safe-inventory",
-      extensionId: "safe-extension",
-      status: "ok",
-      reason: null,
-      source: { kind: "artifact", url: "https://example.test/safe.tgz", sha256 },
-      files: [{ path: "manifest.json", sha256 }],
-      pending: null,
-    };
-    writeFileSync(
-      path,
-      JSON.stringify({
-        version: 1,
-        jobs: [
-          job({
-            operation,
-            fingerprint: opsOperationFingerprint(operation),
-            resourceId: operation.kind,
-            state: "succeeded",
-            terminalAt: "2026-08-23T18:00:00.000Z",
-            result: {
-              integrations: [
-                ...unsafeUrls.map((url, index) => ({
-                  integrationId: `legacy-${index}`,
-                  extensionId: null,
-                  status: "ok",
-                  reason: null,
-                  source: { kind: "artifact", url, sha256 },
-                  files: [{ path: "manifest.json", sha256 }],
-                  pending: null,
-                })),
-                safeIntegration,
-              ],
-              unrecorded: ["safe-unrecorded"],
-            },
-          }),
-        ],
-      }),
-      { mode: 0o600 },
-    );
-
-    const journal = await openOpsJobJournal(path);
-
-    expect(journal.records()[0]?.result).toEqual({
-      integrations: [
-        ...unsafeUrls.map((_url, index) => ({
-          integrationId: `legacy-${index}`,
-          extensionId: null,
-          status: "needs_reinstall",
-          reason: "Its recorded artifact locator is no longer accepted; reinstall it.",
-          source: null,
-          files: [],
-          pending: null,
-        })),
-        safeIntegration,
-      ],
-      unrecorded: ["safe-unrecorded"],
-    });
-    expect(readFileSync(path, "utf8")).not.toMatch(/sentinel-|archive\.tgz/);
-    await expect(openOpsJobJournal(path)).resolves.toBeDefined();
-  });
-
-  it.each([
-    { status: "invalid", files: [] },
-    {
-      status: "ok",
-      files: Array.from({ length: 129 }, (_, index) => ({
-        path: `file-${index.toString().padStart(3, "0")}`,
-        sha256: "a".repeat(64),
-      })),
-    },
-  ])("does not repair a malformed legacy inventory entry", async ({ status, files }) => {
-    const path = join(root(), "journal", "jobs-v1.json");
-    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-    const operation = { kind: "installedIntegrations.inspect" } as const;
-    writeFileSync(
-      path,
-      JSON.stringify({
-        version: 1,
-        jobs: [
-          job({
-            operation,
-            fingerprint: opsOperationFingerprint(operation),
-            resourceId: operation.kind,
-            state: "succeeded",
-            terminalAt: "2026-08-23T18:00:00.000Z",
-            result: {
-              integrations: [
-                {
-                  integrationId: "malformed",
-                  extensionId: null,
-                  status,
-                  reason: null,
-                  source: {
-                    kind: "artifact",
-                    url: "https://user:password@example.test/archive.tgz",
-                    sha256: "a".repeat(64),
-                  },
-                  files,
-                  pending: null,
-                },
-              ],
-              unrecorded: [],
-            },
-          }),
-        ],
-      }),
-      { mode: 0o600 },
-    );
-
-    await expect(openOpsJobJournal(path)).rejects.toThrow("Ops job journal is unavailable");
   });
 
   it("fails closed for symlink, hardlink, corrupt, and oversized journal files", async () => {

@@ -25,18 +25,6 @@ redis.call('SET', KEYS[2], ARGV[5], 'EX', ARGV[6])
 return 1
 `;
 
-export const REPAIR_EXTENSION_URL_STATE = `
-local sources = redis.call('GET', KEYS[1])
-if (ARGV[1] == '0' and sources ~= false) or
-   (ARGV[1] == '1' and sources ~= ARGV[2]) then return 0 end
-local catalog = redis.call('GET', KEYS[2])
-if (ARGV[3] == '0' and catalog ~= false) or
-   (ARGV[3] == '1' and catalog ~= ARGV[4]) then return -1 end
-redis.call('DEL', KEYS[2])
-redis.call('SET', KEYS[1], ARGV[5])
-return 1
-`;
-
 export interface ExtensionCacheKeys {
   sources: string;
   catalog: string;
@@ -102,30 +90,4 @@ export function publishExtensionCatalog(
     [...observed(sourceSnapshot), ...observed(catalogSnapshot), nextCatalog, String(ttl)],
     "catalog_conflict",
   );
-}
-
-export async function repairExtensionUrlState(
-  client: Pick<Redis, "eval">,
-  keys: ExtensionCacheKeys,
-  sourceSnapshot: string | null,
-  catalogSnapshot: string | null,
-  nextSources: string,
-): Promise<void> {
-  let result: unknown;
-  try {
-    result = await client.eval(
-      REPAIR_EXTENSION_URL_STATE,
-      2,
-      keys.sources,
-      keys.catalog,
-      ...observed(sourceSnapshot),
-      ...observed(catalogSnapshot),
-      nextSources,
-    );
-  } catch {
-    throw new ExtensionStoreError("source_storage_unavailable");
-  }
-  if (result === 0) throw new ExtensionStoreError("source_conflict");
-  if (result === -1) throw new ExtensionStoreError("catalog_conflict");
-  if (result !== 1) throw new ExtensionStoreError("source_storage_unavailable");
 }
