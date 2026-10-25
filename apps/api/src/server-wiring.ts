@@ -175,7 +175,17 @@ export function uniformErrorHandler(
 ) {
   const statusCode = error.statusCode ?? 500;
   if (statusCode >= 500) {
-    return reply.status(statusCode).send({ error: "Internal Server Error" });
+    // A stream can fail after Fastify copied its success headers to the raw
+    // response but before the first byte was committed. Clear those headers
+    // so the fixed error body is valid JSON and cannot inherit public caching.
+    reply.removeHeader("Content-Type");
+    reply.removeHeader("Content-Length");
+    reply.removeHeader("Cache-Control");
+    return reply
+      .header("Cache-Control", "no-store")
+      .type("application/json")
+      .status(statusCode)
+      .send({ error: "Internal Server Error" });
   }
   return reply.status(statusCode).send({ error: error.message });
 }
