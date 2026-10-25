@@ -18,7 +18,7 @@ describe("required production build gate", () => {
     expect(workflow).toMatch(/^ {2}build:\n/m);
     expect(workflow).toContain("pnpm build");
     expect(workflow).toContain("pnpm check-packed-packages");
-    expect(workflow).toMatch(/needs: \[[^\]]*build[^\]]*\]/);
+    expect(workflow).toMatch(/needs:\s*\[[^\]]*\bbuild\b[^\]]*\]/);
     expect(rootPackage.scripts["check-packed-packages"]).toBe(
       "node scripts/check-packed-packages.mjs",
     );
@@ -39,7 +39,7 @@ describe("required production build gate", () => {
     expect(smokePosition).toBeGreaterThan(buildPosition);
     // Neither step can be conditional or allowed to fail while the aggregate succeeds.
     expect(buildJob).not.toMatch(/continue-on-error:|^\s+if:/m);
-    expect(workflow).toMatch(/needs: \[[^\]]*build[^\]]*\]/);
+    expect(workflow).toMatch(/needs:\s*\[[^\]]*\bbuild\b[^\]]*\]/);
     expect(workflow).toContain("needs.build.result != 'success'");
   });
 
