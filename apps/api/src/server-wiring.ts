@@ -212,7 +212,7 @@ export const TILE_PUBLIC_PATTERNS = [
   /^\/api\/maptiler\//,
   /^\/api\/tiles\//,
   /^\/api\/traffic\//,
-  /^\/api\/offline\/packages\/(glyphs\/|omp2-[0-9a-f]{64}\/archive(?:$|\?))/,
+  /^\/api\/offline\/packages\/glyphs\//,
 ];
 
 export const EXPENSIVE_PUBLIC_PATTERNS = [

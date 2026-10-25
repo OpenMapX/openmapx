@@ -177,6 +177,7 @@ import type {
   GetOfflinePackageArchive415,
   GetOfflinePackageArchive429,
   GetOfflinePackageArchive500,
+  GetOfflinePackageArchive503,
   GetOfflinePackageArchiveHeaders,
   GetOfflinePackageCapability200,
   GetOfflinePackageCapability400,
@@ -1782,6 +1783,11 @@ export type getOfflinePackageArchiveResponse500 = {
   status: 500;
 };
 
+export type getOfflinePackageArchiveResponse503 = {
+  data: GetOfflinePackageArchive503;
+  status: 503;
+};
+
 export type getOfflinePackageArchiveResponseSuccess = (
   | getOfflinePackageArchiveResponse200
   | getOfflinePackageArchiveResponse206
@@ -1797,6 +1803,7 @@ export type getOfflinePackageArchiveResponseError = (
   | getOfflinePackageArchiveResponse416
   | getOfflinePackageArchiveResponse429
   | getOfflinePackageArchiveResponse500
+  | getOfflinePackageArchiveResponse503
 ) & {
   headers: Headers;
 };

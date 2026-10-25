@@ -491,6 +491,7 @@ export const dataManagerOperations = {
         headers: h.partialArchiveResponseHeadersSchema,
       },
       416: { ...empty, headers: h.unsatisfiableArchiveResponseHeadersSchema },
+      503: json(httpErrorSchema, h.authenticationRetryAfterHeadersSchema),
     },
   },
   headOfflinePackageArchive: {

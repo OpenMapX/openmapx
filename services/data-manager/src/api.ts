@@ -1,10 +1,12 @@
 import { createReadStream } from "node:fs";
 import { join } from "node:path";
+import type { Readable } from "node:stream";
 import {
   type OfflinePackageRequest,
   parseOfflinePackageRequest,
   type TrafficApplicationSnapshot,
 } from "@openmapx/core";
+import { RollingStreamBudget } from "@openmapx/core/server";
 import { feedState } from "@openmapx/db-schema";
 import { parseTransitSource } from "@openmapx/transitous-core";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -121,6 +123,13 @@ export interface ApiOptions {
   getTrafficConditionsApplied?: () => TrafficApplicationSnapshot;
   /** Offline package generator initialized by the process entrypoint. */
   offlinePackages?: OfflinePackageGenerator;
+  /** Process-local offline archive delivery budget; tests inject deterministic limits. */
+  offlinePackageDeliveryBudget?: RollingStreamBudget;
+  /** Test seam for blocked or erroring archive streams. */
+  offlinePackageArchiveStream?: (
+    path: string,
+    options?: { start: number; end: number },
+  ) => Readable;
   /** Search-index database/test seam. */
   searchIndexSql?: postgres.Sql;
   /** Test seam for the country-scale OSM search-index build. */
@@ -220,9 +229,39 @@ function parseByteRange(value: string, total: number): ByteRange | undefined {
   return { start, end: Math.min(requestedEnd, total - 1) };
 }
 
+const DEFAULT_OFFLINE_DELIVERY_MAX_BYTES = 32_000_000_000;
+const DEFAULT_OFFLINE_DELIVERY_WINDOW_MS = 600_000;
+const DEFAULT_OFFLINE_DELIVERY_MAX_CONCURRENT = 16;
+
+function envPositiveSafeInt(name: string, fallback: number): number {
+  const parsed = Number(process.env[name]?.trim());
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function createOfflinePackageDeliveryBudgetFromEnv(): RollingStreamBudget {
+  const maxConcurrent = envPositiveSafeInt(
+    "OFFLINE_PACKAGE_DELIVERY_MAX_CONCURRENT",
+    DEFAULT_OFFLINE_DELIVERY_MAX_CONCURRENT,
+  );
+  return new RollingStreamBudget({
+    maxBytesPerKey: envPositiveSafeInt(
+      "OFFLINE_PACKAGE_DELIVERY_MAX_BYTES",
+      DEFAULT_OFFLINE_DELIVERY_MAX_BYTES,
+    ),
+    windowMs: envPositiveSafeInt(
+      "OFFLINE_PACKAGE_DELIVERY_WINDOW_MS",
+      DEFAULT_OFFLINE_DELIVERY_WINDOW_MS,
+    ),
+    maxConcurrentPerKey: maxConcurrent,
+    maxConcurrentGlobal: maxConcurrent,
+  });
+}
+
 function registerOfflinePackageRoutes(
   app: FastifyInstance,
   generator: OfflinePackageGenerator,
+  deliveryBudget: RollingStreamBudget,
+  archiveStream: (path: string, options?: { start: number; end: number }) => Readable,
 ): void {
   const principal = (request: FastifyRequest): string | undefined => {
     const rawValues: string[] = [];
@@ -363,17 +402,13 @@ function registerOfflinePackageRoutes(
     }
     const manifest = await generator.getManifest(packageId);
     if (!manifest) return reply.code(404).send({ ok: false, error: "offline package not found" });
-    const archive = await generator.openArchive(packageId);
-    if (!archive) return reply.code(404).send({ ok: false, error: "offline package not found" });
-
-    const total = archive.byteLength;
+    const total = manifest.archive.byteLength;
     const ifRange = request.headers["if-range"];
     const rangeHeader = request.headers.range;
     const useRange =
       typeof rangeHeader === "string" && (!ifRange || ifRange === manifest.archive.etag);
     const range = useRange && rangeHeader ? parseByteRange(rangeHeader, total) : undefined;
     if (useRange && rangeHeader && !range) {
-      archive.release();
       return reply
         .code(416)
         .header("Content-Range", `bytes */${total}`)
@@ -391,26 +426,68 @@ function registerOfflinePackageRoutes(
     if (range) {
       headers["Content-Length"] = String(range.end - range.start + 1);
       headers["Content-Range"] = `bytes ${range.start}-${range.end}/${total}`;
-      reply.code(206);
     } else {
       headers["Content-Length"] = String(total);
-      reply.code(200);
     }
-    for (const [name, value] of Object.entries(headers)) reply.header(name, value);
+    const statusCode = range ? 206 : 200;
 
     if (request.method === "HEAD") {
-      archive.release();
-      return reply.send();
+      for (const [name, value] of Object.entries(headers)) reply.header(name, value);
+      return reply.code(statusCode).send();
     }
 
-    const stream = createReadStream(
-      archive.path,
-      range ? { start: range.start, end: range.end } : undefined,
-    );
-    const release = () => archive.release();
-    stream.once("close", release);
-    stream.once("error", release);
-    return reply.send(stream);
+    const admission = deliveryBudget.tryAcquire("offline-package-delivery");
+    if (!admission.allowed) {
+      reply.header("Retry-After", String(admission.retryAfterSeconds));
+      return reply.code(503).send({
+        ok: false,
+        error: "offline package delivery capacity exceeded",
+      });
+    }
+    const responseBytes = range ? range.end - range.start + 1 : total;
+    const byteAdmission = admission.lease.consume(responseBytes);
+    if (!byteAdmission.allowed) {
+      admission.lease.release();
+      reply.header("Retry-After", String(byteAdmission.retryAfterSeconds));
+      return reply.code(503).send({
+        ok: false,
+        error: "offline package delivery byte budget exceeded",
+      });
+    }
+
+    let archive: Awaited<ReturnType<OfflinePackageGenerator["openArchive"]>>;
+    try {
+      archive = await generator.openArchive(packageId);
+      if (!archive) {
+        admission.lease.release();
+        return reply.code(404).send({ ok: false, error: "offline package not found" });
+      }
+      const stream = archiveStream(
+        archive.path,
+        range ? { start: range.start, end: range.end } : undefined,
+      );
+      const release = () => {
+        archive?.release();
+        admission.lease.release();
+      };
+      const cancelStream = () => {
+        if (!stream.destroyed) stream.destroy(new Error("Offline package client disconnected"));
+        release();
+      };
+      stream.once("close", release);
+      stream.once("error", release);
+      request.raw.once("aborted", cancelStream);
+      reply.raw.once("close", () => {
+        if (!reply.raw.writableEnded) cancelStream();
+        else release();
+      });
+      for (const [name, value] of Object.entries(headers)) reply.header(name, value);
+      return reply.code(statusCode).send(stream);
+    } catch (error) {
+      archive?.release();
+      admission.lease.release();
+      throw error;
+    }
   };
 
   registerDataManagerRoute(app, "headOfflinePackageArchive", serveArchive);
@@ -448,7 +525,14 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     ...(opts.coverageSnapshotStore ? { snapshotStore: opts.coverageSnapshotStore } : {}),
   } satisfies CoverageApiOptions);
 
-  if (opts.offlinePackages) registerOfflinePackageRoutes(app, opts.offlinePackages);
+  if (opts.offlinePackages) {
+    registerOfflinePackageRoutes(
+      app,
+      opts.offlinePackages,
+      opts.offlinePackageDeliveryBudget ?? createOfflinePackageDeliveryBudgetFromEnv(),
+      opts.offlinePackageArchiveStream ?? ((path, options) => createReadStream(path, options)),
+    );
+  }
 
   function launchReservedTransitSync(jobId: string, countries: string[], trigger: string): void {
     if (opts.launchTransitSync) {

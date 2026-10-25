@@ -244,6 +244,11 @@ describe("data-manager wire contracts", () => {
         connection: "keep-alive",
       }),
     ).toEqual({ "retry-after": "30" });
+    expect(
+      dataManagerOperations.getOfflinePackageArchive.responses[503].headers?.parse({
+        "retry-after": "10",
+      }),
+    ).toEqual({ "retry-after": "10" });
   });
   it("keeps portable licensing structured and preserves semantic checks", () => {
     const body = {
