@@ -3,7 +3,9 @@ import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob, adminJobLog } from "../db/schema";
 import { dbActorId } from "../utils/actor";
-import { cancelAdminJobOperations } from "./admin-job-ops";
+import { sanitizeExtensionOutputString, sanitizeLogMetadata } from "../utils/safe-log-fields";
+import { cancelAdminJobOperations, normalizeAdminJobOperationsProjection } from "./admin-job-ops";
+import { normalizeExtensionInstallPayload } from "./extension-install-payload";
 import { type JobStatusEvent, jobEventBus, TERMINAL_JOB_STATUSES } from "./job-events";
 import { appApiRestartCheckpoint } from "./system-update-state";
 
@@ -32,6 +34,21 @@ export interface JobContext {
 }
 
 type JobHandler = (ctx: JobContext) => Promise<Record<string, unknown> | undefined>;
+function sanitizeExtensionRecord(value: Record<string, unknown>): Record<string, unknown> {
+  try {
+    const { opsProjection, ...ordinaryOutput } = value;
+    const serialized = JSON.stringify(ordinaryOutput, (_key, child: unknown) =>
+      typeof child === "string" ? sanitizeExtensionOutputString(child) : child,
+    );
+    if (serialized === undefined) return { value: "[redacted]" };
+    const sanitized = sanitizeLogMetadata(JSON.parse(serialized) as unknown);
+    if (opsProjection === undefined) return sanitized;
+    sanitized.opsProjection = normalizeAdminJobOperationsProjection(opsProjection);
+    return sanitized;
+  } catch {
+    return { value: "[redacted]" };
+  }
+}
 
 export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
   "backup.operation",
@@ -56,12 +73,14 @@ class AdminJobRunner {
     payload: Record<string, unknown>,
     createdBy?: string | null,
   ): Promise<string> {
+    const durablePayload =
+      type === "extension.install" ? normalizeExtensionInstallPayload(payload) : payload;
     const id = randomUUID();
     await db.insert(adminJob).values({
       id,
       type,
       status: "queued",
-      payload,
+      payload: durablePayload,
       // Synthetic (loopback) actors have no user row → store null, not a FK violation.
       createdBy: dbActorId(createdBy),
     });
@@ -409,20 +428,42 @@ class AdminJobRunner {
       return;
     }
 
+    const sanitizeExtensionOutput = type === "extension.install";
+    let executionPayload = payload;
+    if (sanitizeExtensionOutput) {
+      try {
+        executionPayload = normalizeExtensionInstallPayload(payload);
+      } catch {
+        const finishedAt = new Date();
+        const error = "Invalid extension install payload";
+        await db
+          .update(adminJob)
+          .set({ status: "failed", error, finishedAt })
+          .where(eq(adminJob.id, jobId));
+        this.announce(jobId, "failed", { error, finishedAt: finishedAt.toISOString() });
+        return;
+      }
+    }
+    const durableRecord = (value: Record<string, unknown>): Record<string, unknown> =>
+      sanitizeExtensionOutput ? sanitizeExtensionRecord(value) : value;
+    const durableLine = (value: string): string =>
+      sanitizeExtensionOutput ? sanitizeExtensionOutputString(value) : value;
+
     const ctx: JobContext = {
       jobId,
-      payload,
+      payload: executionPayload,
       signal,
-      checkpointResult,
+      checkpointResult: checkpointResult === null ? null : durableRecord(checkpointResult),
       log: async (line, stream = "stdout", sourceEventId, sourceSeq) => {
         const localSeq = this.logSeq.get(jobId) ?? 0;
         const seq = sourceSeq ?? localSeq;
         this.logSeq.set(jobId, Math.max(localSeq + 1, seq + 1));
         const id = sourceEventId ?? randomUUID();
         const createdAt = new Date();
+        const durableLogLine = durableLine(line);
         const insertion = db
           .insert(adminJobLog)
-          .values({ id, jobId, seq, stream, line, createdAt });
+          .values({ id, jobId, seq, stream, line: durableLogLine, createdAt });
         if (sourceEventId) await insertion.onConflictDoNothing();
         else await insertion;
         jobEventBus.publish(jobId, {
@@ -430,7 +471,7 @@ class AdminJobRunner {
           id,
           seq,
           stream,
-          line,
+          line: durableLogLine,
           createdAt: createdAt.toISOString(),
         });
       },
@@ -439,11 +480,12 @@ class AdminJobRunner {
         jobEventBus.publish(jobId, { type: "progress", progress });
       },
       checkpoint: async (result, progress) => {
+        const durableResult = durableRecord(result);
         await db
           .update(adminJob)
-          .set({ result, ...(progress === undefined ? {} : { progress }) })
+          .set({ result: durableResult, ...(progress === undefined ? {} : { progress }) })
           .where(eq(adminJob.id, jobId));
-        ctx.checkpointResult = result;
+        ctx.checkpointResult = durableResult;
         if (progress !== undefined) jobEventBus.publish(jobId, { type: "progress", progress });
       },
     };
@@ -462,10 +504,11 @@ class AdminJobRunner {
           .where(eq(adminJob.id, jobId));
         this.announce(jobId, "canceled", { finishedAt: finishedAt.toISOString() });
       } else {
-        const mergedResult =
+        const merged =
           result === undefined
             ? (ctx.checkpointResult ?? null)
             : { ...(ctx.checkpointResult ?? {}), ...result };
+        const mergedResult = merged === null ? null : durableRecord(merged);
         await db
           .update(adminJob)
           .set({ status: "success", result: mergedResult, finishedAt, progress: 100 })
@@ -480,7 +523,8 @@ class AdminJobRunner {
       jobEventBus.recordHandlerDuration(Date.now() - startedAtMs);
       const isAbort = signal.aborted || (err instanceof DOMException && err.name === "AbortError");
       const finishedAt = new Date();
-      const error = err instanceof Error ? err.message : String(err);
+      const rawError = err instanceof Error ? err.message : String(err);
+      const error = durableLine(rawError);
       await db
         .update(adminJob)
         .set(isAbort ? { status: "canceled", finishedAt } : { status: "failed", error, finishedAt })

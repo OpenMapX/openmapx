@@ -1,3 +1,7 @@
+import {
+  canonicalExtensionLocator,
+  extensionLocatorSchema,
+} from "@openmapx/extension-contracts/extension";
 import z from "zod/v4";
 
 export const OPS_PROTOCOL_VERSION = 1 as const;
@@ -298,10 +302,7 @@ const integrationTransactionIdSchema = z.string().regex(/^itx1_[a-f0-9]{24}$/);
 export const integrationSourceSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("artifact"),
-    url: z
-      .string()
-      .max(2_048)
-      .regex(/^https:\/\/[^\s]+$/),
+    url: extensionLocatorSchema.transform(canonicalExtensionLocator),
     sha256: sha256Schema,
   }),
   z.strictObject({ kind: z.literal("upload"), sha256: sha256Schema }),

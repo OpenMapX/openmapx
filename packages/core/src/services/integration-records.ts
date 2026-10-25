@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { agentStatePaths } from "./agent-state";
+import { canonicalExtensionLocator } from "./extension-schema";
 
 /**
  * The operations agent's records of the integrations it installed under
@@ -106,17 +107,21 @@ function parseSource(value: unknown): IntegrationSource | null {
   if (value === null) return null;
   if (!isRecord(value)) throw new Error();
   if (value.kind === "artifact") {
+    let canonical: string;
+    try {
+      canonical = typeof value.url === "string" ? canonicalExtensionLocator(value.url) : "";
+    } catch {
+      throw new Error();
+    }
     if (
-      typeof value.url !== "string" ||
-      !/^https:\/\/\S+$/.test(value.url) ||
-      value.url.length > 2_048 ||
+      canonical === "" ||
       typeof value.sha256 !== "string" ||
       !SHA256.test(value.sha256) ||
       Object.keys(value).length !== 3
     ) {
       throw new Error();
     }
-    return { kind: "artifact", url: value.url, sha256: value.sha256 };
+    return { kind: "artifact", url: canonical, sha256: value.sha256 };
   }
   if (value.kind === "upload") {
     if (

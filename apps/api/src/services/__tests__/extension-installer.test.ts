@@ -155,7 +155,7 @@ const MANIFEST = {
   id: "bundle-x",
   name: "Bundle X",
   version: "1.2.3",
-  services: [{ repo: "https://git.example/repo.git", service: "svc-one" }],
+  services: [{ repo: "https://github.com/example/repo.git", service: "svc-one" }],
   integrations: [
     { artifact: "https://ex.example/intg-one.tar.gz", id: "intg-one", sha256: "a".repeat(64) },
   ],
@@ -164,8 +164,8 @@ const MANIFEST = {
 const TWO_REPO_MANIFEST = {
   ...MANIFEST,
   services: [
-    { repo: "https://git.example/repo.git", service: "svc-one" },
-    { repo: "https://git.example/other.git", service: "svc-two" },
+    { repo: "https://github.com/example/repo.git", service: "svc-one" },
+    { repo: "https://github.com/example/other.git", service: "svc-two" },
   ],
   integrations: [],
 } satisfies ExtensionManifest;
@@ -179,7 +179,7 @@ const INTEGRATION_ONLY = {
   ],
 } satisfies ExtensionManifest;
 
-const REPO_URL = "https://git.example/repo.git";
+const REPO_URL = "https://github.com/example/repo.git";
 const REPO_ONE = "1111111111111111";
 const REPO_TWO = "2222222222222222";
 const COMMIT = "d".repeat(40);
@@ -541,6 +541,72 @@ describe("installExtension", () => {
     for (const order of writeOrders) expect(order).toBeGreaterThan(txOrder);
   });
 
+  it("canonicalizes every locator before host calls and durable bookkeeping", async () => {
+    const manifest = {
+      ...MANIFEST,
+      services: [
+        {
+          repo: "https://GitHub.com:443/example/releases/../repo.git",
+          service: "svc-one",
+        },
+      ],
+      integrations: [
+        {
+          ...MANIFEST.integrations[0],
+          artifact: "https://EX.example:443/releases/../intg-one.tar.gz",
+        },
+      ],
+    } satisfies ExtensionManifest;
+    const sourceUrl = "https://EX.example:443/releases/../extension.json";
+
+    await installExtension(makeCtx(), { manifest, sourceUrl, sourceTrust: "community" });
+
+    expect(inspectMock).toHaveBeenCalledWith(REPO_URL, undefined, expect.anything());
+    expect(publishIntegrationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: expect.objectContaining({ url: "https://ex.example/intg-one.tar.gz" }),
+      }),
+      expect.anything(),
+    );
+    const integrationInsert = dbMock.db.insert.mock.results[1]?.value as {
+      values: ReturnType<typeof vi.fn>;
+    };
+    expect(integrationInsert.values).toHaveBeenCalledWith(
+      expect.objectContaining({ repository: "https://ex.example/extension.json" }),
+    );
+    const extensionInsert = dbMock.db.insert.mock.results[2]?.value as {
+      values: ReturnType<typeof vi.fn>;
+    };
+    expect(extensionInsert.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceUrl: "https://ex.example/extension.json",
+        manifest: expect.objectContaining({
+          services: [expect.objectContaining({ repo: REPO_URL })],
+          integrations: [
+            expect.objectContaining({ artifact: "https://ex.example/intg-one.tar.gz" }),
+          ],
+        }),
+      }),
+    );
+  });
+
+  it("does not write repository, artifact, or source locators to job logs", async () => {
+    const ctx = makeCtx();
+    await installExtension(ctx, {
+      manifest: MANIFEST,
+      sourceUrl: "https://ex.example/extension.json",
+      sourceTrust: "community",
+    });
+
+    expect(JSON.stringify(vi.mocked(ctx.log).mock.calls)).not.toContain(REPO_URL);
+    expect(JSON.stringify(vi.mocked(ctx.log).mock.calls)).not.toContain(
+      MANIFEST.integrations[0].artifact,
+    );
+    expect(JSON.stringify(vi.mocked(ctx.log).mock.calls)).not.toContain(
+      "https://ex.example/extension.json",
+    );
+  });
+
   it("records the agent transaction with the repository in the bookkeeping transaction", async () => {
     await installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" });
 
@@ -637,6 +703,18 @@ describe("installExtension", () => {
     expect(ctx.log).toHaveBeenCalledWith(
       expect.stringContaining("could not settle integration intg-one"),
       "stderr",
+    );
+  });
+
+  it("scrubs provider details from cleanup diagnostics", async () => {
+    const secret = "provider failed\nht\ttps://example.test/private? sentinel-query";
+    settleIntegrationMock.mockRejectedValueOnce(new Error(secret));
+    const ctx = makeCtx();
+
+    await installExtension(ctx, { manifest: INTEGRATION_ONLY, sourceTrust: "community" });
+
+    expect(JSON.stringify(vi.mocked(ctx.log).mock.calls)).not.toMatch(
+      /sentinel-|example\.test|\/private/,
     );
   });
 
@@ -1019,7 +1097,7 @@ describe("installExtension", () => {
   });
 
   it("rejects on a platform version gate before touching any host or db state", async () => {
-    const manifest = { ...INTEGRATION_ONLY, platform: "9999.0.0" } satisfies ExtensionManifest;
+    const manifest = { ...INTEGRATION_ONLY, platform: "9999.0" } satisfies ExtensionManifest;
 
     await expect(
       installExtension(makeCtx(), { manifest, sourceTrust: "community" }),

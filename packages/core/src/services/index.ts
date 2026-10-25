@@ -134,11 +134,13 @@ export {
   embeddedBuiltInServiceManifests,
 } from "./embedded-built-in-services";
 export {
+  canonicalExtensionLocator,
   type ExtensionComponentRef,
   type ExtensionIntegrationComponent,
   type ExtensionManifest,
   type ExtensionServiceComponent,
   extensionComponentSummary,
+  extensionLocatorSchema,
   extensionManifestSchema,
   type VerifiedCatalogEntry,
   validateExtensionManifest,

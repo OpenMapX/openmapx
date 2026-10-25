@@ -39,6 +39,7 @@ vi.mock("../../services/extension-store", () => ({
   listExtensionSources: (...a: unknown[]) => listSources(...a),
   addExtensionSource: (...a: unknown[]) => addSource(...a),
   removeExtensionSource: (...a: unknown[]) => removeSource(...a),
+  normalizeExtensionLocator: (url: string) => url,
   isExtensionCompatible: () => true,
   PLATFORM_VERSION: "1.0",
 }));
@@ -201,7 +202,7 @@ describe("actual extension producers", () => {
       ...entry,
       componentList: [
         { kind: "service", id: "synthetic" },
-        { kind: "integration", id: "synthetic" },
+        { kind: "integration", id: "synthetic-integration" },
       ],
       compatible: true,
       platformVersion: "1.0",

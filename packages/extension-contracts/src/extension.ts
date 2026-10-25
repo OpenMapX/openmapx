@@ -18,26 +18,44 @@ const SHA256_REGEX = /^[a-f0-9]{64}$/i;
 // requirement targets.
 const COMPONENT_TARGET_REGEX = /^(service|integration):[a-z0-9][a-z0-9-]*$/;
 
-function isHttpsUrl(s: string): boolean {
+function parsePortableExtensionUrl(s: string): URL | null {
+  if (s.length > 2048) return null;
   try {
-    return new URL(s).protocol === "https:";
+    const url = new URL(s);
+    if (
+      url.protocol !== "https:" ||
+      url.username !== "" ||
+      url.password !== "" ||
+      url.search !== "" ||
+      url.hash !== ""
+    ) {
+      return null;
+    }
+    return url;
   } catch {
-    return false;
+    return null;
   }
 }
 
-function isGitUrl(s: string): boolean {
-  try {
-    const p = new URL(s).protocol;
-    return p === "https:" || p === "http:" || p === "git:" || p === "ssh:";
-  } catch {
-    return false;
-  }
+/** Canonicalize an extension locator without ever reflecting rejected input. */
+export function canonicalExtensionLocator(value: string): string {
+  const parsed = parsePortableExtensionUrl(value);
+  if (!parsed) throw new Error("Invalid extension locator");
+  return parsed.href;
 }
+
+/** A credential-free HTTPS locator that is safe to persist and portable across hosts. */
+export const extensionLocatorSchema = z
+  .string()
+  .max(2048)
+  .refine(
+    (value) => parsePortableExtensionUrl(value) !== null,
+    "must be a credential-free https URL without query or fragment",
+  );
 
 const serviceComponentSchema = z.object({
   // Authoritative git repo for the service (cloned + ref-pinned at install).
-  repo: z.string().refine(isGitUrl, "must be a git URL"),
+  repo: extensionLocatorSchema,
   // Pinned tag or commit SHA. Optional: when absent the installer pins to the
   // resolved HEAD SHA at install time (so it is still immutable until updated).
   ref: z.string().regex(REF_REGEX, "must be a tag or commit ref").optional(),
@@ -47,7 +65,7 @@ const serviceComponentSchema = z.object({
 
 const integrationComponentSchema = z.object({
   // Prebuilt `.tar.gz` artifact (immutable). HTTPS only.
-  artifact: z.string().refine(isHttpsUrl, "must be an https artifact URL"),
+  artifact: extensionLocatorSchema,
   // Mandatory content pin, verified before extraction.
   sha256: z.string().regex(SHA256_REGEX, "must be a 64-char hex sha256"),
   // The integration id (manifest id) this artifact installs.
@@ -80,7 +98,7 @@ export const verifiedCatalogEntrySchema = z
   .object({
     id: z.string().min(1).regex(ID_REGEX, "must be lowercase, hyphen-separated"),
     version: z.string().min(1),
-    manifest: z.string().refine(isHttpsUrl, "must be an https manifest URL"),
+    manifest: extensionLocatorSchema,
     manifestSha256: z.string().regex(SHA256_REGEX, "must be a 64-char hex sha256"),
     platform: platformVersionSchema.optional(),
   })

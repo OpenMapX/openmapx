@@ -53,8 +53,9 @@ Open **Extensions** in the admin panel. It has three tabs:
   published, and **Uninstall**.
 - **Sources**: the catalog sources the Browse list is merged from. The default
   OpenMapX catalog is built in and cannot be removed; you can add your own
-  (HTTPS only, no credentials in the URL) and they appear as the **community**
-  tier.
+  (HTTPS only, with no username, password, query, or fragment) and they appear
+  as the **community** tier. The same locator rule applies to direct manifest
+  URLs and every artifact or service repository declared by an extension.
 
 Select an entry, inspect the preview and confirm the installation. For an
 extension outside a catalog, use **Install from URL** with its `extension.json`
@@ -178,6 +179,7 @@ Install it again to fix it.
 Each record also names its owner: the extension that installed it, or the
 operator for an install made with the CLI. Only that owner changes or removes
 it, so an extension and a manual install don't replace each other by accident.
+
 This is bookkeeping, not a security boundary: `app-api` and the CLI reach the
 agent with the same credentials, and `app-api` can install any artifact as an
 admin anyway. What the agent guarantees is that every installed file is one it

@@ -195,6 +195,12 @@ function manifestDigest(files: IntegrationFileDigest[]): string {
   return manifest.sha256;
 }
 
+function canonicalSource(source: IntegrationSource): IntegrationSource {
+  return source.kind === "artifact"
+    ? { ...source, url: coreServices.canonicalExtensionLocator(source.url) }
+    : source;
+}
+
 export class IntegrationStore {
   private readonly custom: string;
   private readonly infraDir: string;
@@ -287,28 +293,27 @@ export class IntegrationStore {
 
   /** Fetch, verify, extract and validate `source` in a fresh staging directory. */
   private async stage(source: IntegrationSource, signal: AbortSignal): Promise<Staged> {
+    const normalizedSource = canonicalSource(source);
     this.ensureDirectories();
     const work = join(this.custom, `.agent-stage-${randomBytes(12).toString("hex")}`);
     mkdirSync(work, { mode: 0o755 });
     try {
       const archive = join(work, "archive.tar.gz");
-      if (source.kind === "artifact") {
+      if (normalizedSource.kind === "artifact") {
         try {
           await this.download({
-            url: new URL(source.url),
+            url: new URL(normalizedSource.url),
             destination: archive,
             maxBytes: MAX_ARTIFACT_BYTES,
             signal,
           });
-        } catch (error) {
-          throw new ArtifactUnavailableError(
-            `The archive could not be downloaded: ${(error as Error).message}`,
-          );
+        } catch {
+          throw new ArtifactUnavailableError("The archive could not be downloaded");
         }
       } else {
-        this.copyUpload(source.sha256, archive);
+        this.copyUpload(normalizedSource.sha256, archive);
       }
-      if (sha256File(archive) !== source.sha256) {
+      if (sha256File(archive) !== normalizedSource.sha256) {
         throw new Error("The archive does not have the expected SHA-256");
       }
       const tree = extractIntegrationArchive(
@@ -463,7 +468,8 @@ export class IntegrationStore {
     signal: AbortSignal,
   ): Promise<OpsResultFor<"integration.publish">> {
     return this.serialize(async () => {
-      const { integrationId, source } = operation;
+      const { integrationId } = operation;
+      const source = canonicalSource(operation.source);
       const extensionId = operation.extensionId ?? null;
       const target = this.target(integrationId);
       const record = this.readRecord(integrationId);
@@ -585,6 +591,7 @@ export class IntegrationStore {
   ): Promise<OpsResultFor<"integration.adopt">> {
     return this.serialize(async () => {
       const { integrationId } = operation;
+      const source = operation.source ? canonicalSource(operation.source) : undefined;
       const extensionId = operation.extensionId ?? null;
       const target = this.target(integrationId);
       const existing = this.readRecord(integrationId);
@@ -610,12 +617,12 @@ export class IntegrationStore {
         return { integrationId, status: "needs_reinstall" as const, reason };
       };
       if (!existsSync(target)) return needsReinstall("It is not installed.");
-      if (!operation.source) {
+      if (!source) {
         return needsReinstall("Nothing records the archive it was installed from.");
       }
       let staged: Staged;
       try {
-        staged = await this.stage(operation.source, signal);
+        staged = await this.stage(source, signal);
       } catch (error) {
         if (error instanceof ArtifactUnavailableError) {
           return { integrationId, status: "needs_reinstall", reason: error.message };
@@ -642,7 +649,7 @@ export class IntegrationStore {
           extensionId,
           status: "ok",
           reason: null,
-          source: operation.source,
+          source,
           files: staged.files,
           pending: null,
         });
