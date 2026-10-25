@@ -32,6 +32,10 @@ const PERCENT_USER_PASSWORD_URL = `https://user%2Ename:openmapx ${SECRET}@exampl
 const PLUS_USER_PASSWORD_URL = `https://user+name:openmapx ${SECRET}@example.test/archive.tgz`;
 const UNICODE_USER_PASSWORD_URL = `https://usér:openmapx ${SECRET}@example.test/archive.tgz`;
 const SPACED_USER_PASSWORD_URL = `https://user name:openmapx ${SECRET}@example.test/archive.tgz`;
+const SPACED_USER_URL = `https://user ${SECRET}@example.test/archive`;
+const PUNCTUATED_USER_PASSWORD_URL = `https://user!name:openmapx ${SECRET}@example.test/archive`;
+const EXTENSIONLESS_SPACE_QUERY_URL = `https://example.test/archive name?token=${SECRET}`;
+const EXTENSIONLESS_SPACE_FRAGMENT_URL = `https://example.test/archive name#${SECRET}`;
 const CONTROL_SPACE_QUERY_URL = `\u0001https://example.test/archive name.tgz?token=${SECRET}`;
 const SAFE_HOST_EMAIL_PROSE = "Contact https://example.test:443 owner@example.org for access.";
 const SAFE_URL_LEADING_PROSE = "https://example.test/archive.tgz is ready? Ask an operator.";
@@ -141,6 +145,10 @@ integration("extension URL credential cleanup migration", () => {
             `Downloading ${PLUS_USER_PASSWORD_URL}`,
             `Downloading ${UNICODE_USER_PASSWORD_URL}`,
             `Downloading ${SPACED_USER_PASSWORD_URL}`,
+            `Downloading ${SPACED_USER_URL}`,
+            `Downloading ${PUNCTUATED_USER_PASSWORD_URL}`,
+            `Downloading ${EXTENSIONLESS_SPACE_QUERY_URL}`,
+            `Downloading ${EXTENSIONLESS_SPACE_FRAGMENT_URL}`,
           ],
         })}),
         ('clean-extension', 'https://example.test/extension.json', ${sql.json({
@@ -190,9 +198,13 @@ integration("extension URL credential cleanup migration", () => {
               PLUS_USER_PASSWORD_URL,
               UNICODE_USER_PASSWORD_URL,
               SPACED_USER_PASSWORD_URL,
+              SPACED_USER_URL,
+              PUNCTUATED_USER_PASSWORD_URL,
+              EXTENSIONLESS_SPACE_QUERY_URL,
+              EXTENSIONLESS_SPACE_FRAGMENT_URL,
             ],
           })},
-          ${`Fetch failed for ${SPACE_LEADING_QUERY_URL}`}),
+          ${`Fetch failed for ${EXTENSIONLESS_SPACE_QUERY_URL}`}),
         ('safe-job', 'extension.install', ${sql.json({
           message: SAFE_HOST_EMAIL_PROSE,
           manifest: { homepage: SAFE_HOMEPAGE },
@@ -203,7 +215,7 @@ integration("extension URL credential cleanup migration", () => {
     `;
     await sql`
       INSERT INTO admin_job_log (id, job_id, line) VALUES
-        ('unsafe-log', 'unsafe-job', ${`Downloading ${SPACE_LEADING_FRAGMENT_URL}`}),
+        ('unsafe-log', 'unsafe-job', ${`Downloading ${SPACED_USER_URL}`}),
         ('safe-log', 'safe-job', ${SAFE_URL_LEADING_PROSE}),
         ('other-log', 'other-job', 'Keep exact');
     `;
@@ -245,7 +257,7 @@ integration("extension URL credential cleanup migration", () => {
           { id: "space-password", artifact: null, sha256: "f".repeat(64) },
         ],
         services: [{ service: "unsafe", repo: null }],
-        notes: [null, null, null, null, null, null, null, null, null],
+        notes: [null, null, null, null, null, null, null, null, null, null, null, null, null],
       },
     });
     const [integrationRow] = await sql<{ repository: string }[]>`

@@ -414,7 +414,9 @@ const EXTENSION_OUTPUT_URL = /\b(?:https?|git|ssh):/iu;
  */
 export function sanitizeExtensionOutputString(value: string): string {
   const normalized = value.replace(/[\t\n\r]/gu, "");
-  return EXTENSION_OUTPUT_URL.test(normalized) ? "[redacted-url]" : sanitizeLogString(value);
+  return EXTENSION_OUTPUT_URL.test(value) || EXTENSION_OUTPUT_URL.test(normalized)
+    ? "[redacted-url]"
+    : sanitizeLogString(value);
 }
 
 const PINO_RECORD_CORE_KEYS = new Set(["level", "time", "pid", "hostname", "name", "msg"]);

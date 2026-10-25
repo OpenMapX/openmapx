@@ -26,17 +26,25 @@ AS $$
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
            ~* '(git|ssh):[/\\]*[^/?#[:space:]]*@'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* 'https?:[/\\]*[[:alnum:]%+._~ -]+:[^0-9/?#\\[:space:]][^/?#\\]*@'
+           ~* 'https?:[/\\]*[^/?#@]*[[:space:]][^/?#@]*@[^/?#[:space:]]+[/\\]'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* 'https?:[/\\]*[[:alnum:]%+._~ -]+:[0-9]+[^0-9/?#\\[:space:]][^/?#\\]*@'
+           ~* '(git|ssh):[/\\]*[^/?#@]*[[:space:]][^/?#@]*@[^/?#[:space:]]+[/\\]'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(git|ssh):[/\\]*[[:alnum:]%+._~ -]+:[^0-9/?#[:space:]][^/?#]*@'
+           ~* 'https?:[/\\]*[-[:alnum:]!$&''()*+,;=%._~ ]+:[^0-9/?#\\[:space:]][^/?#\\]*@'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(git|ssh):[/\\]*[[:alnum:]%+._~ -]+:[0-9]+[^0-9/?#[:space:]][^/?#]*@'
+           ~* 'https?:[/\\]*[-[:alnum:]!$&''()*+,;=%._~ ]+:[0-9]+[^0-9/?#\\[:space:]][^/?#\\]*@'
+      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
+           ~* '(git|ssh):[/\\]*[-[:alnum:]!$&''()*+,;=%._~ ]+:[^0-9/?#[:space:]][^/?#]*@'
+      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
+           ~* '(git|ssh):[/\\]*[-[:alnum:]!$&''()*+,;=%._~ ]+:[0-9]+[^0-9/?#[:space:]][^/?#]*@'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
            ~* '(https?|git|ssh):[^[:space:]?#]*[?][^#[:space:]]+'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
            ~* '(https?|git|ssh):[^[:space:]#]*#[^[:space:]]+'
+      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
+           ~* '(https?|git|ssh):[^?#]*[^[:space:]?#][?][^#[:space:]]+'
+      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
+           ~* '(https?|git|ssh):[^#]*[^[:space:]#]#[^[:space:]]+'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
            ~* '(https?|git|ssh):[^?#]*[.][A-Za-z0-9_-]+[?][^#[:space:]]+'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
