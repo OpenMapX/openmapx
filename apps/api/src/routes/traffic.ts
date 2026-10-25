@@ -1,7 +1,12 @@
 import type { FastifyPluginAsync } from "fastify";
 import { getTrafficProvider } from "../services/traffic.factory";
 import { TrafficProviderHttpError } from "../services/traffic.provider";
+import { bindRequestAbort } from "../utils/request-abort.js";
 import { declareRouteAuth } from "../utils/route-auth";
+import { parseWebMercatorTileCoordinates } from "../utils/tile-coordinates.js";
+import { normalizeUpstreamResponseStream } from "../utils/upstream-response.js";
+
+const TOMTOM_TRAFFIC_MAX_ZOOM = 22;
 
 export const trafficRoute: FastifyPluginAsync = async (fastify) => {
   declareRouteAuth(fastify, "public");
@@ -21,21 +26,31 @@ export const trafficRoute: FastifyPluginAsync = async (fastify) => {
       },
     },
     handler: async (req, reply) => {
-      const z = Number(req.params.z);
-      const x = Number(req.params.x);
-      const y = Number(req.params.y);
-
-      if (![z, x, y].every((v) => Number.isFinite(v) && v >= 0)) {
+      const coords = parseWebMercatorTileCoordinates(
+        req.params.z,
+        req.params.x,
+        req.params.y,
+        TOMTOM_TRAFFIC_MAX_ZOOM,
+      );
+      if (!coords) {
         return reply.status(400).send({ message: "Invalid tile coordinates" });
       }
+      const { z, x, y } = coords;
+      reply.header("Cache-Control", "no-store");
+      const requestAbort = bindRequestAbort(req, reply);
 
       try {
-        const tile = await getTrafficProvider().getFlowTile(z, x, y);
+        const tile = await getTrafficProvider().getFlowTile(z, x, y, requestAbort.signal);
 
         reply.header("Cache-Control", tile.cacheControl ?? "public, max-age=30, s-maxage=30");
         reply.header("Cross-Origin-Resource-Policy", "cross-origin");
         reply.type(tile.contentType);
-        return reply.send(Buffer.from(tile.bytes));
+        return reply.send(
+          normalizeUpstreamResponseStream(
+            tile.body,
+            "Traffic tile provider returned an invalid response",
+          ),
+        );
       } catch (error) {
         const message = error instanceof Error ? error.message : "Traffic tile request failed";
         req.log.warn({ err: error, z, x, y }, "Traffic tile request failed");

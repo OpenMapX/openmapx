@@ -92,8 +92,28 @@ describe("uniformErrorHandler", () => {
     const app = await appThatThrows(new Error("db password xyz leaked"));
     const res = await app.inject({ method: "GET", url: "/boom" });
     expect(res.statusCode).toBe(500);
+    expect(res.headers["cache-control"]).toBe("no-store");
     expect(res.json()).toEqual({ error: "Internal Server Error" });
     expect(res.payload).not.toContain("leaked");
+    await app.close();
+  });
+
+  it("replaces stale success headers before serializing a 5xx response", async () => {
+    const app = Fastify({ logger: false });
+    app.setErrorHandler(uniformErrorHandler);
+    app.get("/boom", async (_request, reply) => {
+      reply.header("Cache-Control", "public, max-age=604800");
+      reply.type("image/png");
+      throw Object.assign(new Error("upstream detail"), { statusCode: 502 });
+    });
+    await app.ready();
+
+    const res = await app.inject({ method: "GET", url: "/boom" });
+
+    expect(res.statusCode).toBe(502);
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(res.headers["content-type"]).toContain("application/json");
+    expect(res.json()).toEqual({ error: "Internal Server Error" });
     await app.close();
   });
 });
