@@ -221,6 +221,78 @@ describe("durable ops job journal", () => {
     },
   );
 
+  it("scrubs legacy unsafe inventory results without blocking startup", async () => {
+    const path = join(root(), "journal", "jobs-v1.json");
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    const operation = { kind: "installedIntegrations.inspect" } as const;
+    const sha256 = "a".repeat(64);
+    const unsafeUrls = [
+      "https://sentinel-user:sentinel-password@example.test/archive.tgz",
+      "https://example.test/archive.tgz?token=sentinel-query",
+      "https://example.test/archive.tgz#sentinel-fragment",
+    ];
+    const safeIntegration = {
+      integrationId: "safe-inventory",
+      extensionId: "safe-extension",
+      status: "ok",
+      reason: null,
+      source: { kind: "artifact", url: "https://example.test/safe.tgz", sha256 },
+      files: [{ path: "manifest.json", sha256 }],
+      pending: null,
+    };
+    writeFileSync(
+      path,
+      JSON.stringify({
+        version: 1,
+        jobs: [
+          job({
+            operation,
+            fingerprint: opsOperationFingerprint(operation),
+            resourceId: operation.kind,
+            state: "succeeded",
+            terminalAt: "2026-08-23T18:00:00.000Z",
+            result: {
+              integrations: [
+                ...unsafeUrls.map((url, index) => ({
+                  integrationId: `legacy-${index}`,
+                  extensionId: null,
+                  status: "ok",
+                  reason: null,
+                  source: { kind: "artifact", url, sha256 },
+                  files: [{ path: "manifest.json", sha256 }],
+                  pending: null,
+                })),
+                safeIntegration,
+              ],
+              unrecorded: ["safe-unrecorded"],
+            },
+          }),
+        ],
+      }),
+      { mode: 0o600 },
+    );
+
+    const journal = await openOpsJobJournal(path);
+
+    expect(journal.records()[0]?.result).toEqual({
+      integrations: [
+        ...unsafeUrls.map((_url, index) => ({
+          integrationId: `legacy-${index}`,
+          extensionId: null,
+          status: "needs_reinstall",
+          reason: "Its recorded artifact locator is no longer accepted; reinstall it.",
+          source: null,
+          files: [],
+          pending: null,
+        })),
+        safeIntegration,
+      ],
+      unrecorded: ["safe-unrecorded"],
+    });
+    expect(readFileSync(path, "utf8")).not.toMatch(/sentinel-|archive\.tgz/);
+    await expect(openOpsJobJournal(path)).resolves.toBeDefined();
+  });
+
   it("fails closed for symlink, hardlink, corrupt, and oversized journal files", async () => {
     const base = root();
     const target = join(base, "target");

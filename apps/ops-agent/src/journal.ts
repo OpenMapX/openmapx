@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { mkdir, open, opendir, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import {
+  integrationSourceSchema,
   OPS_PUBLIC_ERROR_MESSAGES,
   type OpsErrorClass,
   type OpsJobState,
@@ -130,6 +131,53 @@ function parseOperation(
   return { operation, fingerprint: opsOperationFingerprint(operation) };
 }
 
+function parseResult(kind: OpsOperation["kind"], value: unknown): unknown {
+  try {
+    return parseBoundedOpsResult(kind, value);
+  } catch (error) {
+    if (kind !== "installedIntegrations.inspect") throw error;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid");
+  const raw = value as Record<string, unknown>;
+  if (!Array.isArray(raw.integrations)) throw new Error("invalid");
+  let changed = false;
+  const integrations = raw.integrations.map((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+    const integration = value as Record<string, unknown>;
+    const source = integration.source;
+    if (
+      !source ||
+      typeof source !== "object" ||
+      Array.isArray(source) ||
+      integrationSourceSchema.safeParse(source).success
+    ) {
+      return value;
+    }
+    const legacy = source as Record<string, unknown>;
+    if (
+      !exactKeys(legacy, ["kind", "url", "sha256"]) ||
+      legacy.kind !== "artifact" ||
+      typeof legacy.url !== "string" ||
+      legacy.url.length > 2_048 ||
+      !/^https:\/\/[^\s]+$/.test(legacy.url) ||
+      typeof legacy.sha256 !== "string" ||
+      !/^[a-f0-9]{64}$/.test(legacy.sha256)
+    ) {
+      return value;
+    }
+    changed = true;
+    return {
+      ...integration,
+      status: "needs_reinstall",
+      reason: "Its recorded artifact locator is no longer accepted; reinstall it.",
+      source: null,
+      files: [],
+    };
+  });
+  if (!changed) throw new Error("invalid");
+  return parseBoundedOpsResult(kind, { ...raw, integrations });
+}
+
 function parseJob(value: unknown): PersistedOpsJob {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid");
   const raw = value as Record<string, unknown>;
@@ -174,10 +222,11 @@ function parseJob(value: unknown): PersistedOpsJob {
     throw new Error("invalid");
   }
   const state = raw.state as OpsJobState;
+  let result = raw.result;
   if (state === "succeeded") {
     if (raw.result === undefined || raw.errorClass !== undefined || raw.terminalAt === undefined)
       throw new Error("invalid");
-    parseBoundedOpsResult(operation.kind, raw.result);
+    result = parseResult(operation.kind, raw.result);
   } else if (state === "failed" || state === "timed_out") {
     if (raw.result !== undefined || raw.errorClass === undefined || raw.terminalAt === undefined)
       throw new Error("invalid");
@@ -192,6 +241,7 @@ function parseJob(value: unknown): PersistedOpsJob {
     ...(raw as unknown as PersistedOpsJob),
     operation,
     fingerprint: parsedOperation.fingerprint,
+    ...(state === "succeeded" ? { result } : {}),
   };
 }
 

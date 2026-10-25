@@ -7,9 +7,17 @@ LANGUAGE sql
 IMMUTABLE
 AS $$
   SELECT regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(https?|git|ssh):[/\\]*[^/?#]*@'
+           ~* 'https?:[/\\]*[^/?#\\]*@'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(https?|git|ssh):[^?#]*[?#]'
+           ~* '(git|ssh):[/\\]*[^/?#]*@'
+      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
+           ~* '(https?|git|ssh):[^[:space:]?#]*[?][^#[:space:]]+'
+      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
+           ~* '(https?|git|ssh):[^[:space:]#]*#[^[:space:]]+'
+      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
+           ~* '^[[:space:]]*(https?|git|ssh):[^?#]*[?][^#]+'
+      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
+           ~* '^[[:space:]]*(https?|git|ssh):[^#]*#.+$'
 $$;
 --> statement-breakpoint
 CREATE OR REPLACE FUNCTION public.openmapx_scrub_extension_json_0043(value jsonb)

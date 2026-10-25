@@ -18,6 +18,11 @@ const TAB_BEFORE_QUERY_URL = `https://example.test/archive.tgz\t?token=${SECRET}
 const NEWLINE_BEFORE_FRAGMENT_URL = `https://example.test/archive.tgz\n#${SECRET}`;
 const TAB_IN_SCHEME_URL = `ht\ttps://user:${SECRET}@example.test/archive.tgz`;
 const SPACE_IN_PASSWORD_URL = `https://user:openmapx ${SECRET}@example.test/archive.tgz`;
+const SAFE_BACKSLASH_AT_URL = String.raw`https:\\example.test\releases\@scope.tgz`;
+const SAFE_EMPTY_QUERY_URL = "https://example.test/releases/empty-query.tgz?";
+const SAFE_EMPTY_FRAGMENT_URL = "https://example.test/releases/empty-fragment.tgz#";
+const SAFE_QUESTION_PROSE =
+  "Download https://example.test/archive.tgz when ready? Ask an operator.";
 
 const integration = describe.runIf(process.env.OPENMAPX_RUN_DATABASE_TESTS === "1");
 
@@ -114,6 +119,14 @@ integration("extension URL credential cleanup migration", () => {
         })}),
         ('clean-extension', 'https://example.test/extension.json', ${sql.json({
           integrations: [{ id: "clean", artifact: "https://example.test/clean.tgz" }],
+        })}),
+        ('safe-provenance', ${SAFE_BACKSLASH_AT_URL}, ${sql.json({
+          integrations: [
+            { id: "safe", artifact: SAFE_BACKSLASH_AT_URL },
+            { id: "empty-query", artifact: SAFE_EMPTY_QUERY_URL },
+            { id: "empty-fragment", artifact: SAFE_EMPTY_FRAGMENT_URL },
+          ],
+          description: SAFE_QUESTION_PROSE,
         })});
     `;
     await sql`
@@ -157,6 +170,10 @@ integration("extension URL credential cleanup migration", () => {
              (SELECT row_to_json(l)::text FROM admin_job_log l WHERE l.job_id = j.id) AS log
         FROM admin_job j WHERE id = 'other-job'
     `;
+    const [safeBefore] = await sql`
+      SELECT row_to_json(e)::text AS extension
+        FROM installed_extension e WHERE id = 'safe-provenance'
+    `;
 
     await applyMigration();
 
@@ -193,6 +210,11 @@ integration("extension URL credential cleanup migration", () => {
         FROM admin_job j WHERE id = 'other-job'
     `;
     expect(unrelatedAfter).toEqual(unrelatedBefore);
+    const [safeAfter] = await sql`
+      SELECT row_to_json(e)::text AS extension
+        FROM installed_extension e WHERE id = 'safe-provenance'
+    `;
+    expect(safeAfter).toEqual(safeBefore);
 
     await applyMigration();
     expect(await snapshot()).toBe(first);
