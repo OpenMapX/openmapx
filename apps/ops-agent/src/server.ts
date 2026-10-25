@@ -14,6 +14,7 @@ import {
   controlHeaders as readControlHeaders,
   reconcileControlRetention,
   registerControlRetentionJournal,
+  repairControlJournalTerminal,
   requireControlJournalRetention,
   restoreAdmittedControlExecution,
   retainAdmittedControlExecution,
@@ -88,6 +89,11 @@ import {
   type OpsTrustedClaim,
 } from "./runtime";
 
+import {
+  type VerifiedTerminalClaimCleanup,
+  verifiesTerminalClaimCleanup,
+} from "./trusted-config-source";
+
 const DEFAULT_BODY_LIMIT = 32 * 1024;
 const DEFAULT_CONCURRENCY = 4;
 const DEFAULT_REPLAY_ENTRIES = 10_000;
@@ -144,6 +150,7 @@ export interface OpsAuditEvent {
 
 export interface BuildOpsAgentServerOptions {
   controlInstallation?: ControlInstallation;
+  terminalClaimCleanup?: VerifiedTerminalClaimCleanup;
   tokens: Record<OpsRole, string>;
   releaseRecovery?: { ready: boolean; reason?: "recovery_required" };
   resourcePolicy?: OpsResourcePolicy;
@@ -1086,52 +1093,93 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     };
   });
 
-  // No replay during restart. Rejoin only the original signed adoption and settle
-  // from an already retained own-effect receipt; absent evidence keeps its fence.
+  // No replay during restart. Rejoin original signed admissions/adoptions and
+  // retained own-effect proof; absent containment evidence keeps its fence.
   app.addHook("onReady", async () => {
     let changed = false;
     for (const job of jobsById.values()) {
-      if (!job.controlAdoption) continue;
-      try {
-        if (!options.controlInstallation) throw Error("Control trust unavailable");
-        const execution = executionFor(job);
-        if (job.state === "succeeded") {
-          verifyRetainedArtifactTargetSettlement(
-            options.controlInstallation,
-            job.controlAdoption,
-            execution,
-          );
-          continue;
+      if (job.controlAdoption) {
+        try {
+          if (!options.controlInstallation) throw Error("Control trust unavailable");
+          const execution = executionFor(job);
+          if (job.state === "succeeded") {
+            verifyRetainedArtifactTargetSettlement(
+              options.controlInstallation,
+              job.controlAdoption,
+              execution,
+            );
+          } else {
+            const assertion = retainedControlAdoptionAssertion(
+              options.controlInstallation,
+              job.controlAdoption,
+              execution,
+            );
+            const admission = inspectControlAdmission(options.controlInstallation, {
+              rawHeaders: ["x-openmapx-control-delegation", assertion],
+              transportPrincipal: "data-manager",
+              kind: job.operation.kind,
+              operation: job.operation,
+              operationKey: job.operationKey,
+              operationFingerprint: execution.operationFingerprint,
+              requestedDeadlineAt: execution.deadlineAt,
+            });
+            const lease = await admission.adopt(execution);
+            const authority = restoreAdmittedControlExecution(
+              options.controlInstallation,
+              execution,
+            );
+            controlLeases.set(job.operationId, lease);
+            controlAuthorities.set(job.operationId, authority);
+            await settleArtifactTargetLeaseChild(
+              lease,
+              verifyControlEffectSettlement(options.controlInstallation, execution),
+            );
+          }
+        } catch {
+          job.controlAdoption = { ...job.controlAdoption, phase: "recovery_required" };
+          job.state = "failed";
+          job.errorClass = "recovery_required";
+          job.result = undefined;
+          stickyRecoveryRequired.add(job.operationId);
+          changed = true;
         }
-        const assertion = retainedControlAdoptionAssertion(
-          options.controlInstallation,
-          job.controlAdoption,
-          execution,
-        );
-        const admission = inspectControlAdmission(options.controlInstallation, {
-          rawHeaders: ["x-openmapx-control-delegation", assertion],
-          transportPrincipal: "data-manager",
-          kind: job.operation.kind,
-          operation: job.operation,
-          operationKey: job.operationKey,
-          operationFingerprint: execution.operationFingerprint,
-          requestedDeadlineAt: execution.deadlineAt,
-        });
-        const lease = await admission.adopt(execution);
-        const authority = restoreAdmittedControlExecution(options.controlInstallation, execution);
-        controlLeases.set(job.operationId, lease);
-        controlAuthorities.set(job.operationId, authority);
-        await settleArtifactTargetLeaseChild(
-          lease,
-          verifyControlEffectSettlement(options.controlInstallation, execution),
-        );
-      } catch {
-        job.controlAdoption = { ...job.controlAdoption, phase: "recovery_required" };
-        job.state = "failed";
-        job.errorClass = "recovery_required";
-        job.result = undefined;
-        stickyRecoveryRequired.add(job.operationId);
-        changed = true;
+      }
+      if (
+        job.executionVersion === 2 &&
+        opsKindRequiresControlAuthority(job.operation.kind) &&
+        ["succeeded", "failed", "timed_out"].includes(job.state)
+      ) {
+        try {
+          if (!options.controlInstallation || job.terminalAt === undefined)
+            throw Error("Original terminal authority unavailable");
+          if (
+            "revisionId" in job.operation &&
+            !verifiesTerminalClaimCleanup(
+              options.terminalClaimCleanup,
+              job.operation,
+              new Date(job.terminalAt).toISOString(),
+            )
+          )
+            throw Error("Terminal claim cleanup is not proved");
+          const execution = executionFor(job);
+          if (job.controlAdoption)
+            verifyRetainedArtifactTargetSettlement(
+              options.controlInstallation,
+              job.controlAdoption,
+              execution,
+            );
+          const authority = repairControlJournalTerminal(
+            options.controlInstallation,
+            execution,
+            statusFor(job, 2),
+            job.terminalAt,
+          );
+          controlAuthorities.set(job.operationId, authority);
+        } catch {
+          // The loaded terminal state, elapsed time and absence of a PID never
+          // prove containment. Keep its exact outcome and original time intact.
+          stickyRecoveryRequired.add(job.operationId);
+        }
       }
     }
     if (changed) await journal.replace([...jobsById.values()].map(persisted));

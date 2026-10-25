@@ -46,7 +46,7 @@ import {
 } from "./trusted-config-runtime";
 import {
   createFileTrustedOpsDataSource,
-  initializeTrustedSnapshotDirectory,
+  initializeTerminalClaimCleanup,
 } from "./trusted-config-source";
 import { createTrustedConfigurationAuthorityLoader } from "./trusted-configuration-authority";
 
@@ -138,12 +138,15 @@ async function main(): Promise<void> {
       container: existsSync("/run/secrets/openmapx-control-verifiers"),
     });
     if (controlStartup.reason) console.error(controlStartup.reason);
-    await initializeTrustedSnapshotDirectory(config.trustedConfigDirectory, {
-      allowedUids: [uid],
-      expectedGid: gid,
-      token: apiToken,
-      journalRecords: journal.records(),
-    });
+    const terminalClaimCleanup = await initializeTerminalClaimCleanup(
+      config.trustedConfigDirectory,
+      {
+        allowedUids: [uid],
+        expectedGid: gid,
+        token: apiToken,
+        journalRecords: journal.records(),
+      },
+    );
     await initializeTrustedConfigurationRuntime(paths.infraDir);
     const authorityLoader = createTrustedConfigurationAuthorityLoader({
       ...authorityOptions,
@@ -255,6 +258,7 @@ async function main(): Promise<void> {
         }),
         journal,
         controlInstallation: controlStartup.installation,
+        terminalClaimCleanup,
         runtime,
         replacementInProgress: () => {
           try {

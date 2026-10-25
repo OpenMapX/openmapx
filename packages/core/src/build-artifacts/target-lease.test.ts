@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createControlRootOperationKey } from "@openmapx/core/ops";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { executionFingerprint } from "../ops/execution-identity";
 import { opsOperationFingerprint } from "../ops/fingerprint";
 import {
@@ -29,9 +29,178 @@ beforeEach(async () => {
   });
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   closeControlInstallation(installation);
   rmSync(root, { recursive: true, force: true });
 });
+
+it.each([18, 256])(
+  "recovers release after target17 for %i maximum-length certified targets within the admission byte budget",
+  async (count) => {
+    const c = await import("./control-authority"),
+      a = await api();
+    const { AnchoredDirectory } = await import("./filesystem");
+    const targets = Array.from(
+      { length: count },
+      (_, n) => `svc-${String(n).padStart(3, "0")}${"x".repeat(57)}`,
+    );
+    closeControlInstallation(installation);
+    installation = openControlInstallation({
+      infraDir: root,
+      role: "host-cli",
+      serviceIds: targets,
+    });
+    const serviceId = targets[0];
+    if (!serviceId) throw Error("Missing test target");
+    const operation = { kind: "service.build" as const, serviceId },
+      operationFingerprint = opsOperationFingerprint(operation),
+      deadlineAt = Date.now() + 120000;
+    const execution = {
+      executor: "host-cli" as const,
+      principal: "host-cli" as const,
+      executionId: randomUUID(),
+      operationKey: createControlRootOperationKey({ notAfter: deadlineAt, nonce: randomBytes(16) }),
+      operationFingerprint,
+      fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
+      deadlineAt,
+    };
+    const authority = retainAdmittedControlExecution(installation, {
+      execution,
+      kind: operation.kind,
+      operation,
+      admittedAt: deadlineAt - 120000,
+      requestedDeadlineAt: deadlineAt,
+      serviceIds: targets,
+    });
+    const admissionPath = join(
+        root,
+        `control-private/host-cli/executions/${execution.operationKey}.json`,
+      ),
+      admitted = readFileSync(admissionPath);
+    const lease = await a.acquireArtifactTargetLease({
+      dataRoot: join(root, "data"),
+      serviceIds: targets,
+      owner: authority,
+    });
+    retainControlEffectReceipt(authority, {
+      outcome: "failed_without_effect",
+      publication: "not_started",
+      receipt: { kind: "not-started" },
+    });
+    await a.settleArtifactTargetLeaseChild(
+      lease,
+      verifyControlEffectSettlement(installation, execution),
+    );
+    const original = AnchoredDirectory.prototype.write;
+    let interrupted = false,
+      maximumBytes = 0;
+    const fault = vi.spyOn(AnchoredDirectory.prototype, "write").mockImplementation(function (
+      this: import("./filesystem").AnchoredDirectory,
+      ...args
+    ) {
+      original.apply(this, args);
+      if (args[0] !== "admission.json") return;
+      maximumBytes = Math.max(maximumBytes, Buffer.byteLength(args[1]));
+      const release = JSON.parse(args[1].toString()).payload.release;
+      if (
+        !interrupted &&
+        (release?.completedTargets ?? release?.locks?.length) === 17 &&
+        release.pending === undefined
+      ) {
+        interrupted = true;
+        throw Error("contained stop after target17 publication");
+      }
+    });
+    await expect(a.releaseArtifactTargetLease(lease)).rejects.toThrow(
+      "contained stop after target17",
+    );
+    expect(interrupted).toBe(true);
+    expect(
+      targets
+        .slice(0, 17)
+        .every((id) => !existsSync(join(root, `data/.admin-target-control/locks/${id}`))),
+    ).toBe(true);
+    expect(existsSync(join(root, `data/.admin-target-control/locks/${targets[17]}`))).toBe(true);
+    if (count === 18) {
+      // Reopen an existing signed name-list checkpoint too. Keep its actual
+      // family index/inode accounting consistent with the fixture publication.
+      const state = c.installationState(installation),
+        origin = c.executionAuthorityState(authority).origin;
+      if (!origin) throw Error("Missing fixture origin");
+      const ledger = new AnchoredDirectory(
+        join(root, `data/.admin-target-control/leases/${lease.leaseId}`),
+      );
+      try {
+        const payload = JSON.parse(ledger.read("admission.json", 4096).toString()).payload;
+        payload.release = { phase: "planned", locks: targets.slice(0, 17), active: false };
+        const bytes = JSON.stringify(
+          c.signControl(state.privateKey, "openmapx-admission-slots-v1", payload),
+        );
+        const { familyRecordWrite } = await import("./retention-family");
+        familyRecordWrite(
+          state,
+          origin,
+          {
+            scope: "shared",
+            namespace: "lease-owner",
+            container: lease.leaseId,
+            name: "admission.json",
+          },
+          bytes,
+          (before) => ledger.write("admission.json", bytes, false, before),
+        );
+      } finally {
+        ledger.close();
+      }
+    }
+    a.closeArtifactTargetLeaseHandle(lease);
+    closeControlInstallation(installation);
+    installation = openControlInstallation({
+      infraDir: root,
+      role: "host-cli",
+      serviceIds: targets,
+    });
+    const restored = c.restoreAdmittedControlExecution(installation, execution),
+      recovery = c.verifyControlRecoveryAuthority(restored);
+    const input = { dataRoot: join(root, "data"), leaseId: lease.leaseId, authority: recovery };
+    await expect(a.reconcileArtifactTargetLease(input)).resolves.toBe("released");
+    await expect(a.reconcileArtifactTargetLease(input)).resolves.toBe("released");
+    fault.mockRestore();
+    expect(maximumBytes).toBeLessThanOrEqual(4096);
+    const journalBytes = readFileSync(
+      join(root, `data/.admin-target-control/leases/${lease.leaseId}/admission.json`),
+    );
+    expect(journalBytes.byteLength).toBeLessThanOrEqual(4096);
+    const finalJournal = JSON.parse(journalBytes.toString()).payload;
+    expect(finalJournal.release).toMatchObject({
+      version: 2,
+      phase: "released",
+      completedTargets: count,
+      active: true,
+    });
+    expect(
+      existsSync(
+        join(
+          root,
+          `data/.admin-target-control/admission-index-v1/active/${finalJournal.active.name}`,
+        ),
+      ),
+    ).toBe(false);
+    expect(
+      targets.every((id) => !existsSync(join(root, `data/.admin-target-control/locks/${id}`))),
+    ).toBe(true);
+    expect(readFileSync(admissionPath)).toEqual(admitted);
+    expect(
+      JSON.parse(
+        readFileSync(
+          join(root, `control-private/host-cli/effect-started/${execution.operationKey}.json`),
+          "utf8",
+        ),
+      ),
+    ).toBeNull();
+  },
+  120000,
+);
 function owner() {
   const operation = { kind: "service.build" as const, serviceId: "osrm" };
   const operationFingerprint = opsOperationFingerprint(operation);

@@ -21,6 +21,7 @@ import {
   OPS_TRUSTED_CONFIG_MAX_BYTES,
   OPS_TRUSTED_CONFIG_QUEUE_LOCK_NAME,
   openTrustedConfigurationSnapshot,
+  opsOperationFingerprint,
   trustedConfigurationQueueFits,
 } from "@openmapx/core/ops";
 import type { OpsClaimOwner, TrustedOpsDataSource } from "./policy";
@@ -35,6 +36,21 @@ const SNAPSHOT_NAME = /^cfg1_[A-Za-z0-9_-]{43}\.json$/;
 const TEMPORARY_NAME = /^\.cfg1_[A-Za-z0-9_-]{43}\.nonce_[A-Za-z0-9_-]{16,96}\.tmp$/;
 const ABORT_NAME = /^\.cfg1_[A-Za-z0-9_-]{43}\.[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.abort$/;
 const HARDLINK_ABORT_NAME = /^\.(cfg1_[A-Za-z0-9_-]{43})\.(terminal|rollback)\.abort$/;
+
+declare const terminalCleanupBrand: unique symbol;
+export type VerifiedTerminalClaimCleanup = Readonly<{ [terminalCleanupBrand]: true }>;
+const terminalCleanups = new WeakMap<object, ReadonlySet<string>>();
+/** Nominal proof from the fixed authenticated, inode-checked startup cleanup. */
+export function verifiesTerminalClaimCleanup(
+  proof: VerifiedTerminalClaimCleanup | undefined,
+  operation: OpsOperation,
+  terminalAt: string,
+): boolean {
+  return (
+    !!proof &&
+    terminalCleanups.get(proof)?.has(`${opsOperationFingerprint(operation)}:${terminalAt}`) === true
+  );
+}
 
 export interface TrustedSnapshotDirectoryPolicy {
   allowedUids: readonly number[];
@@ -435,6 +451,13 @@ export async function initializeTrustedSnapshotDirectory(
   directory: string,
   policy: TrustedSnapshotDirectoryPolicy,
 ): Promise<void> {
+  await initializeTerminalClaimCleanup(directory, policy);
+}
+/** Fixed agent startup additionally retains the verified terminal-cleanup capability. */
+export async function initializeTerminalClaimCleanup(
+  directory: string,
+  policy: TrustedSnapshotDirectoryPolicy,
+): Promise<VerifiedTerminalClaimCleanup> {
   let queueLock: Awaited<ReturnType<typeof acquireTrustedConfigurationQueueLock>> | undefined;
   try {
     if (!directoryIsSafe(directory, policy)) throw new Error(DIRECTORY_REJECTED);
@@ -489,6 +512,21 @@ export async function initializeTrustedSnapshotDirectory(
         syncDirectoryNow(plan.second.parent);
       }
     }
+    const proof = Object.freeze({}) as VerifiedTerminalClaimCleanup;
+    terminalCleanups.set(
+      proof,
+      new Set(
+        (policy.journalRecords ?? [])
+          .filter(
+            (record) =>
+              "revisionId" in record.operation &&
+              ["succeeded", "failed", "timed_out"].includes(record.state) &&
+              record.terminalAt !== undefined,
+          )
+          .map((record) => `${opsOperationFingerprint(record.operation)}:${record.terminalAt}`),
+      ),
+    );
+    return proof;
   } catch {
     throw new Error(DIRECTORY_REJECTED);
   } finally {

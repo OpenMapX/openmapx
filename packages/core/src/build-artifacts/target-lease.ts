@@ -98,6 +98,22 @@ const slotSchema = z.strictObject({
   identity: inode,
   generation: uuid.optional(),
 });
+const releaseProgressSchema = z.strictObject({
+  version: z.literal(2),
+  phase: z.enum(["planned", "released"]),
+  completedTargets: z.number().int().min(0).max(256),
+  pending: z.number().int().min(0).max(255).optional(),
+  active: z.boolean(),
+  activePlanned: z.boolean().optional(),
+});
+// Previously signed name-list progress remains readable within the same byte bound.
+const legacyReleaseProgressSchema = z.strictObject({
+  phase: z.enum(["planned", "released"]),
+  locks: z.array(z.string()).max(256),
+  active: z.boolean(),
+  pending: z.string().optional(),
+  activePlanned: z.boolean().optional(),
+});
 const admissionSlotSchema = z.strictObject({
   version: z.literal(1),
   installationId: uuid,
@@ -105,15 +121,7 @@ const admissionSlotSchema = z.strictObject({
   certificateDigest: digest,
   active: slotSchema,
   history: slotSchema,
-  release: z
-    .object({
-      phase: z.enum(["planned", "released"]),
-      locks: z.array(z.string()).max(16),
-      active: z.boolean(),
-      pending: z.string().optional(),
-      activePlanned: z.boolean().optional(),
-    })
-    .optional(),
+  release: z.union([releaseProgressSchema, legacyReleaseProgressSchema]).optional(),
   releasedAt: z.number().int().positive().safe().optional(),
 });
 type AdmissionSlots = z.infer<typeof admissionSlotSchema>;
@@ -480,6 +488,8 @@ function writeBounded(
   const dir = kind === "owner" ? s.ledger : childDirectory(s, kind);
   try {
     const bytes = canonicalJson(value);
+    if (name === "admission.json" && Buffer.byteLength(bytes) > 4096)
+      throw Error("Admission release journal exceeds byte capacity");
     let old = 0;
     try {
       old = dir.read(name, 131072).length;
@@ -763,8 +773,14 @@ export async function acquireArtifactTargetLease(options: {
       historySlot.generation,
     );
     const admissionBytes = canonicalJson(
-      signControl(authority.installation.privateKey, "openmapx-admission-slots-v1", slots),
+      signControl(
+        authority.installation.privateKey,
+        "openmapx-admission-slots-v1",
+        admissionSlotSchema.parse(slots),
+      ),
     );
+    if (Buffer.byteLength(admissionBytes) > 4096)
+      throw Error("Admission journal exceeds byte capacity");
     familyRecordWrite(
       authority.installation,
       authority.origin,
@@ -1416,20 +1432,49 @@ function finishOwnedRelease(s: State): void {
           s,
           "owner",
           "admission.json",
-          signControl(s.installation.privateKey, "openmapx-admission-slots-v1", s.slots),
+          signControl(
+            s.installation.privateKey,
+            "openmapx-admission-slots-v1",
+            admissionSlotSchema.parse(s.slots),
+          ),
         );
-      const release = s.slots.release ?? { phase: "planned" as const, locks: [], active: false };
-      s.slots.release = release;
+      const saved = s.slots.release;
+      let release: z.infer<typeof releaseProgressSchema>;
+      if (saved && !("version" in saved)) {
+        if (
+          saved.locks.some((id, i) => id !== s.certificate.serviceIds[i]) ||
+          (saved.pending !== undefined &&
+            saved.pending !== s.certificate.serviceIds[saved.locks.length])
+        )
+          throw Error("Invalid legacy release prefix");
+        release = {
+          version: 2,
+          phase: saved.phase,
+          completedTargets: saved.locks.length,
+          active: saved.active,
+          ...(saved.pending === undefined ? {} : { pending: saved.locks.length }),
+          ...(saved.activePlanned === undefined ? {} : { activePlanned: saved.activePlanned }),
+        };
+      } else
+        release = saved ?? { version: 2, phase: "planned", completedTargets: 0, active: false };
+      releaseProgressSchema.parse(release);
       if (
-        release.locks.some((id) => !s.certificate.serviceIds.includes(id)) ||
-        (release.pending && !s.certificate.serviceIds.includes(release.pending))
+        release.completedTargets > s.certificate.serviceIds.length ||
+        (release.pending !== undefined &&
+          (release.pending !== release.completedTargets ||
+            release.pending >= s.certificate.serviceIds.length)) ||
+        ((release.active || release.activePlanned) &&
+          (release.completedTargets !== s.certificate.serviceIds.length ||
+            release.pending !== undefined)) ||
+        (release.phase === "released" && !release.active)
       )
-        throw Error("Invalid release journal target");
-      for (const id of s.certificate.serviceIds) {
-        if (release.locks.includes(id)) continue;
-        if (release.pending && release.pending !== id)
+        throw Error("Invalid release journal certified prefix");
+      s.slots.release = release;
+      for (let index = release.completedTargets; index < s.certificate.serviceIds.length; index++) {
+        const id = required(s.certificate.serviceIds[index], "Missing certified target");
+        if (release.pending !== undefined && release.pending !== index)
           throw Error("Conflicting physical release step");
-        if (release.pending !== id) {
+        if (release.pending === undefined) {
           const lock = s.locks.directory(id);
           try {
             if (
@@ -1443,7 +1488,7 @@ function finishOwnedRelease(s: State): void {
           } finally {
             lock.close();
           }
-          release.pending = id;
+          release.pending = index;
           persist();
         }
         try {
@@ -1454,7 +1499,7 @@ function finishOwnedRelease(s: State): void {
         } catch (e) {
           if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
         }
-        release.locks.push(id);
+        release.completedTargets = index + 1;
         delete release.pending;
         persist();
       }

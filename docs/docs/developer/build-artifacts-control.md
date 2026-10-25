@@ -179,7 +179,22 @@ Namespace deletion records `planned`, `unlinked`, `counted` and `item_done` in a
 preallocated exact-identity transaction. Only an already retained matching plan
 can resume an absent unlink. Counter decrements and slot reuse check the original
 family, generation, manifest, ordinal and inode. A killed unknown writer is never
-stolen automatically.
+stolen automatically. Target release progress uses a certified sorted-target
+prefix count and a pending target index, so all 256 maximum-length target IDs fit
+within the signed admission journal's 4 KiB read/write budget. Writes validate the
+actual schema and byte limit. Retained signed name-list progress within that
+budget is checked against the exact certified prefix before compact recovery.
+
+On agent startup, terminal retention repair rejoins the original signed admission
+and exact authenticated own-effect proof. A known result must match the signed
+result body; a known failure needs signed never-started evidence. Borrowed workers
+also need their exact retained settled lease proof. Configuration workers require
+the fixed authenticated, inode-checked startup claim cleanup capability. Loaded
+terminal state, age and missing processes do not prove containment. Missing,
+mismatched or unknown proof keeps the fence. Repair publishes only the missing
+canonical terminal digest and journal completion, preserving original admission,
+result/failure, deadline and terminal time; duplicate restarts do not restart work
+or postpone the 72-hour retention window.
 
 ### API parent checkpoints and terminal receipt delivery
 

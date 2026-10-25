@@ -993,16 +993,20 @@ export function completeFamilyJournal(
   state: InstallationState,
   origin: ControlExecutionOrigin,
   execution: ExecutionRef,
+  terminalAt?: number,
 ): void {
   const f = openFamily(state, origin);
   try {
     guard(f.slot, ".family-writer", () => {
       const p = readProgress(f),
         fact = p.executions[controlDigest(execution)];
-      if (!fact?.requiresJournal || p.phase !== "active")
-        throw Error("Invalid joined journal worker");
+      if (!fact?.requiresJournal) throw Error("Invalid joined journal worker");
+      if (fact.journalContained) return;
+      if (p.phase !== "active") throw Error("Invalid joined journal worker");
+      if (terminalAt !== undefined && (!Number.isSafeInteger(terminalAt) || terminalAt <= 0))
+        throw Error("Invalid original terminal time");
       fact.journalContained = true;
-      p.terminalAt = Math.max(p.terminalAt, Date.now());
+      p.terminalAt = Math.max(p.terminalAt, terminalAt ?? Date.now());
       progress(f, p);
     });
   } finally {
@@ -1015,6 +1019,7 @@ export function markFamilyTerminal(
   execution: ExecutionRef,
   known: boolean,
   terminalDigest?: string,
+  terminalAt?: number,
 ) {
   const f = openFamily(state, origin);
   try {
@@ -1028,10 +1033,13 @@ export function markFamilyTerminal(
       }
       const changed =
         e.known !== known || (terminalDigest !== undefined && e.terminalDigest !== terminalDigest);
+      if (terminalAt !== undefined && (!Number.isSafeInteger(terminalAt) || terminalAt <= 0))
+        throw Error("Invalid original terminal time");
+      if (!changed && e.terminalAt !== undefined) return;
       e.known = known;
       if (terminalDigest) e.terminalDigest = terminalDigest;
       if (changed || e.terminalAt === undefined) {
-        e.terminalAt = Date.now();
+        e.terminalAt = Math.max(e.terminalAt ?? 0, terminalAt ?? Date.now());
         p.terminalAt = Math.max(p.terminalAt, e.terminalAt);
       }
       progress(f, p);

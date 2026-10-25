@@ -42,6 +42,7 @@ import {
   type OpsOperationKind,
   opsOperationSchema,
   parseBoundedOpsResult,
+  parseOpsJobStatus,
 } from "../ops/contract";
 import {
   controlTerminalReceiptDigest,
@@ -642,6 +643,79 @@ export function retainControlTerminalStatus(
       (status.state === "succeeded" || settlement.evidence.publication !== "committed"),
     digest,
   );
+}
+/** Rejoin a terminal worker from its original signed admission and known effect
+ * receipt. The fixed startup adapter separately proves borrowed/claim cleanup. */
+export function repairControlJournalTerminal(
+  installation: ControlInstallation,
+  execution: ExecutionRef,
+  status: OpsJobStatus,
+  terminalAt: number,
+): VerifiedExecutionAuthority {
+  const authority = restoreAdmittedControlExecution(installation, execution),
+    s = executionAuthorityState(authority);
+  const terminal = parseOpsJobStatus(status);
+  if (
+    !s.origin ||
+    installation.role !== "ops-agent" ||
+    s.installation.fixedChildId ||
+    terminal.version !== 2 ||
+    terminal.admittedAt === undefined ||
+    terminal.operationId !== execution.executionId ||
+    terminal.operationKey !== execution.operationKey ||
+    terminal.fingerprint !== execution.fingerprint ||
+    terminal.deadlineAt !== execution.deadlineAt ||
+    terminal.kind !== s.kind ||
+    !Number.isSafeInteger(terminalAt) ||
+    terminalAt < terminal.admittedAt
+  )
+    throw Error("Original terminal journal identity required");
+  const origin = s.origin;
+  withPrivateEffectWriter(s, () => {
+    const admittedRaw = readPrivateRecord(
+      s.installation,
+      "executions",
+      `${execution.operationKey}.json`,
+      65536,
+    );
+    const admitted = verifyControl(
+      installation.publicKey,
+      originRecordDomain("openmapx-control-execution", admittedRaw),
+      admittedRaw,
+      z.object({ admittedAt: z.number().int().nonnegative().safe() }).passthrough(),
+    );
+    if (admitted.admittedAt !== terminal.admittedAt) throw Error("Original admission time changed");
+    verifyControlEffectSettlement(installation, execution);
+    const proof = verifyControl(
+      installation.publicKey,
+      "openmapx-control-settlement-v1",
+      readPrivateRecord(s.installation, "effects", `${execution.operationKey}.json`, 65536),
+      settlementSchema.extend({ receipt: effectObservationSchema }),
+    );
+    const succeeded =
+      terminal.state === "succeeded" &&
+      proof.outcome === "committed" &&
+      proof.publication === "committed" &&
+      proof.receipt.kind === "ops-result" &&
+      controlDigest(proof.receipt.result) === controlDigest(terminal.result);
+    const failedWithoutEffect =
+      ["failed", "timed_out"].includes(terminal.state) &&
+      proof.outcome === "failed_without_effect" &&
+      proof.publication === "not_started" &&
+      proof.receipt.kind === "not-started";
+    if (!succeeded && !failedWithoutEffect)
+      throw Error("Terminal worker containment is not proved");
+    markFamilyTerminal(
+      s.installation,
+      origin,
+      execution,
+      true,
+      controlTerminalReceiptDigest(terminal),
+      terminalAt,
+    );
+    completeFamilyJournal(s.installation, origin, execution, terminalAt);
+  });
+  return authority;
 }
 /** Fixed agent adapter, installed before startup reconciliation; no request carries this capability. */
 export function registerControlRetentionJournal(

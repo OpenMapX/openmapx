@@ -33,6 +33,7 @@ export {
   readFixedCliSpawnIntent,
   reconcileControlRetention,
   registerControlRetentionJournal,
+  repairControlJournalTerminal,
   requireControlJournalRetention,
   restoreAdmittedControlExecution,
   retainAdmittedControlExecution,
