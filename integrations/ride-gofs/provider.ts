@@ -100,6 +100,27 @@ function toProduct(
   };
 }
 
+/**
+ * The first booking rule that applies to the trip, in feed order. A rule needs
+ * an origin match; when the destination is known it must also fit the rule's
+ * `to_zone_ids`. An omitted or null restriction covers every destination, while
+ * an empty one covers none. With no destination (`null`) only the origin is
+ * compared, so a destination-restricted rule is still offered for a partial trip.
+ */
+function selectBookingRule(
+  rules: GofsBookingRule[],
+  fromZoneIds: string[],
+  toZoneIds: string[] | null,
+): GofsBookingRule | undefined {
+  return rules.find(
+    (rule) =>
+      rule.from_zone_ids.some((z) => fromZoneIds.includes(z)) &&
+      (toZoneIds === null ||
+        !rule.to_zone_ids ||
+        rule.to_zone_ids.some((z) => toZoneIds.includes(z))),
+  );
+}
+
 function toBookingRules(rule: GofsBookingRule | undefined): RideBookingRules | undefined {
   if (!rule) return undefined;
   return {
@@ -225,9 +246,7 @@ export function createGofsRideProvider(
       return [toProduct(brand, vehicleCapabilities(vehicleIdsByBrand.get(id), feed.vehicleTypes))];
     });
 
-    const bookingRule = feed.bookingRules.find((r) =>
-      r.from_zone_ids.some((z) => fromZoneIds.includes(z)),
-    );
+    const bookingRule = selectBookingRule(feed.bookingRules, fromZoneIds, toZoneIds);
 
     return { feed, products, fareIdByBrand, bookingRule, fromZoneIds, toZoneIds };
   }
@@ -364,9 +383,8 @@ export function createGofsRideProvider(
     async createHandoff(request) {
       const feed = await client.loadStatic();
       const fromZoneIds = gofsZonesContaining(feed.zones, request.pickup);
-      const rule = feed.bookingRules.find((r) =>
-        r.from_zone_ids.some((z) => fromZoneIds.includes(z)),
-      );
+      const toZoneIds = request.dropoff ? gofsZonesContaining(feed.zones, request.dropoff) : null;
+      const rule = selectBookingRule(feed.bookingRules, fromZoneIds, toZoneIds);
 
       if (rule?.booking_url) {
         return {
