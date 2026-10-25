@@ -209,7 +209,26 @@ async function main(): Promise<void> {
           { signal: AbortSignal.timeout(30_000), timeout: 30_000, maxBuffer: 64 * 1024 },
         )
       ).stdout.trim() !== "";
-    const legacyState = { rootDir: config.rootDir, handoffHelperRunning };
+    // Whether any container, running or stopped, bind-mounts an earlier
+    // directory: one restarted without its source would get it back as root.
+    const containerMounts = async (path: string) =>
+      (
+        await runContainedProcess(
+          "docker",
+          ["ps", "--all", "--quiet", "--filter", `volume=${path}`],
+          {
+            signal: AbortSignal.timeout(30_000),
+            timeout: 30_000,
+            maxBuffer: 64 * 1024,
+          },
+        )
+      ).stdout.trim() !== "";
+    const legacyState = {
+      rootDir: config.rootDir,
+      handoffHelperRunning,
+      containerMounts,
+      report: (message: string) => process.stderr.write(`${message}\n`),
+    };
     const imported = await importLegacyAgentState(legacyState);
     if (imported) {
       process.stderr.write(
