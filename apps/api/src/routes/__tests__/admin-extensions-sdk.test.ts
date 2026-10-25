@@ -96,6 +96,7 @@ beforeEach(async () => {
       auth: unexpected,
       tile: unexpected,
       expensive: unexpected,
+      integrationIngress: unexpected,
       status: unexpected,
       public: (req, reply) => floor.preHandler()(req, reply),
     }),

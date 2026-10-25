@@ -342,9 +342,13 @@ export interface RateLimitTiers {
   auth: Limit;
   tile: Limit;
   expensive: Limit;
+  integrationIngress: Limit;
   status: Limit;
   public: Limit;
 }
+
+const INTEGRATION_DISPATCHER_ROUTES = new Set(["/api/integrations/:id", "/api/integrations/:id/*"]);
+const BODY_CAPABLE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 // Global rate limiting for the public surface.
 //
@@ -372,14 +376,20 @@ export function makeRateLimitTierHook(limits: RateLimitTiers) {
     // limiter or broad public floor on this privacy-sensitive route.
     if (isTimelineDayRequest(request)) return;
 
-    // Only the matched dispatcher owns tier enforcement. Direct host routes
-    // under the same URL prefix still need the public floor.
-    const route = request.routeOptions.url;
-    if (route === "/api/integrations/:id" || route === "/api/integrations/:id/*") return;
-
     // Trust only the actual TCP peer here, never XFF.
     const peer = request.socket?.remoteAddress;
     if (peer && LOOPBACK.has(peer)) return;
+
+    // Fastify parses these methods' bodies before the dispatcher can select
+    // the matched route's declared tier. Charge a separate admission bucket
+    // first; GET/HEAD keep their deliberate tile/public/expensive late tier.
+    const route = request.routeOptions.url;
+    if (route && INTEGRATION_DISPATCHER_ROUTES.has(route)) {
+      if (BODY_CAPABLE_METHODS.has(request.method)) {
+        await limits.integrationIngress(request, reply);
+      }
+      return;
+    }
 
     if (url.startsWith("/api/auth/")) {
       await limits.auth(request, reply);

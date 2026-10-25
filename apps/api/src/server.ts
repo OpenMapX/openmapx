@@ -123,6 +123,7 @@ import { sendMail } from "./utils/email.js";
 import {
   authLimit,
   expensivePublicApiLimit,
+  integrationIngressApiLimit,
   publicApiLimit,
   statusPublicApiLimit,
   tilePublicApiLimit,
@@ -206,6 +207,7 @@ const rateLimitTiers = {
   auth: authLimit.preHandler(),
   tile: tilePublicApiLimit.preHandler(),
   expensive: makeTimelineAwareRateLimit(expensivePublicApiLimit),
+  integrationIngress: integrationIngressApiLimit.preHandler(),
   status: makeStatusAwareRateLimit(statusPublicApiLimit),
   public: makeTimelineAwareRateLimit(publicApiLimit),
 };

@@ -125,6 +125,7 @@ describe("host and dispatcher request tier ownership", () => {
       expensive: buckets.expensive.preHandler(),
       tile: buckets.tile.preHandler(),
       auth: vi.fn(),
+      integrationIngress: vi.fn(),
       status: vi.fn(),
     };
     app.addHook("onRequest", makeRateLimitTierHook(tiers));
@@ -178,6 +179,78 @@ describe("host and dispatcher request tier ownership", () => {
       }
     },
   );
+
+  it("rejects exhausted body ingress before parsing, matching, and the declared tier", async () => {
+    const app = makeApp();
+    const ingress = new RateLimiter({ max: 1, windowMs: 60_000 });
+    const parseBody = vi.fn((_request, body, done) => done(null, body));
+    const latePublic = vi.fn(async () => undefined);
+    const unexpectedTier = vi.fn(async () => {
+      throw new Error("Wrong rate-limit tier");
+    });
+    const handler = vi.fn(async (request, reply) => {
+      reply.send({ body: request.body });
+    });
+    const tiers: RateLimitTiers = {
+      auth: unexpectedTier,
+      tile: unexpectedTier,
+      expensive: unexpectedTier,
+      integrationIngress: ingress.preHandler(),
+      status: unexpectedTier,
+      public: latePublic,
+    };
+    app.addContentTypeParser("application/x-integration-probe", { parseAs: "string" }, parseBody);
+    app.addHook("onRequest", makeRateLimitTierHook(tiers));
+    setIntegrationRouteRateLimits(tiers);
+    await initIntegrations(app, [FIXTURES_DIR]);
+    registerIntegrationRoute("alpha", "POST", "/body-probe", handler);
+
+    const request = {
+      method: "POST" as const,
+      remoteAddress: "198.51.100.42",
+      headers: { "content-type": "application/x-integration-probe" },
+      payload: "synthetic body",
+    };
+    try {
+      const admitted = await app.inject({
+        ...request,
+        url: "/api/integrations/alpha/body-probe",
+      });
+      expect(admitted.statusCode).toBe(200);
+      expect(admitted.json()).toEqual({ body: "synthetic body" });
+      expect(parseBody).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(latePublic).toHaveBeenCalledTimes(1);
+
+      for (const attempt of [
+        { ...request, url: "/api/integrations/alpha/body-probe" },
+        { ...request, url: "/api/integrations/missing/body-probe" },
+        { ...request, url: "/api/integrations/alpha/missing" },
+        {
+          method: "POST" as const,
+          url: "/api/integrations/alpha/body-probe",
+          remoteAddress: "198.51.100.42",
+          headers: { "content-type": "application/json" },
+          payload: "{",
+        },
+      ]) {
+        const rejected = await app.inject(attempt);
+        expect(rejected.statusCode).toBe(429);
+        expect(rejected.json()).toMatchObject({
+          error: "Too many requests",
+          retryAfter: expect.any(Number),
+        });
+        expect(Number(rejected.headers["retry-after"])).toBeGreaterThan(0);
+      }
+      expect(parseBody).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(latePublic).toHaveBeenCalledTimes(1);
+      expect(unexpectedTier).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+      ingress.destroy();
+    }
+  });
 
   it.each([
     ["public", false],

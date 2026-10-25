@@ -311,6 +311,7 @@ describe("makeRateLimitTierHook", () => {
       auth: vi.fn(async () => {}),
       tile: vi.fn(async () => {}),
       expensive: vi.fn(async () => {}),
+      integrationIngress: vi.fn(async () => {}),
       status: vi.fn(async () => {}),
       public: vi.fn(async () => {}),
     };
@@ -320,13 +321,23 @@ describe("makeRateLimitTierHook", () => {
   async function tierApp(tiers: RateLimitTiers): Promise<FastifyInstance> {
     const app = Fastify({ logger: false });
     app.addHook("onRequest", makeRateLimitTierHook(tiers));
+    app.route({
+      method: ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"],
+      url: "/api/integrations/:id",
+      handler: async () => ({ ok: true }),
+    });
+    app.route({
+      method: ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"],
+      url: "/api/integrations/:id/*",
+      handler: async () => ({ ok: true }),
+    });
     app.all("/*", async () => ({ ok: true }));
     await app.ready();
     return app;
   }
 
   const cases: Array<{
-    method?: "GET" | "POST" | "PUT" | "DELETE";
+    method?: "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE";
     url: string;
     tier: keyof RateLimitTiers | null;
   }> = [
@@ -341,17 +352,22 @@ describe("makeRateLimitTierHook", () => {
     {
       method: "POST",
       url: "/api/integrations/transit/reachability/surface",
-      tier: "public",
+      tier: "integrationIngress",
     },
     {
       method: "POST",
       url: "/api/integrations/transit/reachability/check",
-      tier: "public",
+      tier: "integrationIngress",
     },
-    { url: "/api/integrations/food-delivery/resolve", tier: "public" },
-    { url: "/api/integrations/food-delivery/ubereats/open", tier: "public" },
-    { url: "/api/integrations/restaurants/menu?website=https://example.com", tier: "public" },
-    { url: "/api/integrations/food-delivery/providers?country=de", tier: "public" },
+    { method: "PUT", url: "/api/integrations/example/item", tier: "integrationIngress" },
+    { method: "PATCH", url: "/api/integrations/example/item", tier: "integrationIngress" },
+    { method: "DELETE", url: "/api/integrations/example/item", tier: "integrationIngress" },
+    { url: "/api/integrations/food-delivery/resolve", tier: null },
+    { method: "HEAD", url: "/api/integrations/food-delivery/resolve", tier: null },
+    { url: "/api/integrations/food-delivery/ubereats/open", tier: null },
+    { url: "/api/integrations/restaurants/menu?website=https://example.com", tier: null },
+    { url: "/api/integrations/food-delivery/providers?country=de", tier: null },
+    { url: "/api/integrations", tier: "public" },
     { method: "GET", url: "/api/status", tier: "status" },
     { method: "GET", url: "/api/status?probe=public", tier: "status" },
     { method: "POST", url: "/api/status", tier: "public" },
@@ -392,6 +408,12 @@ describe("makeRateLimitTierHook", () => {
     const { hook, stubs } = stubTiers();
     const app = await tierApp(hook);
     await app.inject({ method: "GET", url: "/api/saved", remoteAddress: "127.0.0.1" });
+    await app.inject({
+      method: "POST",
+      url: "/api/integrations/routing/match",
+      remoteAddress: "127.0.0.1",
+      payload: { trace: [] },
+    });
     for (const key of Object.keys(stubs) as Array<keyof RateLimitTiers>) {
       expect(stubs[key]).not.toHaveBeenCalled();
     }
