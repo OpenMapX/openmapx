@@ -6,6 +6,16 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./pins": {
+      "types": "./src/pins.ts",
+      "default": "./src/pins.ts"
+    }
+  },
   "sideEffects": false,
   "dependencies": {
     "@openmapx/mobility-formats": "workspace:^",

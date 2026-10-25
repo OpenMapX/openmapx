@@ -145,7 +145,7 @@ describe("Dockerfile build input coverage", () => {
     ["packages/brands/src/index.ts", ["api", "web"]],
     ["packages/brands/package.json", ["api", "web"]],
     ["services/data-manager/src/jobs/example.ts", ["api", "data-manager"]],
-    ["services/data-manager/src/transitous-lock.ts", ["api", "data-manager", "ops-agent"]],
+    ["infra/docker/transitous.lock.json", ["ops-agent"]],
   ])("rebuilds only the images that copy %s", (changed, expected) => {
     expect(
       selectChangedTargets({

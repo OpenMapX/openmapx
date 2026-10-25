@@ -49,15 +49,14 @@ COPY --parents \
     packages/transitous-core/ \
     ./
 COPY apps/ops-agent/ apps/ops-agent/
-# The CLI imports this data-manager module. The bundle embeds every built-in
-# service and integration manifest and the release's catalog pins: the agent
-# and its CLI run the release's, not the host checkout's.
+# The bundle embeds every built-in service and integration manifest and the
+# release's catalog pins: the agent and its CLI run the release's, not the host
+# checkout's.
 COPY --parents \
     services/*/service.json \
     integrations/*/manifest.json \
     infra/docker/transitous.lock.json \
     infra/docker/gbfs-catalog.lock.json \
-    services/data-manager/src/transitous-lock.ts \
     ./
 COPY scripts/build-runtime-bundles.mjs scripts/module-specifiers.mjs scripts/
 ARG EXPECTED_BUNDLE_DIGEST=

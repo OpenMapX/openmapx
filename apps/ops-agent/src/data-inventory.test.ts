@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { writeTransitousProposal } from "@openmapx/transitous-core/pins";
 import { afterEach, describe, expect, it } from "vitest";
 import { inspectDataInventory } from "./data-inventory";
 
@@ -34,10 +35,15 @@ function umask002Checkout(): { root: string; data: string } {
     join(data, "motis", "slot-state.json"),
     JSON.stringify({ activeSlot: "B", previousHealthySlot: "A" }),
   );
-  // The agent writes it owner-only.
-  writeFileSync(join(root, "infra", "docker", "transitous.lock.proposed.json"), "{}", {
-    mode: 0o600,
+  // A proposal in the agent's state; one planted in infra/docker is not read.
+  mkdirSync(join(root, "infra", "docker", "state", "ops-agent"), { recursive: true, mode: 0o700 });
+  writeTransitousProposal(join(root, "infra", "docker"), {
+    ref: `main@${"a".repeat(40)}`,
+    submodules: {},
+    lockedAt: "2026-10-25T00:00:00.000Z",
+    lockedBy: "auto-bump",
   });
+  writeFileSync(join(root, "infra", "docker", "transitous.lock.proposed.json"), "{}");
   // data-manager writes the data directory's contents with a umask of 022.
   for (const path of ["osm", "valhalla", "motis", join("motis", "live")]) {
     chmodSync(join(data, path), 0o755);

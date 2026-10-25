@@ -1,19 +1,5 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import {
-  diffFeedFiles,
-  transitousPinIsCurrent,
-  writeTransitousLockProposal,
-} from "../src/commands/transitous-bump.js";
-
-let temporaryRoot: string | undefined;
-
-afterEach(() => {
-  if (temporaryRoot) rmSync(temporaryRoot, { recursive: true, force: true });
-  temporaryRoot = undefined;
-});
+import { describe, expect, it } from "vitest";
+import { diffFeedFiles, transitousPinIsCurrent } from "../src/commands/transitous-bump.js";
 
 const TRANSITOUS = {
   ref: `main@${"a".repeat(40)}`,
@@ -46,22 +32,5 @@ describe("Transitous catalog bump", () => {
     );
     expect(summary.removedSources).toBe(1);
     expect(summary.licenseChanges).toEqual([{ region: "de", source: "BVG" }]);
-  });
-
-  it("writes a proposal and never a pin the repository tracks", () => {
-    temporaryRoot = mkdtempSync(join(tmpdir(), "openmapx-bump-proposal-"));
-    const directory = join(temporaryRoot, "infra", "docker");
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(join(directory, "transitous.lock.json"), "active-transitous\n");
-    writeFileSync(join(directory, "gbfs-catalog.lock.json"), "release-gbfs\n");
-    writeTransitousLockProposal(temporaryRoot, TRANSITOUS);
-    expect(readFileSync(join(directory, "transitous.lock.json"), "utf-8")).toBe(
-      "active-transitous\n",
-    );
-    expect(readFileSync(join(directory, "gbfs-catalog.lock.json"), "utf-8")).toBe("release-gbfs\n");
-    expect(readFileSync(join(directory, "transitous.lock.proposed.json"), "utf-8")).toContain(
-      TRANSITOUS.ref,
-    );
-    expect(existsSync(join(directory, "gbfs-catalog.lock.proposed.json"))).toBe(false);
   });
 });

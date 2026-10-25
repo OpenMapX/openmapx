@@ -1,84 +1,31 @@
-import { randomUUID } from "node:crypto";
-import {
-  closeSync,
-  constants,
-  existsSync,
-  fsyncSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import type { OpsResultFor } from "@openmapx/core/ops";
-
-import { releaseGbfsCatalogPin } from "./release-catalog-pins";
+import type { TransitousLock } from "@openmapx/transitous-core";
+import {
+  activeTransitousPin,
+  approveTransitousProposal,
+  readTransitousProposal,
+  releaseGbfsCatalogPin,
+  writeTransitousProposal,
+} from "@openmapx/transitous-core/pins";
 import type { OpsRuntime } from "./runtime";
 
-// The catalog lock lives in the repository's `infra/docker/`, which only the
-// operations agent may write. Data-manager and the API previously bind-mounted
-// the host checkout to touch it directly; they now name a pinned ref and let
-// the agent own the file, its canonical shape, and its atomic replacement.
+// The catalog pins are the release's, which the agent's bundle carries. On top
+// of the release's Transitous pin, the agent keeps the pin an administrator or
+// the auto-bump approved, and a proposal, in its own state directory; it never
+// writes the checkout's tracked lock files. Data-manager and the API name a
+// pinned ref and let the agent own the state, its shape, and its replacement.
 
-const LOCK_RELATIVE_PATH = join("infra", "docker", "transitous.lock.json");
-const PROPOSED_RELATIVE_PATH = join("infra", "docker", "transitous.lock.proposed.json");
-const MAX_LOCK_BYTES = 256 * 1024;
+type LockRecord = NonNullable<OpsResultFor<"transitousLock.inspect">["active"]>;
 
-type LockRecord = OpsResultFor<"transitousLock.inspect">["active"];
-
-function readLockAt(path: string): LockRecord {
-  if (!existsSync(path)) return null;
-  const raw = readFileSync(path, "utf-8");
-  if (Buffer.byteLength(raw, "utf8") > MAX_LOCK_BYTES) {
-    throw new Error("Transitous lock is too large");
-  }
-  const parsed = JSON.parse(raw) as Record<string, unknown>;
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Transitous lock is not an object");
-  }
-  const submodules: Record<string, string> = {};
-  const rawSubmodules = parsed.submodules;
-  if (rawSubmodules && typeof rawSubmodules === "object" && !Array.isArray(rawSubmodules)) {
-    for (const [name, value] of Object.entries(rawSubmodules as Record<string, unknown>)) {
-      if (typeof value === "string") submodules[name] = value;
-    }
-  }
+function record(lock: TransitousLock): LockRecord {
   return {
-    ref: String(parsed.ref ?? ""),
-    submodules,
-    lockedAt: String(parsed.lockedAt ?? ""),
-    lockedBy: String(parsed.lockedBy ?? ""),
-    ...(typeof parsed.comment === "string" ? { comment: parsed.comment } : {}),
-  } as LockRecord;
-}
-
-/** Write-then-rename so a reader never observes a half-written lock. */
-function atomicWriteJson(path: string, value: unknown): void {
-  mkdirSync(dirname(path), { recursive: true });
-  const temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
-  const descriptor = openSync(
-    temporary,
-    constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW,
-    0o600,
-  );
-  try {
-    writeFileSync(descriptor, `${JSON.stringify(value, null, 2)}\n`, "utf-8");
-    fsyncSync(descriptor);
-  } finally {
-    closeSync(descriptor);
-  }
-  try {
-    renameSync(temporary, path);
-  } catch (error) {
-    try {
-      unlinkSync(temporary);
-    } catch {
-      // The rename already failed; surface that, not the cleanup.
-    }
-    throw error;
-  }
+    ref: lock.ref,
+    submodules: lock.submodules,
+    lockedAt: lock.lockedAt,
+    lockedBy: lock.lockedBy,
+    ...(lock.comment ? { comment: lock.comment } : {}),
+  };
 }
 
 export interface TransitousLockRuntimeOptions {
@@ -92,30 +39,30 @@ export interface TransitousLockRuntimeOptions {
  * `propose` never activates anything: the auto-bump path writes a proposal that
  * an administrator must approve. `approve` requires the exact ref it is
  * activating, so an approval cannot land on a proposal that changed after the
- * reviewer read it.
+ * reviewer read it. The approval holds until a release ships a different pin.
  */
 export function createTransitousLockRuntime(
   runtime: OpsRuntime,
   options: TransitousLockRuntimeOptions,
 ): OpsRuntime {
   const now = options.now ?? (() => new Date());
-  const lockPath = join(options.rootDir, LOCK_RELATIVE_PATH);
-  const proposedPath = join(options.rootDir, PROPOSED_RELATIVE_PATH);
+  const infraDir = join(options.rootDir, "infra", "docker");
 
-  runtime["transitousLock.inspect"] = async () => ({
-    active: readLockAt(lockPath),
-    proposed: readLockAt(proposedPath),
-  });
+  runtime["transitousLock.inspect"] = async () => {
+    const proposed = readTransitousProposal(infraDir);
+    return {
+      active: record(activeTransitousPin(infraDir)),
+      proposed: proposed ? record(proposed) : null,
+    };
+  };
 
-  // The release pins the GBFS registry: the agent's bundle carries the pin,
-  // and nothing reads or writes the checkout's copy.
   runtime["gbfsCatalogLock.inspect"] = async () => {
     const { commit, url, sha256, lockedAt, lockedBy } = releaseGbfsCatalogPin();
     return { commit, url, sha256, lockedAt, lockedBy };
   };
 
   runtime["transitousLock.propose"] = async (operation) => {
-    atomicWriteJson(proposedPath, {
+    writeTransitousProposal(infraDir, {
       ref: operation.ref,
       submodules: operation.submodules,
       lockedAt: now().toISOString(),
@@ -126,27 +73,12 @@ export function createTransitousLockRuntime(
   };
 
   runtime["transitousLock.approve"] = async (operation) => {
-    const proposal = readLockAt(proposedPath);
-    if (!proposal) throw new Error("No Transitous lock proposal to approve");
-    if (proposal.ref !== operation.ref) {
-      // The reviewer approved a different ref than the one now proposed.
-      throw new Error("Transitous lock proposal does not match the approved ref");
-    }
-    const lockedAt = now().toISOString();
-    atomicWriteJson(lockPath, {
-      ref: proposal.ref,
-      submodules: proposal.submodules,
-      lockedAt,
-      lockedBy: operation.approvedBy,
-      comment: "Approved after compatibility review and inactive-slot validation.",
+    const approval = approveTransitousProposal(infraDir, {
+      ref: operation.ref,
+      approvedBy: operation.approvedBy,
+      now,
     });
-    try {
-      unlinkSync(proposedPath);
-    } catch {
-      // The activation already committed; a leftover proposal is inert because
-      // `approve` re-reads and re-matches it.
-    }
-    return { ref: proposal.ref, lockedAt };
+    return { ref: approval.ref, lockedAt: approval.lockedAt };
   };
 
   return runtime;

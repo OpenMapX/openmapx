@@ -3,6 +3,7 @@ import { open } from "node:fs/promises";
 import { join } from "node:path";
 import { readOpsTokenFile } from "@openmapx/core/ops";
 import { repoPaths, services } from "@openmapx/core/server";
+import { retireStaleTransitousApproval } from "@openmapx/transitous-core/pins";
 import {
   createAdministrativeRuntime,
   createDefaultFixedCli,
@@ -295,6 +296,15 @@ async function main(): Promise<void> {
       },
     });
     await releaseEffects.initialize?.();
+    // A release that ships a different Transitous pin takes over from a pin
+    // approved under an earlier one; the auto-bump proposes again through its
+    // canary.
+    const retiredPin = retireStaleTransitousApproval(paths.infraDir);
+    if (retiredPin) {
+      process.stderr.write(
+        `Retired the approved Transitous pin ${retiredPin.approval.ref} (approved by ${retiredPin.approval.lockedBy} at ${retiredPin.approval.lockedAt} over the release pin ${retiredPin.approval.releasePin}): this release pins ${retiredPin.release.ref}\n`,
+      );
+    }
     createTransitousLockRuntime(runtime, { rootDir: config.rootDir });
     createAdministrativeRuntime(runtime, {
       rootDir: config.rootDir,
