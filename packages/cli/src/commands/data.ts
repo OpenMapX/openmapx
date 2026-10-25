@@ -352,7 +352,7 @@ export function registerDataCommands(program: Command): void {
         process.exit(1);
       }
       log.ok(
-        `Imported ${manifest.service} (${manifest.files.length} files, built ${manifest.builtAt}${manifest.revision ? ` at ${manifest.revision.slice(0, 12)}` : ""})`,
+        `Imported ${manifest.service} (${manifest.files.length} files, built ${manifest.builtAt}${typeof manifest.release === "string" ? ` with release ${manifest.release.slice(0, 128)}` : ""}${manifest.revision ? ` at ${manifest.revision.slice(0, 12)}` : ""})`,
       );
       try {
         await renderAndApplyHardlinks();

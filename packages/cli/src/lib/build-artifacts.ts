@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
 import { execa } from "execa";
+import { runsFromAgentBundle } from "./agent-bundle";
 import { promoteStagedBuildDirs } from "./build-staging";
 import { repoPaths, resolveInvocationPath } from "./paths";
 
@@ -75,8 +76,10 @@ export interface BuildRecord {
   region?: string;
   sourcePbf?: { name: string; sizeBytes: number };
   builtAt: string;
-  /** Git commit of the OpenMapX checkout that ran the build, when known. */
+  /** Git commit of the OpenMapX checkout whose CLI ran the build, when known. */
   revision?: string;
+  /** The release selected when the build ran, when one was. */
+  release?: string;
   /**
    * Runtime images whose on-disk format the artifact is bound to, keyed by
    * compose service id. A serving host must run exactly these to load it.
@@ -119,13 +122,32 @@ export function readBuildRecord(serviceId: string, rootDir?: string): BuildRecor
   return JSON.parse(readFileSync(path, "utf-8")) as BuildRecord;
 }
 
-export async function currentRevision(rootDir?: string): Promise<string | undefined> {
-  const result = await execa("git", ["rev-parse", "HEAD"], {
-    cwd: repoPaths(rootDir).root,
-    reject: false,
-  });
-  const revision = result.exitCode === 0 ? String(result.stdout).trim() : "";
-  return revision || undefined;
+/**
+ * Where a build came from: the selected release, and the commit of the
+ * checkout whose CLI ran it. The operations agent's bundled CLI is not the
+ * checkout's code, so it records the release alone and runs no git in the
+ * checkout. Both are informational; one that cannot be read is left out.
+ */
+export async function buildProvenance(
+  rootDir?: string,
+  options: { bundled?: boolean } = {},
+): Promise<Pick<BuildRecord, "revision" | "release">> {
+  const paths = repoPaths(rootDir);
+  let release: string | undefined;
+  try {
+    const overlay = coreServices.readReleaseOverlay(paths.infraDir);
+    release =
+      (overlay === null ? null : coreServices.parseReleaseComposeSelection(overlay).release) ??
+      undefined;
+  } catch {
+    release = undefined;
+  }
+  let revision: string | undefined;
+  if (!(options.bundled ?? runsFromAgentBundle())) {
+    const result = await execa("git", ["rev-parse", "HEAD"], { cwd: paths.root, reject: false });
+    revision = (result.exitCode === 0 ? String(result.stdout).trim() : "") || undefined;
+  }
+  return { ...(revision ? { revision } : {}), ...(release ? { release } : {}) };
 }
 
 function isExcluded(relPath: string, isDir: boolean, exclude: readonly string[]): boolean {

@@ -234,7 +234,8 @@ are refreshed. Restart consumers after a completed refresh where required.
 
 Prepare artifacts on a larger machine with the same OpenMapX revision and
 runtime image pins. Build records under `data/.openmapx-builds/` record inputs,
-images, and revision. Bundles include file checksums; import verifies them and
+images, the selected release and, for a build the host CLI ran, the checkout's
+commit. Bundles include file checksums; import verifies them and
 runtime image compatibility before swapping data.
 
 ```bash

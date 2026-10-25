@@ -61,4 +61,8 @@ RUN mkdir -p /opt/motis \
 ENV PATH=/opt/motis:$PATH
 ENV PYTHONDONTWRITEBYTECODE=1
 
+# The step runner the CLI calls (packages/cli/src/lib/motis-data.ts), part of
+# the release rather than mounted from the host checkout.
+COPY --chmod=0755 run.sh /usr/local/bin/openmapx-transitous
+
 WORKDIR /transitous

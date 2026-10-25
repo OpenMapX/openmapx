@@ -36,6 +36,7 @@ import {
   type TransitSource,
 } from "@openmapx/transitous-core";
 import { execa } from "execa";
+import { runsFromAgentBundle } from "./agent-bundle";
 import { TRANSITOUS_COUNTRIES_ENV } from "./env-defaults";
 import { readFeedProxyVars, renderFeedProxyNginxConfig } from "./motis-feed-proxy";
 import { resolveOsmPbf } from "./osm-pbf";
@@ -55,6 +56,9 @@ export { DEFAULT_TRANSITOUS_REPO_URL };
 // CI publishes a multi-arch transitous-tools image (.github/workflows/docker.yml).
 // Default to the registry image; ensureTransitousToolsImage falls back to a
 // local docker build when the registry pull fails (offline / private fork).
+
+/** Runs one step of the Transitous tooling; the tools image carries it. */
+export const TRANSITOUS_TOOLS_SCRIPT = "/usr/local/bin/openmapx-transitous";
 
 export const DEFAULT_TRANSITOUS_TOOLS_IMAGE =
   process.env.OPENMAPX_TRANSITOUS_TOOLS_IMAGE ?? "ghcr.io/openmapx/transitous-tools:main";
@@ -251,15 +255,42 @@ async function ensureTransitousToolsImage(
   }
   if (image.includes("@sha256:") || coreServices.releaseSelection().kind !== "local")
     throw new Error("Refusing to build a replacement for a release-selected helper image");
+  // The agent's CLI runs its release's code; the checkout is not that release.
+  if (runsFromAgentBundle())
+    throw new Error(
+      "The operations agent does not build the transit tools image from the host checkout; select a release whose transitous-tools image can be pulled",
+    );
   const contextDir = join(rootDir, "services", "motis", "tools", "transitous");
   await runner("docker", ["build", "-t", image, contextDir], { cwd: rootDir, stdio: "inherit" });
+}
+
+/**
+ * The image carries the script that runs each step. One from a release before
+ * it did not, which happens when a checkout's CLI runs ahead of the release
+ * selected on the host.
+ */
+async function assertTransitousToolsScript(
+  rootDir: string,
+  image: string,
+  runner: CommandRunner,
+): Promise<void> {
+  try {
+    await runner(
+      "docker",
+      ["run", "--rm", "--entrypoint", "test", image, "-x", TRANSITOUS_TOOLS_SCRIPT],
+      { cwd: rootDir, stdio: "pipe" },
+    );
+  } catch {
+    throw new Error(
+      `The transit tools image ${image} has no ${TRANSITOUS_TOOLS_SCRIPT}: it is from an earlier release than this CLI. Select the checkout's release with pnpm openmapx compose release, then build again.`,
+    );
+  }
 }
 
 function dockerRunTransitousArgs(
   catalogDir: string,
   gtfsDir: string,
   downloadsDir: string,
-  runScriptPath: string,
   image: string,
   action: "generate-config" | "generate-attribution" | "generate-feed-proxy-vars",
   options: {
@@ -278,8 +309,6 @@ function dockerRunTransitousArgs(
     `${gtfsDir}:/transitous/out`,
     "-v",
     `${downloadsDir}:/transitous/downloads`,
-    "-v",
-    `${runScriptPath}:/run.sh:ro`,
   ];
   if (options.feedProxyOutDir) {
     args.push("-v", `${options.feedProxyOutDir}:/feed-proxy-out`);
@@ -299,7 +328,7 @@ function dockerRunTransitousArgs(
   if (typeof process.getuid === "function" && typeof process.getgid === "function") {
     args.push("--user", `${process.getuid()}:${process.getgid()}`);
   }
-  args.push(image, "/bin/bash", "/run.sh", action);
+  args.push(image, TRANSITOUS_TOOLS_SCRIPT, action);
   return args;
 }
 
@@ -573,6 +602,7 @@ export async function buildMotisData(
   const feedProxyKeyFile = ensureFeedProxyKeyFile(feedProxyDir);
   mkdirSync(transitousDownloadsDir, { recursive: true });
   await ensureTransitousToolsImage(paths.root, image, runner);
+  await assertTransitousToolsScript(paths.root, image, runner);
 
   // Pre-skip sources upstream can't resolve by RUNNING its resolver in the
   // tools container and acting on the "Could not resolve" verdict (same as the
@@ -597,7 +627,6 @@ export async function buildMotisData(
     logger: cliLogger,
   });
 
-  const runScriptPath = join(paths.root, "services", "motis", "tools", "transitous", "run.sh");
   // The MOTIS config + attribution are generated from the catalog in BOTH modes
   // (so the osm override, tiles strip, and rt→our-proxy rewrite all apply). The
   // only difference: build mode stages GTFS that `data download gtfs` fetched,
@@ -608,7 +637,6 @@ export async function buildMotisData(
       transitousCatalogDir,
       gtfsDir,
       transitousDownloadsDir,
-      runScriptPath,
       image,
       "generate-config",
       { feedProxyKeyFile },
@@ -621,7 +649,6 @@ export async function buildMotisData(
       transitousCatalogDir,
       gtfsDir,
       transitousDownloadsDir,
-      runScriptPath,
       image,
       "generate-attribution",
       { feedProxyKeyFile },
@@ -634,7 +661,6 @@ export async function buildMotisData(
       transitousCatalogDir,
       gtfsDir,
       transitousDownloadsDir,
-      runScriptPath,
       image,
       "generate-feed-proxy-vars",
       {
