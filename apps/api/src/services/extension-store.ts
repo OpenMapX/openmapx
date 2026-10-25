@@ -201,6 +201,51 @@ async function readCachedRevocations(): Promise<RevocationSnapshot | null> {
 
 const catalogKeys = { sources: EXTRA_SOURCES_CACHE_KEY, catalog: CATALOG_CACHE_KEY };
 
+function cachedCatalogNeedsLocatorRepair(raw: string | null): boolean {
+  if (raw === null) return false;
+  try {
+    const cached = JSON.parse(raw) as { entries?: unknown };
+    if (!Array.isArray(cached.entries)) return true;
+    return cached.entries.some((entry) => {
+      if (!isCatalogRecord(entry) || typeof entry.id !== "string" || typeof entry.name !== "string")
+        return true;
+      try {
+        const normalized = normalizeCatalogEntry(entry as unknown as ExtensionCatalogEntry);
+        return (
+          normalized.manifest !== entry.manifest ||
+          JSON.stringify(normalized.services) !== JSON.stringify(entry.services) ||
+          JSON.stringify(normalized.integrations) !== JSON.stringify(entry.integrations)
+        );
+      } catch {
+        return true;
+      }
+    });
+  } catch {
+    return true;
+  }
+}
+
+/** Remove legacy secret-bearing Redis locators before the API starts serving. */
+export async function scrubExtensionStoreUrlState(): Promise<void> {
+  if (!redis) return;
+  const { raw, sources } = await getExtraSources();
+  const catalogRaw = await readExtensionSnapshot(redis, CATALOG_CACHE_KEY);
+  let sourcesChanged = false;
+  const repairedSources: ExtensionCatalogSource[] = [];
+  for (const source of sources) {
+    try {
+      const canonical = normalizeExtensionLocator(source.url);
+      validatePublicUrl(canonical);
+      repairedSources.push({ ...source, url: canonical });
+      if (canonical !== source.url) sourcesChanged = true;
+    } catch {
+      sourcesChanged = true;
+    }
+  }
+  if (!sourcesChanged && !cachedCatalogNeedsLocatorRepair(catalogRaw)) return;
+  await editExtensionSources(redis, catalogKeys, raw, JSON.stringify(repairedSources));
+}
+
 async function getExtraSources(): Promise<{
   raw: string | null;
   sources: ExtensionCatalogSource[];

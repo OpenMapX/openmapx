@@ -111,6 +111,7 @@ import {
   warnAboutLegacyInstallJournals,
   withExtensionChangeLock,
 } from "./services/extension-recovery";
+import { scrubExtensionStoreUrlState } from "./services/extension-store";
 import { pruneOldRecords } from "./services/health-history";
 import { jobRunner } from "./services/job-runner";
 import { readOfflinePackagePrincipalKeyFile } from "./services/offline-package-principal.js";
@@ -178,6 +179,14 @@ try {
   // visible to the orchestrator as a stopped container, not as a healthy API
   // that turns schema mismatches into request-time errors or partial writes.
   server.log.fatal(err, "Required database migration failed; refusing to start");
+  throw err;
+}
+
+try {
+  await scrubExtensionStoreUrlState();
+  server.log.info("Extension catalog URL state reconciled");
+} catch (err) {
+  server.log.fatal(err, "Extension catalog URL state is ambiguous; refusing to start");
   throw err;
 }
 

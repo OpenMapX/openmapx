@@ -1,6 +1,7 @@
 import type { AdminExtensionInstallRequest } from "@openmapx/core/api-contracts";
 import { services as coreServices } from "@openmapx/core/server";
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { normalizeExtensionInstallPayload } from "../services/extension-install-payload";
 import { previewExtensionInstall } from "../services/extension-installer";
 import {
   addExtensionSource,
@@ -288,13 +289,13 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
 
       const jobId = await jobRunner.enqueue(
         "extension.install",
-        {
+        normalizeExtensionInstallPayload({
           manifest,
           sourceUrl,
           sourceTrust,
           actorId: adminSession.user.id,
           hostPortConfirmation: body.hostPortConfirmation,
-        },
+        }),
         adminSession.user.id,
       );
 
@@ -334,7 +335,7 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
         assertAdmission(entry, await getKillSwitch());
         resolved = {
           manifest: await resolveExtensionManifest(entry),
-          sourceUrl: entry.manifest ?? undefined,
+          sourceUrl: entry.manifest ? normalizeExtensionLocator(entry.manifest) : undefined,
           sourceTrust: entry.trust === "verified" ? "verified" : "community",
         };
       } catch (error) {
@@ -345,13 +346,13 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
 
       const jobId = await jobRunner.enqueue(
         "extension.install",
-        {
+        normalizeExtensionInstallPayload({
           manifest,
           sourceUrl,
           sourceTrust,
           actorId: adminSession.user.id,
           hostPortConfirmation: request.body?.hostPortConfirmation,
-        },
+        }),
         adminSession.user.id,
       );
 

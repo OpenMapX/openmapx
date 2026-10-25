@@ -32,6 +32,7 @@ import {
   getKillSwitch,
   listExtensionSources,
   removeExtensionSource,
+  scrubExtensionStoreUrlState,
 } from "../extension-store";
 
 import { EDIT_EXTENSION_SOURCES, PUBLISH_EXTENSION_CATALOG } from "../extension-store-cache";
@@ -77,6 +78,106 @@ beforeEach(() => {
 });
 
 describe("extension source and catalog coherence", () => {
+  it("atomically drops legacy secret-bearing sources and invalidates their catalog", async () => {
+    const unsafe = [
+      "https://user:password@example.test/catalog.json",
+      "https://example.test/catalog.json?token=secret",
+      "https://example.test/catalog.json#secret",
+    ].map((url, index) => ({ url, label: `Unsafe ${index}`, isDefault: false }));
+    ports.values.set(sourceKey, JSON.stringify([...unsafe, source]));
+    ports.values.set(catalogKey, old);
+
+    await scrubExtensionStoreUrlState();
+
+    expect(JSON.parse(ports.values.get(sourceKey) as string)).toEqual([source]);
+    expect(ports.values.has(catalogKey)).toBe(false);
+    expect(ports.eval).toHaveBeenCalledTimes(1);
+    expect(ports.fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      id: "unsafe-manifest",
+      name: "Unsafe manifest",
+      manifest: "https://example.test/extension.json?token=secret",
+    },
+    {
+      id: "unsafe-inline",
+      name: "Unsafe inline",
+      version: "1.0.0",
+      integrations: [
+        {
+          id: "unsafe-inline",
+          artifact: "https://example.test/archive.tgz#secret",
+          sha256: "a".repeat(64),
+        },
+      ],
+    },
+  ])("invalidates a cached entry with an unsafe durable locator", async (cachedEntry) => {
+    const sources = JSON.stringify([source]);
+    ports.values.set(sourceKey, sources);
+    ports.values.set(
+      catalogKey,
+      JSON.stringify({
+        entries: [cachedEntry],
+        killSwitch: { removed: [], critical: [] },
+      }),
+    );
+
+    await scrubExtensionStoreUrlState();
+
+    expect(ports.values.get(sourceKey)).toBe(sources);
+    expect(ports.values.has(catalogKey)).toBe(false);
+    expect(ports.eval).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not overwrite a concurrent source edit while repairing", async () => {
+    const unsafeRaw = JSON.stringify([
+      source,
+      {
+        url: "https://example.test/catalog.json?token=secret",
+        label: "Unsafe",
+        isDefault: false,
+      },
+    ]);
+    ports.values.set(sourceKey, unsafeRaw);
+    ports.values.set(catalogKey, old);
+    ports.eval.mockResolvedValueOnce(0);
+
+    await expect(scrubExtensionStoreUrlState()).rejects.toMatchObject({
+      category: "source_conflict",
+    });
+    expect(ports.values.get(sourceKey)).toBe(unsafeRaw);
+    expect(ports.values.get(catalogKey)).toBe(old);
+    expect(ports.eval).toHaveBeenCalledTimes(1);
+  });
+
+  it("rebuilds from remaining sources when another acquisition fails after repair", async () => {
+    const unsafeUrl = "https://example.test/catalog.json?token=secret";
+    ports.values.set(
+      sourceKey,
+      JSON.stringify([{ url: unsafeUrl, label: "Unsafe", isDefault: false }, source]),
+    );
+    ports.values.set(catalogKey, old);
+    ports.fetch.mockImplementation(async (requested: string) => {
+      if (requested === extraUrl) return [entry];
+      throw new Error("synthetic default acquisition failure");
+    });
+
+    await scrubExtensionStoreUrlState();
+    await expect(getExtensionCatalog()).resolves.toEqual([{ ...entry, trust: "community" }]);
+    expect(ports.fetch.mock.calls.some(([requested]) => requested === unsafeUrl)).toBe(false);
+  });
+
+  it("fails closed when repair cannot read or atomically own storage", async () => {
+    ports.values.set(sourceKey, JSON.stringify([source]));
+    ports.get.mockRejectedValueOnce(new Error("synthetic storage details"));
+    await expect(scrubExtensionStoreUrlState()).rejects.toMatchObject({
+      category: "source_storage_unavailable",
+    });
+    expect(ports.eval).not.toHaveBeenCalled();
+  });
+
   it("add then ordinary read includes the added source instead of the old cache", async () => {
     ports.values.set(catalogKey, old);
     await addExtensionSource(extraUrl, "Extra");

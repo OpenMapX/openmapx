@@ -12,6 +12,7 @@ import {
 import { reloadIntegrations } from "../integration-host";
 import { dbActorId } from "../utils/actor";
 import { dockerComposeAction } from "../utils/docker-compose";
+import { sanitizeLogString } from "../utils/safe-log-fields";
 import { getServiceSelectionSummary } from "./admin-cli";
 import { renderAndPersistCompose, serviceStart } from "./admin-ops";
 import {
@@ -30,6 +31,7 @@ import {
   settleServiceRepository,
 } from "./community-repositories";
 import { assertComponentOwnership } from "./extension-component-ownership";
+import { normalizeExtensionInstallPayload } from "./extension-install-payload";
 import { recoverInterruptedExtensionChanges, withExtensionChangeLock } from "./extension-recovery";
 import { getKillSwitch } from "./extension-store";
 import type { JobContext } from "./job-runner";
@@ -97,6 +99,20 @@ export interface ExtensionInstallPreflight {
 
 export class ExtensionPreflightError extends Error {
   override readonly name = "ExtensionPreflightError";
+}
+
+function normalizedInstallOptions(opts: InstallExtensionOptions): InstallExtensionOptions {
+  return normalizeExtensionInstallPayload({
+    manifest: opts.manifest,
+    sourceUrl: opts.sourceUrl,
+    sourceTrust: opts.sourceTrust,
+    actorId: opts.actorId,
+    hostPortConfirmation: opts.hostPortConfirmation,
+  });
+}
+
+function safeDiagnostic(error: unknown): string {
+  return sanitizeLogString(error instanceof Error ? error.message : String(error));
 }
 
 function canonicalJson(value: unknown): string {
@@ -202,13 +218,14 @@ async function inspectExtensionServiceRepos(
 export async function previewExtensionInstall(
   opts: InstallExtensionOptions,
 ): Promise<ExtensionInstallPreview> {
-  await preflightExtensionInstall(opts);
-  await assertNotRevoked(opts.manifest.id);
-  const inspections = await inspectExtensionServiceRepos(opts, {
+  const normalized = normalizedInstallOptions(opts);
+  await preflightExtensionInstall(normalized);
+  await assertNotRevoked(normalized.manifest.id);
+  const inspections = await inspectExtensionServiceRepos(normalized, {
     namespace: "extension.preview.inspect",
     identity: randomUUID(),
   });
-  return buildExtensionInstallPreview(opts, inspections);
+  return buildExtensionInstallPreview(normalized, inspections);
 }
 
 /**
@@ -360,9 +377,10 @@ export function installExtension(
   ctx: JobContext,
   opts: InstallExtensionOptions,
 ): Promise<{ id: string; components: number }> {
+  const normalized = normalizedInstallOptions(opts);
   return withExtensionChangeLock(async () => {
     await recoverInterruptedExtensionChanges(ctx.signal);
-    return installExtensionNow(ctx, opts);
+    return installExtensionNow(ctx, normalized);
   });
 }
 
@@ -434,7 +452,9 @@ async function installExtensionNow(
     for (const svc of serviceRepos.values()) {
       const inspection = inspections.get(svc.repo);
       if (!inspection) throw new Error(`Service repository "${svc.repo}" was not inspected`);
-      await ctx.log(`Installing service repository ${inspection.url}@${inspection.commit}...`);
+      await ctx.log(
+        `Installing service repository for ${svc.service} at commit ${inspection.commit}...`,
+      );
       const published = await publishServiceRepository(
         {
           url: inspection.url,
@@ -552,7 +572,7 @@ async function installExtensionNow(
         ? await readInstalledIntegrations({ signal: ctx.signal })
         : null;
     for (const intg of integrationComponents) {
-      await ctx.log(`Installing integration ${intg.id} from ${intg.artifact}...`);
+      await ctx.log(`Installing integration ${intg.id}...`);
       if (
         agentIntegrations?.unrecorded.includes(intg.id) &&
         (await integrationManagedBy(intg.id)) === manifest.id
@@ -735,7 +755,7 @@ async function installExtensionNow(
       } catch (error) {
         await ctx
           .log(
-            `Cleanup: the operations agent could not settle integration ${integrationId}: ${(error as Error).message}`,
+            `Cleanup: the operations agent could not settle integration ${integrationId}: ${safeDiagnostic(error)}`,
             "stderr",
           )
           .catch(() => {});
@@ -766,7 +786,7 @@ async function installExtensionNow(
       } catch (error) {
         await ctx
           .log(
-            `Cleanup: the operations agent could not settle repository ${repository}: ${(error as Error).message}`,
+            `Cleanup: the operations agent could not settle repository ${repository}: ${safeDiagnostic(error)}`,
             "stderr",
           )
           .catch(() => {});
@@ -782,12 +802,10 @@ async function installExtensionNow(
     if (bookkeepingCommitted) throw err;
     if (!rollbackRequired) throw err;
     await ctx
-      .log(`Install failed: ${(err as Error).message}. Rolling back...`, "stderr")
+      .log(`Install failed: ${safeDiagnostic(err)}. Rolling back...`, "stderr")
       .catch(() => {});
     await rollbackInstall(ctx, ledger).catch((rbErr) => {
-      ctx
-        .log(`Rollback encountered an error: ${(rbErr as Error).message}`, "stderr")
-        .catch(() => {});
+      ctx.log(`Rollback encountered an error: ${safeDiagnostic(rbErr)}`, "stderr").catch(() => {});
     });
     throw err;
   }
@@ -812,7 +830,7 @@ async function rollbackInstall(ctx: JobContext, ledger: InstallLedger): Promise<
     } catch (error) {
       await ctx
         .log(
-          `Rollback: the operations agent could not restore integration ${transaction.integrationId}: ${(error as Error).message}`,
+          `Rollback: the operations agent could not restore integration ${transaction.integrationId}: ${safeDiagnostic(error)}`,
           "stderr",
         )
         .catch(() => {});
@@ -850,7 +868,7 @@ async function rollbackInstall(ctx: JobContext, ledger: InstallLedger): Promise<
     } catch (error) {
       await ctx
         .log(
-          `Rollback: the operations agent could not restore repository ${transaction.repository}: ${(error as Error).message}`,
+          `Rollback: the operations agent could not restore repository ${transaction.repository}: ${safeDiagnostic(error)}`,
           "stderr",
         )
         .catch(() => {});
@@ -877,7 +895,7 @@ async function rollbackInstall(ctx: JobContext, ledger: InstallLedger): Promise<
       }
     } catch (error) {
       await ctx
-        .log(`Rollback: failed to restore service state: ${(error as Error).message}`, "stderr")
+        .log(`Rollback: failed to restore service state: ${safeDiagnostic(error)}`, "stderr")
         .catch(() => {});
       return;
     }
@@ -896,7 +914,7 @@ async function rollbackInstall(ctx: JobContext, ledger: InstallLedger): Promise<
     } catch (error) {
       await ctx
         .log(
-          `Rollback: the operations agent could not release repository ${transaction.repository}: ${(error as Error).message}`,
+          `Rollback: the operations agent could not release repository ${transaction.repository}: ${safeDiagnostic(error)}`,
           "stderr",
         )
         .catch(() => {});
@@ -979,7 +997,7 @@ async function removeExtensionNow(
     // A repository the agent cannot remove fails the job before the extension
     // record is deleted, so the removal can be retried.
     for (const repo of repos) {
-      await ctx.log(`Removing service repository ${repo.url}...`);
+      await ctx.log(`Removing service repository ${repo.hash}...`);
       await removeServiceRepository(
         { repository: repo.hash, extensionId: id },
         {
@@ -1063,22 +1081,11 @@ async function removeExtensionNow(
 // Job handlers (wired in server.ts).
 
 export async function handleExtensionInstallJob(ctx: JobContext): Promise<Record<string, unknown>> {
-  const payload = ctx.payload as {
-    manifest?: ExtensionManifest;
-    sourceUrl?: string;
-    sourceTrust?: ExtensionTrust;
-    actorId?: string;
-    hostPortConfirmation?: string;
-  };
-  if (!payload.manifest) throw new Error("extension install job is missing manifest");
-  const validation = coreServices.validateExtensionManifest(payload.manifest);
-  if (!validation.valid) {
-    throw new Error(`Invalid extension manifest: ${validation.errors.join("; ")}`);
-  }
+  const payload = normalizeExtensionInstallPayload(ctx.payload);
   return installExtension(ctx, {
     manifest: payload.manifest,
     sourceUrl: payload.sourceUrl,
-    sourceTrust: payload.sourceTrust ?? "community",
+    sourceTrust: payload.sourceTrust,
     actorId: payload.actorId,
     hostPortConfirmation: payload.hostPortConfirmation,
   });
