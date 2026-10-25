@@ -1,7 +1,13 @@
 import { statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { atomicWrite } from "../release-files";
-import { assertDeploymentEnvironmentFile, readOwnedStateFile } from "./deployment";
+import {
+  assertDeploymentEnvironmentFile,
+  readDeploymentUserAssignments,
+  readOwnedStateFile,
+} from "./deployment";
+
+export { readDeploymentUserAssignments } from "./deployment";
 
 /**
  * The deployment's user: the uid and gid the stack's own containers run as
@@ -18,7 +24,6 @@ export interface DeploymentUser {
 }
 
 const MAX_ENV_BYTES = 1024 * 1024;
-const ASSIGNMENT = /^\s*(?:export\s+)?(UID|GID)\s*=\s*(.*?)\s*$/;
 
 function envPath(infraDir: string): string {
   return join(infraDir, ".env");
@@ -27,33 +32,6 @@ function envPath(infraDir: string): string {
 /** The checkout `infra/docker` belongs to. */
 function checkoutRoot(infraDir: string): string {
   return resolve(infraDir, "..", "..");
-}
-
-function parseId(name: "UID" | "GID", raw: string, source: string): number {
-  const value = raw.replace(/^(["'])(.*)\1$/, "$2");
-  if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
-    throw new Error(`${name} in ${source} must be a numeric id, not "${raw}"`);
-  }
-  return Number(value);
-}
-
-/** The explicit `UID`/`GID` assignments in `.env`; commented lines don't count. */
-export function readDeploymentUserAssignments(infraDir: string): {
-  uid?: number;
-  gid?: number;
-} {
-  const path = envPath(infraDir);
-  const bytes = readOwnedStateFile(path, MAX_ENV_BYTES);
-  if (bytes === null) return {};
-  const found: { uid?: number; gid?: number } = {};
-  for (const line of bytes.toString("utf8").split(/\r?\n/)) {
-    const match = ASSIGNMENT.exec(line);
-    if (!match) continue;
-    const id = parseId(match[1] as "UID" | "GID", match[2] as string, path);
-    if (match[1] === "UID") found.uid = id;
-    else found.gid = id;
-  }
-  return found;
 }
 
 /** The checkout's owner and group: who the deployment's files belong to. */

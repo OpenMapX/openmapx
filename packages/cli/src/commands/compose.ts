@@ -209,9 +209,6 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
         `Set the deployment's user in infra/docker/.env from the checkout's owner: UID=${deploymentUser.uid} GID=${deploymentUser.gid}`,
       );
     }
-    // Compose prefers a variable this process already has over --env-file.
-    process.env.UID ??= String(deploymentUser.uid);
-    process.env.GID ??= String(deploymentUser.gid);
     // Moves the agent's mounted state out of data-manager's data directory the
     // first time a generation mounts it from its new place.
     prepareAgentStateDirectories(paths.infraDir);

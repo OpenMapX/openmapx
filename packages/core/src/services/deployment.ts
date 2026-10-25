@@ -69,7 +69,11 @@ export function stackComposeArgs(
 ): string[] {
   const envFile = join(paths.infraDir, ".env");
   const hasEnvFile = (fileExists ?? existsSync)(envFile);
-  if (hasEnvFile) assertDeploymentEnvironmentFile(envFile);
+  if (hasEnvFile) {
+    assertDeploymentEnvironmentFile(envFile);
+    const inherited = deploymentUserEnvironmentProblem(paths.infraDir);
+    if (inherited) throw new Error(inherited);
+  }
   const hasOverlay = (fileExists ?? ownedStateFilePresent)(paths.composeReleasePath);
   return [
     "compose",
@@ -78,6 +82,60 @@ export function stackComposeArgs(
     paths.composePath,
     ...(hasOverlay ? ["-f", paths.composeReleasePath] : []),
   ];
+}
+
+const DEPLOYMENT_USER_ASSIGNMENT = /^\s*(?:export\s+)?(UID|GID)\s*=\s*(.*?)\s*$/;
+
+function parseDeploymentId(name: "UID" | "GID", raw: string, source: string): number {
+  const value = raw.replace(/^(["'])(.*)\1$/, "$2");
+  if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
+    throw new Error(`${name} in ${source} must be a numeric id, not "${raw}"`);
+  }
+  return Number(value);
+}
+
+/**
+ * The deployment's user as `.env` assigns it, `UID` and `GID` (see
+ * deployment-user.ts); commented lines don't count.
+ */
+export function readDeploymentUserAssignments(infraDir: string): {
+  uid?: number;
+  gid?: number;
+} {
+  const path = join(infraDir, ".env");
+  const bytes = readOwnedStateFile(path, 1024 * 1024);
+  if (bytes === null) return {};
+  const found: { uid?: number; gid?: number } = {};
+  for (const line of bytes.toString("utf8").split(/\r?\n/)) {
+    const match = DEPLOYMENT_USER_ASSIGNMENT.exec(line);
+    if (!match) continue;
+    const id = parseDeploymentId(match[1] as "UID" | "GID", match[2] as string, path);
+    if (match[1] === "UID") found.uid = id;
+    else found.gid = id;
+  }
+  return found;
+}
+
+/**
+ * Compose takes a variable from its own environment over `--env-file`, so a
+ * UID or GID this process inherited would replace `.env`'s for every stack
+ * container. `.env` is the deployment's: an inherited value that differs is
+ * refused, with the fix.
+ */
+export function deploymentUserEnvironmentProblem(
+  infraDir: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  const assigned = readDeploymentUserAssignments(infraDir);
+  for (const [name, value] of [
+    ["UID", assigned.uid],
+    ["GID", assigned.gid],
+  ] as const) {
+    const inherited = env[name]?.trim();
+    if (value === undefined || !inherited || inherited === String(value)) continue;
+    return `${name}=${inherited} in this process's environment differs from ${name}=${value} in infra/docker/.env, and Compose would run the stack's containers with the environment's: unset ${name} in the environment, or set it in infra/docker/.env`;
+  }
+  return null;
 }
 
 /**

@@ -47,6 +47,7 @@ vi.mock("node:fs", async (importOriginal) => {
 
 const { assertRunningAsDeploymentUser, ensureDeploymentUser, readDeploymentUserAssignments } =
   await import("../deployment-user");
+const { stackComposeArgs } = await import("../deployment");
 
 const roots: string[] = [];
 afterEach(() => {
@@ -112,5 +113,37 @@ describe("the deployment's user", () => {
     expect(() => assertRunningAsDeploymentUser({ uid: uid + 1 })).toThrow(
       new RegExp(`runs as uid ${uid}, but the deployment's user .* is ${uid + 1}`),
     );
+  });
+
+  it("is .env's for every stack Compose call, whatever this process inherited", () => {
+    const { infraDir, env } = checkout();
+    writeFileSync(env, "UID=4321\nGID=4322\n", { mode: 0o600 });
+    const paths = {
+      infraDir,
+      composePath: join(infraDir, "docker-compose.generated.yml"),
+      composeReleasePath: join(infraDir, "docker-compose.release.yml"),
+    };
+    const inherited = { UID: process.env.UID, GID: process.env.GID };
+    try {
+      delete process.env.UID;
+      delete process.env.GID;
+      expect(stackComposeArgs(paths)).toContain(env);
+      process.env.UID = "4321";
+      process.env.GID = "4322";
+      expect(stackComposeArgs(paths)).toContain(env);
+      // Compose would take these over --env-file: refused.
+      process.env.UID = "1000";
+      expect(() => stackComposeArgs(paths)).toThrow(
+        "UID=1000 in this process's environment differs from UID=4321 in infra/docker/.env",
+      );
+      process.env.UID = "4321";
+      process.env.GID = "1000";
+      expect(() => stackComposeArgs(paths)).toThrow(/GID=1000 .* differs from GID=4322/);
+    } finally {
+      for (const [name, value] of Object.entries(inherited)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
   });
 });

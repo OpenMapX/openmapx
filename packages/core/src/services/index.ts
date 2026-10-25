@@ -103,6 +103,7 @@ export {
   type DesiredSelection,
   type DesiredSelectionSource,
   deploymentEnvironmentFileProblem,
+  deploymentUserEnvironmentProblem,
   GENERATED_COMPOSE_FILE,
   GENERATED_HARDLINK_PLAN_FILE,
   LEGACY_CONFIGURATION_GENERATIONS,
