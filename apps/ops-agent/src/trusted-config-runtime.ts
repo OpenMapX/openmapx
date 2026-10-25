@@ -31,6 +31,11 @@ export interface TrustedConfigurationRuntimeOptions {
    * directory; `undefined` when Docker can't tell. Omitted, it is not known.
    */
   legacyTraefikDynamicMounted?: () => Promise<boolean | undefined>;
+  /**
+   * Every container's bind mounts; `undefined` when Docker can't tell. A
+   * service-file tree one of them mounts is kept. Omitted, it is not known.
+   */
+  containerBindMounts?: () => Promise<coreServices.ContainerBindMounts[] | undefined>;
 }
 
 export interface TrustedConfigurationAuthoritySnapshot {
@@ -131,7 +136,9 @@ async function commitGeneration(
         // A Traefik not recreated since an earlier release still reads its
         // routes from the checkout, where they are written too until none does.
         const legacyTraefik = await options.legacyTraefikDynamicMounted?.();
+        const mounts = await options.containerBindMounts?.();
         const committed = await writer.commit({
+          containerBindSources: coreServices.bindSources(mounts),
           services,
           integrationSchemas: authority?.integrationSchemas ?? options.integrationSchemas,
           input: { ...payload, selectedRoots },

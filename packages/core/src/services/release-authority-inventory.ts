@@ -8,6 +8,7 @@ import {
 } from "./built-in-service-source";
 import { embeddedBuiltInServiceManifests } from "./embedded-built-in-services";
 import { validateServiceManifest } from "./manifest-schema";
+import { type ReleaseServiceFiles, readEmbeddedReleaseServiceFiles } from "./release-service-files";
 import type { LoadedService, ServiceManifest } from "./types";
 
 export const RELEASE_BUILT_IN_SERVICE_IDS = Object.freeze([
@@ -65,6 +66,8 @@ export interface BuiltInServiceReadOptions {
    * source.
    */
   source?: BuiltInServiceManifestSource;
+  /** The release's service files the digest covers; defaults to those the bundle embeds. */
+  serviceFiles?: ReleaseServiceFiles | null;
 }
 
 /**
@@ -121,6 +124,35 @@ export function readBuiltInServices(
       isBuiltIn: true,
       enabled: true,
     });
+  }
+  // The release's service files are part of what it runs: a bundle covers
+  // their bytes, executable bits and every earlier version the import knows.
+  // (Run from source, only tests pass an embedded source, without files.)
+  const files =
+    options.serviceFiles !== undefined
+      ? options.serviceFiles
+      : source.embedded
+        ? readEmbeddedReleaseServiceFiles()
+        : null;
+  if (files) {
+    digest.update("files\0");
+    for (const file of files.files.values()) {
+      digest
+        .update(`${file.serviceId}/${file.path}`)
+        .update("\0")
+        .update(file.executable ? "x" : "-")
+        .update("\0")
+        .update(file.sha256)
+        .update("\0");
+    }
+    digest.update("history\0");
+    for (const [key, hashes] of [...files.history].sort(([a], [b]) => a.localeCompare(b))) {
+      digest
+        .update(key)
+        .update("\0")
+        .update([...hashes].sort().join(","))
+        .update("\0");
+    }
   }
   return { serviceIds, services, digest: `release1_${digest.digest("base64url")}` };
 }

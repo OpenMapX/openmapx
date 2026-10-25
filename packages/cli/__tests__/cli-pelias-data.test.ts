@@ -21,6 +21,7 @@ import {
   PELIAS_OPENSTREETMAP_FILENAME,
   PELIAS_PLACEHOLDER_FILENAME,
 } from "../src/lib/pelias-data";
+import { applyServiceFile } from "./applied-service-files";
 
 let tmp: string;
 
@@ -32,12 +33,15 @@ const images = {
   openstreetmapImage: "pelias/openstreetmap:v9.5.0@sha256:3",
 } satisfies Partial<BuildPeliasDataOptions>;
 
-beforeEach(() => {
+let peliasConfig: string;
+
+beforeEach(async () => {
   tmp = mkdtempSync(join(tmpdir(), "openmapx-pelias-data-"));
   writeFileSync(join(tmp, "pnpm-workspace.yaml"), "packages: []\n");
   mkdirSync(join(tmp, "services", "pelias", "config"), { recursive: true });
   mkdirSync(join(tmp, "infra", "docker", "data", "osm"), { recursive: true });
   writeFileSync(join(tmp, "services", "pelias", "config", "pelias.json"), "{}\n");
+  peliasConfig = await applyServiceFile(tmp, "pelias", "config/pelias.json");
 });
 
 afterEach(() => {
@@ -109,9 +113,11 @@ describe("buildPeliasData", () => {
     expect(basename(composeFile)).toBe(PELIAS_BUILD_COMPOSE_FILENAME);
     expect(composeFile.startsWith(tmp)).toBe(false);
     expect(existsSync(dirname(composeFile))).toBe(false);
-    expect(readdirSync(join(tmp, "infra", "docker"))).toEqual(["data"]);
+    // Nothing beside the data and what the generation applied before the build.
+    expect(readdirSync(join(tmp, "infra", "docker")).sort()).toEqual(["data", "state"]);
+    // The copy the applied generation mounts, not the checkout's.
     expect(compose.services["pelias-schema"]?.volumes).toEqual([
-      `${join(tmp, "services", "pelias", "config", "pelias.json")}:/code/pelias.json:ro`,
+      `${peliasConfig}:/code/pelias.json:ro`,
     ]);
     expect(compose.volumes).toBeUndefined();
     expect(compose.services.elasticsearch?.volumes).toEqual([

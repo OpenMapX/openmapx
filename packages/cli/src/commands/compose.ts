@@ -3,10 +3,10 @@ import { join } from "node:path";
 import { initializeErasureJournal } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
 import { type Command, Option } from "commander";
+import { containerBindMounts, legacyTraefikDynamicMounted } from "../lib/container-mounts";
 import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
 import { dockerComposeStream } from "../lib/docker";
 import { applyGeneratedHardlinksBeforeStart } from "../lib/hardlinks";
-import { legacyTraefikDynamicMounted } from "../lib/legacy-traefik";
 import { log } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import {
@@ -333,8 +333,10 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
     // A Traefik not recreated since an earlier release still reads its routes
     // from the checkout, where they are written too until none does.
     const legacyTraefik = await legacyTraefikDynamicMounted(paths.infraDir);
+    const mounts = await containerBindMounts();
     const committed = await writer.commit({
       legacyTraefikDynamicMounted: legacyTraefik,
+      containerBindSources: coreServices.bindSources(mounts),
       services,
       integrationSchemas,
       input: {

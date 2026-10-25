@@ -334,6 +334,17 @@ async function main(): Promise<void> {
           return undefined;
         }
       },
+      containerBindMounts: () =>
+        services.readContainerBindMounts(
+          async (args) =>
+            (
+              await runContainedProcess("docker", args, {
+                signal: AbortSignal.timeout(30_000),
+                timeout: 30_000,
+                maxBuffer: 4 * 1024 * 1024,
+              })
+            ).stdout,
+        ),
     });
     installCommunityRepositoryRuntime(runtime, communityRepositories);
     installIntegrationRuntime(runtime, integrationStore);

@@ -66,6 +66,7 @@ export {
   serviceConfigEnvPrefix,
 } from "./config-resolver";
 export {
+  appliedServiceFile,
   type CommitConfigurationOptions,
   type CommittedConfiguration,
   ConfigurationGenerationError,
@@ -92,6 +93,11 @@ export {
   assertTrustedConfigurationSchema,
   validateTrustedConfigurationValues,
 } from "./configuration-schema";
+export {
+  bindSources,
+  type ContainerBindMounts,
+  readContainerBindMounts,
+} from "./container-mounts";
 export type {
   DataManagerCoverageEvidencePage,
   NotablePlacesBuildResult,
@@ -229,6 +235,15 @@ export {
   writeReleaseComposeArtifacts,
 } from "./release-manifest";
 export {
+  parseReleaseServiceFiles,
+  type ReleaseServiceFile,
+  type ReleaseServiceFiles,
+  releaseServiceFiles,
+  ServiceFileError,
+  serializeReleaseServiceFiles,
+  serviceFileReferences,
+} from "./release-service-files";
+export {
   assertReleaseStateDirectory,
   ensureReleaseStateDirectories,
   ensureReleaseStateDirectory,
@@ -292,11 +307,10 @@ export {
   parseServiceIdList,
   SERVICE_SELECTION_ENV,
 } from "./selection";
+export { serviceFileStore } from "./service-file-store";
 export {
-  describeSkippedTraefikFiles,
   LEGACY_TRAEFIK_MOUNT_NOTICE,
   legacyTraefikDynamicDirectory,
-  readTraefikDynamicSources,
   TRAEFIK_ROUTES_FILE,
 } from "./traefik-files";
 export {

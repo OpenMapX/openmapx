@@ -24,14 +24,15 @@ import { readErasureJournal } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderComposeForRepo, rotateRedisPasswordForRepo } from "../src/commands/compose";
+import { legacyTraefikDynamicMounted } from "../src/lib/container-mounts";
 import { loadInfraEnv } from "../src/lib/infra-env";
-import { legacyTraefikDynamicMounted } from "../src/lib/legacy-traefik";
 import { rotatePlatformSecretFile } from "../src/lib/platform-secret-files";
 
 // Docker answers whether a container still mounts the checkout's Traefik
-// directory; here, by default, none does.
-vi.mock("../src/lib/legacy-traefik", () => ({
+// directory, and what containers mount; here, by default, none does.
+vi.mock("../src/lib/container-mounts", () => ({
   legacyTraefikDynamicMounted: vi.fn(async () => false),
+  containerBindMounts: vi.fn(async () => []),
 }));
 
 /** A file's permission bits, read through a descriptor rather than a second lookup by path. */

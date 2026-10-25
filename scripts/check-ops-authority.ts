@@ -138,7 +138,12 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
   for (const manifestPath of serviceManifests(root)) {
     const serviceId = relative(root, dirname(manifestPath)).split(/[/\\]/).at(-1) as string;
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
-      bindMounts?: Array<{ source?: unknown; target?: unknown; readOnly?: unknown }>;
+      bindMounts?: Array<{
+        source?: unknown;
+        target?: unknown;
+        readOnly?: unknown;
+        writableCopy?: unknown;
+      }>;
     };
     for (const mount of manifest.bindMounts ?? []) {
       const source = typeof mount.source === "string" ? mount.source : "";
@@ -146,6 +151,19 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
       // Bind mounts are read-only unless a manifest says otherwise.
       const readOnly = mount.readOnly !== false;
       if (serviceId === AUTHORITY_SERVICE) continue;
+
+      // A writable copy is what the container mounts, read-write, in place
+      // of its source: it must stay out of the agent's state as well.
+      if (mount.writableCopy !== undefined) {
+        const copy = typeof mount.writableCopy === "string" ? mount.writableCopy : "";
+        const path = copy.startsWith("@infra:") ? checkoutPath(serviceId, copy) : null;
+        if (path === null || reachesAgentState(path)) {
+          violations.push({
+            file: relative(root, manifestPath),
+            detail: `service "${serviceId}" has a writable copy outside the data directory (${copy})`,
+          });
+        }
+      }
 
       const isSocket = source === "@docker-socket" || target.includes("docker.sock");
       if (isSocket) {

@@ -464,6 +464,9 @@
           },
           "optional": {
             "type": "boolean"
+          },
+          "writableCopy": {
+            "type": "string"
           }
         },
         "required": ["source", "target"]

@@ -5,8 +5,8 @@ import { services } from "@openmapx/core/server";
 import { Command } from "commander";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { registerCheckCommand } from "../src/commands/check";
+import { legacyTraefikDynamicMounted } from "../src/lib/container-mounts";
 import { dockerCompose } from "../src/lib/docker";
-import { legacyTraefikDynamicMounted } from "../src/lib/legacy-traefik";
 import {
   ensureTransitousApiKeysFile,
   legacyTransitousApiKeysPath,
@@ -18,8 +18,9 @@ vi.mock("../src/lib/docker", () => ({
   dockerCompose: vi.fn(async () => ({ exitCode: 1, stdout: "", stderr: "no Docker in this test" })),
   dockerRun: vi.fn(),
 }));
-vi.mock("../src/lib/legacy-traefik", () => ({
+vi.mock("../src/lib/container-mounts", () => ({
   legacyTraefikDynamicMounted: vi.fn(async () => false),
+  containerBindMounts: vi.fn(async () => []),
 }));
 
 let tmp: string;
@@ -102,11 +103,7 @@ it("reports what the copy of the agent's stores left in the checkout while it is
   expect(leftBehind()).toEqual([]);
 });
 
-it("says while Traefik still reads the checkout's routes, and which dynamic files are not copied", async () => {
-  const dynamic = join(tmp, "services", "traefik", "config", "dynamic");
-  mkdirSync(dynamic, { recursive: true });
-  writeFileSync(join(tmp, "auth-elsewhere.yml"), "users: ['op:$2y$05$secret-hash']\n");
-  symlinkSync(join(tmp, "auth-elsewhere.yml"), join(dynamic, "auth.yml"));
+it("says while Traefik still reads the checkout's routes", async () => {
   vi.mocked(legacyTraefikDynamicMounted).mockResolvedValue(true);
   const errors = vi.spyOn(console, "error").mockImplementation(() => {});
   const check = async () => {
@@ -125,16 +122,10 @@ it("says while Traefik still reads the checkout's routes, and which dynamic file
     expect.stringContaining(
       "Traefik still reads its routes from services/traefik/config/dynamic, where render keeps writing them until no container mounts that directory. Recreate Traefik to move it to infra/docker/state/ops-agent/traefik/dynamic: pnpm openmapx services update traefik, or Recreate on Admin → Services → Traefik. That restarts the proxy for a few seconds.",
     ),
-    expect.stringContaining(
-      "services/traefik/config/dynamic/auth.yml was not copied to Traefik's dynamic directory, infra/docker/state/ops-agent/traefik/dynamic: it is a symbolic link.",
-    ),
   ]);
-  expect(traefikLines().join("\n")).not.toContain("secret-hash");
 
-  // Quiet once Traefik is recreated and the file is a regular one.
+  // Quiet once Traefik is recreated.
   vi.mocked(legacyTraefikDynamicMounted).mockResolvedValue(false);
-  rmSync(join(dynamic, "auth.yml"));
-  writeFileSync(join(dynamic, "auth.yml"), "http: {}\n");
   errors.mockClear();
   await check();
   expect(traefikLines()).toEqual([]);
