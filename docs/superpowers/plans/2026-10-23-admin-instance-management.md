@@ -19,6 +19,10 @@ All Global Constraints and Product and security decisions in the specification a
 
 Task06.1 consumes the [approved retention amendment](../specs/2026-10-25-admin-control-retention-amendment.md) and its [implementation plan](2026-10-25-admin-control-retention-amendment.md). Its fresh root key/origin, bounded renewable family GC, API receipt delivery and atomic stable-step reservation supersede conflicting earlier provisional interfaces;50-task order/scope remains unchanged. Follow-on02.3/02.4/01.2 use its actual exports. Earlier source clearance for02.2 does not qualify the new projectionv3/ack changes: those are reviewed and tested in this06.1 correction window. Agent-first then currentAPI/CLI producer cutover preserves legacy observations while rejecting fresh unsupported authority roots before effects.
 
+## Approved Task02.3 late-child correction
+
+Task02.3 implements the [approved late-child binding correction](../specs/2026-10-25-admin-late-child-binding-design.md) and [additional steps](2026-10-25-admin-late-child-binding.md). Root admission reserves finite slots with fixed typed bodies/candidate IDs; exact child deadlines/fingerprints bind once at phase readiness. Current-row staged CAS, signed publication references and scope-held cancellation-visible grant issuance preserve original ownership, no replay and existing budgets. This corrects a concrete late120s-child contradiction within02.3; the50-task order and applied0042 remain unchanged. Later01.2/02.4/05/08 consumers use its actual reviewed exports.
+
 ## Review Focus
 
 1. Accepted jobs must reach the real production runtime and retain failed/partial/unknown outcomes.

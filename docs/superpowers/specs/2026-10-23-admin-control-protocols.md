@@ -4,6 +4,8 @@ Date: 2026-10-23. Binding supplement to `2026-10-23-admin-instance-management-de
 
 The approved [renewable control retention amendment](2026-10-25-admin-control-retention-amendment.md) supersedes this supplement only for fresh authority root keys, signed origin propagation, renewable receipt-family retention, API receipt acknowledgement and stable-step checkpoint reservation. Apply all revision2–4 decisions together. Legacy undated identities remain observation/settlement-only; do not use the earlier optional-root-deadline language to mint new managed authority. All other contracts below remain binding.
 
+The approved [late-child binding correction](2026-10-25-admin-late-child-binding-design.md) and its [Task02.3 implementation steps](../plans/2026-10-25-admin-late-child-binding.md) additionally permit immutable finite phase reservations with one exact late identity binding. Every body field and candidate ID remains root-fixed. The original root/deadline, recipient normalization, finite graph, cancellation and retention boundaries remain binding; grant publication now holds the specified ancestry/execution guards through cancellation-visible outbox publication.
+
 ## 1. Source constraints and ownership
 
 - `configuration-ownership.ts:acquireConfigurationOwnership` already uses exclusive mkdir, a 5-second wait, inode checks and no stealing after a crash. `configuration-generation.ts:withConfigurationGenerationWriter` owns the current pointer and commit evidence. Extend this discipline; PID age and TTL are not ownership.
