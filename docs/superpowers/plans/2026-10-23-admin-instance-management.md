@@ -23,6 +23,10 @@ Task06.1 consumes the [approved retention amendment](../specs/2026-10-25-admin-c
 
 Task02.3 implements the [approved late-child binding correction](../specs/2026-10-25-admin-late-child-binding-design.md) and [additional steps](2026-10-25-admin-late-child-binding.md). Root admission reserves finite slots with fixed typed bodies/candidate IDs; exact child deadlines/fingerprints bind once at phase readiness. Current-row staged CAS, signed publication references and scope-held cancellation-visible grant issuance preserve original ownership, no replay and existing budgets. This corrects a concrete late120s-child contradiction within02.3; the50-task order and applied0042 remain unchanged. Later01.2/02.4/05/08 consumers use its actual reviewed exports.
 
+## Approved Task02.3 fixed proxy validation failure
+
+Task02.3 implements the [fixed proxy validation-failure contract](../specs/2026-10-25-admin-proxy-validation-failure-design.md) and [additional steps](2026-10-25-admin-proxy-validation-failure.md). Only the actual fixed nginx read-validation producer can prove a completed no-reload failure; generic failures remain unknown. Parent recovery obligations survive failed restore, cancellation and restart and gate terminal publication/root release. This preserves the existing automatic restore behavior without changing public schemas, graph, keys, deadlines, migration0042 or the50-task count. Fresh design R2 is readiness only; causal/process/PG/task review remains required.
+
 ## Review Focus
 
 1. Accepted jobs must reach the real production runtime and retain failed/partial/unknown outcomes.

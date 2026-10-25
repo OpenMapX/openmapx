@@ -6,6 +6,8 @@ The approved [renewable control retention amendment](2026-10-25-admin-control-re
 
 The approved [late-child binding correction](2026-10-25-admin-late-child-binding-design.md) and its [Task02.3 implementation steps](../plans/2026-10-25-admin-late-child-binding.md) additionally permit immutable finite phase reservations with one exact late identity binding. Every body field and candidate ID remains root-fixed. The original root/deadline, recipient normalization, finite graph, cancellation and retention boundaries remain binding; grant publication now holds the specified ancestry/execution guards through cancellation-visible outbox publication.
 
+The approved [fixed proxy validation-failure contract](2026-10-25-admin-proxy-validation-failure-design.md) and [Task02.3 steps](../plans/2026-10-25-admin-proxy-validation-failure.md) add only a private actual-producer proof for conclusively completed nginx validation before reload. The failed child stays failed/contained; a durable parent recovery obligation prevents live/restart release without exact original successful restore evidence. Other failure/transport uncertainty retains existing fences; no public operation, graph edge, signing key or migration changes.
+
 ## 1. Source constraints and ownership
 
 - `configuration-ownership.ts:acquireConfigurationOwnership` already uses exclusive mkdir, a 5-second wait, inode checks and no stealing after a crash. `configuration-generation.ts:withConfigurationGenerationWriter` owns the current pointer and commit evidence. Extend this discipline; PID age and TTL are not ownership.
