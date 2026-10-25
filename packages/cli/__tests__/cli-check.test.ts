@@ -1,4 +1,14 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  chownSync,
+  lchownSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
@@ -192,6 +202,22 @@ describe("deploymentStateErrors", () => {
   });
 });
 
+/** Directories and files by path with their owner; a directory lists the paths below it. */
+function fakeFilesystem(owners: Record<string, number>, children: Record<string, string[]> = {}) {
+  return {
+    lstat(path: string) {
+      const uid = owners[path];
+      if (uid === undefined) throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+      return {
+        uid,
+        isDirectory: () => path in children,
+        isSymbolicLink: () => false,
+      };
+    },
+    readdir: (path: string) => children[path] ?? [],
+  };
+}
+
 describe("deploymentUserProblems", () => {
   function deployment(env: string | null) {
     const root = mkdtempSync(join(tmpdir(), "openmapx-check-user-"));
@@ -242,7 +268,10 @@ describe("deploymentUserProblems", () => {
           ["ops-agent", "4321:4321"],
           ["postgis", ""],
         ]),
-        lstat: (path) => ({ uid: path.endsWith("erasure") ? 4321 : 1000 }),
+        filesystem: fakeFilesystem({
+          [join(infraDir, "state", "ops-agent", "trusted-config")]: 1000,
+          [join(infraDir, "data", "erasure")]: 4321,
+        }),
       });
       expect(problems).toEqual([
         expect.stringContaining(
@@ -252,8 +281,10 @@ describe("deploymentUserProblems", () => {
           `This check runs as uid ${owner.uid}, not as the deployment's user (UID=4321)`,
         ),
         expect.stringContaining('app-api runs as its image\'s default user, not "4321:4321"'),
-        expect.stringContaining(
-          `sudo chown -R 4321:4321 ${join(infraDir, "state", "ops-agent", "trusted-config")}`,
+        expect.stringMatching(
+          new RegExp(
+            `state/ops-agent/trusted-config \\(uid 1000\\).*sudo chown -R 4321:4321 ${join(infraDir, "state", "ops-agent", "trusted-config")}$`,
+          ),
         ),
       ]);
       // postgis runs as its image's own user: neither its user nor its data is compared.
@@ -262,6 +293,102 @@ describe("deploymentUserProblems", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it("finds a file another uid wrote inside a directory the deployment's user owns", () => {
+    const { root, infraDir, owner } = deployment("");
+    try {
+      writeFileSync(join(infraDir, ".env"), `UID=${owner.uid}\nGID=${owner.gid}\n`, {
+        mode: 0o600,
+      });
+      const mount = join(infraDir, "data", "erasure");
+      const user = `${owner.uid}:${owner.gid}`;
+      const problems = deploymentUserProblems({
+        infraDir,
+        processUid: owner.uid,
+        composeServices: { "app-api": { user, volumes: [{ type: "bind", source: mount }] } },
+        runningUsers: new Map([["app-api", user]]),
+        // An earlier release's container wrote the journal as uid 1000.
+        filesystem: fakeFilesystem(
+          {
+            [mount]: owner.uid,
+            [join(mount, "nested")]: owner.uid,
+            [join(mount, "nested", "journal.jsonl")]: 1000,
+          },
+          { [mount]: ["nested"], [join(mount, "nested")]: ["journal.jsonl"] },
+        ),
+      });
+      expect(problems).toEqual([
+        expect.stringContaining(`data/erasure (nested/journal.jsonl: uid 1000)`),
+      ]);
+      expect(problems[0]).toContain(`sudo chown -R ${owner.uid}:${owner.gid} ${mount}`);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("says so when it stops before walking every mount", () => {
+    const { root, infraDir, owner } = deployment("");
+    try {
+      writeFileSync(join(infraDir, ".env"), `UID=${owner.uid}\nGID=${owner.gid}\n`, {
+        mode: 0o600,
+      });
+      const mount = join(infraDir, "data", "erasure");
+      const user = `${owner.uid}:${owner.gid}`;
+      const owners: Record<string, number> = { [mount]: owner.uid };
+      const names = Array.from({ length: 10 }, (_, index) => `file-${index}`);
+      for (const name of names) owners[join(mount, name)] = owner.uid;
+      expect(
+        deploymentUserProblems({
+          infraDir,
+          processUid: owner.uid,
+          composeServices: { "app-api": { user, volumes: [{ type: "bind", source: mount }] } },
+          runningUsers: new Map([["app-api", user]]),
+          filesystem: fakeFilesystem(owners, { [mount]: names }),
+          entryLimit: 5,
+        }),
+      ).toEqual([
+        expect.stringContaining(
+          "Stopped checking ownership after 5 entries; not fully checked: data/erasure",
+        ),
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it.runIf(process.getuid?.() === 0)(
+    "finds a 1000-owned file in a 1001-owned directory on the real filesystem, without following links",
+    () => {
+      const { root, infraDir } = deployment("UID=1001\nGID=1001\n");
+      try {
+        chownSync(root, 1001, 1001);
+        chownSync(join(infraDir, ".env"), 0, 0);
+        const mount = join(infraDir, "data", "erasure");
+        mkdirSync(join(mount, "nested"), { recursive: true });
+        writeFileSync(join(mount, "nested", "journal.jsonl"), "{}\n");
+        chownSync(mount, 1001, 1001);
+        chownSync(join(mount, "nested"), 1001, 1001);
+        chownSync(join(mount, "nested", "journal.jsonl"), 1000, 1000);
+        // A link to a directory another uid owns is not entered.
+        mkdirSync(join(root, "elsewhere"));
+        symlinkSync(join(root, "elsewhere"), join(mount, "link"));
+        lchownSync(join(mount, "link"), 1001, 1001);
+        const problems = deploymentUserProblems({
+          infraDir,
+          processUid: 1001,
+          composeServices: {
+            "app-api": { user: "1001:1001", volumes: [{ type: "bind", source: mount }] },
+          },
+          runningUsers: new Map([["app-api", "1001:1001"]]),
+        });
+        expect(problems).toEqual([
+          expect.stringContaining("data/erasure (nested/journal.jsonl: uid 1000)"),
+        ]);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("is quiet when everything is the deployment's user", () => {
     const { root, infraDir, owner: checkoutOwner } = deployment("");

@@ -1,4 +1,4 @@
-import { lstatSync, statSync } from "node:fs";
+import { lstatSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
@@ -200,6 +200,56 @@ interface ComposeConfigService {
   volumes?: Array<{ type?: unknown; source?: unknown; read_only?: unknown }>;
 }
 
+/** The entries one check visits under writable mounts, in total. */
+export const OWNERSHIP_ENTRY_LIMIT = 50_000;
+
+/** How the ownership walk reads the filesystem: without following links. */
+export interface OwnershipFilesystem {
+  lstat(path: string): { uid: number; isDirectory(): boolean; isSymbolicLink(): boolean };
+  readdir(path: string): string[];
+}
+
+const hostFilesystem: OwnershipFilesystem = {
+  lstat: (path) => lstatSync(path),
+  readdir: (path) => readdirSync(path),
+};
+
+/**
+ * The first entry under `root`, itself included, that `uid` does not own, or
+ * "limit" when the shared budget ran out first. Links are not followed: a
+ * symbolic link's own owner is what counts, and a linked directory is not
+ * entered. An entry that vanishes or cannot be read is skipped.
+ */
+function firstForeignEntry(
+  root: string,
+  uid: number,
+  filesystem: OwnershipFilesystem,
+  budget: { left: number },
+): { path: string; uid: number } | "limit" | null {
+  const pending = [root];
+  while (pending.length > 0) {
+    if (budget.left <= 0) return "limit";
+    const path = pending.pop() as string;
+    budget.left -= 1;
+    let stats: ReturnType<OwnershipFilesystem["lstat"]>;
+    try {
+      stats = filesystem.lstat(path);
+    } catch {
+      continue;
+    }
+    if (stats.uid !== uid) return { path, uid: stats.uid };
+    if (!stats.isDirectory() || stats.isSymbolicLink()) continue;
+    let names: string[];
+    try {
+      names = filesystem.readdir(path);
+    } catch {
+      continue;
+    }
+    for (const name of names) pending.push(join(path, name));
+  }
+  return null;
+}
+
 /**
  * How the deployment's user (UID and GID in .env) disagrees with the checkout's
  * owner, the uid running this check, the stack's running containers and the
@@ -214,7 +264,9 @@ export function deploymentUserProblems(input: {
   composeServices: Record<string, ComposeConfigService> | null;
   /** The user each running container was created with, by Compose service. */
   runningUsers: Map<string, string>;
-  lstat?: (path: string) => { uid: number };
+  filesystem?: OwnershipFilesystem;
+  /** The entries visited under writable mounts in total; see OWNERSHIP_ENTRY_LIMIT. */
+  entryLimit?: number;
 }): string[] {
   const problems: string[] = [];
   let assigned: { uid?: number; gid?: number };
@@ -242,8 +294,9 @@ export function deploymentUserProblems(input: {
     );
   }
   if (input.composeServices === null) return problems;
-  const lstat = input.lstat ?? ((path: string) => lstatSync(path));
-  const foreign: string[] = [];
+  const filesystem = input.filesystem ?? hostFilesystem;
+  const budget = { left: input.entryLimit ?? OWNERSHIP_ENTRY_LIMIT };
+  const mounts: string[] = [];
   for (const [service, config] of Object.entries(input.composeServices)) {
     if (typeof config.user !== "string" || !config.user) continue;
     const running = input.runningUsers.get(service);
@@ -257,18 +310,34 @@ export function deploymentUserProblems(input: {
       if (volume.type !== "bind" || typeof volume.source !== "string" || volume.read_only === true)
         continue;
       if (!volume.source.startsWith(`${input.infraDir}/`)) continue;
-      let entry: { uid: number };
-      try {
-        entry = lstat(volume.source);
-      } catch {
-        continue;
-      }
-      if (entry.uid !== uid && !foreign.includes(volume.source)) foreign.push(volume.source);
+      if (!mounts.includes(volume.source)) mounts.push(volume.source);
     }
   }
+  // Each writable mount is walked to its first entry another uid owns: an
+  // earlier release's containers wrote files as uid 1000 inside directories
+  // the operator owns.
+  const foreign: Array<{ mount: string; path: string; uid: number }> = [];
+  const unchecked: string[] = [];
+  for (const mount of mounts) {
+    const found = firstForeignEntry(mount, uid, filesystem, budget);
+    if (found === "limit") unchecked.push(mount);
+    else if (found) foreign.push({ mount, ...found });
+  }
   if (foreign.length > 0) {
+    const listed = foreign
+      .map(({ mount, path, uid: owner }) =>
+        path === mount
+          ? `${relative(input.infraDir, mount)} (uid ${owner})`
+          : `${relative(input.infraDir, mount)} (${relative(mount, path)}: uid ${owner})`,
+      )
+      .join(", ");
     problems.push(
-      `${foreign.length} path${foreign.length === 1 ? "" : "s"} that containers running as ${uid}:${gid} write belong${foreign.length === 1 ? "s" : ""} to another uid, which they cannot change: ${foreign.map((path) => relative(input.infraDir, path)).join(", ")}. Fix once, as root: sudo chown -R ${uid}:${gid} ${foreign.join(" ")}`,
+      `${foreign.length} path${foreign.length === 1 ? "" : "s"} that containers running as ${uid}:${gid} write hold${foreign.length === 1 ? "s" : ""} entries another uid owns, which they cannot change: ${listed}. Fix once, as root: sudo chown -R ${uid}:${gid} ${foreign.map(({ mount }) => mount).join(" ")}`,
+    );
+  }
+  if (unchecked.length > 0) {
+    problems.push(
+      `Stopped checking ownership after ${input.entryLimit ?? OWNERSHIP_ENTRY_LIMIT} entries; not fully checked: ${unchecked.map((mount) => relative(input.infraDir, mount)).join(", ")}. If containers fail to write there, change its owner the same way.`,
     );
   }
   return problems;
