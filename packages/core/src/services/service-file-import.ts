@@ -156,7 +156,7 @@ export function importCheckoutServiceFiles(options: {
   const uid = options.uid ?? process.geteuid?.() ?? 0;
   const rootDir = resolve(infraDir, "..", "..");
   const overrides = overridesDirectory(infraDir);
-  const edits: Array<{ key: string; bytes: Buffer }> = [];
+  const edits: Array<{ key: string; bytes: Buffer; mode: number }> = [];
   for (const key of importCandidates(rootDir, services, release, uid)) {
     if (existsSync(join(overrides, key)) || lstatOrUndefined(join(overrides, key))) continue;
     const path = join(rootDir, "services", key);
@@ -170,12 +170,14 @@ export function importCheckoutServiceFiles(options: {
     const hash = sha256(read.bytes);
     const known = release.history.get(key) ?? new Set<string>();
     if (hash === release.files.get(key)?.sha256 || known.has(hash)) continue;
-    edits.push({ key, bytes: read.bytes });
+    // Never more open than the checkout's file, and never writable by others;
+    // an operator's Traefik files may hold password hashes, so owner-only.
+    const mode = read.mode & (key.startsWith("traefik/") ? 0o600 : 0o644);
+    edits.push({ key, bytes: read.bytes, mode: mode | 0o400 });
   }
   const records: Record<string, { override: string; base: string | null }> = {};
-  for (const { key, bytes } of edits) {
-    // An operator's Traefik files may hold password hashes.
-    writeOverride(join(overrides, key), bytes, key.startsWith("traefik/") ? 0o600 : 0o644);
+  for (const { key, bytes, mode } of edits) {
+    writeOverride(join(overrides, key), bytes, mode);
     records[key] = { override: sha256(bytes), base: release.files.get(key)?.sha256 ?? null };
   }
   if (edits.length > 0) addOverrideRecords(infraDir, records);

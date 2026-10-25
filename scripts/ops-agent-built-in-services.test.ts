@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   cpSync,
@@ -109,12 +110,35 @@ describe("the ops-agent's fixed CLI", () => {
     expect(missing.stdout).toBe("");
   }, 60_000);
 
-  it("reports how the checkout differs from the release", async () => {
+  it("reports the release's service files, whatever the checkout holds, and prints them for the host CLI", async () => {
     const checkout = hostileCheckout();
     const checked = await cli(checkout, "check", "--no-probe");
     const output = `${checked.stdout}\n${checked.stderr}`;
-    expect(output).toContain("missing brouter");
-    expect(output).toContain("changed valhalla");
-    expect(output).toContain("not in this release unlisted-engine");
+    // The checkout's manifests don't matter to the agent any more; its edits
+    // to service files become overrides at the next render.
+    expect(output).toContain("The next render imports, once");
+    expect(output).not.toContain("missing brouter");
+
+    const printed = await cli(checkout, "compose", "release-files");
+    const index = JSON.parse(printed.stdout) as {
+      manifests: Record<string, string>;
+      files: Array<{ serviceId: string; path: string; executable: boolean }>;
+    };
+    // The release's manifests, brouter included, not the tampered valhalla.
+    expect(index.manifests.valhalla).toBe(
+      createHash("sha256")
+        .update(readFileSync(join(ROOT, "services", "valhalla", "service.json")))
+        .digest("hex"),
+    );
+    expect(index.files).toContainEqual(
+      expect.objectContaining({ serviceId: "brouter", path: "scripts/run.sh" }),
+    );
+    expect(index.files).toContainEqual(
+      expect.objectContaining({
+        serviceId: "postgis",
+        path: "scripts/sync-password.sh",
+        executable: true,
+      }),
+    );
   }, 60_000);
 });

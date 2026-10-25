@@ -9,6 +9,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -279,6 +280,7 @@ describe("the one-time import of checkout edits", () => {
     writeFileSync(join(traefik, "dynamic", "auth.yml"), AUTH);
     writeFileSync(join(traefik, "dynamic", "generated-routes.yml"), "stale: routes\n");
     writeFileSync(join(f.root, "services", "martin", "config", "martin.yaml"), "edited: true\n");
+    chmodSync(join(f.root, "services", "martin", "config", "martin.yaml"), 0o600);
     // valhalla-scripted's own rewrite: a file a container writes.
     writeFileSync(
       join(f.root, "services", "valhalla", "config", "valhalla.json"),
@@ -298,6 +300,11 @@ describe("the one-time import of checkout edits", () => {
       existsSync(join(overrides, "traefik", "config", "dynamic", "generated-routes.yml")),
     ).toBe(false);
     expect(existsSync(join(overrides, "valhalla"))).toBe(false);
+    // Never more open than the checkout's file; Traefik's owner-only.
+    const mode = (path: string) => statSync(path).mode & 0o777;
+    expect(mode(join(overrides, "martin", "config", "martin.yaml"))).toBe(0o600);
+    expect(mode(join(overrides, "traefik", "config", "dynamic", "auth.yml"))).toBe(0o600);
+    expect(mode(join(overrides, "traefik", "config", "traefik.yml"))).toBe(0o600);
     // The basic-auth gate survives the switch to the release's files.
     expect(
       readFileSync(join(f.infraDir, CURRENT_CONFIGURATION, TRAEFIK_STATIC_GENERATION_FILE), "utf8"),
