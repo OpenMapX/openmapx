@@ -114,7 +114,8 @@ export type ReleaseOverlayState =
   | { status: "present"; path: string }
   | { status: "resolved"; path: string; release: string }
   | { status: "disabled" }
-  | { status: "unpinned"; reason: string };
+  | { status: "unpinned"; reason: string }
+  | { status: "held"; reason: string };
 
 /**
  * Make sure `docker-compose.release.yml` exists before a command that would
@@ -126,6 +127,9 @@ export type ReleaseOverlayState =
 export async function ensureReleaseOverlay(
   opts: { docker?: ReleaseDockerRunner } & ReleaseStateLocation = {},
 ): Promise<ReleaseOverlayState> {
+  const infraDir = opts.infraDir ?? repoPaths().infraDir;
+  // An earlier release's selection is carried over first, if it can be.
+  await coreServices.migrateLegacyReleaseState(infraDir, { uid: opts.uid });
   const path = releaseState(opts).overlay;
   const selected = readSelection(path, opts);
   if (selected) {
@@ -147,6 +151,8 @@ export async function ensureReleaseOverlay(
   // An operator running local images opts out once instead of paying a
   // failed registry pull (and a warning) on every start.
   if (releaseChannel().kind === "disabled") return { status: "disabled" };
+  const held = coreServices.releaseSelectionHold(infraDir, { uid: opts.uid });
+  if (held) return { status: "held", reason: held };
   try {
     const manifest = await resolveReleaseManifest(opts.docker);
     writeReleaseOverlay(manifest, opts);
@@ -244,6 +250,10 @@ export async function clearReleaseSelection(
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
+    // Clearing is a decision too: an earlier release's selection no longer holds.
+    coreServices.supersedeLegacyReleaseOverlay(opts.infraDir ?? repoPaths().infraDir, {
+      uid: opts.uid,
+    });
     let selected: Stats;
     try {
       selected = lstatSync(path);

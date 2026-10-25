@@ -405,6 +405,9 @@ export function registerComposeCommands(program: Command): void {
       } else if (overlay.status === "unpinned") {
         log.err(unpinnedReleaseWarning(overlay.reason));
         process.exit(1);
+      } else if (overlay.status === "held") {
+        log.err(overlay.reason);
+        process.exit(1);
       } else if (overlay.status === "disabled") {
         log.dim("Release pinning disabled (OPENMAPX_RELEASE=local); using manifest image tags.");
       }
@@ -476,6 +479,7 @@ export function registerComposeCommands(program: Command): void {
       if (ids.length === 0 || touchesReleasePinnedServices(ids)) {
         const overlay = await ensureReleaseOverlay();
         if (overlay.status === "unpinned") throw new Error(unpinnedReleaseWarning(overlay.reason));
+        if (overlay.status === "held") throw new Error(overlay.reason);
       }
       const code = await dockerComposeStream(["pull", ...ids]);
       process.exit(code);

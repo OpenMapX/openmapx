@@ -236,6 +236,8 @@ export {
   type LegacyReleaseStateMigration,
   type LegacyReleaseStateMigrationOptions,
   migrateLegacyReleaseState,
+  releaseSelectionHold,
+  supersedeLegacyReleaseOverlay,
 } from "./release-state-migration";
 export {
   acquireReleaseStoreLock,

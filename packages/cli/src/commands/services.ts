@@ -408,6 +408,9 @@ export function registerServicesCommands(program: Command): void {
         } else if (overlay.status === "unpinned") {
           log.err(unpinnedReleaseWarning(overlay.reason));
           process.exit(1);
+        } else if (overlay.status === "held") {
+          log.err(overlay.reason);
+          process.exit(1);
         } else if (overlay.status === "disabled") {
           log.dim("Release pinning disabled (OPENMAPX_RELEASE=local); using manifest image tags.");
         }
@@ -487,6 +490,9 @@ export function registerServicesCommands(program: Command): void {
           for (const line of releaseStatusLines(overlay.path)) log.dim(line);
         } else if (overlay.status === "unpinned") {
           log.err(unpinnedReleaseWarning(overlay.reason));
+          process.exit(1);
+        } else if (overlay.status === "held") {
+          log.err(overlay.reason);
           process.exit(1);
         } else if (overlay.status === "disabled") {
           log.warn(

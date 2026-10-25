@@ -181,6 +181,19 @@ export function installedIntegrationWarnings(rootDir: string): string[] {
   }
 }
 
+/**
+ * What stops stack commands or release updates until the operator acts: an
+ * `.env` that is not the operator's alone, which every stack command refuses,
+ * and an earlier release's selection that did not come over, which holds
+ * automatic release selection.
+ */
+export function deploymentStateErrors(infraDir: string): string[] {
+  return [
+    coreServices.deploymentEnvironmentFileProblem(join(infraDir, ".env")),
+    coreServices.releaseSelectionHold(infraDir),
+  ].filter((error): error is string => error !== null);
+}
+
 export function registerCheckCommand(program: Command): void {
   program
     .command("check")
@@ -194,12 +207,12 @@ export function registerCheckCommand(program: Command): void {
       } catch {
         // A missing local .env is handled by compose; this advisory stays non-fatal.
       }
-      // Every stack command refuses an .env that is not the operator's alone.
-      const environmentProblem = coreServices.deploymentEnvironmentFileProblem(envPath);
-      if (environmentProblem) log.err(environmentProblem);
-      const permissionWarning = environmentProblem
-        ? null
-        : envFilePermissionWarning(envPath, envMode);
+      const stateErrors = deploymentStateErrors(repoPaths().infraDir);
+      for (const error of stateErrors) log.err(error);
+      const permissionWarning =
+        coreServices.deploymentEnvironmentFileProblem(envPath) === null
+          ? envFilePermissionWarning(envPath, envMode)
+          : null;
       if (permissionWarning) log.warn(permissionWarning);
       // Only the ops-agent's fixed CLI runs embedded manifests; from source the
       // checkout is what runs, so there is nothing to compare.

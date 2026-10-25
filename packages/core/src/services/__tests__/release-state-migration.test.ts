@@ -30,7 +30,11 @@ import {
   releaseStateFileProblem,
   releaseStatePaths,
 } from "../release-state";
-import { migrateLegacyReleaseState } from "../release-state-migration";
+import {
+  migrateLegacyReleaseState,
+  releaseSelectionHold,
+  supersedeLegacyReleaseOverlay,
+} from "../release-state-migration";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -414,8 +418,20 @@ describe("legacy release state migration", () => {
     expect(readdirSync(paths.store)).toEqual(["a1.json"]);
   });
 
-  it("does nothing without an earlier release's store", async () => {
+  it("does nothing without an earlier release's store or overlay", async () => {
     const infraDir = infra();
+    expect(await migrateLegacyReleaseState(infraDir)).toBeNull();
+    expect(releaseSelectionHold(infraDir)).toBeNull();
+  });
+
+  it("carries the host's overlay over where no agent ever kept a store", async () => {
+    const infraDir = infra();
+    const hostSelected = manifestFor("287020e6c-host-1", "9");
+    writeLegacyOverlay(infraDir, hostSelected);
+    const result = await migrateLegacyReleaseState(infraDir);
+    expect(result).toMatchObject({ outcome: "migrated", overlay: "carried", problems: [] });
+    expect(readReleaseOverlay(infraDir)).toBe(renderReleaseCompose(hostSelected, infraDir));
+    expect(releaseSelectionHold(infraDir)).toBeNull();
     expect(await migrateLegacyReleaseState(infraDir)).toBeNull();
   });
 
@@ -467,6 +483,51 @@ describe("legacy release state migration", () => {
       /Unsafe release state directory/,
     );
     expect(lstatSync(paths.directory).mode & 0o777).toBe(0o750);
+  });
+});
+
+describe("holding automatic release selection", () => {
+  it("holds it while the earlier selection did not come over, until one is chosen", async () => {
+    const infraDir = infra();
+    const { legacy } = productionState(infraDir);
+    chmodSync(join(legacy.store, `${SELECTED}.json`), 0o660);
+    expect((await migrateLegacyReleaseState(infraDir))?.overlay).toBe("skipped");
+    const held = releaseSelectionHold(infraDir) ?? "";
+    expect(held).toContain(`The release the earlier release selected, ${SELECTED},`);
+    expect(held).toContain("its release's manifest did not come over");
+    expect(held).toContain("pnpm openmapx compose release");
+    // `compose release` (or `--clear`) decides.
+    supersedeLegacyReleaseOverlay(infraDir);
+    expect(releaseSelectionHold(infraDir)).toBeNull();
+  });
+
+  it("holds it while the previous agent's update is unfinished, until it finishes", async () => {
+    const infraDir = infra();
+    const { legacy } = productionState(infraDir);
+    writeFileSync(join(legacy.store, "transaction.json"), '{"phase":"overlay_written"}', {
+      mode: 0o600,
+    });
+    expect((await migrateLegacyReleaseState(infraDir))?.outcome).toBe("refused");
+    const held = releaseSelectionHold(infraDir) ?? "";
+    expect(held).toContain("the previous agent's release update is unfinished");
+    expect(held).toContain("Let the previous agent finish its update");
+    expect(held).toContain("pnpm openmapx compose release");
+    // That agent finished: the next start carries the overlay over.
+    rmSync(join(legacy.store, "transaction.json"));
+    expect((await migrateLegacyReleaseState(infraDir))?.overlay).toBe("regenerated");
+    expect(releaseSelectionHold(infraDir)).toBeNull();
+  });
+
+  it("holds it before the migration has run, and never once the selection came over", async () => {
+    const infraDir = infra();
+    productionState(infraDir);
+    expect(releaseSelectionHold(infraDir)).toContain("the migration has not run yet");
+    await migrateLegacyReleaseState(infraDir);
+    expect(releaseSelectionHold(infraDir)).toBeNull();
+    // An explicit clear afterwards leaves automatic selection to the operator's choice.
+    rmSync(releaseStatePaths(infraDir).overlay);
+    supersedeLegacyReleaseOverlay(infraDir);
+    expect(releaseSelectionHold(infraDir)).toBeNull();
   });
 });
 

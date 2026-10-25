@@ -24,7 +24,11 @@ import {
   loadConfiguredResourceAuthority,
   pruneBackupRetention,
 } from "./administrative-runtime";
-import { createUnavailableRuntime, dispatchOpsOperation } from "./runtime";
+import {
+  createUnavailableRuntime,
+  dispatchOpsOperation,
+  OpsHostUpdateRequiredError,
+} from "./runtime";
 
 const temporaryRoots: string[] = [];
 const releaseState = (rootDir: string) =>
@@ -43,7 +47,8 @@ const privacyReleaseValidation = {
 function temporaryRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "openmapx-admin-runtime-"));
   temporaryRoots.push(root);
-  mkdirSync(join(root, "infra", "docker", "backups"), { recursive: true });
+  // As the CLI creates it, whatever the umask.
+  mkdirSync(join(root, "infra", "docker", "backups"), { recursive: true, mode: 0o700 });
   return root;
 }
 
@@ -447,8 +452,8 @@ describe("administrative data runtime", () => {
     async () => {
       const rootDir = temporaryRoot();
       const dataRoot = join(rootDir, "infra", "docker", "data");
-      mkdirSync(join(dataRoot, "osm"), { recursive: true });
-      mkdirSync(join(dataRoot, "valhalla"), { recursive: true });
+      mkdirSync(join(dataRoot, "osm"), { recursive: true, mode: 0o755 });
+      mkdirSync(join(dataRoot, "valhalla"), { recursive: true, mode: 0o755 });
       writeFileSync(join(dataRoot, "osm", "germany-latest.osm.pbf"), "pbf", { mode: 0o600 });
       const runtime = createUnavailableRuntime();
       createAdministrativeRuntime(runtime, {
@@ -1669,5 +1674,71 @@ describe("administrative release runtime", () => {
       ),
     ).rejects.toThrow("collector pull failed");
     expect(apply).not.toHaveBeenCalled();
+  });
+});
+
+describe("release selection held by an earlier release's overlay", () => {
+  it("refuses to resolve or apply a release, naming the reason, until one is chosen", async () => {
+    const rootDir = temporaryRoot();
+    const infraDir = join(rootDir, "infra", "docker");
+    // An overlay the migration could not carry over.
+    writeFileSync(
+      services.legacyReleaseStatePaths(infraDir).overlay,
+      "services:\n  app-api:\n    image: hand-edited\n",
+      { mode: 0o600 },
+    );
+    await services.migrateLegacyReleaseState(infraDir);
+    const releaseEffects = {
+      resolve: vi.fn(async () => "candidate"),
+      pull: vi.fn(async () => undefined),
+      apply: vi.fn(async () => undefined),
+      inspect: vi.fn(),
+      validateCandidate: vi.fn(async () => undefined),
+      updateAgent: vi.fn(async () => ({ handoffId: "h", replaced: true })),
+    };
+    const runtime = createUnavailableRuntime();
+    createAdministrativeRuntime(runtime, {
+      rootDir,
+      runFixedCli: async () => undefined,
+      releaseEffects: releaseEffects as never,
+    });
+    const operations = [
+      { kind: "release.resolve" },
+      { kind: "release.apply", releaseId: "candidate" },
+      { kind: "appApi.replace", releaseId: "candidate", updateJobId: "job" },
+      {
+        kind: "agent.update",
+        releaseId: "candidate",
+        expectedDigest: "d".repeat(64),
+        handoffId: "h",
+      },
+      {
+        kind: "system.update",
+        releaseId: "candidate",
+        expectedDigest: "d".repeat(64),
+        createBackup: false,
+      },
+    ];
+    const handlers = runtime as unknown as Record<
+      string,
+      (operation: unknown, execution: ReturnType<typeof context>) => Promise<unknown>
+    >;
+    for (const operation of operations) {
+      const ctx = context(operation.kind);
+      await expect(handlers[operation.kind](operation, ctx), operation.kind).rejects.toBeInstanceOf(
+        OpsHostUpdateRequiredError,
+      );
+      expect(ctx.emitLog).toHaveBeenCalledWith(
+        "stderr",
+        expect.stringContaining("pnpm openmapx compose release"),
+      );
+    }
+    for (const effect of Object.values(releaseEffects)) expect(effect).not.toHaveBeenCalled();
+
+    // `pnpm openmapx compose release` on the host decides.
+    services.supersedeLegacyReleaseOverlay(infraDir);
+    await expect(
+      handlers["release.resolve"]({ kind: "release.resolve" }, context("release.resolve")),
+    ).resolves.toEqual({ releaseId: "candidate" });
   });
 });

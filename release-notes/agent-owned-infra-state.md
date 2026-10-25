@@ -60,7 +60,13 @@ when `compose release` selected it and the store holds no manifest of it, from
 its own pins and evidence once they give exactly its bytes again, so the
 selected release stays selected. An
 unfinished release update of the previous agent (`.ops-agent-releases/transaction.json`)
-stops the release migration until that agent recovers it. An earlier applied
+stops the release migration until that agent recovers it. While the earlier
+overlay's release has not come over, for that reason or because the overlay
+could not be verified, nothing selects or applies a release automatically:
+`services update` and `services start` of the release's services, `compose up`, `compose pull` and the admin
+panel's update refuse and name the reason, as does **Run diagnostics**. Let the
+previous agent finish its update, or select a release with
+`pnpm openmapx compose release` (or clear it with `--clear`). An earlier applied
 configuration whose pointer is not the deployment user's own is refused: remove
 `infra/docker/.trusted-config-current` to render without it, and the admin
 panel applies its saved settings again.

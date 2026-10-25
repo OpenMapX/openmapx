@@ -245,8 +245,22 @@ applied after the update is not carried back.
 When the earlier agent left a release update unfinished
 (`.ops-agent-releases/transaction.json`), the release state is not copied; the
 render's output and the agent's log say so, and the next render or agent start
-tries again once that agent has recovered the update. Rendering stops, with the
-reason, when:
+tries again once that agent has recovered the update.
+
+While the release the earlier overlay selected has not come over, for that
+reason or because the overlay could not be verified, no release is selected or
+applied automatically: resolving one would replace the running release with
+whatever is newest. `services update` and `services start` of the release's services, `compose up` and
+`compose pull` refuse, and so do **Check for updates** and **Update** in the
+admin panel, which report **Host update required**; the job log, the command
+and **Run diagnostics** name the reason. To continue, either:
+
+- let the earlier agent finish its update, then render again; or
+- select a release explicitly with `pnpm openmapx compose release`, or clear the
+  selection with `pnpm openmapx compose release --clear` to let the next start
+  resolve one.
+
+Rendering stops, with the reason, when:
 
 - `infra/docker/.trusted-config-current` is not the deployment user's own: remove
   it, and the admin panel applies its saved settings again;

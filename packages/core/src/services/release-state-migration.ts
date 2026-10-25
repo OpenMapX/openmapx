@@ -200,7 +200,8 @@ export async function migrateLegacyReleaseState(
   const paths = releaseStatePaths(infraDir);
   const record = join(paths.directory, MIGRATION_RECORD);
   const due = () => {
-    if (!exists(legacy.store)) return false;
+    // The host CLI's `compose release` leaves an overlay without any store.
+    if (!exists(legacy.store) && !exists(legacy.overlay)) return false;
     const state = migrationState(record, options);
     return state === "started" || (state === undefined && !storeHasManifests(paths.store));
   };
@@ -213,8 +214,9 @@ export async function migrateLegacyReleaseState(
     problems: [problem],
   });
   ensureReleaseStateDirectories(infraDir, options);
+  const legacyStore = exists(legacy.store);
   try {
-    assertReleaseStateDirectory(legacy.store, options);
+    if (legacyStore) assertReleaseStateDirectory(legacy.store, options);
   } catch {
     return refused(
       `${legacy.store} is not a directory of uid ${options.uid ?? process.geteuid?.()} that its group and others cannot reach; nothing was migrated`,
@@ -222,7 +224,7 @@ export async function migrateLegacyReleaseState(
   }
   const locks: ReleaseStoreLock[] = [];
   try {
-    if (legacyConfigurationWriterActive(infraDir)) {
+    if (legacyStore && legacyConfigurationWriterActive(infraDir)) {
       locks.push(await acquireReleaseStoreLock(legacy.store, options.lockHooks));
     }
     locks.push(await acquireReleaseStoreLock(paths.store, options.lockHooks));
@@ -246,7 +248,7 @@ function migrateLocked(
       `${join(legacy.store, "transaction.json")}: a release update of the previous agent is unfinished; nothing was migrated. Let that agent recover it, or remove the file once the running services are checked, and start again`,
     );
   }
-  const names = readdirSync(legacy.store);
+  const names = exists(legacy.store) ? readdirSync(legacy.store) : [];
   if (names.length > RELEASE_STORE_LIMITS.entries + 5) {
     return refused(
       `${legacy.store} holds more entries than a release store can; nothing was migrated`,
@@ -406,4 +408,81 @@ function migrateLocked(
     `${JSON.stringify({ version: 1, state: "finished", startedAt, finishedAt: new Date().toISOString(), ...result })}\n`,
   );
   return result;
+}
+
+/**
+ * Written by `compose release --clear`: once the operator has cleared the
+ * selection, the earlier overlay holds nothing back. (A selection holds
+ * nothing back either way: it is an overlay in the new place.)
+ */
+const LEGACY_OVERLAY_SUPERSEDED = "legacy-overlay-superseded.json";
+
+/** The release an earlier overlay names, for a message; null if it names none plainly. */
+function legacyOverlayRelease(path: string): string | null {
+  try {
+    const raw = readReleaseStateFile(path, RELEASE_STORE_LIMITS.manifestBytes, {});
+    const release = overlayIdentity(raw)?.release;
+    return release && RELEASE_MANIFEST_FILE_PATTERN.test(`${release}.json`) ? release : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Why no release may be selected automatically, or null. An earlier release
+ * selected one in `infra/docker`, and the migration did not bring that
+ * selection into the agent's release state: resolving a release now would
+ * replace the running one with whatever is newest, an upgrade nobody chose.
+ * Commands that would select or apply a release refuse until the operator
+ * selects one with `pnpm openmapx compose release`, or until the migration,
+ * once the previous agent has finished its update, carries the overlay over.
+ */
+export function releaseSelectionHold(
+  infraDir: string,
+  options: ReleaseStateOptions = {},
+): string | null {
+  const legacy = legacyReleaseStatePaths(infraDir);
+  const paths = releaseStatePaths(infraDir);
+  if (!exists(legacy.overlay) || exists(paths.overlay)) return null;
+  if (exists(join(paths.directory, LEGACY_OVERLAY_SUPERSEDED))) return null;
+  const named = legacyOverlayRelease(legacy.overlay);
+  const selection = named
+    ? `The release the earlier release selected, ${named},`
+    : "The release the earlier release selected";
+  const choose =
+    "select one explicitly with `pnpm openmapx compose release` on the host (or clear the selection with `pnpm openmapx compose release --clear`)";
+  const transaction = join(legacy.store, "transaction.json");
+  if (exists(transaction)) {
+    return `${selection} was not carried into the agent's release state: the previous agent's release update is unfinished (${transaction}). No release is selected automatically until then. Let the previous agent finish its update, then render again, or ${choose}.`;
+  }
+  const record = join(paths.directory, MIGRATION_RECORD);
+  let reason = "the migration has not run yet; run `pnpm openmapx compose render`";
+  if (migrationState(record, options) === "finished") {
+    const recorded = JSON.parse(
+      readReleaseStateFile(record, RELEASE_STORE_LIMITS.transactionBytes, options),
+    ) as { problems?: unknown };
+    const problem = Array.isArray(recorded.problems)
+      ? recorded.problems.find(
+          (entry): entry is string => typeof entry === "string" && entry.startsWith(legacy.overlay),
+        )
+      : undefined;
+    reason = problem ?? `${legacy.overlay} was not carried over`;
+  }
+  return `${selection} was not carried into the agent's release state (${reason}). No release is selected automatically until one is: ${choose}.`;
+}
+
+/** Clearing the selection explicitly supersedes the earlier overlay, whatever it held. */
+export function supersedeLegacyReleaseOverlay(
+  infraDir: string,
+  options: ReleaseStateOptions = {},
+): void {
+  const legacy = legacyReleaseStatePaths(infraDir);
+  const marker = join(releaseStatePaths(infraDir).directory, LEGACY_OVERLAY_SUPERSEDED);
+  if (!exists(legacy.overlay) || exists(marker)) return;
+  ensureReleaseStateDirectories(infraDir, options);
+  atomicWrite(
+    marker,
+    `${JSON.stringify({ version: 1, supersededAt: new Date().toISOString() })}\n`,
+    0o600,
+  );
 }
