@@ -1,6 +1,5 @@
-import type { TransitSource } from "@openmapx/transitous-core";
+import type { TransitousLock, TransitSource } from "@openmapx/transitous-core";
 import type { DatasetMetadata, StateStore } from "../../state.js";
-import type { TransitousLock } from "../../transitous-lock.js";
 import type { MotisOperationsPolicy } from "./operations-profile.js";
 import type { OperatorFeedRelayStore } from "./operator-feed-relay.js";
 import type { TransitousScriptRunner } from "./script-runner.js";

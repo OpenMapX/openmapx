@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { parseRefShaPair, type TransitousLock } from "@openmapx/transitous-core";
 import { execa } from "execa";
-import { parseRefShaPair, type TransitousLock } from "../../transitous-lock.js";
 
 /**
  * Minimal command-runner seam so the resolver can be unit-tested without
