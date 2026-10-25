@@ -91,6 +91,7 @@ export const OPS_OPERATION_KINDS = [
   "transitousLock.propose",
   "transitousLock.approve",
   "gbfsCatalogLock.inspect",
+  "transitousPin.inspect",
 ] as const;
 
 export type OpsOperationKind = (typeof OPS_OPERATION_KINDS)[number];
@@ -213,6 +214,8 @@ export const OPS_KIND_POLICIES = {
   "transitousLock.propose": sync("data-manager", 30_000),
   "transitousLock.approve": sync("data-manager", 30_000),
   "gbfsCatalogLock.inspect": sync("data-manager", 30_000),
+  // Read-only, for the admin panel: the pins, never a proposal or a change.
+  "transitousPin.inspect": sync("api", 30_000),
 } as const satisfies Record<OpsOperationKind, OpsKindPolicy>;
 
 const operationKindSchema = z.enum(OPS_OPERATION_KINDS);
@@ -549,6 +552,7 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
     approvedBy: actorLabelSchema,
   }),
   kindOnly("gbfsCatalogLock.inspect"),
+  kindOnly("transitousPin.inspect"),
 ]);
 export type OpsOperation = z.infer<typeof opsOperationSchema>;
 
@@ -1254,6 +1258,12 @@ export const OPS_RESULT_SCHEMAS = {
   "transitousLock.approve": z.strictObject({
     ref: transitousRefSchema,
     lockedAt: timestampSchema,
+  }),
+  "transitousPin.inspect": z.strictObject({
+    /** The pin the release ships. */
+    release: transitousLockRecordSchema,
+    /** The pin in effect: the release's, or one approved over it. */
+    active: transitousLockRecordSchema,
   }),
   "gbfsCatalogLock.inspect": z.strictObject({
     commit: z.string().regex(/^[0-9a-f]{40}$/),

@@ -232,6 +232,7 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     approvedBy: "fixture-actor",
   },
   "gbfsCatalogLock.inspect": { kind: "gbfsCatalogLock.inspect" },
+  "transitousPin.inspect": { kind: "transitousPin.inspect" },
 };
 
 it("compares projections independent of object ordering while preserving array and value identity", () => {
@@ -623,6 +624,31 @@ describe("ops contract", () => {
       });
     },
   );
+
+  it("gives the api role a read-only view of the Transitous pins, and nothing of the lock", () => {
+    expect(authorizeOpsOperation("api", "transitousPin.inspect")).toBe(true);
+    expect(authorizeOpsOperation("data-manager", "transitousPin.inspect")).toBe(false);
+    for (const kind of [
+      "transitousLock.inspect",
+      "transitousLock.propose",
+      "transitousLock.approve",
+    ] as const) {
+      expect(authorizeOpsOperation("api", kind)).toBe(false);
+    }
+    const pin = {
+      ref: `main@${"a".repeat(40)}`,
+      submodules: { "transitland-atlas": "b".repeat(40) },
+      lockedAt: "2026-10-25T00:00:00.000Z",
+      lockedBy: "dev@example.test",
+    };
+    expect(parseOpsResult("transitousPin.inspect", { release: pin, active: pin })).toEqual({
+      release: pin,
+      active: pin,
+    });
+    expect(() =>
+      parseOpsResult("transitousPin.inspect", { release: pin, active: pin, proposed: pin }),
+    ).toThrow();
+  });
 
   it("authorizes roles from the operation kind without inspecting operation arguments", () => {
     expect(authorizeOpsOperation("api", "service.start")).toBe(true);

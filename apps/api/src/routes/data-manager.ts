@@ -100,18 +100,18 @@ interface LockSummary {
 }
 
 async function readLockSummary(): Promise<LockSummary> {
-  // The lock lives under the repository's `infra/docker/`, which only the
-  // operations agent owns. Reading a copy baked into this image would report a
-  // build-time pin rather than the live one.
+  // The pin in effect is the operations agent's to report: the release's, or
+  // one an administrator or the auto-bump approved over it. Reading a copy
+  // baked into this image would report the build's pin, not the live one.
+  // transitousPin.inspect is the api role's read-only view; transitousLock.*
+  // is data-manager's.
   try {
     const { active } = await executeAndWait(
       createApiOpsClient(),
-      { kind: "transitousLock.inspect" },
-      createDurableOpsKey("api.transitous-lock.inspect", "read-lock-summary"),
+      { kind: "transitousPin.inspect" },
+      createDurableOpsKey("api.transitous-pin.inspect", "read-lock-summary"),
     );
-    return active
-      ? { ref: active.ref, lockedAt: active.lockedAt, lockedBy: active.lockedBy }
-      : { ref: null, lockedAt: null, lockedBy: null };
+    return { ref: active.ref, lockedAt: active.lockedAt, lockedBy: active.lockedBy };
   } catch {
     return { ref: null, lockedAt: null, lockedBy: null };
   }

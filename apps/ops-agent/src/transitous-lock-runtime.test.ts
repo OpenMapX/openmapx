@@ -164,6 +164,35 @@ describe("agent-owned Transitous catalog lock", () => {
   });
 });
 
+describe("app-api's read-only view of the Transitous pins", () => {
+  it("reports the release's pin and the pin in effect, never a proposal", async () => {
+    const rootDir = root();
+    const runtime = runtimeFor(rootDir);
+    await expect(
+      dispatchOpsOperation(runtime, { kind: "transitousPin.inspect" }, context()),
+    ).resolves.toEqual({ release: releaseRecord(), active: releaseRecord() });
+    await dispatchOpsOperation(
+      runtime,
+      { kind: "transitousLock.propose", ref: REF, submodules: {}, lockedBy: "auto-bump" },
+      context(),
+    );
+    await expect(
+      dispatchOpsOperation(runtime, { kind: "transitousPin.inspect" }, context()),
+    ).resolves.toEqual({ release: releaseRecord(), active: releaseRecord() });
+    await dispatchOpsOperation(
+      runtime,
+      { kind: "transitousLock.approve", ref: REF, approvedBy: "admin" },
+      context(),
+    );
+    await expect(
+      dispatchOpsOperation(runtime, { kind: "transitousPin.inspect" }, context()),
+    ).resolves.toMatchObject({
+      release: releaseRecord(),
+      active: { ref: REF, lockedBy: "admin" },
+    });
+  });
+});
+
 describe("the release's GBFS registry pin", () => {
   it("is answered from the release, whatever the checkout holds", async () => {
     const rootDir = root();
