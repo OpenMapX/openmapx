@@ -99,11 +99,12 @@ function pruneOrphanedGtfsDatasets(ctx: JobContext): void {
 const FULL_COMMIT_SHA = /^[0-9a-f]{40}$/;
 
 /**
- * Hard-reset the catalog to the SHA pinned in
- * the agent-owned `infra/docker/transitous.lock.json` before running the pipeline.
+ * Hard-reset the catalog to the commit the operations agent reports as the pin
+ * in effect, before running the pipeline: the release's pin, or one an
+ * administrator or the auto-bump approved over it.
  *
- * This fails CLOSED. A missing repo root, a missing, unreadable, or malformed
- * lockfile, or a ref whose SHA is not an exact 40-hex commit all abort
+ * This fails CLOSED. A pin the agent cannot report, a missing or malformed
+ * ref, or a ref whose SHA is not an exact 40-hex commit all abort
  * preparation. Continuing would run upstream Transitous code against whatever
  * the catalog's remote HEAD happens to be — code that was never reviewed and is
  * not what any operator pinned.
@@ -116,10 +117,10 @@ async function enforceTransitousLock(
 ): Promise<TransitousLock> {
   let lock: TransitousLock | null;
   try {
-    // The lock is agent-owned; data-manager reads it through the typed
-    // operation rather than bind-mounting the host checkout. The auto-bump
-    // canary validates the proposed ref in the staging slot before it is
-    // activated; every other run enforces the active lock.
+    // The pin is the agent's to report; data-manager reads it through the
+    // typed operation rather than bind-mounting the host checkout. The
+    // auto-bump canary builds the agent's proposal in the staging slot before
+    // it is approved; every other run enforces the pin in effect.
     const slots = await runOpsOperation({ kind: "transitousLock.inspect" });
     lock = useProposedLock ? (slots.proposed ?? slots.active) : slots.active;
   } catch (error) {
@@ -129,7 +130,7 @@ async function enforceTransitousLock(
   }
   if (!lock) {
     throw new Error(
-      "transitous-pipeline: refusing to run — no infra/docker/transitous.lock.json is pinned (run `pnpm openmapx transitous bump`)",
+      "transitous-pipeline: refusing to run — the operations agent reports no Transitous catalog lock in effect",
     );
   }
   if (useProposedLock) {
@@ -154,7 +155,7 @@ async function enforceTransitousLock(
   const currentSha = await readGitHeadSha(catalogDir);
   if (currentSha === sha) return lock;
   logger.info(
-    `transitous-pipeline: catalog HEAD ${currentSha || "(unknown)"} differs from lockfile ${sha}; resetting`,
+    `transitous-pipeline: catalog HEAD ${currentSha || "(unknown)"} differs from the pinned commit ${sha}; resetting`,
   );
   await runner("git", [...safeArgs, "-C", catalogDir, "fetch", "origin", sha], {
     cwd: catalogDir,
