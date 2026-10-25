@@ -159,8 +159,16 @@ export function createGofsRideProvider(
   config: GofsFeedConfig,
   fetchJson?: GofsFetchJson,
 ): RideProvider {
-  const client = createGofsFeedClient(ctx, config, fetchJson);
   const sourceId = `gofs-${config.id}`;
+
+  /**
+   * One feed client per public operation. The client memoises its static
+   * snapshot so the stages of one request (availability, realtime booking, wait
+   * times) agree with each other; owning it for the provider's lifetime would
+   * make that snapshot permanent and bypass each document's TTL.
+   */
+  const createClient = () => createGofsFeedClient(ctx, config, fetchJson);
+  type FeedClient = ReturnType<typeof createClient>;
 
   function attributionFor(feed: GofsStaticFeed) {
     return [
@@ -178,7 +186,10 @@ export function createGofsRideProvider(
   }
 
   /** Resolve the brands serving this request, or null when out of area. */
-  async function resolve(request: RideQuoteRequest): Promise<{
+  async function resolve(
+    client: FeedClient,
+    request: RideQuoteRequest,
+  ): Promise<{
     feed: GofsStaticFeed;
     products: RideProduct[];
     fareIdByBrand: Map<string, string | undefined>;
@@ -247,7 +258,8 @@ export function createGofsRideProvider(
     quoteTtlSeconds: QUOTE_TTL_SECONDS,
 
     async getAvailability(request) {
-      const resolved = await resolve(request);
+      const client = createClient();
+      const resolved = await resolve(client, request);
       if (!resolved) {
         const feed = await client.loadStatic();
         const data: RideAvailability = {
@@ -273,7 +285,8 @@ export function createGofsRideProvider(
     },
 
     async getQuotes(request) {
-      const resolved = await resolve(request);
+      const client = createClient();
+      const resolved = await resolve(client, request);
       if (!resolved) {
         const feed = await client.loadStatic();
         return { data: [], attributions: attributionFor(feed), freshness: freshnessNow() };
@@ -362,7 +375,7 @@ export function createGofsRideProvider(
     },
 
     async createHandoff(request) {
-      const feed = await client.loadStatic();
+      const feed = await createClient().loadStatic();
       const fromZoneIds = gofsZonesContaining(feed.zones, request.pickup);
       const rule = feed.bookingRules.find((r) =>
         r.from_zone_ids.some((z) => fromZoneIds.includes(z)),

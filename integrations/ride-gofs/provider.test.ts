@@ -1,6 +1,7 @@
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import {
+  DISCOVERY,
   FEED_DOCUMENTS,
   LEAN_FEED_CONFIG,
   LEAN_FEED_DOCUMENTS,
@@ -345,5 +346,363 @@ describe("against the live Freebee feed shape", () => {
     const handoff = await leanProvider().createHandoff({ pickup: LEAN_IN_ZONE });
     expect(handoff.webUrl).toBe("https://lean.example");
     expect(handoff.carriesCoordinates).toBe(false);
+  });
+});
+
+/**
+ * One provider serves many requests over its lifetime, so the static feed must
+ * be re-consulted per operation — through the shared document cache and its
+ * TTL policy — while a single operation (a quote resolves availability,
+ * realtime booking and wait times) still works from one coherent snapshot.
+ */
+describe("static feed lifetime across provider operations", () => {
+  const STATIC_URLS = {
+    gofs: "https://feed.example/gofs.json",
+    system_information: "https://feed.example/system_information.json",
+    service_brands: "https://feed.example/service_brands.json",
+    zones: "https://feed.example/zones.json",
+    operating_rules: "https://feed.example/operating_rules.json",
+    calendars: "https://feed.example/calendars.json",
+    fares: "https://feed.example/fares.json",
+    booking_rules: "https://feed.example/booking_rules.json",
+  } as const;
+  type StaticFile = keyof typeof STATIC_URLS;
+  const REALTIME_URL = "https://feed.example/realtime_booking";
+  const WAIT_URL = "https://feed.example/wait_time";
+  const WAIT_URL_V2 = "https://feed.example/wait_time_v2";
+  const STATIC_FILE_COUNT = Object.keys(STATIC_URLS).length;
+  const pickupAt = "2026-08-11T14:00";
+  const quoteRequest = {
+    pickup: inZone,
+    dropoff: inZone,
+    pickupAt,
+    route: { distanceMeters: 8000, durationSeconds: 900 },
+  };
+
+  const tariff = (kilometer: number) => ({
+    fares: [
+      {
+        fare_id: "std",
+        currency: "CAD",
+        rider: [{ amount: 3.5 }],
+        kilometer: [{ amount: kilometer }],
+        minute: [{ amount: 0.65 }],
+      },
+    ],
+  });
+
+  /**
+   * A controllable synthetic upstream. Documents are served as deep clones so
+   * editing them later cannot reach a snapshot the provider already holds.
+   */
+  function syntheticSource(ttl: number) {
+    const documents = new Map<string, Record<string, unknown>>();
+    for (const [url, doc] of Object.entries(FEED_DOCUMENTS)) {
+      documents.set(url, { ...(structuredClone(doc) as Record<string, unknown>), ttl });
+    }
+    const fetched: string[] = [];
+    const failing = new Set<string>();
+    const waits: Record<string, number> = { [WAIT_URL]: 600, [WAIT_URL_V2]: 300 };
+    const source = {
+      /** Called when a realtime_booking request arrives, after static loading. */
+      onRealtime: undefined as (() => void | Promise<void>) | undefined,
+      failing,
+      waits,
+      fetchJson: vi.fn(async (url: string) => {
+        const base = url.split("?")[0];
+        fetched.push(base);
+        if (base === REALTIME_URL) {
+          const hook = source.onRealtime;
+          if (hook) await hook();
+          return structuredClone(REALTIME_BOOKING);
+        }
+        if (base in waits) {
+          return { data: { wait_times: [{ brand_id: "large", wait_time: waits[base] }] } };
+        }
+        if (failing.has(base)) throw new Error(`503 ${base}`);
+        const doc = documents.get(base);
+        if (!doc) throw new Error(`404 ${base}`);
+        return structuredClone(doc);
+      }),
+      setData(file: StaticFile, data: Record<string, unknown>) {
+        const url = STATIC_URLS[file];
+        documents.set(url, { ...documents.get(url), data });
+      },
+      setTtl(file: StaticFile, value: number) {
+        const url = STATIC_URLS[file];
+        documents.set(url, { ...documents.get(url), ttl: value });
+      },
+      setWaitEndpoint(url: string) {
+        const discovery = structuredClone(DISCOVERY);
+        for (const feed of discovery.data.en.feeds) if (feed.name === "wait_time") feed.url = url;
+        documents.set(STATIC_URLS.gofs, { ...discovery, ttl });
+      },
+      /** Upstream requests since the last call, query strings removed. */
+      takeFetches() {
+        return fetched.splice(0);
+      },
+    };
+    return source;
+  }
+
+  /** Counts fetches per base URL. */
+  const countOf = (fetches: string[], url: string) => fetches.filter((u) => u === url).length;
+
+  /** A shared cache that honours entry lifetimes against an explicit clock. */
+  function ttlCache(clock: { now: number }) {
+    const store = new Map<string, { value: unknown; expiresAt: number }>();
+    return {
+      get: async (key: string) => {
+        const entry = store.get(key);
+        return (entry && entry.expiresAt > clock.now ? entry.value : null) as never;
+      },
+      set: async (key: string, value: unknown, ttlSeconds?: number) => {
+        store.set(key, { value, expiresAt: clock.now + (ttlSeconds ?? 0) * 1000 });
+      },
+      del: async (key: string) => void store.delete(key),
+      withCache: async <T>(_key: string, _ttl: number, fn: () => Promise<T>) => fn(),
+    };
+  }
+
+  function providerOver(
+    source: ReturnType<typeof syntheticSource>,
+    cache?: ReturnType<typeof ttlCache>,
+  ) {
+    const ctx = createMockIntegrationContext({ id: "ride-gofs", config: {}, cache });
+    return createGofsRideProvider(ctx, feedConfig, source.fetchJson);
+  }
+
+  function deferred() {
+    let resolve!: () => void;
+    const promise = new Promise<void>((r) => {
+      resolve = r;
+    });
+    return { promise, resolve };
+  }
+
+  describe("a ttl-0 feed is refreshed by each operation", () => {
+    it("getAvailability sees operating rules that were later removed", async () => {
+      const source = syntheticSource(0);
+      const provider = providerOver(source);
+
+      const before = await provider.getAvailability({ pickup: inZone, dropoff: inZone, pickupAt });
+      expect(before.data.available).toBe(true);
+
+      source.setData("operating_rules", { operating_rules: [] });
+      const after = await provider.getAvailability({ pickup: inZone, dropoff: inZone, pickupAt });
+      expect(after.data.available).toBe(false);
+      expect(after.data.products).toEqual([]);
+    });
+
+    it("getQuotes prices the estimated fallback from the current tariff", async () => {
+      const source = syntheticSource(0);
+      const provider = providerOver(source);
+      const large = (result: Awaited<ReturnType<NonNullable<typeof provider.getQuotes>>>) =>
+        result.data.find((q) => q.productId === "large");
+
+      const before = large(await provider.getQuotes?.(quoteRequest));
+      // 3.50 rider + (8 km x 1.75) + (15 min x 0.65)
+      expect(before?.fare).toEqual({ amount: 27.25, currency: "CAD", basis: "estimated" });
+
+      source.setData("fares", tariff(2.75));
+      source.waits[WAIT_URL] = 420;
+      const after = large(await provider.getQuotes?.(quoteRequest));
+      // 3.50 + (8 km x 2.75) + (15 min x 0.65)
+      expect(after?.fare).toEqual({ amount: 35.25, currency: "CAD", basis: "estimated" });
+      // Dynamic responses are fetched fresh by every operation.
+      expect(after?.pickupEtaSeconds).toBe(420);
+    });
+
+    it("createHandoff follows a changed booking url", async () => {
+      const source = syntheticSource(0);
+      const provider = providerOver(source);
+      const urlOf = async () => {
+        const handoff = await provider.createHandoff({ pickup: inZone, dropoff: inZone, pickupAt });
+        const url = new URL(handoff.webUrl);
+        return url.origin + url.pathname;
+      };
+
+      expect(await urlOf()).toBe("https://feed.example/book");
+      source.setData("booking_rules", {
+        booking_rules: [
+          {
+            from_zone_ids: ["city"],
+            booking_type: 0,
+            booking_url: "https://feed.example/book-v2",
+          },
+        ],
+      });
+      expect(await urlOf()).toBe("https://feed.example/book-v2");
+    });
+  });
+
+  describe("documents with a positive ttl follow the shared cache lifetime", () => {
+    it("reuses them until they expire, then loads only the expired document", async () => {
+      const clock = { now: 0 };
+      const source = syntheticSource(3600);
+      source.setTtl("gofs", 300);
+      source.setTtl("operating_rules", 120);
+      const provider = providerOver(source, ttlCache(clock));
+      const request = { pickup: inZone, dropoff: inZone, pickupAt };
+
+      expect((await provider.getAvailability(request)).data.available).toBe(true);
+      expect(source.takeFetches()).toHaveLength(STATIC_FILE_COUNT);
+
+      source.setData("operating_rules", { operating_rules: [] });
+      clock.now += 60_000;
+      expect((await provider.getAvailability(request)).data.available).toBe(true);
+      expect(source.takeFetches()).toEqual([]);
+
+      clock.now += 61_000;
+      expect((await provider.getAvailability(request)).data.available).toBe(false);
+      expect(source.takeFetches()).toEqual([STATIC_URLS.operating_rules]);
+    });
+  });
+
+  describe("optional files", () => {
+    it("are retried by a later operation once they recover", async () => {
+      const clock = { now: 0 };
+      const source = syntheticSource(3600);
+      source.failing.add(STATIC_URLS.booking_rules);
+      const provider = providerOver(source, ttlCache(clock));
+      const request = { pickup: inZone, pickupAt };
+
+      const degraded = await provider.getAvailability(request);
+      expect(degraded.data.available).toBe(true);
+      expect(degraded.data.bookingRules).toBeUndefined();
+      expect(countOf(source.takeFetches(), STATIC_URLS.booking_rules)).toBe(1);
+
+      source.failing.delete(STATIC_URLS.booking_rules);
+      const recovered = await provider.getAvailability(request);
+      expect(recovered.data.bookingRules?.infoUrl).toBe("https://feed.example/how-to-book");
+      // Only the missing document is requested; cached mandatory files are kept.
+      expect(source.takeFetches()).toEqual([STATIC_URLS.booking_rules]);
+    });
+  });
+
+  describe("one operation", () => {
+    it("quotes from one snapshot, loading each static document once", async () => {
+      const source = syntheticSource(0);
+      const provider = providerOver(source);
+      // The feed changes after this quote's static files are in hand and its
+      // realtime request is already on the wire.
+      source.onRealtime = () => {
+        source.onRealtime = undefined;
+        source.setData("fares", tariff(2.75));
+        source.setWaitEndpoint(WAIT_URL_V2);
+      };
+
+      const first = await provider.getQuotes?.(quoteRequest);
+      const large = first?.data.find((q) => q.productId === "large");
+      expect(large?.pickupEtaSeconds).toBe(600);
+      expect(large?.fare?.amount).toBeCloseTo(27.25, 2);
+      const firstFetches = source.takeFetches();
+      for (const url of Object.values(STATIC_URLS)) expect(countOf(firstFetches, url)).toBe(1);
+      expect(countOf(firstFetches, WAIT_URL)).toBe(1);
+      expect(countOf(firstFetches, WAIT_URL_V2)).toBe(0);
+
+      // The next operation takes the refreshed snapshot and endpoint.
+      const second = await provider.getQuotes?.(quoteRequest);
+      const refreshed = second?.data.find((q) => q.productId === "large");
+      expect(refreshed?.pickupEtaSeconds).toBe(300);
+      expect(refreshed?.fare?.amount).toBeCloseTo(35.25, 2);
+      const secondFetches = source.takeFetches();
+      for (const url of Object.values(STATIC_URLS)) expect(countOf(secondFetches, url)).toBe(1);
+      expect(countOf(secondFetches, WAIT_URL_V2)).toBe(1);
+    });
+
+    it.each([
+      ["getAvailability", "availability"],
+      ["getQuotes", "quotes"],
+    ] as const)("%s loads the static files once on its out-of-area fallback", async (method) => {
+      const source = syntheticSource(0);
+      const provider = providerOver(source);
+
+      const result = await provider[method]?.({ pickup: outOfZone, pickupAt });
+      expect(result?.attributions[0].name).toBe("Example Taxi Registry");
+      const fetches = source.takeFetches();
+      expect(fetches).toHaveLength(STATIC_FILE_COUNT);
+      expect(countOf(fetches, STATIC_URLS.gofs)).toBe(1);
+    });
+  });
+
+  describe("concurrent operations", () => {
+    it("each keep the snapshot they loaded", async () => {
+      const source = syntheticSource(0);
+      const provider = providerOver(source);
+      const reached = deferred();
+      const release = deferred();
+      // Quote A stops at its realtime request, after its static acquisition.
+      source.onRealtime = async () => {
+        source.onRealtime = undefined;
+        reached.resolve();
+        await release.promise;
+      };
+
+      const quoteA = provider.getQuotes?.(quoteRequest);
+      await reached.promise;
+
+      source.setData("fares", tariff(2.75));
+      source.setData("service_brands", {
+        service_brands: [
+          { brand_id: "regular", brand_name: "Regular Ride", brand_color: "#0055AA" },
+          { brand_id: "large", brand_name: "Large Ride Plus" },
+        ],
+      });
+      source.setData("system_information", {
+        language: "en",
+        timezone: "America/Toronto",
+        name: "Example Taxi Registry v2",
+      });
+      source.setWaitEndpoint(WAIT_URL_V2);
+
+      const resultB = await provider.getQuotes?.(quoteRequest);
+      release.resolve();
+      const resultA = await quoteA;
+
+      const largeA = resultA?.data.find((q) => q.productId === "large");
+      expect(largeA?.product.name).toBe("Large Ride");
+      expect(largeA?.pickupEtaSeconds).toBe(600);
+      expect(largeA?.fare?.amount).toBeCloseTo(27.25, 2);
+      expect(resultA?.attributions[0].name).toBe("Example Taxi Registry");
+
+      const largeB = resultB?.data.find((q) => q.productId === "large");
+      expect(largeB?.product.name).toBe("Large Ride Plus");
+      expect(largeB?.pickupEtaSeconds).toBe(300);
+      expect(largeB?.fare?.amount).toBeCloseTo(35.25, 2);
+      expect(resultB?.attributions[0].name).toBe("Example Taxi Registry v2");
+    });
+  });
+
+  describe("failures", () => {
+    it("reject a mandatory-file failure and let a later operation retry", async () => {
+      const source = syntheticSource(0);
+      source.failing.add(STATIC_URLS.system_information);
+      const provider = providerOver(source);
+      const request = { pickup: inZone, pickupAt };
+
+      await expect(provider.getAvailability(request)).rejects.toThrow("503");
+      source.failing.delete(STATIC_URLS.system_information);
+      expect((await provider.getAvailability(request)).data.available).toBe(true);
+    });
+
+    it("fall through to the upstream when the shared cache is unavailable", async () => {
+      const source = syntheticSource(3600);
+      const unavailable = {
+        ...ttlCache({ now: 0 }),
+        get: async () => {
+          throw new Error("cache down");
+        },
+        set: async () => {
+          throw new Error("cache down");
+        },
+      };
+      const provider = providerOver(source, unavailable);
+      const request = { pickup: inZone, pickupAt };
+
+      expect((await provider.getAvailability(request)).data.available).toBe(true);
+      expect((await provider.getAvailability(request)).data.available).toBe(true);
+      expect(source.takeFetches()).toHaveLength(2 * STATIC_FILE_COUNT);
+    });
   });
 });
