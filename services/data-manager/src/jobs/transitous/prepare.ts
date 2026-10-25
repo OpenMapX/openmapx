@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync } from "node:fs";
-import { ensureCatalog } from "@openmapx/transitous-core";
+import { ensureCatalog, parseRefShaPair, type TransitousLock } from "@openmapx/transitous-core";
 import { runOpsOperation } from "../../ops-client.js";
-import { parseRefShaPair, type TransitousLock } from "../../transitous-lock.js";
 import {
   DEFAULT_TRANSITOUS_REPO_URL,
   ensureTransitousWorkdirs,

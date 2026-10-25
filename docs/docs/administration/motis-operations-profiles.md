@@ -82,7 +82,7 @@ Recovery drill:
 
 ## Pin upgrades
 
-`openmapx transitous bump` and `POST /transit/bump` write `*.proposed.json`; they do not mutate active pins. Review catalog/feed/license diffs, build the inactive slot, and run the timetable, rental, planner, attribution, and response-contract canaries. API activation requires typing the exact proposed ref at `/transit/bump/approve`. Keep previous pins with the previous healthy slot.
+`openmapx transitous bump` and `POST /transit/bump` write `transitous.lock.proposed.json`; they do not mutate the active pin. The GBFS registry pin is the release's and changes only with a release. Review catalog/feed/license diffs, build the inactive slot, and run the timetable, rental, planner, attribution, and response-contract canaries. API activation requires typing the exact proposed ref at `/transit/bump/approve`. Keep previous pins with the previous healthy slot.
 
 Mutable tags such as `latest` are prohibited. MOTIS currently uses the repository-wide pinned release.
 

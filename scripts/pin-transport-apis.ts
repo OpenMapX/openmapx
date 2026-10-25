@@ -1,10 +1,30 @@
+/**
+ * Maintainer tool: pin the transport-apis registry that
+ * `integrations/transit-dynamic-registry` ships, by rewriting its `pin.ts`,
+ * its manifest's health checks and `infra/docker/transport-apis.lock.json`
+ * together. Run it in a development checkout and commit the result; the
+ * release then carries the pin. No deployment command rewrites these files.
+ *
+ *   pnpm pin:transport-apis [--yes] [--branch <name>]
+ */
+
+import { execFile } from "node:child_process";
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
-import type { Command } from "commander";
-import { execa } from "execa";
-import { log } from "../lib/output";
-import { repoPaths } from "../lib/paths";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+
+/** Plain console output: maintainer scripts run from the repository root, without the CLI's packages. */
+const log = {
+  info: (message: string) => console.log(message),
+  ok: (message: string) => console.log(`✓ ${message}`),
+  warn: (message: string) => console.error(`⚠ ${message}`),
+  err: (message: string) => console.error(`✗ ${message}`),
+  dim: (message: string) => console.log(message),
+};
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const TRANSPORT_APIS_REPO = "public-transport/transport-apis";
 const TRANSPORT_APIS_API = `https://api.github.com/repos/${TRANSPORT_APIS_REPO}`;
@@ -299,8 +319,8 @@ async function summarizeCatalog(files: Array<{ path: string; value: unknown }>):
   // Only the pin command needs integration implementations. The fixed operator
   // CLI also serves backups/builds in an image containing packages alone.
   const [{ parseEntry }, { registryEndpointRejection }] = await Promise.all([
-    import("../../../../integrations/transit-dynamic-registry/fetcher"),
-    import("../../../../integrations/transit-dynamic-registry/validate-endpoint"),
+    import("../integrations/transit-dynamic-registry/fetcher"),
+    import("../integrations/transit-dynamic-registry/validate-endpoint"),
   ]);
   let entryCount = 0;
   const protocolCounts = new Map<string, number>();
@@ -348,7 +368,7 @@ export async function resolveTransportApisCandidate(
       lockedAt: now().toISOString(),
       lockedBy,
       comment:
-        "Pinned commit of public-transport/transport-apis consumed by integrations/transit-dynamic-registry. Bump via `pnpm openmapx transit-registry bump`.",
+        "Pinned commit of public-transport/transport-apis consumed by integrations/transit-dynamic-registry. Bump via `pnpm pin:transport-apis`.",
     },
     protocolCounts: summary.protocolCounts,
     rejectedIds: summary.rejectedIds,
@@ -372,8 +392,8 @@ async function promptConfirm(question: string): Promise<boolean> {
 
 async function resolveLockedBy(): Promise<string> {
   try {
-    const result = await execa("git", ["config", "user.email"], { stdio: "pipe" });
-    const email = result.stdout.trim();
+    const { stdout } = await promisify(execFile)("git", ["config", "user.email"]);
+    const email = stdout.trim();
     if (email) return email;
   } catch {
     // Fall through to the environment fallback.
@@ -451,67 +471,44 @@ function printCandidateSummary(
   if (candidate.rejectedIds.length > 0) log.info(`  ${candidate.rejectedIds.join(", ")}`);
 }
 
-export function registerTransportApisPinCommands(program: Command): void {
-  const registry = program
-    .command("transit-registry")
-    .description("Manage the transport-apis transit registry pin");
+export async function main(argv: readonly string[]): Promise<void> {
+  const yes = argv.includes("--yes");
+  const branchIndex = argv.indexOf("--branch");
+  const branch = branchIndex >= 0 ? argv[branchIndex + 1] : undefined;
+  if (branchIndex >= 0 && !branch) throw new Error("--branch needs a branch name");
+  const existing = readExistingLock(REPO_ROOT);
+  const lockedBy = await resolveLockedBy();
+  let candidate: TransportApisCandidate;
+  try {
+    candidate = await resolveTransportApisCandidate(lockedBy, fetch, () => new Date(), branch);
+  } catch (error) {
+    log.err(
+      `transport-apis candidate failed validation; no files changed: ${(error as Error).message}`,
+    );
+    process.exitCode = 1;
+    return;
+  }
 
-  registry
-    .command("bump")
-    .description("Resolve, review, and write an immutable transport-apis registry pin")
-    .option("--yes", "Skip the interactive confirmation prompt", false)
-    .option("--branch <name>", "Branch to track; defaults to the upstream default branch")
-    .action(async (options: { yes: boolean; branch?: string }) => {
-      const paths = repoPaths();
-      const existing = readExistingLock(paths.root);
-      const lockedBy = await resolveLockedBy();
-      let candidate: TransportApisCandidate;
-      try {
-        candidate = await resolveTransportApisCandidate(
-          lockedBy,
-          fetch,
-          () => new Date(),
-          options.branch,
-        );
-      } catch (error) {
-        log.err(
-          `transport-apis candidate failed validation; no files changed: ${(error as Error).message}`,
-        );
-        process.exitCode = 1;
-        return;
-      }
+  printCandidateSummary(candidate, existing);
+  if (!yes) {
+    const ok = await promptConfirm("Write this transport-apis pin? [y/N]");
+    if (!ok) {
+      log.info("Aborted — no pin files changed.");
+      return;
+    }
+  }
 
-      printCandidateSummary(candidate, existing);
-      if (!options.yes) {
-        const ok = await promptConfirm("Write this transport-apis pin? [y/N]");
-        if (!ok) {
-          log.info("Aborted — no pin files changed.");
-          return;
-        }
-      }
+  try {
+    writePinAndLock(REPO_ROOT, candidate.lock);
+  } catch (error) {
+    log.err((error as Error).message);
+    process.exitCode = 1;
+    return;
+  }
+  log.ok(`Pinned transport-apis to ${candidate.lock.commit}`);
+  log.dim("Run `pnpm check-toolchain-pins` to verify all consumers use this revision.");
+}
 
-      try {
-        writePinAndLock(paths.root, candidate.lock);
-      } catch (error) {
-        log.err((error as Error).message);
-        process.exitCode = 1;
-        return;
-      }
-      log.ok(`Pinned transport-apis to ${candidate.lock.commit}`);
-      log.dim("Run `pnpm check-toolchain-pins` to verify all consumers use this revision.");
-    });
-
-  registry
-    .command("show")
-    .description("Print the current transport-apis lockfile contents")
-    .action(() => {
-      const lockPath = join(repoPaths().root, "infra", "docker", "transport-apis.lock.json");
-      if (!existsSync(lockPath)) {
-        log.warn(
-          "No infra/docker/transport-apis.lock.json found. Run `pnpm openmapx transit-registry bump` to create one.",
-        );
-        return;
-      }
-      console.log(readFileSync(lockPath, "utf-8"));
-    });
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  void main(process.argv.slice(2));
 }

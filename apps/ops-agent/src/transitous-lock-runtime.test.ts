@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { releaseGbfsCatalogPin } from "./release-catalog-pins";
 import { createUnavailableRuntime, dispatchOpsOperation } from "./runtime";
 import { createTransitousLockRuntime } from "./transitous-lock-runtime";
 
@@ -149,5 +150,26 @@ describe("agent-owned Transitous catalog lock", () => {
     await expect(
       dispatchOpsOperation(runtimeFor(rootDir), { kind: "transitousLock.inspect" }, context()),
     ).rejects.toThrow(/too large/i);
+  });
+});
+
+describe("the release's GBFS registry pin", () => {
+  it("is answered from the release, whatever the checkout holds", async () => {
+    const rootDir = root();
+    // A group-writable checkout another account planted a pin in.
+    writeFileSync(
+      join(rootDir, "infra", "docker", "gbfs-catalog.lock.json"),
+      JSON.stringify({ commit: "f".repeat(40), url: "https://example.test/systems.csv" }),
+    );
+    const release = releaseGbfsCatalogPin();
+    await expect(
+      dispatchOpsOperation(runtimeFor(rootDir), { kind: "gbfsCatalogLock.inspect" }, context()),
+    ).resolves.toEqual({
+      commit: release.commit,
+      url: release.url,
+      sha256: release.sha256,
+      lockedAt: release.lockedAt,
+      lockedBy: release.lockedBy,
+    });
   });
 });

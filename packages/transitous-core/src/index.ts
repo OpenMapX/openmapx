@@ -5,6 +5,13 @@ export {
   safeDirArgs,
 } from "./catalog.js";
 export {
+  decodeGbfsCatalogLock,
+  decodeTransitousLock,
+  type GbfsCatalogLock,
+  parseRefShaPair,
+  type TransitousLock,
+} from "./catalog-pins.js";
+export {
   DEFAULT_TRANSITOUS_REPO_URL,
   GTFSCLEAN_COMMIT,
   MOBILITYDATA_GBFS_CATALOG_COMMIT,

@@ -202,8 +202,8 @@ pnpm openmapx transitous show
 pnpm openmapx transitous bump
 ```
 
-Bump asks permission to write the Transitous and GBFS proposed lockfiles. It
-does not change the active pins or running graph. Follow
+Bump asks permission to write the proposed Transitous lockfile. It does not
+change the active pin or running graph. Follow
 [Pin upgrades](../administration/motis-operations-profiles.md#pin-upgrades)
 to review the proposal, validate an inactive slot, and separately approve the
 exact proposed ref. Opt-in `TRANSITOUS_AUTO_BUMP_CRON` tests a proposed upstream revision through the
@@ -211,6 +211,34 @@ candidate workflow before activating it. A rejection retains the previous pin.
 Set `TRANSITOUS_ALERT_GH_TOKEN` and `TRANSITOUS_ALERT_GH_REPO` if failures should
 open deduplicated issues; otherwise monitor logs and dataset age. A retained
 healthy dataset can still become stale.
+
+### Catalog pins
+
+A release ships three catalog pins in `infra/docker/`:
+
+- `transitous.lock.json`: the Transitous catalog the release was tested with;
+  `transitous bump` and the auto-bump propose newer ones as described above;
+- `gbfs-catalog.lock.json`: the MobilityData GBFS registry revision and its
+  SHA-256, paired with `MOBILITYDATA_GBFS_CATALOG_COMMIT` in
+  `@openmapx/transitous-core`;
+- `transport-apis.lock.json`: the public-transport/transport-apis revision the
+  dynamic transit registry consumes, paired with its `pin.ts` and manifest
+  health checks.
+
+The operations agent reads the GBFS pin from the copy its image carries, not
+from the host checkout, and no deployment command rewrites these files.
+Maintainers change the GBFS and transport-apis pins in a development checkout
+and commit the result:
+
+```bash
+pnpm pin:gbfs-catalog      # the lock and the compiled commit
+pnpm pin:transport-apis    # the lock, pin.ts and the manifest health checks
+pnpm check-toolchain-pins
+```
+
+Each command shows the candidate and asks before it writes; `--yes` skips the
+prompt. `pin:transport-apis` takes `--branch <name>` (default: the upstream
+default branch).
 
 ## Self-hosting OpenTripPlanner
 

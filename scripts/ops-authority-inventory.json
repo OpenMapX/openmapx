@@ -320,7 +320,7 @@
     {
       "id": "data-manager.catalog-locks",
       "callSiteIds": [],
-      "semanticSources": ["services/data-manager/src/transitous-lock.ts#parseRefShaPair"],
+      "semanticSources": ["packages/transitous-core/src/catalog-pins.ts#parseRefShaPair"],
       "typedKinds": [
         "transitousLock.inspect",
         "transitousLock.propose",
