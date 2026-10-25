@@ -1,0 +1,101 @@
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+// A checkout root owns, for the refusal below.
+const rootOwned = vi.hoisted(() => ({ path: "" }));
+vi.mock("node:fs", async (importOriginal) => {
+  const fs = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...fs,
+    statSync: ((path: string, ...rest: unknown[]) => {
+      const stats = (fs.statSync as (...args: unknown[]) => import("node:fs").Stats)(path, ...rest);
+      if (rootOwned.path && String(path) === rootOwned.path) {
+        return Object.assign(Object.create(Object.getPrototypeOf(stats)), stats, {
+          uid: 0,
+          gid: 0,
+        });
+      }
+      return stats;
+    }) as typeof fs.statSync,
+  };
+});
+
+const { assertRunningAsDeploymentUser, ensureDeploymentUser, readDeploymentUserAssignments } =
+  await import("../deployment-user");
+
+const roots: string[] = [];
+afterEach(() => {
+  rootOwned.path = "";
+  vi.restoreAllMocks();
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+
+function checkout() {
+  const root = mkdtempSync(join(tmpdir(), "openmapx-deployment-user-"));
+  roots.push(root);
+  const infraDir = join(root, "infra", "docker");
+  mkdirSync(infraDir, { recursive: true });
+  const owner = statSync(root);
+  return { root, infraDir, env: join(infraDir, ".env"), uid: owner.uid, gid: owner.gid };
+}
+
+describe("the deployment's user", () => {
+  it("is written from the checkout's owner when .env has none, once", () => {
+    const { infraDir, env, uid, gid } = checkout();
+    writeFileSync(env, "DOMAIN=maps.example.test\n# UID=1000\n# GID=1000\n", { mode: 0o600 });
+    expect(ensureDeploymentUser(infraDir)).toEqual({ uid, gid, derived: ["UID", "GID"] });
+    const written = readFileSync(env, "utf8");
+    expect(written.startsWith("DOMAIN=maps.example.test\n# UID=1000\n# GID=1000\n")).toBe(true);
+    expect(written).toContain(`\nUID=${uid}\nGID=${gid}\n`);
+    expect(statSync(env).mode & 0o777).toBe(0o600);
+    expect(ensureDeploymentUser(infraDir)).toEqual({ uid, gid, derived: [] });
+    expect(readFileSync(env, "utf8")).toBe(written);
+  });
+
+  it("keeps explicit values, and writes only the one that is missing", () => {
+    const { infraDir, env, gid } = checkout();
+    writeFileSync(env, "UID=4321\n", { mode: 0o600 });
+    expect(ensureDeploymentUser(infraDir)).toEqual({ uid: 4321, gid, derived: ["GID"] });
+    expect(readDeploymentUserAssignments(infraDir)).toEqual({ uid: 4321, gid });
+    writeFileSync(env, 'export UID="5000"\nGID=5001\n', { mode: 0o600 });
+    expect(ensureDeploymentUser(infraDir)).toEqual({ uid: 5000, gid: 5001, derived: [] });
+  });
+
+  it("creates a missing .env with just the two, owner-only", () => {
+    const { infraDir, env, uid, gid } = checkout();
+    expect(ensureDeploymentUser(infraDir).derived).toEqual(["UID", "GID"]);
+    expect(readFileSync(env, "utf8")).toMatch(new RegExp(`UID=${uid}\\nGID=${gid}\\n$`));
+    expect(statSync(env).mode & 0o777).toBe(0o600);
+  });
+
+  it("refuses uid 0, a malformed value, and an .env that is not the operator's own", () => {
+    const { root, infraDir, env } = checkout();
+    rootOwned.path = root;
+    expect(() => ensureDeploymentUser(infraDir)).toThrow(/owned by root/);
+    rootOwned.path = "";
+    writeFileSync(env, "UID=node\n", { mode: 0o600 });
+    expect(() => ensureDeploymentUser(infraDir)).toThrow(/numeric id/);
+    writeFileSync(env, "DOMAIN=x\n");
+    chmodSync(env, 0o664);
+    expect(() => ensureDeploymentUser(infraDir)).toThrow(/no group or other write/);
+    expect(readFileSync(env, "utf8")).toBe("DOMAIN=x\n");
+  });
+
+  it("is the only user a render may run as", () => {
+    const uid = process.geteuid?.() ?? 0;
+    expect(() => assertRunningAsDeploymentUser({ uid })).not.toThrow();
+    expect(() => assertRunningAsDeploymentUser({ uid: uid + 1 })).toThrow(
+      new RegExp(`runs as uid ${uid}, but the deployment's user .* is ${uid + 1}`),
+    );
+  });
+});

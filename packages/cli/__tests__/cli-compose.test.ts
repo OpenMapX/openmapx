@@ -128,6 +128,24 @@ describe("renderComposeForRepo", () => {
     expect(existsSync(generatedCompose())).toBe(true);
   });
 
+  it("writes the deployment's user from the checkout's owner, and runs only as that user", async () => {
+    writeManifest("alpha", { id: "alpha", ...baseManifest });
+    const env = join(tmp, "infra", "docker", ".env");
+    writeFileSync(env, "DOMAIN=example.com\n", { mode: 0o600 });
+    const owner = statSync(tmp);
+    await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] });
+    expect(readFileSync(env, "utf8")).toContain(`\nUID=${owner.uid}\nGID=${owner.gid}\n`);
+    expect(statSync(env).mode & 0o777).toBe(0o600);
+
+    // .env names another user than this process: nothing is rendered.
+    writeFileSync(env, `UID=${owner.uid + 1}\nGID=${owner.gid}\n`, { mode: 0o600 });
+    const before = coreServices.currentConfigurationGeneration(join(tmp, "infra", "docker"));
+    await expect(
+      renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] }),
+    ).rejects.toThrow(/but the deployment's user .* is/);
+    expect(coreServices.currentConfigurationGeneration(join(tmp, "infra", "docker"))).toBe(before);
+  });
+
   it("writes docker-compose.generated.yml from explicitly selected manifests", async () => {
     writeManifest("alpha", { ...baseManifest, id: "alpha" });
     writeManifest("beta", { ...baseManifest, id: "beta" });

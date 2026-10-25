@@ -112,6 +112,12 @@ async function commitGeneration(
           selectedRoots = desired.roots;
           allowMissingSelected = desired.source === "default";
         }
+        // The generation's containers run as the deployment's user, which
+        // .env names or the checkout's owner supplies, as for every render.
+        coreServices.assertRunningAsDeploymentUser(
+          coreServices.ensureDeploymentUser(options.infraDir),
+          "The operations agent",
+        );
         // This generation mounts the agent's state from its own directory;
         // an earlier release's directories move there first.
         coreServices.prepareAgentStateDirectories(options.infraDir);

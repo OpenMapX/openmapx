@@ -121,6 +121,13 @@ export {
   writeServiceSelectionFile,
 } from "./deployment";
 export {
+  assertRunningAsDeploymentUser,
+  checkoutOwner,
+  type DeploymentUser,
+  ensureDeploymentUser,
+  readDeploymentUserAssignments,
+} from "./deployment-user";
+export {
   embeddedBuiltInIntegrationManifests,
   embeddedBuiltInServiceManifests,
 } from "./embedded-built-in-services";
