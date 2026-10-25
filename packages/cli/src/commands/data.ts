@@ -24,7 +24,7 @@ import {
   resolveTransitousCountries,
   TRANSITOUS_COUNTRIES_ENV,
 } from "../lib/env-defaults";
-import { applyGeneratedHardlinks } from "../lib/hardlinks";
+import { applyGeneratedHardlinks, logAppliedHardlinks } from "../lib/hardlinks";
 import { log, routeLogsToStderr, table } from "../lib/output";
 import { buildServices, resolveDataBuildServiceId } from "../lib/service-builds";
 import { generateTransitousApiKeys } from "../lib/transitous-api-keys";
@@ -245,10 +245,7 @@ async function runFontDownload(transport: ReturnType<typeof createCliTransport>)
 async function renderAndApplyHardlinks(): Promise<void> {
   const rendered = await renderComposeForRepo({ domain: process.env.DOMAIN ?? "localhost" });
   for (const warning of rendered.selectionWarnings) log.warn(warning);
-  const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
-  log.ok(
-    `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
-  );
+  logAppliedHardlinks(await applyGeneratedHardlinks({ prune: true, requirePlan: true }));
 }
 
 function dataManagerHint(): void {
@@ -464,10 +461,7 @@ export function registerDataCommands(program: Command): void {
         // dirs the operator no longer wants.
         const rendered = await renderComposeForRepo({ domain: process.env.DOMAIN ?? "localhost" });
         for (const warning of rendered.selectionWarnings) log.warn(warning);
-        const result = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
-        log.ok(
-          `Linked ${result.linked} files (${result.skipped} already linked, ${result.pruned} stale file${result.pruned === 1 ? "" : "s"} pruned)`,
-        );
+        logAppliedHardlinks(await applyGeneratedHardlinks({ prune: true, requirePlan: true }));
       } catch (err) {
         log.err(`link failed: ${(err as Error).message}`);
         process.exit(1);

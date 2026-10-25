@@ -253,8 +253,12 @@ Three arrays express how a service fits into the stack: the abstract roles it
 plays (`provides`), the prepared data it needs (`consumes`), and the data it
 publishes for others (`produces`). The renderer matches a consumer's `consumes`
 entry to another service's `produces` entry of the same `type` and emits a
-hardlink-plan entry so the files are shared without copying. The CLI applies
-the plan after it renders. Before starting or recreating a service, the admin
+hardlink-plan entry so the files are shared without copying. After it renders,
+the CLI has data-manager apply the plan; it never links in the data root
+itself. When data-manager is not reachable and the plan has links to make or
+prune, `data link`, builds and `data update` refuse with the reason, and
+`compose up`, `services start` and `services update` go ahead with a warning
+to run `data link` once data-manager runs. Before starting or recreating a service, the admin
 panel reads the plan of the configuration it just applied from the operations
 agent (`configuration.hardlinks.inspect`), since it lives in the host's
 configuration generation, and has data-manager apply it. Data-manager mounts

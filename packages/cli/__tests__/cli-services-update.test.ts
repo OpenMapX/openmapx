@@ -11,6 +11,8 @@ vi.mock("../src/commands/compose", () => ({
 }));
 vi.mock("../src/lib/hardlinks", () => ({
   applyGeneratedHardlinks: vi.fn(async () => ({ linked: 0, skipped: 0, pruned: 0 })),
+  applyGeneratedHardlinksBeforeStart: vi.fn(async () => undefined),
+  logAppliedHardlinks: vi.fn(),
 }));
 vi.mock("../src/lib/docker", () => ({ dockerComposeStream: vi.fn() }));
 vi.mock("../src/lib/release", async (importOriginal) => ({

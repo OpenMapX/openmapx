@@ -5,7 +5,7 @@ import { services as coreServices } from "@openmapx/core/server";
 import { type Command, Option } from "commander";
 import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
 import { dockerComposeStream } from "../lib/docker";
-import { applyGeneratedHardlinks } from "../lib/hardlinks";
+import { applyGeneratedHardlinksBeforeStart } from "../lib/hardlinks";
 import { log } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import {
@@ -399,10 +399,7 @@ export function registerComposeCommands(program: Command): void {
         log.ok(`Rendered ${r.servicesRendered} services → ${r.revisionId}`);
         for (const warning of r.selectionWarnings) log.warn(warning);
         for (const warning of r.renderWarnings) log.warn(warning);
-        const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
-        log.ok(
-          `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
-        );
+        await applyGeneratedHardlinksBeforeStart();
       } catch (err) {
         log.err(`Render failed: ${(err as Error).message}`);
         process.exit(1);

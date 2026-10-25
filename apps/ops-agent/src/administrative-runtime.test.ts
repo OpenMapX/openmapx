@@ -16,6 +16,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createAdministrativeRuntime,
   createAgentHandoffBindings,
+  createDefaultFixedCli,
   createDefaultReleaseEffects,
   inspectBackupAuthority,
   inspectDataTypeAuthority,
@@ -357,6 +358,30 @@ describe("administrative backup runtime", () => {
       );
     },
   );
+});
+
+describe("the fixed CLI", () => {
+  it("reaches data-manager on the private network, not the host's loopback port", async () => {
+    const entryDirectory = mkdtempSync(join(tmpdir(), "openmapx-fixed-cli-"));
+    temporaryRoots.push(entryDirectory);
+    // Stands in for the bundled CLI beside the agent's entry.
+    writeFileSync(
+      join(entryDirectory, "cli.mjs"),
+      'const { argv, env } = process;\nconsole.log([...argv.slice(2), env.DATA_MANAGER_URL, env.OPENMAPX_FIXED_CLI_PROBE].join(" "));\n',
+    );
+    vi.stubEnv("DATA_MANAGER_URL", "http://localhost:4000");
+    vi.stubEnv("OPENMAPX_FIXED_CLI_PROBE", "inherited");
+    const lines: string[] = [];
+    try {
+      await createDefaultFixedCli("/unused", join(entryDirectory, "index.mjs"))(["data", "link"], {
+        signal: AbortSignal.timeout(10_000),
+        emitLog: (stream, message) => lines.push(`${stream}: ${message}`),
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(lines).toEqual(["stdout: data link http://data-manager:4000 inherited"]);
+  });
 });
 
 describe("administrative data runtime", () => {
