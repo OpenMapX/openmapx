@@ -380,17 +380,34 @@ function normalizeCatalogEntry(entry: ExtensionCatalogEntry): ExtensionCatalogEn
       throw new ExtensionStoreError("catalog_acquisition_failed");
     normalized.manifest = normalizeExtensionLocator(entry.manifest);
   }
-  if (entry.services !== undefined || entry.integrations !== undefined) {
-    const manifest = validatedManifest({
-      id: entry.id,
-      name: entry.name,
-      version: entry.version,
-      platform: entry.minPlatform,
-      services: entry.services,
-      integrations: entry.integrations,
+  if (entry.services !== undefined) {
+    if (!Array.isArray(entry.services)) throw new ExtensionStoreError("catalog_acquisition_failed");
+    normalized.services = entry.services.map((service) => {
+      const parsed = coreServices.extensionManifestSchema.shape.services
+        .unwrap()
+        .element.safeParse(service);
+      if (!parsed.success || !isCatalogRecord(service)) {
+        throw new ExtensionStoreError("catalog_acquisition_failed");
+      }
+      return { ...service, repo: assertAllowedGitUrl(parsed.data.repo).canonical };
     });
-    normalized.services = manifest.services;
-    normalized.integrations = manifest.integrations;
+  }
+  if (entry.integrations !== undefined) {
+    if (!Array.isArray(entry.integrations)) {
+      throw new ExtensionStoreError("catalog_acquisition_failed");
+    }
+    normalized.integrations = entry.integrations.map((integration) => {
+      const parsed = coreServices.extensionManifestSchema.shape.integrations
+        .unwrap()
+        .element.safeParse(integration);
+      if (!parsed.success || !isCatalogRecord(integration)) {
+        throw new ExtensionStoreError("catalog_acquisition_failed");
+      }
+      return {
+        ...integration,
+        artifact: coreServices.canonicalExtensionLocator(parsed.data.artifact),
+      };
+    });
   }
   return normalized;
 }

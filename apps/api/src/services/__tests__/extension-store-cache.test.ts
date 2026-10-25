@@ -142,6 +142,63 @@ describe("extension source and catalog coherence", () => {
     expect(ports.eval).toHaveBeenCalledTimes(1);
   });
 
+  it("normalizes partial catalog components without losing metadata or requiring a version", async () => {
+    ports.values.set(sourceKey, JSON.stringify([source]));
+    const manifest = "https://MANIFEST.example.test:443/releases/../extension.json";
+    const canonicalManifest = "https://manifest.example.test/extension.json";
+    const emptyManifest = "https://manifest.example.test/empty.json";
+    const item = {
+      id: "partial",
+      name: "Partial",
+      manifest,
+      integrations: [
+        {
+          id: "partial",
+          artifact: "https://ARTIFACTS.example.test:443/releases/../partial.tgz",
+          sha256: "a".repeat(64),
+          metadata: { retained: [1, false, null] },
+        },
+      ],
+      services: [
+        {
+          service: "partial-service",
+          repo: "https://github.com/openmapx/example.git",
+          metadata: { retained: true },
+        },
+      ],
+    };
+    const emptyItem = {
+      id: "empty-components",
+      name: "Empty components",
+      manifest: emptyManifest,
+      services: [],
+      integrations: [],
+      metadata: { retained: "empty" },
+    };
+    ports.fetch.mockImplementation(async (url: string) => {
+      if (url === extraUrl) return [item, emptyItem];
+      if (url === canonicalManifest) return { version: "2.0.0" };
+      if (url === emptyManifest) return { version: "3.0.0" };
+      throw new Error("unexpected fixture URL");
+    });
+
+    await expect(getExtensionCatalog(true)).resolves.toEqual([
+      {
+        ...item,
+        manifest: canonicalManifest,
+        version: "2.0.0",
+        integrations: [
+          {
+            ...item.integrations[0],
+            artifact: "https://artifacts.example.test/partial.tgz",
+          },
+        ],
+        trust: "community",
+      },
+      { ...emptyItem, version: "3.0.0", trust: "community" },
+    ]);
+  });
+
   it("does not overwrite a concurrent source edit while repairing", async () => {
     const unsafeRaw = JSON.stringify([
       source,

@@ -293,6 +293,57 @@ describe("durable ops job journal", () => {
     await expect(openOpsJobJournal(path)).resolves.toBeDefined();
   });
 
+  it.each([
+    { status: "invalid", files: [] },
+    {
+      status: "ok",
+      files: Array.from({ length: 129 }, (_, index) => ({
+        path: `file-${index.toString().padStart(3, "0")}`,
+        sha256: "a".repeat(64),
+      })),
+    },
+  ])("does not repair a malformed legacy inventory entry", async ({ status, files }) => {
+    const path = join(root(), "journal", "jobs-v1.json");
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    const operation = { kind: "installedIntegrations.inspect" } as const;
+    writeFileSync(
+      path,
+      JSON.stringify({
+        version: 1,
+        jobs: [
+          job({
+            operation,
+            fingerprint: opsOperationFingerprint(operation),
+            resourceId: operation.kind,
+            state: "succeeded",
+            terminalAt: "2026-08-23T18:00:00.000Z",
+            result: {
+              integrations: [
+                {
+                  integrationId: "malformed",
+                  extensionId: null,
+                  status,
+                  reason: null,
+                  source: {
+                    kind: "artifact",
+                    url: "https://user:password@example.test/archive.tgz",
+                    sha256: "a".repeat(64),
+                  },
+                  files,
+                  pending: null,
+                },
+              ],
+              unrecorded: [],
+            },
+          }),
+        ],
+      }),
+      { mode: 0o600 },
+    );
+
+    await expect(openOpsJobJournal(path)).rejects.toThrow("Ops job journal is unavailable");
+  });
+
   it("fails closed for symlink, hardlink, corrupt, and oversized journal files", async () => {
     const base = root();
     const target = join(base, "target");

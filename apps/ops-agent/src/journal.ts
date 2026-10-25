@@ -140,8 +140,8 @@ function parseResult(kind: OpsOperation["kind"], value: unknown): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid");
   const raw = value as Record<string, unknown>;
   if (!Array.isArray(raw.integrations)) throw new Error("invalid");
-  let changed = false;
-  const integrations = raw.integrations.map((value) => {
+  const legacyIndexes = new Set<number>();
+  const validationIntegrations = raw.integrations.map((value, index) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return value;
     const integration = value as Record<string, unknown>;
     const source = integration.source;
@@ -165,7 +165,17 @@ function parseResult(kind: OpsOperation["kind"], value: unknown): unknown {
     ) {
       return value;
     }
-    changed = true;
+    legacyIndexes.add(index);
+    return {
+      ...integration,
+      source: { kind: "upload", sha256: legacy.sha256 },
+    };
+  });
+  if (legacyIndexes.size === 0) throw new Error("invalid");
+  parseBoundedOpsResult(kind, { ...raw, integrations: validationIntegrations });
+  const integrations = raw.integrations.map((value, index) => {
+    if (!legacyIndexes.has(index)) return value;
+    const integration = value as Record<string, unknown>;
     return {
       ...integration,
       status: "needs_reinstall",
@@ -174,7 +184,6 @@ function parseResult(kind: OpsOperation["kind"], value: unknown): unknown {
       files: [],
     };
   });
-  if (!changed) throw new Error("invalid");
   return parseBoundedOpsResult(kind, { ...raw, integrations });
 }
 

@@ -23,6 +23,11 @@ const SAFE_EMPTY_QUERY_URL = "https://example.test/releases/empty-query.tgz?";
 const SAFE_EMPTY_FRAGMENT_URL = "https://example.test/releases/empty-fragment.tgz#";
 const SAFE_QUESTION_PROSE =
   "Download https://example.test/archive.tgz when ready? Ask an operator.";
+const SPACE_QUERY_URL = `https://example.test/archive name.tgz?token=${SECRET}`;
+const SPACE_FRAGMENT_URL = `https://example.test/archive name.tgz#${SECRET}`;
+const CONTROL_SPACE_QUERY_URL = `\u0001https://example.test/archive name.tgz?token=${SECRET}`;
+const SAFE_HOST_EMAIL_PROSE = "Contact https://example.test:443 owner@example.org for access.";
+const SAFE_URL_LEADING_PROSE = "https://example.test/archive.tgz is ready? Ask an operator.";
 
 const integration = describe.runIf(process.env.OPENMAPX_RUN_DATABASE_TESTS === "1");
 
@@ -116,6 +121,7 @@ integration("extension URL credential cleanup migration", () => {
             { id: "space-password", artifact: SPACE_IN_PASSWORD_URL, sha256: "f".repeat(64) },
           ],
           services: [{ service: "unsafe", repo: LEGACY_GIT_URL }],
+          notes: [`Downloading ${SPACE_QUERY_URL}`, `Inspect ${SPACE_FRAGMENT_URL}`],
         })}),
         ('clean-extension', 'https://example.test/extension.json', ${sql.json({
           integrations: [{ id: "clean", artifact: "https://example.test/clean.tgz" }],
@@ -127,11 +133,12 @@ integration("extension URL credential cleanup migration", () => {
             { id: "empty-fragment", artifact: SAFE_EMPTY_FRAGMENT_URL },
           ],
           description: SAFE_QUESTION_PROSE,
+          notes: [SAFE_HOST_EMAIL_PROSE, SAFE_URL_LEADING_PROSE],
         })});
     `;
     await sql`
       INSERT INTO installed_integration (id, repository, managed_by_extension) VALUES
-        ('unsafe-integration', ${SPACE_IN_PASSWORD_URL}, 'unsafe-extension'),
+        ('unsafe-integration', ${CONTROL_SPACE_QUERY_URL}, 'unsafe-extension'),
         ('manual-integration', 'https://example.test/manual.tgz', NULL);
     `;
     await sql`
@@ -152,13 +159,16 @@ integration("extension URL credential cleanup migration", () => {
               SPACE_IN_PASSWORD_URL,
             ],
           })},
-          ${`Fetch failed for ${SPACE_IN_PASSWORD_URL}`}),
+          ${`Fetch failed for ${SPACE_QUERY_URL}`}),
+        ('safe-job', 'extension.install', ${sql.json({ message: SAFE_HOST_EMAIL_PROSE })},
+          ${sql.json({ message: SAFE_URL_LEADING_PROSE })}, ${SAFE_HOST_EMAIL_PROSE}),
         ('other-job', 'system.update', ${sql.json({ url: "https://example.test/keep", keep: "exact" })},
           ${sql.json({ url: "https://example.test/keep" })}, 'Keep exact');
     `;
     await sql`
       INSERT INTO admin_job_log (id, job_id, line) VALUES
-        ('unsafe-log', 'unsafe-job', ${`Downloading ${TAB_IN_SCHEME_URL}`}),
+        ('unsafe-log', 'unsafe-job', ${`Downloading ${SPACE_FRAGMENT_URL}`}),
+        ('safe-log', 'safe-job', ${SAFE_URL_LEADING_PROSE}),
         ('other-log', 'other-job', 'Keep exact');
     `;
   }
@@ -173,6 +183,11 @@ integration("extension URL credential cleanup migration", () => {
     const [safeBefore] = await sql`
       SELECT row_to_json(e)::text AS extension
         FROM installed_extension e WHERE id = 'safe-provenance'
+    `;
+    const [safeJobBefore] = await sql`
+      SELECT row_to_json(j)::text AS job,
+             (SELECT row_to_json(l)::text FROM admin_job_log l WHERE l.job_id = j.id) AS log
+        FROM admin_job j WHERE id = 'safe-job'
     `;
 
     await applyMigration();
@@ -194,6 +209,7 @@ integration("extension URL credential cleanup migration", () => {
           { id: "space-password", artifact: null, sha256: "f".repeat(64) },
         ],
         services: [{ service: "unsafe", repo: null }],
+        notes: [null, null],
       },
     });
     const [integrationRow] = await sql<{ repository: string }[]>`
@@ -215,6 +231,12 @@ integration("extension URL credential cleanup migration", () => {
         FROM installed_extension e WHERE id = 'safe-provenance'
     `;
     expect(safeAfter).toEqual(safeBefore);
+    const [safeJobAfter] = await sql`
+      SELECT row_to_json(j)::text AS job,
+             (SELECT row_to_json(l)::text FROM admin_job_log l WHERE l.job_id = j.id) AS log
+        FROM admin_job j WHERE id = 'safe-job'
+    `;
+    expect(safeJobAfter).toEqual(safeJobBefore);
 
     await applyMigration();
     expect(await snapshot()).toBe(first);
