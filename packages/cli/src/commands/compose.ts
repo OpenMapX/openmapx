@@ -199,6 +199,16 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   coreServices.assertDeploymentEnvironmentFile(join(paths.infraDir, ".env"));
   assertCliDeploymentSecrets();
   return withConfigurationGenerationWriter(paths.infraDir, async (writer) => {
+    // The deployment's user, which the generation's containers run as, from
+    // .env or, where it has none, from the checkout's owner. This render, the
+    // host's or the operations agent's, must run as that user.
+    const deploymentUser = coreServices.ensureDeploymentUser(paths.infraDir);
+    coreServices.assertRunningAsDeploymentUser(deploymentUser);
+    if (deploymentUser.derived.length > 0) {
+      log.info(
+        `Set the deployment's user in infra/docker/.env from the checkout's owner: UID=${deploymentUser.uid} GID=${deploymentUser.gid}`,
+      );
+    }
     // Moves the agent's mounted state out of data-manager's data directory the
     // first time a generation mounts it from its new place.
     prepareAgentStateDirectories(paths.infraDir);

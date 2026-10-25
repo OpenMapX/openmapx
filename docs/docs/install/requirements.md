@@ -42,8 +42,9 @@ Docker Desktop can be useful for exploration, but check image support for the
 host architecture and allocate memory and disk to its Linux VM. Do not assume
 that successful local startup establishes production readiness on Linux.
 
-Run the checkout and containers under compatible IDs (`UID` and `GID`, default
-`1000:1000`). The container user also needs to
+The stack's own containers run as the checkout's owner: the first render writes
+that account's IDs into `infra/docker/.env` as `UID` and `GID`, and renders and
+stack commands run as it. Any uid other than root works. That user also needs to
 read the registry credentials directory if private images are used.
 
 Only the operator's account may write the checkout: services mount

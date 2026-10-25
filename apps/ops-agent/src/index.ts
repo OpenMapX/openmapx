@@ -146,6 +146,23 @@ async function main(): Promise<void> {
         ),
     });
     await integrationStore.recover();
+    // Releases before this one fell back to uid 1000. After a panel
+    // self-update this agent starts from a generation an earlier release
+    // rendered, before anything rendered with its code; the generations it
+    // writes require UID and GID, so .env gets them now, from the checkout's
+    // owner where it has none. Problems are reported, not fatal: every render
+    // and commit checks again and refuses.
+    try {
+      const deploymentUser = services.ensureDeploymentUser(paths.infraDir);
+      if (deploymentUser.derived.length > 0) {
+        process.stderr.write(
+          `Set the deployment's user in infra/docker/.env from the checkout's owner: UID=${deploymentUser.uid} GID=${deploymentUser.gid}\n`,
+        );
+      }
+      services.assertRunningAsDeploymentUser(deploymentUser, "The operations agent");
+    } catch (error) {
+      process.stderr.write(`${(error as Error).message}\n`);
+    }
     // Releases before this one kept the applied configuration, the selection
     // and the release state in infra/docker itself. After a panel self-update
     // this agent starts before anything has rendered with its code, so it

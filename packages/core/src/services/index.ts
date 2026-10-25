@@ -103,6 +103,7 @@ export {
   type DesiredSelection,
   type DesiredSelectionSource,
   deploymentEnvironmentFileProblem,
+  deploymentUserEnvironmentProblem,
   GENERATED_COMPOSE_FILE,
   GENERATED_HARDLINK_PLAN_FILE,
   LEGACY_CONFIGURATION_GENERATIONS,
@@ -120,6 +121,13 @@ export {
   stackComposeArgs,
   writeServiceSelectionFile,
 } from "./deployment";
+export {
+  assertRunningAsDeploymentUser,
+  checkoutOwner,
+  type DeploymentUser,
+  ensureDeploymentUser,
+  readDeploymentUserAssignments,
+} from "./deployment-user";
 export {
   embeddedBuiltInIntegrationManifests,
   embeddedBuiltInServiceManifests,

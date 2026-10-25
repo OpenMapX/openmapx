@@ -151,6 +151,37 @@ admin panel. The output is deterministic, and re-rendering when nothing changed
 preserves the same stack content. The update command also renders, but this
 separate step lets you inspect configuration before replacement.
 
+Run it as the checkout's owner. Releases before this one ran the stack's own
+containers as uid 1000 unless `.env` said otherwise, and `app-api` always as
+uid 1000. Now they all run as the deployment's user, `UID:GID` in `.env`, and
+generated configuration has no fallback. Where `.env` sets neither, the first
+render writes them from the checkout's owner, as does the operations agent when
+a panel self-update starts it; explicit values are kept. A render refuses to
+run as another uid, or to take the user from a checkout root owns.
+
+Where the checkout's owner is uid 1000, nothing changes: the containers keep
+their user, and `app-api` keeps using the volumes it wrote. Elsewhere:
+
+- Files an earlier release's containers wrote as uid 1000 stay owned by it,
+  also inside directories the operator owns, and Docker creates a missing bind
+  source as root. `pnpm openmapx check`, and **Run diagnostics** in the admin
+  panel, list each such entry that the stack's containers write, and print the
+  one-time `sudo chown -R UID:GID …` for exactly those entries. What a service
+  running as its image's own user writes (Valhalla's extracts, Overpass's
+  database) is left out, and a directory that holds such data gets a
+  non-recursive `chown` of itself only.
+- `app-api` refuses a volume an earlier image created for uid 1000, and its
+  startup log (`pnpm openmapx services logs app-api`) names the volume. Do not
+  remove it: it holds the subject-export ciphertexts the database refers to and
+  the runtime-recovery journal. Change its owner in place while `app-api` is
+  stopped, with the volume name and ids from the log, for example:
+
+  ```bash
+  pnpm openmapx services stop app-api
+  docker run --rm -v docker_openmapx-subject-exports:/v alpine chown -R 1001:1001 /v
+  pnpm openmapx services start app-api
+  ```
+
 ## 4. Resolve the complete release and replace containers
 
 Inspect the locally selected release without contacting the registry:

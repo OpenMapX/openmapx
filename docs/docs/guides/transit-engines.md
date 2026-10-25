@@ -127,7 +127,7 @@ pnpm openmapx data source list
 
 The primary endpoint is `http://motis:8080`, published on host loopback `8081`.
 Staging uses loopback `8083` and does not serve application traffic. Both run
-as `UID:GID`, default `1000:1000`.
+as the deployment's user, `UID:GID` from `infra/docker/.env`.
 
 ### Adding GTFS feeds
 

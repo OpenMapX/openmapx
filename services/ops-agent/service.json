@@ -15,7 +15,7 @@
     "image": "ghcr.io/openmapx/ops-agent",
     "tag": "main",
     "expose": [4300],
-    "user": "${UID:-1000}:${GID:-1000}",
+    "user": "${UID:?UID must be set, run pnpm openmapx compose render}:${GID:?GID must be set, run pnpm openmapx compose render}",
     "environment": {
       "HOME": "/home/node",
       "HOST": "0.0.0.0",

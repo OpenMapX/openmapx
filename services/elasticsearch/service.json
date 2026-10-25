@@ -21,7 +21,7 @@
       "ES_JAVA_OPTS": "-Xms2g -Xmx2g",
       "xpack.security.enabled": "false"
     },
-    "user": "${UID:-1000}:0",
+    "user": "${UID:?UID must be set, run pnpm openmapx compose render}:0",
     "memory": "4g",
     "restart": "unless-stopped",
     "healthcheck": {
