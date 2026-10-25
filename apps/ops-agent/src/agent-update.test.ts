@@ -113,7 +113,8 @@ const request = (
 describe("operations agent update", () => {
   it("replaces an outdated agent through a helper started from its own image", async () => {
     const f = await resolved({ agent: "old" });
-    writeFileSync(releaseState(f.rootDir).overlay, "old-overlay\n");
+    // Owner-only, as the agent and its helper write it, whatever the umask.
+    writeFileSync(releaseState(f.rootDir).overlay, "old-overlay\n", { mode: 0o600 });
 
     await expect(f.effects.updateAgent?.(request(), f.context)).resolves.toEqual({
       handoffId: "handoff-1",
@@ -350,7 +351,7 @@ describe("release application after an agent handoff", () => {
   it("rolls the application services back to the overlay from before the handoff", async () => {
     const f = await resolved({ agent: "current" });
     const overlay = releaseState(f.rootDir).overlay;
-    writeFileSync(overlay, "release-2-overlay-written-by-the-helper\n");
+    writeFileSync(overlay, "release-2-overlay-written-by-the-helper\n", { mode: 0o600 });
     writeAgentHandoff(f.rootDir, handoff("applied"));
     f.cli.mockImplementationOnce(async () => {
       throw new Error("services update failed");
@@ -368,7 +369,7 @@ describe("release application after an agent handoff", () => {
     const overlay = releaseState(f.rootDir).overlay;
     // An earlier apply recorded the release the application services run.
     await f.effects.apply(release, [...services], f.context);
-    writeFileSync(overlay, "overlay-written-by-the-earlier-release-helper\n");
+    writeFileSync(overlay, "overlay-written-by-the-earlier-release-helper\n", { mode: 0o600 });
     // Whatever the old location held, the imported record's overlay is never used.
     writeAgentHandoff(f.rootDir, {
       ...handoff("applied"),
@@ -391,7 +392,7 @@ describe("release application after an agent handoff", () => {
   it("never restores an overlay from an imported handoff that did not keep this agent", async () => {
     const f = await resolved({ agent: "old" });
     const overlay = releaseState(f.rootDir).overlay;
-    writeFileSync(overlay, "current-overlay\n");
+    writeFileSync(overlay, "current-overlay\n", { mode: 0o600 });
     writeAgentHandoff(f.rootDir, {
       ...handoff("recreated"),
       previousOverlay: "services:\n  app-api:\n    image: attacker.invalid/app-api\n",
@@ -406,7 +407,7 @@ describe("release application after an agent handoff", () => {
   it("uses the current overlay again once the handoff was consumed", async () => {
     const f = await resolved({ agent: "current" });
     const overlay = releaseState(f.rootDir).overlay;
-    writeFileSync(overlay, "current-overlay\n");
+    writeFileSync(overlay, "current-overlay\n", { mode: 0o600 });
     writeAgentHandoff(f.rootDir, { ...handoff("applied"), consumed: true });
     f.cli.mockImplementationOnce(async () => {
       throw new Error("services update failed");
