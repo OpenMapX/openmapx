@@ -31,7 +31,16 @@ export interface DescriptorDirectoryEntry {
   type: "directory" | "file" | "symlink" | "other";
 }
 
-export interface DescriptorReadOptions {
+/**
+ * Entries must still be this user's own, with one link for files, without
+ * other write, and are opened without following links; only the group write
+ * bit is not required to be clear.
+ */
+export interface DescriptorWriteModeOption {
+  allowGroupWritable?: boolean;
+}
+
+export interface DescriptorReadOptions extends DescriptorWriteModeOption {
   maximumBytes: number;
   minimumBytes?: number;
   descriptorAnchorRoot?: string;
@@ -66,12 +75,26 @@ function sameIdentity(left: BigIntStats, right: BigIntStats): boolean {
   );
 }
 
-function safeDirectory(stat: BigIntStats, expectedUid: bigint): boolean {
+/**
+ * Whether an entry's write modes are acceptable: no group or other write, or,
+ * under an anchor whose writers share this user's uid by design (the data
+ * directory data-manager writes), no other write. A umask of 002 leaves only
+ * the group bit; an entry anyone can write is still refused.
+ */
+function writeModeAllowed(stat: BigIntStats, allowGroupWritable: boolean): boolean {
+  return (stat.mode & (allowGroupWritable ? 0o002n : 0o022n)) === 0n;
+}
+
+function safeDirectory(
+  stat: BigIntStats,
+  expectedUid: bigint,
+  allowGroupWritable = false,
+): boolean {
   return (
     stat.isDirectory() &&
     stat.uid === expectedUid &&
     stat.nlink >= 1n &&
-    (stat.mode & 0o022n) === 0n
+    writeModeAllowed(stat, allowGroupWritable)
   );
 }
 
@@ -79,9 +102,9 @@ function safeDirectory(stat: BigIntStats, expectedUid: bigint): boolean {
  * An anchor directory: this user's own, not merely consistent with itself, so
  * one another account put in its place is refused.
  */
-function safeRoot(stat: BigIntStats): boolean {
+function safeRoot(stat: BigIntStats, allowGroupWritable = false): boolean {
   const owner = process.geteuid?.();
-  return safeDirectory(stat, owner === undefined ? stat.uid : BigInt(owner));
+  return safeDirectory(stat, owner === undefined ? stat.uid : BigInt(owner), allowGroupWritable);
 }
 
 function safeFile(
@@ -89,12 +112,13 @@ function safeFile(
   expectedUid: bigint,
   minimumBytes: number,
   maximumBytes: number,
+  allowGroupWritable = false,
 ): boolean {
   return (
     stat.isFile() &&
     stat.uid === expectedUid &&
     stat.nlink === 1n &&
-    (stat.mode & 0o022n) === 0n &&
+    writeModeAllowed(stat, allowGroupWritable) &&
     stat.size >= BigInt(minimumBytes) &&
     stat.size <= BigInt(maximumBytes)
   );
@@ -130,6 +154,7 @@ export function readDescriptorAnchoredUtf8(
   const opened: OpenedEntry[] = [];
   const descriptors: number[] = [];
   try {
+    const shared = options.allowGroupWritable === true;
     const minimumBytes = options.minimumBytes ?? 0;
     if (
       !isAbsolute(rootDir) ||
@@ -158,7 +183,7 @@ export function readDescriptorAnchoredUtf8(
     );
     descriptors.push(rootDescriptor);
     const rootIdentity = fstatSync(rootDescriptor, { bigint: true });
-    if (!safeRoot(rootIdentity)) throw new Error("unsafe root");
+    if (!safeRoot(rootIdentity, shared)) throw new Error("unsafe root");
     opened.push({
       descriptor: rootDescriptor,
       identity: rootIdentity,
@@ -179,7 +204,7 @@ export function readDescriptorAnchoredUtf8(
       );
       descriptors.push(descriptor);
       const identity = fstatSync(descriptor, { bigint: true });
-      if (!safeDirectory(identity, expectedUid)) throw new Error("unsafe directory");
+      if (!safeDirectory(identity, expectedUid, shared)) throw new Error("unsafe directory");
       opened.push({ descriptor, identity, pathname, kind: "directory" });
       options.hooks?.descriptorOpened?.(descriptor);
       options.hooks?.afterDirectoryOpen?.({ index, name });
@@ -194,7 +219,7 @@ export function readDescriptorAnchoredUtf8(
     );
     descriptors.push(descriptor);
     const identity = fstatSync(descriptor, { bigint: true });
-    if (!safeFile(identity, expectedUid, minimumBytes, options.maximumBytes)) {
+    if (!safeFile(identity, expectedUid, minimumBytes, options.maximumBytes, shared)) {
       throw new Error("unsafe file");
     }
     opened.push({ descriptor, identity, pathname, kind: "file" });
@@ -214,8 +239,8 @@ export function readDescriptorAnchoredUtf8(
         !sameIdentity(entry.identity, descriptorIdentity) ||
         !sameIdentity(entry.identity, pathIdentity) ||
         (entry.kind === "directory"
-          ? !safeDirectory(descriptorIdentity, expectedUid)
-          : !safeFile(descriptorIdentity, expectedUid, minimumBytes, options.maximumBytes))
+          ? !safeDirectory(descriptorIdentity, expectedUid, shared)
+          : !safeFile(descriptorIdentity, expectedUid, minimumBytes, options.maximumBytes, shared))
       ) {
         throw new Error("unstable file identity");
       }
@@ -368,7 +393,7 @@ export function hashDescriptorAnchoredFile(
 export function listDescriptorAnchoredDirectory(
   rootDir: string,
   components: readonly string[],
-  options: {
+  options: DescriptorWriteModeOption & {
     maximumEntries: number;
     descriptorAnchorRoot?: string;
     hooks?: DescriptorReadHooks;
@@ -377,6 +402,7 @@ export function listDescriptorAnchoredDirectory(
   const descriptors: number[] = [];
   const opened: OpenedEntry[] = [];
   try {
+    const shared = options.allowGroupWritable === true;
     if (
       !isAbsolute(rootDir) ||
       components.length > MAX_PATH_COMPONENTS ||
@@ -395,7 +421,7 @@ export function listDescriptorAnchoredDirectory(
     );
     descriptors.push(rootDescriptor);
     const rootIdentity = fstatSync(rootDescriptor, { bigint: true });
-    if (!safeRoot(rootIdentity)) throw new Error("unsafe root");
+    if (!safeRoot(rootIdentity, shared)) throw new Error("unsafe root");
     opened.push({
       descriptor: rootDescriptor,
       identity: rootIdentity,
@@ -414,7 +440,7 @@ export function listDescriptorAnchoredDirectory(
       );
       descriptors.push(descriptor);
       const identity = fstatSync(descriptor, { bigint: true });
-      if (!safeDirectory(identity, rootIdentity.uid)) throw new Error("unsafe directory");
+      if (!safeDirectory(identity, rootIdentity.uid, shared)) throw new Error("unsafe directory");
       opened.push({ descriptor, identity, pathname, kind: "directory" });
       options.hooks?.descriptorOpened?.(descriptor);
       options.hooks?.afterDirectoryOpen?.({ index, name });
@@ -455,7 +481,7 @@ export function listDescriptorAnchoredDirectory(
       if (
         !sameIdentity(item.identity, descriptorIdentity) ||
         !sameIdentity(item.identity, pathIdentity) ||
-        !safeDirectory(descriptorIdentity, rootIdentity.uid)
+        !safeDirectory(descriptorIdentity, rootIdentity.uid, shared)
       ) {
         throw new Error("unstable directory identity");
       }
@@ -490,11 +516,12 @@ export interface DescriptorEntryMetadata {
 export function statDescriptorAnchoredEntry(
   rootDir: string,
   components: readonly string[],
-  options: { descriptorAnchorRoot?: string } = {},
+  options: DescriptorWriteModeOption & { descriptorAnchorRoot?: string } = {},
 ): DescriptorEntryMetadata {
   const descriptors: number[] = [];
   const opened: OpenedEntry[] = [];
   try {
+    const shared = options.allowGroupWritable === true;
     if (
       !isAbsolute(rootDir) ||
       components.length < 1 ||
@@ -516,7 +543,7 @@ export function statDescriptorAnchoredEntry(
     );
     descriptors.push(rootDescriptor);
     const rootIdentity = fstatSync(rootDescriptor, { bigint: true });
-    if (!safeRoot(rootIdentity)) throw new Error("unsafe root");
+    if (!safeRoot(rootIdentity, shared)) throw new Error("unsafe root");
     opened.push({
       descriptor: rootDescriptor,
       identity: rootIdentity,
@@ -533,7 +560,7 @@ export function statDescriptorAnchoredEntry(
       );
       descriptors.push(descriptor);
       const identity = fstatSync(descriptor, { bigint: true });
-      if (!safeDirectory(identity, rootIdentity.uid)) throw new Error("unsafe directory");
+      if (!safeDirectory(identity, rootIdentity.uid, shared)) throw new Error("unsafe directory");
       opened.push({ descriptor, identity, pathname, kind: "directory" });
       parentDescriptor = descriptor;
     }
@@ -549,8 +576,8 @@ export function statDescriptorAnchoredEntry(
     if (!isDirectory && !identity.isFile()) throw new Error("unsupported entry type");
     if (
       isDirectory
-        ? !safeDirectory(identity, rootIdentity.uid)
-        : !safeFile(identity, rootIdentity.uid, 0, MAX_SUPPORTED_READ_BYTES)
+        ? !safeDirectory(identity, rootIdentity.uid, shared)
+        : !safeFile(identity, rootIdentity.uid, 0, MAX_SUPPORTED_READ_BYTES, shared)
     ) {
       throw new Error("unsafe entry");
     }
