@@ -42,6 +42,7 @@ const volumes: string[] = [];
 function docker(...args: string[]): string {
   return execFileSync("docker", args, {
     encoding: "utf-8",
+    maxBuffer: 64 * 1024 * 1024,
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
 }
@@ -218,15 +219,30 @@ async function replaceUnderTraefik() {
     "-c",
     "while :; do wget -qO- http://127.0.0.1:8080/api/http/routers >> /tmp/routers 2>&1; echo >> /tmp/routers; sleep 0.05; done",
   );
+  // Traefik applies the file provider's latest configuration at most every
+  // two seconds (`providersThrottleDuration`), so two of the renders are held
+  // longer: Traefik then serves each set while the replacing goes on.
   for (let round = 0; round < 30; round += 1) {
     await render(round % 2 === 0 ? MANY : FEW);
-    await sleep(30 + (round % 5) * 20);
+    await sleep(round === 10 || round === 21 ? 3_000 : 30 + (round % 5) * 20);
   }
   await waitForRouters(traefik, FEW);
   docker("exec", traefik, "pkill", "-f", "while :");
 
-  const reads = docker("exec", traefik, "cat", "/tmp/digests").split("\n");
-  const missing = reads.filter((line) => line.includes("No such file"));
+  // Each distinct line of the reader once, with how often it came.
+  const reads = new Map<string, number>();
+  for (const line of docker("exec", traefik, "sh", "-c", "sort /tmp/digests | uniq -c").split(
+    "\n",
+  )) {
+    const [, count = "0", seen = ""] = /^\s*(\d+)\s+(.*)$/.exec(line) ?? [];
+    reads.set(seen, Number(count));
+  }
+  let missing = 0;
+  const read = new Map<string, number>();
+  for (const [seen, count] of reads) {
+    if (seen.includes("No such file")) missing += count;
+    else read.set(seen.split(/\s+/)[0] ?? "", count);
+  }
   const served = docker("exec", traefik, "cat", "/tmp/routers")
     .split("\n")
     .filter((line) => line.startsWith("["))
@@ -245,7 +261,7 @@ async function replaceUnderTraefik() {
     traefik,
     before,
     whole,
-    read: reads.filter((line) => !missing.includes(line)).map((line) => line.split(/\s+/)[0]),
+    read,
     missing,
     served,
     fileProviderErrors,
@@ -271,8 +287,9 @@ describe.runIf(runTraefikTests)("Traefik's dynamic directory in the agent's stat
 
   it("never shows a reader of the routes a half-written file", async () => {
     const run = await replaceUnderTraefik();
-    expect(run.read.length).toBeGreaterThan(100);
-    for (const read of run.read) expect(run.whole).toContain(read);
+    expect([...run.read.values()].reduce((sum, count) => sum + count, 0)).toBeGreaterThan(100);
+    // Both versions were read, and nothing else.
+    expect(new Set(run.read.keys())).toEqual(run.whole);
     expect(started(run.traefik)).toBe(run.before);
   }, 120_000);
 
@@ -280,7 +297,7 @@ describe.runIf(runTraefikTests)("Traefik's dynamic directory in the agent's stat
     "never shows Traefik a missing or partial route set while render replaces it",
     async () => {
       const run = await replaceUnderTraefik();
-      expect(run.missing).toEqual([]);
+      expect(run.missing).toBe(0);
       expect(run.served.length).toBeGreaterThan(20);
       const sets = new Set(run.served.map((names) => JSON.stringify(names)));
       expect(sets).toEqual(
