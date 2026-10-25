@@ -16,7 +16,7 @@ import { registerDataManagerRoute } from "../../route-contract.js";
 export interface DataExecutionReceiver {
   admitLocal(
     input: DataExecutionInput,
-    options?: { sourceJobId?: string; triggeredBy?: "cron" | "bootstrap" },
+    options?: { sourceJobId?: string; triggeredBy?: string; legacyTransitKey?: string },
   ): Promise<DataExecutionStatus>;
   admitMaintenance(
     action: "restart-primary" | "reload-feed-proxy",

@@ -19,11 +19,12 @@ const lines = createInterface({ input: process.stdin });
 const messages = lines[Symbol.asyncIterator]();
 const initial = await messages.next();
 if (initial.done) throw Error("Missing fixed fixture startup");
-const { root, token, validationFailure, crash } = JSON.parse(initial.value) as {
+const { root, token, validationFailure, crash, loseCancelResponse } = JSON.parse(initial.value) as {
   root: string;
   token: string;
   validationFailure?: boolean | "twice";
   crash?: "before-proof" | "before-terminal" | "after-terminal";
+  loseCancelResponse?: boolean;
 };
 const installation = openControlInstallation({
   infraDir: root,
@@ -122,6 +123,16 @@ const app = buildOpsAgentServer({
     ),
   }),
 });
+let cancels = 0;
+if (loseCancelResponse)
+  app.addHook("onSend", async (request, reply, payload) => {
+    if (request.method === "DELETE") {
+      cancels++;
+      send({ type: "cancel-response", cancels });
+      if (cancels === 1) reply.raw.destroy();
+    }
+    return payload;
+  });
 await app.listen({ host: "127.0.0.1", port: 0 });
 const address = app.server.address();
 if (!address || typeof address === "string") throw Error("Missing actual agent address");

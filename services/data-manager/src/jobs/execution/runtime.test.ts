@@ -616,3 +616,163 @@ describe.skipIf(
     }
   }, 60000);
 });
+
+describe.skipIf(
+  !process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL &&
+    process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1",
+)("locked production Drizzle and postgres query cancellation", () => {
+  it.each([
+    "mapped-held",
+    "mapped-aborted",
+    "values-then",
+    "values-catch",
+    "values-finally",
+    "raw-finally",
+  ] as const)(
+    "contains the actual mapped/fluent query (%s)",
+    async (mode) => {
+      const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
+      if (!url) throw Error("Owned PostgreSQL required");
+      const sql = postgres(url, { max: 8 }),
+        workerSql = withDataSqlCancellation(sql);
+      const { sql: expression } = await import("drizzle-orm");
+      const { pgSchema, integer } = await import("drizzle-orm/pg-core");
+      const db = drizzle(workerSql),
+        suffix = randomUUID().replaceAll("-", ""),
+        tableName = `fix1_query_${suffix}`,
+        fn = `fix1_hit_${suffix}`;
+      const table = pgSchema("data_manager").table(tableName, {
+        id: integer("id"),
+        hits: integer("hits"),
+      });
+      await sql.unsafe(
+        `CREATE TABLE data_manager.${tableName}(id int PRIMARY KEY,hits int NOT NULL)`,
+      );
+      await sql.unsafe(`INSERT INTO data_manager.${tableName} VALUES(1,0)`);
+      await sql.unsafe(
+        `CREATE FUNCTION data_manager.${fn}() RETURNS integer LANGUAGE plpgsql AS $$ BEGIN UPDATE data_manager.${tableName} SET hits=hits+1 WHERE id=1; RETURN 1; END $$`,
+      );
+      const root = mkdtempSync(join(tmpdir(), "omx-fix1-mapped-"));
+      mkdirSync(join(root, "data"), { mode: 0o700 });
+      await control.provisionControlInstallation(root);
+      const installation = control.openControlInstallation({
+        infraDir: root,
+        role: "data-manager",
+        serviceIds: ["data-manager"],
+      });
+      const journal = control.createDataExecutionControlJournal(installation, sql),
+        store = createPostgresDataExecutionStore(sql, { controlJournal: journal });
+      let workerReady = () => {},
+        letQueryStart = () => {},
+        locked = () => {},
+        unlock = () => {};
+      const ready = new Promise<void>((resolve) => {
+          workerReady = resolve;
+        }),
+        start = new Promise<void>((resolve) => {
+          letQueryStart = resolve;
+        });
+      const lockReady = new Promise<void>((resolve) => {
+          locked = resolve;
+        }),
+        lockHeld = new Promise<void>((resolve) => {
+          unlock = resolve;
+        });
+      const locker =
+        mode === "mapped-held"
+          ? sql.begin(async (tx) => {
+              await tx.unsafe(`LOCK TABLE data_manager.${tableName} IN ACCESS EXCLUSIVE MODE`);
+              locked();
+              await lockHeld;
+            })
+          : Promise.resolve();
+      if (mode === "mapped-held") await lockReady;
+      let querySettled = false,
+        queryRejected = false,
+        fluentIdentity = true,
+        finalized = 0;
+      const runtime = createDataExecutionRuntime({
+        store,
+        dispatch: async (_input, context) => {
+          workerReady();
+          await start;
+          try {
+            if (mode.startsWith("mapped")) {
+              await db
+                .select({ seen: expression<number>`data_manager.${expression.identifier(fn)}()` })
+                .from(table);
+            } else {
+              const query = workerSql.unsafe(`SELECT data_manager.${fn}() AS seen`);
+              const fluent = mode === "raw-finally" ? query.raw() : query.values();
+              fluentIdentity = Object.is(fluent, query);
+              if (mode === "values-catch")
+                await fluent.catch((error) => {
+                  throw error;
+                });
+              else if (mode.endsWith("finally"))
+                await fluent.finally(() => {
+                  finalized++;
+                });
+              else await fluent.then((value) => value);
+            }
+          } catch (error) {
+            queryRejected = true;
+            throw error;
+          } finally {
+            querySettled = true;
+          }
+          context.signal.throwIfAborted();
+          return { kind: "download-fonts", completed: true };
+        },
+      });
+      let id: string | undefined;
+      try {
+        const deadline = Date.now() + 60000,
+          key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) });
+        const admitted = await runtime.admit(
+          { kind: "download-fonts" },
+          { operationKey: key, requestedDeadlineAt: deadline },
+        );
+        id = admitted.id;
+        await ready;
+        if (mode === "mapped-held") {
+          letQueryStart();
+          await expect
+            .poll(
+              async () =>
+                (
+                  await sql`SELECT count(*)::int AS count FROM pg_stat_activity WHERE query LIKE ${"%" + tableName + "%"} AND wait_event_type='Lock'`
+                )[0]?.count,
+              { timeout: 10000 },
+            )
+            .toBe(1);
+        }
+        await runtime.requestCancel({ id, operationKey: key, fingerprint: admitted.fingerprint });
+        letQueryStart();
+        await expect.poll(() => querySettled, { timeout: 5000 }).toBe(true);
+        expect(queryRejected).toBe(true);
+        expect(fluentIdentity).toBe(true);
+        if (mode.endsWith("finally")) expect(finalized).toBe(1);
+        unlock();
+        await locker;
+        expect((await sql.unsafe(`SELECT hits FROM data_manager.${tableName}`))[0]?.hits).toBe(0);
+        await expect
+          .poll(async () => (await store.inspect(id!))?.status.status, { timeout: 15000 })
+          .toBe("canceled");
+      } finally {
+        letQueryStart();
+        unlock();
+        await locker;
+        await runtime.close();
+        if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+        await sql.unsafe(`DROP FUNCTION data_manager.${fn}()`);
+        await sql.unsafe(`DROP TABLE data_manager.${tableName}`);
+        journal.close();
+        control.closeControlInstallation(installation);
+        await sql.end();
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+    60000,
+  );
+});

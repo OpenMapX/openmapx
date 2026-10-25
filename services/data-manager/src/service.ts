@@ -17,6 +17,7 @@ import type { DataExecutionReceiver } from "./jobs/execution/api.js";
 import { createDataConfigurationMaintenance } from "./jobs/execution/configuration-maintenance.js";
 import { createDataExecutionDispatcher } from "./jobs/execution/dispatch.js";
 import { applyOwnedGenerationHardlinks } from "./jobs/execution/hardlinks.js";
+import { reconcileLegacyCatalogPreflightRejections } from "./jobs/execution/legacy-mutation.js";
 import { createDataExecutionReceiver } from "./jobs/execution/receiver.js";
 import { createDataExecutionRuntime } from "./jobs/execution/runtime.js";
 import { createPostgresDataExecutionStore } from "./jobs/execution/store.js";
@@ -186,6 +187,7 @@ let notablePlacesSchedule: NotablePlacesSchedule | null = null;
 async function start(): Promise<void> {
   const store = dataState;
   try {
+    await reconcileLegacyCatalogPreflightRejections();
     await configurationFence?.startup();
     await executionRuntime.reconcile();
   } catch (err) {

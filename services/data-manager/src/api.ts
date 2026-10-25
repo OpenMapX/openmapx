@@ -23,6 +23,7 @@ import {
   startLegacyDataMutation,
   withLegacyDataMutation,
 } from "./jobs/execution/legacy-mutation.js";
+import { LegacyTransitDuplicate } from "./jobs/execution/store.js";
 import {
   createNotablePlacesRuntimeState,
   getNotablePlacesStatus,
@@ -429,10 +430,13 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
 
   if (opts.offlinePackages) registerOfflinePackageRoutes(app, opts.offlinePackages);
 
-  async function admitLegacyData(input: DataExecutionInput) {
+  async function admitLegacyData(
+    input: DataExecutionInput,
+    source?: { triggeredBy?: string; legacyTransitKey?: string },
+  ) {
     if (!opts.executionReceiver)
       throw Object.assign(Error("Durable data receiver is unavailable"), { statusCode: 503 });
-    return opts.executionReceiver.admitLocal(input);
+    return opts.executionReceiver.admitLocal(input, source);
   }
   async function observeLegacyData(
     status: DataExecutionStatus,
@@ -913,11 +917,24 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   // the single-flight lock + idempotency key. apps/api proxies user-facing
   // sync requests here.
   registerDataManagerRoute(app, "syncTransit", async (req, reply) => {
-    const admitted = await admitLegacyData({
-      kind: "transit-sync",
-      countries: req.body?.countries ?? operationsPolicy.countries,
-    });
-    return reply.code(202).send({ ok: true, jobId: admitted.id, status: "started" });
+    try {
+      const admitted = await admitLegacyData(
+        {
+          kind: "transit-sync",
+          countries: req.body?.countries ?? operationsPolicy.countries,
+        },
+        { triggeredBy: req.body?.triggeredBy, legacyTransitKey: req.body?.idempotencyKey },
+      );
+      return reply.code(202).send({ ok: true, jobId: admitted.id, status: "started" });
+    } catch (error) {
+      if (error instanceof LegacyTransitDuplicate)
+        return reply.code(409).send({
+          ok: false,
+          reason: "duplicate-idempotency-key",
+          existingJobId: error.existingJobId,
+        });
+      throw error;
+    }
   });
 
   // POST /transit/restart-motis — bounce the primary MOTIS container. Used
@@ -945,9 +962,40 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
 
     const catalogDir = join(dataDir, ".transitous-catalog");
 
-    let candidate: Awaited<ReturnType<typeof resolveCatalogBumpCandidate>>;
     try {
-      candidate = await resolveCatalogBumpCandidate({ catalogDir, branch });
+      return await withLegacyDataMutation("transit-proposal", async () => {
+        const candidate = await resolveCatalogBumpCandidate({ catalogDir, branch });
+        const { active: existing } = await runOpsOperation({ kind: "transitousLock.inspect" });
+        if (candidateMatchesLock(candidate, existing) && !force)
+          return {
+            ok: true,
+            unchanged: true,
+            ref: candidate.ref,
+            previousRef: existing?.ref ?? null,
+          };
+        const lock = lockFromCandidate(
+          candidate,
+          lockedBy,
+          "Pinned commit of public-transport/transitous consumed by services/data-manager. Bumped via POST /transit/bump.",
+        );
+        await runOpsOperation({
+          kind: "transitousLock.propose",
+          ref: lock.ref,
+          submodules: lock.submodules,
+          lockedBy: lock.lockedBy,
+          ...(lock.comment ? { comment: lock.comment } : {}),
+        });
+        return {
+          ok: true,
+          unchanged: false,
+          proposed: true,
+          ref: lock.ref,
+          previousRef: existing?.ref ?? null,
+          submoduleSha: candidate.transitlandAtlasSha,
+          lockedAt: lock.lockedAt,
+          lockedBy: lock.lockedBy,
+        };
+      });
     } catch (err) {
       if (err instanceof CatalogBumpError) {
         const status =
@@ -957,44 +1005,6 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       }
       throw err;
     }
-
-    const { active: existing } = await runOpsOperation({ kind: "transitousLock.inspect" });
-    if (candidateMatchesLock(candidate, existing) && !force) {
-      return {
-        ok: true,
-        unchanged: true,
-        ref: candidate.ref,
-        previousRef: existing?.ref ?? null,
-      };
-    }
-
-    const lock = lockFromCandidate(
-      candidate,
-      lockedBy,
-      "Pinned commit of public-transport/transitous consumed by services/data-manager. Bumped via POST /transit/bump.",
-    );
-    // The proposal file lives under the repository's `infra/docker/`, which only
-    // the operations agent may write.
-    await withLegacyDataMutation("transit-proposal", () =>
-      runOpsOperation({
-        kind: "transitousLock.propose",
-        ref: lock.ref,
-        submodules: lock.submodules,
-        lockedBy: lock.lockedBy,
-        ...(lock.comment ? { comment: lock.comment } : {}),
-      }),
-    );
-
-    return {
-      ok: true,
-      unchanged: false,
-      proposed: true,
-      ref: lock.ref,
-      previousRef: existing?.ref ?? null,
-      submoduleSha: candidate.transitlandAtlasSha,
-      lockedAt: lock.lockedAt,
-      lockedBy: lock.lockedBy,
-    };
   });
 
   registerDataManagerRoute(app, "approveTransitBump", async (_req, reply) => {

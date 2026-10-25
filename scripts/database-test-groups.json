@@ -27,6 +27,7 @@
   "ingestion": [
     "apps/api/src/services/__tests__/job-runner-postgres.test.ts",
     "services/data-manager/src/jobs/execution/store-postgres.test.ts",
+    "services/data-manager/src/jobs/execution/legacy-admission-postgres.test.ts",
     "services/data-manager/src/jobs/execution/runtime.test.ts",
     "services/data-manager/src/jobs/execution/fixed-cli.test.ts",
     "services/data-manager/src/jobs/execution/runner-cancellation.test.ts",

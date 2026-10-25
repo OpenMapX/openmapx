@@ -29,6 +29,7 @@ import {
   isDataExecutionTerminal,
 } from "@openmapx/core/data-manager-contracts";
 import type { ExecutionRef, VerifiedParentExecution } from "@openmapx/core/ops";
+import { cancelAndSettleRetainedTransitousScripts } from "../transitous/script-runner.js";
 import {
   cancelAndSettleOwnedDataOpsChildren,
   type DataOpsChildAttempt,
@@ -71,7 +72,8 @@ export interface DataExecutionRuntime {
       principal?: ExecutionRef["principal"];
       hardlinkPlan?: unknown;
       sourceJobId?: string;
-      triggeredBy?: "cron" | "bootstrap";
+      triggeredBy?: string;
+      legacyTransitKey?: string;
       adopt?: (execution: ExecutionRef) => Promise<BorrowedArtifactTargetLease | undefined>;
     },
   ): Promise<DataExecutionStatus>;
@@ -106,11 +108,113 @@ export function createDataExecutionRuntime(deps: {
     tail: Promise<unknown>;
   };
   const active = new Map<string, LiveEntry>();
+  const recovering = new Map<string, Promise<void>>();
   let closed = false;
   function requireJournal() {
     if (!journal)
       throw new DataExecutionRuntimeUnavailable("Durable control prerequisites are unavailable");
     return journal;
+  }
+  function observationContext(record: DataExecutionRecord): DataExecutionContext {
+    const owner = requireJournal(),
+      authority = restoreAdmittedControlExecution(owner.installation, record.execution),
+      lease =
+        record.input.kind === "generation-hardlinks"
+          ? restoreGenerationHardlinksLeaseForSettlement(authority)
+          : restoreArtifactTargetLeaseForSettlement(authority);
+    let tail: Promise<unknown> = Promise.resolve(),
+      version = record.version;
+    const context: DataExecutionContext = {
+      execution: record.execution,
+      get executionVersion() {
+        return version;
+      },
+      signal: AbortSignal.abort(
+        new DOMException("Recovery permits cancellation/observation only", "AbortError"),
+      ),
+      targetAuthority: lease,
+      authority,
+      installation: owner.installation,
+      store,
+      dataRoot: owner.dataRoot,
+      async record() {
+        const value = await store.inspect(record.status.id);
+        if (!value) throw new DataExecutionOwnershipLost("Original execution disappeared");
+        return value;
+      },
+      async write(run) {
+        const work = tail.then(async () => {
+          const current = await context.record(),
+            saved = await run(current);
+          version = saved.record.version;
+          return saved.value;
+        });
+        tail = work.catch(() => {});
+        return work;
+      },
+      async checkpoint(patch) {
+        await context.write(async (current) => {
+          const saved = await store.checkpoint(current.status.id, current.version, patch);
+          if (!saved) throw new DataExecutionOwnershipLost("Recovery CAS lost");
+          return { record: saved, value: undefined };
+        });
+      },
+      async checkpointChild(child) {
+        await context.write(async (current) => {
+          const saved = await store.checkpointChild(current.status.id, current.version, child);
+          if (!saved) throw new DataExecutionOwnershipLost("Recovery child CAS lost");
+          return { record: saved, value: undefined };
+        });
+      },
+      assertForward() {
+        throw new DataExecutionOwnershipLost("Recovery permits observation/settlement only");
+      },
+    };
+    return context;
+  }
+  function cancelRecovered(record: DataExecutionRecord): void {
+    if (recovering.has(record.status.id)) return;
+    const task = Promise.resolve()
+      .then(async () => {
+        let context: DataExecutionContext | undefined;
+        try {
+          context = observationContext(record);
+          // A stale or contended forward writer is not containment evidence.
+          // It must not prevent authenticated cancellation of an already live child.
+          const owned = context;
+          const cancelOwnership = async () => {
+            const signal = AbortSignal.timeout(15000);
+            for (;;) {
+              let executionCanceled = false,
+                leaseCanceled = false;
+              try {
+                cancelControlExecution(owned.authority);
+                executionCanceled = true;
+              } catch {}
+              try {
+                await cancelArtifactTargetLease(owned.targetAuthority);
+                leaseCanceled = true;
+              } catch {}
+              if (executionCanceled && leaseCanceled) return;
+              // Retry only cancellation; never steal a busy writer or renew time.
+              await settleDelay(50, undefined, { signal });
+            }
+          };
+          await Promise.allSettled([
+            cancelOwnership(),
+            cancelAndSettleOwnedDataOpsChildren(context),
+            cancelAndSettleRetainedTransitousScripts(context),
+          ]);
+          // Remote containment cannot manufacture the dead local worker's proof.
+          await context.checkpoint({ publication: "unknown" });
+        } catch {
+          /* Original identity/lease gaps retain the durable cancellation intent. */
+        } finally {
+          if (context) closeArtifactTargetLeaseHandle(context.targetAuthority);
+        }
+      })
+      .finally(() => recovering.delete(record.status.id));
+    recovering.set(record.status.id, task);
   }
   async function start(
     record: DataExecutionRecord,
@@ -330,7 +434,8 @@ export function createDataExecutionRuntime(deps: {
           authority =
             entry?.context.authority ??
             restoreAdmittedControlExecution(owner.installation, saved.execution);
-        cancelControlExecution(authority);
+        if (entry) cancelControlExecution(authority);
+        else cancelRecovered(saved);
         if (entry) {
           const until = now() + 15000;
           for (;;) {
@@ -379,7 +484,7 @@ export function createDataExecutionRuntime(deps: {
     async reconcile() {
       const owner = requireJournal();
       for (const record of await store.listUnsettled()) {
-        if (active.has(record.status.id)) continue;
+        if (active.has(record.status.id) || recovering.has(record.status.id)) continue;
         if (isDataExecutionTerminal(record.status)) {
           try {
             await owner.assertOwnedProxyRecoverySettled(record.execution);
@@ -412,64 +517,23 @@ export function createDataExecutionRuntime(deps: {
           }
           continue;
         }
-        let recovered: Awaited<ReturnType<typeof owner.restoreCompletion>> | undefined;
+        let recovered: Awaited<ReturnType<typeof owner.restoreCompletion>> | undefined,
+          observation: DataExecutionContext | undefined;
         try {
+          // Recover authentic observation authority without assuming that the
+          // killed local producer ever reached worker completion publication.
+          observation = observationContext(record);
           recovered = await owner.restoreCompletion(record.execution);
           cancelControlExecution(recovered.authority);
           await cancelArtifactTargetLease(recovered.lease);
-          let current = record,
-            tail: Promise<unknown> = Promise.resolve();
-          const context: DataExecutionContext = {
-            execution: record.execution,
-            get executionVersion() {
-              return current.version;
-            },
-            signal: AbortSignal.abort(
-              new DOMException("Original worker is contained", "AbortError"),
-            ),
-            targetAuthority: recovered.lease,
-            authority: recovered.authority,
-            installation: owner.installation,
-            store,
-            dataRoot: owner.dataRoot,
-            record: async () => {
-              const loaded = await store.inspect(record.status.id);
-              if (!loaded) throw new DataExecutionOwnershipLost("Original execution disappeared");
-              return loaded;
-            },
-            async write(run) {
-              const work = tail.then(async () => {
-                const saved = await run(current);
-                current = saved.record;
-                return saved.value;
-              });
-              tail = work.catch(() => {});
-              return work;
-            },
-            async checkpoint(patch) {
-              await context.write(async (value) => {
-                const saved = await store.checkpoint(value.status.id, value.version, patch);
-                if (!saved) throw new DataExecutionOwnershipLost("Recovery CAS lost");
-                return { record: saved, value: undefined };
-              });
-            },
-            async checkpointChild(child) {
-              await context.write(async (value) => {
-                const saved = await store.checkpointChild(value.status.id, value.version, child);
-                if (!saved) throw new DataExecutionOwnershipLost("Recovery child CAS lost");
-                return { record: saved, value: undefined };
-              });
-            },
-            assertForward() {
-              throw new DataExecutionOwnershipLost("Recovery permits observation/settlement only");
-            },
-          };
+          const context = observation;
           if (
             (await cancelAndSettleOwnedDataOpsChildren(context)) !== "settled" ||
             recovered.publication === "unknown"
           )
             throw Error("Original containment/publication remains unknown");
-          const result = recovered.result,
+          const current = await context.record(),
+            result = recovered.result,
             status = result
               ? result.kind === "transit-sync"
                 ? result.finalStatus
@@ -512,10 +576,13 @@ export function createDataExecutionRuntime(deps: {
                 status: latest.status.cancellationRequestedAt ? "cancel_pending" : "interrupted",
                 publication: "unknown",
               });
+              if (latest.status.cancellationRequestedAt || now() >= latest.status.deadlineAt)
+                cancelRecovered(latest);
             }
           } catch {}
         } finally {
           if (recovered) closeArtifactTargetLeaseHandle(recovered.lease);
+          if (observation) closeArtifactTargetLeaseHandle(observation.targetAuthority);
         }
       }
     },
@@ -531,7 +598,9 @@ export function createDataExecutionRuntime(deps: {
         ),
       );
       await Promise.race([
-        Promise.allSettled([...active.values()].map((entry) => entry.task)),
+        Promise.allSettled(
+          [...active.values()].map((entry) => entry.task).concat([...recovering.values()]),
+        ),
         new Promise<void>((resolve) => {
           const t = setTimeout(resolve, 30000);
           t.unref();

@@ -76,6 +76,9 @@ import {
 } from "../src/jobs/transitous/single-flight.js";
 
 vi.mock("../src/jobs/execution/legacy-mutation.js", () => ({
+  beginLegacyCatalogPreflight: async () => {},
+  rejectLegacyMissingCatalog: async () => {},
+  markLegacyCatalogFetchAttempt: async () => {},
   withLegacyDataMutation: async (_kind: string, run: () => Promise<unknown>) => run(),
   independentLegacyDataMutation: async (_kind: string, run: () => Promise<unknown>) => run(),
 }));

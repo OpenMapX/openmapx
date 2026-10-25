@@ -75,28 +75,50 @@ function ownedQuery<T>(query: T): T {
   )
     return query;
   const cancel = query.cancel.bind(query);
-  return new Proxy(query, {
+  let consumed: Promise<unknown> | undefined;
+  const consume = () => {
+    if (consumed) return consumed;
+    const signal = dataWorkerSignal();
+    if (signal?.aborted) {
+      consumed = Promise.reject(signal.reason);
+      return consumed;
+    }
+    const abort = () => {
+      void Promise.resolve(cancel()).catch(() => {});
+    };
+    signal?.addEventListener("abort", abort, { once: true });
+    try {
+      const then = Reflect.get(query, "then");
+      if (typeof then !== "function") throw Error("PostgreSQL query is not thenable");
+      consumed = Promise.resolve(Reflect.apply(then, query, [])).finally(() =>
+        signal?.removeEventListener("abort", abort),
+      );
+    } catch (error) {
+      signal?.removeEventListener("abort", abort);
+      consumed = Promise.reject(error);
+    }
+    return consumed;
+  };
+  const wrapped = new Proxy(query, {
     get(target, property, receiver) {
       const value = Reflect.get(target, property, receiver);
-      if (property !== "then" || typeof value !== "function")
-        return typeof value === "function" ? value.bind(target) : value;
-      return (
-        resolved?: ((value: unknown) => unknown) | null,
-        rejected?: ((reason: unknown) => unknown) | null,
-      ) => {
-        const signal = dataWorkerSignal();
-        if (signal?.aborted) return Promise.reject(signal.reason).then(resolved, rejected);
-        const abort = () => {
-          void Promise.resolve(cancel()).catch(() => {});
-        };
-        signal?.addEventListener("abort", abort, { once: true });
-        const pending = Reflect.apply(value, target, []);
-        return Promise.resolve(pending)
-          .finally(() => signal?.removeEventListener("abort", abort))
-          .then(resolved, rejected);
+      if (property === "then")
+        return (
+          resolved?: ((value: unknown) => unknown) | null,
+          rejected?: ((reason: unknown) => unknown) | null,
+        ) => consume().then(resolved, rejected);
+      if (property === "catch")
+        return (rejected?: ((reason: unknown) => unknown) | null) => consume().catch(rejected);
+      if (property === "finally")
+        return (settled?: (() => void) | null) => consume().finally(settled);
+      if (typeof value !== "function") return value;
+      return (...args: unknown[]) => {
+        const result = Reflect.apply(value, target, args);
+        return result === target ? wrapped : result;
       };
     },
   });
+  return wrapped;
 }
 export function withDataSqlCancellation<T extends postgres.Sql | postgres.TransactionSql>(
   sql: T,

@@ -556,6 +556,30 @@ export function createDataExecutionControlJournal(
         s.origin,
       );
     },
+    pendingRunnerAttempts(authority: VerifiedExecutionAuthority) {
+      const state = executionAuthorityState(authority);
+      if (state.installation !== local || state.kind !== "transit-sync" || !state.origin)
+        throw Error("Original transit worker required");
+      try {
+        const saved = verifyControl(
+          installation.publicKey,
+          "openmapx-data-runner-journal-v1",
+          readPrivateRecord(
+            local,
+            "observations",
+            `runners-${state.execution.operationKey}.json`,
+            65536,
+          ),
+          runnerJournalSchema,
+        );
+        if (controlDigest(saved.execution) !== controlDigest(state.execution))
+          throw Error("Original runner owner changed");
+        return saved.attempts;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        return [];
+      }
+    },
     retainRunnerAttempt(authority: VerifiedExecutionAuthority, request: unknown): void {
       const state = executionAuthorityState(authority),
         body = transitousRunnerRequestSchema.parse(request);

@@ -1,4 +1,7 @@
 vi.mock("../src/jobs/execution/legacy-mutation.js", () => ({
+  beginLegacyCatalogPreflight: async () => {},
+  rejectLegacyMissingCatalog: async () => {},
+  markLegacyCatalogFetchAttempt: async () => {},
   startLegacyDataMutation: async (_kind: string, run: () => Promise<unknown>) => ({
     id: "unit-writer",
     completion: run(),
@@ -517,12 +520,19 @@ describe("data-manager API", () => {
     const res = await app.inject({
       method: "POST",
       url: "/transit/sync",
-      payload: { countries: ["DE"] },
+      payload: {
+        countries: ["DE"],
+        idempotencyKey: "legacy-test-key",
+        triggeredBy: "api:synthetic-user",
+      },
     });
 
     expect(res.statusCode).toBe(202);
     expect(res.json()).toEqual({ ok: true, jobId: dataReceipt().id, status: "started" });
-    expect(admitLocal).toHaveBeenCalledWith({ kind: "transit-sync", countries: ["DE"] });
+    expect(admitLocal).toHaveBeenCalledWith(
+      { kind: "transit-sync", countries: ["DE"] },
+      { legacyTransitKey: "legacy-test-key", triggeredBy: "api:synthetic-user" },
+    );
   });
 
   it.each(["../etc", "Europe/Germany"])(
