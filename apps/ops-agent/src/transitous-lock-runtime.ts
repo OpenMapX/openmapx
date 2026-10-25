@@ -13,6 +13,8 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import type { OpsResultFor } from "@openmapx/core/ops";
+
+import { releaseGbfsCatalogPin } from "./release-catalog-pins";
 import type { OpsRuntime } from "./runtime";
 
 // The catalog lock lives in the repository's `infra/docker/`, which only the
@@ -22,7 +24,6 @@ import type { OpsRuntime } from "./runtime";
 
 const LOCK_RELATIVE_PATH = join("infra", "docker", "transitous.lock.json");
 const PROPOSED_RELATIVE_PATH = join("infra", "docker", "transitous.lock.proposed.json");
-const GBFS_LOCK_RELATIVE_PATH = join("infra", "docker", "gbfs-catalog.lock.json");
 const MAX_LOCK_BYTES = 256 * 1024;
 
 type LockRecord = OpsResultFor<"transitousLock.inspect">["active"];
@@ -106,21 +107,11 @@ export function createTransitousLockRuntime(
     proposed: readLockAt(proposedPath),
   });
 
+  // The release pins the GBFS registry: the agent's bundle carries the pin,
+  // and nothing reads or writes the checkout's copy.
   runtime["gbfsCatalogLock.inspect"] = async () => {
-    const path = join(options.rootDir, GBFS_LOCK_RELATIVE_PATH);
-    if (!existsSync(path)) throw new Error("GBFS catalog lock is missing");
-    const raw = readFileSync(path, "utf-8");
-    if (Buffer.byteLength(raw, "utf8") > MAX_LOCK_BYTES) {
-      throw new Error("GBFS catalog lock is too large");
-    }
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    return {
-      commit: String(parsed.commit ?? ""),
-      url: String(parsed.url ?? ""),
-      sha256: String(parsed.sha256 ?? ""),
-      lockedAt: String(parsed.lockedAt ?? ""),
-      lockedBy: String(parsed.lockedBy ?? ""),
-    };
+    const { commit, url, sha256, lockedAt, lockedBy } = releaseGbfsCatalogPin();
+    return { commit, url, sha256, lockedAt, lockedBy };
   };
 
   runtime["transitousLock.propose"] = async (operation) => {
