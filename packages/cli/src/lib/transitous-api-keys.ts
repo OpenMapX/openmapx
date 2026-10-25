@@ -188,6 +188,77 @@ function lstatExists(path: string): boolean {
   }
 }
 
+/**
+ * The names of the keys a file sets, read without following a link; values are
+ * looked at only to tell a set key from an empty slot and never leave here.
+ */
+function setKeyNames(path: string): { names: Set<string> } | { reason: string } {
+  let fd: number;
+  try {
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ELOOP") return { reason: "it is a symbolic link" };
+    if (code === "EACCES") return { reason: "it can't be read" };
+    throw error;
+  }
+  try {
+    const stats = fstatSync(fd);
+    if (!stats.isFile()) return { reason: "it is not a regular file" };
+    if (stats.size > MAX_TRANSITOUS_API_KEYS_BYTES) return { reason: "it is larger than 1 MiB" };
+    const bytes = Buffer.alloc(stats.size);
+    const read = stats.size === 0 ? 0 : readSync(fd, bytes, 0, stats.size, 0);
+    const text = bytes.subarray(0, read).toString("utf8");
+    if (!isApiKeysDocument(text)) return { reason: "it is not a JSON object of key strings" };
+    const entries = Object.entries(JSON.parse(text) as Record<string, string>);
+    return {
+      names: new Set(
+        entries
+          .filter(([name, value]) => !name.startsWith("_") && value.trim().length > 0)
+          .map(([name]) => name),
+      ),
+    };
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
+ * While the earlier release's keys file in the checkout still sets keys the
+ * keys file doesn't, a line saying so, why it was not copied and how to carry
+ * them over; `null` otherwise. Only key names appear, never values. `check`
+ * reports it on every run, since the render's notice is printed once.
+ */
+export function transitousApiKeysLeftBehindWarning(rootDir?: string): string | null {
+  const paths = repoPaths(rootDir);
+  const legacy = legacyTransitousApiKeysPath(paths.root);
+  const current = transitousApiKeysPath(paths.infraDir);
+  // Before the first render there is nothing to compare; it copies the file.
+  if (!lstatExists(legacy) || !lstatExists(current)) return null;
+  const uid = process.geteuid?.();
+  if (uid === undefined) return null;
+  const shownLegacy = relative(paths.root, legacy);
+  const shownCurrent = relative(paths.root, current);
+  const fix = `Copy the keys you meant to keep into ${shownCurrent}, or run pnpm openmapx data generate-api-keys and enter them again.`;
+
+  const earlier = setKeyNames(legacy);
+  if ("reason" in earlier) {
+    return `The earlier Transitous API keys file ${shownLegacy} was left in place and can't be compared with ${shownCurrent}: ${earlier.reason}. ${fix}`;
+  }
+  const now = setKeyNames(current);
+  const set = "names" in now ? now.names : new Set<string>();
+  const missing = [...earlier.names].filter((name) => !set.has(name)).sort();
+  if (missing.length === 0) return null;
+  const refusal = readOwnedApiKeysFile(legacy, uid, "refuse");
+  const why =
+    "reason" in refusal
+      ? `it was not copied because ${refusal.reason}`
+      : `${shownCurrent} already existed, so it is no longer copied`;
+  const shown = missing.slice(0, 10).join(", ");
+  const more = missing.length > 10 ? ` and ${missing.length - 10} more` : "";
+  return `The earlier Transitous API keys file ${shownLegacy} sets ${missing.length} key${missing.length === 1 ? "" : "s"} that ${shownCurrent} doesn't (${shown}${more}): ${why}. ${fix}`;
+}
+
 /** One line for the render's output about what {@link ensureTransitousApiKeysFile} did. */
 export function describeTransitousApiKeysMigration(
   result: EnsureTransitousApiKeysResult,

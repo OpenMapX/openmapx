@@ -7,6 +7,7 @@ import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
 import { dockerCompose, dockerRun } from "../lib/docker";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
+import { transitousApiKeysLeftBehindWarning } from "../lib/transitous-api-keys";
 
 interface PsLine {
   Service?: string;
@@ -475,6 +476,10 @@ export function registerCheckCommand(program: Command): void {
       // Integrations the operations agent installed are trusted by its records;
       // only its fixed CLI reads them, so a check from source has none to report.
       for (const warning of installedIntegrationWarnings(repoPaths().root)) log.warn(warning);
+      // The render reports a key file it did not copy once; this repeats it
+      // while the keys are still missing.
+      const keysLeftBehind = transitousApiKeysLeftBehindWarning();
+      if (keysLeftBehind) log.warn(keysLeftBehind);
 
       const result = await dockerComposeAfterDeploymentSecretCheck(["ps", "--format", "json"]);
       if (result.exitCode !== 0) {

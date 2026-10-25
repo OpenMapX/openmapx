@@ -212,7 +212,9 @@ that neither its group nor others can write, holding a JSON object of key
 strings; otherwise the new file starts empty and the render's output names the
 earlier file and the reason. Copy its keys over yourself after checking it, or
 run `generate-api-keys` and enter them again. The earlier file is not read
-again.
+again. For as long as it sets keys the new file doesn't, `pnpm openmapx check`
+and **Run diagnostics** in the admin panel say so, naming those keys (never their
+values), why the file was not copied and how to carry them over.
 
 ### `transitous-feed-proxy.age` (optional)
 

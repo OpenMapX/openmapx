@@ -25,8 +25,10 @@ group-writable key file, which is not copied.
 
 ## Required action
 
-After the update, read the render's output. When it says the earlier file was
-left in place, check that file and copy its keys into
+After the update, read the render's output, or run `pnpm openmapx check` (**Run
+diagnostics** in the admin panel), which keeps reporting it for as long as the
+earlier file sets keys the new one doesn't. When the earlier file was left in
+place, check it and copy its keys into
 `infra/docker/secrets/transitous-api-keys/api-keys.json`, or run
 `pnpm openmapx data generate-api-keys` and enter them again. Until then those
 feeds run without their keys. Edit the keys in the new file from now on; the

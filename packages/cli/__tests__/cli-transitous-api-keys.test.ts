@@ -21,6 +21,7 @@ import {
   ensureTransitousApiKeysFile,
   generateTransitousApiKeys,
   legacyTransitousApiKeysPath,
+  transitousApiKeysLeftBehindWarning,
   transitousApiKeysPath,
 } from "../src/lib/transitous-api-keys";
 
@@ -297,5 +298,77 @@ describe("ensureTransitousApiKeysFile", () => {
     expect(() => ensureTransitousApiKeysFile(tmp)).toThrow(
       `Transitous API keys at ${keysPath()} can't be used: it is not a JSON object of key strings`,
     );
+  });
+});
+
+describe("transitousApiKeysLeftBehindWarning", () => {
+  const FIX =
+    "Copy the keys you meant to keep into infra/docker/secrets/transitous-api-keys/api-keys.json, or run pnpm openmapx data generate-api-keys and enter them again.";
+
+  it("keeps reporting the keys a refused copy left behind, by name only", () => {
+    writeLegacy({ "us-ca/NeedsKey": "secret-one", "de/BVG": "secret-two", "fr/Empty": "" }, 0o664);
+    expect(ensureTransitousApiKeysFile(tmp).leftInPlace).toBeDefined();
+
+    const warning = transitousApiKeysLeftBehindWarning(tmp);
+    expect(warning).toBe(
+      `The earlier Transitous API keys file services/motis/tools/transitous/api-keys.json sets 2 keys that infra/docker/secrets/transitous-api-keys/api-keys.json doesn't (de/BVG, us-ca/NeedsKey): it was not copied because group or others can write it. ${FIX}`,
+    );
+    expect(warning).not.toMatch(/secret-one|secret-two/);
+    // Later renders are silent; check keeps saying it.
+    expect(describeTransitousApiKeysMigration(ensureTransitousApiKeysFile(tmp), tmp)).toBeNull();
+    expect(transitousApiKeysLeftBehindWarning(tmp)).toBe(warning);
+  });
+
+  it("names only the keys still missing, and stops once every one is carried over", () => {
+    writeLegacy({ "us-ca/NeedsKey": "one", "de/BVG": "two" }, 0o664);
+    ensureTransitousApiKeysFile(tmp);
+    writeFileSync(keysPath(), JSON.stringify({ "de/BVG": "two", "us-ca/NeedsKey": "" }));
+    expect(transitousApiKeysLeftBehindWarning(tmp)).toMatch(
+      /sets 1 key that .* doesn't \(us-ca\/NeedsKey\)/,
+    );
+
+    writeFileSync(keysPath(), JSON.stringify({ "de/BVG": "two", "us-ca/NeedsKey": "one" }));
+    expect(transitousApiKeysLeftBehindWarning(tmp)).toBeNull();
+  });
+
+  it("says why it is no longer copied once the earlier file would pass", () => {
+    writeLegacy({ "de/BVG": "two" }, 0o664);
+    ensureTransitousApiKeysFile(tmp);
+    chmodSync(legacyPath(), 0o600);
+
+    expect(transitousApiKeysLeftBehindWarning(tmp)).toMatch(
+      /: infra\/docker\/secrets\/transitous-api-keys\/api-keys\.json already existed, so it is no longer copied\./,
+    );
+  });
+
+  it("reports an earlier file it can't compare", () => {
+    writeFileSync(join(tmp, "target.json"), JSON.stringify({ "de/BVG": "two" }));
+    symlinkSync(join(tmp, "target.json"), legacyPath());
+    ensureTransitousApiKeysFile(tmp);
+
+    expect(transitousApiKeysLeftBehindWarning(tmp)).toBe(
+      `The earlier Transitous API keys file services/motis/tools/transitous/api-keys.json was left in place and can't be compared with infra/docker/secrets/transitous-api-keys/api-keys.json: it is a symbolic link. ${FIX}`,
+    );
+  });
+
+  it("lists at most ten names", () => {
+    const keys = Object.fromEntries(
+      Array.from({ length: 12 }, (_, index) => [`de/S${String(index).padStart(2, "0")}`, "k"]),
+    );
+    writeLegacy(keys, 0o664);
+    ensureTransitousApiKeysFile(tmp);
+
+    expect(transitousApiKeysLeftBehindWarning(tmp)).toMatch(
+      /sets 12 keys .* \(de\/S00, .*, de\/S09 and 2 more\)/,
+    );
+  });
+
+  it("has nothing to say without an earlier file, before the first render, or with only empty slots", () => {
+    expect(transitousApiKeysLeftBehindWarning(tmp)).toBeNull();
+    writeLegacy({ "de/BVG": "two" }, 0o664);
+    expect(transitousApiKeysLeftBehindWarning(tmp)).toBeNull();
+    writeLegacy({ "de/BVG": "  " }, 0o664);
+    ensureTransitousApiKeysFile(tmp);
+    expect(transitousApiKeysLeftBehindWarning(tmp)).toBeNull();
   });
 });
