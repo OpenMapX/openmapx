@@ -185,8 +185,20 @@ within the signed admission journal's 4 KiB read/write budget. Writes validate t
 actual schema and byte limit. Retained signed name-list progress within that
 budget is checked against the exact certified prefix before compact recovery.
 
-On agent startup, terminal retention repair rejoins the original signed admission
-and exact authenticated own-effect proof. A known result must match the signed
+Before an agent publishes a terminal journal row, its fixed live producer signs
+the complete canonical terminal tuple digest and original terminal time in a
+preallocated private `observations` record. This uses the existing role key,
+namespace quota, family index and collection path. Own-effect settlement and
+canonical terminal publication have separate digests. Configuration cleanup can
+refine a prepared result while public status remains running, preserving its
+first terminal time; sealing the canonical receipt freezes its tuple and time.
+An already canonical digest cannot be replaced by either settlement or repair.
+
+On agent startup, terminal retention repair rejoins the original signed admission,
+exact authenticated own-effect proof and existing signed terminal commitment.
+Every canonical tuple field and the original terminal time must match that
+commitment; startup cannot sign a new tuple from the loaded public row.
+A known result must match the signed
 result body; a known failure needs signed never-started evidence. Borrowed workers
 also need their exact retained settled lease proof. Configuration workers require
 the fixed authenticated, inode-checked startup claim cleanup capability. Loaded
@@ -195,6 +207,9 @@ mismatched or unknown proof keeps the fence. Repair publishes only the missing
 canonical terminal digest and journal completion, preserving original admission,
 result/failure, deadline and terminal time; duplicate restarts do not restart work
 or postpone the 72-hour retention window.
+Legacy families without the terminal authentication record or canonical
+publication reservation remain observation/recovery-required; startup does not
+upgrade them by trusting their public journal.
 
 ### API parent checkpoints and terminal receipt delivery
 

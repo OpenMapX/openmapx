@@ -19,6 +19,7 @@ import {
   restoreAdmittedControlExecution,
   retainAdmittedControlExecution,
   retainControlEffectReceipt,
+  retainControlTerminalCommitment,
   retainControlTerminalStatus,
   retainedControlAdoptionAssertion,
   settleArtifactTargetLeaseChild,
@@ -581,6 +582,15 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           );
       }
       const candidate: JobRecord = { ...job, ...updates, state, updatedAt };
+      if (authority && ["succeeded", "failed", "timed_out"].includes(state)) {
+        if (candidate.terminalAt === undefined) throw Error("Missing terminal time");
+        candidate.terminalAt = retainControlTerminalCommitment(
+          authority,
+          statusFor(candidate, 2, true),
+          candidate.terminalAt,
+        );
+        updates = { ...updates, terminalAt: candidate.terminalAt };
+      }
       await journal.replace(
         [...jobsById.values()].map((entry) => persisted(entry === job ? candidate : entry)),
       );
@@ -703,7 +713,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     state: outwardStateFor(job),
     ...(version === 2 && job.executionVersion === 2 ? { version: 2, ...identityFor(job) } : {}),
   });
-  const statusFor = (job: JobRecord, version: 1 | 2): OpsJobStatus => ({
+  const statusFor = (job: JobRecord, version: 1 | 2, internalTerminal = false): OpsJobStatus => ({
     version: version === 2 && job.executionVersion === 2 ? 2 : 1,
     ...(version === 2 && job.executionVersion === 2 ? identityFor(job) : {}),
     ...(version === 2 && job.executionVersion === 2 && job.diagnostics
@@ -716,16 +726,18 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     operationKey: job.operationKey,
     kind: job.operation.kind,
     resourceId: job.resourceId,
-    state: outwardStateFor(job),
+    state: internalTerminal ? job.state : outwardStateFor(job),
     submittedAt: job.submittedAt,
     updatedAt: job.updatedAt,
     ...(job.terminationRequestedAt === undefined
       ? {}
       : { terminationRequestedAt: job.terminationRequestedAt }),
-    ...(job.result === undefined || configurationResultsSettling.has(job.operationId)
+    ...(job.result === undefined ||
+    (!internalTerminal && configurationResultsSettling.has(job.operationId))
       ? {}
       : { result: job.result }),
-    ...(job.errorClass === undefined || configurationResultsSettling.has(job.operationId)
+    ...(job.errorClass === undefined ||
+    (!internalTerminal && configurationResultsSettling.has(job.operationId))
       ? {}
       : { errorClass: job.errorClass }),
   });
@@ -957,6 +969,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 options.controlInstallation,
                 authority.execution,
                 statusFor(job, 2),
+                job.terminalAt,
               );
             if (terminalDurable && claimReleased && authority)
               completeControlJournalExecution(authority);
@@ -1048,6 +1061,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 options.controlInstallation,
                 authority.execution,
                 statusFor(job, 2),
+                job.terminalAt,
               );
             if (terminalDurable && claimReleased && authority)
               completeControlJournalExecution(authority);

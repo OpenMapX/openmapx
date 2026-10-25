@@ -68,12 +68,14 @@ import {
 } from "./retention-clock";
 import {
   acknowledgeRetentionDependency,
+  assertFamilyCanonicalCompatibility,
   completeFamilyJournal,
   enlistFamilyIntent,
   familyRecordWrite,
   hasLocalRetentionFamily,
   hasRetentionEvidence,
   markFamilyTerminal,
+  publishFamilyCanonicalTerminal,
   reconcileRetentionFamilies,
   registerFamilyExecution,
   requireFamilyJournal,
@@ -617,32 +619,180 @@ export function acknowledgeControlRetention(
   });
   return { acknowledged: true };
 }
+const terminalCommitmentSchema = z.strictObject({
+  version: z.literal(1),
+  phase: z.enum(["prepared", "canonical"]),
+  installationId: uuid,
+  origin: controlOriginSchema,
+  execution: executionRefSchema,
+  admissionDigest: digest,
+  terminalDigest: digest,
+  terminalAt: z.number().int().positive().safe(),
+});
+const terminalCommitmentName = (execution: ExecutionRef) =>
+  `terminal-${execution.operationKey}.json`;
+function terminalIdentity(s: AuthorityState, status: OpsJobStatus) {
+  const terminal = parseOpsJobStatus(status),
+    execution = s.execution;
+  const raw = readPrivateRecord(
+    s.installation,
+    "executions",
+    `${execution.operationKey}.json`,
+    65536,
+  );
+  const admitted = verifyControl(
+    s.installation.installation.publicKey,
+    originRecordDomain("openmapx-control-execution", raw),
+    raw,
+    z
+      .object({ admittedAt: z.number().int().nonnegative().safe(), operation: opsOperationSchema })
+      .passthrough(),
+  );
+  if (
+    !s.origin ||
+    s.installation.installation.role !== "ops-agent" ||
+    s.installation.fixedChildId ||
+    terminal.version !== 2 ||
+    terminal.admittedAt !== admitted.admittedAt ||
+    terminal.operationId !== execution.executionId ||
+    terminal.operationKey !== execution.operationKey ||
+    terminal.fingerprint !== execution.fingerprint ||
+    terminal.deadlineAt !== execution.deadlineAt ||
+    terminal.kind !== s.kind
+  )
+    throw Error("Original terminal identity required");
+  return { terminal, admitted, digest: controlTerminalReceiptDigest(terminal) };
+}
+function readTerminalCommitment(s: AuthorityState) {
+  const proof = verifyControl(
+    s.installation.installation.publicKey,
+    "openmapx-control-terminal-v1",
+    readPrivateRecord(s.installation, "observations", terminalCommitmentName(s.execution), 4096),
+    terminalCommitmentSchema,
+  );
+  if (
+    proof.installationId !== s.installation.installation.installationId ||
+    proof.admissionDigest !== s.receiptDigest ||
+    controlDigest(proof.execution) !== controlDigest(s.execution) ||
+    !sameControlOrigin(proof.origin, s.origin)
+  )
+    throw Error("Original terminal commitment identity changed");
+  return proof;
+}
+/** Fixed live producer only: sign the full canonical tuple digest and original
+ * time before its public journal row. This record makes no containment claim. */
+export function retainControlTerminalCommitment(
+  authority: VerifiedExecutionAuthority,
+  status: OpsJobStatus,
+  terminalAt: number,
+): number {
+  const s = executionAuthorityState(authority),
+    value = terminalIdentity(s, status),
+    origin = s.origin;
+  if (!origin || !Number.isSafeInteger(terminalAt) || terminalAt < value.admitted.admittedAt)
+    throw Error("Invalid original terminal time");
+  return withPrivateEffectWriter(s, () => {
+    const raw = readPrivateRecord(
+      s.installation,
+      "observations",
+      terminalCommitmentName(s.execution),
+      4096,
+    );
+    const prior = raw === null ? undefined : readTerminalCommitment(s);
+    const originalTime = prior?.terminalAt ?? terminalAt;
+    assertFamilyCanonicalCompatibility(
+      s.installation,
+      origin,
+      s.execution,
+      value.digest,
+      originalTime,
+    );
+    if (prior) {
+      if (prior.terminalDigest === value.digest) return originalTime;
+      // Configuration results stay masked while confidential claim cleanup
+      // refines their prepared result. A canonical receipt is never replaceable.
+      if (prior.phase !== "prepared" || !("revisionId" in value.admitted.operation))
+        throw Error("Original terminal tuple conflict");
+    }
+    const payload = terminalCommitmentSchema.parse({
+      version: 1,
+      phase: "prepared",
+      installationId: s.installation.installation.installationId,
+      origin,
+      execution: s.execution,
+      admissionDigest: s.receiptDigest,
+      terminalDigest: value.digest,
+      terminalAt: originalTime,
+    });
+    writePrivateRecord(
+      s.installation,
+      "observations",
+      terminalCommitmentName(s.execution),
+      signControl(s.installation.privateKey, "openmapx-control-terminal-v1", payload),
+      false,
+      origin,
+    );
+    return originalTime;
+  });
+}
+function verifyAndSealTerminalCommitment(
+  s: AuthorityState,
+  status: OpsJobStatus,
+  terminalAt?: number,
+) {
+  const value = terminalIdentity(s, status),
+    proof = readTerminalCommitment(s),
+    origin = s.origin;
+  if (
+    !origin ||
+    proof.terminalDigest !== value.digest ||
+    (terminalAt !== undefined && proof.terminalAt !== terminalAt)
+  )
+    throw Error("Original canonical terminal tuple/time changed");
+  assertFamilyCanonicalCompatibility(
+    s.installation,
+    origin,
+    s.execution,
+    value.digest,
+    proof.terminalAt,
+  );
+  if (proof.phase === "prepared")
+    writePrivateRecord(
+      s.installation,
+      "observations",
+      terminalCommitmentName(s.execution),
+      signControl(s.installation.privateKey, "openmapx-control-terminal-v1", {
+        ...proof,
+        phase: "canonical" as const,
+      }),
+      false,
+      origin,
+    );
+  return proof;
+}
 export function retainControlTerminalStatus(
   installation: ControlInstallation,
   execution: ExecutionRef,
   status: OpsJobStatus,
+  terminalAt?: number,
 ): void {
   const authority = restoreAdmittedControlExecution(installation, execution),
     s = executionAuthorityState(authority);
-  if (
-    !s.origin ||
-    status.operationId !== execution.executionId ||
-    status.operationKey !== execution.operationKey ||
-    status.fingerprint !== execution.fingerprint ||
-    status.deadlineAt !== execution.deadlineAt ||
-    status.kind !== s.kind
-  )
-    throw Error("Terminal control receipt identity conflict");
-  const digest = controlTerminalReceiptDigest(status);
-  const settlement = childSettlementState(verifyControlEffectSettlement(installation, execution));
-  markFamilyTerminal(
-    s.installation,
-    s.origin,
-    execution,
-    settlement.evidence.outcome !== "unknown" &&
-      (status.state === "succeeded" || settlement.evidence.publication !== "committed"),
-    digest,
-  );
+  withPrivateEffectWriter(s, () => {
+    const proof = verifyAndSealTerminalCommitment(s, status, terminalAt),
+      origin = s.origin;
+    if (!origin) throw Error("Missing terminal origin");
+    const settlement = childSettlementState(verifyControlEffectSettlement(installation, execution));
+    publishFamilyCanonicalTerminal(
+      s.installation,
+      origin,
+      execution,
+      settlement.evidence.outcome !== "unknown" &&
+        (status.state === "succeeded" || settlement.evidence.publication !== "committed"),
+      proof.terminalDigest,
+      proof.terminalAt,
+    );
+  });
 }
 /** Rejoin a terminal worker from its original signed admission and known effect
  * receipt. The fixed startup adapter separately proves borrowed/claim cleanup. */
@@ -705,13 +855,14 @@ export function repairControlJournalTerminal(
       proof.receipt.kind === "not-started";
     if (!succeeded && !failedWithoutEffect)
       throw Error("Terminal worker containment is not proved");
-    markFamilyTerminal(
+    const committed = verifyAndSealTerminalCommitment(s, terminal, terminalAt);
+    publishFamilyCanonicalTerminal(
       s.installation,
       origin,
       execution,
       true,
-      controlTerminalReceiptDigest(terminal),
-      terminalAt,
+      committed.terminalDigest,
+      committed.terminalAt,
     );
     completeFamilyJournal(s.installation, origin, execution, terminalAt);
   });
@@ -738,6 +889,15 @@ export function completeControlJournalExecution(authority: VerifiedExecutionAuth
 export function requireControlJournalRetention(authority: VerifiedExecutionAuthority): void {
   const s = executionAuthorityState(authority);
   if (!s.origin) throw Error("Legacy origin is observation-only");
+  // Reserve the immutable terminal authentication cell before any effect.
+  writePrivateRecord(
+    s.installation,
+    "observations",
+    terminalCommitmentName(s.execution),
+    null,
+    true,
+    s.origin,
+  );
   requireFamilyJournal(s.installation, s.origin, s.execution);
 }
 export function hasRetainedControlOrigin(
@@ -1284,7 +1444,7 @@ const effectObservationSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("not-started") }),
   z.strictObject({ kind: z.literal("unresolved") }),
 ]);
-function withPrivateEffectWriter(s: AuthorityState, write: () => void): void {
+function withPrivateEffectWriter<T>(s: AuthorityState, write: () => T): T {
   const guards = s.installation.privateRoot.directory("effect-writers", true, true);
   try {
     const name = s.execution.operationKey;
@@ -1293,7 +1453,7 @@ function withPrivateEffectWriter(s: AuthorityState, write: () => void): void {
     const guard = guards.directory(name);
     const held = identity(guard.stat);
     try {
-      write();
+      return write();
     } finally {
       guard.close();
       guards.removeDirectory(name, held);

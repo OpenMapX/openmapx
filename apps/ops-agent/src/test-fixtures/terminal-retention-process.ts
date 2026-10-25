@@ -1,5 +1,12 @@
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
-import { appendFileSync, mkdirSync, writeFileSync, writeSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
 import { join } from "node:path";
 import * as c from "@openmapx/core/build-artifacts";
 import {
@@ -126,8 +133,21 @@ AnchoredDirectory.prototype.removeDirectory = function (...args) {
   const result = remove.apply(this, args);
   // Stop after the real canonical-digest transaction AND guard removal. No
   // unknown metadata writer is left for startup to steal.
-  if (input.boundary === "digest" && terminal && args[0] === ".family-writer") {
-    const progress = JSON.parse(this.read("progress.json", 131072).toString());
+  if (
+    input.boundary === "digest" &&
+    terminal &&
+    [".family-writer", key].includes(args[0]) &&
+    !existsSync(join(input.root, `control-private/ops-agent/effect-writers/${key}`)) &&
+    !existsSync(
+      join(input.root, "control-private/ops-agent/retention-families/slot-0/.family-writer"),
+    )
+  ) {
+    const progress = JSON.parse(
+      readFileSync(
+        join(input.root, "control-private/ops-agent/retention-families/slot-0/progress.json"),
+        "utf8",
+      ),
+    );
     const facts = Object.values(progress.executions) as Array<{
       execution: { executionId: string };
       terminalDigest?: string;

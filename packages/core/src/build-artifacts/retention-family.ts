@@ -88,6 +88,9 @@ interface ExecutionFact {
   verifier: string;
   receiptDigest: string;
   terminalDigest?: string;
+  settlementDigest?: string;
+  canonicalDigest?: string;
+  canonicalTerminalAt?: number;
   terminalAt?: number;
   known: boolean;
   fixedChildId?: string;
@@ -895,6 +898,9 @@ export function registerFamilyExecution(
           known: false,
           terminalAt: 0,
           terminalDigest: "0".repeat(64),
+          settlementDigest: "0".repeat(64),
+          canonicalDigest: "0".repeat(64),
+          canonicalTerminalAt: 0,
           requiresJournal: false,
           journalContained: false,
           ...(state.fixedChildId ? { fixedChildId: state.fixedChildId } : {}),
@@ -1028,20 +1034,96 @@ export function markFamilyTerminal(
         e = p.executions[controlDigest(execution)];
       if (!e) throw Error("Missing indexed terminal execution");
       if (p.phase !== "active") {
-        if (e.known && known && (!terminalDigest || e.terminalDigest === terminalDigest)) return;
+        if (
+          e.known &&
+          known &&
+          (!terminalDigest || (e.settlementDigest ?? e.terminalDigest) === terminalDigest)
+        )
+          return;
         throw Error("Terminal transition after membership closed");
       }
       const changed =
-        e.known !== known || (terminalDigest !== undefined && e.terminalDigest !== terminalDigest);
+        e.known !== known ||
+        (terminalDigest !== undefined &&
+          (e.settlementDigest ?? e.terminalDigest) !== terminalDigest);
       if (terminalAt !== undefined && (!Number.isSafeInteger(terminalAt) || terminalAt <= 0))
         throw Error("Invalid original terminal time");
       if (!changed && e.terminalAt !== undefined) return;
       e.known = known;
-      if (terminalDigest) e.terminalDigest = terminalDigest;
+      if (terminalDigest) {
+        e.settlementDigest = terminalDigest;
+        if (!e.requiresJournal) e.terminalDigest = terminalDigest;
+      }
       if (changed || e.terminalAt === undefined) {
         e.terminalAt = Math.max(e.terminalAt ?? 0, terminalAt ?? Date.now());
         p.terminalAt = Math.max(p.terminalAt, e.terminalAt);
       }
+      progress(f, p);
+    });
+  } finally {
+    f.close();
+  }
+}
+function canonicalCompatible(
+  p: Progress,
+  execution: ExecutionRef,
+  digest: string,
+  terminalAt: number,
+): ExecutionFact {
+  const e = p.executions[controlDigest(execution)];
+  if (!e?.requiresJournal || e.canonicalDigest === undefined || e.canonicalTerminalAt === undefined)
+    throw Error("Missing canonical publication reservation; recovery required");
+  if (!DIGEST.test(digest) || !Number.isSafeInteger(terminalAt) || terminalAt <= 0)
+    throw Error("Invalid canonical terminal publication");
+  if (e.canonicalDigest !== "0".repeat(64)) {
+    if (
+      e.canonicalDigest !== digest ||
+      e.terminalDigest !== digest ||
+      e.canonicalTerminalAt !== terminalAt
+    )
+      throw Error("Canonical terminal receipt/time conflict");
+  } else if (p.phase !== "active")
+    throw Error("Canonical publication after retirement preparation");
+  return e;
+}
+export function assertFamilyCanonicalCompatibility(
+  state: InstallationState,
+  origin: ControlExecutionOrigin,
+  execution: ExecutionRef,
+  digest: string,
+  terminalAt: number,
+): void {
+  const f = openFamily(state, origin);
+  try {
+    guard(f.slot, ".family-writer", () => {
+      canonicalCompatible(readProgress(f), execution, digest, terminalAt);
+    });
+  } finally {
+    f.close();
+  }
+}
+/** One-way canonical publication, independent of the immutable own-effect proof. */
+export function publishFamilyCanonicalTerminal(
+  state: InstallationState,
+  origin: ControlExecutionOrigin,
+  execution: ExecutionRef,
+  known: boolean,
+  digest: string,
+  terminalAt: number,
+): void {
+  const f = openFamily(state, origin);
+  try {
+    guard(f.slot, ".family-writer", () => {
+      const p = readProgress(f),
+        e = canonicalCompatible(p, execution, digest, terminalAt);
+      if (e.canonicalDigest !== "0".repeat(64) && (e.known || !known)) return;
+      if (p.phase !== "active") throw Error("Canonical containment after retirement preparation");
+      e.canonicalDigest = digest;
+      e.canonicalTerminalAt = terminalAt;
+      e.terminalDigest = digest;
+      e.known = known;
+      e.terminalAt = Math.max(e.terminalAt ?? 0, terminalAt);
+      p.terminalAt = Math.max(p.terminalAt, e.terminalAt);
       progress(f, p);
     });
   } finally {
@@ -1194,7 +1276,10 @@ function localProof(f: Family, p: Progress): boolean {
     if (executionWriterPresent(f, fact.execution)) return false;
     if (
       fact.requiresJournal &&
-      (!fact.journalContained ||
+      (!fact.canonicalDigest ||
+        fact.canonicalDigest === "0".repeat(64) ||
+        fact.canonicalDigest !== fact.terminalDigest ||
+        !fact.journalContained ||
         !f.state.retentionJournal?.contained(fact.execution, fact.terminalDigest))
     )
       return false;
@@ -2231,6 +2316,7 @@ export function acknowledgeRetentionDependency(
         dep.operationKey !== input.operationKey ||
         dep.fingerprint !== input.fingerprint ||
         !fact?.terminalDigest ||
+        fact.canonicalDigest !== fact.terminalDigest ||
         !fact.terminalAt ||
         fact.terminalDigest !== input.terminalDigest
       )

@@ -9,6 +9,7 @@ import {
   createControlRootOperationKey,
   type ExecutionRef,
   executionFingerprint,
+  type OpsJobStatus,
   opsOperationFingerprint,
   parseOpsJobStatus,
   signApiRetentionProof,
@@ -94,6 +95,186 @@ function progress(root: string) {
     >;
   };
 }
+function terminalStatus(job: PersistedOpsJob): OpsJobStatus {
+  return parseOpsJobStatus({
+    version: 2,
+    operationId: job.operationId,
+    operationKey: job.operationKey,
+    kind: job.operation.kind,
+    resourceId: job.resourceId,
+    state: job.state,
+    submittedAt: job.submittedAt,
+    updatedAt: job.updatedAt,
+    admittedAt: job.admittedAt,
+    deadlineAt: job.deadlineAt,
+    fingerprint: job.fingerprint,
+    ...(job.result === undefined ? {} : { result: job.result }),
+    ...(job.errorClass === undefined ? {} : { errorClass: job.errorClass }),
+    ...(job.failureResult === undefined ? {} : { failureResult: job.failureResult }),
+    ...(job.terminationRequestedAt === undefined
+      ? {}
+      : { terminationRequestedAt: job.terminationRequestedAt }),
+  });
+}
+
+const tupleChanges = [
+  "failure-error",
+  "failure-result",
+  "failure-cancel",
+  "failure-time",
+  "success-cancel",
+  "success-time",
+] as const;
+it.each(
+  ["terminal", "digest"].flatMap((boundary) =>
+    tupleChanges.map((change) => ({ boundary, change })),
+  ),
+)(
+  "rejects altered original terminal tuple across actual restart ($boundary/$change)",
+  async ({ boundary, change }) => {
+    const root = mkdtempSync(join(tmpdir(), "omx-terminal-tuple-"));
+    mkdirSync(join(root, "data"), { mode: 0o700 });
+    await c.provisionControlInstallation(root);
+    let app: ReturnType<typeof buildOpsAgentServer> | undefined,
+      installation: c.ControlInstallation | undefined;
+    const token = Buffer.alloc(32, 7).toString("base64url"),
+      dispatch = vi.fn(async () => {
+        throw Error("Restart must never dispatch");
+      });
+    try {
+      const failure = change.startsWith("failure"),
+        stopped = await interrupt(root, boundary, failure ? "not-started" : "success");
+      const original = stopped.job;
+      if (!original.terminalAt) throw Error("Missing original terminal timestamp");
+      const originalTime = Date.parse(original.terminalAt),
+        originalDigest = controlTerminalReceiptDigest(terminalStatus(original));
+      const before = progress(root),
+        altered = structuredClone(original);
+      const commitmentPath = join(
+        root,
+        `control-private/ops-agent/observations/terminal-${original.operationKey}.json`,
+      );
+      const commitment = readFileSync(commitmentPath);
+      const admission = readFileSync(
+        join(root, `control-private/ops-agent/executions/${original.operationKey}.json`),
+      );
+      if (change === "failure-error") altered.errorClass = "timeout";
+      else if (change === "failure-result")
+        altered.failureResult = {
+          diagnostics: {
+            tail: [{ stream: "stderr", message: "different valid failure evidence" }],
+            truncated: false,
+          },
+        };
+      else if (change.endsWith("cancel"))
+        altered.terminationRequestedAt = new Date(originalTime).toISOString();
+      else altered.terminalAt = new Date(originalTime + 1000).toISOString();
+      const file = join(root, "data/ops-agent/jobs-v1.json"),
+        changedJournal = await openOpsJobJournal(file);
+      await changedJournal.replace([altered]); // Actual parser accepts each schema-valid change.
+      const clock = vi.spyOn(Date, "now").mockReturnValue(originalTime + 71 * 3600_000);
+      const start = async (expected: PersistedOpsJob) => {
+        installation = c.openControlInstallation({
+          infraDir: root,
+          role: "ops-agent",
+          serviceIds: ["motis"],
+        });
+        const journal = await openOpsJobJournal(file);
+        app = buildOpsAgentServer({
+          tokens: { api: token, "data-manager": "b".repeat(32) },
+          controlInstallation: installation,
+          journal,
+          dispatch,
+          now: () => new Date(Date.now()),
+          resourcePolicy: { allowBackup: () => true },
+        });
+        await app.ready();
+        expect(journal.records()).toEqual([expected]);
+        return { journal, server: app };
+      };
+      await start(altered);
+      expect(Object.values(progress(root).executions)[0]?.terminalDigest).toBe(
+        Object.values(before.executions)[0]?.terminalDigest,
+      );
+      expect(Object.values(progress(root).executions)[0]?.journalContained).toBe(false);
+      expect(progress(root).terminalAt).toBe(before.terminalAt);
+      expect(readFileSync(commitmentPath)).toEqual(commitment);
+      await app?.close();
+      app = undefined;
+      if (installation) c.closeControlInstallation(installation);
+      installation = undefined;
+      const restoredJournal = await openOpsJobJournal(file);
+      await restoredJournal.replace([original]);
+      clock.mockReturnValue(originalTime + 71.5 * 3600_000);
+      const { journal, server } = await start(original);
+      const ack = {
+        kind: "controlRetention.acknowledge",
+        originRootKey: original.operationKey,
+        operationKey: original.operationKey,
+        fingerprint: original.fingerprint,
+        terminalDigest: originalDigest,
+        proof: signApiRetentionProof(token, {
+          version: 1,
+          apiJobId: stopped.apiJobId,
+          originalApiOwnerVersion: 1,
+          attemptId: stopped.attemptId,
+          checkpointOwnerVersion: 1,
+          terminalCopyId: randomUUID(),
+          operationKey: original.operationKey,
+          fingerprint: original.fingerprint,
+          terminalDigest: originalDigest,
+        }),
+      };
+      for (let retry = 0; retry < 2; retry++) {
+        const response = await server.inject({
+          method: "POST",
+          url: "/v1/operations",
+          headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" },
+          payload: {
+            version: 2,
+            requestId: `ops1_${randomUUID().replaceAll("-", "")}`,
+            operationKey: "opk1_ackrequest123456",
+            issuedAt: new Date(Date.now()).toISOString(),
+            expiresAt: new Date(Date.now() + 10000).toISOString(),
+            operation: ack,
+          },
+        });
+        expect(response.statusCode, response.body).toBe(200);
+      }
+      expect(Object.values(progress(root).executions)[0]).toMatchObject({
+        journalContained: true,
+        terminalDigest: originalDigest,
+      });
+      expect(progress(root).terminalAt).toBeLessThanOrEqual(
+        Math.max(before.terminalAt, originalTime),
+      );
+      expect(
+        readFileSync(
+          join(root, `control-private/ops-agent/executions/${original.operationKey}.json`),
+        ),
+      ).toEqual(admission);
+      clock.mockReturnValue(Math.max(before.terminalAt, originalTime) + 73 * 3600_000);
+      if (!installation) throw Error("Missing restored installation");
+      expect(await c.reconcileControlRetention(installation, { maxFamilies: 1 })).toEqual({
+        retired: 1,
+        pending: 0,
+      });
+      expect(journal.records()).toHaveLength(0);
+      expect(dispatch).not.toHaveBeenCalled();
+      expect(
+        existsSync(join(root, "effect-calls"))
+          ? readFileSync(join(root, "effect-calls"), "utf8")
+          : "",
+      ).toBe(failure ? "" : "effect\n");
+    } finally {
+      vi.restoreAllMocks();
+      await app?.close();
+      if (installation) c.closeControlInstallation(installation);
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+  90000,
+);
 const cases = [
   { boundary: "terminal", outcome: "success", known: true },
   { boundary: "digest", outcome: "success", known: true },
@@ -102,6 +283,7 @@ const cases = [
   { boundary: "terminal", outcome: "unknown", known: false },
   { boundary: "terminal", outcome: "configuration", known: true },
   { boundary: "terminal", outcome: "success", known: false, tamper: "missing-proof" },
+  { boundary: "terminal", outcome: "success", known: false, tamper: "missing-terminal-commitment" },
   { boundary: "terminal", outcome: "success", known: false, tamper: "mismatched-journal" },
   { boundary: "terminal", outcome: "success", known: false, tamper: "admission-time" },
 ] as const;
@@ -128,6 +310,13 @@ it.each(
       if ("tamper" in scenario) {
         if (scenario.tamper === "missing-proof")
           rmSync(join(root, `control-private/ops-agent/effects/${original.operationKey}.json`));
+        else if (scenario.tamper === "missing-terminal-commitment")
+          rmSync(
+            join(
+              root,
+              `control-private/ops-agent/observations/terminal-${original.operationKey}.json`,
+            ),
+          );
         else if (scenario.tamper === "admission-time") {
           if (original.admittedAt === undefined) throw Error("Missing fixture admission timestamp");
           original.admittedAt += 1;

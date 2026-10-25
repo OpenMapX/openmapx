@@ -39,6 +39,7 @@ export {
   retainAdmittedControlExecution,
   retainControlEffectReceipt,
   retainControlPreparedTerminal,
+  retainControlTerminalCommitment,
   retainControlTerminalStatus,
   retainedControlAdoptionAssertion,
   retainedControlParent,
