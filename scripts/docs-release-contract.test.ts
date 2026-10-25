@@ -172,10 +172,16 @@ esac
         .match(/if: >-\n([\s\S]*?)\n {8}run:/)?.[1] ?? "";
     expect(condition).not.toBe("");
     const needs = Object.fromEntries(
-      ["lint", "types", "test-node", "test-web", "mobile", "database", "build"].map((job) => [
-        job,
-        { result: "success" },
-      ]),
+      [
+        "lint",
+        "types",
+        "test-node",
+        "test-linux-user",
+        "test-web",
+        "mobile",
+        "database",
+        "build",
+      ].map((job) => [job, { result: "success" }]),
     );
     expect(
       runInNewContext(

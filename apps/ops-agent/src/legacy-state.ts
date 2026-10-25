@@ -40,6 +40,10 @@ export interface LegacyStateOptions {
   rootDir: string;
   /** Whether a handoff helper container runs: for `handoffId`, or any at all. */
   handoffHelperRunning(handoffId?: string): Promise<boolean>;
+  /** Whether any container, running or stopped, bind-mounts `path`. */
+  containerMounts?(path: string): Promise<boolean>;
+  /** Receives why an earlier directory was left in place. */
+  report?(message: string): void;
 }
 
 function isRegularFile(path: string): boolean {
@@ -129,10 +133,91 @@ export async function importLegacyAgentState(
   return outcome;
 }
 
+/** A real directory of this user, not a link: what this agent may remove. */
+function ownDirectory(path: string): "missing" | "own" | string {
+  let metadata: ReturnType<typeof lstatSync>;
+  try {
+    metadata = lstatSync(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "missing";
+    return `it cannot be inspected (${(error as NodeJS.ErrnoException).code ?? "error"})`;
+  }
+  if (!metadata.isDirectory() || metadata.isSymbolicLink()) return "it is not a directory";
+  const uid = process.geteuid?.();
+  if (uid !== undefined && metadata.uid !== uid) {
+    return `it belongs to uid ${metadata.uid}, not ${uid}`;
+  }
+  return "own";
+}
+
+/**
+ * Removes the trusted-configuration queue and the privacy-extraction scratch
+ * an earlier release kept in the data directory, once their state has moved:
+ * each goes only when its replacement in the agent's state exists, no
+ * container still mounts it, it is a directory of this user, and it is empty
+ * (the queue may hold its own empty `.claimed`). rmdir refuses a directory
+ * that is not empty, so an entry written meanwhile keeps it. Anything else
+ * stays, and why is reported.
+ */
+async function retireLegacyAgentDirectories(options: LegacyStateOptions): Promise<void> {
+  const { current, legacy } = paths(options.rootDir);
+  const report = options.report ?? (() => undefined);
+  for (const [directory, replacement, allowed] of [
+    [legacy.trustedConfig, current.trustedConfig, [".claimed"]],
+    [legacy.privacyExtraction, current.privacyExtraction, []],
+  ] as const) {
+    const leave = (reason: string) =>
+      report(`Left the earlier directory ${directory} in place: ${reason}`);
+    const kind = ownDirectory(directory);
+    if (kind === "missing") continue;
+    if (kind !== "own") {
+      leave(kind);
+      continue;
+    }
+    if (ownDirectory(replacement) !== "own") {
+      leave(`its replacement ${replacement} is not in place yet`);
+      continue;
+    }
+    try {
+      if (await options.containerMounts?.(directory)) {
+        leave("a container still mounts it; it goes once that container is recreated");
+        continue;
+      }
+    } catch {
+      leave("whether a container still mounts it could not be checked");
+      continue;
+    }
+    let entries: string[];
+    try {
+      entries = readdirSync(directory);
+    } catch {
+      leave("it cannot be listed");
+      continue;
+    }
+    const other = entries.filter((name) => !(allowed as readonly string[]).includes(name));
+    if (other.length > 0) {
+      leave(`it is not empty (${other.slice(0, 5).join(", ")}${other.length > 5 ? ", …" : ""})`);
+      continue;
+    }
+    try {
+      for (const name of entries) {
+        const nested = join(directory, name);
+        const nestedKind = ownDirectory(nested);
+        if (nestedKind !== "own") throw new Error(`${name}: ${nestedKind}`);
+        rmdirSync(nested);
+      }
+      rmdirSync(directory);
+    } catch (error) {
+      leave((error as Error).message);
+    }
+  }
+}
+
 /**
  * Removes the journal and handoff record left at the previous location once
  * they were imported and no helper could still roll back to an agent that
- * reads them. Only plain entries are unlinked; the directory goes when empty.
+ * reads them, and the earlier queue and scratch directories once empty. Only
+ * plain entries are unlinked; the directory goes when empty.
  */
 export async function retireLegacyAgentState(options: LegacyStateOptions): Promise<boolean> {
   const { current, legacy } = paths(options.rootDir);
@@ -144,6 +229,7 @@ export async function retireLegacyAgentState(options: LegacyStateOptions): Promi
     return false;
   }
   if (helperRunning) return false;
+  await retireLegacyAgentDirectories(options);
   let names: string[];
   try {
     names = readdirSync(legacy.directory);
@@ -164,7 +250,7 @@ export async function retireLegacyAgentState(options: LegacyStateOptions): Promi
   try {
     rmdirSync(legacy.directory);
   } catch {
-    // Not empty: an old trusted-config directory, or something an operator keeps.
+    // Not empty: an earlier queue left in place, or something an operator keeps.
   }
   return true;
 }

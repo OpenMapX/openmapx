@@ -6,6 +6,7 @@ import {
   approveTransitousProposal,
   readTransitousProposal,
   releaseGbfsCatalogPin,
+  releaseTransitousPin,
   writeTransitousProposal,
 } from "@openmapx/transitous-core/pins";
 import type { OpsRuntime } from "./runtime";
@@ -55,6 +56,13 @@ export function createTransitousLockRuntime(
       proposed: proposed ? record(proposed) : null,
     };
   };
+
+  // app-api's read-only view for the admin panel: the release's pin and the
+  // pin in effect, nothing proposed and nothing it can change.
+  runtime["transitousPin.inspect"] = async () => ({
+    release: record(releaseTransitousPin()),
+    active: record(activeTransitousPin(infraDir)),
+  });
 
   runtime["gbfsCatalogLock.inspect"] = async () => {
     const { commit, url, sha256, lockedAt, lockedBy } = releaseGbfsCatalogPin();

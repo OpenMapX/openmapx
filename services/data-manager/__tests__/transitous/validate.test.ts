@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { crc32 } from "node:zlib";
 import { execa } from "execa";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
@@ -30,18 +31,47 @@ afterAll(() => {
   // no-op
 });
 
+/**
+ * A stored (uncompressed) ZIP archive of `members`, written here rather than by
+ * the system `zip`, which not every host that has `unzip` installs. The
+ * validate stage lists members with `unzip -Z1`, which reads it like any other.
+ */
 async function makeZip(target: string, members: Record<string, string>): Promise<void> {
-  // Build via the system `zip` so we don't drag jszip into the data-manager
-  // for a test fixture. The validate stage only needs the archive to have
-  // a recognisable central directory; `zip -q` is sufficient.
-  const dir = `${target}.work`;
-  mkdirSync(dir, { recursive: true });
+  const locals: Buffer[] = [];
+  const central: Buffer[] = [];
+  let offset = 0;
   for (const [name, body] of Object.entries(members)) {
-    writeFileSync(join(dir, name), body);
+    const nameBytes = Buffer.from(name, "utf8");
+    const data = Buffer.from(body, "utf8");
+    const crc = crc32(data);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0); // local file header
+    local.writeUInt16LE(20, 4); // version needed
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18); // compressed size (stored)
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(nameBytes.length, 26);
+    locals.push(local, nameBytes, data);
+    const entry = Buffer.alloc(46);
+    entry.writeUInt32LE(0x02014b50, 0); // central directory header
+    entry.writeUInt16LE(20, 4); // version made by
+    entry.writeUInt16LE(20, 6); // version needed
+    entry.writeUInt32LE(crc, 16);
+    entry.writeUInt32LE(data.length, 20);
+    entry.writeUInt32LE(data.length, 24);
+    entry.writeUInt16LE(nameBytes.length, 28);
+    entry.writeUInt32LE(offset, 42); // local header offset
+    central.push(entry, nameBytes);
+    offset += local.length + nameBytes.length + data.length;
   }
-  await execa("zip", ["-q", "-j", target, ...Object.keys(members).map((n) => join(dir, n))], {
-    stdio: "pipe",
-  });
+  const directory = Buffer.concat(central);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0); // end of central directory
+  end.writeUInt16LE(Object.keys(members).length, 8);
+  end.writeUInt16LE(Object.keys(members).length, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(offset, 16);
+  writeFileSync(target, Buffer.concat([...locals, directory, end]));
 }
 
 describe("validate stage", () => {

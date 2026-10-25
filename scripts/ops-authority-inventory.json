@@ -89,6 +89,7 @@
       "system.diagnostics",
       "system.inspect",
       "system.update",
+      "transitousPin.inspect",
       "vault.apply"
     ],
     "data-manager": [
@@ -325,7 +326,8 @@
         "transitousLock.inspect",
         "transitousLock.propose",
         "transitousLock.approve",
-        "gbfsCatalogLock.inspect"
+        "gbfsCatalogLock.inspect",
+        "transitousPin.inspect"
       ]
     }
   ],

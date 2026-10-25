@@ -64,7 +64,7 @@ describe("required database test gate", () => {
     expect(exportSteps).toContain(
       "OPENMAPX_REAL_BACKUP_FIXTURE: $" + "{{ runner.temp }}/openmapx-real-backup-result.tar",
     );
-    expect(workflow).toMatch(/needs: \[[^\]]*database[^\]]*\]/);
+    expect(workflow).toMatch(/needs:\s*\[[^\]]*\bdatabase\b[^\]]*\]/);
     expect(workflow).toContain("needs.database.result != 'success'");
     const packageJson = JSON.parse(read("package.json")) as { scripts: Record<string, string> };
     expect(packageJson.scripts["test:database"]).toBe("node scripts/test-database.mjs");
@@ -81,10 +81,16 @@ describe("required database test gate", () => {
     const expression = aggregate.match(/if: >-\n([\s\S]*?)\n {8}run:/)?.[1];
     expect(expression).toBeDefined();
     const needs: Record<string, { result?: string }> = Object.fromEntries(
-      ["lint", "types", "test-node", "test-web", "mobile", "database", "build"].map((job) => [
-        job,
-        { result: "success" },
-      ]),
+      [
+        "lint",
+        "types",
+        "test-node",
+        "test-linux-user",
+        "test-web",
+        "mobile",
+        "database",
+        "build",
+      ].map((job) => [job, { result: "success" }]),
     );
     needs.database = { result };
     // This condition uses only comparisons, || and &&, shared by Actions and JS.

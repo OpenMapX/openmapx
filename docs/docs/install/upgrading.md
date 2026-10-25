@@ -255,8 +255,10 @@ empty and nothing is copied from the old ones, which data-manager could have
 written. The agent reads its queue from the new location whatever its own
 container mounts, so it meets `app-api` there once `app-api` has been replaced;
 a request made in between, during the update, ends without being applied. The
-old directories stay in `infra/docker/data/` for containers that still mount
-them. Nothing needs doing by hand. An older agent started afterwards, for example by
+old directories stay in `infra/docker/data/` while a container still mounts
+them. When it starts, or a self-update has settled, and none does, the agent
+removes each one that is empty and its own (the queue with its empty
+`.claimed`); one that is not is left in place and named in the agent's log. Nothing needs doing by hand. An older agent started afterwards, for example by
 selecting an earlier release, finds no job history.
 
 The applied configuration, the service selection and the release state are in

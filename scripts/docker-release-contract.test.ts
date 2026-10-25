@@ -413,7 +413,7 @@ describe("Docker release trust gate", () => {
     expect(ci).toContain("needs: docker-changes");
     expect(ci).toContain("needs.docker-changes.outputs.apps != '[]'");
     expect(ci).toContain("push: false");
-    expect(ci).toMatch(/needs: \[[^\]]*docker-build[^\]]*\]/);
+    expect(ci).toMatch(/needs:\s*\[[^\]]*\bdocker-build\b[^\]]*\]/);
     expect(read("apps/web/Dockerfile")).toContain(
       "COPY apps/api/openapi.json apps/api/openapi.json",
     );

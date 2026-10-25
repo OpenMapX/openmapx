@@ -1,9 +1,18 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { opsOperationFingerprint, opsResourceId } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { readAgentHandoff } from "./agent-handoff";
 import { openOpsJobJournal } from "./journal";
 import { importLegacyAgentState, retireLegacyAgentState } from "./legacy-state";
@@ -200,5 +209,92 @@ describe("importing an earlier release's agent state", () => {
     await writeLegacyJournal(f.legacy.journal);
     await expect(retireLegacyAgentState(f.options)).resolves.toBe(false);
     expect(existsSync(f.legacy.journal)).toBe(true);
+  });
+});
+
+describe("retiring the earlier queue and scratch directories", () => {
+  /** What openmapx.com holds: both empty, the queue with its empty .claimed. */
+  async function moved() {
+    const f = fixture();
+    mkdirSync(join(f.legacy.trustedConfig, ".claimed"), { recursive: true, mode: 0o700 });
+    mkdirSync(f.legacy.privacyExtraction, { recursive: true, mode: 0o700 });
+    mkdirSync(f.current.trustedConfig, { recursive: true, mode: 0o700 });
+    mkdirSync(f.current.privacyExtraction, { recursive: true, mode: 0o700 });
+    const reports: string[] = [];
+    const mounted = new Set<string>();
+    const options = {
+      ...f.options,
+      containerMounts: async (path: string) => mounted.has(path),
+      report: (message: string) => reports.push(message),
+    };
+    await importLegacyAgentState(options);
+    return { ...f, options, reports, mounted };
+  }
+
+  it("removes both once their state moved and nothing mounts them", async () => {
+    const f = await moved();
+    await expect(retireLegacyAgentState(f.options)).resolves.toBe(true);
+    expect(existsSync(f.legacy.trustedConfig)).toBe(false);
+    expect(existsSync(f.legacy.privacyExtraction)).toBe(false);
+    // data/ops-agent itself, empty now, goes too; the new state stays.
+    expect(existsSync(f.legacy.directory)).toBe(false);
+    expect(existsSync(f.current.trustedConfig)).toBe(true);
+    expect(f.reports).toEqual([]);
+  });
+
+  it("waits for a helper, and keeps a directory a container still mounts", async () => {
+    const f = await moved();
+    f.setHelpers(["handoff-2"]);
+    await expect(retireLegacyAgentState(f.options)).resolves.toBe(false);
+    expect(existsSync(f.legacy.trustedConfig)).toBe(true);
+    f.setHelpers([]);
+    f.mounted.add(f.legacy.trustedConfig);
+    await retireLegacyAgentState(f.options);
+    expect(existsSync(join(f.legacy.trustedConfig, ".claimed"))).toBe(true);
+    expect(existsSync(f.legacy.privacyExtraction)).toBe(false);
+    expect(f.reports).toEqual([expect.stringContaining("a container still mounts it")]);
+  });
+
+  it("leaves and reports what is not empty, not a directory of this user, or not yet replaced", async () => {
+    const f = await moved();
+    writeFileSync(join(f.legacy.trustedConfig, `cfg1_${"q".repeat(43)}.json`), "queued");
+    writeFileSync(join(f.legacy.privacyExtraction, ".claimed"), "a file named like the claim");
+    await retireLegacyAgentState(f.options);
+    expect(existsSync(f.legacy.trustedConfig)).toBe(true);
+    expect(existsSync(f.legacy.privacyExtraction)).toBe(true);
+    expect(f.reports).toEqual([
+      expect.stringContaining("it is not empty (cfg1_"),
+      expect.stringContaining("it is not empty (.claimed)"),
+    ]);
+
+    // A .claimed that is not empty: rmdir refuses, nothing is removed.
+    const g = await moved();
+    writeFileSync(join(g.legacy.trustedConfig, ".claimed", "snapshot.json"), "{}");
+    rmSync(g.current.privacyExtraction, { recursive: true });
+    await retireLegacyAgentState(g.options);
+    expect(existsSync(join(g.legacy.trustedConfig, ".claimed", "snapshot.json"))).toBe(true);
+    expect(existsSync(g.legacy.privacyExtraction)).toBe(true);
+    expect(g.reports).toEqual([
+      expect.stringMatching(/trusted-config in place: .*ENOTEMPTY/),
+      expect.stringContaining("is not in place yet"),
+    ]);
+
+    // A symbolic link in its place, and a directory of another uid.
+    const h = await moved();
+    rmSync(h.legacy.trustedConfig, { recursive: true });
+    symlinkSync(h.current.trustedConfig, h.legacy.trustedConfig);
+    const uid = process.geteuid?.() ?? 0;
+    const spy = vi.spyOn(process, "geteuid").mockReturnValue(uid + 1);
+    try {
+      await retireLegacyAgentState(h.options);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(lstatSync(h.legacy.trustedConfig).isSymbolicLink()).toBe(true);
+    expect(existsSync(h.legacy.privacyExtraction)).toBe(true);
+    expect(h.reports).toEqual([
+      expect.stringContaining("it is not a directory"),
+      expect.stringContaining(`it belongs to uid ${uid}, not ${uid + 1}`),
+    ]);
   });
 });

@@ -167,6 +167,50 @@ jobs:
       # gate exercises the real crypto path.
       - run: pnpm test --project node
 
+  # The agent, core and data-manager suites as a deployment whose operator is
+  # not uid 1000 sees them: a non-root uid 1001 in a Debian Node container,
+  # under the Debian and Ubuntu default umask 002, which leaves checkouts and
+  # files group-writable. It also runs both update orders of the deployment's
+  # user from an .env without UID/GID (scripts/ops-agent-deployment-user.test.ts),
+  # which only runs where OPENMAPX_TEST_DEPLOYMENT_USER names the uid.
+  test-linux-user:
+    name: test (linux, uid 1001, umask 002)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: node:24.22.1-bookworm@sha256:6449e19d8184d84062525b6a7524def03146c2cb04a7f08b076680d0e8e4240a
+      # The runner's own uid, which owns the checked-out workspace. --init
+      # reaps orphans as tini does in the agent's image: the job container's
+      # own PID 1 never would, and the contained-process tests wait for a
+      # command's process group to empty.
+      options: --user 1001:1001 --init
+    env:
+      HOME: /tmp/home
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      OPENMAPX_TEST_DEPLOYMENT_USER: "1001"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Confirm the user and umask
+        run: |
+          umask 002
+          mkdir -p "$HOME"
+          echo "uid $(id -u) gid $(id -g) umask $(umask)"
+          test "$(id -u)" = 1001 && test "$(umask)" = 0002
+
+      - run: umask 002 && corepack pnpm install --frozen-lockfile
+
+      - name: Run the agent, core and data-manager suites and the deployment-user test
+        run: >-
+          umask 002 && corepack pnpm exec vitest run --project node
+          apps/ops-agent packages/core services/data-manager
+          scripts/ops-agent-deployment-user.test.ts
+
   test-web:
     name: test (web)
     runs-on: ubuntu-latest
@@ -480,7 +524,19 @@ jobs:
     name: lint / types / test
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [lint, types, test-node, test-web, mobile, database, build, docker-changes, docker-build]
+    needs:
+      [
+        lint,
+        types,
+        test-node,
+        test-linux-user,
+        test-web,
+        mobile,
+        database,
+        build,
+        docker-changes,
+        docker-build,
+      ]
     if: always()
     steps:
       - name: Fail if any gate job did not succeed
@@ -491,6 +547,7 @@ jobs:
           needs.lint.result != 'success' ||
           needs.types.result != 'success' ||
           needs.test-node.result != 'success' ||
+          needs.test-linux-user.result != 'success' ||
           needs.test-web.result != 'success' ||
           needs.mobile.result != 'success' ||
           needs.database.result != 'success' ||
