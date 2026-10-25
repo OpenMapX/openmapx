@@ -49,6 +49,35 @@ const SAFE_ISSUE_PROSE = "Download https://example.test/archive.tgz and follow i
 const SAFE_REPOSITORY_ISSUE_PROSE =
   "Download https://example.test/archive.tgz and follow OpenMapX/openmapx#123.";
 const SAFE_EMAIL_PATH_PROSE = "Contact https://example.test owner@example.org/support.";
+const LEGACY_PROSE_URLS = [
+  SPACE_QUERY_URL,
+  SPACE_FRAGMENT_URL,
+  SPACE_LEADING_QUERY_URL,
+  SPACE_LEADING_FRAGMENT_URL,
+  DOTTED_USER_PASSWORD_URL,
+  PERCENT_USER_PASSWORD_URL,
+  PLUS_USER_PASSWORD_URL,
+  UNICODE_USER_PASSWORD_URL,
+  SPACED_USER_PASSWORD_URL,
+  SPACED_USER_URL,
+  SPACED_USER_ROOT_URL,
+  SPACED_PASSWORD_ROOT_URL,
+  PUNCTUATED_USER_PASSWORD_URL,
+  EXTENSIONLESS_SPACE_QUERY_URL,
+  EXTENSIONLESS_SPACE_FRAGMENT_URL,
+  EXTENSIONLESS_SPACE_LEADING_QUERY_URL,
+  EXTENSIONLESS_SPACE_LEADING_FRAGMENT_URL,
+] as const;
+const JOB_LEGACY_URLS = [
+  UNSAFE_URL,
+  ALTERNATE_HTTPS_URL,
+  LEGACY_GIT_URL,
+  TAB_BEFORE_QUERY_URL,
+  NEWLINE_BEFORE_FRAGMENT_URL,
+  TAB_IN_SCHEME_URL,
+  SPACE_IN_PASSWORD_URL,
+  ...LEGACY_PROSE_URLS,
+] as const;
 
 const integration = describe.runIf(process.env.OPENMAPX_RUN_DATABASE_TESTS === "1");
 
@@ -142,25 +171,8 @@ integration("extension URL credential cleanup migration", () => {
             { id: "space-password", artifact: SPACE_IN_PASSWORD_URL, sha256: "f".repeat(64) },
           ],
           services: [{ service: "unsafe", repo: LEGACY_GIT_URL }],
-          notes: [
-            `Downloading ${SPACE_QUERY_URL}`,
-            `Inspect ${SPACE_FRAGMENT_URL}`,
-            `Downloading ${SPACE_LEADING_QUERY_URL}`,
-            `Inspect ${SPACE_LEADING_FRAGMENT_URL}`,
-            `Downloading ${DOTTED_USER_PASSWORD_URL}`,
-            `Downloading ${PERCENT_USER_PASSWORD_URL}`,
-            `Downloading ${PLUS_USER_PASSWORD_URL}`,
-            `Downloading ${UNICODE_USER_PASSWORD_URL}`,
-            `Downloading ${SPACED_USER_PASSWORD_URL}`,
-            `Downloading ${SPACED_USER_URL}`,
-            `Downloading ${SPACED_USER_ROOT_URL}`,
-            `Downloading ${SPACED_PASSWORD_ROOT_URL}`,
-            `Downloading ${PUNCTUATED_USER_PASSWORD_URL}`,
-            `Downloading ${EXTENSIONLESS_SPACE_QUERY_URL}`,
-            `Downloading ${EXTENSIONLESS_SPACE_FRAGMENT_URL}`,
-            `Downloading ${EXTENSIONLESS_SPACE_LEADING_QUERY_URL}`,
-            `Downloading ${EXTENSIONLESS_SPACE_LEADING_FRAGMENT_URL}`,
-          ],
+          legacyLocators: LEGACY_PROSE_URLS.map((artifact) => ({ artifact })),
+          notes: LEGACY_PROSE_URLS.map((url) => `Downloading ${url}`),
         })}),
         ('clean-extension', 'https://example.test/extension.json', ${sql.json({
           integrations: [{ id: "clean", artifact: "https://example.test/clean.tgz" }],
@@ -194,7 +206,10 @@ integration("extension URL credential cleanup migration", () => {
     `;
     await sql`
       INSERT INTO admin_job (id, type, payload, result, error) VALUES
-        ('unsafe-job', 'extension.install', ${sql.json({ sourceUrl: UNSAFE_URL })},
+        ('unsafe-job', 'extension.install', ${sql.json({
+          sourceUrl: UNSAFE_URL,
+          legacyLocators: JOB_LEGACY_URLS.map((artifact) => ({ artifact })),
+        })},
           ${sql.json({
             nested: [
               UNSAFE_URL,
@@ -281,6 +296,7 @@ integration("extension URL credential cleanup migration", () => {
           { id: "space-password", artifact: null, sha256: "f".repeat(64) },
         ],
         services: [{ service: "unsafe", repo: null }],
+        legacyLocators: LEGACY_PROSE_URLS.map(() => ({ artifact: null })),
         notes: [
           null,
           null,

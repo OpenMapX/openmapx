@@ -16,54 +16,41 @@ AS $$
            ~* '^[[:cntrl:][:space:]]*(https?|git|ssh):[^#]*#.+$'
 $$;
 --> statement-breakpoint
-CREATE OR REPLACE FUNCTION public.openmapx_unsafe_extension_text_0043(value text)
-RETURNS boolean
+CREATE OR REPLACE FUNCTION public.openmapx_extension_locators_0043(value jsonb)
+RETURNS text[]
 LANGUAGE sql
 IMMUTABLE
 AS $$
-  SELECT regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* 'https?:[/\\]*[^/?#\\[:space:]]*@'
-      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(git|ssh):[/\\]*[^/?#[:space:]]*@'
-      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* 'https?:[/\\]*[[:alnum:]%+_~-]+[[:space:]]+[^/?#@[:space:]][^/?#@]*@[^/?#[:space:]]+'
-      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(git|ssh):[/\\]*[[:alnum:]%+_~-]+[[:space:]]+[^/?#@[:space:]][^/?#@]*@[^/?#[:space:]]+'
-      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* 'https?:[/\\]*[-[:alnum:]!$&''()*+,;=%._~ ]+:[[:space:]]+[^/?#@[:space:]][^/?#@]*@'
-      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(git|ssh):[/\\]*[-[:alnum:]!$&''()*+,;=%._~ ]+:[[:space:]]+[^/?#@[:space:]][^/?#@]*@'
-      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* 'https?:[/\\]*[-[:alnum:]!$&''()*+,;=%._~ ]+:[^0-9/?#\\[:space:]][^/?#\\]*@'
-      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* 'https?:[/\\]*[-[:alnum:]!$&''()*+,;=%._~ ]+:[0-9]+[^0-9/?#\\[:space:]][^/?#\\]*@'
-      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(git|ssh):[/\\]*[-[:alnum:]!$&''()*+,;=%._~ ]+:[^0-9/?#[:space:]][^/?#]*@'
-      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(git|ssh):[/\\]*[-[:alnum:]!$&''()*+,;=%._~ ]+:[0-9]+[^0-9/?#[:space:]][^/?#]*@'
-      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(https?|git|ssh):[^[:space:]?#]*[?][^#[:space:]]+'
-      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(https?|git|ssh):[^[:space:]#]*#[^[:space:]]+'
-      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(https?|git|ssh):[/\\]*[^/?#[:space:]]+[/\\]([^/?#[:space:]]+[/\\])*[^./?#[:space:]]+[[:space:]][^?#]*[?][^#[:space:]]+'
-      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(https?|git|ssh):[/\\]*[^/?#[:space:]]+[/\\]([^/?#[:space:]]+[/\\])*[^./?#[:space:]]+[[:space:]][^#]*#[^[:space:]]+'
-      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(https?|git|ssh):[/\\]*[^/?#[:space:]]+[/\\]([^/?#[:space:]]+[/\\])*[^./?#[:space:]]+[[:space:]][^?#]*[?][[:space:]]+[^[:space:]]+'
-      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(https?|git|ssh):[/\\]*[^/?#[:space:]]+[/\\]([^/?#[:space:]]+[/\\])*[^./?#[:space:]]+[[:space:]][^#]*#[[:space:]]+[^[:space:]]+'
-      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(https?|git|ssh):[^?#]*[.][A-Za-z0-9_-]+[?][^#[:space:]]+'
-      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(https?|git|ssh):[^#]*[.][A-Za-z0-9_-]+#[^[:space:]]+'
-      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(https?|git|ssh):[^?#]*[./][^[:space:]?#]*[?][[:space:]]+[^[:space:]]+'
-      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(https?|git|ssh):[^#]*[./][^[:space:]#]*#[[:space:]]+[^[:space:]]+'
+  SELECT CASE jsonb_typeof(value)
+    WHEN 'object' THEN ARRAY(
+      SELECT DISTINCT locator
+        FROM jsonb_each(value) AS entry(key, item)
+        CROSS JOIN LATERAL unnest(
+          CASE
+            WHEN jsonb_typeof(item) = 'string'
+              AND key IN ('artifact', 'repo', 'repository', 'sourceUrl', 'source_url', 'url', 'manifest')
+              AND public.openmapx_unsafe_extension_locator_0043(item #>> '{}')
+            THEN ARRAY[item #>> '{}']
+            ELSE public.openmapx_extension_locators_0043(item)
+          END
+        ) AS found(locator)
+       ORDER BY locator
+    )::text[]
+    WHEN 'array' THEN ARRAY(
+      SELECT DISTINCT locator
+        FROM jsonb_array_elements(value) AS entry(item)
+        CROSS JOIN LATERAL unnest(public.openmapx_extension_locators_0043(item))
+          AS found(locator)
+       ORDER BY locator
+    )::text[]
+    ELSE ARRAY[]::text[]
+  END
 $$;
 --> statement-breakpoint
-CREATE OR REPLACE FUNCTION public.openmapx_scrub_extension_manifest_json_0043(value jsonb)
+CREATE OR REPLACE FUNCTION public.openmapx_scrub_extension_manifest_json_0043(
+  value jsonb,
+  locators text[]
+)
 RETURNS jsonb
 LANGUAGE sql
 IMMUTABLE
@@ -79,19 +66,22 @@ AS $$
               AND key IN ('artifact', 'repo', 'repository', 'sourceUrl', 'source_url', 'url', 'manifest')
               AND public.openmapx_unsafe_extension_locator_0043(item #>> '{}')
             THEN 'null'::jsonb
-            ELSE public.openmapx_scrub_extension_manifest_json_0043(item)
+            ELSE public.openmapx_scrub_extension_manifest_json_0043(item, locators)
           END
         )
          FROM jsonb_each(value) AS entry(key, item)),
       '{}'::jsonb
     )
     WHEN 'array' THEN COALESCE(
-      (SELECT jsonb_agg(public.openmapx_scrub_extension_manifest_json_0043(item) ORDER BY ordinal)
+      (SELECT jsonb_agg(public.openmapx_scrub_extension_manifest_json_0043(item, locators) ORDER BY ordinal)
          FROM jsonb_array_elements(value) WITH ORDINALITY AS entry(item, ordinal)),
       '[]'::jsonb
     )
     WHEN 'string' THEN CASE
-      WHEN public.openmapx_unsafe_extension_text_0043(value #>> '{}')
+      WHEN EXISTS (
+        SELECT 1 FROM unnest(locators) AS unsafe(locator)
+         WHERE strpos(value #>> '{}', locator) > 0
+      )
       THEN 'null'::jsonb
       ELSE value
     END
@@ -99,7 +89,10 @@ AS $$
   END
 $$;
 --> statement-breakpoint
-CREATE OR REPLACE FUNCTION public.openmapx_scrub_extension_json_0043(value jsonb)
+CREATE OR REPLACE FUNCTION public.openmapx_scrub_extension_json_0043(
+  value jsonb,
+  locators text[]
+)
 RETURNS jsonb
 LANGUAGE sql
 IMMUTABLE
@@ -110,24 +103,27 @@ AS $$
           key,
           CASE
             WHEN key = 'manifest' AND jsonb_typeof(item) IN ('object', 'array')
-            THEN public.openmapx_scrub_extension_manifest_json_0043(item)
+            THEN public.openmapx_scrub_extension_manifest_json_0043(item, locators)
             WHEN jsonb_typeof(item) = 'string'
               AND key IN ('artifact', 'repo', 'repository', 'sourceUrl', 'source_url', 'url', 'manifest')
               AND public.openmapx_unsafe_extension_locator_0043(item #>> '{}')
             THEN 'null'::jsonb
-            ELSE public.openmapx_scrub_extension_json_0043(item)
+            ELSE public.openmapx_scrub_extension_json_0043(item, locators)
           END
         )
          FROM jsonb_each(value) AS entry(key, item)),
       '{}'::jsonb
     )
     WHEN 'array' THEN COALESCE(
-      (SELECT jsonb_agg(public.openmapx_scrub_extension_json_0043(item) ORDER BY ordinal)
+      (SELECT jsonb_agg(public.openmapx_scrub_extension_json_0043(item, locators) ORDER BY ordinal)
          FROM jsonb_array_elements(value) WITH ORDINALITY AS entry(item, ordinal)),
       '[]'::jsonb
     )
     WHEN 'string' THEN CASE
-      WHEN public.openmapx_unsafe_extension_text_0043(value #>> '{}')
+      WHEN EXISTS (
+        SELECT 1 FROM unnest(locators) AS unsafe(locator)
+         WHERE strpos(value #>> '{}', locator) > 0
+      )
       THEN 'null'::jsonb
       ELSE value
     END
@@ -135,14 +131,34 @@ AS $$
   END
 $$;
 --> statement-breakpoint
+WITH candidates AS (
+  SELECT id,
+         array_cat(
+           public.openmapx_extension_locators_0043(manifest),
+           CASE
+             WHEN public.openmapx_unsafe_extension_locator_0043(source_url)
+             THEN ARRAY[source_url]
+             ELSE ARRAY[]::text[]
+           END
+         ) AS locators
+    FROM installed_extension
+)
+UPDATE installed_extension AS extension
+SET manifest = public.openmapx_scrub_extension_manifest_json_0043(
+  extension.manifest,
+  candidates.locators
+)
+FROM candidates
+WHERE extension.id = candidates.id
+  AND extension.manifest IS NOT NULL
+  AND extension.manifest IS DISTINCT FROM public.openmapx_scrub_extension_manifest_json_0043(
+    extension.manifest,
+    candidates.locators
+  );
+--> statement-breakpoint
 UPDATE installed_extension
 SET source_url = NULL
 WHERE public.openmapx_unsafe_extension_locator_0043(source_url);
---> statement-breakpoint
-UPDATE installed_extension
-SET manifest = public.openmapx_scrub_extension_manifest_json_0043(manifest)
-WHERE manifest IS NOT NULL
-  AND manifest IS DISTINCT FROM public.openmapx_scrub_extension_manifest_json_0043(manifest);
 --> statement-breakpoint
 UPDATE installed_integration
 SET repository = 'redacted-extension-locator:' || id
@@ -153,32 +169,65 @@ UPDATE service_repository
 SET url = 'redacted-extension-locator:' || hash
 WHERE public.openmapx_unsafe_extension_locator_0043(url);
 --> statement-breakpoint
-UPDATE admin_job
-SET payload = public.openmapx_scrub_extension_json_0043(payload),
-    result = public.openmapx_scrub_extension_json_0043(result),
-    error = CASE
-      WHEN public.openmapx_unsafe_extension_text_0043(error)
-      THEN 'Extension install output removed because it contained a legacy unsafe URL'
-      ELSE error
-    END
-WHERE type = 'extension.install'
-  AND (
-    payload IS DISTINCT FROM public.openmapx_scrub_extension_json_0043(payload)
-    OR result IS DISTINCT FROM public.openmapx_scrub_extension_json_0043(result)
-    OR public.openmapx_unsafe_extension_text_0043(error)
-  );
---> statement-breakpoint
+WITH candidates AS (
+  SELECT id,
+         array_cat(
+           public.openmapx_extension_locators_0043(payload),
+           public.openmapx_extension_locators_0043(result)
+         ) AS locators
+    FROM admin_job
+   WHERE type = 'extension.install'
+)
 UPDATE admin_job_log AS log
 SET line = 'Extension install output removed because it contained a legacy unsafe URL'
-FROM admin_job AS job
-WHERE log.job_id = job.id
-  AND job.type = 'extension.install'
-  AND public.openmapx_unsafe_extension_text_0043(log.line);
+FROM candidates
+WHERE log.job_id = candidates.id
+  AND EXISTS (
+    SELECT 1 FROM unnest(candidates.locators) AS unsafe(locator)
+     WHERE strpos(log.line, locator) > 0
+  );
 --> statement-breakpoint
-DROP FUNCTION public.openmapx_scrub_extension_json_0043(jsonb);
+WITH candidates AS (
+  SELECT id,
+         array_cat(
+           public.openmapx_extension_locators_0043(payload),
+           public.openmapx_extension_locators_0043(result)
+         ) AS locators
+    FROM admin_job
+   WHERE type = 'extension.install'
+)
+UPDATE admin_job AS job
+SET payload = public.openmapx_scrub_extension_json_0043(job.payload, candidates.locators),
+    result = public.openmapx_scrub_extension_json_0043(job.result, candidates.locators),
+    error = CASE
+      WHEN EXISTS (
+        SELECT 1 FROM unnest(candidates.locators) AS unsafe(locator)
+         WHERE strpos(job.error, locator) > 0
+      )
+      THEN 'Extension install output removed because it contained a legacy unsafe URL'
+      ELSE job.error
+    END
+FROM candidates
+WHERE job.id = candidates.id
+  AND (
+    job.payload IS DISTINCT FROM public.openmapx_scrub_extension_json_0043(
+      job.payload,
+      candidates.locators
+    )
+    OR job.result IS DISTINCT FROM public.openmapx_scrub_extension_json_0043(
+      job.result,
+      candidates.locators
+    )
+    OR EXISTS (
+      SELECT 1 FROM unnest(candidates.locators) AS unsafe(locator)
+       WHERE strpos(job.error, locator) > 0
+    )
+  );
 --> statement-breakpoint
-DROP FUNCTION public.openmapx_scrub_extension_manifest_json_0043(jsonb);
+DROP FUNCTION public.openmapx_scrub_extension_json_0043(jsonb, text[]);
 --> statement-breakpoint
-DROP FUNCTION public.openmapx_unsafe_extension_text_0043(text);
+DROP FUNCTION public.openmapx_scrub_extension_manifest_json_0043(jsonb, text[]);
+--> statement-breakpoint
+DROP FUNCTION public.openmapx_extension_locators_0043(jsonb);
 --> statement-breakpoint
 DROP FUNCTION public.openmapx_unsafe_extension_locator_0043(text);
