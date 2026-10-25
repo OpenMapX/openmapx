@@ -482,29 +482,12 @@ export function registerCheckCommand(program: Command): void {
         process.exit(result.exitCode);
       }
 
-      const rows: PsLine[] = [];
-      const text = result.stdout.trim();
-      if (text.length > 0) {
-        try {
-          const parsed = JSON.parse(text) as unknown;
-          if (Array.isArray(parsed)) {
-            for (const row of parsed) {
-              if (row && typeof row === "object") rows.push(row as PsLine);
-            }
-          } else if (parsed && typeof parsed === "object") {
-            rows.push(parsed as PsLine);
-          }
-        } catch {
-          for (const line of result.stdout.split("\n")) {
-            const trimmed = line.trim();
-            if (!trimmed) continue;
-            try {
-              rows.push(JSON.parse(trimmed) as PsLine);
-            } catch {
-              // Ignore malformed lines to keep check output resilient.
-            }
-          }
-        }
+      let rows: PsLine[];
+      try {
+        rows = coreServices.parseComposePsJson(result.stdout) as PsLine[];
+      } catch (error) {
+        log.err(error instanceof Error ? error.message : String(error));
+        process.exit(1);
       }
 
       // The deployment's user against the checkout, this process, the

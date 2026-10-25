@@ -303,23 +303,21 @@ export function runContainedLogProcess(
 }
 
 function parseStackStatus(stdout: string): OpsResultFor<"stack.status"> {
-  if (!stdout.trim()) return { services: [] };
+  let entries: services.ComposePsEntry[];
   try {
-    const parsed = JSON.parse(stdout) as unknown;
-    const values = Array.isArray(parsed) ? parsed : [parsed];
-    return {
-      services: values.slice(0, 256).map((value) => {
-        const item = value as Record<string, unknown>;
-        const rawState = String(item.State ?? "unknown").toLowerCase();
-        const state = ["running", "stopped", "created", "restarting", "paused"].includes(rawState)
-          ? (rawState as "running" | "stopped" | "created" | "restarting" | "paused")
-          : "unknown";
-        return { serviceId: String(item.Service ?? item.Name ?? "unknown"), state };
-      }),
-    };
+    entries = services.parseComposePsJson(stdout);
   } catch {
     throw new Error("Contained process failed");
   }
+  return {
+    services: entries.slice(0, 256).map((item) => {
+      const rawState = String(item.State ?? "unknown").toLowerCase();
+      const state = ["running", "stopped", "created", "restarting", "paused"].includes(rawState)
+        ? (rawState as "running" | "stopped" | "created" | "restarting" | "paused")
+        : "unknown";
+      return { serviceId: String(item.Service ?? item.Name ?? "unknown"), state };
+    }),
+  };
 }
 
 export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {

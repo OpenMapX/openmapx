@@ -267,7 +267,7 @@ then fires in-network HTTP deep probes (from an ephemeral curl container on the
 Compose network) that catch wedged-but-running states a plain healthcheck misses.
 Pass `--no-probe` to skip the deep probes and report engine-level health only.
 The command exits non-zero if any service is unhealthy, restarting, or fails its
-probe.
+probe, and when `docker compose ps` prints something other than Compose's JSON.
 
 ## `transitous`
 
