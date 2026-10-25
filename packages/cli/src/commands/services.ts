@@ -211,7 +211,7 @@ export function registerServicesCommands(program: Command): void {
     .description(`Persistently add services to ${SERVICE_SELECTION_FILE}`)
     .action(async (ids: string[]) => {
       try {
-        const state = enableSelectedServices(ids);
+        const state = await enableSelectedServices(ids);
         const applied = await getServiceSelectionSummary();
         log.ok(`Selected roots → ${formatServiceIdList(state.selected) || "(none)"}`);
         log.dim(`Effective services → ${formatServiceIdList(applied.selection.enabledIdsOrdered)}`);
@@ -230,7 +230,7 @@ export function registerServicesCommands(program: Command): void {
     .description(`Persistently remove services from ${SERVICE_SELECTION_FILE}`)
     .action(async (ids: string[]) => {
       try {
-        const state = disableSelectedServices(ids);
+        const state = await disableSelectedServices(ids);
         const applied = await getServiceSelectionSummary();
         log.ok(`Selected roots → ${formatServiceIdList(state.selected) || "(none)"}`);
         log.dim(`Effective services → ${formatServiceIdList(applied.selection.enabledIdsOrdered)}`);

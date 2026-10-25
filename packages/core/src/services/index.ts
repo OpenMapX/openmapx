@@ -74,6 +74,7 @@ export {
   withConfigurationGenerationWriter,
 } from "./configuration-generation";
 export {
+  acquireConfigurationOwnership,
   legacyConfigurationWriterActive,
   retireLegacyConfigurationWriter,
 } from "./configuration-ownership";
