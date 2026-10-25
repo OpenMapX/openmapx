@@ -42,7 +42,7 @@ describe("the GBFS registry pin", () => {
       "Country Code,Name,Location,System ID,URL,Auto-Discovery URL,Supported Versions,Authentication Info URL\nDE,One,Berlin,one,https://one.test,https://one.test/gbfs.json,2.3,\nAT,Two,Vienna,two,https://two.test,https://two.test/gbfs.json,3.0,\n";
     const sha = "e".repeat(40);
     const fetchStub = async (input: string | URL | Request): Promise<Response> =>
-      String(input).includes("api.github.com")
+      new URL(String(input)).hostname === "api.github.com"
         ? new Response(JSON.stringify({ sha }))
         : new Response(csv);
     const result = await resolveGbfsCandidate(
