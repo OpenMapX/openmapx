@@ -10,6 +10,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -301,6 +302,56 @@ describe("copying the agent's stores out of the checkout", () => {
     rmSync(join(f.legacy.customIntegrations, "hand-placed"), { recursive: true });
     rmSync(join(f.legacy.community, "0123456789abcdef"), { recursive: true });
     expect(services.agentStoresLeftBehind(f.infraDir)).toHaveLength(2);
+  });
+
+  it("carries only what a repository's record trusts, and the record it validated", async () => {
+    const f = earlierRelease();
+    const repositories = f.repositories(f.legacy.community);
+    const repository = await installRepository(repositories);
+    await repositories.settle({
+      kind: "serviceRepository.settle",
+      repository: REPOSITORY,
+      transactionId: repository.transactionId,
+      outcome: "commit",
+    });
+    // Planted beside the recorded manifest in a checkout others could write.
+    const checkout = join(f.legacy.community, REPOSITORY);
+    writeFileSync(join(checkout, "services", "live", "run.sh"), "#!/bin/sh\n");
+    symlinkSync("/etc/passwd", join(checkout, "passwd"));
+    const validated = services.readCommunityRepositoryRecord(f.legacy.community, REPOSITORY, uid);
+
+    expect(services.prepareAgentStores(f.infraDir, { uid })?.repositories.copied).toEqual([
+      REPOSITORY,
+    ]);
+
+    const store = services.agentStatePaths(f.infraDir).community;
+    const files = readdirSync(join(store, REPOSITORY), { recursive: true, encoding: "utf8" });
+    expect(files.sort()).toEqual(["services", "services/live", "services/live/service.json"]);
+    expect(services.readCommunityRepositoryRecord(store, REPOSITORY, uid)).toEqual(validated);
+  });
+
+  it("refuses a repository record that is a link, without reading through it", async () => {
+    const f = earlierRelease();
+    const repositories = f.repositories(f.legacy.community);
+    const repository = await installRepository(repositories);
+    await repositories.settle({
+      kind: "serviceRepository.settle",
+      repository: REPOSITORY,
+      transactionId: repository.transactionId,
+      outcome: "commit",
+    });
+    const recordPath = join(f.legacy.community, services.communityRecordFileName(REPOSITORY));
+    const elsewhere = join(f.root, "elsewhere.json");
+    copyFileSync(recordPath, elsewhere);
+    rmSync(recordPath);
+    symlinkSync(elsewhere, recordPath);
+
+    expect(services.prepareAgentStores(f.infraDir, { uid })?.repositories).toEqual({
+      copied: [],
+      refused: [{ id: REPOSITORY, reason: "its record is not one the agent wrote" }],
+      unrecorded: [],
+    });
+    expect(readdirSync(services.agentStatePaths(f.infraDir).community)).toEqual([]);
   });
 
   it("carries an unfinished change, with the copy it replaced, so the agent can still settle it", async () => {

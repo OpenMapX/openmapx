@@ -551,8 +551,10 @@ a panel self-update, copies both stores once. The agent first undoes any change
 an earlier agent left unfinished, then copies each entry only when it matches
 the agent's records: an integration's files by the SHA-256 the agent recorded
 for each, a repository's service manifests by theirs, together with the copy an
-unfinished change keeps for rolling back. Anything that matches none of its
-recorded states, and anything without a record, is not copied. The render's
+unfinished change keeps for rolling back. Only those recorded files are copied,
+and a repository's record is written from what was checked. Anything that
+matches none of its recorded states, and anything without a record, is not
+copied. The render's
 output and the agent's log name each one and why, and so do
 `pnpm openmapx check` and **Run diagnostics** for as long as it is still in the
 checkout: install it again through the admin panel, then delete it.

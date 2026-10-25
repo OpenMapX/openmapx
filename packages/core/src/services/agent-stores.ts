@@ -3,7 +3,6 @@ import {
   chmodSync,
   closeSync,
   constants,
-  cpSync,
   fstatSync,
   lstatSync,
   mkdirSync,
@@ -22,6 +21,7 @@ import {
   type CommunityRepositoryRecord,
   communityRecordFileName,
   communityRecordRepository,
+  type RecordedManifest,
   readCommunityRepositoryRecord,
   verifyRecordedRepository,
 } from "./community-repository-records";
@@ -245,15 +245,23 @@ function copyRepository(
 ): string | null {
   const { repository } = record;
   const copied: string[] = [];
-  const copyTree = (name: string): boolean => {
-    const source = join(legacy, name);
-    if (kind(source) !== "directory") return false;
-    cpSync(source, join(staging, name), {
-      recursive: true,
-      verbatimSymlinks: true,
-      errorOnExist: true,
-      force: false,
-    });
+  // Only what the record trusts is carried over: the recorded service
+  // manifests of one of the states it allows, each read without following a
+  // link and matching its recorded digest. Nothing else in a checkout is
+  // read, by the agent or by anyone it serves.
+  const copyManifests = (
+    name: string,
+    candidates: ReadonlyArray<readonly RecordedManifest[] | null | undefined>,
+  ): boolean => {
+    const files = candidates
+      .filter((manifests): manifests is readonly RecordedManifest[] => !!manifests)
+      .map((manifests) =>
+        manifests.map(({ path, sha256 }) => ({
+          path: path === "" ? "service.json" : `${path}/service.json`,
+          sha256,
+        })),
+      );
+    if (!copyRecordedFiles(join(legacy, name), join(staging, name), files)) return false;
     copied.push(name);
     return true;
   };
@@ -261,49 +269,39 @@ function copyRepository(
     for (const name of copied) rmSync(join(staging, name), { recursive: true, force: true });
     return reason;
   };
-  const source = join(legacy, repository);
-  const present = kind(source);
+  const present = kind(join(legacy, repository));
   if (present !== "missing" && present !== "directory") return "its checkout is not a directory";
-  if (present === "directory") copyTree(repository);
+  const pending = record.pending;
+  if (present === "missing") {
+    // Only a change in progress may leave a repository without its checkout.
+    if (!pending && record.manifests) return "its checkout is missing";
+  } else if (!copyManifests(repository, [record.manifests, pending?.next.manifests])) {
+    return "its checkout no longer matches the service manifests the agent recorded";
+  }
   try {
     // The copy, not the original: what was checked is what is carried over.
     verifyRecordedRepository(join(staging, repository), record);
   } catch {
-    return undo(
-      present === "missing"
-        ? "its checkout is missing"
-        : "its checkout no longer matches the service manifests the agent recorded",
-    );
+    return undo("its checkout no longer matches the service manifests the agent recorded");
   }
-  const pending = record.pending;
   if (pending) {
     const backupName = `.backup-${repository}-${pending.transactionId}`;
     if (kind(join(legacy, backupName)) !== "missing") {
       const previous = pending.previous?.manifests;
-      if (!previous || !copyTree(backupName)) {
-        return undo(
-          "the checkout it replaced, kept for an unfinished change, is not one it recorded",
-        );
-      }
-      try {
-        verifyRecordedRepository(join(staging, backupName), {
-          ...record,
-          manifests: previous,
-          pending: null,
-        });
-      } catch {
+      if (!previous || !copyManifests(backupName, [previous])) {
         return undo(
           "the checkout it replaced, kept for an unfinished change, is not one it recorded",
         );
       }
     }
   }
-  // The record itself, byte for byte, as the agent wrote it.
-  const recordName = communityRecordFileName(repository);
-  writeFileSync(join(staging, recordName), readFileSync(join(legacy, recordName)), {
-    mode: 0o600,
-    flag: "wx",
-  });
+  // The record the agent validated, as the agent writes its records; the
+  // file is not read a second time.
+  writeFileSync(
+    join(staging, communityRecordFileName(repository)),
+    `${JSON.stringify(record, null, 2)}\n`,
+    { mode: 0o600, flag: "wx" },
+  );
   return null;
 }
 
