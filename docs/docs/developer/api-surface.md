@@ -693,3 +693,21 @@ expiry, token hashing, rate limits and route normalization stay in the producer.
 Regenerate OpenAPI and the SDK together. Tests cover serialized Fastify replies,
 anonymous SSR isolation, malformed successes, large attribution-bearing lists,
 and real migrated PostgreSQL ownership and share-cap concurrency.
+
+## Personal timeline response validation
+
+The five timeline calls keep the existing centralized client in
+`packages/core/src/api/personalTimeline.ts`. Successful connection metadata,
+disconnect receipts and normalized day replies are parsed with the shared Zod
+schemas in `packages/core/src/schemas/personalTimeline.ts`; their response types
+are inferred from those schemas. These application-wire schemas are separate
+from the Dawarich upstream validators. The OpenAPI entries remain inventory-only;
+this is not an adopted generated SDK family or Fastify serialization change.
+
+Parsing projects declared fields, including identifier-only map properties,
+before data enters timeline query/UI state. Invalid successful replies raise a
+payload-free `PersonalTimelineApiError` with `TIMELINE_RESPONSE_INVALID`. No raw
+response, schema issues or private history are attached to errors or persisted.
+Existing HTTP failure sanitization, owner isolation and partial-track warnings
+are preserved. Valid track positions can include elevation dimensions; no
+8 MiB generated-client limit is imposed on these larger normalized day replies.
