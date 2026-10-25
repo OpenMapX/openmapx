@@ -8,11 +8,12 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   writeSync,
 } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import z from "zod/v4";
 import { atomicWrite, fsyncDirectory } from "../release-files";
 import { agentStatePaths } from "./agent-state";
@@ -50,8 +51,45 @@ export function writableCopyPath(infraDir: string, copy: string): string {
   return resolve(infraDir, copy.slice("@infra:".length));
 }
 
-function replaceWith(path: string, bytes: Buffer): void {
-  const temporary = join(dirname(path), `.${randomBytes(6).toString("hex")}.seed.tmp`);
+/**
+ * Creates the copy's directories below `infra/docker/data`, each a real
+ * directory, never through a link: containers write the data directory, and
+ * one could plant a link to steer render's write elsewhere. (The data
+ * directory itself may be the operator's link to another disk; no container
+ * mounts its parent.)
+ */
+function ensureCopyDirectory(infraDir: string, path: string): void {
+  const data = join(infraDir, "data");
+  const below = relative(data, dirname(path));
+  const parts = below.split(sep);
+  if (!below || parts[0] === ".." || isAbsolute(below)) {
+    throw new Error("it is not below infra/docker/data");
+  }
+  mkdirSync(data, { recursive: true });
+  let directory = data;
+  for (const part of parts) {
+    directory = join(directory, part);
+    let stats: ReturnType<typeof lstatSync> | undefined;
+    try {
+      stats = lstatSync(directory);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      mkdirSync(directory, { mode: 0o755 });
+      stats = lstatSync(directory);
+    }
+    if (!stats.isDirectory())
+      throw new Error(`${relative(infraDir, directory)} is not a directory`);
+  }
+}
+
+/** Whether `directory` still resolves below `data` through no link. */
+function resolvesBelow(data: string, directory: string): boolean {
+  return realpathSync(directory) === join(realpathSync(data), relative(data, directory));
+}
+
+function replaceWith(data: string, path: string, bytes: Buffer): void {
+  const directory = dirname(path);
+  const temporary = join(directory, `.${randomBytes(6).toString("hex")}.seed.tmp`);
   const fd = openSync(
     temporary,
     constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW,
@@ -69,12 +107,14 @@ function replaceWith(path: string, bytes: Buffer): void {
   }
   closeSync(fd);
   try {
+    // Checked again right before the rename, which replaces the entry itself.
+    if (!resolvesBelow(data, directory)) throw new Error("a directory on its path is a link");
     renameSync(temporary, path);
   } catch (error) {
     rmSync(temporary, { force: true });
     throw error;
   }
-  fsyncDirectory(dirname(path));
+  fsyncDirectory(directory);
 }
 
 /** Seeds each copy whose seed changed; returns what render reports about those it could not. */
@@ -88,7 +128,7 @@ export function seedWritableCopies(infraDir: string, seeds: readonly WritableCop
     const key = `${seed.serviceId}/${seed.path}`;
     const shown = relative(infraDir, path);
     try {
-      mkdirSync(dirname(path), { recursive: true, mode: 0o755 });
+      ensureCopyDirectory(infraDir, path);
       let current: ReturnType<typeof lstatSync> | undefined;
       try {
         current = lstatSync(path);
@@ -102,7 +142,7 @@ export function seedWritableCopies(infraDir: string, seeds: readonly WritableCop
         continue;
       }
       if (current && recorded[key] === seed.sha256) continue;
-      replaceWith(path, seed.bytes);
+      replaceWith(join(infraDir, "data"), path, seed.bytes);
       next[key] = seed.sha256;
     } catch (error) {
       problems.push(

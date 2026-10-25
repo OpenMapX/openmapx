@@ -9,6 +9,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -288,6 +289,18 @@ describe("the release's service files in the store", () => {
         "the writable copy of services/valhalla/config/valhalla.json, is not a regular file",
       ),
     ]);
+
+    // A container that writes the data directory plants a link for its
+    // directory: render does not write through it.
+    const elsewhere = join(infraDir, "elsewhere");
+    mkdirSync(elsewhere);
+    rmSync(join(infraDir, "data", "valhalla"), { recursive: true });
+    symlinkSync(elsewhere, join(infraDir, "data", "valhalla"));
+    const linked = await commit({ "valhalla/config/valhalla.json": '{"planted": false}\n' });
+    expect(linked.stackFileProblems).toEqual([
+      expect.stringContaining("data/valhalla is not a directory"),
+    ]);
+    expect(readdirSync(elsewhere)).toEqual([]);
   });
 
   it("gives builds the applied generation's copy, and tells them to render first", async () => {
