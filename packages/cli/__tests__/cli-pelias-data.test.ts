@@ -1,6 +1,14 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   type BuildPeliasDataOptions,
@@ -75,8 +83,7 @@ describe("buildPeliasData", () => {
     const buildDir = `${peliasDir}.next`;
     mkdirSync(join(peliasDir, "placeholder"), { recursive: true });
     writeFileSync(join(peliasDir, "placeholder", "stale"), "OLD");
-    const composeFile = join(tmp, "infra", "docker", PELIAS_BUILD_COMPOSE_FILENAME);
-
+    let composeFile = "";
     let compose: {
       services: Record<string, { image: string; volumes?: string[]; user?: string }>;
       volumes?: unknown;
@@ -88,12 +95,24 @@ describe("buildPeliasData", () => {
       ...images,
       runner: fakePeliasRunner(buildDir, calls, {
         onUp: () => {
+          const up = calls.at(-1)?.args ?? [];
+          composeFile = up[up.indexOf("-f") + 1] as string;
           compose = JSON.parse(readFileSync(composeFile, "utf-8"));
         },
       }),
       elasticsearchReadyDelayMs: 0,
     });
 
+    // The build's project is in a private temporary directory, not in the
+    // checkout, and names the checkout's files by absolute path.
+    expect(dirname(composeFile)).toMatch(/[/\\]openmapx-pelias-build-[^/\\]+$/);
+    expect(basename(composeFile)).toBe(PELIAS_BUILD_COMPOSE_FILENAME);
+    expect(composeFile.startsWith(tmp)).toBe(false);
+    expect(existsSync(dirname(composeFile))).toBe(false);
+    expect(readdirSync(join(tmp, "infra", "docker"))).toEqual(["data"]);
+    expect(compose.services["pelias-schema"]?.volumes).toEqual([
+      `${join(tmp, "services", "pelias", "config", "pelias.json")}:/code/pelias.json:ro`,
+    ]);
     expect(compose.volumes).toBeUndefined();
     expect(compose.services.elasticsearch?.volumes).toEqual([
       `${join(buildDir, PELIAS_ELASTICSEARCH_DIR)}:/usr/share/elasticsearch/data`,
@@ -175,6 +194,8 @@ describe("buildPeliasData", () => {
     );
     expect(existsSync(`${peliasDir}.next`)).toBe(false);
     expect(calls.at(-1)?.args.slice(-2)).toEqual(["down", "--remove-orphans"]);
+    const down = calls.at(-1)?.args ?? [];
+    expect(existsSync(dirname(down[down.indexOf("-f") + 1] as string))).toBe(false);
   });
 
   it("requires a region when multiple OSM PBFs exist", async () => {

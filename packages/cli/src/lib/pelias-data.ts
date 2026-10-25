@@ -1,4 +1,13 @@
-import { copyFileSync, existsSync, linkSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  linkSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { atomicWrite } from "@openmapx/core/release-files";
 import { execa } from "execa";
@@ -12,7 +21,7 @@ export const PELIAS_ELASTICSEARCH_DIR = "elasticsearch";
 export const PELIAS_OPENSTREETMAP_FILENAME = "data.osm.pbf";
 export const PELIAS_PLACEHOLDER_FILENAME = "store.sqlite3";
 export const PELIAS_INDEX_NAME = "pelias";
-export const PELIAS_BUILD_COMPOSE_FILENAME = ".openmapx-pelias-build.compose.yml";
+export const PELIAS_BUILD_COMPOSE_FILENAME = "compose.yml";
 export const PELIAS_BUILD_PROJECT_NAME = "openmapx-pelias-build";
 
 export type CommandRunner = (
@@ -74,6 +83,7 @@ function dockerComposeArgs(composeFile: string, args: string[]): string[] {
 function writeBuildComposeFile(
   composeFile: string,
   buildDir: string,
+  configPath: string,
   images: {
     elasticsearch: string;
     schema: string;
@@ -82,7 +92,7 @@ function writeBuildComposeFile(
     placeholder: string;
   },
 ): void {
-  const configMount = "../../services/pelias/config/pelias.json:/code/pelias.json:ro";
+  const configMount = `${configPath}:/code/pelias.json:ro`;
   const dataMount = `${buildDir}:/data`;
   const hasIds = typeof process.getuid === "function" && typeof process.getgid === "function";
   const dockerUser = hasIds ? `${process.getuid?.()}:${process.getgid?.()}` : undefined;
@@ -146,9 +156,8 @@ function writeBuildComposeFile(
     },
   };
 
-  // A file of that name could be anything, a symbolic link included, while
-  // infra/docker is writable by more than this user: replace it through an
-  // exclusive temporary instead of writing through it.
+  // Its directory is this run's own (see buildPeliasData); the exclusive
+  // temporary still refuses anything already there.
   atomicWrite(composeFile, `${JSON.stringify(compose, null, 2)}\n`, 0o600);
 }
 
@@ -212,28 +221,37 @@ export async function buildPeliasData(
   const runner = opts.runner ?? defaultRunner;
   const readyAttempts = opts.elasticsearchReadyAttempts ?? 60;
   const readyDelayMs = opts.elasticsearchReadyDelayMs ?? 5000;
-  const composeFile = join(paths.infraDir, PELIAS_BUILD_COMPOSE_FILENAME);
+  // The build's Compose project lives in a private directory of its own, not
+  // in infra/docker; every path in it is absolute.
+  const composeDir = mkdtempSync(join(tmpdir(), "openmapx-pelias-build-"));
+  const composeFile = join(composeDir, PELIAS_BUILD_COMPOSE_FILENAME);
+  const configPath = join(paths.root, "services", "pelias", "config", "pelias.json");
 
   // The whole tree, including the Elasticsearch index, is built into a staged
   // dir so a failed import never leaves the runtime stack with a half index.
-  await withStagedBuildDir(peliasDir, (buildDir) =>
-    buildPeliasTree({
-      buildDir,
-      composeFile,
-      cwd: paths.infraDir,
-      sourcePbf,
-      runner,
-      readyAttempts,
-      readyDelayMs,
-      images: {
-        elasticsearch: opts.elasticsearchImage,
-        schema: opts.schemaImage,
-        whosonfirst: opts.whosonfirstImage,
-        openstreetmap: opts.openstreetmapImage,
-        placeholder: opts.placeholderImage,
-      },
-    }),
-  );
+  try {
+    await withStagedBuildDir(peliasDir, (buildDir) =>
+      buildPeliasTree({
+        buildDir,
+        composeFile,
+        configPath,
+        cwd: paths.infraDir,
+        sourcePbf,
+        runner,
+        readyAttempts,
+        readyDelayMs,
+        images: {
+          elasticsearch: opts.elasticsearchImage,
+          schema: opts.schemaImage,
+          whosonfirst: opts.whosonfirstImage,
+          openstreetmap: opts.openstreetmapImage,
+          placeholder: opts.placeholderImage,
+        },
+      }),
+    );
+  } finally {
+    rmSync(composeDir, { recursive: true, force: true });
+  }
 
   return {
     sourcePbf,
@@ -252,12 +270,13 @@ export async function buildPeliasData(
 async function buildPeliasTree(opts: {
   buildDir: string;
   composeFile: string;
+  configPath: string;
   cwd: string;
   sourcePbf: string;
   runner: CommandRunner;
   readyAttempts: number;
   readyDelayMs: number;
-  images: Parameters<typeof writeBuildComposeFile>[2];
+  images: Parameters<typeof writeBuildComposeFile>[3];
 }): Promise<void> {
   const { buildDir, composeFile, cwd, runner } = opts;
   const whosonfirstDir = join(buildDir, "whosonfirst");
@@ -265,7 +284,7 @@ async function buildPeliasTree(opts: {
     mkdirSync(join(buildDir, sub), { recursive: true });
   }
   linkOrCopy(opts.sourcePbf, join(buildDir, "openstreetmap", PELIAS_OPENSTREETMAP_FILENAME));
-  writeBuildComposeFile(composeFile, buildDir, opts.images);
+  writeBuildComposeFile(composeFile, buildDir, opts.configPath, opts.images);
 
   let buildError: unknown;
   try {

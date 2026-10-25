@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TRANSITOUS_ARTIFACT_BASE_URL } from "@openmapx/transitous-core";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { runsFromAgentBundle } from "../src/lib/agent-bundle";
 import {
   buildMotisData,
   type CommandRunner,
@@ -13,7 +14,10 @@ import {
   MOTIS_DATA_DIR,
   MOTIS_FEED_PROXY_DIR,
   MOTIS_LICENSE_FILENAME,
+  TRANSITOUS_TOOLS_SCRIPT,
 } from "../src/lib/motis-data";
+
+vi.mock("../src/lib/agent-bundle", () => ({ runsFromAgentBundle: vi.fn(() => false) }));
 
 let tmp: string;
 
@@ -27,7 +31,6 @@ beforeEach(() => {
   mkdirSync(join(tmp, "services", "motis", "tools", "transitous"), { recursive: true });
   mkdirSync(join(tmp, "infra", "docker", "data", "osm"), { recursive: true });
   mkdirSync(join(tmp, "infra", "docker", "data", "gtfs"), { recursive: true });
-  writeFileSync(join(tmp, "services", "motis", "tools", "transitous", "run.sh"), "#!/bin/sh\n");
 });
 
 afterEach(() => {
@@ -159,6 +162,19 @@ describe("buildMotisData", () => {
         cwd: tmp,
       },
       {
+        command: "docker",
+        args: [
+          "run",
+          "--rm",
+          "--entrypoint",
+          "test",
+          DEFAULT_TRANSITOUS_TOOLS_IMAGE,
+          "-x",
+          TRANSITOUS_TOOLS_SCRIPT,
+        ],
+        cwd: tmp,
+      },
+      {
         // Resolution pre-check: run generate-config in the tools container and
         // act on its "Could not resolve" verdict (delegates to upstream).
         command: "docker",
@@ -186,11 +202,8 @@ describe("buildMotisData", () => {
           `${join(tmp, "infra", "docker", "data", "gtfs")}:/transitous/out`,
           "-v",
           `${join(tmp, "infra", "docker", "data", ".transitous-downloads")}:/transitous/downloads`,
-          "-v",
-          `${join(tmp, "services", "motis", "tools", "transitous", "run.sh")}:/run.sh:ro`,
           DEFAULT_TRANSITOUS_TOOLS_IMAGE,
-          "/bin/bash",
-          "/run.sh",
+          TRANSITOUS_TOOLS_SCRIPT,
           "generate-config",
         ]),
         cwd: tmp,
@@ -206,11 +219,8 @@ describe("buildMotisData", () => {
           `${join(tmp, "infra", "docker", "data", "gtfs")}:/transitous/out`,
           "-v",
           `${join(tmp, "infra", "docker", "data", ".transitous-downloads")}:/transitous/downloads`,
-          "-v",
-          `${join(tmp, "services", "motis", "tools", "transitous", "run.sh")}:/run.sh:ro`,
           DEFAULT_TRANSITOUS_TOOLS_IMAGE,
-          "/bin/bash",
-          "/run.sh",
+          TRANSITOUS_TOOLS_SCRIPT,
           "generate-attribution",
         ]),
         cwd: tmp,
@@ -227,12 +237,9 @@ describe("buildMotisData", () => {
           "-v",
           `${join(tmp, "infra", "docker", "data", ".transitous-downloads")}:/transitous/downloads`,
           "-v",
-          `${join(tmp, "services", "motis", "tools", "transitous", "run.sh")}:/run.sh:ro`,
-          "-v",
           `${join(tmp, "infra", "docker", "data", MOTIS_FEED_PROXY_DIR)}:/feed-proxy-out`,
           DEFAULT_TRANSITOUS_TOOLS_IMAGE,
-          "/bin/bash",
-          "/run.sh",
+          TRANSITOUS_TOOLS_SCRIPT,
           "generate-feed-proxy-vars",
         ]),
         cwd: tmp,
@@ -331,8 +338,10 @@ describe("buildMotisData", () => {
       },
     });
 
-    // The three run.sh actions thread TRANSITOUS_COUNTRIES via -e.
-    const runShRuns = dockerRuns.filter((args) => args.includes("/run.sh"));
+    // The three tool steps thread TRANSITOUS_COUNTRIES via -e.
+    const runShRuns = dockerRuns.filter(
+      (args) => args.includes(TRANSITOUS_TOOLS_SCRIPT) && !args.includes("--entrypoint"),
+    );
     expect(runShRuns).toHaveLength(3);
     for (const args of runShRuns) {
       expect(args).toEqual(expect.arrayContaining(["-e", "TRANSITOUS_COUNTRIES=de,at"]));
@@ -482,4 +491,76 @@ it("never builds a missing exact helper image, even in local mode", async () => 
   );
   expect(calls.some((args) => args[0] === "build")).toBe(false);
   delete process.env.OPENMAPX_RELEASE;
+});
+
+describe("the transit tools image's own script", () => {
+  function writeInputs(): void {
+    writeFileSync(join(tmp, "infra/docker/data/osm/planet.osm.pbf"), "PBF");
+    writeFileSync(join(tmp, "infra/docker/data/gtfs/synthetic.gtfs.zip"), "GTFS");
+  }
+
+  it("runs each step with it and mounts nothing from the checkout's services", async () => {
+    writeInputs();
+    const gtfsDir = join(tmp, "infra", "docker", "data", "gtfs");
+    const calls: string[][] = [];
+    await buildMotisData({
+      rootDir: tmp,
+      region: "planet",
+      source: "build",
+      runner: async (command, args) => {
+        if (command !== "docker") return;
+        calls.push(args);
+        if (args.at(-1) === "generate-config")
+          writeFileSync(join(gtfsDir, MOTIS_CONFIG_FILENAME), "osm: old.osm.pbf\n");
+        if (args.at(-1) === "generate-attribution")
+          writeFileSync(join(gtfsDir, MOTIS_LICENSE_FILENAME), "[]\n");
+        if (args.at(-1) === "generate-feed-proxy-vars") {
+          mkdirSync(join(tmp, "infra/docker/data", MOTIS_FEED_PROXY_DIR), { recursive: true });
+          writeFileSync(
+            join(tmp, "infra/docker/data", MOTIS_FEED_PROXY_DIR, "feed-proxy-vars.json"),
+            "{}\n",
+          );
+        }
+      },
+    });
+
+    const steps = calls.filter((args) => args.at(-2) === TRANSITOUS_TOOLS_SCRIPT);
+    expect(steps.map((args) => args.at(-1))).toEqual([
+      "generate-config",
+      "generate-attribution",
+      "generate-feed-proxy-vars",
+    ]);
+    expect(calls.flat().filter((arg) => arg.includes(join(tmp, "services")))).toEqual([]);
+  });
+
+  it("refuses an image from before it carried the script, naming the remedy", async () => {
+    writeInputs();
+    const runner: CommandRunner = async (_command, args) => {
+      if (args.includes("--entrypoint")) throw new Error("exit 1");
+    };
+    await expect(
+      buildMotisData({ rootDir: tmp, region: "planet", source: "build", runner }),
+    ).rejects.toThrow(
+      `The transit tools image ${DEFAULT_TRANSITOUS_TOOLS_IMAGE} has no ${TRANSITOUS_TOOLS_SCRIPT}: it is from an earlier release than this CLI. Select the checkout's release with pnpm openmapx compose release`,
+    );
+  });
+
+  it("is never built from the checkout by the operations agent", async () => {
+    writeInputs();
+    vi.mocked(runsFromAgentBundle).mockReturnValueOnce(true);
+    const calls: string[][] = [];
+    const runner: CommandRunner = async (_command, args) => {
+      calls.push(args);
+    };
+    await expect(
+      buildMotisData({
+        rootDir: tmp,
+        region: "planet",
+        source: "build",
+        image: "openmapx/transitous-tools:local",
+        runner,
+      }),
+    ).rejects.toThrow(/operations agent does not build the transit tools image/);
+    expect(calls.some((args) => args[0] === "build")).toBe(false);
+  });
 });

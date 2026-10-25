@@ -4,7 +4,7 @@ import { services as coreServices } from "@openmapx/core/server";
 import {
   BUILD_ARTIFACTS,
   type BuildRecord,
-  currentRevision,
+  buildProvenance,
   writeBuildRecord,
 } from "./build-artifacts";
 import { runningComposeServices } from "./docker";
@@ -210,7 +210,7 @@ async function recordBuild(
   region: string | undefined,
   artifact: ServiceBuildArtifact,
 ): Promise<void> {
-  const revision = await currentRevision(rootDir);
+  const provenance = await buildProvenance(rootDir);
   writeBuildRecord(
     {
       schemaVersion: 1,
@@ -221,7 +221,7 @@ async function recordBuild(
         sizeBytes: statSync(artifact.sourcePbf).size,
       },
       builtAt: new Date().toISOString(),
-      ...(revision ? { revision } : {}),
+      ...provenance,
       runtimeImages: artifact.runtimeImages,
       toolImages: artifact.toolImages,
     },
