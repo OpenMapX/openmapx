@@ -146,7 +146,13 @@ describe("Gate C — host authority", () => {
     expect(reaching.filter((entry) => !entry.startsWith(`${AUTHORITY_SERVICE} `))).toEqual([
       "app-api ./state/ops-agent/trusted-config",
       "app-api ./state/ops-agent/custom-integrations",
+      "traefik ./state/ops-agent/configuration/current/traefik/traefik.yml",
+      "traefik ./state/ops-agent/traefik/dynamic",
     ]);
+    // Traefik reads its files; it never writes them.
+    for (const volume of services.traefik?.volumes ?? []) {
+      if (volume.startsWith("./state/")) expect(volume).toMatch(/:ro$/);
+    }
     // app-api reads the integrations the agent installed; it never writes them.
     const store = (services["app-api"]?.volumes ?? []).filter((volume) =>
       volume.startsWith("./state/ops-agent/custom-integrations:"),
@@ -154,6 +160,37 @@ describe("Gate C — host authority", () => {
     expect(store).toHaveLength(1);
     expect(store[0]).toMatch(/\/app\/custom_integrations\}:ro$/);
     expect(services["data-manager"]?.volumes).toContain("./data:/data");
+  });
+
+  it("lets Traefik mount its own files from the agent's state read-only, and no one else", () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-authority-"));
+    try {
+      const manifest = (id: string, mounts: Array<{ source: string; readOnly?: boolean }>) => {
+        mkdirSync(join(root, "services", id), { recursive: true });
+        writeFileSync(
+          join(root, "services", id, "service.json"),
+          JSON.stringify({
+            id,
+            bindMounts: mounts.map((mount) => ({ ...mount, target: `/mnt/${id}` })),
+          }),
+        );
+      };
+      const dynamic = "@infra:state/ops-agent/traefik/dynamic";
+      const staticFile = "@infra:state/ops-agent/configuration/current/traefik/traefik.yml";
+      const generation = "@infra:state/ops-agent/configuration/current";
+      manifest("traefik", [{ source: dynamic }, { source: staticFile }, { source: generation }]);
+      manifest("app-web", [{ source: dynamic }]);
+      expect(findAuthorityViolations(root).map((violation) => violation.detail)).toEqual([
+        `service "app-web" mounts the operations agent's state (${dynamic})`,
+        `service "traefik" mounts the operations agent's state (${generation})`,
+      ]);
+      manifest("traefik", [{ source: dynamic, readOnly: false }]);
+      expect(findAuthorityViolations(root).map((violation) => violation.detail)).toContain(
+        `service "traefik" mounts the operations agent's state (${dynamic})`,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("lets app-api mount the agent's integration store read-only, and no one else", () => {

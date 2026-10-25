@@ -5,6 +5,7 @@ import type { Command } from "commander";
 import { execa } from "execa";
 import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
 import { dockerCompose, dockerRun } from "../lib/docker";
+import { legacyTraefikDynamicMounted } from "../lib/legacy-traefik";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import { transitousApiKeysLeftBehindWarning } from "../lib/transitous-api-keys";
@@ -479,6 +480,18 @@ export function registerCheckCommand(program: Command): void {
       // What the one-time copy of the agent's stores left in the checkout, for
       // as long as it is still there.
       for (const warning of coreServices.agentStoresLeftBehind(repoPaths().infraDir)) {
+        log.warn(warning);
+      }
+      // Traefik: a container still on the checkout's dynamic directory, and
+      // dynamic files render does not copy.
+      if ((await legacyTraefikDynamicMounted(repoPaths().infraDir)) === true) {
+        log.warn(coreServices.LEGACY_TRAEFIK_MOUNT_NOTICE);
+      }
+      const traefikSkipped = coreServices.readTraefikDynamicSources(
+        join(repoPaths().root, "services", "traefik"),
+        process.geteuid?.() ?? 0,
+      ).skipped;
+      for (const warning of coreServices.describeSkippedTraefikFiles(traefikSkipped)) {
         log.warn(warning);
       }
       // The render reports a key file it did not copy once; this repeats it

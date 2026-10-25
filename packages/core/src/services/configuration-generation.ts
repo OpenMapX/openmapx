@@ -23,7 +23,7 @@ import {
   type TrustedConfigurationPayload,
   trustedConfigurationPayloadSchema,
 } from "../ops/trusted-config";
-import { atomicWrite } from "../release-files";
+import { ensureTraefikDynamicDirectory } from "./agent-state";
 import {
   GENERATED_SECRETS_DIRNAME,
   type RenderContext,
@@ -53,6 +53,13 @@ import {
   writeServiceSelectionFile,
 } from "./deployment";
 import { buildAppApiServiceEnv, expandServiceSelection } from "./selection";
+import {
+  describeSkippedTraefikFiles,
+  readTraefikStaticConfiguration,
+  TRAEFIK_STATIC_GENERATION_FILE,
+  writeLegacyTraefikRoutes,
+  writeTraefikDynamicDirectory,
+} from "./traefik-files";
 import { renderTraefikDynamicConfiguration, renderTraefikDynamicYaml } from "./traefik-renderer";
 import type { LoadedService } from "./types";
 
@@ -87,6 +94,12 @@ export interface CommitConfigurationOptions {
   beforeCommit?: () => Promise<void>;
   afterGenerationRename?: () => Promise<void>;
   afterCommit?: () => Promise<void>;
+  /**
+   * Whether a container, running or stopped, still mounts the checkout's
+   * Traefik dynamic directory. The routes are written there too while one
+   * does, and when it is not known.
+   */
+  legacyTraefikDynamicMounted?: boolean;
 }
 
 export interface CommittedConfiguration {
@@ -94,6 +107,8 @@ export interface CommittedConfiguration {
   enabledServiceIds: string[];
   /** Render advisories, such as optional bind mounts skipped for a missing source. */
   warnings: string[];
+  /** Files beside the generation that were not written, and why; for every render's output. */
+  stackFileProblems: string[];
 }
 
 /** Evidence about THIS attempt, never inferred from a transport exception. */
@@ -823,18 +838,28 @@ async function initializeOwnedConfigurationGenerations(infraDir: string): Promis
   }
 }
 
+/** Where the checkout keeps Traefik's files, whether or not Traefik is enabled. */
+function traefikServiceDirectory(infraDir: string, services: readonly LoadedService[]): string {
+  return (
+    services.find((service) => service.isBuiltIn && service.manifest.id === "traefik")?.directory ??
+    join(resolve(infraDir, "..", ".."), "services", "traefik")
+  );
+}
+
 /**
- * Files outside the generation that follow it: Traefik's routes for the
- * enabled first-party services and the writable data directories Compose would
- * otherwise create as root.
+ * Files outside the generation that follow it: Traefik's dynamic directory,
+ * with the routes for the enabled first-party services, and the writable data
+ * directories Compose would otherwise create as root. Returns what render
+ * reports about them.
  */
 function writeStackFiles(
   infraDir: string,
+  services: readonly LoadedService[],
   enabled: readonly LoadedService[],
   context: RenderContext,
   writableBindDirs: readonly string[],
-): void {
-  const rootDir = resolve(infraDir, "..", "..");
+  legacyTraefikDynamicMounted: boolean | undefined,
+): string[] {
   const traefik = renderTraefikDynamicConfiguration(
     enabled.filter((service) => service.isBuiltIn).map((service) => service.manifest),
     {
@@ -842,12 +867,22 @@ function writeStackFiles(
       resolveProxyHost: (manifest) => resolveProxyHost(manifest, context),
     },
   );
-  const routesDir = join(rootDir, "services", "traefik", "config", "dynamic");
-  mkdirSync(routesDir, { recursive: true });
-  const routes = join(routesDir, "generated-routes.yml");
-  // Traefik watches the file, so it is replaced, never rewritten in place.
-  atomicWrite(routes, renderTraefikDynamicYaml(traefik), 0o644);
+  const routes = renderTraefikDynamicYaml(traefik);
+  // Traefik watches its dynamic directory, so every file there is replaced,
+  // never rewritten in place.
+  const skipped = writeTraefikDynamicDirectory(
+    infraDir,
+    traefikServiceDirectory(infraDir, services),
+    routes,
+    process.geteuid?.() ?? 0,
+  );
   for (const dir of writableBindDirs) mkdirSync(dir, { recursive: true });
+  const problems = describeSkippedTraefikFiles(skipped);
+  // A Traefik not recreated since an earlier release still reads them there.
+  const legacy =
+    legacyTraefikDynamicMounted === false ? null : writeLegacyTraefikRoutes(infraDir, routes);
+  if (legacy) problems.push(legacy);
+  return problems;
 }
 
 export type RenderConfigurationOptions = Pick<
@@ -908,6 +943,9 @@ async function commitOwnedConfigurationGeneration(
     throw new Error("Bad expected current generation");
   }
   options.signal?.throwIfAborted();
+  // Its bind mount is optional, left out when the directory is missing, so
+  // it is there before the generation is rendered.
+  ensureTraefikDynamicDirectory(infraDir);
   const { resolved, context, rendered } = renderConfiguration(options);
   const generations = join(infraDir, CONFIGURATION_GENERATIONS);
   await initializeOwnedConfigurationGenerations(infraDir);
@@ -939,6 +977,23 @@ async function commitOwnedConfigurationGeneration(
       })}\n`,
       0o600,
     );
+    // Traefik's static configuration, read once at its start, belongs to the
+    // generation; its dynamic directory, which it watches, stays put.
+    if (
+      resolved.enabled.some((service) => service.isBuiltIn && service.manifest.id === "traefik")
+    ) {
+      const staticConfiguration = readTraefikStaticConfiguration(
+        traefikServiceDirectory(infraDir, options.services),
+        process.geteuid?.() ?? 0,
+      );
+      mkdirSync(join(temporary, dirname(TRAEFIK_STATIC_GENERATION_FILE)), { mode: 0o700 });
+      await writeDurable(
+        join(temporary, TRAEFIK_STATIC_GENERATION_FILE),
+        staticConfiguration,
+        0o400,
+      );
+      await syncDirectory(join(temporary, dirname(TRAEFIK_STATIC_GENERATION_FILE)));
+    }
     const populatedSecrets = [...resolved.serviceSecrets].filter(
       ([, values]) => Object.keys(values).length > 0,
     );
@@ -1000,6 +1055,7 @@ async function commitOwnedConfigurationGeneration(
         revisionId,
         enabledServiceIds: resolved.enabledIdsOrdered,
         warnings: rendered.warnings ?? [],
+        stackFileProblems: [],
       };
       await syncDirectory(dirname(join(infraDir, CURRENT_CONFIGURATION)));
     } else {
@@ -1007,9 +1063,19 @@ async function commitOwnedConfigurationGeneration(
         revisionId,
         enabledServiceIds: resolved.enabledIdsOrdered,
         warnings: rendered.warnings ?? [],
+        stackFileProblems: [],
       };
     }
-    writeStackFiles(infraDir, resolved.enabled, context, rendered.writableBindDirs ?? []);
+    committed.stackFileProblems.push(
+      ...writeStackFiles(
+        infraDir,
+        options.services,
+        resolved.enabled,
+        context,
+        rendered.writableBindDirs ?? [],
+        options.legacyTraefikDynamicMounted,
+      ),
+    );
     await options.afterCommit?.();
   } catch (error) {
     failure =

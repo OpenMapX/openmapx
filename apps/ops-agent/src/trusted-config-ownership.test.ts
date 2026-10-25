@@ -103,7 +103,7 @@ function fixture() {
   const label = () =>
     coreServices.readAppliedConfiguration(infraDir).serviceConfigs[0]?.values.label;
   const followUp = () =>
-    readFileSync(join(root, "services/traefik/config/dynamic/generated-routes.yml"), "utf8");
+    readFileSync(join(infraDir, "state/ops-agent/traefik/dynamic/generated-routes.yml"), "utf8");
   return { root, infraDir, services, apply, label, followUp };
 }
 describe("trusted configuration ownership and outcomes", () => {

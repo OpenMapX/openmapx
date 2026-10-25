@@ -167,14 +167,37 @@ logs before retrying. Repeated ACME attempts can hit upstream limits.
 A default deployment exposes routed pages publicly. For staging basic auth,
 copy `services/traefik/config/dynamic/auth.yml.example` to `auth.yml`, replace
 its example hash, and append `basic-auth@file` to the existing middleware list
-in `services/traefik/config/traefik.yml`. Recreate Traefik after changing static
-configuration; copying the middleware file alone does not activate it.
+in `services/traefik/config/traefik.yml`. Render the stack, then recreate
+Traefik after changing static configuration; copying the middleware file alone
+does not activate it.
 
-### Generated dynamic routing
+### Where Traefik reads its configuration
 
-Rendering writes `services/traefik/config/dynamic/generated-routes.yml` from
-validated service exposure declarations. Traefik watches this directory. Do not
-edit generated routes directly.
+Traefik watches its dynamic directory and reloads a file as soon as it
+changes, so that directory is a stable one in the operations agent's state,
+`infra/docker/state/ops-agent/traefik/dynamic`. Rendering writes
+`generated-routes.yml` there from validated service exposure declarations,
+beside copies of the YAML and TOML files of `services/traefik/config/dynamic`,
+each replaced atomically. The static `traefik.yml`, which Traefik reads when it
+starts, is copied into each configuration generation. Edit both in
+`services/traefik/config` and render; do not edit the copies or the generated
+routes.
+
+Render copies only regular files of the deployment's user with one link, from
+directories of that user, and never through a symbolic link. It names any other
+file in its output and in `pnpm openmapx check`, without its contents, and
+keeps the copy an earlier render made of it; a file you delete is removed from
+Traefik's directory by the next render. The directory
+is owner-only (0700, files 0600, `auth.yml`'s password hashes included). The
+Traefik image runs as root, which reads it through the capabilities Docker
+grants by default.
+
+A Traefik started before this layout reads `services/traefik/config/dynamic`
+until it is recreated. Render keeps writing the routes there while any
+container still mounts that directory, and render, check and **Run
+diagnostics** say so. Recreate Traefik when a few seconds without the proxy
+suit you: `pnpm openmapx services update traefik`, or **Recreate** on
+**Admin → Services → Traefik**.
 
 | Public path         | Target                       |
 | ------------------- | ---------------------------- |

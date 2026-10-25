@@ -28,6 +28,11 @@ const AGENT_STATE = "infra/docker/state";
 const AGENT_TRUSTED_CONFIG_QUEUE = `${AGENT_STATE}/ops-agent/trusted-config`;
 /** …and, read-only, the integrations the agent installed, which app-api loads. */
 const AGENT_INTEGRATION_STORE = `${AGENT_STATE}/ops-agent/custom-integrations`;
+/** Traefik reads, read-only, its dynamic directory and its static file in the applied generation. */
+const AGENT_TRAEFIK_FILES = new Set([
+  `${AGENT_STATE}/ops-agent/traefik/dynamic`,
+  `${AGENT_STATE}/ops-agent/configuration/current/traefik/traefik.yml`,
+]);
 
 /** `$OPENMAPX_HOST_DIR`, `${OPENMAPX_HOST_DIR}` or `${OPENMAPX_HOST_DIR:?…}`, then the rest of the path. */
 const HOST_DIR_SOURCE =
@@ -178,7 +183,8 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
           !(
             serviceId === "app-api" &&
             (path === AGENT_TRUSTED_CONFIG_QUEUE || (path === AGENT_INTEGRATION_STORE && readOnly))
-          )
+          ) &&
+          !(serviceId === "traefik" && AGENT_TRAEFIK_FILES.has(path) && readOnly)
         ) {
           violations.push({
             file: relative(root, manifestPath),

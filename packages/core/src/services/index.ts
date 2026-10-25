@@ -293,6 +293,13 @@ export {
   SERVICE_SELECTION_ENV,
 } from "./selection";
 export {
+  describeSkippedTraefikFiles,
+  LEGACY_TRAEFIK_MOUNT_NOTICE,
+  legacyTraefikDynamicDirectory,
+  readTraefikDynamicSources,
+  TRAEFIK_ROUTES_FILE,
+} from "./traefik-files";
+export {
   renderTraefikDynamicConfiguration,
   renderTraefikDynamicYaml,
   renderTraefikServiceConfiguration,

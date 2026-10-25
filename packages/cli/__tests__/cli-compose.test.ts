@@ -25,7 +25,14 @@ import { services as coreServices } from "@openmapx/core/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderComposeForRepo, rotateRedisPasswordForRepo } from "../src/commands/compose";
 import { loadInfraEnv } from "../src/lib/infra-env";
+import { legacyTraefikDynamicMounted } from "../src/lib/legacy-traefik";
 import { rotatePlatformSecretFile } from "../src/lib/platform-secret-files";
+
+// Docker answers whether a container still mounts the checkout's Traefik
+// directory; here, by default, none does.
+vi.mock("../src/lib/legacy-traefik", () => ({
+  legacyTraefikDynamicMounted: vi.fn(async () => false),
+}));
 
 /** A file's permission bits, read through a descriptor rather than a second lookup by path. */
 function permissions(path: string): number {
@@ -215,6 +222,9 @@ describe("renderComposeForRepo", () => {
     writeManifest("postgis", { ...baseManifest, id: "postgis" });
     writeManifest("redis", { ...baseManifest, id: "redis" });
     writeManifest("traefik", { ...baseManifest, id: "traefik" });
+    // Traefik's static file goes into the generation; render refuses without it.
+    mkdirSync(join(tmp, "services", "traefik", "config"), { recursive: true });
+    writeFileSync(join(tmp, "services", "traefik", "config", "traefik.yml"), "log: {}\n");
     writeManifest("valhalla", { ...baseManifest, id: "valhalla" });
 
     const result = await renderComposeForRepo({ rootDir: tmp, domain: "example.com" });
@@ -469,6 +479,47 @@ describe("renderComposeForRepo", () => {
     );
     expect(dataManagerSection).not.toContain("services/motis/tools/transitous");
     expect(yaml.match(/transitous-api-keys/g)).toHaveLength(1);
+  });
+
+  it("mounts Traefik's static file from the generation and its dynamic directory from the agent's state", async () => {
+    writeManifest(
+      "traefik",
+      JSON.parse(readFileSync(join(REPO_ROOT, "services", "traefik", "service.json"), "utf8")),
+    );
+    const config = join(tmp, "services", "traefik", "config");
+    mkdirSync(join(config, "dynamic"), { recursive: true });
+    writeFileSync(join(config, "traefik.yml"), "log: {}\n");
+    writeFileSync(join(config, "dynamic", "middlewares.yml"), "http: {}\n");
+    const legacyRoutes = join(config, "dynamic", "generated-routes.yml");
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const notices = () =>
+      errors.mock.calls
+        .flat()
+        .map(String)
+        .filter((line) => line.includes("Traefik still reads its routes"));
+
+    // A Traefik an earlier release started still reads the checkout's routes.
+    vi.mocked(legacyTraefikDynamicMounted).mockResolvedValueOnce(true);
+    await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["traefik"] });
+    const yaml = readFileSync(generatedCompose(), "utf8");
+    expect(yaml).toContain("- ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro");
+    expect(yaml).toContain("- ../../traefik/dynamic:/etc/traefik/dynamic:ro");
+    expect(yaml).not.toContain("services/traefik/config");
+    expect(permissions(currentGenerationFile("traefik", "traefik.yml"))).toBe(0o400);
+    const dynamic = join(tmp, "infra", "docker", "state", "ops-agent", "traefik", "dynamic");
+    expect(readdirSync(dynamic).sort()).toEqual(["generated-routes.yml", "middlewares.yml"]);
+    expect(permissions(dynamic)).toBe(0o700);
+    expect(readFileSync(legacyRoutes, "utf8")).toBe(
+      readFileSync(join(dynamic, "generated-routes.yml"), "utf8"),
+    );
+    expect(notices()).toHaveLength(1);
+
+    // Once none does, the checkout's file is left as it was and render is quiet.
+    rmSync(legacyRoutes);
+    errors.mockClear();
+    await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["traefik"] });
+    expect(existsSync(legacyRoutes)).toBe(false);
+    expect(notices()).toEqual([]);
   });
 
   it("rejects pre-existing identical ops-agent role tokens", async () => {
