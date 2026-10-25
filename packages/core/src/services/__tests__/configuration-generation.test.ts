@@ -85,9 +85,11 @@ describe("configuration generations", () => {
     expect(compose).toContain("alpha:");
     // The project is the file's, not its generation directory's.
     expect(compose.startsWith("name: docker\n")).toBe(true);
-    expect(existsSync(join(root, "services/traefik/config/dynamic/generated-routes.yml"))).toBe(
-      true,
-    );
+    expect(
+      existsSync(join(root, "infra/docker/state/ops-agent/traefik/dynamic/generated-routes.yml")),
+    ).toBe(true);
+    // A checkout without Traefik's directory: no container mounts it, so it isn't created.
+    expect(existsSync(join(root, "services/traefik/config/dynamic"))).toBe(false);
     // Installed integrations are no longer kept in the checkout.
     expect(existsSync(join(root, "custom_integrations"))).toBe(false);
   });

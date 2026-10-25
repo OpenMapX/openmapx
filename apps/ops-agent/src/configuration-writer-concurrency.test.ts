@@ -134,7 +134,7 @@ describe("overlapping configuration writers", () => {
     const b = start(root, "ops", "b", rev("a"), "after");
     await b.wait("held");
     const routes = readFileSync(
-      join(root, "services/traefik/config/dynamic/generated-routes.yml"),
+      join(infra, "state/ops-agent/traefik/dynamic/generated-routes.yml"),
       "utf8",
     );
     const compensation = start(root, "ops", "c", rev("a"));
@@ -150,7 +150,7 @@ describe("overlapping configuration writers", () => {
     });
     expect(coreServices.readAppliedConfiguration(infra).serviceConfigs[0]?.values.label).toBe("b");
     expect(
-      readFileSync(join(root, "services/traefik/config/dynamic/generated-routes.yml"), "utf8"),
+      readFileSync(join(infra, "state/ops-agent/traefik/dynamic/generated-routes.yml"), "utf8"),
     ).toBe(routes);
   }, 20_000);
   it("holds pruning outside a contender's completed-generation activation interval", async () => {

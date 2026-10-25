@@ -1,5 +1,5 @@
 import { chmodSync, lstatSync, mkdirSync, renameSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 /**
  * Where the operations agent keeps its own state: the job journal, the
@@ -24,6 +24,8 @@ export interface AgentStatePaths {
   customIntegrations: string;
   /** Written once both stores were copied from the checkout, with what was left behind. */
   storesMigration: string;
+  /** Traefik's dynamic configuration, which Traefik mounts read-only and watches. */
+  traefikDynamic: string;
 }
 
 export function agentStatePaths(infraDir: string): AgentStatePaths {
@@ -38,6 +40,7 @@ export function agentStatePaths(infraDir: string): AgentStatePaths {
     community: join(directory, "community"),
     customIntegrations: join(directory, "custom-integrations"),
     storesMigration: join(directory, "stores-migration.json"),
+    traefikDynamic: join(directory, "traefik", "dynamic"),
   };
 }
 
@@ -65,7 +68,8 @@ function entryKind(path: string): "missing" | "directory" | "other" {
 
 /**
  * Prepares the directories containers bind-mount from the agent's state: the
- * trusted-configuration queue and the privacy-extraction scratch. Run under
+ * trusted-configuration queue, the privacy-extraction scratch and Traefik's
+ * dynamic configuration. Run under
  * the writer lock by every configuration generation commit, where their mounts
  * move from the old location to the new one, and by the agent at startup.
  *
@@ -108,4 +112,27 @@ export function prepareAgentStateDirectories(infraDir: string): void {
     }
     chmodSync(to, 0o700);
   }
+  ensureTraefikDynamicDirectory(infraDir);
+}
+
+/**
+ * Traefik's dynamic directory, which Traefik mounts read-only: in place,
+ * owner-only, before a generation mounts it, so Docker never creates it as
+ * root. Refuses one that is a link or not the agent's own.
+ */
+export function ensureTraefikDynamicDirectory(infraDir: string): string {
+  const paths = agentStatePaths(infraDir);
+  const parent = dirname(paths.traefikDynamic);
+  mkdirSync(dirname(parent), { recursive: true, mode: 0o700 });
+  for (const directory of [parent, paths.traefikDynamic]) {
+    if (entryKind(directory) === "missing") mkdirSync(directory, { mode: 0o700 });
+    const stats = lstatSync(directory);
+    if (!stats.isDirectory() || stats.uid !== process.geteuid?.()) {
+      throw new Error(
+        `Traefik's dynamic directory at ${directory} is not the agent's own directory`,
+      );
+    }
+    chmodSync(directory, 0o700);
+  }
+  return paths.traefikDynamic;
 }

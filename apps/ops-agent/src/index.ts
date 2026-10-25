@@ -327,6 +327,13 @@ async function main(): Promise<void> {
         return { ...authority, revisionId: authorizedRevision(authority) };
       },
       infraDir: paths.infraDir,
+      legacyTraefikDynamicMounted: async () => {
+        try {
+          return await containerMounts(services.legacyTraefikDynamicDirectory(paths.infraDir));
+        } catch {
+          return undefined;
+        }
+      },
     });
     installCommunityRepositoryRuntime(runtime, communityRepositories);
     installIntegrationRuntime(runtime, integrationStore);

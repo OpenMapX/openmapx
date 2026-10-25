@@ -6,6 +6,7 @@ import { type Command, Option } from "commander";
 import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
 import { dockerComposeStream } from "../lib/docker";
 import { applyGeneratedHardlinksBeforeStart } from "../lib/hardlinks";
+import { legacyTraefikDynamicMounted } from "../lib/legacy-traefik";
 import { log } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import {
@@ -329,7 +330,11 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
       if (Object.keys(values).length === 0 && envKeys.length === 0) return [];
       return [{ serviceId: id, values, ...(envKeys.length > 0 ? { envKeys } : {}) }];
     });
+    // A Traefik not recreated since an earlier release still reads its routes
+    // from the checkout, where they are written too until none does.
+    const legacyTraefik = await legacyTraefikDynamicMounted(paths.infraDir);
     const committed = await writer.commit({
+      legacyTraefikDynamicMounted: legacyTraefik,
       services,
       integrationSchemas,
       input: {
@@ -343,6 +348,13 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
       },
       allowMissingSelected: applied.source === "default",
     });
+    for (const problem of committed.stackFileProblems) log.warn(problem);
+    if (legacyTraefik === true) log.warn(coreServices.LEGACY_TRAEFIK_MOUNT_NOTICE);
+    else if (legacyTraefik === undefined) {
+      log.dim(
+        "Docker could not say whether a container still mounts services/traefik/config/dynamic; the routes were written there too.",
+      );
+    }
     return {
       servicesRendered: committed.enabledServiceIds.length,
       composePath: paths.composePath,

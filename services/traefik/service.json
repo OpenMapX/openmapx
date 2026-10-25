@@ -33,8 +33,17 @@
     }
   ],
   "bindMounts": [
-    { "source": "config/traefik.yml", "target": "/etc/traefik/traefik.yml", "readOnly": true },
-    { "source": "config/dynamic", "target": "/etc/traefik/dynamic", "readOnly": true }
+    {
+      "source": "@infra:state/ops-agent/configuration/current/traefik/traefik.yml",
+      "target": "/etc/traefik/traefik.yml",
+      "readOnly": true
+    },
+    {
+      "source": "@infra:state/ops-agent/traefik/dynamic",
+      "target": "/etc/traefik/dynamic",
+      "readOnly": true,
+      "optional": true
+    }
   ],
   "exposure": {
     "hostPorts": [
