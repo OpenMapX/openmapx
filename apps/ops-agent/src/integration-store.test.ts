@@ -13,10 +13,13 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
+import type { OpsOperation, OpsResourcePolicy } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { packageIntegration } from "@openmapx/integration-framework/installer";
 import { afterEach, describe, expect, it } from "vitest";
 import { IntegrationStore } from "./integration-store";
+import type { OpsJobJournal, PersistedOpsJob } from "./journal";
+import { buildOpsAgentServer } from "./server";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -26,6 +29,19 @@ afterEach(() => {
 const signal = new AbortController().signal;
 const uid = process.geteuid?.() ?? 0;
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+const apiToken = Buffer.alloc(32, 31).toString("base64url");
+const allowAllResources: OpsResourcePolicy = {
+  allowGlobal: () => true,
+  allowService: () => true,
+  allowBackup: () => true,
+  allowPreparedRun: () => true,
+  allowCandidate: () => true,
+  allowRelease: () => true,
+  allowRegion: () => true,
+  allowDataType: () => true,
+  allowIntegration: () => true,
+  allowTrustedRevision: () => true,
+};
 
 function manifest(id: string, region = "eu"): Record<string, unknown> {
   return {
@@ -47,7 +63,7 @@ interface Fixture {
   downloads: string[];
 }
 
-function fixture(): Fixture {
+function fixture(options: { downloadError?: Error } = {}): Fixture {
   const root = mkdtempSync(join(tmpdir(), "openmapx-integration-store-"));
   roots.push(root);
   mkdirSync(join(root, "infra", "docker", "state", "ops-agent"), {
@@ -62,6 +78,7 @@ function fixture(): Fixture {
     builtInIds: () => new Set(["routing"]),
     download: async ({ url, destination }) => {
       downloads.push(url.href);
+      if (options.downloadError) throw options.downloadError;
       const path = artifacts.get(url.href);
       if (!path) throw new Error("unreachable");
       copyFileSync(path, destination);
@@ -216,6 +233,107 @@ describe("integration store", () => {
       url: source.url,
       sha256: source.sha256,
     });
+  });
+
+  it("does not expose provider redirect locators in inspection problems", async () => {
+    const secretRedirect = "https://redirect.example.test/archive.tgz?token=sentinel-secret";
+    const f = fixture({
+      downloadError: new Error(`Too many redirects while fetching ${secretRedirect}`),
+    });
+
+    const result = await f.store.inspect(
+      {
+        kind: "integration.inspect",
+        source: {
+          kind: "artifact",
+          url: "https://artifacts.example.test/archive.tgz",
+          sha256: "a".repeat(64),
+        },
+      },
+      signal,
+    );
+
+    expect(result).toMatchObject({
+      valid: false,
+      problems: ["The archive could not be downloaded"],
+    });
+    expect(JSON.stringify(result)).not.toContain("sentinel-secret");
+  });
+
+  it("keeps provider redirect locators out of the ops journal and status response", async () => {
+    const secretRedirect = "https://redirect.example.test/archive.tgz?token=sentinel-secret";
+    const f = fixture({
+      downloadError: new Error(`Too many redirects while fetching ${secretRedirect}`),
+    });
+    let persistedJobs: readonly PersistedOpsJob[] = [];
+    const journal: OpsJobJournal = {
+      records: () => [],
+      replace: async (records) => {
+        persistedJobs = structuredClone(records);
+      },
+    };
+    const now = new Date("2026-10-25T20:00:00.000Z");
+    const app = buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": Buffer.alloc(32, 32).toString("base64url") },
+      resourcePolicy: allowAllResources,
+      journal,
+      now: () => now,
+      randomBytes: () => Buffer.alloc(18, 33),
+      dispatch: async (operation: OpsOperation, _runtime, context) => {
+        if (operation.kind !== "integration.inspect") throw new Error("unexpected operation");
+        return f.store.inspect(operation, context.signal);
+      },
+    });
+
+    const admitted = await app.inject({
+      method: "POST",
+      url: "/v1/operations",
+      headers: { authorization: `Bearer ${apiToken}` },
+      payload: {
+        version: 1,
+        requestId: "ops1_redirectDiagnostic",
+        operationKey: "opk1_redirectDiagnostic",
+        issuedAt: now.toISOString(),
+        expiresAt: new Date(now.getTime() + 20_000).toISOString(),
+        operation: {
+          kind: "integration.inspect",
+          source: {
+            kind: "artifact",
+            url: "https://artifacts.example.test/archive.tgz",
+            sha256: "a".repeat(64),
+          },
+        },
+      },
+    });
+    expect(admitted.statusCode).toBe(202);
+    const operationId = admitted.json().result.operationId as string;
+
+    let status = await app.inject({
+      method: "GET",
+      url: `/v1/operations/${operationId}`,
+      headers: { authorization: `Bearer ${apiToken}` },
+    });
+    for (
+      let attempt = 0;
+      attempt < 50 && status.json().result.state !== "succeeded";
+      attempt += 1
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      status = await app.inject({
+        method: "GET",
+        url: `/v1/operations/${operationId}`,
+        headers: { authorization: `Bearer ${apiToken}` },
+      });
+    }
+
+    expect(status.statusCode).toBe(200);
+    expect(status.json().result).toMatchObject({
+      state: "succeeded",
+      result: { valid: false, problems: ["The archive could not be downloaded"] },
+    });
+    expect(JSON.stringify(status.json())).not.toContain("sentinel-secret");
+    expect(JSON.stringify(persistedJobs)).not.toContain("sentinel-secret");
+    await app.close();
   });
 
   it("keeps the previous copy until settled and restores it on rollback", async () => {

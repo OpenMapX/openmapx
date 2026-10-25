@@ -331,6 +331,29 @@ describe("ops contract", () => {
     }
   });
 
+  it("canonicalizes accepted integration artifact locators before dispatch", () => {
+    const parsed = parseOpsRequest(
+      request({
+        kind: "integration.inspect",
+        source: {
+          kind: "artifact",
+          url: "https://ARTIFACTS.example.test:443/releases/../integration.tgz",
+          sha256: "a".repeat(64),
+        },
+      }),
+      { role: "api" },
+    );
+
+    expect(parsed.operation).toEqual({
+      kind: "integration.inspect",
+      source: {
+        kind: "artifact",
+        url: "https://artifacts.example.test/integration.tgz",
+        sha256: "a".repeat(64),
+      },
+    });
+  });
+
   it("rejects flag-shaped, path-shaped, malformed, and unregistered service IDs", () => {
     for (const serviceId of ["--project", "../motis", "MOTIS", "motis/blue"]) {
       expect(() =>

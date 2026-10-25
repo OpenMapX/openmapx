@@ -307,10 +307,8 @@ export class IntegrationStore {
             maxBytes: MAX_ARTIFACT_BYTES,
             signal,
           });
-        } catch (error) {
-          throw new ArtifactUnavailableError(
-            `The archive could not be downloaded: ${(error as Error).message}`,
-          );
+        } catch {
+          throw new ArtifactUnavailableError("The archive could not be downloaded");
         }
       } else {
         this.copyUpload(normalizedSource.sha256, archive);
