@@ -1,11 +1,15 @@
 import { createHash } from "node:crypto";
 import {
   chmodSync,
+  closeSync,
+  constants,
   existsSync,
+  fstatSync,
   linkSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -21,6 +25,16 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { renderComposeForRepo, rotateRedisPasswordForRepo } from "../src/commands/compose";
 import { loadInfraEnv } from "../src/lib/infra-env";
 import { rotatePlatformSecretFile } from "../src/lib/platform-secret-files";
+
+/** A file's permission bits, read through a descriptor rather than a second lookup by path. */
+function permissions(path: string): number {
+  const descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    return fstatSync(descriptor).mode & 0o777;
+  } finally {
+    closeSync(descriptor);
+  }
+}
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
 
@@ -118,7 +132,7 @@ describe("renderComposeForRepo", () => {
       renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] }),
     ).rejects.toThrow("no group or other write");
     expect(existsSync(generatedCompose())).toBe(false);
-    expect(statSync(env).mode & 0o777).toBe(0o664);
+    expect(permissions(env)).toBe(0o664);
 
     chmodSync(env, 0o600);
     loadInfraEnv(tmp);
@@ -135,7 +149,7 @@ describe("renderComposeForRepo", () => {
     const owner = statSync(tmp);
     await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] });
     expect(readFileSync(env, "utf8")).toContain(`\nUID=${owner.uid}\nGID=${owner.gid}\n`);
-    expect(statSync(env).mode & 0o777).toBe(0o600);
+    expect(permissions(env)).toBe(0o600);
 
     // .env names another user than this process: nothing is rendered.
     writeFileSync(env, `UID=${owner.uid + 1}\nGID=${owner.gid}\n`, { mode: 0o600 });

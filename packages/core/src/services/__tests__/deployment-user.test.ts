@@ -1,7 +1,11 @@
 import {
   chmodSync,
+  closeSync,
+  constants,
+  fstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   rmSync,
   statSync,
@@ -12,6 +16,17 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // A checkout root owns, for the refusal below.
+
+/** A file's permission bits, read through a descriptor rather than a second lookup by path. */
+function permissions(path: string): number {
+  const descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    return fstatSync(descriptor).mode & 0o777;
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
 const rootOwned = vi.hoisted(() => ({ path: "" }));
 vi.mock("node:fs", async (importOriginal) => {
   const fs = await importOriginal<typeof import("node:fs")>();
@@ -57,7 +72,7 @@ describe("the deployment's user", () => {
     const written = readFileSync(env, "utf8");
     expect(written.startsWith("DOMAIN=maps.example.test\n# UID=1000\n# GID=1000\n")).toBe(true);
     expect(written).toContain(`\nUID=${uid}\nGID=${gid}\n`);
-    expect(statSync(env).mode & 0o777).toBe(0o600);
+    expect(permissions(env)).toBe(0o600);
     expect(ensureDeploymentUser(infraDir)).toEqual({ uid, gid, derived: [] });
     expect(readFileSync(env, "utf8")).toBe(written);
   });
@@ -75,7 +90,7 @@ describe("the deployment's user", () => {
     const { infraDir, env, uid, gid } = checkout();
     expect(ensureDeploymentUser(infraDir).derived).toEqual(["UID", "GID"]);
     expect(readFileSync(env, "utf8")).toMatch(new RegExp(`UID=${uid}\\nGID=${gid}\\n$`));
-    expect(statSync(env).mode & 0o777).toBe(0o600);
+    expect(permissions(env)).toBe(0o600);
   });
 
   it("refuses uid 0, a malformed value, and an .env that is not the operator's own", () => {
