@@ -345,6 +345,15 @@ jobs:
           echo "::error::Could not pull $image after 5 attempts"
           exit 1
 
+      # data-manager reads its Transitous API keys through a directory mount;
+      # a running container must see the file generate-api-keys replaced.
+      - name: Verify the Transitous API keys mount
+        if: matrix.group == 'api-privacy'
+        timeout-minutes: 5
+        run: |
+          image="$(node -e 'const {container: c} = require("./services/redis/service.json"); console.log(c.image + ":" + c.tag + "@" + c.digest)')"
+          OPENMAPX_RUN_SECRET_MOUNT_TESTS=1 OPENMAPX_SECRET_MOUNT_TEST_IMAGE="$image" pnpm exec vitest run --project node packages/cli/__tests__/transitous-api-keys-mount.integration.test.ts
+
       - name: Pull the pinned managed Dawarich image
         if: matrix.group == 'export-restore'
         timeout-minutes: 10

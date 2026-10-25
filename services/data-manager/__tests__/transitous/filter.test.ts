@@ -6,6 +6,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -264,6 +265,44 @@ describe("filter stage", () => {
     expect(result.status).toBe("ok");
     expect(readSources(feedPath)[0]?.["api-key"]).toBe("test-key");
     expect(statSync(feedPath).mode & 0o777).toBe(0o600);
+  });
+
+  it("reads the keys anew at every run, so a key file replaced by rename applies at the next", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-filter-api-key-replace-"));
+    const catalogDir = makeCatalog(tmp);
+    const feedPath = join(catalogDir, "feeds", "de.json");
+    writeFileSync(
+      feedPath,
+      JSON.stringify({ sources: [{ name: "BVG", "transitland-atlas-id": "f-bvg" }] }),
+    );
+    // As mounted: the keys file alone in its own directory.
+    const keysDirectory = join(tmp, "config", "transitous");
+    mkdirSync(keysDirectory, { recursive: true });
+    const apiKeysPath = join(keysDirectory, "api-keys.json");
+    writeFileSync(apiKeysPath, JSON.stringify({ "de/BVG": "first-key" }));
+    const ctx = buildJobContext({
+      dataDir: tmp,
+      store: new StateStore(tmp),
+      countries: ["de"],
+      apiKeysPath,
+      runner: async () => {},
+      runScript: async () => {},
+      now: () => "2026-05-01T00:00:00.000Z",
+    });
+    ctx.state.catalogDir = catalogDir;
+    await filterRun(ctx);
+    expect(readSources(feedPath)[0]?.["api-key"]).toBe("first-key");
+
+    // generate-api-keys' replacement: a temporary beside it, renamed over it.
+    const before = statSync(apiKeysPath).ino;
+    const temporary = join(keysDirectory, "api-keys.json.tmp-1");
+    writeFileSync(temporary, JSON.stringify({ "de/BVG": "second-key" }), { mode: 0o600 });
+    renameSync(temporary, apiKeysPath);
+    expect(statSync(apiKeysPath).ino).not.toBe(before);
+
+    const result = await filterRun(ctx);
+    expect(result.status).toBe("ok");
+    expect(readSources(feedPath)[0]?.["api-key"]).toBe("second-key");
   });
 
   it("repairs a pre-existing world-readable feed after applying an API key", async () => {

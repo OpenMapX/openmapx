@@ -179,6 +179,43 @@ transition. Starting clients before Valkey has loaded the matching ACL can cause
 authentication failures; leaving an old client running during rotation keeps an
 obsolete password in that process's memory.
 
+### `transitous-api-keys/api-keys.json` (operator-edited, data-manager only)
+
+The API keys for restricted Transitous feeds, as a JSON object of
+`"<region>/<source>": "<key>"` strings. `pnpm openmapx data generate-api-keys`
+writes the slots the current catalog needs and keeps the values already set;
+fill in the empty ones by hand.
+
+Unlike the other secrets, this one is a directory holding a single file:
+
+    infra/docker/secrets/transitous-api-keys/        0700, the deployment's user
+    infra/docker/secrets/transitous-api-keys/api-keys.json    0600, the deployment's user
+
+data-manager mounts the directory read-only at `/config/transitous` and reads
+`/config/transitous/api-keys.json` at every Transitous run. The other secrets are
+single-file mounts that their services read once at startup. A file mount keeps
+showing the file it was created with, so a key file replaced by a rename, as
+`generate-api-keys` and most editors do, would stay invisible until data-manager
+is recreated. Through the directory, new keys apply at the next run. Nothing else
+goes in that directory; `secrets/` itself is never mounted into data-manager.
+
+Compose rendering creates the directory and an empty `{}` file when there is
+none, and keeps the file owner-only. A file that is not a regular, single-link
+file of the deployment's user holding a JSON object of strings stops the render
+with the reason.
+
+Releases before this one kept the keys in the checkout, in
+`services/motis/tools/transitous/api-keys.json`. The first render copies that
+file and leaves it in place, so an earlier release still finds it after a
+rollback. It copies only a regular file of the deployment's user with one link
+that neither its group nor others can write, holding a JSON object of key
+strings; otherwise the new file starts empty and the render's output names the
+earlier file and the reason. Copy its keys over yourself after checking it, or
+run `generate-api-keys` and enter them again. The earlier file is not read
+again. For as long as it sets keys the new file doesn't, `pnpm openmapx check`
+and **Run diagnostics** in the admin panel say so, naming those keys (never their
+values), why the file was not copied and how to carry them over.
+
 ### `transitous-feed-proxy.age` (optional)
 
 An [age identity file](https://github.com/FiloSottile/age#usage), generated with

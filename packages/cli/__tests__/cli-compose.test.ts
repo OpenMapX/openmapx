@@ -10,6 +10,7 @@ import {
   mkdirSync,
   mkdtempSync,
   openSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -18,7 +19,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { readErasureJournal } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -399,6 +400,39 @@ describe("renderComposeForRepo", () => {
       services: ["app-api,data-manager"],
     });
     expect(readFileSync(secretPath, "utf8")).toBe(key);
+  });
+
+  it("mounts only the Transitous API keys directory into data-manager, where it reads them", async () => {
+    for (const id of ["app-api", "data-manager", "ops-agent", "motis", "postgis", "redis"]) {
+      const manifest = JSON.parse(
+        readFileSync(join(REPO_ROOT, "services", id, "service.json"), "utf8"),
+      ) as Record<string, unknown>;
+      writeManifest(id, manifest);
+    }
+    // An earlier release's keys in the checkout.
+    const legacy = join(tmp, "services", "motis", "tools", "transitous", "api-keys.json");
+    mkdirSync(dirname(legacy), { recursive: true });
+    writeFileSync(legacy, '{\n  "us-ca/NeedsKey": "secret"\n}\n', { mode: 0o600 });
+
+    await renderComposeForRepo({
+      rootDir: tmp,
+      domain: "example.com",
+      services: ["app-api,data-manager"],
+    });
+
+    const keysDirectory = join(tmp, "infra", "docker", "secrets", "transitous-api-keys");
+    expect(readdirSync(keysDirectory)).toEqual(["api-keys.json"]);
+    expect(readFileSync(join(keysDirectory, "api-keys.json"), "utf8")).toBe(
+      readFileSync(legacy, "utf8"),
+    );
+    const yaml = readFileSync(generatedCompose(), "utf8");
+    const dataManagerSection = yaml.split("  data-manager:")[1]?.split("\n  app-")[0] ?? "";
+    // The directory, read-only, at the path data-manager reads by default.
+    expect(dataManagerSection).toContain(
+      "- ../../../../secrets/transitous-api-keys:/config/transitous:ro",
+    );
+    expect(dataManagerSection).not.toContain("services/motis/tools/transitous");
+    expect(yaml.match(/transitous-api-keys/g)).toHaveLength(1);
   });
 
   it("rejects pre-existing identical ops-agent role tokens", async () => {

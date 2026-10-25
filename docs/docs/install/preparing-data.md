@@ -115,7 +115,7 @@ through the API-key file:
 
 ```bash
 pnpm openmapx data generate-api-keys
-# Edit services/motis/tools/transitous/api-keys.json, then:
+# Edit infra/docker/secrets/transitous-api-keys/api-keys.json, then:
 pnpm openmapx data sync --countries de
 ```
 
