@@ -66,6 +66,17 @@ records, never paths or private keys. Each recipient independently verifies the
 installation, role, complete chain, current tree, immutable identity, subset and
 absolute deadline. Per-lease journal guards and private sequence high-water marks
 reject conflicting writers and shared-record rollback.
+Inspection and forward checks acquire that same per-lease guard before reading
+and publishing their private high-water observations. A busy/crashed writer fails
+closed; read-only inspection cannot overwrite a newer process's observation.
+
+The data-manager-to-agent HTTP receiver derives the required targets from the
+parsed operation: primary stop/restart/promotion require `motis`, staging
+stop/restart require `motis-staging`, and proxy validation/reload requires
+`motis-feed-proxy`. Restart does not start dependencies and promotion uses
+`--no-deps`. The signed grant must contain those targets, independently of its
+body fingerprint and resource policy. Other operation families remain unavailable
+through this receiver until their fixed manifest/generation resolver exists.
 
 Use `acquireArtifactTargetLease`, `delegateArtifactTargetLease`,
 `adoptArtifactTargetLease`, `settleArtifactTargetLeaseChild`,
@@ -75,7 +86,7 @@ second root. `withArtifactTargetLease` checks forward permission and retains fen
 on failure; its callback must produce durable own-effect evidence before release.
 Acquisition has one five-second budget. The limits are 256 registered targets,
 64 child intents, 128 KiB per lease ledger and 256 unsettled leases. Settled
-receipts remain retained; this foundation performs no age-based garbage collection.
+receipts remain retained under the capacity policy below.
 
 Host ordering is target lease, nonblocking transit reservation, configuration
 writer, then release store. A busy reservation must settle an unused owner without
@@ -89,6 +100,65 @@ use the original identity/deadline. Fixed CLI spawn intents bind exact command
 arguments and a fresh private child key; entry consumes a one-use start marker
 before adoption can lead to effects. Unrelated subprocesses receive no authority
 variables. Deadline-only Full Update forwarding owns no target lease.
+Its separate signed lifecycle binds the original execution, monotonic sequence,
+phase and at most 64 child-intent digests. Each transition persists its private
+fence before shared publication under the execution writer guard. Terminal effect
+receipts fence new grants; `cancelControlExecution` persists cancellation and
+returns the original attempted identities for the future runtime's authenticated
+cancellation/lookup adapter. `assertControlExecutionForward` and
+`beginControlEffect` validate the complete deadline-only ancestry. New adoption
+and effect-start intent share the lifecycle guard with cancellation. Exact
+already-adopted duplicates remain usable for observation/settlement after cancel,
+terminal state or expiry, and do not renew forward permission.
+Acquiring a child's independent target lease and forward use of its bound handle
+also check this lifecycle. Terminal maintenance/handoff preparation has only its
+explicit frozen delegation exception: current signed terminal preparation,
+unexpired identity, original admitted plan and held lease ancestry are all still
+required. It cannot restart ordinary effects.
+
+Target borrowers also check every intermediate ancestor. Canceling an intermediate
+borrower fences its retained descendants and returns their original attempted
+identities without deleting or settling any descendant evidence.
+
+### Authority storage capacity and retirement
+
+`CONTROL_RETENTION_LIMITS` fixes the installation lifetime policy:
+
+- At most 1,024 admitted executions per role recovery root, including fixed
+  children sharing the agent root. A signed immutable admission reserves capacity
+  before witness publication or effects. Existing identities and settlement remain
+  accessible when admission is full.
+- At most 1,024 lease histories across the physical installation and 256 active
+  leases. Exclusive fixed admission slots reserve both before target acquisition;
+  only authoritative root release removes an active slot. Terminal histories and
+  partial published histories keep their retained slot. Acquisition starts its
+  five-second budget before admission work and probes at most 1,024 history slots
+  plus 256 active slots, without listing or opening historical ledgers.
+- Exactly 18 fixed private receipt namespaces, each capped at 65,536 records
+  (1,024 executions times 64 intents); the execution namespace has the stricter
+  1,024 limit. Each private record is at most 128 KiB, so even the conservative
+  aggregate private record ceiling is finite, below 145 GiB per role, excluding
+  filesystem overhead. Actual typed key/admission/effect records have tighter
+  schema limits. Durable private counters reserve creation before publication;
+  bounded streaming enumeration is needed only to initialize a missing counter.
+  Failed reservations consume capacity rather than allowing undercount/reuse.
+- Fixed-child keys use a direct public-key-digest index plus exact challenge read,
+  never a historical key-directory scan. Each execution may allocate at most 64
+  keys and no more than its admitted plan length. Shared witnesses are bounded by
+  the admitted execution count: immutable witness, lifecycle and attempted-child
+  map each at most 64 KiB, plus at most 4 KiB of key identities and a bounded
+  prepared witness. Lease ledgers remain capped at 128 KiB/64 children.
+
+There is **no online retirement** of terminal records or key/identity slots.
+Terminal records therefore survive at least 72 hours; unresolved records survive
+regardless of age, deadline or PID. This deliberately trades lifetime throughput
+for exact one-use/replay evidence: exhaustion refuses new work and requires
+supervised offline capacity planning/recovery after all relevant writers/helpers
+stop. No constructor resets counters, deletes aged evidence or rotates trust to
+make room. Automatic bounded retirement with sustained throughput is not supplied
+by this foundation. Older lease layouts without the admission index require
+supervised indexing; startup never silently excludes their fences. A crashed
+metadata guard likewise requires supervised recovery.
 
 Settlement requires signed retained structured evidence from the fixed executor:
 a parsed typed result, exact fixed-command completion, or an execution that has

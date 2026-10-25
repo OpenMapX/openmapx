@@ -3,6 +3,7 @@
 export * from "./archive";
 export {
   type ArtifactDelegationAssertion,
+  assertControlExecutionForward,
   attestParentExecution,
   beginControlEffect,
   beginFixedCliExecution,
@@ -12,6 +13,7 @@ export {
   type ControlInstallation,
   type ControlPlannedChild,
   type ControlRecipient,
+  cancelControlExecution,
   closeControlInstallation,
   controlAdoptionSchema,
   controlChildOperationKey,
@@ -41,6 +43,7 @@ export {
   verifyParentExecution,
   verifyRetainedLocalControlPeer,
 } from "./control-authority";
+export { CONTROL_RETENTION_LIMITS } from "./control-retention";
 export * from "./manifest";
 export { inspectControlAdmission, verifiedParentForArtifactDelegation } from "./peer-admission";
 export * from "./target-lease";

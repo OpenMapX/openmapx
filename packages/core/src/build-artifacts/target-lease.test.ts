@@ -257,6 +257,11 @@ it("retains terminal maintenance ownership and permits only frozen one-use conti
     { mode: 0o600 },
   );
   c.retainControlPreparedTerminal(authority);
+  c.retainControlEffectReceipt(authority, {
+    outcome: "failed_without_effect",
+    publication: "not_started",
+    receipt: { kind: "not-started" },
+  });
   await expect(
     a.delegateArtifactTargetLease(lease, {
       ...plan,
@@ -368,4 +373,147 @@ it("does not restart effects after retaining unused-execution evidence", async (
     receipt: { kind: "not-started" },
   });
   expect(() => c.beginControlEffect(authority)).toThrow(/cannot restart/);
+});
+
+it("admits from a bounded active index without opening retained terminal ledgers", async () => {
+  const a = await api();
+  const { AnchoredDirectory } = await import("./filesystem");
+  const { vi } = await import("vitest");
+  // Real retained terminal histories, with valid signatures and released locks.
+  for (let i = 0; i < 12; i++) {
+    const authority = owner();
+    const lease = await a.acquireArtifactTargetLease({
+      dataRoot: join(root, "data"),
+      serviceIds: ["osrm"],
+      owner: authority,
+    });
+    retainControlEffectReceipt(authority, {
+      outcome: "failed_without_effect",
+      publication: "not_started",
+      receipt: { kind: "not-started" },
+    });
+    await a.settleArtifactTargetLeaseChild(
+      lease,
+      verifyControlEffectSettlement(installation, authority.execution),
+    );
+    await a.releaseArtifactTargetLease(lease);
+  }
+  const authority = owner();
+  const read = AnchoredDirectory.prototype.read;
+  const historicalReads: string[] = [];
+  const spy = vi.spyOn(AnchoredDirectory.prototype, "read").mockImplementation(function (
+    this: InstanceType<typeof AnchoredDirectory>,
+    name,
+    max,
+    mode,
+  ) {
+    if (name === "owner.json") historicalReads.push(this.path);
+    return read.call(this, name, max, mode);
+  });
+  let lease: import("./target-lease").ArtifactTargetLease | undefined;
+  try {
+    lease = await a.acquireArtifactTargetLease({
+      dataRoot: join(root, "data"),
+      serviceIds: ["osrm"],
+      owner: authority,
+    });
+  } finally {
+    spy.mockRestore();
+  }
+  expect(new Set(historicalReads).size, "new acquisition must read only its new ledger").toBe(1);
+  if (lease) a.closeArtifactTargetLeaseHandle(lease);
+});
+
+it("retains terminal and unresolved records past 72h and refuses at retained capacity before effects", async () => {
+  const a = await api();
+  const { CONTROL_RETENTION_LIMITS } = await import("./control-retention");
+  const { vi } = await import("vitest");
+  const fs = await import("node:fs");
+  const authority = owner();
+  const terminal = await a.acquireArtifactTargetLease({
+    dataRoot: join(root, "data"),
+    serviceIds: ["osrm"],
+    owner: authority,
+  });
+  retainControlEffectReceipt(authority, {
+    outcome: "failed_without_effect",
+    publication: "not_started",
+    receipt: { kind: "not-started" },
+  });
+  await a.settleArtifactTargetLeaseChild(
+    terminal,
+    verifyControlEffectSettlement(installation, authority.execution),
+  );
+  await a.releaseArtifactTargetLease(terminal);
+  const unsettledAuthority = owner();
+  const unresolved = await a.acquireArtifactTargetLease({
+    dataRoot: join(root, "data"),
+    serviceIds: ["osrm"],
+    owner: unsettledAuthority,
+  });
+  const retainedFile = join(
+    root,
+    `data/.admin-target-control/leases/${unresolved.leaseId}/owner.json`,
+  );
+  const original = readFileSync(retainedFile);
+  const history = join(root, "data/.admin-target-control/admission-index-v1/history");
+  for (let i = 0; i < CONTROL_RETENTION_LIMITS.leases; i++) {
+    try {
+      mkdirSync(join(history, `slot-${i}`), { mode: 0o700 });
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+    }
+  }
+  const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 96 * 60 * 60 * 1000);
+  let effects = 0;
+  try {
+    await expect(
+      a.withArtifactTargetLease(
+        { dataRoot: join(root, "data"), serviceIds: ["osrm"], owner: owner() },
+        async () => {
+          effects++;
+        },
+      ),
+    ).rejects.toThrow(/capacity/);
+    expect(effects).toBe(0);
+    expect(readFileSync(retainedFile)).toEqual(original);
+    expect(
+      fs.existsSync(join(root, `data/.admin-target-control/leases/${terminal.leaseId}/owner.json`)),
+    ).toBe(true);
+    expect(
+      fs.existsSync(join(root, `control-private/host-cli/leases/${terminal.leaseId}.json`)),
+    ).toBe(true);
+    expect(fs.existsSync(join(root, "data/.admin-target-control/locks/osrm"))).toBe(true);
+    expect(() => a.assertArtifactTargetLeaseForward(unresolved)).toThrow(/observation/);
+  } finally {
+    clock.mockRestore();
+    a.closeArtifactTargetLeaseHandle(unresolved);
+  }
+});
+
+it("does not accumulate temporary authority records after failed atomic updates", async () => {
+  const { AnchoredDirectory } = await import("./filesystem");
+  const { vi } = await import("vitest");
+  const { readdirSync } = await import("node:fs");
+  const dir = new AnchoredDirectory(root);
+  try {
+    dir.write("receipt.json", "original", true);
+    for (let i = 0; i < 3; i++) {
+      const check = dir.check.bind(dir);
+      let calls = 0;
+      const fault = vi.spyOn(dir, "check").mockImplementation(() => {
+        if (++calls === 3) throw Error("synthetic post-write authority failure");
+        check();
+      });
+      try {
+        expect(() => dir.write("receipt.json", "replacement")).toThrow(/synthetic/);
+      } finally {
+        fault.mockRestore();
+      }
+    }
+    expect(dir.read("receipt.json", 64).toString()).toBe("original");
+    expect(readdirSync(root).filter((name) => name.startsWith(".write-"))).toEqual([]);
+  } finally {
+    dir.close();
+  }
 });

@@ -12,21 +12,23 @@ import { expect, it } from "vitest";
 import { type OpsJobJournal, openOpsJobJournal } from "./journal";
 import { buildOpsAgentServer } from "./server";
 
-it.each([false, true])(
-  "adopts at authenticated HTTP admission without replay (ready-write failure: %s)",
-  async (failReadyWrite) => {
+it.each(["normal", "ready-failure", "wrong-target"])(
+  "adopts at authenticated HTTP admission without replay (%s)",
+  async (scenario) => {
+    const failReadyWrite = scenario === "ready-failure";
+    const serviceIds = scenario === "wrong-target" ? ["osrm"] : ["motis"];
     const root = mkdtempSync(join(tmpdir(), "omx-control-http-"));
     mkdirSync(join(root, "data"), { mode: 0o700 });
     await control.provisionControlInstallation(root);
     const dm = control.openControlInstallation({
       infraDir: root,
       role: "data-manager",
-      serviceIds: ["motis"],
+      serviceIds: ["motis", "osrm"],
     });
     const agent = control.openControlInstallation({
       infraDir: root,
       role: "ops-agent",
-      serviceIds: ["motis"],
+      serviceIds: ["motis", "osrm"],
     });
     const operation = { kind: "transit-sync" };
     const hash = opsOperationFingerprint({ kind: "motis.primary.stop" });
@@ -66,7 +68,7 @@ it.each([false, true])(
       ordinal: 0,
       kind: "motis.primary.stop",
       execution: child,
-      serviceIds: ["motis"],
+      serviceIds,
       recipient: "ops-agent" as const,
     };
     const authority = control.retainAdmittedControlExecution(dm, {
@@ -74,12 +76,12 @@ it.each([false, true])(
       kind: operation.kind,
       operation,
       admittedAt: deadlineAt - 60000,
-      serviceIds: ["motis"],
+      serviceIds,
       plan: [plan],
     });
     const lease = await control.acquireArtifactTargetLease({
       dataRoot: join(root, "data"),
-      serviceIds: ["motis"],
+      serviceIds,
       owner: authority,
     });
     const assertion = await control.delegateArtifactTargetLease(lease, {
@@ -129,6 +131,12 @@ it.each([false, true])(
       });
     try {
       const result = await request();
+      if (scenario === "wrong-target") {
+        expect(result.statusCode, result.body).toBe(403);
+        expect(calls).toBe(0);
+        expect(journal.records()).toHaveLength(0);
+        return;
+      }
       if (failReadyWrite) {
         expect(result.statusCode).toBe(500);
         expect(calls).toBe(0);

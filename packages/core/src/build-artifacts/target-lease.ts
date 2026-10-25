@@ -11,6 +11,8 @@ import { canonicalJson } from "../ops/fingerprint";
 import {
   type ArtifactDelegationAssertion,
   type AuthorityState,
+  assertControlDelegationForward,
+  assertControlExecutionForward,
   assertionSchema,
   type ChildSettlement,
   type ControlChildPhase,
@@ -24,6 +26,7 @@ import {
   digest,
   encodePrivate,
   executionAuthorityState,
+  fixedControlChildId,
   type InstallationState,
   installationState,
   newControlKey,
@@ -44,6 +47,7 @@ import {
   verifyControlPreparedTerminal,
   writePrivateRecord,
 } from "./control-authority";
+import { CONTROL_RETENTION_LIMITS, reserveAuthoritySlot } from "./control-retention";
 import { AnchoredDirectory, type FileIdentity, identity, sameInode } from "./filesystem";
 
 export type { ChildSettlement } from "./control-authority";
@@ -74,6 +78,17 @@ const certificateSchema = z.strictObject({
   createdAt: z.number().int().nonnegative().safe(),
 });
 type Certificate = z.infer<typeof certificateSchema>;
+const slotSchema = z.strictObject({ name: z.string().regex(/^slot-\d{1,4}$/), identity: inode });
+const admissionSlotSchema = z.strictObject({
+  version: z.literal(1),
+  installationId: uuid,
+  leaseId: uuid,
+  certificateDigest: digest,
+  active: slotSchema,
+  history: slotSchema,
+});
+type AdmissionSlots = z.infer<typeof admissionSlotSchema>;
+
 const signedCertificateSchema = z.strictObject({
   payload: certificateSchema,
   signature: z.string(),
@@ -141,9 +156,16 @@ interface State {
   node: string | null;
   execution: ExecutionRef;
   authority?: AuthorityState;
+  verifiedAuthority?: VerifiedExecutionAuthority;
   closed: boolean;
+  journalGuardHeld?: boolean;
+  slots?: AdmissionSlots;
 }
 const handles = new WeakMap<object, State>();
+function required<T>(value: T | undefined, message: string): T {
+  if (value === undefined) throw Error(message);
+  return value;
+}
 function stateOf(lease: TargetLeaseAuthority): State {
   const state = handles.get(lease);
   if (!state || state.closed || (lease.mode === "owner") !== (state.node === null))
@@ -159,9 +181,14 @@ function verifyAnchors(s: State) {
   for (const id of s.certificate.serviceIds) {
     const lock = s.locks.directory(id);
     try {
-      if (!sameInode(identity(lock.stat), s.certificate.lockIdentities[id]!))
+      if (
+        !sameInode(
+          identity(lock.stat),
+          required(s.certificate.lockIdentities[id], "Missing certified target inode"),
+        )
+      )
         throw Error("Target lock inode identity changed");
-      if (lock.list().length) throw Error("Unexplained nonempty target lock");
+      if (lock.listBounded(1).length) throw Error("Unexplained nonempty target lock");
     } finally {
       lock.close();
     }
@@ -253,7 +280,13 @@ function highWater(s: State, nodes: Record<string, { sequence: number; digest: s
   }
   writePrivateRecord(s.installation, "observations", name, nodes);
 }
-function tree(s: State) {
+type LeaseTree = {
+  root: RootRecord;
+  grants: Map<string, Grant>;
+  children: Map<string, ChildRecord>;
+};
+function tree(s: State): LeaseTree {
+  if (!s.journalGuardHeld) return guarded(s, () => tree(s), false);
   const root = readRoot(s);
   if (controlDigest(root.certificate) !== controlDigest(s.certificateEnvelope))
     throw Error("Owner certificate replacement");
@@ -358,8 +391,8 @@ function tree(s: State) {
     childDir = childDirectory(s, "children");
   try {
     if (
-      grantDir.list().some((n) => !grants.has(n.replace(/\.json$/, ""))) ||
-      childDir.list().some((n) => !children.has(n.replace(/\.json$/, "")))
+      grantDir.listBounded(64).some((n) => !grants.has(n.replace(/\.json$/, ""))) ||
+      childDir.listBounded(64).some((n) => !children.has(n.replace(/\.json$/, "")))
     )
       throw Error("Unexplained protocol record; recovery required");
   } finally {
@@ -370,12 +403,13 @@ function tree(s: State) {
   return { root, grants, children };
 }
 function ledgerBytes(s: State) {
-  let bytes = s.ledger.read("owner.json", 131072).length;
+  let bytes =
+    s.ledger.read("owner.json", 131072).length + s.ledger.read("admission.json", 4096).length;
   for (const kind of ["grants", "children"] as const) {
     const dir = childDirectory(s, kind);
     try {
-      if (dir.list().length > 64) throw Error("Protocol record capacity");
-      for (const name of dir.list()) bytes += dir.read(name, 131072).length;
+      if (dir.listBounded(64).length > 64) throw Error("Protocol record capacity");
+      for (const name of dir.listBounded(64)) bytes += dir.read(name, 131072).length;
     } finally {
       dir.close();
     }
@@ -405,8 +439,13 @@ function writeBounded(
     if (dir !== s.ledger) dir.close();
   }
 }
-async function guarded<T>(s: State, run: () => T): Promise<T> {
-  verifyAnchors(s);
+function guarded<T>(s: State, run: () => T, checkTargets = true): T {
+  if (s.journalGuardHeld) throw Error("Nested lease journal writer");
+  if (checkTargets) verifyAnchors(s);
+  else {
+    s.data.check();
+    s.ledger.check();
+  }
   const path = s.ledger.name(".journal-writer");
   try {
     mkdirSync(path, { mode: 0o700 });
@@ -417,8 +456,10 @@ async function guarded<T>(s: State, run: () => T): Promise<T> {
   const guard = s.ledger.directory(".journal-writer");
   const expected = identity(guard.stat);
   try {
+    s.journalGuardHeld = true;
     return run();
   } finally {
+    s.journalGuardHeld = false;
     guard.close();
     s.ledger.removeDirectory(".journal-writer", expected);
   }
@@ -449,12 +490,60 @@ function knownOutcome(e: ChildSettlement | null | undefined) {
     !(e.outcome === "failed_without_effect" && e.publication !== "not_started")
   );
 }
+function admissionIndex(
+  control: AnchoredDirectory,
+  leases: AnchoredDirectory,
+  installation: InstallationState,
+) {
+  let created = false;
+  try {
+    mkdirSync(control.name("admission-index-v1"), { mode: 0o700 });
+    fsyncSync(control.fd);
+    created = true;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+  }
+  const index = control.directory("admission-index-v1");
+  try {
+    if (created) {
+      // Existing installations require supervised indexing; never silently omit an old fence.
+      if (leases.listBounded(1).length)
+        throw Error("Existing leases require supervised admission-index recovery");
+      index.directory("active", true).close();
+      index.directory("history", true).close();
+      index.write(
+        "ready.json",
+        canonicalJson({ installationId: installation.installation.installationId }),
+        true,
+      );
+    }
+    const ready = z.strictObject({ installationId: uuid }).parse(json(index, "ready.json", 1024));
+    if (ready.installationId !== installation.installation.installationId)
+      throw Error("Foreign admission index");
+    return index;
+  } catch (e) {
+    index.close();
+    throw e;
+  }
+}
+function releaseActiveSlot(s: State) {
+  if (!s.slots) throw Error("Missing retained admission slots");
+  const index = s.control.directory("admission-index-v1"),
+    active = index.directory("active");
+  try {
+    active.removeDirectory(s.slots.active.name, s.slots.active.identity);
+  } finally {
+    active.close();
+    index.close();
+  }
+}
 export async function acquireArtifactTargetLease(options: {
   dataRoot: string;
   serviceIds: readonly string[];
   owner: VerifiedExecutionAuthority;
   signal?: AbortSignal;
 }): Promise<ArtifactTargetLease> {
+  const beganAt = Date.now();
   const authority = executionAuthorityState(options.owner);
   if (authority.installation.fixedChildId)
     throw Error("Fixed children must borrow and cannot acquire a root");
@@ -464,6 +553,7 @@ export async function acquireArtifactTargetLease(options: {
     Date.now() >= authority.execution.deadlineAt
   )
     throw Error("Target closure or execution deadline mismatch");
+  assertControlExecutionForward(options.owner);
   options.signal?.throwIfAborted();
   try {
     readPrivateRecord(
@@ -489,36 +579,21 @@ export async function acquireArtifactTargetLease(options: {
   const acquired: Record<string, FileIdentity> = {};
   let published = false;
   let ledger: AnchoredDirectory | undefined;
+  let activeSlot: z.infer<typeof slotSchema> | undefined,
+    historySlot: z.infer<typeof slotSchema> | undefined;
+  let index: AnchoredDirectory | undefined;
   try {
-    let unsettled = 0;
-    for (const id of leases.list()) {
-      uuid.parse(id);
-      const d = leases.directory(id);
-      try {
-        const raw = json(d, "owner.json");
-        const preliminary = z.object({ payload: rootSchema }).parse(raw);
-        const certificate = preliminary.payload.certificate;
-        const cert = verifyControl(
-          authority.installation.publicKeys[certificate.payload.owner.executor],
-          "openmapx-lease-certificate-v1",
-          certificate,
-          certificateSchema,
-        );
-        if (cert.installationId !== authority.installation.installation.installationId)
-          throw Error("Foreign retained lease");
-        const record = verifyControl(
-          cert.ownerPublicKey,
-          "openmapx-lease-owner-v1",
-          raw,
-          rootSchema,
-        );
-        if (record.phase !== "settled") unsettled++;
-      } finally {
-        d.close();
-      }
+    const until = Math.min(beganAt + 5000, authority.execution.deadlineAt);
+    index = admissionIndex(control, leases, authority.installation);
+    const history = index.directory("history"),
+      active = index.directory("active");
+    try {
+      historySlot = reserveAuthoritySlot(history, CONTROL_RETENTION_LIMITS.leases, until);
+      activeSlot = reserveAuthoritySlot(active, CONTROL_RETENTION_LIMITS.activeLeases, until);
+    } finally {
+      active.close();
+      history.close();
     }
-    if (unsettled >= 256) throw Error("Unsettled lease capacity exhausted");
-    const until = Math.min(Date.now() + 5000, authority.execution.deadlineAt);
     for (const id of serviceIds) {
       for (;;) {
         options.signal?.throwIfAborted();
@@ -558,6 +633,21 @@ export async function acquireArtifactTargetLease(options: {
       authority.installation.privateKey,
       "openmapx-lease-certificate-v1",
       certificate,
+    );
+    const slots: AdmissionSlots = {
+      version: 1,
+      installationId: certificate.installationId,
+      leaseId,
+      certificateDigest: controlDigest(certificateEnvelope),
+      active: activeSlot,
+      history: historySlot,
+    };
+    ledger.write(
+      "admission.json",
+      canonicalJson(
+        signControl(authority.installation.privateKey, "openmapx-admission-slots-v1", slots),
+      ),
+      true,
     );
     writePrivateRecord(
       authority.installation,
@@ -603,6 +693,8 @@ export async function acquireArtifactTargetLease(options: {
       node: null,
       execution: authority.execution,
       authority,
+      verifiedAuthority: options.owner,
+      slots,
       closed: false,
     };
     const lease = Object.freeze({
@@ -613,8 +705,29 @@ export async function acquireArtifactTargetLease(options: {
     });
     handles.set(lease, state);
     tree(state);
+    if (Date.now() >= until)
+      throw Error(
+        "Target lease acquisition deadline elapsed after publication; reconcile original identity",
+      );
+    index.close();
     return lease;
   } catch (e) {
+    if (!published && index) {
+      for (const [kind, slot] of [
+        ["active", activeSlot],
+        ["history", historySlot],
+      ] as const) {
+        if (!slot) continue;
+        if (kind === "history" && ledger) continue; // Partial records consume retained capacity too.
+        const dir = index.directory(kind);
+        try {
+          dir.removeDirectory(slot.name, slot.identity);
+        } finally {
+          dir.close();
+        }
+      }
+    }
+    index?.close();
     if (!published)
       for (const [id, expected] of Object.entries(acquired)) locks.removeDirectory(id, expected);
     ledger?.close();
@@ -722,6 +835,16 @@ function permitted(s: State, child: ControlPlannedChild, parentGrant?: Grant): s
     child.recipient,
   );
 }
+function forwardAncestry(t: ReturnType<typeof tree>, node: string | null): boolean {
+  if (t.root.phase !== "held") return false;
+  while (node !== null) {
+    const grant = t.grants.get(node);
+    if (!grant || t.children.get(node)?.phase !== "held" || Date.now() >= grant.child.deadlineAt)
+      return false;
+    node = grant.parentNode;
+  }
+  return Date.now() < t.root.certificate.payload.owner.deadlineAt;
+}
 export async function delegateArtifactTargetLease(
   lease: TargetLeaseAuthority,
   child: {
@@ -733,14 +856,14 @@ export async function delegateArtifactTargetLease(
   },
 ): Promise<ArtifactDelegationAssertion> {
   const s = stateOf(lease);
+  if (s.verifiedAuthority) assertControlDelegationForward(s.verifiedAuthority, child.phase);
   return guarded(s, () => {
     const current = tree(s);
-    const node = s.node === null ? current.root : current.children.get(s.node)!;
-    if (
-      node.phase !== "held" ||
-      current.root.phase !== "held" ||
-      Date.now() >= s.execution.deadlineAt
-    )
+    const node =
+      s.node === null
+        ? current.root
+        : required(current.children.get(s.node), "Missing retained child node");
+    if (!forwardAncestry(current, s.node) || Date.now() >= s.execution.deadlineAt)
       throw Error("Lease does not permit forward delegation");
     let plan = s.authority?.plan.find(
       (p) =>
@@ -750,7 +873,7 @@ export async function delegateArtifactTargetLease(
         canonicalJson(p.serviceIds) === canonicalJson(child.serviceIds),
     );
     if (!plan && s.node !== null) {
-      const inherited = current.grants.get(s.node)!;
+      const inherited = required(current.grants.get(s.node), "Missing retained child grant");
       const kinds = childPhaseKinds[child.phase];
       if (
         inherited.permittedFurtherEdges.includes(child.phase) &&
@@ -758,7 +881,7 @@ export async function delegateArtifactTargetLease(
         child.execution.operationKey ===
           controlChildOperationKey(s.execution.operationKey, child.phase, 0)
       )
-        plan = { ...child, kind: kinds[0]!, ordinal: 0 };
+        plan = { ...child, kind: required(kinds[0], "Missing finite child kind"), ordinal: 0 };
     }
     if (!plan) throw Error("Child is absent from immutable admitted plan");
     if (current.grants.size >= 64) throw Error("Child intent capacity exhausted");
@@ -784,18 +907,7 @@ export async function delegateArtifactTargetLease(
       verifyControlPreparedTerminal(s.installation, s.execution);
     let delegationId: string = randomUUID();
     if (child.recipient === "fixed-cli" || child.recipient === "configuration-helper") {
-      const dir = s.installation.privateRoot.directory("children");
-      try {
-        const matches = dir.list().filter((name) => {
-          if (!name.endsWith(".key")) return false;
-          const saved = JSON.parse(dir.read(name, 2048).toString("utf8"));
-          return saved.publicKey === child.childPublicKey;
-        });
-        if (matches.length !== 1) throw Error("Missing fixed child private challenge");
-        delegationId = uuid.parse(matches[0]?.slice(0, -4));
-      } finally {
-        dir.close();
-      }
+      delegationId = fixedControlChildId(s.installation, child.childPublicKey, s.execution);
     } else if (child.childPublicKey !== s.installation.publicKeys[child.recipient])
       throw Error("Child role key mismatch");
     const grant: Grant = {
@@ -886,7 +998,20 @@ function openState(
       certificate.leaseId !== leaseId
     )
       throw Error("Foreign lease installation");
+    const slots = verifyControl(
+      installation.publicKeys[certificate.owner.executor],
+      "openmapx-admission-slots-v1",
+      json(ledger, "admission.json", 4096),
+      admissionSlotSchema,
+    );
+    if (
+      slots.leaseId !== leaseId ||
+      slots.installationId !== certificate.installationId ||
+      slots.certificateDigest !== controlDigest(envelope)
+    )
+      throw Error("Admission slot identity mismatch");
     const s = {
+      slots,
       data,
       control,
       locks,
@@ -990,7 +1115,7 @@ export async function adoptArtifactTargetLease(options: {
       const retained = t.children.get(grant.delegationId);
       if (
         !retained &&
-        (t.root.phase !== "held" || parent.phase !== "held" || Date.now() >= grant.child.deadlineAt)
+        (!forwardAncestry(t, grant.parentNode) || Date.now() >= grant.child.deadlineAt)
       )
         throw Error("Stale or canceled delegation");
       const admissionName = `${grant.delegationId}.json`;
@@ -1073,6 +1198,7 @@ export function bindBorrowedControlExecution(
   )
     throw Error("Borrower execution authority mismatch");
   s.authority = a;
+  s.verifiedAuthority = authority;
 }
 export async function settleArtifactTargetLeaseChild(
   lease: TargetLeaseAuthority,
@@ -1087,7 +1213,8 @@ export async function settleArtifactTargetLeaseChild(
     throw Error("Foreign settlement identity");
   await guarded(s, () => {
     const t = tree(s);
-    const node = s.node === null ? t.root : t.children.get(s.node)!;
+    const node =
+      s.node === null ? t.root : required(t.children.get(s.node), "Missing retained child node");
     for (const grant of t.grants.values()) {
       if (grant.parentNode === s.node) {
         const child = t.children.get(grant.delegationId);
@@ -1116,7 +1243,11 @@ export async function releaseArtifactTargetLease(lease: ArtifactTargetLease): Pr
     }
   });
   for (const id of s.certificate.serviceIds)
-    s.locks.removeDirectory(id, s.certificate.lockIdentities[id]!);
+    s.locks.removeDirectory(
+      id,
+      required(s.certificate.lockIdentities[id], "Missing certified target inode"),
+    );
+  releaseActiveSlot(s);
   closeState(s);
 }
 export async function reconcileArtifactTargetLease(options: {
@@ -1186,6 +1317,7 @@ export async function withArtifactTargetLease<T>(
   run: (lease: TargetLeaseAuthority) => Promise<T>,
 ): Promise<T> {
   if (options.inherited) {
+    assertControlExecutionForward(options.owner);
     const state = stateOf(options.inherited);
     const requestedRoot = new AnchoredDirectory(options.dataRoot);
     try {
@@ -1201,7 +1333,7 @@ export async function withArtifactTargetLease<T>(
     )
       throw Error("Inherited target closure cannot widen or reacquire");
     assertArtifactTargetLeaseForward(options.inherited);
-    const inheritedGrant = tree(state).grants.get(state.node!);
+    const inheritedGrant = state.node === null ? undefined : tree(state).grants.get(state.node);
     if (inheritedGrant?.recipient === "configuration-helper")
       verifyConfigurationHelperReady(options.inherited);
     return run(options.inherited);
@@ -1243,7 +1375,9 @@ export function inspectArtifactDelegation(options: {
     const grant = t.grants.get(parsed.delegationId);
     if (!grant || parsed.ownerCertificateDigest !== controlDigest(s.certificateEnvelope))
       throw Error("Unanchored delegation");
-    const parent = grant.parentNode ? t.grants.get(grant.parentNode)! : undefined;
+    const parent = grant.parentNode
+      ? required(t.grants.get(grant.parentNode), "Missing parent grant")
+      : undefined;
     const parentKey = parent?.childPublicKey ?? s.certificate.ownerPublicKey;
     const { signature, ...fields } = parsed;
     verifyControl(
@@ -1252,7 +1386,9 @@ export function inspectArtifactDelegation(options: {
       { payload: fields, signature },
       assertionSchema.omit({ signature: true }),
     );
-    const parentNode = grant.parentNode ? t.children.get(grant.parentNode)! : t.root;
+    const parentNode = grant.parentNode
+      ? required(t.children.get(grant.parentNode), "Missing parent adoption")
+      : t.root;
     if (parentNode.grantDigests[grant.delegationId] !== parsed.grantDigest)
       throw Error("Grant digest mismatch");
     return Object.freeze({
@@ -1271,16 +1407,35 @@ export function inspectArtifactDelegation(options: {
   }
 }
 
-export async function cancelArtifactTargetLease(lease: TargetLeaseAuthority): Promise<void> {
+export async function cancelArtifactTargetLease(
+  lease: TargetLeaseAuthority,
+): Promise<readonly ExecutionRef[]> {
   const s = stateOf(lease);
-  await guarded(s, () => {
+  return guarded(s, () => {
     const t = tree(s);
-    const node = s.node === null ? t.root : t.children.get(s.node)!;
-    if (node.phase === "settled") return;
-    node.phase = "cancel_pending";
-    node.sequence++;
-    writeNode(s, node);
-    tree(s);
+    const node =
+      s.node === null ? t.root : required(t.children.get(s.node), "Missing retained child node");
+    if (node.phase !== "settled") {
+      node.phase = "cancel_pending";
+      node.sequence++;
+      writeNode(s, node);
+      tree(s);
+    }
+    // These immutable attempted identities are the adapter's cancellation
+    // outbox, including lost admissions. No descendant evidence is released.
+    return Object.freeze(
+      [...t.grants.values()]
+        .filter((grant) => {
+          let parent = grant.parentNode;
+          if (s.node === null) return true;
+          while (parent !== null) {
+            if (parent === s.node) return true;
+            parent = t.grants.get(parent)?.parentNode ?? null;
+          }
+          return false;
+        })
+        .map((grant) => Object.freeze({ ...grant.child })),
+    );
   });
 }
 
@@ -1288,12 +1443,11 @@ export async function cancelArtifactTargetLease(lease: TargetLeaseAuthority): Pr
 export function verifyConfigurationHelperReady(lease: BorrowedArtifactTargetLease): void {
   const s = stateOf(lease);
   const t = tree(s);
-  const grant = t.grants.get(s.node!);
+  const grant = s.node === null ? undefined : t.grants.get(s.node);
   if (
     grant?.recipient !== "configuration-helper" ||
     grant.phase !== "configuration-handoff" ||
-    t.root.phase !== "held" ||
-    t.children.get(s.node!)?.phase !== "held" ||
+    !forwardAncestry(t, s.node) ||
     Date.now() >= grant.child.deadlineAt
   )
     throw Error("Configuration helper cannot enter drain");
@@ -1303,14 +1457,10 @@ export function verifyConfigurationHelperReady(lease: BorrowedArtifactTargetLeas
 /** Observation/adoption of an old identity is not permission to start another forward effect. */
 export function assertArtifactTargetLeaseForward(lease: TargetLeaseAuthority): void {
   const s = stateOf(lease);
+  if (s.verifiedAuthority) assertControlExecutionForward(s.verifiedAuthority);
   const t = tree(s);
   const node = s.node === null ? t.root : t.children.get(s.node);
-  if (
-    !node ||
-    t.root.phase !== "held" ||
-    node.phase !== "held" ||
-    Date.now() >= s.execution.deadlineAt
-  )
+  if (!node || !forwardAncestry(t, s.node) || Date.now() >= s.execution.deadlineAt)
     throw Error("Target lease permits observation/settlement only");
 }
 
@@ -1335,8 +1485,7 @@ export function verifyRetainedArtifactTargetSettlement(
     const child = t.children.get(adoption.delegationId);
     const proof = childSettlementState(verifyControlEffectSettlement(installation, execution));
     if (
-      !child ||
-      child.phase !== "settled" ||
+      child?.phase !== "settled" ||
       !knownOutcome(child.settlement) ||
       controlDigest(child.execution) !== controlDigest(execution) ||
       controlDigest(child.settlement) !== controlDigest(proof.evidence)

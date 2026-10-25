@@ -541,6 +541,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       const authority = controlAuthorities.get(job.operationId);
       if (lease && state === "termination_pending") await cancelArtifactTargetLease(lease);
       if (lease && authority && ["succeeded", "failed", "timed_out"].includes(state)) {
+        if (!options.controlInstallation) throw Error("Missing control settlement installation");
         // The fixed runtime's validated result is own-effect evidence. Failure alone is not containment.
         const committed = state === "succeeded" && updates.result !== undefined;
         retainControlEffectReceipt(authority, {
@@ -552,7 +553,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         });
         await settleArtifactTargetLeaseChild(
           lease,
-          verifyControlEffectSettlement(options.controlInstallation!, authority.execution),
+          verifyControlEffectSettlement(options.controlInstallation, authority.execution),
         );
       }
       const candidate: JobRecord = { ...job, ...updates, state, updatedAt };
@@ -1023,6 +1024,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           rawHeaders: ["x-openmapx-control-delegation", assertion],
           transportPrincipal: "data-manager",
           kind: job.operation.kind,
+          operation: job.operation,
           operationKey: job.operationKey,
           operationFingerprint: execution.operationFingerprint,
           requestedDeadlineAt: execution.deadlineAt,
@@ -1086,6 +1088,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             rawHeaders: request.raw.rawHeaders,
             transportPrincipal: "data-manager",
             kind,
+            operation,
             operationKey: parsed.operationKey,
             operationFingerprint,
             requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
@@ -1306,24 +1309,30 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           jobsById.set(job.operationId, job);
           jobsByKey.set(ownerKey, job);
           if (controlAdmission) {
+            const adoption = {
+              leaseId: controlAdmission.leaseId,
+              delegationId: controlAdmission.delegationId,
+            };
             try {
+              if (!options.controlInstallation || job.admittedAt === undefined)
+                throw Error("Missing durable control admission context");
               const lease = await controlAdmission.adopt(executionFor(job));
-              const authority = retainAdmittedControlExecution(options.controlInstallation!, {
+              const authority = retainAdmittedControlExecution(options.controlInstallation, {
                 execution: executionFor(job),
                 kind: job.operation.kind,
                 operation: job.operation,
-                admittedAt: job.admittedAt!,
+                admittedAt: job.admittedAt,
                 parent: job.parent,
                 serviceIds: lease.serviceIds,
               });
               controlLeases.set(job.operationId, lease);
               controlAuthorities.set(job.operationId, authority);
-              job.controlAdoption = { ...job.controlAdoption!, phase: "ready" };
+              job.controlAdoption = { ...adoption, phase: "ready" };
               await journal.replace([...jobsById.values()].map(persisted));
             } catch (error) {
               // The receiver may already have adopted. This identity remains
               // observable as recovery-required and is never dispatched again.
-              job.controlAdoption = { ...job.controlAdoption!, phase: "recovery_required" };
+              job.controlAdoption = { ...adoption, phase: "recovery_required" };
               forceRecoveryRequired(job);
               try {
                 await journal.replace([...jobsById.values()].map(persisted));

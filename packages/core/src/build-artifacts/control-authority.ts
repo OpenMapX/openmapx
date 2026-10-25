@@ -22,6 +22,7 @@ import {
 } from "../ops/execution-identity";
 import { canonicalJson, opsOperationFingerprint } from "../ops/fingerprint";
 import { verifiedParents } from "../ops/verified-parent-internal";
+import { CONTROL_RETENTION_LIMITS, writeRetainedRecord } from "./control-retention";
 import { AnchoredDirectory, identity } from "./filesystem";
 export const CONTROL_ROLES = ["ops-agent", "data-manager", "host-cli"] as const;
 export type ControlRecipient = "fixed-cli" | "data-manager" | "ops-agent" | "configuration-helper";
@@ -99,7 +100,10 @@ export const targetSchema = z
   .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
   .min(1)
   .max(256)
-  .refine((x) => x.every((v, i) => i === 0 || x[i - 1]! < v), "Targets must be sorted and unique");
+  .refine(
+    (x) => x.every((v, i) => i === 0 || (x[i - 1] ?? v) < v),
+    "Targets must be sorted and unique",
+  );
 export function controlDigest(value: unknown): string {
   return createHash("sha256").update(canonicalJson(value)).digest("hex");
 }
@@ -449,7 +453,38 @@ export function writePrivateRecord(
   try {
     const bytes = canonicalJson(value);
     if (Buffer.byteLength(bytes) > 131072) throw Error("Private receipt limit");
-    dir.write(name, bytes, exclusive);
+    if (
+      ![
+        "executions",
+        "children",
+        "child-keys",
+        "effects",
+        "effect-started",
+        "observations",
+        "leases",
+        "execution-leases",
+        "attempts",
+        "adoptions",
+        "parent-attempts",
+        "parent-adoptions",
+        "execution-parents",
+        "execution-lifecycle",
+        "lifecycle-observations",
+        "spawns",
+        "spawn-started",
+        "prepared",
+      ].includes(namespace)
+    )
+      throw Error("Unknown fixed authority namespace");
+    writeRetainedRecord(
+      dir,
+      name,
+      bytes,
+      exclusive,
+      namespace === "executions"
+        ? CONTROL_RETENTION_LIMITS.executionsPerRole
+        : CONTROL_RETENTION_LIMITS.recordsPerNamespace,
+    );
   } finally {
     dir.close();
   }
@@ -589,6 +624,7 @@ export function retainAdmittedControlExecution(
   if (Buffer.byteLength(canonicalJson(receipt)) > 65536)
     throw Error("Execution authority receipt capacity");
   const name = `${execution.operationKey}.json`;
+  let newlyAdmitted = false;
   try {
     const old = readPrivateRecord(state, "executions", name, 65536);
     if (controlDigest(old) !== controlDigest(receipt))
@@ -596,12 +632,14 @@ export function retainAdmittedControlExecution(
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
     writePrivateRecord(state, "executions", name, receipt, true);
+    newlyAdmitted = true;
   }
   publishControlExecutionWitness(
     state,
     { execution, kind: input.kind, serviceIds },
     controlDigest(receipt),
   );
+  initializeLifecycle(state, execution, newlyAdmitted);
   const authority = Object.freeze({ execution }) as VerifiedExecutionAuthority;
   authorities.set(authority, {
     installation: state,
@@ -662,7 +700,9 @@ export function controlHeaders(rawHeaders: readonly string[]): {
     if (!["x-openmapx-control-delegation", "x-openmapx-parent-execution"].includes(name)) continue;
     if (found.has(name) || typeof rawHeaders[i + 1] !== "string")
       throw Error("Duplicate control header");
-    found.set(name, rawHeaders[i + 1]!);
+    const value = rawHeaders[i + 1];
+    if (value === undefined) throw Error("Missing control header value");
+    found.set(name, value);
   }
   const delegation = found.get("x-openmapx-control-delegation"),
     parent = found.get("x-openmapx-parent-execution");
@@ -754,6 +794,21 @@ export function prepareFixedControlChild(
   const s = executionAuthorityState(authority);
   if (s.installation.installation.role !== "ops-agent")
     throw Error("Only agent prepares fixed children");
+  withExecutionWriter(s.installation, s.execution, (dir) => {
+    const name = `${s.execution.operationKey}.keys.json`;
+    let ids: string[] = [];
+    try {
+      ids = z
+        .array(uuid)
+        .max(64)
+        .parse(JSON.parse(dir.read(name, 4096).toString("utf8")));
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+    }
+    if (ids.length >= Math.min(64, s.plan.length) || ids.includes(delegationId))
+      throw Error("Fixed child key capacity/replay");
+    dir.write(name, canonicalJson([...ids, delegationId]));
+  });
   const key = newControlKey();
   writePrivateRecord(
     s.installation,
@@ -762,7 +817,30 @@ export function prepareFixedControlChild(
     { publicKey: key.publicKey, privateKey: encodePrivate(key.privateKey) },
     true,
   );
+  writePrivateRecord(
+    s.installation,
+    "child-keys",
+    `${controlDigest(key.publicKey)}.json`,
+    { delegationId, publicKey: key.publicKey, execution: s.execution },
+    true,
+  );
   return key.publicKey;
+}
+export function fixedControlChildId(
+  state: InstallationState,
+  key: string,
+  parent: ExecutionRef,
+): string {
+  const saved = z
+    .strictObject({ delegationId: uuid, publicKey, execution: executionRefSchema })
+    .parse(readPrivateRecord(state, "child-keys", `${controlDigest(key)}.json`, 2048));
+  if (saved.publicKey !== key || controlDigest(saved.execution) !== controlDigest(parent))
+    throw Error("Fixed child key index mismatch");
+  const challenge = z
+    .object({ publicKey })
+    .parse(readPrivateRecord(state, "children", `${saved.delegationId}.key`, 2048));
+  if (challenge.publicKey !== key) throw Error("Fixed child key challenge mismatch");
+  return saved.delegationId;
 }
 export function verifyFixedCliControlPeer(
   installation: ControlInstallation,
@@ -847,21 +925,23 @@ function withPrivateEffectWriter(s: AuthorityState, write: () => void): void {
 }
 export function beginControlEffect(authority: VerifiedExecutionAuthority): void {
   const s = executionAuthorityState(authority);
-  withPrivateEffectWriter(s, () => {
-    try {
-      readPrivateRecord(s.installation, "effects", `${s.execution.operationKey}.json`);
-      throw Error("Settled execution cannot restart effects");
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-    }
-    writePrivateRecord(
-      s.installation,
-      "effect-started",
-      `${s.execution.operationKey}.json`,
-      { execution: s.execution, receiptDigest: s.receiptDigest },
-      true,
-    );
-  });
+  withControlExecutionForward(authority, () =>
+    withPrivateEffectWriter(s, () => {
+      try {
+        readPrivateRecord(s.installation, "effects", `${s.execution.operationKey}.json`);
+        throw Error("Settled execution cannot restart effects");
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+      }
+      writePrivateRecord(
+        s.installation,
+        "effect-started",
+        `${s.execution.operationKey}.json`,
+        { execution: s.execution, receiptDigest: s.receiptDigest },
+        true,
+      );
+    }),
+  );
 }
 /** Fixed executor adapters supply their parsed result or exact fixed-command exit; arbitrary text is never proof. */
 export function retainControlEffectReceipt(
@@ -906,6 +986,7 @@ export function retainControlEffectReceipt(
     }
     if (effect.outcome !== outcome || effect.publication !== publication)
       throw Error("Effect evidence does not prove requested settlement");
+    settleExecutionLifecycle(s);
     const payload = {
       identity: s.execution,
       outcome,
@@ -1057,6 +1138,297 @@ function executionWitnessDirectory(
     },
   };
 }
+const lifecycleSchema = z.strictObject({
+  version: z.literal(1),
+  installationId: uuid,
+  execution: executionRefSchema,
+  sequence: z.number().int().nonnegative().safe(),
+  phase: z.enum(["held", "cancel_pending", "recovery_required", "settled"]),
+  childIntents: z.record(uuid, digest),
+});
+type ExecutionLifecycle = z.infer<typeof lifecycleSchema>;
+function withExecutionWriter<T>(
+  state: InstallationState,
+  execution: ExecutionRef,
+  run: (dir: AnchoredDirectory) => T,
+): T {
+  const d = executionWitnessDirectory(state, execution.executor, true);
+  const name = `${execution.operationKey}.writer`;
+  let guard: AnchoredDirectory | undefined;
+  try {
+    mkdirSync(d.role.name(name), { mode: 0o700 });
+    fsyncSync(d.role.fd);
+    guard = d.role.directory(name);
+    return run(d.role);
+  } finally {
+    if (guard) {
+      const held = identity(guard.stat);
+      guard.close();
+      d.role.removeDirectory(name, held);
+    }
+    d.close();
+  }
+}
+function readLifecycle(
+  state: InstallationState,
+  dir: AnchoredDirectory,
+  execution: ExecutionRef,
+  verifier: string,
+): ExecutionLifecycle {
+  const raw = JSON.parse(
+    dir.read(`${execution.operationKey}.lifecycle.json`, 65536).toString("utf8"),
+  );
+  const current = verifyControl(verifier, "openmapx-execution-lifecycle-v1", raw, lifecycleSchema);
+  if (
+    current.installationId !== state.installation.installationId ||
+    controlDigest(current.execution) !== controlDigest(execution) ||
+    Object.keys(current.childIntents).length > 64
+  )
+    throw Error("Execution lifecycle identity/capacity mismatch");
+  const observationName = `${execution.executor}-${execution.operationKey}.json`;
+  function compare(old: ExecutionLifecycle) {
+    if (
+      current.sequence < old.sequence ||
+      (current.sequence === old.sequence && controlDigest(current) !== controlDigest(old))
+    )
+      throw Error("Execution lifecycle rollback or replacement");
+  }
+  if (verifier === state.installation.publicKey) {
+    const local = verifyControl(
+      verifier,
+      "openmapx-execution-lifecycle-v1",
+      readPrivateRecord(state, "execution-lifecycle", `${execution.operationKey}.json`, 65536),
+      lifecycleSchema,
+    );
+    compare(local);
+  }
+  try {
+    compare(
+      lifecycleSchema.parse(
+        readPrivateRecord(state, "lifecycle-observations", observationName, 65536),
+      ),
+    );
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+  }
+  writePrivateRecord(state, "lifecycle-observations", observationName, current);
+  return current;
+}
+function writeLifecycle(
+  state: InstallationState,
+  dir: AnchoredDirectory,
+  lifecycle: ExecutionLifecycle,
+  exclusive = false,
+) {
+  const signed = signControl(state.privateKey, "openmapx-execution-lifecycle-v1", lifecycle);
+  const bytes = canonicalJson(signed);
+  if (Buffer.byteLength(bytes) > 65536) throw Error("Execution lifecycle capacity");
+  // Persist the private fence first. A crash before shared publication fails closed.
+  writePrivateRecord(
+    state,
+    "execution-lifecycle",
+    `${lifecycle.execution.operationKey}.json`,
+    signed,
+    exclusive,
+  );
+  dir.write(`${lifecycle.execution.operationKey}.lifecycle.json`, bytes, exclusive);
+  readLifecycle(state, dir, lifecycle.execution, state.installation.publicKey);
+}
+function initializeLifecycle(
+  state: InstallationState,
+  execution: ExecutionRef,
+  newlyAdmitted: boolean,
+) {
+  withExecutionWriter(state, execution, (dir) => {
+    try {
+      readLifecycle(state, dir, execution, state.installation.publicKey);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+      if (!newlyAdmitted)
+        throw Error("Missing retained execution lifecycle requires supervised recovery");
+      // Never replace a private fence after partial publication.
+      try {
+        readPrivateRecord(state, "execution-lifecycle", `${execution.operationKey}.json`);
+        throw Error("Incomplete execution lifecycle requires supervised recovery");
+      } catch (missing) {
+        if ((missing as NodeJS.ErrnoException).code !== "ENOENT") throw missing;
+      }
+      writeLifecycle(
+        state,
+        dir,
+        {
+          version: 1,
+          installationId: state.installation.installationId,
+          execution,
+          sequence: 0,
+          phase: "held",
+          childIntents: {},
+        },
+        true,
+      );
+    }
+  });
+}
+function withParentLifecycles<T>(
+  state: InstallationState,
+  assertion: string,
+  run: (forward: boolean) => T,
+): T {
+  const chain: Array<{
+    assertion: string;
+    grant: z.infer<typeof parentGrantSchema>;
+    verifier: string;
+  }> = [];
+  function collect(value: string) {
+    const grant = readParentGrant(state, value);
+    if (grant.parentAssertion) collect(grant.parentAssertion);
+    const verifier = grant.parentAssertion
+      ? readParentGrant(state, grant.parentAssertion).childPublicKey
+      : state.publicKeys[grant.parent.executor];
+    chain.push({ assertion: value, grant, verifier });
+  }
+  collect(assertion);
+  function lock(index: number, forward: boolean): T {
+    const item = chain[index];
+    if (!item) return run(forward);
+    return withExecutionWriter(state, item.grant.parent, (dir) => {
+      const lifecycle = readLifecycle(state, dir, item.grant.parent, item.verifier);
+      const parsed = parseParentAssertion(item.assertion);
+      if (lifecycle.childIntents[parsed.attemptId] !== parsed.grantDigest)
+        throw Error("Missing durable lifecycle child intent");
+      return lock(
+        index + 1,
+        forward && lifecycle.phase === "held" && Date.now() < lifecycle.execution.deadlineAt,
+      );
+    });
+  }
+  return lock(0, true);
+}
+/** Narrow local runtime fence; exact duplicate admission alone never grants forward permission. */
+function withControlExecutionForward<T>(authority: VerifiedExecutionAuthority, run: () => T): T {
+  const s = executionAuthorityState(authority);
+  const check = () =>
+    withExecutionWriter(s.installation, s.execution, (dir) => {
+      const lifecycle = readLifecycle(
+        s.installation,
+        dir,
+        s.execution,
+        s.installation.installation.publicKey,
+      );
+      if (lifecycle.phase !== "held" || Date.now() >= s.execution.deadlineAt)
+        throw Error(
+          "Execution cannot restart effects; observation/settlement only; forward phase fenced",
+        );
+      return run();
+    });
+  const assertion = retainedParentAssertion(s);
+  return assertion
+    ? withParentLifecycles(s.installation, assertion, (forward) => {
+        if (!forward) throw Error("Canceled/terminal ancestor permits observation only");
+        return check();
+      })
+    : check();
+}
+export function assertControlExecutionForward(authority: VerifiedExecutionAuthority): void {
+  withControlExecutionForward(authority, () => {});
+}
+/** Only the protocol's frozen terminal preparation edges may outlive their local worker. */
+export function assertControlDelegationForward(
+  authority: VerifiedExecutionAuthority,
+  phase: ControlChildPhase,
+): void {
+  try {
+    assertControlExecutionForward(authority);
+  } catch (error) {
+    const s = executionAuthorityState(authority);
+    if (
+      !(
+        (s.kind === "configurationMaintenance.prepare" &&
+          [
+            "configuration-commit",
+            "maintenance-hardlinks",
+            "maintenance-recreate",
+            "maintenance-handoff",
+          ].includes(phase)) ||
+        (s.kind === "configurationHandoff.prepare" && phase === "configuration-handoff")
+      )
+    )
+      throw error;
+    withExecutionWriter(s.installation, s.execution, (dir) => {
+      const lifecycle = readLifecycle(
+        s.installation,
+        dir,
+        s.execution,
+        s.installation.installation.publicKey,
+      );
+      if (lifecycle.phase !== "settled" || Date.now() >= s.execution.deadlineAt) throw error;
+      verifyControlPreparedTerminal(s.installation, s.execution);
+    });
+  }
+}
+function retainedParentAssertion(s: AuthorityState): string | undefined {
+  if (s.installation.fixedParentAssertion) return s.installation.fixedParentAssertion;
+  // Retain the exact adopted assertion with the execution, never search history.
+  try {
+    return z
+      .object({ assertion: z.string() })
+      .parse(
+        readPrivateRecord(s.installation, "execution-parents", `${s.execution.operationKey}.json`),
+      ).assertion;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+  }
+  return undefined;
+}
+/** Persist before a runtime publishes canceled state; return original attempted child identities for cancellation/lookup. */
+export function cancelControlExecution(
+  authority: VerifiedExecutionAuthority,
+): readonly ExecutionRef[] {
+  const s = executionAuthorityState(authority);
+  return withExecutionWriter(s.installation, s.execution, (dir) => {
+    const lifecycle = readLifecycle(
+      s.installation,
+      dir,
+      s.execution,
+      s.installation.installation.publicKey,
+    );
+    if (lifecycle.phase !== "settled" && lifecycle.phase !== "cancel_pending") {
+      lifecycle.phase = "cancel_pending";
+      lifecycle.sequence++;
+      writeLifecycle(s.installation, dir, lifecycle);
+    }
+    return Object.freeze(
+      Object.keys(lifecycle.childIntents).map((id) => {
+        const saved = z
+          .object({ grant: z.unknown() })
+          .parse(readPrivateRecord(s.installation, "parent-attempts", `${id}.json`));
+        return Object.freeze(
+          verifyControl(
+            s.installation.installation.publicKey,
+            "openmapx-parent-grant-v1",
+            saved.grant,
+            parentGrantSchema,
+          ).child,
+        );
+      }),
+    );
+  });
+}
+function settleExecutionLifecycle(s: AuthorityState) {
+  withExecutionWriter(s.installation, s.execution, (dir) => {
+    const lifecycle = readLifecycle(
+      s.installation,
+      dir,
+      s.execution,
+      s.installation.installation.publicKey,
+    );
+    if (lifecycle.phase !== "settled") {
+      lifecycle.phase = "settled";
+      lifecycle.sequence++;
+      writeLifecycle(s.installation, dir, lifecycle);
+    }
+  });
+}
 export async function attestParentExecution(
   authority: VerifiedExecutionAuthority,
   child: {
@@ -1100,21 +1472,7 @@ export async function attestParentExecution(
   verifyDeadlineEdge(s.kind, child.phase, child.recipient, plan.kind);
   let attemptId: string = randomUUID();
   if (child.recipient === "fixed-cli") {
-    const d = s.installation.privateRoot.directory("children");
-    try {
-      const matches = d
-        .list()
-        .filter(
-          (n) =>
-            n.endsWith(".key") &&
-            (JSON.parse(d.read(n, 2048).toString("utf8")) as { publicKey: string }).publicKey ===
-              child.childPublicKey,
-        );
-      if (matches.length !== 1) throw Error("Missing fixed child key");
-      attemptId = uuid.parse(matches[0]?.slice(0, -4));
-    } finally {
-      d.close();
-    }
+    attemptId = fixedControlChildId(s.installation, child.childPublicKey, s.execution);
   }
   const grant = parentGrantSchema.parse({
     version: 1,
@@ -1148,19 +1506,22 @@ export async function attestParentExecution(
     }),
   ).toString("base64url");
   parseParentAssertion(assertion);
-  const dir = executionWitnessDirectory(s.installation, s.execution.executor, true);
-  try {
-    const name = `${s.execution.operationKey}.children.json`;
-    const guardName = `${s.execution.operationKey}.writer`;
-    mkdirSync(dir.role.name(guardName), { mode: 0o700 });
-    const guard = dir.role.directory(guardName);
-    const guardIdentity = identity(guard.stat);
-    try {
+  const issue = () =>
+    withExecutionWriter(s.installation, s.execution, (dir) => {
+      const lifecycle = readLifecycle(
+        s.installation,
+        dir,
+        s.execution,
+        s.installation.installation.publicKey,
+      );
+      if (lifecycle.phase !== "held" || Date.now() >= s.execution.deadlineAt)
+        throw Error("Canceled/terminal execution cannot authorize forward children");
+      const name = `${s.execution.operationKey}.children.json`;
       let witness: Record<string, unknown> = {};
       try {
         witness = z
           .record(uuid, z.unknown())
-          .parse(JSON.parse(dir.role.read(name, 65536).toString("utf8")));
+          .parse(JSON.parse(dir.read(name, 65536).toString("utf8")));
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
       }
@@ -1185,16 +1546,21 @@ export async function attestParentExecution(
         { grant: signed, assertion },
         true,
       );
-      dir.role.write(name, bytes);
+      lifecycle.childIntents[attemptId] = fields.grantDigest;
+      lifecycle.sequence++;
+      writeLifecycle(s.installation, dir, lifecycle);
+      dir.write(name, bytes);
       return assertion;
-    } finally {
-      guard.close();
-      dir.role.removeDirectory(guardName, guardIdentity);
-    }
-  } finally {
-    dir.close();
-  }
+    });
+  const inherited = retainedParentAssertion(s);
+  return inherited
+    ? withParentLifecycles(s.installation, inherited, (forward) => {
+        if (!forward) throw Error("Canceled ancestor prevents forward delegation");
+        return issue();
+      })
+    : issue();
 }
+
 function readParentGrant(
   state: InstallationState,
   assertion: string,
@@ -1305,22 +1671,39 @@ export function verifyParentExecution(
     grant.child.deadlineAt > grant.parent.deadlineAt
   )
     throw Error("Parent child identity mismatch");
-  const name = `${parsed.attemptId}.json`;
-  let retained = false;
-  try {
-    if (
-      controlDigest(readPrivateRecord(p.installation, "parent-adoptions", name)) !==
-      controlDigest(grant)
-    )
-      throw Error("Parent attempt replay conflict");
-    retained = true;
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-  }
-  if (!retained) {
-    if (Date.now() >= grant.child.deadlineAt) throw Error("Expired parent grant");
-    writePrivateRecord(p.installation, "parent-adoptions", name, grant, true);
-  }
+  withParentLifecycles(p.installation, assertion, (forward) => {
+    const name = `${parsed.attemptId}.json`;
+    let retained = false;
+    try {
+      if (
+        controlDigest(readPrivateRecord(p.installation, "parent-adoptions", name)) !==
+        controlDigest(grant)
+      )
+        throw Error("Parent attempt replay conflict");
+      retained = true;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+    }
+    if (!retained) {
+      if (!forward) throw Error("Canceled/terminal parent permits observation only");
+      if (Date.now() >= grant.child.deadlineAt) throw Error("Expired parent grant");
+      writePrivateRecord(
+        p.installation,
+        "execution-parents",
+        `${grant.child.operationKey}.json`,
+        { assertion },
+        true,
+      );
+      writePrivateRecord(p.installation, "parent-adoptions", name, grant, true);
+    }
+    const binding = z
+      .strictObject({ assertion: z.string() })
+      .parse(
+        readPrivateRecord(p.installation, "execution-parents", `${grant.child.operationKey}.json`),
+      );
+    if (binding.assertion !== assertion)
+      throw Error("Incomplete/conflicting parent adoption binding");
+  });
   const parent = Object.freeze(
     retainedControlParent(grant.parent),
   ) as import("../ops/execution-identity").VerifiedParentExecution;
@@ -1541,7 +1924,14 @@ export function beginFixedCliExecution(
 ): void {
   const s = installationState(installation);
   if (!s.fixedChildId) throw Error("Fixed CLI authority required");
-  writePrivateRecord(s, "spawn-started", `${s.fixedChildId}.json`, { execution }, true);
+  const begin = () =>
+    writePrivateRecord(s, "spawn-started", `${s.fixedChildId}.json`, { execution }, true);
+  if (s.fixedParentAssertion)
+    withParentLifecycles(s, s.fixedParentAssertion, (forward) => {
+      if (!forward) throw Error("Canceled/terminal parent prevents fixed CLI start");
+      begin();
+    });
+  else begin();
 }
 
 const executionWitnessSchema = z.strictObject({

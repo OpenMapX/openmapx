@@ -52,7 +52,8 @@ export async function withCliControlContext<T>(
   if (!encoded || Buffer.byteLength(encoded) > 2048)
     throw Error("Missing bounded fixed CLI execution");
   const execution = executionRefSchema.parse(JSON.parse(encoded));
-  const assertion = (delegation ?? parentAssertion)!;
+  const assertion = delegation ?? parentAssertion;
+  if (!assertion) throw Error("Missing fixed CLI control assertion");
   if (assertion.length > 4096) throw Error("Fixed CLI assertion exceeds header budget");
   const infraDir = repoPaths().infraDir;
   const installation = openFixedChildInstallation({

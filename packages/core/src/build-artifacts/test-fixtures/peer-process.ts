@@ -1,13 +1,42 @@
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import * as c from "../control-authority";
+import { AnchoredDirectory } from "../filesystem";
 import { inspectControlAdmission, verifiedParentForArtifactDelegation } from "../peer-admission";
 import * as l from "../target-lease";
 
 for await (const line of createInterface({ input: process.stdin })) {
   try {
     const input = JSON.parse(line);
-    if (input.mode === "owner") {
+    if (input.mode === "observe-interleaving") {
+      const installation = c.openControlInstallation({
+        infraDir: input.infraDir,
+        role: "data-manager",
+        serviceIds: ["motis"],
+      });
+      const read = AnchoredDirectory.prototype.read;
+      let paused = false;
+      AnchoredDirectory.prototype.read = function (name, max, privateMode) {
+        const bytes = read.call(this, name, max, privateMode);
+        if (!paused && this.path.endsWith("/observations")) {
+          paused = true;
+          writeFileSync(input.ready, "ready");
+          const until = Date.now() + 10000;
+          while (!existsSync(input.resume)) {
+            if (Date.now() >= until) throw Error("Interleaving resume timed out");
+            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+          }
+        }
+        return bytes;
+      };
+      l.inspectArtifactDelegation({
+        dataRoot: join(input.infraDir, "data"),
+        assertion: input.assertion,
+        installation,
+      });
+      process.stdout.write(`${JSON.stringify({ ok: true })}\n`);
+    } else if (input.mode === "owner") {
       const installation = c.openControlInstallation({
         infraDir: input.infraDir,
         role: input.role,
@@ -49,7 +78,7 @@ for await (const line of createInterface({ input: process.stdin })) {
         serviceIds: ["motis"],
       });
       l.verifyConfigurationHelperReady(lease);
-      process.stdout.write(JSON.stringify({ ok: true, drainPermitted: true }) + "\n");
+      process.stdout.write(`${JSON.stringify({ ok: true, drainPermitted: true })}\n`);
     } else if (input.mode === "fixed") {
       const installation = c.openFixedChildInstallation({
         infraDir: input.infraDir,
@@ -82,6 +111,7 @@ for await (const line of createInterface({ input: process.stdin })) {
         serviceIds: intent.serviceIds,
       });
       l.bindBorrowedControlExecution(lease, authority);
+      if (input.action === "cancel") await l.cancelArtifactTargetLease(lease);
       if (input.action === "run") c.beginFixedCliExecution(installation, input.execution);
       let assertion: string | undefined;
       if (input.child) assertion = await l.delegateArtifactTargetLease(lease, input.child);
@@ -103,17 +133,53 @@ for await (const line of createInterface({ input: process.stdin })) {
         role: input.role,
         serviceIds: ["motis", "osrm"],
       });
-      const admission = inspectControlAdmission(installation, {
-        rawHeaders: ["x-openmapx-control-delegation", input.assertion],
-        transportPrincipal:
-          input.transportPrincipal ??
-          (input.role === "ops-agent" ? "data-manager" : "shared-data-manager-bearer"),
-        kind: input.kind,
-        operationKey: input.execution.operationKey,
-        operationFingerprint: input.execution.operationFingerprint,
-        requestedDeadlineAt: input.execution.deadlineAt,
-      });
+      const admission =
+        input.role === "ops-agent" && !input.primitive
+          ? inspectControlAdmission(installation, {
+              rawHeaders: ["x-openmapx-control-delegation", input.assertion],
+              transportPrincipal:
+                input.transportPrincipal ??
+                (input.role === "ops-agent" ? "data-manager" : "shared-data-manager-bearer"),
+              kind: input.kind,
+              operation: input.operation,
+              operationKey: input.execution.operationKey,
+              operationFingerprint: input.execution.operationFingerprint,
+              requestedDeadlineAt: input.execution.deadlineAt,
+            })
+          : (() => {
+              // Primitive protocol fixture, not the future generation-bound DM HTTP adapter.
+              const inspected = l.inspectArtifactDelegation({
+                dataRoot: join(input.infraDir, "data"),
+                assertion: input.assertion,
+                installation,
+              });
+              const peer = c.verifyControlPeer(installation, {
+                rawHeaders: ["x-openmapx-control-delegation", input.assertion],
+                transportPrincipal:
+                  input.transportPrincipal ??
+                  (input.role === "ops-agent" ? "data-manager" : "shared-data-manager-bearer"),
+                execution: input.execution,
+                kind: input.kind,
+              });
+              return {
+                ...inspected,
+                parent: verifiedParentForArtifactDelegation(
+                  installation,
+                  input.assertion,
+                  input.execution,
+                ),
+                adopt: (execution: typeof input.execution) =>
+                  l.adoptArtifactTargetLease({
+                    dataRoot: join(input.infraDir, "data"),
+                    assertion: input.assertion,
+                    peer,
+                    execution,
+                    serviceIds: inspected.serviceIds,
+                  }),
+              };
+            })();
       const lease = await admission.adopt(input.execution);
+      if (input.forward) l.assertArtifactTargetLeaseForward(lease);
       const authority = c.retainAdmittedControlExecution(installation, {
         execution: input.execution,
         kind: input.kind,
@@ -139,7 +205,9 @@ for await (const line of createInterface({ input: process.stdin })) {
       );
     }
   } catch (error) {
-    process.stdout.write(`${JSON.stringify({ ok: false, error: (error as Error).message })}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ ok: false, error: (error as Error).message, stack: (error as Error).stack })}\n`,
+    );
   }
   break;
 }

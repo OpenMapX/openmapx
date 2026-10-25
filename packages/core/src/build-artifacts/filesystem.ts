@@ -8,6 +8,7 @@ import {
   fsyncSync,
   lstatSync,
   mkdirSync,
+  opendirSync,
   openSync,
   readdirSync,
   readSync,
@@ -105,6 +106,20 @@ export class AnchoredDirectory {
     this.check();
     return readdirSync(this.anchor);
   }
+  listBounded(maximum: number): string[] {
+    this.check();
+    const dir = opendirSync(this.anchor);
+    const names: string[] = [];
+    try {
+      for (let entry = dir.readSync(); entry; entry = dir.readSync()) {
+        if (names.length >= maximum) throw Error("Authority directory capacity exceeded");
+        names.push(entry.name);
+      }
+      return names;
+    } finally {
+      dir.closeSync();
+    }
+  }
   read(name: string, maximum: number, privateMode = true): Buffer {
     const path = this.name(name);
     const fd = openSync(path, C.O_RDONLY | C.O_NOFOLLOW | C.O_NONBLOCK);
@@ -146,17 +161,34 @@ export class AnchoredDirectory {
     const temporary = exclusive ? name : `.write-${randomUUID()}`;
     const path = this.name(temporary);
     const fd = openSync(path, C.O_WRONLY | C.O_CREAT | C.O_EXCL | C.O_NOFOLLOW, 0o600);
+    const expected = identity(fstatSync(fd, { bigint: true }));
     try {
-      writeFileSync(fd, bytes);
-      fsyncSync(fd);
-      this.check();
-    } finally {
-      closeSync(fd);
+      try {
+        writeFileSync(fd, bytes);
+        fsyncSync(fd);
+        this.check();
+      } finally {
+        closeSync(fd);
+      }
+      if (!exclusive) renameSync(path, target);
+      fsyncSync(this.fd);
+    } catch (error) {
+      // Only remove this call's unpublished temporary inode. Published or
+      // exclusive evidence, and unexplained replacements, remain fenced.
+      if (!exclusive) {
+        try {
+          const current = lstatSync(path, { bigint: true });
+          if (!current.isFile() || current.nlink !== 1n || !sameInode(identity(current), expected))
+            throw Error("Refusing replaced authority temporary");
+          unlinkSync(path);
+          fsyncSync(this.fd);
+        } catch (cleanup) {
+          if ((cleanup as NodeJS.ErrnoException).code !== "ENOENT")
+            throw new AggregateError([error, cleanup], "Authority write requires recovery");
+        }
+      }
+      throw error;
     }
-    if (!exclusive) {
-      renameSync(path, target);
-    }
-    fsyncSync(this.fd);
   }
   removeFile(name: string) {
     unlinkSync(this.name(name));
@@ -165,7 +197,7 @@ export class AnchoredDirectory {
   removeDirectory(name: string, expected: FileIdentity) {
     const child = this.directory(name);
     try {
-      if (!sameInode(identity(child.stat), expected) || child.list().length)
+      if (!sameInode(identity(child.stat), expected) || child.listBounded(1).length)
         throw Error("Refusing replaced or nonempty lock");
       rmdirSync(this.name(name));
       fsyncSync(this.fd);

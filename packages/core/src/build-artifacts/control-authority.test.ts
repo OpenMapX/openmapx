@@ -302,6 +302,14 @@ it("verifies the certified ephemeral fixed-CLI deadline chain without exporting 
   });
   const id = randomUUID();
   const publicKey = c.prepareFixedControlChild(authority, id);
+  // Unrelated retained keys must never be enumerated or parsed to find this
+  // exact certified challenge. These unreadable historical fixtures expose a scan.
+  for (let i = 0; i < 128; i++)
+    writeFileSync(
+      join(root, `control-private/ops-agent/children/retained-${i}.key`),
+      "historical",
+      { mode: 0o600 },
+    );
   const assertion = await c.attestParentExecution(authority, {
     ...planned,
     childPublicKey: publicKey,
@@ -353,7 +361,230 @@ it("verifies the certified ephemeral fixed-CLI deadline chain without exporting 
       requestedDeadlineAt: deadlineAt,
     }),
   ).toMatchObject({ operationKey: cli.operationKey });
+  c.cancelControlExecution(authority);
+  expect(() => c.assertControlExecutionForward(cliAuthority)).toThrow(/ancestor|observation/);
+  expect(
+    c.verifyParentExecution(next, dmPeer, {
+      execution: child,
+      kind: body.kind,
+      requestedDeadlineAt: deadlineAt,
+    }),
+  ).toMatchObject({ operationKey: cli.operationKey });
   c.closeControlInstallation(fixed);
   c.closeControlInstallation(dm);
   c.closeControlInstallation(agent);
+});
+
+async function deadlineFamily() {
+  const c = await api();
+  const { randomUUID } = await import("node:crypto");
+  const { executionFingerprint } = await import("../ops/execution-identity");
+  const { opsOperationFingerprint } = await import("../ops/fingerprint");
+  await c.provisionControlInstallation(root);
+  const agent = c.openControlInstallation({
+    infraDir: root,
+    role: "ops-agent",
+    serviceIds: ["osrm"],
+  });
+  const dm = c.openControlInstallation({
+    infraDir: root,
+    role: "data-manager",
+    serviceIds: ["osrm"],
+  });
+  const operation = { kind: "data.update" as const };
+  const deadlineAt = Date.now() + 60000;
+  const operationFingerprint = opsOperationFingerprint(operation);
+  const execution = {
+    executor: "ops-agent" as const,
+    principal: "api" as const,
+    executionId: `job1_${randomUUID().replaceAll("-", "")}`,
+    operationKey: `opk1_${randomUUID().replaceAll("-", "")}`,
+    operationFingerprint,
+    deadlineAt,
+    fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
+  };
+  const hash = c.controlDigest({ kind: "download-osm", regionId: "europe/germany" });
+  const child = {
+    executor: "data-manager" as const,
+    principal: "data-manager" as const,
+    executionId: randomUUID(),
+    operationKey: c.controlChildOperationKey(execution.operationKey, "osm", 0),
+    operationFingerprint: hash,
+    deadlineAt,
+    fingerprint: executionFingerprint({
+      kind: "download-osm",
+      operationFingerprint: hash,
+      deadlineAt,
+      parent: c.retainedControlParent(execution),
+    }),
+  };
+  const plan = {
+    phase: "osm" as const,
+    ordinal: 0,
+    kind: "download-osm",
+    execution: child,
+    serviceIds: ["osrm"],
+    recipient: "data-manager" as const,
+  };
+  const authority = c.retainAdmittedControlExecution(agent, {
+    execution,
+    operation,
+    kind: operation.kind,
+    admittedAt: deadlineAt - 60000,
+    serviceIds: ["osrm"],
+    plan: [plan],
+  });
+  const grant = () => c.attestParentExecution(authority, { ...plan, childPublicKey: dm.publicKey });
+  const admit = (assertion: string) =>
+    c.verifyParentExecution(
+      assertion,
+      c.verifyControlPeer(dm, {
+        rawHeaders: ["x-openmapx-parent-execution", assertion],
+        transportPrincipal: "shared-data-manager-bearer",
+        execution: child,
+        kind: plan.kind,
+      }),
+      { execution: child, kind: plan.kind, requestedDeadlineAt: deadlineAt },
+    );
+  return { c, agent, dm, authority, execution, child, grant, admit };
+}
+it("terminal deadline-only parent cannot mint an unattempted child", async () => {
+  const f = await deadlineFamily();
+  try {
+    f.c.retainControlEffectReceipt(f.authority, {
+      outcome: "failed_without_effect",
+      publication: "not_started",
+      receipt: { kind: "not-started" },
+    });
+    await expect(f.grant()).rejects.toThrow(/terminal|settled|forward/);
+  } finally {
+    f.c.closeControlInstallation(f.dm);
+    f.c.closeControlInstallation(f.agent);
+  }
+});
+it("terminal deadline-only parent fences a previously attempted unadopted grant", async () => {
+  const f = await deadlineFamily();
+  try {
+    const assertion = await f.grant();
+    f.c.retainControlEffectReceipt(f.authority, {
+      outcome: "failed_without_effect",
+      publication: "not_started",
+      receipt: { kind: "not-started" },
+    });
+    expect(() => f.admit(assertion)).toThrow(/terminal|observation/);
+    expect(existsSync(join(root, "data/.admin-target-control/locks"))).toBe(false);
+  } finally {
+    f.c.closeControlInstallation(f.dm);
+    f.c.closeControlInstallation(f.agent);
+  }
+});
+it.each([false, true])(
+  "canceled deadline-only parent fences unadopted attempts (attempted: %s)",
+  async (attempted) => {
+    const f = await deadlineFamily();
+    try {
+      const assertion = attempted ? await f.grant() : undefined;
+      const children = f.c.cancelControlExecution(f.authority);
+      expect(children).toHaveLength(attempted ? 1 : 0);
+      if (assertion) expect(() => f.admit(assertion)).toThrow(/cancel|forward|observation/);
+      else await expect(f.grant()).rejects.toThrow(/cancel|forward/);
+      expect(() => f.c.beginControlEffect(f.authority)).toThrow(/cancel|forward/);
+    } finally {
+      f.c.closeControlInstallation(f.dm);
+      f.c.closeControlInstallation(f.agent);
+    }
+  },
+);
+it("retained deadline-only duplicates observe after cancellation but cannot start work", async () => {
+  const f = await deadlineFamily();
+  try {
+    const assertion = await f.grant();
+    const parent = f.admit(assertion);
+    f.c.cancelControlExecution(f.authority);
+    expect(f.admit(assertion)).toEqual(parent);
+    const body = { kind: "download-osm", regionId: "europe/germany" };
+    const authority = f.c.retainAdmittedControlExecution(f.dm, {
+      execution: f.child,
+      operation: body,
+      kind: body.kind,
+      admittedAt: f.execution.deadlineAt - 60000,
+      parent,
+      serviceIds: ["osrm"],
+    });
+    expect(() => f.c.beginControlEffect(authority)).toThrow(/cancel|forward|observation/);
+    const { acquireArtifactTargetLease } = await import("./target-lease");
+    await expect(
+      acquireArtifactTargetLease({
+        dataRoot: join(root, "data"),
+        serviceIds: ["osrm"],
+        owner: authority,
+      }),
+    ).rejects.toThrow(/cancel|ancestor|observation/);
+  } finally {
+    f.c.closeControlInstallation(f.dm);
+    f.c.closeControlInstallation(f.agent);
+  }
+});
+
+it("refuses exhausted private admission capacity before publishing a witness or effect", async () => {
+  const f = await deadlineFamily();
+  const { CONTROL_RETENTION_LIMITS } = await import("./control-retention");
+  try {
+    // A durable consumed-reservation fixture, not a mocked authorization decision.
+    const count = join(root, "control-private/ops-agent/executions/.retention-count");
+    writeFileSync(count, String(CONTROL_RETENTION_LIMITS.executionsPerRole), { mode: 0o600 });
+    const replacement = { ...f.execution, operationKey: `opk1_${"z".repeat(32)}` };
+    expect(() =>
+      f.c.retainAdmittedControlExecution(f.agent, {
+        execution: replacement,
+        operation: { kind: "data.update" },
+        kind: "data.update",
+        admittedAt: replacement.deadlineAt - 60000,
+        serviceIds: ["osrm"],
+      }),
+    ).toThrow(/capacity/);
+    expect(
+      existsSync(
+        join(
+          root,
+          `data/.admin-target-control/executions/ops-agent/${replacement.operationKey}.json`,
+        ),
+      ),
+    ).toBe(false);
+    // Capacity is admission-only: existing exact identity and settlement stay available.
+    f.c.retainControlEffectReceipt(f.authority, {
+      outcome: "failed_without_effect",
+      publication: "not_started",
+      receipt: { kind: "not-started" },
+    });
+    expect(() => f.c.verifyControlEffectSettlement(f.agent, f.execution)).not.toThrow();
+  } finally {
+    f.c.closeControlInstallation(f.dm);
+    f.c.closeControlInstallation(f.agent);
+  }
+});
+it("expired exact deadline-only adoption stays observable without renewing one-use work", async () => {
+  const f = await deadlineFamily();
+  const { vi } = await import("vitest");
+  try {
+    const assertion = await f.grant();
+    const admitted = f.admit(assertion);
+    const clock = vi
+      .spyOn(Date, "now")
+      .mockReturnValue(f.execution.deadlineAt + 96 * 60 * 60 * 1000);
+    try {
+      expect(f.admit(assertion)).toEqual(admitted);
+      await expect(f.grant()).rejects.toThrow(/Expired/);
+      expect(
+        existsSync(
+          join(root, `control-private/ops-agent/executions/${f.execution.operationKey}.json`),
+        ),
+      ).toBe(true);
+    } finally {
+      clock.mockRestore();
+    }
+  } finally {
+    f.c.closeControlInstallation(f.dm);
+    f.c.closeControlInstallation(f.agent);
+  }
 });
