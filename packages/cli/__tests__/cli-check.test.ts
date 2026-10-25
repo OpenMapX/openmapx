@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
@@ -8,6 +8,7 @@ import {
   composeNetworkName,
   DEEP_PROBES,
   deploymentStateErrors,
+  deploymentUserProblems,
   dockerComposeAfterDeploymentSecretCheck,
   envFilePermissionWarning,
   PROBE_IMAGE,
@@ -187,6 +188,100 @@ describe("deploymentStateErrors", () => {
       expect(errors[1]).toContain("pnpm openmapx compose release");
     } finally {
       rmSync(infraDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("deploymentUserProblems", () => {
+  function deployment(env: string | null) {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-check-user-"));
+    const infraDir = join(root, "infra", "docker");
+    mkdirSync(infraDir, { recursive: true });
+    if (env !== null) writeFileSync(join(infraDir, ".env"), env, { mode: 0o600 });
+    return { root, infraDir, owner: statSync(root) };
+  }
+
+  it("says the next render writes a missing UID/GID from the checkout's owner", () => {
+    const { root, infraDir, owner } = deployment("DOMAIN=x\n");
+    try {
+      expect(
+        deploymentUserProblems({
+          infraDir,
+          processUid: owner.uid,
+          composeServices: null,
+          runningUsers: new Map(),
+        }),
+      ).toEqual([expect.stringContaining(`uid ${owner.uid}, gid ${owner.gid}`)]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports .env, the checkout, this process, containers and paths that disagree", () => {
+    const { root, infraDir, owner } = deployment("UID=4321\nGID=4321\n");
+    try {
+      const problems = deploymentUserProblems({
+        infraDir,
+        processUid: owner.uid,
+        composeServices: {
+          "app-api": {
+            user: "4321:4321",
+            volumes: [
+              { type: "bind", source: join(infraDir, "state", "ops-agent", "trusted-config") },
+              { type: "bind", source: join(infraDir, "data", "erasure") },
+              // Read-only: Docker may have created it as root, and that is fine.
+              { type: "bind", source: join(infraDir, "data", "motis", "live"), read_only: true },
+              { type: "volume", source: "openmapx-subject-exports" },
+            ],
+          },
+          "ops-agent": { user: "4321:4321", volumes: [] },
+          postgis: { volumes: [{ type: "bind", source: join(infraDir, "data", "postgis") }] },
+        },
+        runningUsers: new Map([
+          ["app-api", ""],
+          ["ops-agent", "4321:4321"],
+          ["postgis", ""],
+        ]),
+        lstat: (path) => ({ uid: path.endsWith("erasure") ? 4321 : 1000 }),
+      });
+      expect(problems).toEqual([
+        expect.stringContaining(
+          `UID in infra/docker/.env is 4321, but the checkout belongs to uid ${owner.uid}`,
+        ),
+        expect.stringContaining(
+          `This check runs as uid ${owner.uid}, not as the deployment's user (UID=4321)`,
+        ),
+        expect.stringContaining('app-api runs as its image\'s default user, not "4321:4321"'),
+        expect.stringContaining(
+          `sudo chown -R 4321:4321 ${join(infraDir, "state", "ops-agent", "trusted-config")}`,
+        ),
+      ]);
+      // postgis runs as its image's own user: neither its user nor its data is compared.
+      expect(problems.join("\n")).not.toContain("postgis");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("is quiet when everything is the deployment's user", () => {
+    const { root, infraDir, owner: checkoutOwner } = deployment("");
+    try {
+      writeFileSync(
+        join(infraDir, ".env"),
+        `UID=${checkoutOwner.uid}\nGID=${checkoutOwner.gid}\n`,
+        { mode: 0o600 },
+      );
+      const user = `${checkoutOwner.uid}:${checkoutOwner.gid}`;
+      expect(
+        deploymentUserProblems({
+          infraDir,
+          processUid: checkoutOwner.uid,
+          composeServices: { "app-api": { user, volumes: [] } },
+          runningUsers: new Map([["app-api", user]]),
+        }),
+      ).toEqual([]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });

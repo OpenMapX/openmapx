@@ -1,7 +1,8 @@
-import { statSync } from "node:fs";
-import { join } from "node:path";
+import { lstatSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
+import { execa } from "execa";
 import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
 import { dockerCompose, dockerRun } from "../lib/docker";
 import { log, table } from "../lib/output";
@@ -194,6 +195,107 @@ export function deploymentStateErrors(infraDir: string): string[] {
   ].filter((error): error is string => error !== null);
 }
 
+interface ComposeConfigService {
+  user?: unknown;
+  volumes?: Array<{ type?: unknown; source?: unknown; read_only?: unknown }>;
+}
+
+/**
+ * How the deployment's user (UID and GID in .env) disagrees with the checkout's
+ * owner, the uid running this check, the stack's running containers and the
+ * host paths those containers write. Only services Compose runs as a user are
+ * compared, and only their bind mounts under infra/docker: services that run
+ * as their image's own user keep their data that way.
+ */
+export function deploymentUserProblems(input: {
+  infraDir: string;
+  processUid: number | undefined;
+  /** `docker compose config --format json`'s services, or null when it failed. */
+  composeServices: Record<string, ComposeConfigService> | null;
+  /** The user each running container was created with, by Compose service. */
+  runningUsers: Map<string, string>;
+  lstat?: (path: string) => { uid: number };
+}): string[] {
+  const problems: string[] = [];
+  let assigned: { uid?: number; gid?: number };
+  try {
+    assigned = coreServices.readDeploymentUserAssignments(input.infraDir);
+  } catch (error) {
+    return [(error as Error).message];
+  }
+  const owner = coreServices.checkoutOwner(input.infraDir);
+  if (assigned.uid === undefined || assigned.gid === undefined) {
+    problems.push(
+      `infra/docker/.env sets no ${assigned.uid === undefined ? "UID" : "GID"}: the next render writes UID and GID from the checkout's owner (uid ${owner.uid}, gid ${owner.gid}). Run \`pnpm openmapx compose render\`.`,
+    );
+    return problems;
+  }
+  const { uid, gid } = assigned as { uid: number; gid: number };
+  if (uid !== owner.uid) {
+    problems.push(
+      `UID in infra/docker/.env is ${uid}, but the checkout belongs to uid ${owner.uid}: the stack's containers would not own the files they share with the checkout.`,
+    );
+  }
+  if (input.processUid !== undefined && input.processUid !== uid) {
+    problems.push(
+      `This check runs as uid ${input.processUid}, not as the deployment's user (UID=${uid}): run renders and stack commands as that user.`,
+    );
+  }
+  if (input.composeServices === null) return problems;
+  const lstat = input.lstat ?? ((path: string) => lstatSync(path));
+  const foreign: string[] = [];
+  for (const [service, config] of Object.entries(input.composeServices)) {
+    if (typeof config.user !== "string" || !config.user) continue;
+    const running = input.runningUsers.get(service);
+    if (running !== undefined && running !== config.user) {
+      problems.push(
+        `${service} runs as ${running ? `"${running}"` : "its image's default user"}, not "${config.user}": recreate it with \`pnpm openmapx services update ${service}\`.`,
+      );
+    }
+    for (const volume of config.volumes ?? []) {
+      // Only what they write: a read-only mount may belong to anyone.
+      if (volume.type !== "bind" || typeof volume.source !== "string" || volume.read_only === true)
+        continue;
+      if (!volume.source.startsWith(`${input.infraDir}/`)) continue;
+      let entry: { uid: number };
+      try {
+        entry = lstat(volume.source);
+      } catch {
+        continue;
+      }
+      if (entry.uid !== uid && !foreign.includes(volume.source)) foreign.push(volume.source);
+    }
+  }
+  if (foreign.length > 0) {
+    problems.push(
+      `${foreign.length} path${foreign.length === 1 ? "" : "s"} that containers running as ${uid}:${gid} write belong${foreign.length === 1 ? "s" : ""} to another uid, which they cannot change: ${foreign.map((path) => relative(input.infraDir, path)).join(", ")}. Fix once, as root: sudo chown -R ${uid}:${gid} ${foreign.join(" ")}`,
+    );
+  }
+  return problems;
+}
+
+/** The user each running stack container was created with, by Compose service. */
+async function runningContainerUsers(names: string[]): Promise<Map<string, string>> {
+  const users = new Map<string, string>();
+  if (names.length === 0) return users;
+  const result = await execa(
+    "docker",
+    [
+      "inspect",
+      "--format",
+      '{{index .Config.Labels "com.docker.compose.service"}}\t{{.Config.User}}',
+      ...names,
+    ],
+    { reject: false },
+  );
+  if (result.exitCode !== 0) return users;
+  for (const line of String(result.stdout ?? "").split("\n")) {
+    const [service, user = ""] = line.split("\t");
+    if (service) users.set(service, user.trim());
+  }
+  return users;
+}
+
 export function registerCheckCommand(program: Command): void {
   program
     .command("check")
@@ -253,6 +355,33 @@ export function registerCheckCommand(program: Command): void {
             }
           }
         }
+      }
+
+      // The deployment's user against the checkout, this process, the
+      // running containers and the paths they write.
+      const config = await dockerCompose(["config", "--format", "json"]);
+      let composeServices: Record<string, ComposeConfigService> | null = null;
+      if (config.exitCode === 0) {
+        try {
+          composeServices =
+            (JSON.parse(config.stdout) as { services?: Record<string, ComposeConfigService> })
+              .services ?? {};
+        } catch {
+          composeServices = null;
+        }
+      }
+      const runningUsers = await runningContainerUsers(
+        rows
+          .filter((row) => row.State === "running" && typeof row.Name === "string")
+          .map((row) => row.Name as string),
+      );
+      for (const problem of deploymentUserProblems({
+        infraDir: repoPaths().infraDir,
+        processUid: process.geteuid?.(),
+        composeServices,
+        runningUsers,
+      })) {
+        log.err(problem);
       }
 
       if (rows.length === 0) {
