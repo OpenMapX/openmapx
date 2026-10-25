@@ -334,7 +334,7 @@ describe("makeRateLimitTierHook", () => {
     { url: "/api/auth/sign-in", tier: "auth" },
     { url: "/api/tiles/1/2/3", tier: "tile" },
     { url: "/api/offline/packages/glyphs/glyphs-v1/Noto%20Sans/0-255.pbf", tier: "tile" },
-    { url: `/api/offline/packages/omp2-${"a".repeat(64)}/archive`, tier: "tile" },
+    { url: `/api/offline/packages/omp2-${"a".repeat(64)}/archive`, tier: "public" },
     { url: "/api/offline/packages/prepare", tier: "expensive" },
     { url: "/api/isochrone?x=1", tier: "expensive" },
     { url: "/api/motis/plan", tier: "expensive" },
