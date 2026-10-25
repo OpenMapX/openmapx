@@ -16,11 +16,13 @@ function manifest(id: "app-api" | "ops-agent") {
 }
 
 describe("trusted configuration deployment handoff", () => {
-  it("uses one narrow confidential host queue for root API and configurable non-root agent", () => {
+  it("uses one narrow confidential host queue, which the API and the agent both use as the deployment's user", () => {
     const api = manifest("app-api");
     const agent = manifest("ops-agent");
-    expect(api.manifest.container.user).toBeUndefined();
-    expect(agent.manifest.container.user).toBe(`\${UID:-1000}:\${GID:-1000}`);
+    // Both run as UID:GID from .env, with no fallback uid: every render writes them.
+    const user = `\${UID:?UID must be set, run pnpm openmapx compose render}:\${GID:?GID must be set, run pnpm openmapx compose render}`;
+    expect(api.manifest.container.user).toBe(user);
+    expect(agent.manifest.container.user).toBe(user);
     for (const service of [api, agent]) {
       expect(service.manifest.container.environment?.OPS_TRUSTED_CONFIG_DIR).toBe(
         "/var/lib/openmapx/trusted-config",
@@ -31,8 +33,12 @@ describe("trusted configuration deployment handoff", () => {
         readOnly: false,
       });
     }
-    expect(api.manifest.container.environment?.OPS_TRUSTED_CONFIG_UID).toBe(`\${UID:-1000}`);
-    expect(api.manifest.container.environment?.OPS_TRUSTED_CONFIG_GID).toBe(`\${GID:-1000}`);
+    expect(api.manifest.container.environment?.OPS_TRUSTED_CONFIG_UID).toBe(
+      `\${UID:?UID must be set, run pnpm openmapx compose render}`,
+    );
+    expect(api.manifest.container.environment?.OPS_TRUSTED_CONFIG_GID).toBe(
+      `\${GID:?GID must be set, run pnpm openmapx compose render}`,
+    );
   });
 
   it("renders the queue against the real infra root through the generation pointer", () => {

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
+import { privateVolumeDirectory } from "./private-volume-directory";
 import {
   openRuntimeRecoveryJournal,
   type RuntimeRecoveryJournal,
@@ -23,7 +24,10 @@ export async function openRuntimeRecoveryAuthority(
   ];
   await (dependencies.validateAuthority ?? services.validateReleaseServiceAuthority)(rootDir);
   return (dependencies.openJournal ?? openRuntimeRecoveryJournal)(
-    join(rootDir, "infra", "docker", ".runtime-recovery", "runtime-recovery-v1.json"),
+    join(
+      privateVolumeDirectory(join(rootDir, "infra", "docker", ".runtime-recovery")),
+      "runtime-recovery-v1.json",
+    ),
     { forbiddenServiceIds },
   );
 }

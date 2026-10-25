@@ -18,7 +18,7 @@
     "digest": "sha256:7126a80f8d1537426655a14a121e395e9d56451c36144f3a1ce5c3e4deb38f64",
     "containerName": "motis",
     "expose": [8080],
-    "user": "${UID:-1000}:${GID:-1000}",
+    "user": "${UID:?UID must be set, run pnpm openmapx compose render}:${GID:?GID must be set, run pnpm openmapx compose render}",
     "workingDir": "/motis-data",
     "entrypoint": ["/bin/sh", "-c"],
     "command": [
