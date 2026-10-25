@@ -179,8 +179,11 @@ jobs:
     timeout-minutes: 30
     container:
       image: node:24.22.1-bookworm@sha256:6449e19d8184d84062525b6a7524def03146c2cb04a7f08b076680d0e8e4240a
-      # The runner's own uid, which owns the checked-out workspace.
-      options: --user 1001:1001
+      # The runner's own uid, which owns the checked-out workspace. --init
+      # reaps orphans as tini does in the agent's image: the job container's
+      # own PID 1 never would, and the contained-process tests wait for a
+      # command's process group to empty.
+      options: --user 1001:1001 --init
     env:
       HOME: /tmp/home
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
