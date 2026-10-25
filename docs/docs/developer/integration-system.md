@@ -34,7 +34,8 @@ The main implementation boundaries are:
 
 An integration is a directory. Built-in integrations live under `integrations/`
 and run directly from workspace TypeScript source; community integrations live
-under `custom_integrations/` and contain declarative metadata and
+in the operations agent's integration store, which app-api mounts at
+`custom_integrations/`, and contain declarative metadata and
 safe static assets (see
 [Built-in versus community](#built-in-versus-community)). The directory can contain these entry files:
 
@@ -1240,7 +1241,7 @@ and a reduced version on reload.
 ### 1. Discovery
 
 The host scans each configured integration directory (`integrations/` for
-built-ins, `custom_integrations/` for community installs), reads every
+built-ins, the mounted `custom_integrations/` for community installs), reads every
 `manifest.json`, and skips directories that begin with `_` or have no manifest.
 Discovery runs no integration code. An integration that later fails during
 setup is still known to the host by ID.
@@ -1347,9 +1348,10 @@ The host treats the two install locations differently, and the
 - **Built-in integrations** ship in the repository under `integrations/`. They
   run directly from workspace TypeScript source. The host imports their
   `index.ts`; no separate integration build is needed. They carry `quality: "built-in"`.
-- **Community integrations** are installed under `custom_integrations/` by the
-  operations agent, which records the SHA-256 of every file it installs; app-api
-  mounts the directory read-only and serves only files that match. Their
+- **Community integrations** are installed by the operations agent in its
+  integration store, `infra/docker/state/ops-agent/custom-integrations/`, which
+  records the SHA-256 of every file it installs; app-api mounts the store
+  read-only at `custom_integrations/` and serves only files that match. Their
   manifests and safe static assets are discovered, but backend and frontend
   JavaScript is never imported by app-api: that process holds
   database credentials and application secrets and is not a sandbox. Host and

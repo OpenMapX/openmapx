@@ -216,6 +216,14 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
     // Moves the agent's mounted state out of data-manager's data directory the
     // first time a generation mounts it from its new place.
     prepareAgentStateDirectories(paths.infraDir);
+    // The agent's stores, owner-only, before the generation mounts one into
+    // app-api; the first time, copied from the checkout and verified.
+    for (const { level, message } of coreServices.describeAgentStoresMigration(
+      coreServices.prepareAgentStores(paths.infraDir),
+      paths.infraDir,
+    )) {
+      log[level](message);
+    }
     const agentState = agentStatePaths(paths.infraDir);
     ensurePlatformPrivateDirectory(agentState.trustedConfig);
     const erasureDirectory = join(paths.infraDir, "data", "erasure");

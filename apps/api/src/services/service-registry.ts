@@ -64,8 +64,8 @@ function scheduleCommunityRetry(): void {
 }
 
 /**
- * Community services from the operations agent, which owns
- * `services/.community`; the app-api container has no host checkout. While the
+ * Community services from the operations agent, which owns its community
+ * store; the app-api container has no host checkout. While the
  * agent is unreachable the last reported list stays in use and a retry is
  * scheduled, unless `strict` asks for the failure instead. An API run on the
  * host without an agent configured (development) returns null and scans the

@@ -9,7 +9,7 @@ import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-c
 /**
  * Community service repositories, as the operations agent holds them.
  *
- * The agent owns the checkouts under the host's `services/.community`: it
+ * The agent owns the checkouts in its community store: it
  * fetches and validates repositories, swaps checkouts in, keeps the previous
  * checkout until a change is settled, and reports what is installed. The API
  * decides what to install and records it; nothing here touches the host

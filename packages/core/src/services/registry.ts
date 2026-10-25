@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { agentStatePaths } from "./agent-state";
 import { loadRecordedCommunityServices } from "./community-repository-records";
 import { embeddedBuiltInServiceManifests } from "./embedded-built-in-services";
 import { findServiceManifestDirs } from "./manifest-discovery";
@@ -23,7 +24,7 @@ export interface ServiceRegistryOptions {
    * Community services supplied by the caller instead of scanning
    * `communityDir` (or, from the ops-agent bundle, reading the agent's
    * repository records). The app-api container has no host checkout, so it reads
-   * them from the operations agent, which owns `services/.community`. Each
+   * them from the operations agent, which owns the community store. Each
    * must already have passed the community manifest rules.
    */
   communityServices?: readonly LoadedService[];
@@ -42,7 +43,9 @@ export class ServiceRegistry {
   async load(): Promise<void> {
     this.services = [];
     const servicesDir = this.opts.servicesDir ?? join(this.opts.rootDir, "services");
-    const communityDir = this.opts.communityDir ?? join(servicesDir, ".community");
+    const communityDir =
+      this.opts.communityDir ??
+      agentStatePaths(join(this.opts.rootDir, "infra", "docker")).community;
     const warnings = this.opts.warnings ?? [];
 
     const builtInServices = this.opts.builtInServices ?? this.embeddedBuiltInServices();

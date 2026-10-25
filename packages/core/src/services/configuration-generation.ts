@@ -848,11 +848,6 @@ function writeStackFiles(
   // Traefik watches the file, so it is replaced, never rewritten in place.
   atomicWrite(routes, renderTraefikDynamicYaml(traefik), 0o644);
   for (const dir of writableBindDirs) mkdirSync(dir, { recursive: true });
-  // app-api bind-mounts `${OPENMAPX_HOST_DIR}/custom_integrations`, a path the
-  // renderer cannot resolve. Left to Docker it is created root-owned on first
-  // start, and the ops-agent, which installs integrations there as the
-  // checkout's user, could not write it.
-  mkdirSync(join(rootDir, "custom_integrations"), { recursive: true, mode: 0o755 });
 }
 
 export type RenderConfigurationOptions = Pick<

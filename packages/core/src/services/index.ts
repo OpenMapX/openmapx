@@ -5,6 +5,15 @@ export {
   prepareAgentStateDirectories,
 } from "./agent-state";
 export {
+  type AgentStoreCopyReport,
+  type AgentStoresMigration,
+  agentStoresLeftBehind,
+  describeAgentStoresMigration,
+  legacyAgentStorePaths,
+  prepareAgentStores,
+  readAgentStoresMigration,
+} from "./agent-stores";
+export {
   type BuiltInManifestSource,
   type BuiltInServiceManifestSource,
   checkoutBuiltInIntegrationManifests,

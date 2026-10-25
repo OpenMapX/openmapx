@@ -132,17 +132,20 @@ unchanged. The normal sequence is:
    schema and the community sandbox. If any manifest fails, or a service id is
    already taken, the whole install is refused before anything changes. The
    security preview describes that exact commit, and only that commit is
-   installed, into `services/.community/<url-hash>/`, managed by this extension.
+   installed, into the agent's community store
+   (`infra/docker/state/ops-agent/community/<url-hash>/`), managed by this extension.
 2. **Enable + render + start** the service(s): `compose render` regenerates the
    stack and the container is brought up. Database initialization and migration behavior belongs to the installed service;
    inspect its startup logs.
 3. **Install each integration artifact**: the operations agent downloads the
    `.tar.gz` (HTTPS only), verifies its SHA-256 before extraction, unpacks it
-   into `custom_integrations/<id>/` and records the SHA-256 of every file it
+   into its integration store (`infra/docker/state/ops-agent/custom-integrations/<id>/`)
+   and records the SHA-256 of every file it
    wrote. The integration host is then hot-reloaded.
 4. **Record** the installed extension and its components.
 
-The operations agent owns `services/.community/` on the host, the way it owns
+The operations agent owns its community store,
+`infra/docker/state/ops-agent/community/`, the way it owns
 Docker and the generated configuration. `app-api` never writes there: it asks
 the agent to inspect, install, settle or remove a repository, and reads the
 installed community services back from it. Until a change is settled the agent
@@ -150,28 +153,30 @@ keeps the previous checkout for rollback and attempts recovery of interrupted
 changes on startup. Recovery failures remain operator work.
 
 The agent trusts an installed repository by content, not by file permissions.
-When it installs a commit, its record (`services/.community/.repository-<hash>.json`)
+When it installs a commit, its record (`community/.repository-<hash>.json` in that store)
 lists each `service.json` it validated with that file's SHA-256. The agent, and
 the CLI it runs for updates, builds and backups, load exactly those manifests
 and only while their bytes match: a manifest the record does not list, or a
 repository directory without a record, is never loaded. Changed bytes, or a
 record the agent did not write, stop the agent from starting or authorizing
 anything, as an invalid manifest always has. Recover by deleting that
-repository's directory and record under `services/.community/` and installing
+repository's directory and record in the community store and installing
 the extension again. Records are the agent's own files: they must be owned by
 its user and writable only by it. Repositories installed before records carried
-digests are refused the same way. Both locations are gitignored and live on the
-host, so installs survive container restarts.
+digests are refused the same way. Both stores live in the agent's state
+directory on the host, which is gitignored, so installs survive container restarts.
 
-The agent owns `custom_integrations/` the same way. It installs, updates, rolls
-back and removes integrations; `app-api` mounts the directory read-only and
+The agent owns its integration store,
+`infra/docker/state/ops-agent/custom-integrations/`, the same way. It installs,
+updates, rolls back and removes integrations; `app-api` mounts the store
+read-only at `/app/custom_integrations` and
 `pnpm openmapx integrations install` and `remove` ask the agent too. For each
 integration the agent records the SHA-256 of every file it installed, in its
 own state directory (`infra/docker/state/ops-agent/integrations/`), which no
 other service mounts. The agent, and the CLI it runs, load an installed
 integration's configuration schema only while its `manifest.json` has exactly
 the recorded bytes; `app-api` serves only the files whose bytes match. File
-owners and modes in `custom_integrations/` decide nothing. An integration the
+owners and modes in the store decide nothing. An integration the
 agent did not install, or whose files changed, is left out and reported (in the
 agent's startup log and in **Run diagnostics**) without affecting the others.
 Install it again to fix it.
@@ -188,7 +193,7 @@ verified and recorded.
 ### The service sandbox
 
 The sandbox is derived from provenance, not the manifest's `quality` label:
-manifests loaded from `services/.community/` are third-party whether they say
+manifests loaded from the community store are third-party whether they say
 `community` or `community-verified`, and the admin lists them as community. They may **not** use any `bindMounts`
 entry: community service installation and updates reject every host bind mount,
 including read-only mounts, with `community_bind_mount_forbidden`. Use a

@@ -88,7 +88,8 @@ describe("configuration generations", () => {
     expect(existsSync(join(root, "services/traefik/config/dynamic/generated-routes.yml"))).toBe(
       true,
     );
-    expect(existsSync(join(root, "custom_integrations"))).toBe(true);
+    // Installed integrations are no longer kept in the checkout.
+    expect(existsSync(join(root, "custom_integrations"))).toBe(false);
   });
 
   it("retains commit evidence even if the owner callback fails while its write is settling", async () => {

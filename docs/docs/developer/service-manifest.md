@@ -20,8 +20,9 @@ External authors should also follow [Building an external extension](./building-
 
 A service named `valhalla` lives at `services/valhalla/service.json`. The
 directory slug must equal the manifest's `id`, and first-party bind-mount
-sources resolve relative to that directory. Community services install under
-`services/.community/<repo-hash>/`, at most four directory levels into their
+sources resolve relative to that directory. Community services install in the
+operations agent's community store,
+`infra/docker/state/ops-agent/community/<repo-hash>/`, at most four directory levels into their
 repository, and cannot declare bind mounts.
 
 The ops-agent and the fixed CLI it runs do not read built-in manifests from the
@@ -657,7 +658,7 @@ Hints for the admin catalog.
 `quality` is a display and catalog label, not an authorization input. The
 security boundary is provenance: the registry passes `firstParty: true` only
 for manifests shipped in this repository's `services/` tree, and
-`firstParty: false` for manifests under `services/.community/`, which the
+`firstParty: false` for manifests in the agent's community store, which the
 operations agent validates before it installs a repository and again whenever
 it reads the tree.
 The validator enforces the invariant in both directions: a first-party
@@ -665,10 +666,10 @@ manifest must declare `quality: "built-in"`, and a third-party manifest may not
 declare it. A manifest cannot grant itself first-party privileges by changing
 this field.
 
-| Origin                                                                                 | Sandbox                                                                                                                                                                                                                                                                                                                                                                   |
-| :------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| First-party (`services/`, `quality: "built-in"`)                                       | May use first-party-only host privileges and special sources such as `@docker-socket`, `@service:`, `@infra:`, host networking, privileged mode, and narrowly reviewed `communityNetworkAccess`.                                                                                                                                                                          |
-| Third-party (`services/.community/`, `quality: "community"` or `"community-verified"`) | Identical sandbox for both labels: one isolated per-service network; no `communityNetworkAccess`, bind mounts of any kind, host networking, privileged mode, devices, escape-class capabilities, deployment `envFile`, Compose-variable bind paths, or Traefik proxy routes; named volumes must use `openmapx-<serviceId>-<suffix>`, and network aliases may not collide. |
+| Origin                                                                                  | Sandbox                                                                                                                                                                                                                                                                                                                                                                   |
+| :-------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| First-party (`services/`, `quality: "built-in"`)                                        | May use first-party-only host privileges and special sources such as `@docker-socket`, `@service:`, `@infra:`, host networking, privileged mode, and narrowly reviewed `communityNetworkAccess`.                                                                                                                                                                          |
+| Third-party (agent's community store, `quality: "community"` or `"community-verified"`) | Identical sandbox for both labels: one isolated per-service network; no `communityNetworkAccess`, bind mounts of any kind, host networking, privileged mode, devices, escape-class capabilities, deployment `envFile`, Compose-variable bind paths, or Traefik proxy routes; named volumes must use `openmapx-<serviceId>-<suffix>`, and network aliases may not collide. |
 
 The third-party rules apply at validation and again at render time. Community
 services must migrate persistent state to a namespaced named volume; operator

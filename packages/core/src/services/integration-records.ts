@@ -13,11 +13,11 @@ import { agentStatePaths } from "./agent-state";
 import { canonicalExtensionLocator } from "./extension-schema";
 
 /**
- * The operations agent's records of the integrations it installed under
- * `custom_integrations/`. Each record lists the SHA-256 of every file the
- * agent wrote there; readers trust an installed integration only while its
- * bytes match. The records live in the agent's own state directory, which no
- * other service mounts, so file modes in `custom_integrations/` decide nothing.
+ * The operations agent's records of the integrations it installed in its
+ * integration store. Each record lists the SHA-256 of every file the agent
+ * wrote there; readers trust an installed integration only while its bytes
+ * match. The records live in the agent's own state directory, which no other
+ * service mounts, so file modes in the store decide nothing.
  */
 
 export const INTEGRATION_RECORD_VERSION = 1;

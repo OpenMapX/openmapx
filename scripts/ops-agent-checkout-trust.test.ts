@@ -317,8 +317,10 @@ describe("integrations installed through the operations agent", () => {
       return sha256;
     };
 
-    // What an earlier release's installer left: the files of its archive,
-    // extracted under umask 002, so group-writable, and no agent record.
+    // The agent's integration store.
+    const store = services.agentStatePaths(infra).customIntegrations;
+    // Files placed in the store by hand, as an earlier release's installer
+    // left them: extracted under umask 002, so group-writable, and no record.
     const legacy = upload("legacy", [
       { name: "manifest.json", data: manifest("legacy"), mode: 0o664 },
       { name: "strings/en.json", data: "{}", mode: 0o664 },
@@ -327,20 +329,20 @@ describe("integrations installed through the operations agent", () => {
     try {
       const work = join(artifacts, "legacy-extract");
       mkdirSync(work);
-      mkdirSync(join(checkout, "custom_integrations"), { recursive: true });
+      mkdirSync(store, { recursive: true });
       renameSync(
         extractIntegrationArchive(
           join(artifacts, "legacy.tar.gz"),
           join(work, "x"),
           join(work, "y"),
         ),
-        join(checkout, "custom_integrations", "legacy"),
+        join(store, "legacy"),
       );
-      chmodSync(join(checkout, "custom_integrations", "legacy"), 0o775);
+      chmodSync(join(store, "legacy"), 0o775);
     } finally {
       process.umask(previous);
     }
-    expect(statSync(join(checkout, "custom_integrations", "legacy")).mode & 0o777).toBe(0o775);
+    expect(statSync(join(store, "legacy")).mode & 0o777).toBe(0o775);
 
     // It does not stop a render or the agent: it is left out and reported.
     const rendered = await cli(checkout, "compose", "render");
@@ -399,7 +401,7 @@ describe("integrations installed through the operations agent", () => {
       );
       expect("code" in refused && refused.code, name).not.toBe(0);
       expect(`${refused.stdout}${refused.stderr}`, name).toContain(problem);
-      expect(existsSync(join(checkout, "custom_integrations", name)), name).toBe(false);
+      expect(existsSync(join(store, name)), name).toBe(false);
     }
 
     // The earlier install is recorded only after its files match its archive.
@@ -441,7 +443,11 @@ function communityManifest(id: string, image = `registry.example.test/${id}`): s
  * record lists, one it does not, and a second repository without a record.
  */
 function installCommunityRepository(checkout: string): string {
-  const community = join(checkout, "services", ".community");
+  const state = join(checkout, "infra", "docker", "state", "ops-agent");
+  // The agent's state directory is its own, as the agent creates it.
+  mkdirSync(state, { recursive: true, mode: 0o700 });
+  chmodSync(state, 0o700);
+  const community = join(state, "community");
   const repository = join(community, REPOSITORY);
   for (const [path, id] of [
     ["recorded", "community-recorded"],
@@ -522,7 +528,7 @@ describe("the ops-agent's fixed CLI", () => {
     expect(message).toContain(
       `Community repository ${REPOSITORY} no longer matches the service manifests the operations agent recorded when it installed it.`,
     );
-    expect(message).toContain(`Delete services/.community/${REPOSITORY}`);
+    expect(message).toContain(`Delete infra/docker/state/ops-agent/community/${REPOSITORY}`);
     expect(message).not.toMatch(/\n\s+at /);
   }, 120_000);
 });

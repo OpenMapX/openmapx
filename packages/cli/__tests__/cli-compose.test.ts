@@ -22,7 +22,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { readErasureJournal } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderComposeForRepo, rotateRedisPasswordForRepo } from "../src/commands/compose";
 import { loadInfraEnv } from "../src/lib/infra-env";
 import { rotatePlatformSecretFile } from "../src/lib/platform-secret-files";
@@ -400,6 +400,42 @@ describe("renderComposeForRepo", () => {
       services: ["app-api,data-manager"],
     });
     expect(readFileSync(secretPath, "utf8")).toBe(key);
+  });
+
+  it("creates the agent's stores before mounting its integration store read-only into app-api", async () => {
+    for (const id of ["app-api", "data-manager", "ops-agent", "motis", "postgis", "redis"]) {
+      const manifest = JSON.parse(
+        readFileSync(join(REPO_ROOT, "services", id, "service.json"), "utf8"),
+      ) as Record<string, unknown>;
+      writeManifest(id, manifest);
+    }
+    // An earlier release's checkout, with a directory the agent never recorded.
+    mkdirSync(join(tmp, "custom_integrations", "hand-placed"), { recursive: true });
+    const warnings = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await renderComposeForRepo({
+      rootDir: tmp,
+      domain: "example.com",
+      services: ["app-api,data-manager"],
+    });
+
+    const state = join(tmp, "infra", "docker", "state", "ops-agent");
+    for (const store of ["custom-integrations", "community"]) {
+      expect(statSync(join(state, store)).mode & 0o777).toBe(0o700);
+    }
+    expect(readdirSync(join(state, "custom-integrations"))).toEqual([]);
+    const yaml = readFileSync(generatedCompose(), "utf8");
+    const appApi = yaml.split("  app-api:")[1]?.split("\n  app-")[0] ?? "";
+    // Relative to the generation, inside infra/docker/state/ops-agent.
+    expect(appApi).toMatch(
+      /- \.\.\/\.\.\/custom-integrations:\$\{OPENMAPX_CUSTOM_INTEGRATIONS_DIR:-\/app\/custom_integrations\}:ro/,
+    );
+    expect(yaml).not.toContain("/custom_integrations:${");
+    expect(warnings.mock.calls.flat().join("\n")).toContain(
+      "The integration hand-placed in custom_integrations was not copied into the operations agent's state: the agent holds no record of it.",
+    );
+    // Left in place, as everything in the checkout.
+    expect(readdirSync(join(tmp, "custom_integrations"))).toEqual(["hand-placed"]);
   });
 
   it("mounts only the Transitous API keys directory into data-manager, where it reads them", async () => {

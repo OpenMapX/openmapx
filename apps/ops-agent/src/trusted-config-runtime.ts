@@ -121,6 +121,8 @@ async function commitGeneration(
         // This generation mounts the agent's state from its own directory;
         // an earlier release's directories move there first.
         coreServices.prepareAgentStateDirectories(options.infraDir);
+        // And its stores, which the generation mounts into app-api.
+        coreServices.prepareAgentStores(options.infraDir);
         const committed = await writer.commit({
           services,
           integrationSchemas: authority?.integrationSchemas ?? options.integrationSchemas,

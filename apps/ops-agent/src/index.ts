@@ -123,7 +123,41 @@ async function main(): Promise<void> {
       rootDir: config.rootDir,
       builtInAuthorityDigest: releaseAuthority.digest,
     };
-    // The agent is the only writer of services/.community. An interrupted
+    const builtInIntegrationIds = () =>
+      new Set(
+        (
+          services.embeddedBuiltInIntegrationManifests() ??
+          services.checkoutBuiltInIntegrationManifests(config.rootDir)
+        ).ids,
+      );
+    // Releases before this one kept both stores in the checkout. The first
+    // time, a change they left unfinished is undone where it began, then the
+    // stores are copied into the agent's state, each entry verified against
+    // its record, before anything is installed there. After a panel
+    // self-update this runs before app-api is recreated with the new mount;
+    // until then app-api keeps reading the earlier copies, which stay.
+    if (!services.readAgentStoresMigration(paths.infraDir)) {
+      const legacy = services.legacyAgentStorePaths(paths.infraDir);
+      await new CommunityRepositoryStore({
+        rootDir: config.rootDir,
+        directory: legacy.community,
+        uid,
+        loadAuthority: () => authorityLoader(),
+      }).recover();
+      await new IntegrationStore({
+        rootDir: config.rootDir,
+        directory: legacy.customIntegrations,
+        uid,
+        builtInIds: builtInIntegrationIds,
+      }).recover();
+      const migration = await services.withConfigurationGenerationWriter(paths.infraDir, async () =>
+        services.prepareAgentStores(paths.infraDir, { uid }),
+      );
+      for (const { message } of services.describeAgentStoresMigration(migration, paths.infraDir)) {
+        process.stderr.write(`${message}\n`);
+      }
+    }
+    // The agent is the only writer of its community store. An interrupted
     // repository transaction is undone before any authority load, which
     // refuses a checkout it cannot validate.
     const communityRepositories = new CommunityRepositoryStore({
@@ -132,18 +166,12 @@ async function main(): Promise<void> {
       loadAuthority: () => authorityLoader(),
     });
     await communityRepositories.recover();
-    // The agent is the only writer of custom_integrations, too; an interrupted
-    // install is undone before any authority load reads the integrations.
+    // And of its integration store; an interrupted install is undone before
+    // any authority load reads the integrations.
     const integrationStore = new IntegrationStore({
       rootDir: config.rootDir,
       uid,
-      builtInIds: () =>
-        new Set(
-          (
-            services.embeddedBuiltInIntegrationManifests() ??
-            services.checkoutBuiltInIntegrationManifests(config.rootDir)
-          ).ids,
-        ),
+      builtInIds: builtInIntegrationIds,
     });
     await integrationStore.recover();
     // Releases before this one fell back to uid 1000. After a panel

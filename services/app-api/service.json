@@ -191,9 +191,10 @@
       "readOnly": true
     },
     {
-      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — community integrations are stored under the host checkout}/custom_integrations",
+      "source": "@infra:state/ops-agent/custom-integrations",
       "target": "${OPENMAPX_CUSTOM_INTEGRATIONS_DIR:-/app/custom_integrations}",
-      "readOnly": true
+      "readOnly": true,
+      "optional": true
     }
   ],
   "volumes": [
