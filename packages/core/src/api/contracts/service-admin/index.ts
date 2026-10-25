@@ -111,6 +111,8 @@ export const serviceAdminOperations = {
       200: adminJson(adminServiceOkSchema),
       404: adminJson(httpErrorSchema),
       400: adminJson(z.union([httpErrorSchema, adminServiceValidationErrorSchema])),
+      // Not applied, for a reason the operator can fix (an override render may not use).
+      409: adminJson(httpErrorSchema),
     },
   },
   getAdminServiceCredentials: {
@@ -215,6 +217,8 @@ export const serviceAdminOperations = {
     responses: {
       ...adminCommonResponses,
       200: adminJson(adminServiceSelectionUpdatedSchema),
+      // Not applied, for a reason the operator can fix (an override render may not use).
+      409: adminJson(httpErrorSchema),
       503: adminJson(httpErrorSchema),
     },
   },

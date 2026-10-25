@@ -29,6 +29,11 @@ export {
   WELL_KNOWN_CAPABILITIES,
   WELL_KNOWN_DATA_TYPES,
 } from "./capabilities";
+export {
+  type CheckoutDifference,
+  checkoutDifferencesFromRelease,
+  describeCheckoutDifferences,
+} from "./checkout-differences";
 export { communityServiceManifestProblems } from "./community-manifest";
 export {
   COMMUNITY_RECORD_VERSION,
@@ -94,7 +99,6 @@ export {
   validateTrustedConfigurationValues,
 } from "./configuration-schema";
 export {
-  bindSources,
   type ContainerBindMounts,
   readContainerBindMounts,
 } from "./container-mounts";
@@ -190,12 +194,9 @@ export {
 } from "./manifest-schema";
 export { ServiceRegistry, type ServiceRegistryOptions } from "./registry";
 export {
-  type BuiltInServiceDrift,
   type BuiltInServiceReadOptions,
   builtInServiceManifestSource,
   captureReleaseServiceAuthority,
-  describeBuiltInServiceDrift,
-  inspectBuiltInServiceDrift,
   RELEASE_BUILT_IN_SERVICE_IDS,
   RELEASE_NEVER_MANAGE_SERVICE_IDS,
   type ReleaseServiceAuthorityCapture,
@@ -238,6 +239,7 @@ export {
   parseReleaseServiceFiles,
   type ReleaseServiceFile,
   type ReleaseServiceFiles,
+  readEmbeddedReleaseServiceFiles,
   releaseServiceFiles,
   ServiceFileError,
   serializeReleaseServiceFiles,
@@ -307,7 +309,14 @@ export {
   parseServiceIdList,
   SERVICE_SELECTION_ENV,
 } from "./selection";
-export { serviceFileStore } from "./service-file-store";
+export {
+  describeImportedServiceFiles,
+  importCheckoutServiceFiles,
+  serviceFilesImported,
+} from "./service-file-import";
+export { describeServiceFiles } from "./service-file-report";
+export { readGenerationServiceFiles, serviceFileStore } from "./service-file-store";
+export { readServiceOverrides, staleOverrides } from "./service-overrides";
 export {
   LEGACY_TRAEFIK_MOUNT_NOTICE,
   legacyTraefikDynamicDirectory,

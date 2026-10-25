@@ -1,12 +1,13 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
 import { Command } from "commander";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { registerCheckCommand } from "../src/commands/check";
-import { legacyTraefikDynamicMounted } from "../src/lib/container-mounts";
+import { containerBindMounts, legacyTraefikDynamicMounted } from "../src/lib/container-mounts";
 import { dockerCompose } from "../src/lib/docker";
+import { selectedReleaseServiceFiles } from "../src/lib/release-service-files";
 import {
   ensureTransitousApiKeysFile,
   legacyTransitousApiKeysPath,
@@ -21,6 +22,10 @@ vi.mock("../src/lib/docker", () => ({
 vi.mock("../src/lib/container-mounts", () => ({
   legacyTraefikDynamicMounted: vi.fn(async () => false),
   containerBindMounts: vi.fn(async () => []),
+}));
+// No release is selected unless a test selects one.
+vi.mock("../src/lib/release-service-files", () => ({
+  selectedReleaseServiceFiles: vi.fn(async () => "none"),
 }));
 
 let tmp: string;
@@ -129,4 +134,76 @@ it("says while Traefik still reads the checkout's routes", async () => {
   errors.mockClear();
   await check();
   expect(traefikLines()).toEqual([]);
+});
+
+it("reports the service files: overrides, the import to come, a host render's refusal, containers on the checkout", async () => {
+  const directory = join(tmp, "services", "martin");
+  mkdirSync(join(directory, "config"), { recursive: true });
+  const manifest = {
+    id: "martin",
+    name: "martin",
+    version: "1.0.0",
+    quality: "built-in",
+    container: { image: "example/martin", tag: "1" },
+    bindMounts: [{ source: "config/martin.yaml", target: "/etc/martin/martin.yaml" }],
+  };
+  writeFileSync(join(directory, "service.json"), JSON.stringify(manifest));
+  writeFileSync(join(directory, "config", "martin.yaml"), "listen_addresses: 0.0.0.0:3000\n");
+  const override = join(tmp, "infra", "docker", "overrides", "services", "martin", "config");
+  mkdirSync(override, { recursive: true, mode: 0o755 });
+  writeFileSync(join(override, "martin.yaml"), "users: ['op:$2y$05$secret-hash']\n");
+  const checkout = services.releaseServiceFiles([
+    { manifest, directory, isBuiltIn: true, enabled: true } as services.LoadedService,
+  ]);
+  vi.mocked(selectedReleaseServiceFiles).mockResolvedValue({
+    files: { ...checkout, origin: "release", manifests: new Map([["martin", "0".repeat(64)]]) },
+    release: "r1",
+    image: "ghcr.io/openmapx/ops-agent@sha256:1",
+    revision: "a".repeat(40),
+  });
+  vi.mocked(containerBindMounts).mockResolvedValue([
+    { name: "docker-martin-1", sources: [join(directory, "config", "martin.yaml")] },
+  ]);
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const check = async () => {
+    const program = new Command();
+    registerCheckCommand(program);
+    await expect(program.parseAsync(["check"], { from: "user" })).rejects.toThrow("exit:1");
+  };
+  const lines = () => errors.mock.calls.flat().map(String);
+  try {
+    await check();
+    expect(lines()).toContainEqual(expect.stringContaining("The next render imports, once"));
+    expect(lines()).toContainEqual(
+      expect.stringContaining(
+        "Service file overrides in use, in place of the release's files (infra/docker/overrides/services): martin/config/martin.yaml.",
+      ),
+    );
+    expect(lines()).toContainEqual(
+      expect.stringContaining(
+        "1 container still mounts service files from the checkout: docker-martin-1.",
+      ),
+    );
+    expect(lines().join("\n")).not.toContain("secret-hash");
+
+    // Once the import ran: what a host render would refuse.
+    services.importCheckoutServiceFiles({
+      infraDir: join(tmp, "infra", "docker"),
+      services: [],
+      release: { ...checkout, origin: "release" },
+    });
+    errors.mockClear();
+    await check();
+    expect(lines()).toContainEqual(
+      expect.stringContaining(
+        "A host render refuses until this is resolved. The checkout's built-in services differ from the selected release r1",
+      ),
+    );
+    expect(lines()).toContainEqual(
+      expect.stringContaining("services/martin/service.json (changed)"),
+    );
+  } finally {
+    vi.mocked(selectedReleaseServiceFiles).mockResolvedValue("none");
+    vi.mocked(containerBindMounts).mockResolvedValue([]);
+  }
 });

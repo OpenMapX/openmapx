@@ -25,6 +25,7 @@ import type {
   DisableAdminIntegration401,
   DisableAdminIntegration403,
   DisableAdminIntegration404,
+  DisableAdminIntegration409,
   DisableAdminIntegration413,
   DisableAdminIntegration415,
   DisableAdminIntegration429,
@@ -35,6 +36,7 @@ import type {
   EnableAdminIntegration401,
   EnableAdminIntegration403,
   EnableAdminIntegration404,
+  EnableAdminIntegration409,
   EnableAdminIntegration413,
   EnableAdminIntegration415,
   EnableAdminIntegration429,
@@ -140,6 +142,7 @@ import type {
   PatchAdminIntegrationConfig401,
   PatchAdminIntegrationConfig403,
   PatchAdminIntegrationConfig404,
+  PatchAdminIntegrationConfig409,
   PatchAdminIntegrationConfig413,
   PatchAdminIntegrationConfig415,
   PatchAdminIntegrationConfig429,
@@ -1336,6 +1339,11 @@ export type patchAdminIntegrationConfigResponse404 = {
   status: 404;
 };
 
+export type patchAdminIntegrationConfigResponse409 = {
+  data: PatchAdminIntegrationConfig409;
+  status: 409;
+};
+
 export type patchAdminIntegrationConfigResponse413 = {
   data: PatchAdminIntegrationConfig413;
   status: 413;
@@ -1364,6 +1372,7 @@ export type patchAdminIntegrationConfigResponseError = (
   | patchAdminIntegrationConfigResponse401
   | patchAdminIntegrationConfigResponse403
   | patchAdminIntegrationConfigResponse404
+  | patchAdminIntegrationConfigResponse409
   | patchAdminIntegrationConfigResponse413
   | patchAdminIntegrationConfigResponse415
   | patchAdminIntegrationConfigResponse429
@@ -1440,6 +1449,11 @@ export type disableAdminIntegrationResponse404 = {
   status: 404;
 };
 
+export type disableAdminIntegrationResponse409 = {
+  data: DisableAdminIntegration409;
+  status: 409;
+};
+
 export type disableAdminIntegrationResponse413 = {
   data: DisableAdminIntegration413;
   status: 413;
@@ -1468,6 +1482,7 @@ export type disableAdminIntegrationResponseError = (
   | disableAdminIntegrationResponse401
   | disableAdminIntegrationResponse403
   | disableAdminIntegrationResponse404
+  | disableAdminIntegrationResponse409
   | disableAdminIntegrationResponse413
   | disableAdminIntegrationResponse415
   | disableAdminIntegrationResponse429
@@ -1544,6 +1559,11 @@ export type enableAdminIntegrationResponse404 = {
   status: 404;
 };
 
+export type enableAdminIntegrationResponse409 = {
+  data: EnableAdminIntegration409;
+  status: 409;
+};
+
 export type enableAdminIntegrationResponse413 = {
   data: EnableAdminIntegration413;
   status: 413;
@@ -1572,6 +1592,7 @@ export type enableAdminIntegrationResponseError = (
   | enableAdminIntegrationResponse401
   | enableAdminIntegrationResponse403
   | enableAdminIntegrationResponse404
+  | enableAdminIntegrationResponse409
   | enableAdminIntegrationResponse413
   | enableAdminIntegrationResponse415
   | enableAdminIntegrationResponse429

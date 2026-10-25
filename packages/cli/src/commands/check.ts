@@ -8,6 +8,7 @@ import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
 import { dockerCompose, dockerRun } from "../lib/docker";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
+import { serviceFileReport } from "../lib/service-file-report";
 import { transitousApiKeysLeftBehindWarning } from "../lib/transitous-api-keys";
 
 interface PsLine {
@@ -468,12 +469,9 @@ export function registerCheckCommand(program: Command): void {
           ? envFilePermissionWarning(envPath, envMode)
           : null;
       if (permissionWarning) log.warn(permissionWarning);
-      // Only the ops-agent's fixed CLI runs embedded manifests; from source the
-      // checkout is what runs, so there is nothing to compare.
-      const drift = coreServices.describeBuiltInServiceDrift(
-        coreServices.inspectBuiltInServiceDrift(repoPaths().root),
-      );
-      if (drift) log.warn(drift);
+      // The service files: overrides, the import, checkout edits and
+      // containers still on them, and what a host render would refuse.
+      for (const { level, message } of await serviceFileReport()) log[level](message);
       // Integrations the operations agent installed are trusted by its records;
       // only its fixed CLI reads them, so a check from source has none to report.
       for (const warning of installedIntegrationWarnings(repoPaths().root)) log.warn(warning);

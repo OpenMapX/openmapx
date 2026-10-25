@@ -239,7 +239,8 @@ against refreshed source data produces a new content-addressed identity.
 ## Martin overlays
 
 Martin serves PostGIS tile functions as dynamic vector tile endpoints. It
-serves only the sources declared in `services/martin/config/martin.yaml`,
+serves only the sources declared in the release's `services/martin/config/martin.yaml`
+(or your [override](../install/managing-services.md#service-file-overrides) of it),
 the traffic-flow overlay's `segment_flow`, and logs in as
 `openmapx_tiles`, a role that can call the functions in the `tiles` schema and
 read no table. Set its password before enabling Martin; PostGIS applies it on

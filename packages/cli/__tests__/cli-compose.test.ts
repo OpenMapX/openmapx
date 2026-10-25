@@ -27,12 +27,17 @@ import { renderComposeForRepo, rotateRedisPasswordForRepo } from "../src/command
 import { legacyTraefikDynamicMounted } from "../src/lib/container-mounts";
 import { loadInfraEnv } from "../src/lib/infra-env";
 import { rotatePlatformSecretFile } from "../src/lib/platform-secret-files";
+import { selectedReleaseServiceFiles } from "../src/lib/release-service-files";
 
 // Docker answers whether a container still mounts the checkout's Traefik
 // directory, and what containers mount; here, by default, none does.
 vi.mock("../src/lib/container-mounts", () => ({
   legacyTraefikDynamicMounted: vi.fn(async () => false),
   containerBindMounts: vi.fn(async () => []),
+}));
+// The selected release's files come from its image; by default none is selected.
+vi.mock("../src/lib/release-service-files", () => ({
+  selectedReleaseServiceFiles: vi.fn(async () => "none"),
 }));
 
 /** A file's permission bits, read through a descriptor rather than a second lookup by path. */
@@ -521,6 +526,93 @@ describe("renderComposeForRepo", () => {
     await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["traefik"] });
     expect(existsSync(legacyRoutes)).toBe(false);
     expect(notices()).toEqual([]);
+  });
+
+  it("renders a selected release's files, keeps checkout edits as overrides, and refuses while its manifests differ", async () => {
+    const manifest = {
+      ...baseManifest,
+      id: "martin",
+      bindMounts: [{ source: "config/martin.yaml", target: "/etc/martin/martin.yaml" }],
+    };
+    writeManifest("martin", manifest);
+    const config = join(tmp, "services", "martin", "config");
+    mkdirSync(config, { recursive: true });
+    const shipped = "listen_addresses: 0.0.0.0:3000\n";
+    writeFileSync(join(config, "martin.yaml"), shipped);
+    const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+    const release = (yaml: string): coreServices.ReleaseServiceFiles => ({
+      origin: "release",
+      files: new Map([
+        [
+          "martin/config/martin.yaml",
+          {
+            serviceId: "martin",
+            path: "config/martin.yaml",
+            executable: false,
+            bytes: Buffer.from(yaml),
+            sha256: sha(yaml),
+          },
+        ],
+      ]),
+      history: new Map([["martin/config/martin.yaml", new Set([sha(shipped), sha(yaml)])]]),
+      manifests: new Map([["martin", sha(JSON.stringify(manifest))]]),
+      missing: [],
+    });
+    const select = (yaml: string) =>
+      vi.mocked(selectedReleaseServiceFiles).mockResolvedValue({
+        files: release(yaml),
+        release: "r1",
+        image: "ghcr.io/openmapx/ops-agent@sha256:1",
+        revision: "a".repeat(40),
+      });
+    const render = () =>
+      renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["martin"] });
+    const mountedFile = () => {
+      const line = readFileSync(generatedCompose(), "utf8")
+        .split("\n")
+        .find((entry) => entry.includes(":/etc/martin/martin.yaml"));
+      return readFileSync(
+        join(dirname(generatedCompose()), line?.trim().replace(/^- /, "").split(":")[0] ?? ""),
+        "utf8",
+      );
+    };
+    try {
+      // A checkout at the release: the release's file, as the store holds it.
+      select(shipped);
+      await render();
+      expect(mountedFile()).toBe(shipped);
+
+      // One an earlier release left: refused, and nothing is imported from it.
+      const newer = "listen_addresses: 0.0.0.0:3000\nworker_processes: 2\n";
+      select(newer);
+      await expect(render()).rejects.toThrow("services/martin/config/martin.yaml (changed)");
+      expect(existsSync(join(tmp, "infra", "docker", "overrides"))).toBe(false);
+
+      // An operator's edit there: imported once as an override, then used.
+      rmSync(join(tmp, "infra", "docker", "state", "ops-agent", "overrides-import.json"));
+      writeFileSync(join(config, "martin.yaml"), "listen_addresses: 0.0.0.0:3001\n");
+      await render();
+      expect(
+        readFileSync(
+          join(tmp, "infra", "docker", "overrides", "services", "martin", "config", "martin.yaml"),
+          "utf8",
+        ),
+      ).toBe("listen_addresses: 0.0.0.0:3001\n");
+      expect(mountedFile()).toBe("listen_addresses: 0.0.0.0:3001\n");
+
+      // A checkout whose manifest is not the release's: refused, with what to do.
+      writeManifest("martin", { ...manifest, version: "2.0.0" });
+      const refused = await render().catch((error: Error) => error.message);
+      expect(refused).toContain(
+        `The checkout's built-in services differ from the selected release r1, built from ${"a".repeat(40)}:\n  services/martin/service.json (changed)`,
+      );
+      expect(refused).toContain(
+        "Either wait until the release of this checkout's commit is published and run `pnpm openmapx compose release` again, or check out the selected release's source: git checkout aaaaaaaa",
+      );
+      expect(refused).toContain("infra/docker/overrides/services/<id>/<path>");
+    } finally {
+      vi.mocked(selectedReleaseServiceFiles).mockResolvedValue("none");
+    }
   });
 
   it("rejects pre-existing identical ops-agent role tokens", async () => {

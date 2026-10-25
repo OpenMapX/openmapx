@@ -1061,4 +1061,79 @@ describe("ops-agent trusted configuration runtime", () => {
       );
     });
   });
+
+  it("does not commit with an override it may not use, and says why for the admin panel", async () => {
+    const paths = fixture();
+    // A built-in that mounts a file of the release.
+    const directory = join(paths.root, "services", "alpha");
+    mkdirSync(join(directory, "config"), { recursive: true });
+    writeFileSync(join(directory, "config", "alpha.yml"), "release: true\n");
+    const alpha: services.LoadedService = {
+      ...service("alpha"),
+      manifest: {
+        ...service("alpha").manifest,
+        bindMounts: [{ source: "config/alpha.yml", target: "/etc/alpha.yml" }],
+      },
+      directory,
+    };
+    const override = join(paths.infraDir, "overrides", "services", "alpha", "config", "alpha.yml");
+    mkdirSync(dirname(override), { recursive: true, mode: 0o755 });
+    writeFileSync(override, "users: ['op:$2y$05$secret-hash']\n");
+    chmodSync(override, 0o664);
+    const runtime = createUnavailableRuntime();
+    installTrustedConfigurationRuntime(runtime, {
+      services: [alpha],
+      integrationSchemas: new Map([["routing", { enabled: { type: "boolean" } }]]),
+      infraDir: paths.infraDir,
+    });
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const apply = (revisionId: string) => {
+      const operation = {
+        expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+        kind: "stack.render" as const,
+        revisionId,
+      };
+      return dispatchOpsOperation(runtime, operation, {
+        signal: new AbortController().signal,
+        emitLog: vi.fn(),
+        claim: claim(operation),
+      });
+    };
+    const failure = (attemptedRevisionId: string) => {
+      const operation = { kind: "configuration.failure.inspect" as const, attemptedRevisionId };
+      return dispatchOpsOperation(runtime, operation, {
+        signal: new AbortController().signal,
+        emitLog: vi.fn(),
+        claim: {
+          fingerprint: opsOperationFingerprint(operation),
+          operation,
+          source: "registry",
+          capability: { revisionId: attemptedRevisionId, values: {} },
+        },
+      });
+    };
+    try {
+      const refused = `cfg1_${"r".repeat(43)}`;
+      await expect(apply(refused)).resolves.toMatchObject({
+        outcome: "not_committed",
+        reason: "failed",
+      });
+      const problem =
+        "infra/docker/overrides/services/alpha/config/alpha.yml can't be used: group or others may write it. Render refuses it rather than use the release's file in its place: make it a regular file of yours that only you may write, or delete it.";
+      await expect(failure(refused)).resolves.toEqual({ attemptedRevisionId: refused, problem });
+      expect(stderr.mock.calls.flat().map(String)).toContainEqual(`${problem}\n`);
+      expect(stderr.mock.calls.flat().join("")).not.toContain("secret-hash");
+      expect(services.currentConfigurationGeneration(paths.infraDir)).toBeNull();
+
+      chmodSync(override, 0o644);
+      const applied = `cfg1_${"a".repeat(43)}`;
+      await expect(apply(applied)).resolves.toMatchObject({ outcome: "committed" });
+      await expect(failure(applied)).resolves.toEqual({
+        attemptedRevisionId: applied,
+        problem: null,
+      });
+    } finally {
+      stderr.mockRestore();
+    }
+  });
 });

@@ -155,6 +155,46 @@ describe("applyTrustedConfiguration", () => {
       expect(executeTrustedConfigurationAndWait).toHaveBeenCalledTimes(1);
     },
   );
+  it("asks the agent why an apply was not committed, and gives the admin panel that reason", async () => {
+    const problem =
+      "infra/docker/overrides/services/martin/config/martin.yaml can't be used: it has 2 links.";
+    vi.mocked(executeTrustedConfigurationAndWait).mockResolvedValue({
+      outcome: "not_committed",
+      reason: "failed",
+      cleanupFailed: false,
+    });
+    inspect.mockImplementation(async (_client, operation: { kind: string }) =>
+      operation.kind === "configuration.failure.inspect"
+        ? { attemptedRevisionId: `cfg1_${"r".repeat(43)}`, problem }
+        : { revisionId: null, integrationConfigDigests: [] },
+    );
+    const error = await applyTrustedConfiguration({
+      kind: "stack.render",
+      operationKey: "opk1_failureReason123",
+    }).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(TrustedConfigurationApplyError);
+    expect(error).toMatchObject({ message: problem, statusCode: 409 });
+    expect(isProvenConfigurationNonCommit(error)).toBe(true);
+    expect(inspect).toHaveBeenCalledWith(
+      undefined,
+      { kind: "configuration.failure.inspect", attemptedRevisionId: `cfg1_${"r".repeat(43)}` },
+      expect.any(String),
+      expect.anything(),
+    );
+
+    // An agent of an earlier release has no reason to give.
+    inspect.mockImplementation(async (_client, operation: { kind: string }) => {
+      if (operation.kind === "configuration.failure.inspect") throw new Error("unknown kind");
+      return { revisionId: null, integrationConfigDigests: [] };
+    });
+    const older = await applyTrustedConfiguration({
+      kind: "stack.render",
+      operationKey: "opk1_failureReason456",
+    }).catch((caught: unknown) => caught);
+    expect(older).toMatchObject({ message: "Trusted configuration unavailable" });
+    expect((older as { statusCode?: number }).statusCode).toBeUndefined();
+  });
+
   it("does not prepare or publish when authoritative observation is unavailable", async () => {
     inspect.mockRejectedValueOnce(new Error("synthetic observation failure"));
     const result = await applyTrustedConfigurationWithEvidence({

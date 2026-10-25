@@ -28,8 +28,10 @@ import { embeddedBuiltInServiceFiles } from "../embedded-service-files.bundle";
 import { findServiceManifestDirs } from "../manifest-discovery";
 import { readBuiltInServices } from "../release-authority-inventory";
 import {
+  parseReleaseServiceFiles,
   type ReleaseServiceFiles,
   readCheckoutServiceFiles,
+  serializeReleaseServiceFiles,
   serviceFileReferences,
 } from "../release-service-files";
 import { readGenerationServiceFiles, serviceFileStore } from "../service-file-store";
@@ -199,14 +201,14 @@ describe("the release's service files in the store", () => {
   it("removes a tree nothing records or mounts, and keeps one a container mounts or when Docker can't tell", async () => {
     const { infraDir } = stack();
     const services = releaseServices();
-    const commit = (containerBindSources?: string[]) =>
+    const commit = (sources?: string[]) =>
       commitConfigurationGeneration({
         infraDir,
         services,
         input: input(),
         releaseServiceFiles: release(services),
         legacyTraefikDynamicMounted: false,
-        containerBindSources,
+        ...(sources ? { containerBindMounts: [{ name: "docker-postgis-1", sources }] } : {}),
       });
     await commit([]);
     // Trees a pruned generation recorded.
@@ -348,6 +350,26 @@ describe("the runtime bundle's service files", () => {
       expect(relative(join(REPOSITORY, "services"), path)).toBe(`${file.serviceId}/${file.path}`);
       expect((statSync(path).mode & 0o111) !== 0, path).toBe(file.executable);
     }
+  });
+
+  it("hands the host CLI its files as an index it verifies", () => {
+    const set = {
+      ...release(releaseServices()),
+      manifests: new Map([["postgis", "a".repeat(64)]]),
+    };
+    const parsed = parseReleaseServiceFiles(serializeReleaseServiceFiles(set));
+    expect([...parsed.files.keys()]).toEqual([...set.files.keys()]);
+    expect(parsed.files.get("postgis/scripts/sync-password.sh")).toMatchObject({
+      executable: true,
+      bytes: set.files.get("postgis/scripts/sync-password.sh")?.bytes,
+    });
+    expect(parsed.manifests).toEqual(set.manifests);
+    // Bytes that do not match their hash are refused.
+    const index = JSON.parse(serializeReleaseServiceFiles(set));
+    index.files[0].bytes = Buffer.from("tampered").toString("base64");
+    expect(() => parseReleaseServiceFiles(JSON.stringify(index))).toThrow(
+      "does not match its hash",
+    );
   });
 
   it("knows every file's current bytes as a version the release shipped", () => {

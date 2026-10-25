@@ -350,6 +350,47 @@ describe("deploymentUserProblems", () => {
     }
   });
 
+  it("leaves out Valhalla's writable copy of valhalla.json, which it rewrites as its image's root", () => {
+    const { root, infraDir, owner } = deployment("");
+    try {
+      writeFileSync(join(infraDir, ".env"), `UID=${owner.uid}\nGID=${owner.gid}\n`, {
+        mode: 0o600,
+      });
+      const data = join(infraDir, "data");
+      const at = (...parts: string[]) => join(data, ...parts);
+      const user = `${owner.uid}:${owner.gid}`;
+      const copy = at("valhalla", "config", "valhalla.json");
+      const problems = deploymentUserProblems({
+        infraDir,
+        processUid: owner.uid,
+        composeServices: {
+          "data-manager": { user, volumes: [{ type: "bind", source: data }] },
+          // As render writes it: the copy, read-write, into a service without a user.
+          valhalla: { volumes: [{ type: "bind", source: copy }] },
+        },
+        runningUsers: new Map([["data-manager", user]]),
+        filesystem: fakeFilesystem(
+          {
+            [data]: owner.uid,
+            [at("valhalla")]: owner.uid,
+            // Render creates the directory as the deployment's user.
+            [at("valhalla", "config")]: owner.uid,
+            // configure_valhalla.sh rewrote the file as root.
+            [copy]: 0,
+          },
+          {
+            [data]: ["valhalla"],
+            [at("valhalla")]: ["config"],
+            [at("valhalla", "config")]: ["valhalla.json"],
+          },
+        ),
+      });
+      expect(problems).toEqual([]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("leaves out what services running as their image's user write, as on openmapx.com", () => {
     const { root, infraDir, owner } = deployment("");
     try {

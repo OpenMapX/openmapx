@@ -35,6 +35,7 @@ import {
   touchesReleasePinnedServices,
   unpinnedReleaseWarning,
 } from "../lib/release";
+import { selectedReleaseServiceFiles } from "../lib/release-service-files";
 import { applyServiceSelection } from "../lib/service-selection";
 import {
   describeTransitousApiKeysMigration,
@@ -334,9 +335,43 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
     // from the checkout, where they are written too until none does.
     const legacyTraefik = await legacyTraefikDynamicMounted(paths.infraDir);
     const mounts = await containerBindMounts();
+    // Run from the checkout with a release selected, render uses that
+    // release's service files, read from its image, and refuses while the
+    // checkout's built-in services differ from them.
+    const selected = await selectedReleaseServiceFiles(paths.infraDir);
+    if (selected === "none") {
+      log.dim(
+        "No release is selected yet: the services' files come from this checkout. `pnpm openmapx compose release` selects one.",
+      );
+    } else if (selected) {
+      const imported = coreServices.importCheckoutServiceFiles({
+        infraDir: paths.infraDir,
+        services,
+        release: selected.files,
+      });
+      for (const line of coreServices.describeImportedServiceFiles(imported ?? [])) log.warn(line);
+      const overrides = coreServices.readServiceOverrides(paths.infraDir, selected.files);
+      const differences = coreServices.checkoutDifferencesFromRelease({
+        rootDir: paths.root,
+        services,
+        release: selected.files,
+        overrides: new Map(
+          overrides.active.map((entry) => [`${entry.serviceId}/${entry.path}`, entry.bytes]),
+        ),
+      });
+      if (differences.length > 0) {
+        throw new Error(
+          coreServices.describeCheckoutDifferences(differences, {
+            name: selected.release,
+            revision: selected.revision,
+          }),
+        );
+      }
+    }
     const committed = await writer.commit({
       legacyTraefikDynamicMounted: legacyTraefik,
-      containerBindSources: coreServices.bindSources(mounts),
+      ...(mounts ? { containerBindMounts: mounts } : {}),
+      ...(selected && selected !== "none" ? { releaseServiceFiles: selected.files } : {}),
       services,
       integrationSchemas,
       input: {
@@ -351,6 +386,7 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
       allowMissingSelected: applied.source === "default",
     });
     for (const problem of committed.stackFileProblems) log.warn(problem);
+    for (const line of committed.serviceFileReport) log.warn(line);
     if (legacyTraefik === true) log.warn(coreServices.LEGACY_TRAEFIK_MOUNT_NOTICE);
     else if (legacyTraefik === undefined) {
       log.dim(
@@ -371,6 +407,22 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
 
 export function registerComposeCommands(program: Command): void {
   const compose = program.command("compose").description("Manage docker-compose stack");
+
+  // The host CLI runs this in the selected release's operations-agent image
+  // to read the service files that release ships.
+  compose
+    .command("release-files", { hidden: true })
+    .description("Print the service files this release's bundle embeds, as JSON")
+    .action(() => {
+      const files = coreServices.readEmbeddedReleaseServiceFiles();
+      if (!files) {
+        log.err(
+          "Only a release's own CLI, in its operations-agent image, embeds its service files.",
+        );
+        process.exit(1);
+      }
+      process.stdout.write(coreServices.serializeReleaseServiceFiles(files));
+    });
 
   compose
     .command("rotate-redis-password")

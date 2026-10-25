@@ -45,6 +45,8 @@ const mutation = {
   body: adminIntegrationEmptyMutationSchema,
 };
 const reloaded = { ...missing, 200: adminJson(adminIntegrationReloadResultSchema) };
+/** Not applied, for a reason the operator can fix (a service-file override render may not use). */
+const notApplied = { 409: adminJson(httpErrorSchema) };
 const ok = adminJson(z.strictObject({ ok: z.literal(true) }));
 
 /** Complete integration/credential/overview family. Authentication metadata never enforces access. */
@@ -107,6 +109,7 @@ export const integrationAdminOperations = {
     request: { params: adminIntegrationParamsSchema, body: adminIntegrationConfigPatchSchema },
     responses: {
       ...missing,
+      ...notApplied,
       400: configErrors,
       200: adminJson(adminIntegrationConfigUpdatedSchema),
     },
@@ -116,14 +119,14 @@ export const integrationAdminOperations = {
     path: "/api/admin/integrations/:id/enable",
     auth: "admin",
     request: mutation,
-    responses: reloaded,
+    responses: { ...reloaded, ...notApplied },
   },
   disableAdminIntegration: {
     method: "POST",
     path: "/api/admin/integrations/:id/disable",
     auth: "admin",
     request: mutation,
-    responses: reloaded,
+    responses: { ...reloaded, ...notApplied },
   },
   getAdminIntegrationHealth: {
     method: "GET",
