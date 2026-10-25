@@ -39,6 +39,7 @@ export {
   type VerifiedCommunityService,
   verifyRecordedRepository,
 } from "./community-repository-records";
+export { type ComposePsEntry, ComposePsFormatError, parseComposePsJson } from "./compose-ps";
 export {
   type ComposeServiceSnippet,
   GENERATED_SECRETS_DIRNAME,

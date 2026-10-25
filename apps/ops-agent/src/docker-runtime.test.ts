@@ -1591,6 +1591,80 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     ).rejects.toMatchObject({ name: "OpsNotWiredError" });
   });
 
+  describe("stack.status", () => {
+    const stackStatus = (stdout: string) =>
+      dispatchOpsOperation(
+        createDockerRuntime({
+          stack: {
+            infraDir: "/trusted",
+            composePath: "/trusted/compose.yml",
+            composeReleasePath: "/trusted/release.yml",
+          },
+          fileExists: () => false,
+          execFile: async (_file, args) => {
+            expect(args).toEqual([
+              "compose",
+              "-f",
+              "/trusted/compose.yml",
+              "ps",
+              "--format",
+              "json",
+            ]);
+            return { stdout, stderr: "" };
+          },
+        }),
+        { kind: "stack.status" },
+        context(),
+      );
+    // Real `docker compose ps --format json` output; see the README beside it.
+    const captured = (name: string) =>
+      readFileSync(
+        new URL(
+          `../../../packages/core/src/services/__tests__/__fixtures__/compose-ps/${name}`,
+          import.meta.url,
+        ),
+        "utf8",
+      );
+
+    it.each([["compose-5.6.1.stdout"], ["compose-2.21.0.stdout"], ["compose-2.20.3.stdout"]])(
+      "reports every service in %s",
+      async (name) => {
+        await expect(stackStatus(captured(name))).resolves.toEqual({
+          services: [
+            { serviceId: "crashloop", state: "restarting" },
+            { serviceId: "web", state: "running" },
+            { serviceId: "worker", state: "paused" },
+          ],
+        });
+      },
+    );
+
+    it.each([["compose-5.6.1-empty.stdout"], ["compose-2.20.3-empty.stdout"]])(
+      "reports no services for the empty stack in %s",
+      async (name) => {
+        await expect(stackStatus(captured(name))).resolves.toEqual({ services: [] });
+      },
+    );
+
+    it("keeps the first 256 services", async () => {
+      const lines = Array.from(
+        { length: 300 },
+        (_, index) => `{"Service":"service-${index}","State":"running"}`,
+      );
+      const result = await stackStatus(`${lines.join("\n")}\n`);
+      expect(result.services).toHaveLength(256);
+      expect(result.services.at(-1)).toEqual({ serviceId: "service-255", state: "running" });
+    });
+
+    it.each([
+      ['{"Service":"web","State":"running"}\nnot json\n'],
+      ['[\n  {"Service":"web","State":"running"}\n]\n'],
+      ['"web"\n'],
+    ])("refuses output that is not Compose's: %j", async (stdout) => {
+      await expect(stackStatus(stdout)).rejects.toThrow("Contained process failed");
+    });
+  });
+
   it("inspects only the fixed Dawarich services and provisioning marker", async () => {
     const calls: string[][] = [];
     const runtime = createDockerRuntime({
@@ -1603,13 +1677,16 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       execFile: async (_file, args) => {
         calls.push([...args]);
         if (args.includes("ps")) {
+          // One object per line, as Compose 2.21 and later print it.
           return {
-            stdout: JSON.stringify([
+            stdout: [
               { Service: "dawarich-app", State: "running" },
               { Service: "dawarich-sidekiq", State: "running" },
               { Service: "dawarich-postgis", State: "running" },
               { Service: "dawarich-redis", State: "running" },
-            ]),
+            ]
+              .map((entry) => `${JSON.stringify(entry)}\n`)
+              .join(""),
             stderr: "",
           };
         }
