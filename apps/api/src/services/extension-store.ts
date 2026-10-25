@@ -282,6 +282,13 @@ async function getExtraSources(): Promise<{
 }
 
 function withDefaultSource(sources: ExtensionCatalogSource[]): ExtensionCatalogSource[] {
+  return [
+    { url: DEFAULT_EXTENSION_CATALOG_URL, label: "OpenMapX Community", isDefault: true },
+    ...sources,
+  ];
+}
+
+function normalizedDefaultSource(): ExtensionCatalogSource {
   let canonical: string;
   try {
     canonical = normalizeExtensionLocator(DEFAULT_EXTENSION_CATALOG_URL);
@@ -289,7 +296,7 @@ function withDefaultSource(sources: ExtensionCatalogSource[]): ExtensionCatalogS
   } catch {
     throw new ExtensionStoreError("invalid_source_url");
   }
-  return [{ url: canonical, label: "OpenMapX Community", isDefault: true }, ...sources];
+  return { url: canonical, label: "OpenMapX Community", isDefault: true };
 }
 
 export async function addExtensionSource(url: string, label: string): Promise<void> {
@@ -324,7 +331,7 @@ export async function removeExtensionSource(url: string): Promise<void> {
 }
 
 export async function listExtensionSources(): Promise<ExtensionCatalogSource[]> {
-  return withDefaultSource((await getExtraSources()).sources);
+  return [normalizedDefaultSource(), ...(await getExtraSources()).sources];
 }
 
 /**
