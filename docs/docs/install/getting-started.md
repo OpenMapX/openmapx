@@ -52,10 +52,14 @@ Generate a separate value for each secret with `openssl rand -hex 32`. The
 renderer rejects known placeholders and weak database/application secrets.
 Do not reuse the database username as its password.
 
-Set `UID` and `GID` to the deployment owner's IDs where they differ from
-`1000:1000`. They govern files written by the data-manager and ops-agent.
-A root-only Docker credentials directory will not be readable by the default
-container user; configure `OPENMAPX_DOCKER_CONFIG_DIR` accordingly if needed.
+`UID` and `GID` name the deployment's user: the stack's own containers
+(`app-api`, `ops-agent`, `data-manager`, the MOTIS and Transitous services)
+run as `UID:GID` and own the files they write. Leave them unset: the first
+render writes them into `infra/docker/.env` from the checkout's owner. Set them
+only to run the stack as another account, and run renders as that account; a
+render refuses to run as any other uid, and refuses a checkout root owns. A
+root-only Docker credentials directory will not be readable by that user;
+configure `OPENMAPX_DOCKER_CONFIG_DIR` accordingly if needed.
 
 The default regional transit policy requires countries or an explicit feed
 allow-list at data-manager startup, even without MOTIS. Setting countries does

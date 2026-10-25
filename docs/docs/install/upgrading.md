@@ -151,6 +151,22 @@ admin panel. The output is deterministic, and re-rendering when nothing changed
 preserves the same stack content. The update command also renders, but this
 separate step lets you inspect configuration before replacement.
 
+Run it as the checkout's owner. Releases before this one ran the stack's own
+containers as uid 1000 unless `.env` said otherwise, and `app-api` always as
+uid 1000. Now they all run as the deployment's user, `UID:GID` in `.env`, and
+generated configuration has no fallback. Where `.env` sets neither, the first
+render writes them from the checkout's owner, as does the operations agent when
+a panel self-update starts it; explicit values are kept. A render refuses to
+run as another uid, or to take the user from a checkout root owns.
+
+Where the checkout's owner is uid 1000, nothing changes: the containers keep
+their user, and `app-api` keeps using the volumes it wrote. Elsewhere, files an
+earlier release wrote as uid 1000 stay owned by it, and `app-api` refuses a
+volume an earlier image created for uid 1000. `pnpm openmapx check`, and
+**Run diagnostics** in the admin panel, name each of them with its fix: a
+one-time `sudo chown -R` of the listed paths, and removing the listed volume
+while `app-api` is stopped.
+
 ## 4. Resolve the complete release and replace containers
 
 Inspect the locally selected release without contacting the registry:
