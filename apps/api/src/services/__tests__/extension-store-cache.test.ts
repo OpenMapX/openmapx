@@ -35,7 +35,11 @@ import {
   scrubExtensionStoreUrlState,
 } from "../extension-store";
 
-import { EDIT_EXTENSION_SOURCES, PUBLISH_EXTENSION_CATALOG } from "../extension-store-cache";
+import {
+  EDIT_EXTENSION_SOURCES,
+  PUBLISH_EXTENSION_CATALOG,
+  REPAIR_EXTENSION_URL_STATE,
+} from "../extension-store-cache";
 
 const sourceKey = "extstore:extra_sources";
 const catalogKey = "extstore:catalog";
@@ -53,14 +57,21 @@ const empty = JSON.stringify({ entries: [], killSwitch: { removed: [], critical:
 async function atomic(_script: string, count: number, ...args: string[]) {
   expect(count).toBe(2);
   const [sources, catalog, sourcePresent, observedSource, ...rest] = args;
-  expect(_script).toBe(rest.length === 1 ? EDIT_EXTENSION_SOURCES : PUBLISH_EXTENSION_CATALOG);
   const matches = (key: string, present: string, value: string) =>
     present === "0" ? !ports.values.has(key) : ports.values.get(key) === value;
   if (!matches(sources, sourcePresent, observedSource)) return 0;
   if (rest.length === 1) {
+    expect(_script).toBe(EDIT_EXTENSION_SOURCES);
     ports.values.delete(catalog);
     ports.values.set(sources, rest[0]);
+  } else if (rest.length === 3) {
+    expect(_script).toBe(REPAIR_EXTENSION_URL_STATE);
+    const [catalogPresent, observedCatalog, next] = rest;
+    if (!matches(catalog, catalogPresent, observedCatalog)) return -1;
+    ports.values.delete(catalog);
+    ports.values.set(sources, next);
   } else {
+    expect(_script).toBe(PUBLISH_EXTENSION_CATALOG);
     const [catalogPresent, observedCatalog, next] = rest;
     if (!matches(catalog, catalogPresent, observedCatalog)) return 0;
     ports.values.set(catalog, next);
@@ -150,6 +161,35 @@ describe("extension source and catalog coherence", () => {
     expect(ports.values.get(sourceKey)).toBe(unsafeRaw);
     expect(ports.values.get(catalogKey)).toBe(old);
     expect(ports.eval).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not delete a concurrent catalog publication while repairing", async () => {
+    const sources = JSON.stringify([source]);
+    const unsafeCatalog = JSON.stringify({
+      entries: [
+        {
+          id: "unsafe",
+          name: "Unsafe",
+          manifest: "https://example.test/extension.json?token=secret",
+        },
+      ],
+    });
+    const newer = JSON.stringify({
+      entries: [{ id: "newer", name: "Newer" }],
+      killSwitch: { removed: ["revoked"], critical: [] },
+    });
+    ports.values.set(sourceKey, sources);
+    ports.values.set(catalogKey, unsafeCatalog);
+    ports.eval.mockImplementationOnce(async (script: string, count: number, ...args: string[]) => {
+      ports.values.set(catalogKey, newer);
+      return atomic(script, count, ...args);
+    });
+
+    await expect(scrubExtensionStoreUrlState()).rejects.toMatchObject({
+      category: "catalog_conflict",
+    });
+    expect(ports.values.get(sourceKey)).toBe(sources);
+    expect(ports.values.get(catalogKey)).toBe(newer);
   });
 
   it("rebuilds from remaining sources when another acquisition fails after repair", async () => {

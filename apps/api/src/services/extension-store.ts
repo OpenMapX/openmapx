@@ -21,6 +21,7 @@ import {
   editExtensionSources,
   publishExtensionCatalog,
   readExtensionSnapshot,
+  repairExtensionUrlState,
 } from "./extension-store-cache";
 import { ExtensionStoreError } from "./extension-store-error";
 
@@ -243,7 +244,13 @@ export async function scrubExtensionStoreUrlState(): Promise<void> {
     }
   }
   if (!sourcesChanged && !cachedCatalogNeedsLocatorRepair(catalogRaw)) return;
-  await editExtensionSources(redis, catalogKeys, raw, JSON.stringify(repairedSources));
+  await repairExtensionUrlState(
+    redis,
+    catalogKeys,
+    raw,
+    catalogRaw,
+    JSON.stringify(repairedSources),
+  );
 }
 
 async function getExtraSources(): Promise<{

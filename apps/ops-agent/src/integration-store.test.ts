@@ -173,6 +173,51 @@ describe("integration store", () => {
     expect(listed.unrecorded).toEqual([]);
   });
 
+  it.each([
+    "https://sentinel-user:sentinel-password@example.test/integration.tgz",
+    "https://example.test/integration.tgz?token=sentinel-query",
+    "https://example.test/integration.tgz#sentinel-fragment",
+  ])("refuses an unsafe artifact locator before download or durable work: %s", async (url) => {
+    const f = fixture();
+    await expect(
+      f.store.publish(
+        {
+          kind: "integration.publish",
+          integrationId: "weather-radar",
+          source: { kind: "artifact", url, sha256: "a".repeat(64) },
+        },
+        signal,
+      ),
+    ).rejects.toThrow();
+    expect(f.downloads).toEqual([]);
+    expect(record(f, "weather-radar")).toBeUndefined();
+  });
+
+  it("canonicalizes a safe artifact locator before download and persistence", async () => {
+    const f = fixture();
+    const source = await artifact(f, "weather-radar");
+    const noncanonical = source.url.replace(
+      "https://artifacts.example.test/",
+      "https://ARTIFACTS.example.test:443/",
+    );
+
+    await f.store.publish(
+      {
+        kind: "integration.publish",
+        integrationId: "weather-radar",
+        source: { kind: "artifact", url: noncanonical, sha256: source.sha256 },
+      },
+      signal,
+    );
+
+    expect(f.downloads).toEqual([source.url]);
+    expect(record(f, "weather-radar")?.pending?.next.source).toEqual({
+      kind: "artifact",
+      url: source.url,
+      sha256: source.sha256,
+    });
+  });
+
   it("keeps the previous copy until settled and restores it on rollback", async () => {
     const f = fixture();
     const first = await artifact(f, "weather-radar", { region: "eu" });

@@ -12,6 +12,8 @@ const MIGRATION = join(
 );
 const SECRET = "openmapx-secret-sentinel";
 const UNSAFE_URL = `https://user:${SECRET}@example.test/archive.tgz?token=${SECRET}#part`;
+const ALTERNATE_HTTPS_URL = String.raw`https:\\user:${SECRET}@example.test\archive.tgz`;
+const LEGACY_GIT_URL = `ssh://user:${SECRET}@example.test/repository.git?token=${SECRET}`;
 
 const integration = describe.runIf(process.env.OPENMAPX_RUN_DATABASE_TESTS === "1");
 
@@ -91,9 +93,12 @@ integration("extension URL credential cleanup migration", () => {
 
     await sql`
       INSERT INTO installed_extension (id, source_url, manifest) VALUES
-        ('unsafe-extension', ${UNSAFE_URL}, ${sql.json({
-          integrations: [{ id: "unsafe", artifact: UNSAFE_URL, sha256: "a".repeat(64) }],
-          services: [{ service: "unsafe", repo: UNSAFE_URL }],
+        ('unsafe-extension', ${ALTERNATE_HTTPS_URL}, ${sql.json({
+          integrations: [
+            { id: "unsafe", artifact: UNSAFE_URL, sha256: "a".repeat(64) },
+            { id: "alternate", artifact: ALTERNATE_HTTPS_URL, sha256: "b".repeat(64) },
+          ],
+          services: [{ service: "unsafe", repo: LEGACY_GIT_URL }],
         })}),
         ('clean-extension', 'https://example.test/extension.json', ${sql.json({
           integrations: [{ id: "clean", artifact: "https://example.test/clean.tgz" }],
@@ -111,13 +116,14 @@ integration("extension URL credential cleanup migration", () => {
     await sql`
       INSERT INTO admin_job (id, type, payload, result, error) VALUES
         ('unsafe-job', 'extension.install', ${sql.json({ sourceUrl: UNSAFE_URL })},
-          ${sql.json({ nested: [UNSAFE_URL] })}, ${`Fetch failed for ${UNSAFE_URL}`}),
+          ${sql.json({ nested: [UNSAFE_URL, ALTERNATE_HTTPS_URL, LEGACY_GIT_URL] })},
+          ${`Fetch failed for ${LEGACY_GIT_URL}`}),
         ('other-job', 'system.update', ${sql.json({ url: "https://example.test/keep", keep: "exact" })},
           ${sql.json({ url: "https://example.test/keep" })}, 'Keep exact');
     `;
     await sql`
       INSERT INTO admin_job_log (id, job_id, line) VALUES
-        ('unsafe-log', 'unsafe-job', ${`Downloading ${UNSAFE_URL}`}),
+        ('unsafe-log', 'unsafe-job', ${`Downloading ${ALTERNATE_HTTPS_URL}`}),
         ('other-log', 'other-job', 'Keep exact');
     `;
   }
@@ -140,7 +146,10 @@ integration("extension URL credential cleanup migration", () => {
     expect(extension).toEqual({
       source_url: null,
       manifest: {
-        integrations: [{ id: "unsafe", artifact: null, sha256: "a".repeat(64) }],
+        integrations: [
+          { id: "unsafe", artifact: null, sha256: "a".repeat(64) },
+          { id: "alternate", artifact: null, sha256: "b".repeat(64) },
+        ],
         services: [{ service: "unsafe", repo: null }],
       },
     });

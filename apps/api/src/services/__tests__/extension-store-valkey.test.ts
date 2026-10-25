@@ -8,6 +8,7 @@ import {
   editExtensionSources,
   publishExtensionCatalog,
   readExtensionSnapshot,
+  repairExtensionUrlState,
 } from "../extension-store-cache";
 
 import {
@@ -188,6 +189,27 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         publishExtensionCatalog(fixture.client, keys, current, null, "obsolete", 60),
       ).rejects.toMatchObject({ category: "catalog_conflict" });
       expect(await fixture.client.get(keys.catalog)).toBe(empty);
+    });
+
+    it("repairs only the exact observed source and catalog snapshots", async () => {
+      await fixture.client.set(keys.sources, "unsafe sources");
+      await fixture.client.set(keys.catalog, "unsafe catalog");
+      await repairExtensionUrlState(
+        fixture.client,
+        keys,
+        "unsafe sources",
+        "unsafe catalog",
+        "repaired sources",
+      );
+      expect(await fixture.client.get(keys.sources)).toBe("repaired sources");
+      expect(await fixture.client.get(keys.catalog)).toBeNull();
+
+      await fixture.client.set(keys.catalog, "newer catalog");
+      await expect(
+        repairExtensionUrlState(fixture.client, keys, "repaired sources", null, "obsolete repair"),
+      ).rejects.toMatchObject({ category: "catalog_conflict" });
+      expect(await fixture.client.get(keys.sources)).toBe("repaired sources");
+      expect(await fixture.client.get(keys.catalog)).toBe("newer catalog");
     });
 
     it("rejects wrong-type source reads before invalidation and wrong-type catalog publication", async () => {

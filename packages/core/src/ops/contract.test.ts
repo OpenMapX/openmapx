@@ -316,6 +316,21 @@ describe("ops contract", () => {
     }
   });
 
+  it.each([
+    "https://sentinel-user:sentinel-password@example.test/integration.tgz",
+    "https://example.test/integration.tgz?token=sentinel-query",
+    "https://example.test/integration.tgz#sentinel-fragment",
+  ])("rejects unsafe integration artifact locators before agent dispatch: %s", (url) => {
+    const source = { kind: "artifact", url, sha256: "a".repeat(64) };
+    for (const operation of [
+      { kind: "integration.inspect", source },
+      { kind: "integration.publish", integrationId: "fixture", source },
+      { kind: "integration.adopt", integrationId: "fixture", source },
+    ]) {
+      expect(() => parseOpsRequest(request(operation), { role: "api" })).toThrow(OpsContractError);
+    }
+  });
+
   it("rejects flag-shaped, path-shaped, malformed, and unregistered service IDs", () => {
     for (const serviceId of ["--project", "../motis", "MOTIS", "motis/blue"]) {
       expect(() =>
