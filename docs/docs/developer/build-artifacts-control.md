@@ -122,7 +122,11 @@ identities without deleting or settling any descendant evidence.
 
 ### Authority storage capacity and retirement
 
-`CONTROL_RETENTION_LIMITS` fixes the installation lifetime policy:
+The lifetime limits below are an interim fail-closed bound. They are not an
+accepted policy for routine administration: renewable retention remains
+unimplemented pending the control-identity contract described below.
+
+`CONTROL_RETENTION_LIMITS` currently fixes these installation lifetime limits:
 
 - At most 1,024 admitted executions per role recovery root, including fixed
   children sharing the agent root. A signed immutable admission reserves capacity
@@ -159,6 +163,41 @@ make room. Automatic bounded retirement with sustained throughput is not supplie
 by this foundation. Older lease layouts without the admission index require
 supervised indexing; startup never silently excludes their fences. A crashed
 metadata guard likewise requires supervised recovery.
+
+#### Renewable retention and operation identity
+
+The current protocol accepts opaque `opk1_` keys and permits an unparented root
+to omit its requested deadline. On first admission that root receives a deadline
+based on the current admission time. A duplicate instead needs its original
+admission time; an expired missing attempt must remain unknown and must not be
+retried as a new mutation (control protocol section 2). Section 3.2 also requires
+producers never to reuse keys.
+
+After the per-key admission details are reclaimed, the same root operation/key
+without a requested deadline is indistinguishable from a first admission. Fresh
+normalization gives it a new deadline and fingerprint. A timestamp retirement
+floor cannot identify that old key: both newly assigned times exceed the floor.
+Keeping every spent key would recreate unbounded history; a bounded spent-key
+cache eventually loses this exact recognition. Deadline expiry still rejects
+the original unchanged signed child grant, but does not solve this root case.
+
+The proposed minimal protocol amendment is an issuer-controlled monotonic birth
+sequence encoded in control root keys, with that origin certified through the
+existing child authority chains. A durable private retirement floor, with bounded
+exceptions for unresolved original authorities, can then reject retired origins
+without remembering every old key. The fixed child phase-key hash can remain
+unchanged if signed origin evidence accompanies derived child keys. Legacy
+undated roots need an explicit cutover rule: retained originals remain readable,
+and missing old roots cannot be normalized into fresh authority. Ordinary
+transport timestamps are not this birth evidence.
+
+This is a proposed amendment, not an implemented protocol or a renewal guarantee.
+The protocol owner must define the root issuance/cutover and signed origin
+binding before retirement can reclaim terminal details and keys. Any resulting
+collector must still retain terminal evidence for at least 72 hours and through
+authority validity, preserve every unresolved dependency, and coordinate signed
+cross-role settlement and crash-safe counters/indexes before reuse. No expiry,
+PID check or counter reset is settlement proof.
 
 Settlement requires signed retained structured evidence from the fixed executor:
 a parsed typed result, exact fixed-command completion, or an execution that has
