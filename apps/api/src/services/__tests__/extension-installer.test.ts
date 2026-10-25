@@ -707,8 +707,7 @@ describe("installExtension", () => {
   });
 
   it("scrubs provider details from cleanup diagnostics", async () => {
-    const secret =
-      "https://sentinel-user:sentinel-password@example.test/private?token=sentinel-query";
+    const secret = "ht\ttps://example.test/private? sentinel-query";
     settleIntegrationMock.mockRejectedValueOnce(new Error(secret));
     const ctx = makeCtx();
 

@@ -3,8 +3,8 @@ import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob, adminJobLog } from "../db/schema";
 import { dbActorId } from "../utils/actor";
-import { sanitizeLogMetadata, sanitizeLogString } from "../utils/safe-log-fields";
-import { cancelAdminJobOperations } from "./admin-job-ops";
+import { sanitizeExtensionOutputString, sanitizeLogMetadata } from "../utils/safe-log-fields";
+import { cancelAdminJobOperations, normalizeAdminJobOperationsProjection } from "./admin-job-ops";
 import { normalizeExtensionInstallPayload } from "./extension-install-payload";
 import { type JobStatusEvent, jobEventBus, TERMINAL_JOB_STATUSES } from "./job-events";
 import { appApiRestartCheckpoint } from "./system-update-state";
@@ -34,15 +34,17 @@ export interface JobContext {
 }
 
 type JobHandler = (ctx: JobContext) => Promise<Record<string, unknown> | undefined>;
-const EXTENSION_OUTPUT_URL = /\b(?:https?|git|ssh):/iu;
-
 function sanitizeExtensionRecord(value: Record<string, unknown>): Record<string, unknown> {
   try {
-    const serialized = JSON.stringify(value, (_key, child: unknown) =>
-      typeof child === "string" && EXTENSION_OUTPUT_URL.test(child) ? "[redacted-url]" : child,
+    const { opsProjection, ...ordinaryOutput } = value;
+    const serialized = JSON.stringify(ordinaryOutput, (_key, child: unknown) =>
+      typeof child === "string" ? sanitizeExtensionOutputString(child) : child,
     );
     if (serialized === undefined) return { value: "[redacted]" };
-    return sanitizeLogMetadata(JSON.parse(serialized) as unknown);
+    const sanitized = sanitizeLogMetadata(JSON.parse(serialized) as unknown);
+    if (opsProjection === undefined) return sanitized;
+    sanitized.opsProjection = normalizeAdminJobOperationsProjection(opsProjection);
+    return sanitized;
   } catch {
     return { value: "[redacted]" };
   }
@@ -445,11 +447,7 @@ class AdminJobRunner {
     const durableRecord = (value: Record<string, unknown>): Record<string, unknown> =>
       sanitizeExtensionOutput ? sanitizeExtensionRecord(value) : value;
     const durableLine = (value: string): string =>
-      sanitizeExtensionOutput
-        ? EXTENSION_OUTPUT_URL.test(value)
-          ? "[redacted-url]"
-          : sanitizeLogString(value)
-        : value;
+      sanitizeExtensionOutput ? sanitizeExtensionOutputString(value) : value;
 
     const ctx: JobContext = {
       jobId,

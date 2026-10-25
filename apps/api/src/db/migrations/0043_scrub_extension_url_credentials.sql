@@ -26,55 +26,25 @@ AS $$
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
            ~* '(git|ssh):[/\\]*[^/?#[:space:]]*@'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* 'https?:[/\\]*[A-Za-z0-9._~-]+:[^0-9/?#\\[:space:]][^/?#\\]*@'
+           ~* 'https?:[/\\]*[[:alnum:]%+._~ -]+:[^0-9/?#\\[:space:]][^/?#\\]*@'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* 'https?:[/\\]*[A-Za-z0-9._~-]+:[0-9]+[^0-9/?#\\[:space:]][^/?#\\]*@'
+           ~* 'https?:[/\\]*[[:alnum:]%+._~ -]+:[0-9]+[^0-9/?#\\[:space:]][^/?#\\]*@'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(git|ssh):[/\\]*[A-Za-z0-9._~-]+:[^0-9/?#[:space:]][^/?#]*@'
+           ~* '(git|ssh):[/\\]*[[:alnum:]%+._~ -]+:[^0-9/?#[:space:]][^/?#]*@'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(git|ssh):[/\\]*[A-Za-z0-9._~-]+:[0-9]+[^0-9/?#[:space:]][^/?#]*@'
+           ~* '(git|ssh):[/\\]*[[:alnum:]%+._~ -]+:[0-9]+[^0-9/?#[:space:]][^/?#]*@'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(https?|git|ssh):[^?#]*[?][^#[:space:]]+'
+           ~* '(https?|git|ssh):[^[:space:]?#]*[?][^#[:space:]]+'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(https?|git|ssh):[^#]*#[^[:space:]]+'
+           ~* '(https?|git|ssh):[^[:space:]#]*#[^[:space:]]+'
+      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
+           ~* '(https?|git|ssh):[^?#]*[.][A-Za-z0-9_-]+[?][^#[:space:]]+'
+      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
+           ~* '(https?|git|ssh):[^#]*[.][A-Za-z0-9_-]+#[^[:space:]]+'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
            ~* '(https?|git|ssh):[^?#]*[./][^[:space:]?#]*[?][[:space:]]+[^[:space:]]+'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
            ~* '(https?|git|ssh):[^#]*[./][^[:space:]#]*#[[:space:]]+[^[:space:]]+'
-$$;
---> statement-breakpoint
-CREATE OR REPLACE FUNCTION public.openmapx_scrub_extension_json_0043(value jsonb)
-RETURNS jsonb
-LANGUAGE sql
-IMMUTABLE
-AS $$
-  SELECT CASE jsonb_typeof(value)
-    WHEN 'object' THEN COALESCE(
-      (SELECT jsonb_object_agg(
-          key,
-          CASE
-            WHEN jsonb_typeof(item) = 'string'
-              AND key IN ('artifact', 'repo', 'repository', 'sourceUrl', 'source_url', 'url', 'manifest')
-              AND public.openmapx_unsafe_extension_locator_0043(item #>> '{}')
-            THEN 'null'::jsonb
-            ELSE public.openmapx_scrub_extension_json_0043(item)
-          END
-        )
-         FROM jsonb_each(value) AS entry(key, item)),
-      '{}'::jsonb
-    )
-    WHEN 'array' THEN COALESCE(
-      (SELECT jsonb_agg(public.openmapx_scrub_extension_json_0043(item) ORDER BY ordinal)
-         FROM jsonb_array_elements(value) WITH ORDINALITY AS entry(item, ordinal)),
-      '[]'::jsonb
-    )
-    WHEN 'string' THEN CASE
-      WHEN public.openmapx_unsafe_extension_text_0043(value #>> '{}')
-      THEN 'null'::jsonb
-      ELSE value
-    END
-    ELSE value
-  END
 $$;
 --> statement-breakpoint
 CREATE OR REPLACE FUNCTION public.openmapx_scrub_extension_manifest_json_0043(value jsonb)
@@ -101,6 +71,42 @@ AS $$
     )
     WHEN 'array' THEN COALESCE(
       (SELECT jsonb_agg(public.openmapx_scrub_extension_manifest_json_0043(item) ORDER BY ordinal)
+         FROM jsonb_array_elements(value) WITH ORDINALITY AS entry(item, ordinal)),
+      '[]'::jsonb
+    )
+    WHEN 'string' THEN CASE
+      WHEN public.openmapx_unsafe_extension_text_0043(value #>> '{}')
+      THEN 'null'::jsonb
+      ELSE value
+    END
+    ELSE value
+  END
+$$;
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION public.openmapx_scrub_extension_json_0043(value jsonb)
+RETURNS jsonb
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT CASE jsonb_typeof(value)
+    WHEN 'object' THEN COALESCE(
+      (SELECT jsonb_object_agg(
+          key,
+          CASE
+            WHEN key = 'manifest' AND jsonb_typeof(item) IN ('object', 'array')
+            THEN public.openmapx_scrub_extension_manifest_json_0043(item)
+            WHEN jsonb_typeof(item) = 'string'
+              AND key IN ('artifact', 'repo', 'repository', 'sourceUrl', 'source_url', 'url', 'manifest')
+              AND public.openmapx_unsafe_extension_locator_0043(item #>> '{}')
+            THEN 'null'::jsonb
+            ELSE public.openmapx_scrub_extension_json_0043(item)
+          END
+        )
+         FROM jsonb_each(value) AS entry(key, item)),
+      '{}'::jsonb
+    )
+    WHEN 'array' THEN COALESCE(
+      (SELECT jsonb_agg(public.openmapx_scrub_extension_json_0043(item) ORDER BY ordinal)
          FROM jsonb_array_elements(value) WITH ORDINALITY AS entry(item, ordinal)),
       '[]'::jsonb
     )

@@ -1,4 +1,9 @@
-import type { OpsOperation, OpsOperationKind, OpsResultFor } from "@openmapx/core/ops";
+import {
+  OPS_OPERATION_KINDS,
+  type OpsOperation,
+  type OpsOperationKind,
+  type OpsResultFor,
+} from "@openmapx/core/ops";
 import type { JobContext } from "./job-runner";
 import {
   type ApiOpsClient,
@@ -85,6 +90,7 @@ function readProjection(result: unknown): OpsProjection {
       typeof operation.operationId !== "string" ||
       !OPERATION_ID.test(operation.operationId) ||
       typeof operation.kind !== "string" ||
+      !OPS_OPERATION_KINDS.includes(operation.kind as OpsOperationKind) ||
       !boundedInteger(operation.cursor, Number.MAX_SAFE_INTEGER) ||
       !boundedInteger(operation.events, ADMIN_EVENT_LIMIT) ||
       !boundedInteger(operation.bytes, ADMIN_EVENT_BYTE_LIMIT) ||
@@ -93,7 +99,16 @@ function readProjection(result: unknown): OpsProjection {
     ) {
       throw new Error("Invalid durable operations projection");
     }
-    operations[key] = operation as unknown as ProjectedOperation;
+    operations[key] = {
+      kind: operation.kind as OpsOperationKind,
+      operationKey: key,
+      operationId: operation.operationId,
+      cursor: operation.cursor,
+      events: operation.events,
+      bytes: operation.bytes,
+      truncated: operation.truncated,
+      terminal: operation.terminal,
+    } as ProjectedOperation;
   }
   return {
     version: 1,
@@ -102,6 +117,11 @@ function readProjection(result: unknown): OpsProjection {
     truncated: value.truncated,
     operations,
   };
+}
+
+/** Validate and normalize the bounded recovery projection without log-field rules. */
+export function normalizeAdminJobOperationsProjection(value: unknown): Record<string, unknown> {
+  return readProjection({ opsProjection: value }) as unknown as Record<string, unknown>;
 }
 
 async function persistProjection(context: JobContext, projection: OpsProjection): Promise<void> {

@@ -12,7 +12,7 @@ import {
 import { reloadIntegrations } from "../integration-host";
 import { dbActorId } from "../utils/actor";
 import { dockerComposeAction } from "../utils/docker-compose";
-import { sanitizeLogString } from "../utils/safe-log-fields";
+import { sanitizeExtensionOutputString } from "../utils/safe-log-fields";
 import { getServiceSelectionSummary } from "./admin-cli";
 import { renderAndPersistCompose, serviceStart } from "./admin-ops";
 import {
@@ -112,7 +112,7 @@ function normalizedInstallOptions(opts: InstallExtensionOptions): InstallExtensi
 }
 
 function safeDiagnostic(error: unknown): string {
-  return sanitizeLogString(error instanceof Error ? error.message : String(error));
+  return sanitizeExtensionOutputString(error instanceof Error ? error.message : String(error));
 }
 
 function canonicalJson(value: unknown): string {
