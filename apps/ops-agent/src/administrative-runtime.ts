@@ -59,6 +59,10 @@ const MAX_BACKUP_SERVICES = 256;
 const MAX_BACKUP_VOLUMES = 4_096;
 const MAX_CLI_OUTPUT_BYTES = 1024 * 1024;
 const MAX_CLI_DURATION_MS = 30 * 60_000;
+// data-manager on the stack's private network. The CLI's default, its
+// published loopback port, is the host's; inside this container it reaches
+// nothing.
+const FIXED_CLI_DATA_MANAGER_URL = "http://data-manager:4000";
 const ADMIN_RELEASE_SERVICE_IDS = [
   "data-manager",
   "app-web",
@@ -1699,6 +1703,15 @@ export function createDefaultReleaseEffects(
 }
 
 /**
+ * The fixed CLI's environment: the agent's own, with data-manager at its
+ * address on the private network. The CLI's data commands and its hardlink
+ * step go there; the hardlink step refuses rather than linking itself.
+ */
+function fixedCliEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return { ...env, DATA_MANAGER_URL: FIXED_CLI_DATA_MANAGER_URL };
+}
+
+/**
  * The fixed CLI the agent runs. In the image both are runtime bundles and
  * `cli.mjs` sits next to the agent's entry; in development the agent runs from
  * `src/` and the CLI runs from source under tsx.
@@ -1723,6 +1736,7 @@ export function createDefaultFixedCli(
       signal: options.signal,
       timeout: MAX_CLI_DURATION_MS,
       maxBuffer: MAX_CLI_OUTPUT_BYTES,
+      env: fixedCliEnvironment(),
     });
     emitLines(options.emitLog, "stdout", result.stdout);
     emitLines(options.emitLog, "stderr", result.stderr);

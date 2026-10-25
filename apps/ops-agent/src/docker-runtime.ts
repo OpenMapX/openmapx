@@ -77,6 +77,8 @@ export interface ContainedProcessOptions {
   timeout: number;
   maxBuffer: number;
   killGraceMs?: number;
+  /** The child's environment; the agent's own when omitted. */
+  env?: NodeJS.ProcessEnv;
 }
 
 // The agent runs as the data-owning user, so its own identity is the default
@@ -130,6 +132,7 @@ export function runContainedProcess(
     const child = spawn(file, [...args], {
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
+      ...(options.env ? { env: options.env } : {}),
     });
     const group = monitorPosixProcessGroup(child, {
       killGraceMs: options.killGraceMs ?? KILL_GRACE_MS,

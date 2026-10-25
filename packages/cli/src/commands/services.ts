@@ -2,7 +2,11 @@ import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
 import kleur from "kleur";
 import { dockerComposeStream } from "../lib/docker";
-import { applyGeneratedHardlinks } from "../lib/hardlinks";
+import {
+  applyGeneratedHardlinks,
+  applyGeneratedHardlinksBeforeStart,
+  logAppliedHardlinks,
+} from "../lib/hardlinks";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import { expandPresets, UnknownPresetError } from "../lib/presets";
@@ -298,10 +302,7 @@ export function registerServicesCommands(program: Command): void {
             domain: process.env.DOMAIN ?? "localhost",
           });
           for (const warning of rendered.selectionWarnings) log.warn(warning);
-          const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
-          log.ok(
-            `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
-          );
+          logAppliedHardlinks(await applyGeneratedHardlinks({ prune: true, requirePlan: true }));
         }
         if (result.failures.length > 0) {
           log.err(
@@ -348,10 +349,7 @@ export function registerServicesCommands(program: Command): void {
               domain: process.env.DOMAIN ?? "localhost",
             });
             for (const warning of rendered.selectionWarnings) log.warn(warning);
-            const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
-            log.ok(
-              `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
-            );
+            logAppliedHardlinks(await applyGeneratedHardlinks({ prune: true, requirePlan: true }));
           }
           if (result.failures.length > 0) {
             log.err(
@@ -391,10 +389,7 @@ export function registerServicesCommands(program: Command): void {
           domain: process.env.DOMAIN ?? "localhost",
         });
         for (const warning of rendered.selectionWarnings) log.warn(warning);
-        const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
-        log.ok(
-          `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
-        );
+        await applyGeneratedHardlinksBeforeStart();
       } catch (err) {
         log.err(`prepare/start failed: ${(err as Error).message}`);
         process.exit(1);
@@ -470,10 +465,7 @@ export function registerServicesCommands(program: Command): void {
           domain: process.env.DOMAIN ?? "localhost",
         });
         for (const warning of rendered.selectionWarnings) log.warn(warning);
-        const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
-        log.ok(
-          `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
-        );
+        await applyGeneratedHardlinksBeforeStart();
       } catch (err) {
         log.err(`prepare/update failed: ${(err as Error).message}`);
         process.exit(1);

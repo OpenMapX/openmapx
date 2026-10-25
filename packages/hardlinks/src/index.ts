@@ -463,6 +463,26 @@ export function applyHardlinkPlan(
 }
 
 /**
+ * Whether applying `plan` under `rootDir` could change anything: some
+ * producer source exists to link from, or a sentinel records links that a
+ * prune could remove. It only reads; nothing is linked or removed.
+ */
+export function hardlinkPlanHasWork(
+  plan: readonly HardlinkEntry[],
+  opts: Pick<ApplyHardlinkOptions, "rootDir" | "sentinelDir">,
+): boolean {
+  const rootAbs = resolve(opts.rootDir);
+  const sentinels = join(rootAbs, opts.sentinelDir ?? DEFAULT_SENTINEL_DIR);
+  if (existsSync(sentinels) && readdirSync(sentinels).some((name) => name.endsWith(".json"))) {
+    return true;
+  }
+  return plan.some((entry) => {
+    const rawSource = isAbsolute(entry.source) ? entry.source : stripDataPrefix(entry.source);
+    return existsSync(isAbsolute(rawSource) ? rawSource : resolve(rootAbs, rawSource));
+  });
+}
+
+/**
  * The plan entries last applied under `rootDir`, as their sentinels record
  * them. A service that cannot read the host's generated plan, such as
  * data-manager, re-applies some of them after replacing a producer file, whose
