@@ -14,6 +14,10 @@ const SECRET = "openmapx-secret-sentinel";
 const UNSAFE_URL = `https://user:${SECRET}@example.test/archive.tgz?token=${SECRET}#part`;
 const ALTERNATE_HTTPS_URL = String.raw`https:\\user:${SECRET}@example.test\archive.tgz`;
 const LEGACY_GIT_URL = `ssh://user:${SECRET}@example.test/repository.git?token=${SECRET}`;
+const TAB_BEFORE_QUERY_URL = `https://example.test/archive.tgz\t?token=${SECRET}`;
+const NEWLINE_BEFORE_FRAGMENT_URL = `https://example.test/archive.tgz\n#${SECRET}`;
+const TAB_IN_SCHEME_URL = `ht\ttps://user:${SECRET}@example.test/archive.tgz`;
+const SPACE_IN_PASSWORD_URL = `https://user:openmapx ${SECRET}@example.test/archive.tgz`;
 
 const integration = describe.runIf(process.env.OPENMAPX_RUN_DATABASE_TESTS === "1");
 
@@ -93,10 +97,18 @@ integration("extension URL credential cleanup migration", () => {
 
     await sql`
       INSERT INTO installed_extension (id, source_url, manifest) VALUES
-        ('unsafe-extension', ${ALTERNATE_HTTPS_URL}, ${sql.json({
+        ('unsafe-extension', ${TAB_IN_SCHEME_URL}, ${sql.json({
           integrations: [
             { id: "unsafe", artifact: UNSAFE_URL, sha256: "a".repeat(64) },
             { id: "alternate", artifact: ALTERNATE_HTTPS_URL, sha256: "b".repeat(64) },
+            { id: "tab-query", artifact: TAB_BEFORE_QUERY_URL, sha256: "c".repeat(64) },
+            {
+              id: "newline-fragment",
+              artifact: NEWLINE_BEFORE_FRAGMENT_URL,
+              sha256: "d".repeat(64),
+            },
+            { id: "tab-scheme", artifact: TAB_IN_SCHEME_URL, sha256: "e".repeat(64) },
+            { id: "space-password", artifact: SPACE_IN_PASSWORD_URL, sha256: "f".repeat(64) },
           ],
           services: [{ service: "unsafe", repo: LEGACY_GIT_URL }],
         })}),
@@ -106,24 +118,34 @@ integration("extension URL credential cleanup migration", () => {
     `;
     await sql`
       INSERT INTO installed_integration (id, repository, managed_by_extension) VALUES
-        ('unsafe-integration', ${UNSAFE_URL}, 'unsafe-extension'),
+        ('unsafe-integration', ${SPACE_IN_PASSWORD_URL}, 'unsafe-extension'),
         ('manual-integration', 'https://example.test/manual.tgz', NULL);
     `;
     await sql`
       INSERT INTO service_repository (hash, url, managed_by_extension) VALUES
-        ('unsafe-repository', ${UNSAFE_URL}, 'unsafe-extension');
+        ('unsafe-repository', ${NEWLINE_BEFORE_FRAGMENT_URL}, 'unsafe-extension');
     `;
     await sql`
       INSERT INTO admin_job (id, type, payload, result, error) VALUES
         ('unsafe-job', 'extension.install', ${sql.json({ sourceUrl: UNSAFE_URL })},
-          ${sql.json({ nested: [UNSAFE_URL, ALTERNATE_HTTPS_URL, LEGACY_GIT_URL] })},
-          ${`Fetch failed for ${LEGACY_GIT_URL}`}),
+          ${sql.json({
+            nested: [
+              UNSAFE_URL,
+              ALTERNATE_HTTPS_URL,
+              LEGACY_GIT_URL,
+              TAB_BEFORE_QUERY_URL,
+              NEWLINE_BEFORE_FRAGMENT_URL,
+              TAB_IN_SCHEME_URL,
+              SPACE_IN_PASSWORD_URL,
+            ],
+          })},
+          ${`Fetch failed for ${SPACE_IN_PASSWORD_URL}`}),
         ('other-job', 'system.update', ${sql.json({ url: "https://example.test/keep", keep: "exact" })},
           ${sql.json({ url: "https://example.test/keep" })}, 'Keep exact');
     `;
     await sql`
       INSERT INTO admin_job_log (id, job_id, line) VALUES
-        ('unsafe-log', 'unsafe-job', ${`Downloading ${ALTERNATE_HTTPS_URL}`}),
+        ('unsafe-log', 'unsafe-job', ${`Downloading ${TAB_IN_SCHEME_URL}`}),
         ('other-log', 'other-job', 'Keep exact');
     `;
   }
@@ -149,6 +171,10 @@ integration("extension URL credential cleanup migration", () => {
         integrations: [
           { id: "unsafe", artifact: null, sha256: "a".repeat(64) },
           { id: "alternate", artifact: null, sha256: "b".repeat(64) },
+          { id: "tab-query", artifact: null, sha256: "c".repeat(64) },
+          { id: "newline-fragment", artifact: null, sha256: "d".repeat(64) },
+          { id: "tab-scheme", artifact: null, sha256: "e".repeat(64) },
+          { id: "space-password", artifact: null, sha256: "f".repeat(64) },
         ],
         services: [{ service: "unsafe", repo: null }],
       },

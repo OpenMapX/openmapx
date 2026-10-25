@@ -6,8 +6,10 @@ RETURNS boolean
 LANGUAGE sql
 IMMUTABLE
 AS $$
-  SELECT value ~* '(https?|git|ssh):[/\\]*[^/?#[:space:]]*@'
-      OR value ~* '(https?|git|ssh):[^[:space:]]*[?#]'
+  SELECT regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
+           ~* '(https?|git|ssh):[/\\]*[^/?#]*@'
+      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
+           ~* '(https?|git|ssh):[^?#]*[?#]'
 $$;
 --> statement-breakpoint
 CREATE OR REPLACE FUNCTION public.openmapx_scrub_extension_json_0043(value jsonb)
