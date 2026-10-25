@@ -312,6 +312,7 @@ async function wire(max = 1000) {
       auth: unexpected,
       tile: unexpected,
       expensive: unexpected,
+      integrationIngress: unexpected,
       status: unexpected,
     }),
   );

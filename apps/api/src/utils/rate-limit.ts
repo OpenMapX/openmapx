@@ -166,6 +166,17 @@ export const publicApiLimit = new RateLimiter({
 });
 
 /**
+ * Admission floor for integration dispatcher methods whose bodies Fastify
+ * parses before the matched route can apply its declared limiter. This bucket
+ * is independent from that late operation tier; GET and HEAD never use it, so
+ * bursty integration tile traffic retains the dedicated tile budget.
+ */
+export const integrationIngressApiLimit = new RateLimiter({
+  max: envInt("RATE_LIMIT_INTEGRATION_INGRESS_MAX", 60),
+  windowMs: envInt("RATE_LIMIT_INTEGRATION_INGRESS_WINDOW_MS", 60_000),
+});
+
+/**
  * Public status has a dedicated IP bucket because each cache refresh fans out
  * to deployment dependencies. Keep this contract fixed at 60 requests/minute;
  * the in-process snapshot and shared response cache reduce probe work further.

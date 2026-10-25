@@ -885,10 +885,13 @@ The typed registrars enforce the contract shape at compile time, so the
 orchestrator can dispatch on a declared capability rather than reflecting over
 the object. `registerRoute` mounts a route under the integration's prefix; passing
 `{ requireAuth: true }` makes the host reject unauthenticated callers with 401
-before the handler runs. Every route consumes exactly one host limiter bucket:
-`rateLimitTier` defaults to `public`, upstream-heavy point/list routes use
-`expensive`, and tile fan-out uses `tile`. Do not add integration paths to the
-global URL-pattern limiter.
+before the handler runs. Every matched route consumes exactly one operation-tier
+bucket: `rateLimitTier` defaults to `public`, upstream-heavy point/list routes use
+`expensive`, and tile fan-out uses `tile`. In addition, `POST`, `PUT`, `PATCH`, and
+`DELETE` requests consume a separate per-client integration-ingress bucket before
+Fastify parses their bodies. `GET` and `HEAD` do not use that admission bucket, so
+bursty integration tile traffic retains its dedicated tier. Do not add integration
+paths to the global URL-pattern limiter.
 
 Provider health accepts only closed outcomes. Timeouts, connection failures,
 upstream 5xx responses, authentication failures, and invalid payloads affect the
