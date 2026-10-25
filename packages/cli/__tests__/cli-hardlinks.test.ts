@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { services } from "@openmapx/core/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyGeneratedHardlinks, applyHardlinkPlan } from "../src/lib/hardlinks";
 
@@ -20,7 +21,7 @@ function planPath(): string {
     tmp,
     "infra",
     "docker",
-    ".trusted-config-current",
+    services.CURRENT_CONFIGURATION,
     "docker-compose.generated.hardlinks.json",
   );
 }
@@ -30,7 +31,7 @@ beforeEach(() => {
   writeFileSync(join(tmp, "pnpm-workspace.yaml"), "packages: []\n");
   mkdirSync(join(tmp, "services"), { recursive: true });
   mkdirSync(join(tmp, "infra", "docker", "data"), { recursive: true });
-  mkdirSync(join(tmp, "infra", "docker", ".trusted-config-current"), { recursive: true });
+  mkdirSync(join(tmp, "infra", "docker", services.CURRENT_CONFIGURATION), { recursive: true });
 });
 
 afterEach(() => {

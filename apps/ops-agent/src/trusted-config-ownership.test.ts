@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import {
   type OpsOperation,
@@ -43,7 +43,9 @@ function fixture() {
   roots.push(root);
   const infraDir = join(root, "infra/docker");
   mkdirSync(infraDir, { recursive: true });
-  writeFileSync(join(infraDir, "service-selection.json"), '{"selected":["alpha"]}');
+  const selection = coreServices.serviceSelectionPath(infraDir);
+  mkdirSync(dirname(selection), { recursive: true, mode: 0o700 });
+  writeFileSync(selection, '{"selected":["alpha"]}', { mode: 0o600 });
   const services: coreServices.LoadedService[] = [
     {
       manifest: {
@@ -169,9 +171,9 @@ describe("trusted configuration ownership and outcomes", () => {
         currentRevisionId: revision("b"),
       });
       expect(f.label()).toBe("b");
-      expect(JSON.parse(readFileSync(join(f.infraDir, "service-selection.json"), "utf8"))).toEqual({
-        selected: ["alpha"],
-      });
+      expect(
+        JSON.parse(readFileSync(coreServices.serviceSelectionPath(f.infraDir), "utf8")),
+      ).toEqual({ selected: ["alpha"] });
     },
   );
   it("observes one settled generation under writer ownership without returning values or secrets", async () => {
@@ -277,7 +279,7 @@ describe("trusted configuration ownership and outcomes", () => {
   });
   it("retains a committed revision when real writer cleanup fails and leaves the foreign contents intact", async () => {
     const f = fixture();
-    const foreign = join(f.infraDir, ".trusted-config-writer", "foreign");
+    const foreign = join(f.infraDir, coreServices.CONFIGURATION_DIRECTORY, ".writer", "foreign");
     const result = await f.apply("a", undefined, {
       afterCommit: async () => {
         writeFileSync(foreign, "preserve");

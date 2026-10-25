@@ -2,12 +2,15 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { services as coreServices } from "@openmapx/core/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAdministrativeRuntime, createDefaultReleaseEffects } from "./administrative-runtime";
 import { type AgentHandoffRecord, readAgentHandoff, writeAgentHandoff } from "./agent-handoff";
 import { createUnavailableRuntime, dispatchOpsOperation } from "./runtime";
 
 const roots: string[] = [];
+const releaseState = (rootDir: string) =>
+  coreServices.releaseStatePaths(join(rootDir, "infra", "docker"));
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -110,10 +113,7 @@ const request = (
 describe("operations agent update", () => {
   it("replaces an outdated agent through a helper started from its own image", async () => {
     const f = await resolved({ agent: "old" });
-    writeFileSync(
-      join(f.rootDir, "infra", "docker", "docker-compose.release.yml"),
-      "old-overlay\n",
-    );
+    writeFileSync(releaseState(f.rootDir).overlay, "old-overlay\n");
 
     await expect(f.effects.updateAgent?.(request(), f.context)).resolves.toEqual({
       handoffId: "handoff-1",
@@ -136,9 +136,7 @@ describe("operations agent update", () => {
     );
     // Nothing in the stack changes before the helper takes over.
     expect(f.cli).not.toHaveBeenCalled();
-    expect(
-      readFileSync(join(f.rootDir, "infra", "docker", "docker-compose.release.yml"), "utf8"),
-    ).toBe("old-overlay\n");
+    expect(readFileSync(releaseState(f.rootDir).overlay, "utf8")).toBe("old-overlay\n");
   });
 
   it("leaves an agent that already runs the release alone", async () => {
@@ -351,7 +349,7 @@ describe("release application after an agent handoff", () => {
 
   it("rolls the application services back to the overlay from before the handoff", async () => {
     const f = await resolved({ agent: "current" });
-    const overlay = join(f.rootDir, "infra", "docker", "docker-compose.release.yml");
+    const overlay = releaseState(f.rootDir).overlay;
     writeFileSync(overlay, "release-2-overlay-written-by-the-helper\n");
     writeAgentHandoff(f.rootDir, handoff("applied"));
     f.cli.mockImplementationOnce(async () => {
@@ -367,7 +365,7 @@ describe("release application after an agent handoff", () => {
 
   it("takes an imported handoff's rollback target from the agent's own release state", async () => {
     const f = await resolved({ agent: "current" });
-    const overlay = join(f.rootDir, "infra", "docker", "docker-compose.release.yml");
+    const overlay = releaseState(f.rootDir).overlay;
     // An earlier apply recorded the release the application services run.
     await f.effects.apply(release, [...services], f.context);
     writeFileSync(overlay, "overlay-written-by-the-earlier-release-helper\n");
@@ -392,7 +390,7 @@ describe("release application after an agent handoff", () => {
 
   it("never restores an overlay from an imported handoff that did not keep this agent", async () => {
     const f = await resolved({ agent: "old" });
-    const overlay = join(f.rootDir, "infra", "docker", "docker-compose.release.yml");
+    const overlay = releaseState(f.rootDir).overlay;
     writeFileSync(overlay, "current-overlay\n");
     writeAgentHandoff(f.rootDir, {
       ...handoff("recreated"),
@@ -407,7 +405,7 @@ describe("release application after an agent handoff", () => {
 
   it("uses the current overlay again once the handoff was consumed", async () => {
     const f = await resolved({ agent: "current" });
-    const overlay = join(f.rootDir, "infra", "docker", "docker-compose.release.yml");
+    const overlay = releaseState(f.rootDir).overlay;
     writeFileSync(overlay, "current-overlay\n");
     writeAgentHandoff(f.rootDir, { ...handoff("applied"), consumed: true });
     f.cli.mockImplementationOnce(async () => {
@@ -423,8 +421,6 @@ describe("release application after an agent handoff", () => {
     writeAgentHandoff(f.rootDir, handoff("applied"));
     await f.effects.apply(release, [...services], f.context);
     expect(f.cli).toHaveBeenCalledWith(["services", "update", "--no-deps", ...services], f.context);
-    expect(
-      existsSync(join(f.rootDir, "infra", "docker", ".ops-agent-releases", "current.json")),
-    ).toBe(true);
+    expect(existsSync(join(releaseState(f.rootDir).store, "current.json"))).toBe(true);
   });
 });

@@ -11,9 +11,11 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { OpsOperation } from "@openmapx/core/ops";
+import { services } from "@openmapx/core/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createAdministrativeRuntime,
+  createAgentHandoffBindings,
   createDefaultReleaseEffects,
   inspectBackupAuthority,
   inspectDataTypeAuthority,
@@ -25,6 +27,8 @@ import {
 import { createUnavailableRuntime, dispatchOpsOperation } from "./runtime";
 
 const temporaryRoots: string[] = [];
+const releaseState = (rootDir: string) =>
+  services.releaseStatePaths(join(rootDir, "infra", "docker"));
 const privacyReleaseValidation = {
   version: 1 as const,
   sourceBuildFingerprint: "a".repeat(64),
@@ -649,19 +653,11 @@ describe("administrative release runtime", () => {
     await expect(first.resolve(context)).resolves.toBe(release);
     manifestText = JSON.stringify(makeManifest("5"));
     await expect(first.resolve(context)).rejects.toThrow("Release authority rejected");
+    expect(readFileSync(join(releaseState(rootDir).store, `${release}.json`), "utf8")).toContain(
+      "4".repeat(64),
+    );
     expect(
-      readFileSync(
-        join(rootDir, "infra", "docker", ".ops-agent-releases", `${release}.json`),
-        "utf8",
-      ),
-    ).toContain("4".repeat(64));
-    expect(
-      JSON.parse(
-        readFileSync(
-          join(rootDir, "infra", "docker", ".ops-agent-releases", `${release}.json`),
-          "utf8",
-        ),
-      ),
+      JSON.parse(readFileSync(join(releaseState(rootDir).store, `${release}.json`), "utf8")),
     ).toMatchObject({
       images: { "privacy-backup": `ghcr.io/openmapx/privacy-backup@sha256:${"4".repeat(64)}` },
       privacyReleaseValidation,
@@ -716,23 +712,166 @@ describe("administrative release runtime", () => {
       expect(
         JSON.parse(
           readFileSync(
-            join(
-              rootDir,
-              "infra",
-              "docker",
-              ".ops-agent-releases",
-              `${sourceRevision}-123-${n}.json`,
-            ),
+            join(releaseState(rootDir).store, `${sourceRevision}-123-${n}.json`),
             "utf8",
           ),
         ).producer.runAttempt,
       ).toBe(n);
   });
 
+  describe("release state of an earlier release", () => {
+    const stored = (release: string) =>
+      services.canonicalReleaseManifest(
+        services.parseReleaseManifest(
+          JSON.stringify({
+            schemaVersion: 1,
+            release,
+            images: Object.fromEntries(
+              services.RELEASE_IMAGE_NAMES.map((name) => [
+                name,
+                `ghcr.io/openmapx/${name}@sha256:${"6".repeat(64)}`,
+              ]),
+            ),
+            privacyReleaseValidation,
+          }),
+        ),
+      );
+
+    it("is migrated by initialization before anything reads the store or the overlay", async () => {
+      const rootDir = temporaryRoot();
+      const infraDir = join(rootDir, "infra", "docker");
+      const legacy = services.legacyReleaseStatePaths(infraDir);
+      mkdirSync(legacy.store, { mode: 0o700 });
+      const manifest = stored("release-legacy");
+      const digest = createHash("sha256").update(manifest).digest("hex");
+      writeFileSync(join(legacy.store, "release-legacy.json"), manifest, { mode: 0o600 });
+      writeFileSync(
+        join(legacy.store, "current.json"),
+        JSON.stringify({ releaseId: "release-legacy", digest }),
+        { mode: 0o600 },
+      );
+      const legacyOverlay = services.renderReleaseCompose(
+        services.parseReleaseManifest(manifest),
+        infraDir,
+      );
+      writeFileSync(legacy.overlay, legacyOverlay, { mode: 0o600 });
+      const migrations: unknown[] = [];
+      const effects = createDefaultReleaseEffects(rootDir, async () => undefined, {
+        onLegacyReleaseMigration: (migration) => migrations.push(migration),
+      });
+      // Constructing the effects reads nothing: the new store is still empty.
+      expect(readdirSync(releaseState(rootDir).store)).toEqual([]);
+      await expect(effects.runtimeInspect?.()).resolves.toEqual({ releaseId: "release-legacy" });
+      expect(migrations).toEqual([
+        expect.objectContaining({ outcome: "migrated", overlay: "regenerated", problems: [] }),
+      ]);
+      expect(readFileSync(releaseState(rootDir).overlay, "utf8")).toBe(legacyOverlay);
+      expect(readFileSync(legacy.overlay, "utf8")).toBe(legacyOverlay);
+      expect(inspectReleaseAuthority(rootDir, "release-legacy")).toBe(true);
+    });
+
+    it("leaves a group-writable manifest behind", async () => {
+      const rootDir = temporaryRoot();
+      const legacy = services.legacyReleaseStatePaths(join(rootDir, "infra", "docker"));
+      mkdirSync(legacy.store, { mode: 0o700 });
+      writeFileSync(join(legacy.store, "release-legacy.json"), stored("release-legacy"), {
+        mode: 0o600,
+      });
+      chmodSync(join(legacy.store, "release-legacy.json"), 0o620);
+      const effects = createDefaultReleaseEffects(rootDir, async () => undefined);
+      await expect(effects.inspect()).resolves.toEqual({ configuredSelector: "main" });
+      expect(inspectReleaseAuthority(rootDir, "release-legacy")).toBe(false);
+    });
+  });
+
+  it("refuses store entries and an overlay its group or others could write", async () => {
+    const rootDir = temporaryRoot();
+    const { store, overlay } = releaseState(rootDir);
+    mkdirSync(store, { recursive: true, mode: 0o700 });
+    const manifest = JSON.stringify({
+      schemaVersion: 1,
+      release: "release-1",
+      images: Object.fromEntries(
+        services.RELEASE_IMAGE_NAMES.map((name) => [
+          name,
+          `ghcr.io/openmapx/${name}@sha256:${"7".repeat(64)}`,
+        ]),
+      ),
+      privacyReleaseValidation,
+    });
+    writeFileSync(join(store, "release-1.json"), manifest, { mode: 0o600 });
+    chmodSync(join(store, "release-1.json"), 0o660);
+    expect(inspectReleaseAuthority(rootDir, "release-1")).toBe(false);
+    await expect(
+      createDefaultReleaseEffects(rootDir, async () => undefined).initialize?.(),
+    ).rejects.toThrow("Release store contains an unsafe entry");
+
+    chmodSync(join(store, "release-1.json"), 0o600);
+    expect(inspectReleaseAuthority(rootDir, "release-1")).toBe(true);
+    writeFileSync(overlay, "services: {}\n", { mode: 0o600 });
+    chmodSync(overlay, 0o620);
+    const cli = vi.fn(async () => undefined);
+    const effects = createDefaultReleaseEffects(rootDir, cli, {
+      verifyAppliedRelease: async () => true,
+    });
+    await expect(
+      effects.apply("release-1", ["app-api"], {
+        signal: new AbortController().signal,
+        emitLog: vi.fn(),
+      }),
+    ).rejects.toThrow(/group or others/);
+    expect(cli).not.toHaveBeenCalled();
+    expect(readFileSync(overlay, "utf8")).toBe("services: {}\n");
+  });
+
+  it("gives the self-update helper the release state's store, overlay and evidence", async () => {
+    const rootDir = temporaryRoot();
+    const { store, overlay, evidence } = releaseState(rootDir);
+    mkdirSync(store, { recursive: true, mode: 0o700 });
+    const manifest = services.canonicalReleaseManifest(
+      services.parseReleaseManifest(
+        JSON.stringify({
+          schemaVersion: 1,
+          release: "release-helper",
+          images: Object.fromEntries(
+            services.RELEASE_IMAGE_NAMES.map((name) => [
+              name,
+              `ghcr.io/openmapx/${name}@sha256:${"8".repeat(64)}`,
+            ]),
+          ),
+          privacyReleaseValidation,
+        }),
+      ),
+    );
+    writeFileSync(join(store, "release-helper.json"), manifest, { mode: 0o600 });
+    const digest = createHash("sha256").update(manifest).digest("hex");
+    const bindings = createAgentHandoffBindings(rootDir);
+    expect(bindings.releasePins("release-helper", digest).agentImage).toContain("ops-agent@");
+    expect(() => bindings.releasePins("release-helper", "0".repeat(64))).toThrow(
+      "Release authority rejected",
+    );
+    await bindings.withStoreLock(() => bindings.writeOverlay("release-helper", digest));
+    expect(readFileSync(overlay, "utf8")).toContain("file: ../../releases/evidence/");
+    expect(readdirSync(evidence)).toHaveLength(1);
+    expect(bindings.stackArgs()).toEqual(expect.arrayContaining(["-f", overlay]));
+    await bindings.withStoreLock(() => bindings.restoreOverlay(null));
+    expect(existsSync(overlay)).toBe(false);
+    expect(bindings.stackArgs()).not.toContain(overlay);
+  });
+
+  it("refuses release state directories of another user", () => {
+    const rootDir = temporaryRoot();
+    // Tests cannot chown: inject the uid the state must belong to instead.
+    const uid = (process.geteuid?.() ?? 0) + 1;
+    expect(() => createDefaultReleaseEffects(rootDir, async () => undefined, { uid })).toThrow(
+      /Unsafe release state directory/,
+    );
+  });
+
   it("uses the durable latest pointer instead of lexical release-ID ordering", async () => {
     const rootDir = temporaryRoot();
-    const directory = join(rootDir, "infra", "docker", ".ops-agent-releases");
-    mkdirSync(directory, { mode: 0o700 });
+    const directory = releaseState(rootDir).store;
+    mkdirSync(directory, { recursive: true, mode: 0o700 });
     const makeManifest = (release: string, digit: string) => ({
       schemaVersion: 1 as const,
       release,
@@ -772,8 +911,8 @@ describe("administrative release runtime", () => {
 
   it("enforces release entry and aggregate bounds before registry reads", async () => {
     const rootDir = temporaryRoot();
-    const directory = join(rootDir, "infra", "docker", ".ops-agent-releases");
-    mkdirSync(directory, { mode: 0o700 });
+    const directory = releaseState(rootDir).store;
+    mkdirSync(directory, { recursive: true, mode: 0o700 });
     for (let index = 0; index < 65; index += 1) {
       writeFileSync(join(directory, `release-${index}.json`), "{}", { mode: 0o600 });
     }
@@ -783,8 +922,8 @@ describe("administrative release runtime", () => {
 
   it("holds the entry bound when two resolutions race the same near-full store", async () => {
     const rootDir = temporaryRoot();
-    const directory = join(rootDir, "infra", "docker", ".ops-agent-releases");
-    mkdirSync(directory, { mode: 0o700 });
+    const directory = releaseState(rootDir).store;
+    mkdirSync(directory, { recursive: true, mode: 0o700 });
     const stored = (release: string) =>
       JSON.stringify({
         schemaVersion: 1,
@@ -854,8 +993,8 @@ describe("administrative release runtime", () => {
     "recovers a crash at the durable %s release boundary",
     async (crashPhase) => {
       const rootDir = temporaryRoot();
-      const directory = join(rootDir, "infra", "docker", ".ops-agent-releases");
-      mkdirSync(directory, { mode: 0o700 });
+      const directory = releaseState(rootDir).store;
+      mkdirSync(directory, { recursive: true, mode: 0o700 });
       const releaseId = "release-recovery";
       const manifest = {
         schemaVersion: 1 as const,
@@ -926,8 +1065,8 @@ describe("administrative release runtime", () => {
     "fails closed at the %s boundary when the runtime no longer matches the release",
     async (crashPhase) => {
       const rootDir = temporaryRoot();
-      const directory = join(rootDir, "infra", "docker", ".ops-agent-releases");
-      mkdirSync(directory, { mode: 0o700 });
+      const directory = releaseState(rootDir).store;
+      mkdirSync(directory, { recursive: true, mode: 0o700 });
       const releaseId = "release-recovery";
       writeFileSync(
         join(directory, `${releaseId}.json`),
@@ -979,8 +1118,8 @@ describe("administrative release runtime", () => {
 
   it("rejects a release manifest replaced after the transaction was admitted", async () => {
     const rootDir = temporaryRoot();
-    const directory = join(rootDir, "infra", "docker", ".ops-agent-releases");
-    mkdirSync(directory, { mode: 0o700 });
+    const directory = releaseState(rootDir).store;
+    mkdirSync(directory, { recursive: true, mode: 0o700 });
     const releaseId = "release-recovery";
     const manifestFor = (tag: string) =>
       JSON.stringify({
@@ -1030,8 +1169,8 @@ describe("administrative release runtime", () => {
     "recovers a crash at the durable %s release boundary",
     async (crashPhase) => {
       const rootDir = temporaryRoot();
-      const directory = join(rootDir, "infra", "docker", ".ops-agent-releases");
-      mkdirSync(directory, { mode: 0o700 });
+      const directory = releaseState(rootDir).store;
+      mkdirSync(directory, { recursive: true, mode: 0o700 });
       const releaseId = `release-${crashPhase}`;
       writeFileSync(
         join(directory, `${releaseId}.json`),
@@ -1053,7 +1192,7 @@ describe("administrative release runtime", () => {
         }),
         { mode: 0o600 },
       );
-      const overlay = join(rootDir, "infra", "docker", "docker-compose.release.yml");
+      const overlay = releaseState(rootDir).overlay;
       writeFileSync(overlay, "previous-overlay\n", { mode: 0o600 });
       let updateAttempts = 0;
       const first = createDefaultReleaseEffects(
@@ -1091,11 +1230,19 @@ describe("administrative release runtime", () => {
 
   it("inspects old, current, missing, and partial core images from fixed Docker targets", async () => {
     const rootDir = temporaryRoot();
-    const releaseDirectory = join(rootDir, "infra", "docker", ".ops-agent-releases");
-    mkdirSync(releaseDirectory, { mode: 0o700 });
-    mkdirSync(join(rootDir, "infra", "docker", ".trusted-config-current"), { recursive: true });
+    const releaseDirectory = releaseState(rootDir).store;
+    mkdirSync(releaseDirectory, { recursive: true, mode: 0o700 });
+    mkdirSync(join(rootDir, "infra", "docker", services.CURRENT_CONFIGURATION), {
+      recursive: true,
+    });
     writeFileSync(
-      join(rootDir, "infra", "docker", ".trusted-config-current", "docker-compose.generated.yml"),
+      join(
+        rootDir,
+        "infra",
+        "docker",
+        services.CURRENT_CONFIGURATION,
+        "docker-compose.generated.yml",
+      ),
       "services:{}\n",
     );
     const releaseId = "release-123";
@@ -1168,14 +1315,16 @@ describe("administrative release runtime", () => {
       runDocker: (args: readonly string[]) => Promise<string>,
     ) {
       const rootDir = temporaryRoot();
-      const releaseDirectory = join(rootDir, "infra", "docker", ".ops-agent-releases");
-      mkdirSync(releaseDirectory, { mode: 0o700 });
-      mkdirSync(join(rootDir, "infra", "docker", ".trusted-config-current"), { recursive: true });
+      const releaseDirectory = releaseState(rootDir).store;
+      mkdirSync(releaseDirectory, { recursive: true, mode: 0o700 });
+      mkdirSync(join(rootDir, "infra", "docker", services.CURRENT_CONFIGURATION), {
+        recursive: true,
+      });
       const composePath = join(
         rootDir,
         "infra",
         "docker",
-        ".trusted-config-current",
+        services.CURRENT_CONFIGURATION,
         "docker-compose.generated.yml",
       );
       if (compose === "file") writeFileSync(composePath, "services:{}\n");
@@ -1306,8 +1455,8 @@ describe("administrative release runtime", () => {
 
   it("binds stored release IDs and restores the exact overlay when application fails", async () => {
     const rootDir = temporaryRoot();
-    const releaseDirectory = join(rootDir, "infra", "docker", ".ops-agent-releases");
-    mkdirSync(releaseDirectory, { mode: 0o700 });
+    const releaseDirectory = releaseState(rootDir).store;
+    mkdirSync(releaseDirectory, { recursive: true, mode: 0o700 });
     const releaseId = "release-123";
     writeFileSync(
       join(releaseDirectory, `${releaseId}.json`),
@@ -1332,7 +1481,7 @@ describe("administrative release runtime", () => {
       }),
       { mode: 0o600 },
     );
-    const overlay = join(rootDir, "infra", "docker", "docker-compose.release.yml");
+    const overlay = releaseState(rootDir).overlay;
     writeFileSync(overlay, "previous-overlay\n", { mode: 0o600 });
     let attempts = 0;
     const effects = createDefaultReleaseEffects(rootDir, async () => {

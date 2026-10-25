@@ -69,13 +69,25 @@ export function repoPaths(start?: string): RepoPaths {
     integrationsDir: join(root, "integrations"),
     customIntegrationsDir: join(root, "custom_integrations"),
     infraDir: join(root, "infra", "docker"),
+    // The operations agent's state: the applied generation and the release overlay.
     composePath: join(
       root,
       "infra",
       "docker",
-      ".trusted-config-current",
+      "state",
+      "ops-agent",
+      "configuration",
+      "current",
       "docker-compose.generated.yml",
     ),
-    composeReleasePath: join(root, "infra", "docker", "docker-compose.release.yml"),
+    composeReleasePath: join(
+      root,
+      "infra",
+      "docker",
+      "state",
+      "ops-agent",
+      "releases",
+      "docker-compose.release.yml",
+    ),
   };
 }

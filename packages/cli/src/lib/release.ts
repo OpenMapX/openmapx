@@ -1,19 +1,7 @@
-import {
-  closeSync,
-  constants,
-  existsSync,
-  fsyncSync,
-  lstatSync,
-  mkdirSync,
-  mkdtempSync,
-  openSync,
-  readFileSync,
-  rmSync,
-  type Stats,
-  unlinkSync,
-} from "node:fs";
+import { lstatSync, mkdtempSync, readFileSync, rmSync, type Stats, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
+import { fsyncDirectory } from "@openmapx/core/release-files";
 import { services as coreServices } from "@openmapx/core/server";
 import { execa } from "execa";
 import { repoPaths } from "./paths";
@@ -28,6 +16,20 @@ const {
 } = coreServices;
 
 export type ReleaseManifest = coreServices.ReleaseManifest;
+
+/**
+ * Where the release selection lives: the agent's release state under
+ * `infra/docker`, shared with the host CLI, which runs as the agent's user.
+ * `uid` is the owner that state must have; tests inject another.
+ */
+export interface ReleaseStateLocation {
+  infraDir?: string;
+  uid?: number;
+}
+
+function releaseState(opts: ReleaseStateLocation) {
+  return coreServices.releaseStatePaths(opts.infraDir ?? repoPaths().infraDir);
+}
 
 export type ReleaseDockerRunner = (
   args: string[],
@@ -97,12 +99,11 @@ export async function resolveReleaseManifest(
   }
 }
 
-/** Write the overlay atomically next to the generated compose file. */
-export function writeReleaseOverlay(
-  manifest: ReleaseManifest,
-  path = repoPaths().composeReleasePath,
-) {
-  return writeReleaseComposeArtifacts(manifest, path).overlayPath;
+/** Write the overlay and its evidence atomically into the agent's release state. */
+export function writeReleaseOverlay(manifest: ReleaseManifest, opts: ReleaseStateLocation = {}) {
+  return writeReleaseComposeArtifacts(manifest, opts.infraDir ?? repoPaths().infraDir, {
+    uid: opts.uid,
+  }).overlayPath;
 }
 
 export function touchesReleasePinnedServices(serviceIds: readonly string[]): boolean {
@@ -123,11 +124,11 @@ export type ReleaseOverlayState =
  * own deliberate release changes.
  */
 export async function ensureReleaseOverlay(
-  opts: { docker?: ReleaseDockerRunner; path?: string } = {},
+  opts: { docker?: ReleaseDockerRunner } & ReleaseStateLocation = {},
 ): Promise<ReleaseOverlayState> {
-  const path = opts.path ?? repoPaths().composeReleasePath;
-  if (existsSync(path)) {
-    const selected = readSelection(path);
+  const path = releaseState(opts).overlay;
+  const selected = readSelection(path, opts);
+  if (selected) {
     const channel = releaseChannel();
     const prefix =
       channel.kind === "enabled" ? channel.imagePrefix : selected?.images.api?.split("/api@")[0];
@@ -148,7 +149,7 @@ export async function ensureReleaseOverlay(
   if (releaseChannel().kind === "disabled") return { status: "disabled" };
   try {
     const manifest = await resolveReleaseManifest(opts.docker);
-    writeReleaseOverlay(manifest, path);
+    writeReleaseOverlay(manifest, opts);
     return { status: "resolved", path, release: manifest.release };
   } catch (error) {
     return { status: "unpinned", reason: (error as Error).message };
@@ -164,15 +165,21 @@ export function unpinnedReleaseWarning(reason: string): string {
   );
 }
 
-function readSelection(path: string): coreServices.ReleaseComposeSelection | null {
-  return existsSync(path)
-    ? coreServices.parseReleaseComposeSelection(readFileSync(path, "utf8"))
-    : null;
+/** The overlay's selection; an overlay anyone but the agent's user could write is refused. */
+function readSelection(
+  path: string,
+  opts: ReleaseStateLocation,
+): coreServices.ReleaseComposeSelection | null {
+  const raw = coreServices.readReleaseOverlayFile(path, { uid: opts.uid });
+  return raw === null ? null : coreServices.parseReleaseComposeSelection(raw);
 }
 
 /** Read-only local status; an existing overlay still applies when resolution is disabled. */
-export function releaseStatusLines(path = repoPaths().composeReleasePath): string[] {
-  const selected = readSelection(path);
+export function releaseStatusLines(
+  path = repoPaths().composeReleasePath,
+  opts: Pick<ReleaseStateLocation, "uid"> = {},
+): string[] {
+  const selected = readSelection(path, opts);
   const disabled = releaseChannel().kind === "disabled";
   if (!selected)
     return [
@@ -193,13 +200,12 @@ export function releaseStatusLines(path = repoPaths().composeReleasePath): strin
 
 export async function selectRelease(
   opts: {
-    path?: string;
     resolve?: () => Promise<ReleaseManifest>;
     report?: (line: string) => void;
-  } = {},
+  } & ReleaseStateLocation = {},
 ): Promise<{ path: string; release: string }> {
-  const path = opts.path ?? repoPaths().composeReleasePath;
-  const previous = readSelection(path);
+  const path = releaseState(opts).overlay;
+  const previous = readSelection(path, opts);
   const manifest = await (opts.resolve ?? resolveReleaseManifest)();
   const report = opts.report ?? (() => undefined);
   report(
@@ -213,30 +219,21 @@ export async function selectRelease(
       `${name}: ${before ? (before === after ? "reused" : "changed") : "previous digest unknown"} (${before ?? "unknown"} → ${after})`,
     );
   }
-  writeReleaseOverlay(manifest, path);
+  writeReleaseOverlay(manifest, opts);
   return { path, release: manifest.release };
 }
 
-/** Clear only local Compose selection; preserve evidence still mounted by running services. */
+/**
+ * Clear only local Compose selection, the overlay in the agent's release state;
+ * preserve evidence still mounted by running services. An overlay of an
+ * earlier release in `infra/docker` is left alone: nothing reads it any more.
+ */
 export async function clearReleaseSelection(
-  opts: { path?: string } = {},
+  opts: ReleaseStateLocation = {},
 ): Promise<{ path: string; cleared: boolean }> {
-  const path = opts.path ?? repoPaths().composeReleasePath;
-  const parent = dirname(path);
-  const assertDirectory = (directory: string) => {
-    const stat = lstatSync(directory);
-    if (!stat.isDirectory() || stat.isSymbolicLink()) {
-      throw new Error("Release selection directory is unsafe");
-    }
-  };
-  assertDirectory(parent);
-  const store = join(parent, ".ops-agent-releases");
-  try {
-    mkdirSync(store, { mode: 0o700 });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-  }
-  assertDirectory(store);
+  const { directory, store, overlay: path } = releaseState(opts);
+  coreServices.ensureReleaseStateDirectory(directory, { uid: opts.uid });
+  coreServices.ensureReleaseStateDirectory(store, { uid: opts.uid });
   const lock = await coreServices.acquireReleaseStoreLock(store, {}, { failIfBusy: true });
   try {
     try {
@@ -254,19 +251,14 @@ export async function clearReleaseSelection(
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return { path, cleared: false };
       throw error;
     }
-    if (!selected.isFile() || selected.isSymbolicLink() || selected.nlink !== 1) {
-      throw new Error("Release selection overlay is unsafe");
-    }
-    unlinkSync(path);
-    const descriptor = openSync(
-      parent,
-      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+    const problem = coreServices.releaseStateFileProblem(
+      selected,
+      coreServices.RELEASE_STORE_LIMITS.manifestBytes,
+      { uid: opts.uid },
     );
-    try {
-      fsyncSync(descriptor);
-    } finally {
-      closeSync(descriptor);
-    }
+    if (problem) throw new Error(`Release selection overlay is unsafe: ${path} ${problem}`);
+    unlinkSync(path);
+    fsyncDirectory(directory);
     return { path, cleared: true };
   } finally {
     lock.release();

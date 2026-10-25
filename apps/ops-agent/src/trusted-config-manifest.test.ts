@@ -37,13 +37,11 @@ describe("trusted configuration deployment handoff", () => {
 
   it("renders the queue against the real infra root through the generation pointer", () => {
     const rendered = services.renderCompose([manifest("ops-agent")], {
-      composeOutDir: join(root, "infra", "docker", ".trusted-config-current"),
+      composeOutDir: join(root, "infra", "docker", services.CURRENT_CONFIGURATION),
       infraDir: join(root, "infra", "docker"),
       allServices: [manifest("ops-agent")],
     });
-    expect(rendered.composeYaml).toContain(
-      "../state/ops-agent/trusted-config:/var/lib/openmapx/trusted-config",
-    );
-    expect(rendered.composeYaml).not.toContain(".trusted-config-current/state/ops-agent");
+    expect(rendered.composeYaml).toContain("../../trusted-config:/var/lib/openmapx/trusted-config");
+    expect(rendered.composeYaml).not.toContain("current/state/ops-agent");
   });
 });

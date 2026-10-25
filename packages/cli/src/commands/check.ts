@@ -194,7 +194,12 @@ export function registerCheckCommand(program: Command): void {
       } catch {
         // A missing local .env is handled by compose; this advisory stays non-fatal.
       }
-      const permissionWarning = envFilePermissionWarning(envPath, envMode);
+      // Every stack command refuses an .env that is not the operator's alone.
+      const environmentProblem = coreServices.deploymentEnvironmentFileProblem(envPath);
+      if (environmentProblem) log.err(environmentProblem);
+      const permissionWarning = environmentProblem
+        ? null
+        : envFilePermissionWarning(envPath, envMode);
       if (permissionWarning) log.warn(permissionWarning);
       // Only the ops-agent's fixed CLI runs embedded manifests; from source the
       // checkout is what runs, so there is nothing to compare.

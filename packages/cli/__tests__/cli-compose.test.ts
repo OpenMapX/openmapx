@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   existsSync,
   linkSync,
   lstatSync,
@@ -8,6 +9,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -17,6 +19,7 @@ import { readErasureJournal } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { renderComposeForRepo, rotateRedisPasswordForRepo } from "../src/commands/compose";
+import { loadInfraEnv } from "../src/lib/infra-env";
 import { rotatePlatformSecretFile } from "../src/lib/platform-secret-files";
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
@@ -28,9 +31,14 @@ function composeDefault(name: string, fallback: string): string {
 
 let tmp: string;
 
+/** A file of the applied generation, through the current pointer. */
+function currentGenerationFile(...names: string[]): string {
+  return join(tmp, "infra", "docker", coreServices.CURRENT_CONFIGURATION, ...names);
+}
+
 /** The applied generation's compose file. */
 function generatedCompose(): string {
-  return join(tmp, "infra", "docker", ".trusted-config-current", "docker-compose.generated.yml");
+  return currentGenerationFile("docker-compose.generated.yml");
 }
 let originalPostgresPassword: string | undefined;
 let originalBetterAuthSecret: string | undefined;
@@ -97,6 +105,28 @@ describe("renderComposeForRepo", () => {
       expect(existsSync(join(tmp, "infra", "docker", "secrets"))).toBe(false);
     },
   );
+
+  it("refuses a deployment .env that is not the operator's own, and loads none of it", async () => {
+    writeManifest("alpha", { id: "alpha", ...baseManifest });
+    const env = join(tmp, "infra", "docker", ".env");
+    writeFileSync(env, "OPENMAPX_TEST_PLANTED=planted\n", { mode: 0o600 });
+    chmodSync(env, 0o664);
+    delete process.env.OPENMAPX_TEST_PLANTED;
+    loadInfraEnv(tmp);
+    expect(process.env.OPENMAPX_TEST_PLANTED).toBeUndefined();
+    await expect(
+      renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] }),
+    ).rejects.toThrow("no group or other write");
+    expect(existsSync(generatedCompose())).toBe(false);
+    expect(statSync(env).mode & 0o777).toBe(0o664);
+
+    chmodSync(env, 0o600);
+    loadInfraEnv(tmp);
+    expect(process.env.OPENMAPX_TEST_PLANTED).toBe("planted");
+    delete process.env.OPENMAPX_TEST_PLANTED;
+    await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] });
+    expect(existsSync(generatedCompose())).toBe(true);
+  });
 
   it("writes docker-compose.generated.yml from explicitly selected manifests", async () => {
     writeManifest("alpha", { ...baseManifest, id: "alpha" });
@@ -202,13 +232,7 @@ describe("renderComposeForRepo", () => {
     });
 
     await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["valhalla"] });
-    const planPath = join(
-      tmp,
-      "infra",
-      "docker",
-      ".trusted-config-current",
-      "docker-compose.generated.hardlinks.json",
-    );
+    const planPath = currentGenerationFile("docker-compose.generated.hardlinks.json");
     const plan = JSON.parse(readFileSync(planPath, "utf-8"));
     expect(plan).toEqual([
       {
@@ -653,18 +677,7 @@ describe("renderComposeForRepo and what the admin panel applied", () => {
     expect(yaml).toContain("MODE: saved");
     expect(yaml).toContain("NH_API_KEY_FILE: /run/secrets/NH_API_KEY");
     expect(
-      readFileSync(
-        join(
-          tmp,
-          "infra",
-          "docker",
-          ".trusted-config-current",
-          ".generated-secrets",
-          "ingest",
-          "NH_API_KEY",
-        ),
-        "utf-8",
-      ),
+      readFileSync(currentGenerationFile(".generated-secrets", "ingest", "NH_API_KEY"), "utf-8"),
     ).toBe("secret-value");
   });
 

@@ -901,7 +901,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     const runtime = createDockerRuntime({
       stack: {
         infraDir: "/stack",
-        composePath: "/stack/.trusted-config-current/docker-compose.generated.yml",
+        composePath: "/stack/state/ops-agent/configuration/current/docker-compose.generated.yml",
         composeReleasePath: "/stack/docker-compose.release.yml",
       },
       fileExists: () => true,
@@ -926,7 +926,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       "--env-file",
       "/stack/.env",
       "-f",
-      "/stack/.trusted-config-current/docker-compose.generated.yml",
+      "/stack/state/ops-agent/configuration/current/docker-compose.generated.yml",
       "-f",
       "/stack/docker-compose.release.yml",
     ];

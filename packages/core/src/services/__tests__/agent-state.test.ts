@@ -10,14 +10,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   agentStatePaths,
   legacyAgentStatePaths,
   prepareAgentStateDirectories,
 } from "../agent-state";
-import { writeServiceSelectionFile } from "../deployment";
+import { serviceSelectionPath, writeServiceSelectionFile } from "../deployment";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -102,7 +102,8 @@ describe("service selection file", () => {
     const infraDir = infra();
     const sentinel = join(infraDir, "..", "sentinel");
     writeFileSync(sentinel, "untouched");
-    const path = join(infraDir, "service-selection.json");
+    const path = serviceSelectionPath(infraDir);
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     symlinkSync(sentinel, `${path}.${process.pid}.tmp`);
     symlinkSync(sentinel, path);
 
@@ -112,6 +113,6 @@ describe("service selection file", () => {
     expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ selected: ["postgis"] });
     const written = lstatSync(path);
     expect(written.isFile()).toBe(true);
-    expect(written.mode & 0o777).toBe(0o644);
+    expect(written.mode & 0o777).toBe(0o600);
   });
 });

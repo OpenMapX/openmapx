@@ -123,11 +123,13 @@ describe("an existing host's agent state", () => {
     expect(statSync(current.trustedConfig).ino).toBe(queue);
     expect(existsSync(legacy.trustedConfig)).toBe(false);
     expect(existsSync(legacy.privacyExtraction)).toBe(false);
-    const compose = readFileSync(
-      join(infra, ".trusted-config-current", "docker-compose.generated.yml"),
-      "utf8",
+    const pointer = join(infra, services.CURRENT_CONFIGURATION);
+    const compose = readFileSync(join(pointer, "docker-compose.generated.yml"), "utf8");
+    // Compose resolves mounts from the pointer: `../../trusted-config`.
+    expect(compose).toContain(
+      `${relative(pointer, current.trustedConfig)}:/var/lib/openmapx/trusted-config`,
     );
-    expect(compose).toContain("../state/ops-agent/trusted-config:/var/lib/openmapx/trusted-config");
+    expect(relative(pointer, current.trustedConfig)).toBe("../../trusted-config");
     expect(compose).not.toContain("data/ops-agent");
 
     const port = await freePort();

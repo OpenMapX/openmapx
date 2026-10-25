@@ -37,7 +37,8 @@ const opsClient = {};
 
 vi.mock("@openmapx/core/server", () => ({
   repoPaths: () => ({
-    composePath: "/repo/.trusted-config-current/docker-compose.generated.yml",
+    composePath:
+      "/repo/infra/docker/state/ops-agent/configuration/current/docker-compose.generated.yml",
   }),
 }));
 

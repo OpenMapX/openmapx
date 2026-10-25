@@ -196,6 +196,7 @@ export function rotateRedisPasswordForRepo(
 export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<RenderRepoResult> {
   coreServices.releaseSelection();
   const paths = repoPaths(opts.rootDir);
+  coreServices.assertDeploymentEnvironmentFile(join(paths.infraDir, ".env"));
   assertCliDeploymentSecrets();
   return withConfigurationGenerationWriter(paths.infraDir, async (writer) => {
     // Moves the agent's mounted state out of data-manager's data directory the
@@ -255,6 +256,14 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
       throw new Error("Ops-agent API and data-manager tokens must be distinct");
     }
     reconcileRedisAuthFiles(redisPasswordPath, redisAclPath, opts.redisAuthHooks);
+    // The first render of this release carries the earlier release's applied
+    // selection into the agent's state, from its applied generation; its
+    // settings are carried by readAppliedConfiguration below. Nothing reads the
+    // earlier files once this generation is committed.
+    coreServices.migrateLegacyServiceSelection(paths.infraDir);
+    // And its release store and overlay, before anything selects a release.
+    const releaseMigration = await coreServices.migrateLegacyReleaseState(paths.infraDir);
+    for (const problem of releaseMigration?.problems ?? []) log.warn(problem);
     const registry = new ServiceRegistry({ rootDir: paths.root });
     await registry.load();
     const applied = applyServiceSelection(registry, {

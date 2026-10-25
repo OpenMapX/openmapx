@@ -15,8 +15,12 @@ chmod 600 infra/docker/.env
 ```
 
 The CLI loads this file without overriding existing shell variables and passes it
-explicitly to Compose. Generated configuration lives below
-`infra/docker/.trusted-config-current/`, so a bare `docker compose up` from the
+explicitly to Compose. It must be a regular file owned by the deployment's user,
+with one link and no group or other write, like the files under
+`infra/docker/secrets/`. Rendering, stack commands and the operations agent
+refuse any other `.env` and leave it as it is; `pnpm openmapx check` names the
+problem and the fix. Generated configuration lives below
+`infra/docker/state/ops-agent/configuration/current/`, so a bare `docker compose up` from the
 repository root does not address the stack. Use the CLI commands in
 [Managing services](./managing-services.md).
 

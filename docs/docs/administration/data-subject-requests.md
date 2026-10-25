@@ -49,7 +49,7 @@ The source release must pass repository tests, real database and configured
 Docker collector fixtures. Official releases generate validation evidence on
 the exact gated checkout and include it in the same atomic release manifest as
 the immutable image pins. Activation downloads the collector and writes
-content-addressed evidence under `infra/docker/.release-evidence` before
+content-addressed evidence under `infra/docker/state/ops-agent/releases/evidence` before
 atomically replacing the release overlay. The API receives that file read-only,
 including when its root filesystem is read-only. Existing evidence files remain
 available for rollback. Missing evidence, a failed collector download or an

@@ -248,12 +248,10 @@ describe.skipIf(!SEPARATE || process.platform !== "linux")(
       expect(rendered.stdout).toContain("Rendered");
       expectFreshState(current, true);
       const compose = readFileSync(
-        join(infra, ".trusted-config-current", "docker-compose.generated.yml"),
+        join(infra, services.CURRENT_CONFIGURATION, "docker-compose.generated.yml"),
         "utf8",
       );
-      expect(compose).toContain(
-        "../state/ops-agent/trusted-config:/var/lib/openmapx/trusted-config",
-      );
+      expect(compose).toContain("../../trusted-config:/var/lib/openmapx/trusted-config");
 
       // `services update` recreates both from this generation.
       const agent = await startAgent(target, current.trustedConfig);

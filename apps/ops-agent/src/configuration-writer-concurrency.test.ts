@@ -2,7 +2,7 @@ import { type ChildProcess, fork } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { services as coreServices } from "@openmapx/core/server";
 import { afterEach, describe, expect, it } from "vitest";
@@ -35,7 +35,9 @@ function fixture() {
       configSchema: { type: "object", properties: { label: { type: "string" } } },
     }),
   );
-  writeFileSync(join(root, "infra/docker/service-selection.json"), '{"selected":["alpha"]}');
+  const selection = coreServices.serviceSelectionPath(join(root, "infra/docker"));
+  mkdirSync(dirname(selection), { recursive: true, mode: 0o700 });
+  writeFileSync(selection, '{"selected":["alpha"]}', { mode: 0o600 });
   return root;
 }
 function start(root: string, mode: string, letter = "a", expected = "", hold = "") {
@@ -103,7 +105,7 @@ describe("overlapping configuration writers", () => {
     const infra = join(root, "infra/docker");
     const a = start(root, "ops", "a", "", "before");
     await a.wait("held");
-    const staging = readdirSync(join(infra, ".trusted-config-generations")).filter((n) =>
+    const staging = readdirSync(join(infra, coreServices.CONFIGURATION_GENERATIONS)).filter((n) =>
       n.endsWith(".tmp"),
     );
     expect(staging).toHaveLength(1);
@@ -113,13 +115,16 @@ describe("overlapping configuration writers", () => {
     await delay(150);
     expect(cli.messages.some((m) => m.event === "done")).toBe(false);
     expect(init.messages.some((m) => m.event === "done")).toBe(false);
-    expect(readdirSync(join(infra, ".trusted-config-generations"))).toEqual(staging);
+    expect(readdirSync(join(infra, coreServices.CONFIGURATION_GENERATIONS))).toEqual(staging);
     a.release();
     await a.wait("done");
     await Promise.all([cli.wait("done"), init.wait("done")]);
     expect(coreServices.readAppliedConfiguration(infra).serviceConfigs[0]?.values.label).toBe("a");
     expect(
-      readFileSync(join(infra, ".trusted-config-current/docker-compose.generated.yml"), "utf8"),
+      readFileSync(
+        join(infra, coreServices.CURRENT_CONFIGURATION, "docker-compose.generated.yml"),
+        "utf8",
+      ),
     ).toContain("label: a");
   }, 20_000);
   it("rejects an overlapping compensation after B completes and preserves B follow-up files", async () => {
@@ -171,13 +176,13 @@ describe("overlapping configuration writers", () => {
     await init.wait("started");
     await delay(150);
     expect(init.messages.some((m) => m.event === "done")).toBe(false);
-    expect(readdirSync(join(infra, ".trusted-config-generations"))).toHaveLength(16);
+    expect(readdirSync(join(infra, coreServices.CONFIGURATION_GENERATIONS))).toHaveLength(16);
     a.release();
     await a.wait("done");
     await init.wait("done");
     expect(coreServices.currentConfigurationGeneration(infra)).toBe(rev("a"));
     expect(coreServices.readAppliedConfiguration(infra).serviceConfigs[0]?.values.label).toBe("a");
-    expect(readdirSync(join(infra, ".trusted-config-generations"))).toHaveLength(15);
+    expect(readdirSync(join(infra, coreServices.CONFIGURATION_GENERATIONS))).toHaveLength(15);
   }, 20_000);
   it("never writes after a contender times out, even when the live holder subsequently releases", async () => {
     const root = fixture();
@@ -212,7 +217,9 @@ describe("overlapping configuration writers", () => {
     });
     expect(coreServices.currentConfigurationGeneration(infra)).toBeNull();
     expect(
-      readdirSync(join(infra, ".trusted-config-generations")).some((n) => n.endsWith(".tmp")),
+      readdirSync(join(infra, coreServices.CONFIGURATION_GENERATIONS)).some((n) =>
+        n.endsWith(".tmp"),
+      ),
     ).toBe(true);
   }, 20_000);
 });
