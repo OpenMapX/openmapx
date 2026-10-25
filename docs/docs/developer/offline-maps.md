@@ -49,6 +49,13 @@ versions, attribution, byte length, SHA-256, and immutable ETag. Package IDs are
 content-addressed from the canonical request and every input embedded in the
 archive, including attribution.
 
+The browser adapter validates capability and preparation/job replies with the
+shared data-manager wire schemas before exposing them to offline settings. A
+malformed reply raises `OfflinePackageApiError` with code `invalid-response`;
+validation errors omit response contents. A valid unavailable capability remains
+usable when the public proxy returns HTTP 502. Archive bodies stay streamed by
+the download transport, with Range/If-Range and cancellation preserved.
+
 ## Download and storage guarantees
 
 Archive downloads support byte ranges and resume only when the server accepts
