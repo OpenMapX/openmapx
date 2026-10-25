@@ -13,7 +13,11 @@ and its binding supplement `docs/superpowers/specs/2026-10-23-admin-control-prot
 
 ## Global Constraints
 
-All Global Constraints and Product and security decisions in the specification are binding. User authorization includes autonomous decisions and execution through one PR with green CI; no additional approval or planning pause is required. Codex-only agents; local rendered verification, no screenshots attached to PR.
+All Global Constraints and Product and security decisions in the specification are binding. User authorization includes autonomous decisions and execution through one PR with green CI; no additional approval or planning pause is required. Delegated work uses only Codex6.1-Sol or ClaudeOpus, preferablyCodex; Astra is prohibited by the latest user instruction. Local rendered verification, no screenshots attached to PR.
+
+## Approved Task06.1 retention correction
+
+Task06.1 consumes the [approved retention amendment](../specs/2026-10-25-admin-control-retention-amendment.md) and its [implementation plan](2026-10-25-admin-control-retention-amendment.md). Its fresh root key/origin, bounded renewable family GC, API receipt delivery and atomic stable-step reservation supersede conflicting earlier provisional interfaces;50-task order/scope remains unchanged. Follow-on02.3/02.4/01.2 use its actual exports. Earlier source clearance for02.2 does not qualify the new projectionv3/ack changes: those are reviewed and tested in this06.1 correction window. Agent-first then currentAPI/CLI producer cutover preserves legacy observations while rejecting fresh unsupported authority roots before effects.
 
 ## Review Focus
 

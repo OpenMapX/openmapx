@@ -2,6 +2,8 @@
 
 Date: 2026-10-23. Binding supplement to `2026-10-23-admin-instance-management-design.md` and the controller's `plan-fix-rulings-r1.md`. This is an implementation contract, not an implementation or test receipt. Tasks 01.2 and 02.1–02.4 produce the interfaces assigned below; 06.1 implements the shared filesystem protocol. Later plans consume these names rather than inventing parallel locks, command runners, secret stores or upload services.
 
+The approved [renewable control retention amendment](2026-10-25-admin-control-retention-amendment.md) supersedes this supplement only for fresh authority root keys, signed origin propagation, renewable receipt-family retention, API receipt acknowledgement and stable-step checkpoint reservation. Apply all revision2–4 decisions together. Legacy undated identities remain observation/settlement-only; do not use the earlier optional-root-deadline language to mint new managed authority. All other contracts below remain binding.
+
 ## 1. Source constraints and ownership
 
 - `configuration-ownership.ts:acquireConfigurationOwnership` already uses exclusive mkdir, a 5-second wait, inode checks and no stealing after a crash. `configuration-generation.ts:withConfigurationGenerationWriter` owns the current pointer and commit evidence. Extend this discipline; PID age and TTL are not ownership.
