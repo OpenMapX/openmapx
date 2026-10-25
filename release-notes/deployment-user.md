@@ -25,7 +25,13 @@ containers keep their user and nothing else changes.
 ## Required action
 
 Run renders and stack commands as the checkout's owner. On a host whose
-operator is not uid 1000, follow what `pnpm openmapx check` reports: change the
-owner of files an earlier release wrote as uid 1000 once, as root, with the
-`sudo chown -R` it prints, and remove an `app-api` volume an earlier image
-created for uid 1000 while `app-api` is stopped.
+operator is not uid 1000:
+
+- change the owner of files an earlier release's containers wrote as uid 1000
+  once, as root, with the `sudo chown -R` that `pnpm openmapx check` prints for
+  each path containers write that holds them;
+- if `app-api`'s startup log reports a volume an earlier image created for uid
+  1000, do not remove it: it holds subject-export ciphertexts the database
+  refers to and the runtime-recovery journal. With `app-api` stopped, change
+  its owner in place with the command the log prints, for example
+  `docker run --rm -v docker_openmapx-subject-exports:/v alpine chown -R 1001:1001 /v`.

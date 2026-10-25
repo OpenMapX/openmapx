@@ -17,7 +17,7 @@ import {
   dataSubjectRequestAttachment,
   dataSubjectRequestSourceSnapshot,
 } from "../db/schema";
-import { privateVolumeDirectory } from "./private-volume-directory";
+import { API_VOLUMES, privateVolumeDirectory } from "./private-volume-directory";
 
 interface ErasureUser {
   id: string;
@@ -257,7 +257,7 @@ async function deletePrivacyCiphertext(storageKey: string): Promise<void> {
     process.env.OPENMAPX_EXPORT_STORAGE_DIR?.trim() || "/var/lib/openmapx/subject-exports";
   if (!isAbsolute(configuredRoot)) throw new Error("Privacy export storage root is unavailable");
   // The same directory the export store uses (see server.ts).
-  const rootValue = privateVolumeDirectory(configuredRoot);
+  const rootValue = privateVolumeDirectory(configuredRoot, API_VOLUMES.subjectExports);
   if (
     !storageKey ||
     storageKey.length > 512 ||

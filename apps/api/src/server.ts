@@ -114,7 +114,7 @@ import {
 import { pruneOldRecords } from "./services/health-history";
 import { jobRunner } from "./services/job-runner";
 import { readOfflinePackagePrincipalKeyFile } from "./services/offline-package-principal.js";
-import { privateVolumeDirectory } from "./services/private-volume-directory";
+import { API_VOLUMES, privateVolumeDirectory } from "./services/private-volume-directory";
 import { getServiceRegistry, initServiceRegistry } from "./services/service-registry";
 import { handleSystemDiagnosticsJob, handleSystemUpdateJob } from "./services/system-maintenance";
 import { configurePrivacyArtifactDeleter, readJournalKey } from "./services/user-erasure.js";
@@ -276,6 +276,7 @@ let privacyKeyRing: MasterKeyRing | undefined;
 try {
   const exportRoot = privateVolumeDirectory(
     envString("OPENMAPX_EXPORT_STORAGE_DIR", "/var/lib/openmapx/subject-exports").trim(),
+    API_VOLUMES.subjectExports,
   );
   const exportRing = await loadMasterKeyRingAsync();
   privacyKeyRing = exportRing;

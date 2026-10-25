@@ -160,12 +160,23 @@ a panel self-update starts it; explicit values are kept. A render refuses to
 run as another uid, or to take the user from a checkout root owns.
 
 Where the checkout's owner is uid 1000, nothing changes: the containers keep
-their user, and `app-api` keeps using the volumes it wrote. Elsewhere, files an
-earlier release wrote as uid 1000 stay owned by it, and `app-api` refuses a
-volume an earlier image created for uid 1000. `pnpm openmapx check`, and
-**Run diagnostics** in the admin panel, name each of them with its fix: a
-one-time `sudo chown -R` of the listed paths, and removing the listed volume
-while `app-api` is stopped.
+their user, and `app-api` keeps using the volumes it wrote. Elsewhere:
+
+- Files an earlier release's containers wrote as uid 1000 stay owned by it,
+  also inside directories the operator owns. `pnpm openmapx check`, and
+  **Run diagnostics** in the admin panel, name each path containers write that
+  holds such files, with the one-time `sudo chown -R UID:GID …` that fixes it.
+- `app-api` refuses a volume an earlier image created for uid 1000, and its
+  startup log (`pnpm openmapx services logs app-api`) names the volume. Do not
+  remove it: it holds the subject-export ciphertexts the database refers to and
+  the runtime-recovery journal. Change its owner in place while `app-api` is
+  stopped, with the volume name and ids from the log, for example:
+
+  ```bash
+  pnpm openmapx services stop app-api
+  docker run --rm -v docker_openmapx-subject-exports:/v alpine chown -R 1001:1001 /v
+  pnpm openmapx services start app-api
+  ```
 
 ## 4. Resolve the complete release and replace containers
 
