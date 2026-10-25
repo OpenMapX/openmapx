@@ -35,6 +35,10 @@ import {
   unpinnedReleaseWarning,
 } from "../lib/release";
 import { applyServiceSelection } from "../lib/service-selection";
+import {
+  describeTransitousApiKeysMigration,
+  ensureTransitousApiKeysFile,
+} from "../lib/transitous-api-keys";
 
 const {
   agentStatePaths,
@@ -266,6 +270,12 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
       throw new Error("Ops-agent API and data-manager tokens must be distinct");
     }
     reconcileRedisAuthFiles(redisPasswordPath, redisAclPath, opts.redisAuthHooks);
+    // Before a generation mounts their directory into data-manager.
+    const transitousApiKeys = describeTransitousApiKeysMigration(
+      ensureTransitousApiKeysFile(paths.root),
+      paths.root,
+    );
+    if (transitousApiKeys) log[transitousApiKeys.level](transitousApiKeys.message);
     // The first render of this release carries the earlier release's applied
     // selection into the agent's state, from its applied generation; its
     // settings are carried by readAppliedConfiguration below. Nothing reads the

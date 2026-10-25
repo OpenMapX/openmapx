@@ -26,8 +26,12 @@ import {
 } from "../lib/env-defaults";
 import { applyGeneratedHardlinks, logAppliedHardlinks } from "../lib/hardlinks";
 import { log, routeLogsToStderr, table } from "../lib/output";
+import { repoPaths } from "../lib/paths";
 import { buildServices, resolveDataBuildServiceId } from "../lib/service-builds";
-import { generateTransitousApiKeys } from "../lib/transitous-api-keys";
+import {
+  describeTransitousApiKeysMigration,
+  generateTransitousApiKeys,
+} from "../lib/transitous-api-keys";
 import { renderComposeForRepo } from "./compose";
 
 function createCliTransport() {
@@ -961,12 +965,12 @@ export function registerDataCommands(program: Command): void {
   data
     .command("generate-api-keys")
     .description(
-      "Generate Transitous API-key template at services/motis/tools/transitous/api-keys.json",
+      "Generate the Transitous API-key template at infra/docker/secrets/transitous-api-keys/api-keys.json",
     )
     .option("--repo-url <url>", "Override Transitous catalog git URL")
     .option(
       "--output <path>",
-      "Override output path (default: services/motis/tools/transitous/api-keys.json)",
+      "Override output path (default: infra/docker/secrets/transitous-api-keys/api-keys.json)",
     )
     .action(async (options: { repoUrl?: string; output?: string }) => {
       try {
@@ -975,6 +979,9 @@ export function registerDataCommands(program: Command): void {
           transitousRepoUrl: options.repoUrl,
           outputPath: options.output,
         });
+        const carried =
+          result.keysFile && describeTransitousApiKeysMigration(result.keysFile, repoPaths().root);
+        if (carried) log[carried.level](carried.message);
         const preserved =
           result.preservedCount > 0
             ? ` (${result.preservedCount} existing value${result.preservedCount === 1 ? "" : "s"} preserved)`

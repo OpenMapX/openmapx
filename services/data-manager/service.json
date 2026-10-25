@@ -168,9 +168,10 @@
     },
     { "source": "@infra:data", "target": "/data", "readOnly": false },
     {
-      "source": "@service:motis:tools/transitous",
+      "source": "@infra:secrets/transitous-api-keys",
       "target": "/config/transitous",
-      "readOnly": true
+      "readOnly": true,
+      "optional": true
     },
     {
       "source": "@infra:secrets/transitous-feed-proxy.age",

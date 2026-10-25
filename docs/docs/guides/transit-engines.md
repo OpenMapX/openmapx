@@ -79,11 +79,13 @@ For restricted catalog feeds, generate and fill the key template first:
 
 ```bash
 pnpm openmapx data generate-api-keys
-# Edit services/motis/tools/transitous/api-keys.json
+# Edit infra/docker/secrets/transitous-api-keys/api-keys.json
 ```
 
-Keep this file private. Data-manager and runner mount it at
-`/config/transitous/api-keys.json`. The release overlay must be selected before a
+Keep this file private. Data-manager mounts its directory read-only and reads
+`/config/transitous/api-keys.json` at every run, so edits apply at the next one.
+See the [secrets directory's README](https://github.com/OpenMapX/openmapx/blob/main/infra/docker/secrets/README.md)
+for its layout. The release overlay must be selected before a
 host-side MOTIS build so its helper image matches the release.
 
 ### 3. Build the prepared data

@@ -1,5 +1,21 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fchmodSync,
+  fstatSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { atomicWrite, fsyncDirectory } from "@openmapx/core/release-files";
 import {
   type CommandRunner,
   DEFAULT_TRANSITOUS_REPO_URL,
@@ -9,9 +25,189 @@ import {
 } from "@openmapx/transitous-core";
 import { execa } from "execa";
 import { repoPaths } from "./paths";
+import { ensurePlatformPrivateDirectory } from "./platform-secret-files";
 
 export type { CommandRunner };
 export { DEFAULT_TRANSITOUS_REPO_URL };
+
+/**
+ * The operator's Transitous API keys live alone in their own directory under
+ * the secrets directory, which data-manager mounts read-only at
+ * `/config/transitous`. A directory, not the file: data-manager reads the keys
+ * at every run, and a file mount would keep showing the file a rename
+ * replaced until the container is recreated.
+ */
+export const TRANSITOUS_API_KEYS_DIRECTORY = "transitous-api-keys";
+export const TRANSITOUS_API_KEYS_FILENAME = "api-keys.json";
+const TRANSITOUS_API_KEYS_MODE = 0o600;
+const MAX_TRANSITOUS_API_KEYS_BYTES = 1024 * 1024;
+
+export function transitousApiKeysPath(infraDir: string): string {
+  return join(infraDir, "secrets", TRANSITOUS_API_KEYS_DIRECTORY, TRANSITOUS_API_KEYS_FILENAME);
+}
+
+/** Where releases before this one kept the keys, in the checkout. */
+export function legacyTransitousApiKeysPath(rootDir: string): string {
+  return join(rootDir, "services", "motis", "tools", "transitous", TRANSITOUS_API_KEYS_FILENAME);
+}
+
+export interface EnsureTransitousApiKeysResult {
+  path: string;
+  /** What this call created: the earlier file's copy, an empty file, or nothing. */
+  created: "copied" | "empty" | null;
+  /** Why an earlier file was left in place, when one was. */
+  leftInPlace?: { path: string; reason: string };
+}
+
+function isApiKeysDocument(text: string): boolean {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return false;
+  }
+  return (
+    parsed !== null &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed) &&
+    Object.values(parsed).every((value) => typeof value === "string")
+  );
+}
+
+/**
+ * The file's text, read without following a link, or why it can't be used.
+ * `writableByOthers` decides whether group or other write refuses it; when it
+ * doesn't, the file is made owner-only instead.
+ */
+function readOwnedApiKeysFile(
+  path: string,
+  uid: number,
+  writableByOthers: "refuse" | "restrict",
+): { text: string } | { reason: string } {
+  let fd: number;
+  try {
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ELOOP") {
+      return { reason: "it is a symbolic link" };
+    }
+    throw error;
+  }
+  try {
+    const stats = fstatSync(fd);
+    if (!stats.isFile()) return { reason: "it is not a regular file" };
+    if (stats.uid !== uid) return { reason: `it belongs to uid ${stats.uid}, not ${uid}` };
+    if (stats.nlink !== 1) return { reason: `it has ${stats.nlink} links` };
+    if ((stats.mode & 0o022) !== 0 && writableByOthers === "refuse") {
+      return { reason: "group or others can write it" };
+    }
+    if (stats.size > MAX_TRANSITOUS_API_KEYS_BYTES) return { reason: "it is larger than 1 MiB" };
+    const bytes = Buffer.alloc(stats.size);
+    const read = stats.size === 0 ? 0 : readSync(fd, bytes, 0, stats.size, 0);
+    const text = bytes.subarray(0, read).toString("utf8");
+    if (!isApiKeysDocument(text)) return { reason: "it is not a JSON object of key strings" };
+    if (writableByOthers === "restrict") fchmodSync(fd, TRANSITOUS_API_KEYS_MODE);
+    return { text };
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** Creates the file without replacing one that appeared meanwhile. */
+function publishApiKeysFile(path: string, contents: string): void {
+  const temporary = `${path}.tmp-${process.pid}-${Date.now()}`;
+  const fd = openSync(
+    temporary,
+    constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW,
+    TRANSITOUS_API_KEYS_MODE,
+  );
+  try {
+    writeFileSync(fd, contents, "utf8");
+    fchmodSync(fd, TRANSITOUS_API_KEYS_MODE);
+  } finally {
+    closeSync(fd);
+  }
+  try {
+    linkSync(temporary, path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  } finally {
+    unlinkSync(temporary);
+  }
+  fsyncDirectory(dirname(path));
+}
+
+/**
+ * Makes sure the keys file exists in its directory before a generation mounts
+ * it. The first time, the earlier release's file in the checkout is copied,
+ * not moved, so that release still finds it after a rollback; only a regular
+ * file of the deployment's user with one link that neither group nor others
+ * can write, holding a JSON object of key strings, is copied. Anything else
+ * stays where it is, the result says why, and the keys file starts empty.
+ * An existing keys file must meet the same rules and is kept owner-only.
+ */
+export function ensureTransitousApiKeysFile(rootDir?: string): EnsureTransitousApiKeysResult {
+  const paths = repoPaths(rootDir);
+  const uid = process.geteuid?.();
+  if (uid === undefined) throw new Error("Transitous API keys ownership is unavailable");
+  const path = transitousApiKeysPath(paths.infraDir);
+  // The secrets directory itself is protected by the platform secrets render
+  // creates first; this one holds nothing but the keys.
+  ensurePlatformPrivateDirectory(dirname(path));
+
+  if (lstatExists(path)) {
+    // Like the other secrets: kept owner-only, refused when it isn't its own.
+    const current = readOwnedApiKeysFile(path, uid, "restrict");
+    if ("reason" in current) {
+      throw new Error(`Transitous API keys at ${path} can't be used: ${current.reason}`);
+    }
+    return { path, created: null };
+  }
+
+  const legacy = legacyTransitousApiKeysPath(paths.root);
+  if (lstatExists(legacy)) {
+    const earlier = readOwnedApiKeysFile(legacy, uid, "refuse");
+    if ("reason" in earlier) {
+      publishApiKeysFile(path, "{}\n");
+      return { path, created: "empty", leftInPlace: { path: legacy, reason: earlier.reason } };
+    }
+    publishApiKeysFile(path, earlier.text);
+    return { path, created: "copied" };
+  }
+  publishApiKeysFile(path, "{}\n");
+  return { path, created: "empty" };
+}
+
+function lstatExists(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+/** One line for the render's output about what {@link ensureTransitousApiKeysFile} did. */
+export function describeTransitousApiKeysMigration(
+  result: EnsureTransitousApiKeysResult,
+  rootDir: string,
+): { level: "info" | "warn"; message: string } | null {
+  const shown = (path: string) => relative(rootDir, path);
+  if (result.created === "copied") {
+    return {
+      level: "info",
+      message: `Copied the Transitous API keys from ${shown(legacyTransitousApiKeysPath(rootDir))} to ${shown(result.path)}; the earlier file stays for rolling back and is no longer read.`,
+    };
+  }
+  if (result.leftInPlace) {
+    return {
+      level: "warn",
+      message: `Left the earlier Transitous API keys file ${shown(result.leftInPlace.path)} in place and started an empty ${shown(result.path)}: ${result.leftInPlace.reason}. If it is yours, check it and copy its keys into the new file, or run pnpm openmapx data generate-api-keys and enter them again.`,
+    };
+  }
+  return null;
+}
 
 interface TransitousAtlasFeed {
   id?: string;
@@ -35,6 +231,8 @@ export interface GenerateTransitousApiKeysResult {
   requiredCount: number;
   preservedCount: number;
   droppedCount: number;
+  /** What preparing the default keys file did; absent with an explicit output path. */
+  keysFile?: EnsureTransitousApiKeysResult;
 }
 
 async function defaultRunner(
@@ -168,9 +366,11 @@ export async function generateTransitousApiKeys(
   const runner = opts.runner ?? defaultRunner;
   const paths = repoPaths(opts.rootDir);
   const dataDir = join(paths.infraDir, "data");
+  // The keys data-manager reads, carried over from the checkout the first time.
+  const keysFile = opts.outputPath ? undefined : ensureTransitousApiKeysFile(opts.rootDir);
   const outputPath = opts.outputPath
     ? assertInsideRoot(resolve(paths.root, opts.outputPath), paths.root)
-    : join(paths.root, "services", "motis", "tools", "transitous", "api-keys.json");
+    : (keysFile as EnsureTransitousApiKeysResult).path;
 
   mkdirSync(dataDir, { recursive: true });
   const catalogDir = await ensureCatalog({
@@ -202,7 +402,9 @@ export async function generateTransitousApiKeys(
   }
 
   mkdirSync(dirname(outputPath), { recursive: true });
-  writeFileSync(outputPath, `${JSON.stringify(rendered, null, 2)}\n`, "utf-8");
+  // Replaced through a temporary in the same directory: a running data-manager
+  // reads the new keys at its next run through its directory mount.
+  atomicWrite(outputPath, `${JSON.stringify(rendered, null, 2)}\n`, TRANSITOUS_API_KEYS_MODE);
 
   return {
     outputPath,
@@ -210,5 +412,6 @@ export async function generateTransitousApiKeys(
     requiredCount: requiredKeys.length,
     preservedCount,
     droppedCount,
+    ...(keysFile ? { keysFile } : {}),
   };
 }
