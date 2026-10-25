@@ -1,7 +1,9 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import {
   canonicalJson,
+  createControlRootOperationKey,
   type OpsOperation,
+  type OpsOperationKind,
   opsExecutionBudget,
   opsOperationFingerprint,
   readOpsTokenFile,
@@ -24,7 +26,7 @@ export const apiJobChildAttemptSchema = z.strictObject({
 });
 export type ApiJobChildAttempt = z.infer<typeof apiJobChildAttemptSchema>;
 
-function parentJobBudget(ctx: JobContext, operation: OpsOperation): number {
+function parentJobBudget(ctx: JobContext, kind: OpsOperationKind): number {
   if (ctx.jobType === "system.update") return opsExecutionBudget("system.update").processMs;
   if (ctx.jobType === "service.start" || ctx.jobType === "service.apply") {
     // Fixed current workflow: render, inspect, start the coordinator, await its
@@ -38,42 +40,65 @@ function parentJobBudget(ctx: JobContext, operation: OpsOperation): number {
     ].reduce((sum, kind) => sum + opsExecutionBudget(kind).processMs, 60_000);
   }
   if (ctx.jobType === "service.bulk") return opsExecutionBudget("services.buildAll").processMs;
-  return opsExecutionBudget(operation.kind).processMs;
+  return opsExecutionBudget(kind).processMs;
+}
+export interface ApiPreparedRoot {
+  operationKey: string;
+  requestedDeadlineAt: number;
+  parent: { operationKey: string; fingerprint: string; deadlineAt: number };
+}
+/** Pure preparation. Sealed configuration claims need the final key before
+ * preparing their body; the complete candidate is still committed in one CAS. */
+export function prepareApiJobRoot(
+  ctx: JobContext,
+  kind: OpsOperationKind,
+  stepAddress: string,
+): ApiPreparedRoot {
+  if (!ctx.execution) throw Error("A durable administrative job owner is required");
+  const retained = ctx.checkpointResult?._parentExecution as ApiPreparedRoot["parent"] | undefined;
+  const parent = retained ?? {
+    operationKey: createDurableOpsKey("admin-job.parent", ctx.jobId),
+    fingerprint: createHash("sha256")
+      .update(canonicalJson({ jobId: ctx.jobId }))
+      .digest("hex"),
+    deadlineAt: Date.now() + parentJobBudget(ctx, kind),
+  };
+  const requestedDeadlineAt = Math.min(
+    parent.deadlineAt,
+    Date.now() + opsExecutionBudget(kind).processMs,
+  );
+  const nonce = createHash("sha256")
+    .update("openmapx-api-control-root-nonce-v1\0")
+    .update(canonicalJson({ jobId: ctx.jobId, stepAddress }))
+    .digest()
+    .subarray(0, 16);
+  return {
+    operationKey: createControlRootOperationKey({ notAfter: requestedDeadlineAt, nonce }),
+    requestedDeadlineAt,
+    parent,
+  };
 }
 /** These non-secret fields are checkpointed before the assertion is minted. */
 export function prepareApiJobChildAttempt(
   ctx: JobContext,
   operation: OpsOperation,
   key: string,
+  prepared?: ApiPreparedRoot,
 ): ApiJobChildAttempt | undefined {
   if (!ctx.execution) return undefined;
-  const retained = ctx.checkpointResult?._parentExecution as
-    | { operationKey: string; fingerprint: string; deadlineAt: number }
-    | undefined;
-  const parent = retained ?? {
-    operationKey: createDurableOpsKey("admin-job.parent", ctx.jobId),
-    // Job identity, not its potentially secret payload, binds the parent.
-    fingerprint: createHash("sha256")
-      .update(canonicalJson({ jobId: ctx.jobId }))
-      .digest("hex"),
-    deadlineAt: Date.now() + parentJobBudget(ctx, operation),
-  };
-  ctx.checkpointResult = { ...ctx.checkpointResult, _parentExecution: parent };
-  return {
+  const root = prepared ?? prepareApiJobRoot(ctx, operation.kind, key);
+  return apiJobChildAttemptSchema.parse({
     version: 1,
     apiJobId: ctx.jobId,
     apiOwnerVersion: ctx.execution.version,
-    parentOperationKey: parent.operationKey,
-    parentFingerprint: parent.fingerprint,
-    parentDeadlineAt: parent.deadlineAt,
+    parentOperationKey: root.parent.operationKey,
+    parentFingerprint: root.parent.fingerprint,
+    parentDeadlineAt: root.parent.deadlineAt,
     childOperationKey: key,
     childOperationFingerprint: opsOperationFingerprint(operation),
-    requestedDeadlineAt: Math.min(
-      parent.deadlineAt,
-      Date.now() + opsExecutionBudget(operation.kind).processMs,
-    ),
+    requestedDeadlineAt: root.requestedDeadlineAt,
     attemptId: randomUUID(),
-  };
+  });
 }
 export async function issueApiJobChildAssertion(attempt: ApiJobChildAttempt): Promise<string> {
   const token = await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? "");

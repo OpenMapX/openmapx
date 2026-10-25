@@ -1,9 +1,10 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import {
+  createControlRootOperationKey,
   type ExecutionRef,
   executionFingerprint,
   opsOperationFingerprint,
@@ -40,7 +41,7 @@ it.each(["normal", "ready-failure", "wrong-target"])(
       executor: "data-manager",
       principal: "data-manager",
       executionId: randomUUID(),
-      operationKey: `opk1_${randomUUID().replaceAll("-", "")}`,
+      operationKey: createControlRootOperationKey({ notAfter: deadlineAt, nonce: randomBytes(16) }),
       operationFingerprint: rootHash,
       deadlineAt,
       fingerprint: executionFingerprint({
@@ -72,6 +73,7 @@ it.each(["normal", "ready-failure", "wrong-target"])(
       recipient: "ops-agent" as const,
     };
     const authority = control.retainAdmittedControlExecution(dm, {
+      requestedDeadlineAt: owner.deadlineAt,
       execution: owner,
       kind: operation.kind,
       operation,

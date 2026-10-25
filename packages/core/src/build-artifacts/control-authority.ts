@@ -1,17 +1,53 @@
 import {
+  type ControlInstallation,
+  controlDigest,
+  controlOriginSchema,
+  digest,
+  type InstallationState,
+  originRecordDomain,
+  sameControlOrigin,
+  signControl,
+  uuid,
+  validateOriginRecord,
+  verifyControl,
+} from "./control-records";
+
+export {
+  type ControlInstallation,
+  controlDigest,
+  controlOriginSchema,
+  digest,
+  type InstallationState,
+  originRecordDomain,
+  sameControlOrigin,
+  signControl,
+  uuid,
+  validateOriginRecord,
+  verifyControl,
+} from "./control-records";
+
+import {
   createHash,
   createPrivateKey,
   createPublicKey,
   generateKeyPairSync,
   type KeyObject,
   randomUUID,
-  sign,
-  verify,
 } from "node:crypto";
 import { existsSync, fsyncSync, mkdirSync, realpathSync } from "node:fs";
 import { join, relative } from "node:path";
 import { z } from "zod";
-import { type OpsOperationKind, opsOperationSchema, parseBoundedOpsResult } from "../ops/contract";
+import {
+  type OpsJobStatus,
+  type OpsOperationKind,
+  opsOperationSchema,
+  parseBoundedOpsResult,
+} from "../ops/contract";
+import {
+  controlTerminalReceiptDigest,
+  verifyApiRetentionProof,
+} from "../ops/control-retention-receipt";
+import { type ControlExecutionOrigin, parseControlRootOperationKey } from "../ops/control-root-key";
 import {
   type ControlIssuer,
   type ExecutionRef,
@@ -21,9 +57,27 @@ import {
   type RetainedParentExecution,
 } from "../ops/execution-identity";
 import { canonicalJson, opsOperationFingerprint } from "../ops/fingerprint";
-import { verifiedParents } from "../ops/verified-parent-internal";
+import { verifiedParentOrigins, verifiedParents } from "../ops/verified-parent-internal";
 import { CONTROL_RETENTION_LIMITS, writeRetainedRecord } from "./control-retention";
 import { AnchoredDirectory, identity } from "./filesystem";
+import {
+  assertOriginClockForward,
+  bootstrapRetentionClock,
+  readRetentionClock,
+} from "./retention-clock";
+import {
+  acknowledgeRetentionDependency,
+  completeFamilyJournal,
+  enlistFamilyIntent,
+  familyRecordWrite,
+  hasLocalRetentionFamily,
+  hasRetentionEvidence,
+  markFamilyTerminal,
+  reconcileRetentionFamilies,
+  registerFamilyExecution,
+  requireFamilyJournal,
+  retentionApiDependency,
+} from "./retention-family";
 export const CONTROL_ROLES = ["ops-agent", "data-manager", "host-cli"] as const;
 export type ControlRecipient = "fixed-cli" | "data-manager" | "ops-agent" | "configuration-helper";
 export type ControlChildPhase =
@@ -57,7 +111,6 @@ declare const authorityBrand: unique symbol,
   peerBrand: unique symbol,
   settlementBrand: unique symbol,
   recoveryBrand: unique symbol,
-  installationBrand: unique symbol,
   assertionBrand: unique symbol;
 export type VerifiedExecutionAuthority = Readonly<{
   execution: ExecutionRef;
@@ -67,20 +120,14 @@ export type VerifiedControlPeer = Readonly<{ [peerBrand]: true }>;
 export type VerifiedChildSettlement = Readonly<{ [settlementBrand]: true }>;
 export type VerifiedRecoveryAuthority = Readonly<{ [recoveryBrand]: true }>;
 export type ArtifactDelegationAssertion = string & { readonly [assertionBrand]: true };
-export type ControlInstallation = Readonly<{
-  installationId: string;
-  role: ControlIssuer;
-  publicKey: string;
-  [installationBrand]: true;
-}>;
 export type ChildSettlement = {
   identity: ExecutionRef;
   outcome: "contained" | "committed" | "failed_without_effect" | "unknown";
   publication: "not_started" | "committed" | "unknown";
   terminalReceiptDigest: string;
 };
-export const uuid = z.uuid();
-export const digest = z.string().regex(/^[a-f0-9]{64}$/);
+export type { ControlExecutionOrigin } from "../ops/control-root-key";
+
 const publicKey = z.string().max(256);
 const bundleSchema = z.strictObject({
   installationId: uuid,
@@ -104,43 +151,6 @@ export const targetSchema = z
     (x) => x.every((v, i) => i === 0 || (x[i - 1] ?? v) < v),
     "Targets must be sorted and unique",
   );
-export function controlDigest(value: unknown): string {
-  return createHash("sha256").update(canonicalJson(value)).digest("hex");
-}
-export function signControl<T>(
-  key: KeyObject,
-  domain: string,
-  payload: T,
-): { payload: T; signature: string } {
-  return {
-    payload,
-    signature: sign(null, Buffer.from(`${domain}\0${canonicalJson(payload)}`), key).toString(
-      "base64url",
-    ),
-  };
-}
-export function verifyControl<T>(
-  key: string,
-  domain: string,
-  envelope: unknown,
-  schema: z.ZodType<T>,
-): T {
-  const e = z
-    .strictObject({ payload: schema, signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/) })
-    .parse(envelope);
-  const k = createPublicKey({ key: Buffer.from(key, "base64url"), format: "der", type: "spki" });
-  if (
-    k.asymmetricKeyType !== "ed25519" ||
-    !verify(
-      null,
-      Buffer.from(`${domain}\0${canonicalJson(e.payload)}`),
-      k,
-      Buffer.from(e.signature, "base64url"),
-    )
-  )
-    throw Error("Invalid control signature");
-  return e.payload;
-}
 export function newControlKey() {
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
   return {
@@ -174,7 +184,17 @@ export async function provisionControlInstallation(infraDir: string): Promise<vo
       throw Error(
         "Incomplete control installation trust; stop all writers/helpers and recover existing keys/verifiers, never regenerate",
       );
-    if (!existing.length) {
+    const newInstallation = existing.length === 0;
+    if (newInstallation) {
+      if (existsSync(join(infraDir, "control-private"))) {
+        const priorPrivate = infra.directory("control-private");
+        try {
+          if (priorPrivate.hasEntries())
+            throw Error("Existing private control records require original installation trust");
+        } finally {
+          priorPrivate.close();
+        }
+      }
       if (existsSync(join(infraDir, "data/.admin-target-control")))
         throw Error("Existing control records require original installation trust");
       const installationId = randomUUID();
@@ -221,22 +241,28 @@ export async function provisionControlInstallation(infraDir: string): Promise<vo
     privateRoot = infra.directory("control-private", true, true);
     privateRoot.directory("empty", true, true).close();
     if (!privateRoot.list().includes("hidden-key")) privateRoot.write("hidden-key", "", true);
-    for (const role of CONTROL_ROLES) privateRoot.directory(role, true, true).close();
+    for (const role of CONTROL_ROLES) {
+      const roleRoot = privateRoot.directory(role, true, true);
+      try {
+        const saved = roleKeySchema.parse(
+          JSON.parse(secrets.read(`control-${role}.key`, 2048).toString("utf8")),
+        );
+        if (newInstallation)
+          bootstrapRetentionClock({
+            installation: { role, installationId: bundle.installationId },
+            privateRoot: roleRoot,
+            privateKey: parsePrivate(saved.privateKey),
+            publicKeys: bundle.publicKeys,
+          });
+      } finally {
+        roleRoot.close();
+      }
+    }
   } finally {
     privateRoot?.close();
     secrets?.close();
     infra.close();
   }
-}
-export interface InstallationState {
-  fixedChildId?: string;
-  fixedParentAssertion?: string;
-  installation: ControlInstallation;
-  privateKey: KeyObject;
-  publicKeys: Record<ControlIssuer, string>;
-  privateRoot: AnchoredDirectory;
-  dataRoot: string;
-  registeredTargets: ReadonlySet<string>;
 }
 const installations = new WeakMap<object, InstallationState>();
 export function installationState(value: ControlInstallation): InstallationState {
@@ -426,6 +452,7 @@ export interface AuthorityState {
   serviceIds: readonly string[];
   plan: readonly ControlPlannedChild[];
   receiptDigest: string;
+  origin?: ControlExecutionOrigin;
 }
 const authorities = new WeakMap<object, AuthorityState>();
 export function executionAuthorityState(value: VerifiedExecutionAuthority) {
@@ -448,6 +475,7 @@ export function writePrivateRecord(
   name: string,
   value: unknown,
   exclusive = false,
+  origin?: ControlExecutionOrigin,
 ) {
   const dir = state.privateRoot.directory(namespace, true, true);
   try {
@@ -473,21 +501,227 @@ export function writePrivateRecord(
         "spawns",
         "spawn-started",
         "prepared",
+        "execution-adoptions",
       ].includes(namespace)
     )
       throw Error("Unknown fixed authority namespace");
-    writeRetainedRecord(
-      dir,
-      name,
-      bytes,
-      exclusive,
-      namespace === "executions"
-        ? CONTROL_RETENTION_LIMITS.executionsPerRole
-        : CONTROL_RETENTION_LIMITS.recordsPerNamespace,
-    );
+    const write = (beforePublish?: (inode: import("./filesystem").FileIdentity) => void) =>
+      writeRetainedRecord(
+        dir,
+        name,
+        bytes,
+        exclusive,
+        CONTROL_RETENTION_LIMITS.recordsPerNamespace,
+        beforePublish,
+      );
+    if (origin)
+      familyRecordWrite(
+        state,
+        origin,
+        { scope: "private", namespace, name, container: "" },
+        bytes,
+        write,
+        exclusive,
+      );
+    else write();
   } finally {
     dir.close();
   }
+}
+export function retainedExecutionOrigin(
+  state: InstallationState,
+  execution: ExecutionRef,
+): ControlExecutionOrigin | undefined {
+  const raw = readPrivateRecord(state, "executions", `${execution.operationKey}.json`, 65536);
+  const admitted = verifyControl(
+    state.installation.publicKey,
+    originRecordDomain("openmapx-control-execution", raw),
+    raw,
+    z
+      .object({
+        version: z.union([z.literal(1), z.literal(2)]),
+        execution: executionRefSchema,
+        origin: controlOriginSchema.optional(),
+      })
+      .passthrough(),
+  );
+  if (
+    !validateOriginRecord(admitted) ||
+    controlDigest(execution) !== controlDigest(admitted.execution)
+  )
+    throw Error("Execution origin identity mismatch");
+  return admitted.origin;
+}
+export function reconcileControlRetention(
+  installation: ControlInstallation,
+  options?: { signal?: AbortSignal; maxFamilies?: number },
+): Promise<{ retired: number; pending: number }> {
+  return reconcileRetentionFamilies(installationState(installation), options);
+}
+/** No effect authority: binds the agent's retained API receipt dependency only. */
+export function acknowledgeControlRetention(
+  installation: ControlInstallation,
+  input: {
+    originRootKey: string;
+    operationKey: string;
+    fingerprint: string;
+    terminalDigest: string;
+    proof: string;
+  },
+  token: string,
+): { acknowledged: true } {
+  const state = installationState(installation);
+  if (installation.role !== "ops-agent" || state.fixedChildId)
+    throw Error("Fixed API receipt adapter required");
+  if (Buffer.byteLength(canonicalJson(input)) > 16384)
+    throw Error("Retention acknowledgement exceeds capacity");
+  const proof = verifyApiRetentionProof(token, input.proof);
+  if (
+    proof.operationKey !== input.operationKey ||
+    proof.fingerprint !== input.fingerprint ||
+    proof.terminalDigest !== input.terminalDigest
+  )
+    throw Error("Receipt proof identity conflict");
+  const parsed = parseControlRootOperationKey(input.originRootKey);
+  const origin: ControlExecutionOrigin = {
+    version: 1,
+    rootKey: input.originRootKey,
+    issuer: "ops-agent",
+    notAfter: parsed.notAfter,
+  };
+  if (!hasRetentionEvidence(state, origin)) {
+    if (
+      input.originRootKey !== input.operationKey ||
+      parsed.notAfter > readRetentionClock(state).rejectNotAfterThrough
+    )
+      throw Error("Receipt dependency recovery required");
+    // This discharges no surviving dependency; it asserts no operation outcome.
+    return { acknowledged: true };
+  }
+  const dependency = retentionApiDependency(state, origin);
+  if (
+    !dependency ||
+    dependency.operationKey !== input.operationKey ||
+    dependency.fingerprint !== input.fingerprint ||
+    dependency.parent.apiJobId !== proof.apiJobId ||
+    dependency.parent.apiOwnerVersion !== proof.originalApiOwnerVersion ||
+    dependency.parent.attemptId !== proof.attemptId
+  )
+    throw Error("Receipt parent/attempt conflict");
+  acknowledgeRetentionDependency(state, origin, {
+    operationKey: input.operationKey,
+    fingerprint: input.fingerprint,
+    terminalDigest: input.terminalDigest,
+    proofDigest: controlDigest(proof),
+  });
+  return { acknowledged: true };
+}
+export function retainControlTerminalStatus(
+  installation: ControlInstallation,
+  execution: ExecutionRef,
+  status: OpsJobStatus,
+): void {
+  const authority = restoreAdmittedControlExecution(installation, execution),
+    s = executionAuthorityState(authority);
+  if (
+    !s.origin ||
+    status.operationId !== execution.executionId ||
+    status.operationKey !== execution.operationKey ||
+    status.fingerprint !== execution.fingerprint ||
+    status.deadlineAt !== execution.deadlineAt ||
+    status.kind !== s.kind
+  )
+    throw Error("Terminal control receipt identity conflict");
+  const digest = controlTerminalReceiptDigest(status);
+  const settlement = childSettlementState(verifyControlEffectSettlement(installation, execution));
+  markFamilyTerminal(
+    s.installation,
+    s.origin,
+    execution,
+    settlement.evidence.outcome !== "unknown" &&
+      (status.state === "succeeded" || settlement.evidence.publication !== "committed"),
+    digest,
+  );
+}
+/** Fixed agent adapter, installed before startup reconciliation; no request carries this capability. */
+export function registerControlRetentionJournal(
+  installation: ControlInstallation,
+  journal: NonNullable<InstallationState["retentionJournal"]>,
+): () => void {
+  const s = installationState(installation);
+  if (s.fixedChildId || installation.role !== "ops-agent" || s.retentionJournal)
+    throw Error("Invalid journal retention adapter");
+  s.retentionJournal = journal;
+  return () => {
+    if (s.retentionJournal === journal) s.retentionJournal = undefined;
+  };
+}
+export function completeControlJournalExecution(authority: VerifiedExecutionAuthority): void {
+  const s = executionAuthorityState(authority);
+  if (!s.origin) throw Error("Missing journal origin");
+  completeFamilyJournal(s.installation, s.origin, s.execution);
+}
+export function requireControlJournalRetention(authority: VerifiedExecutionAuthority): void {
+  const s = executionAuthorityState(authority);
+  if (!s.origin) throw Error("Legacy origin is observation-only");
+  requireFamilyJournal(s.installation, s.origin, s.execution);
+}
+export function hasRetainedControlOrigin(
+  installation: ControlInstallation,
+  rootKey: string,
+): boolean {
+  try {
+    const parsed = parseControlRootOperationKey(rootKey);
+    return hasRetentionEvidence(installationState(installation), {
+      version: 1,
+      rootKey,
+      issuer: installation.role,
+      notAfter: parsed.notAfter,
+    });
+  } catch {
+    return true;
+  } // Legacy, malformed, corrupt or partial evidence is never age-pruned by this adapter.
+}
+export function assertFreshControlRoot(
+  installation: ControlInstallation,
+  key: string,
+  requestedDeadlineAt: number | undefined,
+): void {
+  const state = installationState(installation),
+    parsed = parseControlRootOperationKey(key);
+  if (requestedDeadlineAt !== parsed.notAfter || parsed.notAfter - Date.now() > 7 * 24 * 3600_000)
+    throw Error(
+      "Upgrade prerequisite: a persisted timed control root and exact deadline are required",
+    );
+  assertOriginClockForward(state, {
+    version: 1,
+    rootKey: key,
+    issuer: installation.role,
+    notAfter: parsed.notAfter,
+  });
+}
+export function controlRegisteredServiceIds(installation: ControlInstallation): string[] {
+  return [...installationState(installation).registeredTargets].sort();
+}
+function writeExecutionShared(
+  state: InstallationState,
+  execution: ExecutionRef,
+  dir: AnchoredDirectory,
+  name: string,
+  bytes: string,
+  exclusive = false,
+  origin = retainedExecutionOrigin(state, execution),
+) {
+  if (origin)
+    familyRecordWrite(
+      state,
+      origin,
+      { scope: "shared", namespace: "execution", container: execution.executor, name },
+      bytes,
+      (beforePublish) => dir.write(name, bytes, exclusive, beforePublish),
+      exclusive,
+    );
+  else dir.write(name, bytes, exclusive);
 }
 export function readPrivateRecord(
   state: InstallationState,
@@ -510,6 +744,7 @@ export function retainAdmittedControlExecution(
     kind: string;
     operation: unknown;
     admittedAt: number;
+    requestedDeadlineAt?: number;
     parent?: RetainedParentExecution;
     serviceIds: readonly string[];
     plan?: readonly ControlPlannedChild[];
@@ -613,16 +848,75 @@ export function retainAdmittedControlExecution(
       throw Error("Invalid fixed child plan");
     keys.add(child.execution.operationKey);
   }
-  const receipt = signControl(state.privateKey, "openmapx-control-execution-v1", {
-    version: 1,
+  if (Object.hasOwn(input, "origin"))
+    throw Error("Caller-supplied origin is not verified authority");
+  const existingName = `${execution.operationKey}.json`;
+  let existing: unknown;
+  try {
+    existing = readPrivateRecord(state, "executions", existingName, 65536);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+  }
+  if (existing) {
+    const stored = verifyControl(
+      installation.publicKey,
+      originRecordDomain("openmapx-control-execution", existing),
+      existing,
+      z
+        .object({
+          version: z.union([z.literal(1), z.literal(2)]),
+          installationId: uuid,
+          origin: controlOriginSchema.optional(),
+        })
+        .passthrough(),
+    );
+    if (!validateOriginRecord(stored)) throw Error("Legacy origin cannot be invented");
+    const {
+      version: _version,
+      installationId: _installationId,
+      origin: _origin,
+      ...oldInput
+    } = stored;
+    if (controlDigest(oldInput) !== controlDigest({ ...input, execution, serviceIds, plan }))
+      throw Error("Conflicting retained execution identity");
+    return restoreAdmittedControlExecution(installation, execution);
+  }
+  let origin: ControlExecutionOrigin;
+  const inherited = input.parent && verifiedParentOrigins.get(input.parent);
+  if (inherited) {
+    if (!input.parent || !verifiedParents.has(input.parent))
+      throw Error("Unverified parent origin");
+    origin = controlOriginSchema.parse(inherited);
+  } else {
+    if (input.parent && (input.parent.issuer !== "api" || !verifiedParents.has(input.parent)))
+      throw Error("Missing signed inherited origin; legacy parent is observation-only");
+    const parsed = parseControlRootOperationKey(execution.operationKey);
+    const now = Date.now();
+    if (parsed.notAfter <= now) throw Error("Expired control root expiry");
+    if (parsed.notAfter - now > 7 * 24 * 3600_000 || input.requestedDeadlineAt !== parsed.notAfter)
+      throw Error("Control root requested deadline must equal its expiry within seven days");
+    origin = {
+      version: 1,
+      rootKey: execution.operationKey,
+      issuer: execution.executor,
+      notAfter: parsed.notAfter,
+    };
+  }
+  if (execution.deadlineAt > origin.notAfter)
+    throw Error("Control execution widens origin deadline");
+  assertOriginClockForward(state, origin);
+  const receipt = signControl(state.privateKey, "openmapx-control-execution-v2", {
+    version: 2,
     installationId: installation.installationId,
     ...input,
     execution,
     serviceIds,
     plan,
+    origin,
   });
   if (Buffer.byteLength(canonicalJson(receipt)) > 65536)
     throw Error("Execution authority receipt capacity");
+  registerFamilyExecution(state, origin, execution, controlDigest(receipt), input.parent);
   const name = `${execution.operationKey}.json`;
   let newlyAdmitted = false;
   try {
@@ -631,12 +925,14 @@ export function retainAdmittedControlExecution(
       throw Error("Conflicting retained execution identity");
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-    writePrivateRecord(state, "executions", name, receipt, true);
+    writePrivateRecord(state, "executions", name, receipt, true, origin);
+    writePrivateRecord(state, "effects", name, null, true, origin);
+    writePrivateRecord(state, "effect-started", name, null, true, origin);
     newlyAdmitted = true;
   }
   publishControlExecutionWitness(
     state,
-    { execution, kind: input.kind, serviceIds },
+    { execution, kind: input.kind, serviceIds, origin },
     controlDigest(receipt),
   );
   initializeLifecycle(state, execution, newlyAdmitted);
@@ -648,6 +944,7 @@ export function retainAdmittedControlExecution(
     serviceIds,
     plan,
     receiptDigest: controlDigest(receipt),
+    origin,
   });
   return authority;
 }
@@ -807,7 +1104,13 @@ export function prepareFixedControlChild(
     }
     if (ids.length >= Math.min(64, s.plan.length) || ids.includes(delegationId))
       throw Error("Fixed child key capacity/replay");
-    dir.write(name, canonicalJson([...ids, delegationId]));
+    writeExecutionShared(
+      s.installation,
+      s.execution,
+      dir,
+      name,
+      canonicalJson([...ids, delegationId]),
+    );
   });
   const key = newControlKey();
   writePrivateRecord(
@@ -816,6 +1119,7 @@ export function prepareFixedControlChild(
     `${delegationId}.key`,
     { publicKey: key.publicKey, privateKey: encodePrivate(key.privateKey) },
     true,
+    s.origin,
   );
   writePrivateRecord(
     s.installation,
@@ -823,6 +1127,7 @@ export function prepareFixedControlChild(
     `${controlDigest(key.publicKey)}.json`,
     { delegationId, publicKey: key.publicKey, execution: s.execution },
     true,
+    s.origin,
   );
   return key.publicKey;
 }
@@ -928,17 +1233,23 @@ export function beginControlEffect(authority: VerifiedExecutionAuthority): void 
   withControlExecutionForward(authority, () =>
     withPrivateEffectWriter(s, () => {
       try {
-        readPrivateRecord(s.installation, "effects", `${s.execution.operationKey}.json`);
-        throw Error("Settled execution cannot restart effects");
+        if (
+          readPrivateRecord(s.installation, "effects", `${s.execution.operationKey}.json`) !== null
+        )
+          throw Error("Settled execution cannot restart effects");
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
       }
+      const name = `${s.execution.operationKey}.json`;
+      if (readPrivateRecord(s.installation, "effect-started", name) !== null)
+        throw Error("Execution effects already started");
       writePrivateRecord(
         s.installation,
         "effect-started",
-        `${s.execution.operationKey}.json`,
+        name,
         { execution: s.execution, receiptDigest: s.receiptDigest },
-        true,
+        false,
+        s.origin,
       );
     }),
   );
@@ -975,8 +1286,14 @@ export function retainControlEffectReceipt(
       publication = "committed";
     } else if (receipt.kind === "not-started") {
       try {
-        readPrivateRecord(s.installation, "effect-started", `${s.execution.operationKey}.json`);
-        throw Error("Started effects require containment evidence");
+        if (
+          readPrivateRecord(
+            s.installation,
+            "effect-started",
+            `${s.execution.operationKey}.json`,
+          ) !== null
+        )
+          throw Error("Started effects require containment evidence");
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
       }
@@ -1001,20 +1318,41 @@ export function retainControlEffectReceipt(
     );
     const name = `${s.execution.operationKey}.json`;
     try {
+      const raw = readPrivateRecord(s.installation, "effects", name, 65536);
+      if (raw === null) {
+        writePrivateRecord(s.installation, "effects", name, signed, false, s.origin);
+        if (s.origin)
+          markFamilyTerminal(
+            s.installation,
+            s.origin,
+            s.execution,
+            outcome !== "unknown",
+            controlDigest(payload),
+          );
+        return;
+      }
       const prior = verifyControl(
         s.installation.installation.publicKey,
         "openmapx-control-settlement-v1",
-        readPrivateRecord(s.installation, "effects", name, 65536),
+        raw,
         settlementSchema.extend({ receipt: effectObservationSchema }),
       );
       if (controlDigest(prior) === controlDigest(payload)) return;
       // A later transport/journal failure must never erase proved committed effects.
       if (prior.outcome !== "unknown") return;
-      writePrivateRecord(s.installation, "effects", name, signed);
+      writePrivateRecord(s.installation, "effects", name, signed, false, s.origin);
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      writePrivateRecord(s.installation, "effects", name, signed, true);
+      writePrivateRecord(s.installation, "effects", name, signed, true, s.origin);
     }
+    if (s.origin)
+      markFamilyTerminal(
+        s.installation,
+        s.origin,
+        s.execution,
+        outcome !== "unknown",
+        controlDigest(payload),
+      );
   });
 }
 export function verifyControlEffectSettlement(
@@ -1097,7 +1435,8 @@ const parentAssertionSchema = z.strictObject({
   signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/),
 });
 const parentGrantSchema = z.strictObject({
-  version: z.literal(1),
+  version: z.union([z.literal(1), z.literal(2)]),
+  origin: controlOriginSchema.optional(),
   installationId: uuid,
   parent: executionRefSchema,
   child: executionRefSchema,
@@ -1211,7 +1550,9 @@ function readLifecycle(
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
   }
-  writePrivateRecord(state, "lifecycle-observations", observationName, current);
+  const origin = readControlExecutionWitness(state, execution, verifier).origin;
+  if (!origin || hasLocalRetentionFamily(state, origin))
+    writePrivateRecord(state, "lifecycle-observations", observationName, current, false, origin);
   return current;
 }
 function writeLifecycle(
@@ -1230,8 +1571,16 @@ function writeLifecycle(
     `${lifecycle.execution.operationKey}.json`,
     signed,
     exclusive,
+    retainedExecutionOrigin(state, lifecycle.execution),
   );
-  dir.write(`${lifecycle.execution.operationKey}.lifecycle.json`, bytes, exclusive);
+  writeExecutionShared(
+    state,
+    lifecycle.execution,
+    dir,
+    `${lifecycle.execution.operationKey}.lifecycle.json`,
+    bytes,
+    exclusive,
+  );
   readLifecycle(state, dir, lifecycle.execution, state.installation.publicKey);
 }
 function initializeLifecycle(
@@ -1307,6 +1656,11 @@ function withParentLifecycles<T>(
 /** Narrow local runtime fence; exact duplicate admission alone never grants forward permission. */
 function withControlExecutionForward<T>(authority: VerifiedExecutionAuthority, run: () => T): T {
   const s = executionAuthorityState(authority);
+  if (!s.origin)
+    throw Error(
+      "Legacy undated control authority is observation/settlement only; upgrade producer",
+    );
+  assertOriginClockForward(s.installation, s.origin);
   const check = () =>
     withExecutionWriter(s.installation, s.execution, (dir) => {
       const lifecycle = readLifecycle(
@@ -1405,7 +1759,7 @@ export function cancelControlExecution(
         return Object.freeze(
           verifyControl(
             s.installation.installation.publicKey,
-            "openmapx-parent-grant-v1",
+            originRecordDomain("openmapx-parent-grant", saved.grant),
             saved.grant,
             parentGrantSchema,
           ).child,
@@ -1474,8 +1828,11 @@ export async function attestParentExecution(
   if (child.recipient === "fixed-cli") {
     attemptId = fixedControlChildId(s.installation, child.childPublicKey, s.execution);
   }
+  if (!s.origin) throw Error("Legacy parent origin is observation-only");
+  assertOriginClockForward(s.installation, s.origin);
   const grant = parentGrantSchema.parse({
-    version: 1,
+    version: 2,
+    origin: s.origin,
     installationId: s.installation.installation.installationId,
     parent: s.execution,
     child: child.execution,
@@ -1489,7 +1846,7 @@ export async function attestParentExecution(
       ? { parentAssertion: s.installation.fixedParentAssertion }
       : {}),
   });
-  const signed = signControl(s.installation.privateKey, "openmapx-parent-grant-v1", grant);
+  const signed = signControl(s.installation.privateKey, "openmapx-parent-grant-v2", grant);
   const fields = {
     version: 1 as const,
     installationId: grant.installationId,
@@ -1528,7 +1885,7 @@ export async function attestParentExecution(
       for (const value of Object.values(witness)) {
         const previous = verifyControl(
           s.installation.installation.publicKey,
-          "openmapx-parent-grant-v1",
+          originRecordDomain("openmapx-parent-grant", value),
           value,
           parentGrantSchema,
         );
@@ -1539,17 +1896,26 @@ export async function attestParentExecution(
       witness[attemptId] = signed;
       const bytes = canonicalJson(witness);
       if (Buffer.byteLength(bytes) > 65536) throw Error("Parent witness capacity");
+      if (!s.origin) throw Error("Legacy origin is observation-only");
+      enlistFamilyIntent(
+        s.installation,
+        s.origin,
+        attemptId,
+        child.execution,
+        child.recipient === "data-manager" ? "data-manager" : "ops-agent",
+      );
       writePrivateRecord(
         s.installation,
         "parent-attempts",
         `${attemptId}.json`,
         { grant: signed, assertion },
         true,
+        s.origin,
       );
       lifecycle.childIntents[attemptId] = fields.grantDigest;
       lifecycle.sequence++;
       writeLifecycle(s.installation, dir, lifecycle);
-      dir.write(name, bytes);
+      writeExecutionShared(s.installation, s.execution, dir, name, bytes);
       return assertion;
     });
   const inherited = retainedParentAssertion(s);
@@ -1603,9 +1969,16 @@ function readParentGrant(
     { payload: fields, signature },
     parentAssertionSchema.omit({ signature: true }),
   );
-  const grant = verifyControl(verifier, "openmapx-parent-grant-v1", signed, parentGrantSchema);
+  const grant = verifyControl(
+    verifier,
+    originRecordDomain("openmapx-parent-grant", signed),
+    signed,
+    parentGrantSchema,
+  );
   const parent = readControlExecutionWitness(state, grant.parent, verifier);
   if (
+    !validateOriginRecord(grant) ||
+    !sameControlOrigin(grant.origin, parent.origin) ||
     grant.parent.executor !== parsed.issuer ||
     grant.parent.operationKey !== parsed.operationKey ||
     grant.attemptId !== parsed.attemptId ||
@@ -1685,6 +2058,8 @@ export function verifyParentExecution(
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
     }
     if (!retained) {
+      if (!grant.origin) throw Error("Legacy parent is observation-only; upgrade producer");
+      assertOriginClockForward(p.installation, grant.origin);
       if (!forward) throw Error("Canceled/terminal parent permits observation only");
       if (Date.now() >= grant.child.deadlineAt) throw Error("Expired parent grant");
       writePrivateRecord(
@@ -1693,8 +2068,9 @@ export function verifyParentExecution(
         `${grant.child.operationKey}.json`,
         { assertion },
         true,
+        grant.origin,
       );
-      writePrivateRecord(p.installation, "parent-adoptions", name, grant, true);
+      writePrivateRecord(p.installation, "parent-adoptions", name, grant, true, grant.origin);
     }
     const binding = z
       .strictObject({ assertion: z.string() })
@@ -1708,6 +2084,7 @@ export function verifyParentExecution(
     retainedControlParent(grant.parent),
   ) as import("../ops/execution-identity").VerifiedParentExecution;
   verifiedParents.add(parent);
+  if (grant.origin) verifiedParentOrigins.set(parent, Object.freeze(grant.origin));
   return parent;
 }
 
@@ -1833,6 +2210,7 @@ export function retainFixedCliSpawnIntent(
         .parse(input.plan ?? []),
     },
     true,
+    s.origin,
   );
 }
 export function fixedCliArguments(operation: import("../ops/contract").OpsOperation): string[] {
@@ -1925,7 +2303,14 @@ export function beginFixedCliExecution(
   const s = installationState(installation);
   if (!s.fixedChildId) throw Error("Fixed CLI authority required");
   const begin = () =>
-    writePrivateRecord(s, "spawn-started", `${s.fixedChildId}.json`, { execution }, true);
+    writePrivateRecord(
+      s,
+      "spawn-started",
+      `${s.fixedChildId}.json`,
+      { execution },
+      true,
+      retainedExecutionOrigin(s, execution),
+    );
   if (s.fixedParentAssertion)
     withParentLifecycles(s, s.fixedParentAssertion, (forward) => {
       if (!forward) throw Error("Canceled/terminal parent prevents fixed CLI start");
@@ -1935,7 +2320,8 @@ export function beginFixedCliExecution(
 }
 
 const executionWitnessSchema = z.strictObject({
-  version: z.literal(1),
+  version: z.union([z.literal(1), z.literal(2)]),
+  origin: controlOriginSchema.optional(),
   installationId: uuid,
   execution: executionRefSchema,
   kind: z.string().max(128),
@@ -1951,11 +2337,15 @@ export function readControlExecutionWitness(
   try {
     const witness = verifyControl(
       publicVerifier,
-      "openmapx-control-execution-witness-v1",
+      originRecordDomain(
+        "openmapx-control-execution-witness",
+        JSON.parse(d.role.read(`${execution.operationKey}.json`, 65536).toString("utf8")),
+      ),
       JSON.parse(d.role.read(`${execution.operationKey}.json`, 65536).toString("utf8")),
       executionWitnessSchema,
     );
     if (
+      !validateOriginRecord(witness) ||
       witness.installationId !== state.installation.installationId ||
       controlDigest(witness.execution) !== controlDigest(execution)
     )
@@ -1967,13 +2357,19 @@ export function readControlExecutionWitness(
 }
 function publishControlExecutionWitness(
   state: InstallationState,
-  input: { execution: ExecutionRef; kind: string; serviceIds: readonly string[] },
+  input: {
+    execution: ExecutionRef;
+    kind: string;
+    serviceIds: readonly string[];
+    origin: ControlExecutionOrigin;
+  },
   authorityDigest: string,
 ) {
   const d = executionWitnessDirectory(state, input.execution.executor, true);
   try {
-    const witness = signControl(state.privateKey, "openmapx-control-execution-witness-v1", {
-      version: 1 as const,
+    const witness = signControl(state.privateKey, "openmapx-control-execution-witness-v2", {
+      version: 2 as const,
+      origin: input.origin,
       installationId: state.installation.installationId,
       execution: input.execution,
       kind: input.kind,
@@ -1987,7 +2383,15 @@ function publishControlExecutionWitness(
         throw Error("Replaced execution witness");
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      d.role.write(name, canonicalJson(witness), true);
+      writeExecutionShared(
+        state,
+        input.execution,
+        d.role,
+        name,
+        canonicalJson(witness),
+        true,
+        input.origin,
+      );
     }
   } finally {
     d.close();
@@ -2000,24 +2404,54 @@ export function restoreAdmittedControlExecution(
   execution: ExecutionRef,
 ): VerifiedExecutionAuthority {
   const state = installationState(installation);
+  const raw = readPrivateRecord(state, "executions", `${execution.operationKey}.json`, 65536);
   const payload = verifyControl(
     installation.publicKey,
-    "openmapx-control-execution-v1",
-    readPrivateRecord(state, "executions", `${execution.operationKey}.json`, 65536),
+    originRecordDomain("openmapx-control-execution", raw),
+    raw,
     z
-      .object({ version: z.literal(1), installationId: uuid, execution: executionRefSchema })
+      .object({
+        version: z.union([z.literal(1), z.literal(2)]),
+        installationId: uuid,
+        execution: executionRefSchema,
+        kind: z.string(),
+        serviceIds: targetSchema,
+        origin: controlOriginSchema.optional(),
+        plan: z.array(plannedChildSchema).max(64),
+      })
       .passthrough(),
   );
   if (
+    !validateOriginRecord(payload) ||
     payload.installationId !== installation.installationId ||
     controlDigest(payload.execution) !== controlDigest(execution)
   )
     throw Error("Recovery execution ownership mismatch");
-  const { version: _version, installationId: _installationId, ...input } = payload;
-  return retainAdmittedControlExecution(
-    installation,
-    input as Parameters<typeof retainAdmittedControlExecution>[1],
-  );
+  const authority = Object.freeze({ execution: payload.execution }) as VerifiedExecutionAuthority;
+  authorities.set(authority, {
+    installation: state,
+    execution: payload.execution,
+    kind: payload.kind,
+    serviceIds: payload.serviceIds,
+    plan: payload.plan,
+    receiptDigest: controlDigest(raw),
+    origin: payload.origin,
+  });
+  return authority;
+}
+/** Fixed local continuation adapter: private signed admission, never a bare request identity. */
+export function verifiedRetainedControlParent(
+  installation: ControlInstallation,
+  execution: ExecutionRef,
+): import("../ops/execution-identity").VerifiedParentExecution {
+  const authority = restoreAdmittedControlExecution(installation, execution);
+  const s = executionAuthorityState(authority);
+  const parent = Object.freeze(
+    retainedControlParent(execution),
+  ) as import("../ops/execution-identity").VerifiedParentExecution;
+  verifiedParents.add(parent);
+  if (s.origin) verifiedParentOrigins.set(parent, s.origin);
+  return parent;
 }
 export function retainedControlAdoptionAssertion(
   installation: ControlInstallation,
@@ -2113,10 +2547,18 @@ export function retainControlPreparedTerminal(authority: VerifiedExecutionAuthor
       `${s.execution.operationKey}.json`,
       signed,
       true,
+      s.origin,
     );
     const d = executionWitnessDirectory(s.installation, "ops-agent", true);
     try {
-      d.role.write(`${s.execution.operationKey}.prepared.json`, canonicalJson(signed), true);
+      writeExecutionShared(
+        s.installation,
+        s.execution,
+        d.role,
+        `${s.execution.operationKey}.prepared.json`,
+        canonicalJson(signed),
+        true,
+      );
     } finally {
       d.close();
     }

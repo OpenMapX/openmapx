@@ -1,9 +1,13 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as c from "@openmapx/core/build-artifacts";
-import { executionFingerprint, opsOperationFingerprint } from "@openmapx/core/ops";
+import {
+  createControlRootOperationKey,
+  executionFingerprint,
+  opsOperationFingerprint,
+} from "@openmapx/core/ops";
 import { expect, it, vi } from "vitest";
 import { completeCliCommand, withCliControlContext } from "../src/lib/control-context";
 
@@ -24,7 +28,7 @@ it("settles successful explicit CLI exits once through the real control context"
     executor: "ops-agent" as const,
     principal: "api" as const,
     executionId: `job1_${randomUUID().replaceAll("-", "")}`,
-    operationKey: `opk1_${randomUUID().replaceAll("-", "")}`,
+    operationKey: createControlRootOperationKey({ notAfter: deadlineAt, nonce: randomBytes(16) }),
     operationFingerprint,
     deadlineAt,
     fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
@@ -52,6 +56,7 @@ it("settles successful explicit CLI exits once through the real control context"
     recipient: "fixed-cli" as const,
   };
   const authority = c.retainAdmittedControlExecution(installation, {
+    requestedDeadlineAt: execution.deadlineAt,
     execution,
     kind: operation.kind,
     operation,

@@ -37,15 +37,33 @@ vi.mock("../ops-client", async (importOriginal) => ({
   executeTrustedConfigurationAndWait: vi.fn(),
   executeAndWait: (...args: unknown[]) => inspect(...args),
 }));
+vi.mock("../admin-job-ops", async (original) => ({
+  ...(await original<typeof import("../admin-job-ops")>()),
+  executeAdminJobOperation: async (
+    _ctx: unknown,
+    operation: unknown,
+    _namespace: string,
+    options: { preparedRoot: { operationKey: string } },
+  ) => {
+    const { executeTrustedConfigurationAndWait } = await import("../ops-client");
+    return executeTrustedConfigurationAndWait(
+      undefined as never,
+      operation as never,
+      options.preparedRoot.operationKey,
+    );
+  },
+}));
 vi.mock("../trusted-config-publisher", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../trusted-config-publisher")>()),
   publishTrustedConfigurationSnapshot: async (options: {
     payload: unknown;
+    operationKey: string;
     operationForRevision: (revisionId: string) => unknown;
   }) => {
     published.push(options.payload);
     const operation = options.operationForRevision(`cfg1_${"r".repeat(43)}`);
     operations.push(operation);
+    expect(options.operationKey).toMatch(/^opk1_t1_/);
     return { operation, abort };
   },
 }));
@@ -54,16 +72,34 @@ vi.mock("@openmapx/core/ops", async (importOriginal) => ({
   readOpsTokenFile: async () => "token",
 }));
 
-const {
-  applyTrustedConfiguration,
-  applyTrustedConfigurationSnapshot,
-  applyTrustedConfigurationWithEvidence,
-} = await import("../trusted-config-operations");
+const subject = await import("../trusted-config-operations");
+function owner() {
+  const ctx = {
+    jobId: "1d2b29cd-23de-4b19-8c32-86c196833b79",
+    execution: { owner: "4c0c9623-252c-41b6-8f99-41915ad38b12", version: 1 },
+    payload: {},
+    signal: new AbortController().signal,
+    checkpointResult: {} as Record<string, unknown>,
+    checkpoint: async (value: Record<string, unknown>) => {
+      ctx.checkpointResult = value;
+    },
+    log: vi.fn(),
+    setProgress: vi.fn(),
+  };
+  return ctx;
+}
+const applyTrustedConfiguration = (
+  options: Parameters<typeof subject.applyTrustedConfiguration>[0],
+) => subject.applyTrustedConfiguration({ ...options, ctx: options.ctx ?? owner() });
+const applyTrustedConfigurationWithEvidence = (
+  options: Parameters<typeof subject.applyTrustedConfigurationWithEvidence>[0],
+) => subject.applyTrustedConfigurationWithEvidence({ ...options, ctx: options.ctx ?? owner() });
+const applyTrustedConfigurationSnapshot = (
+  options: Parameters<typeof subject.applyTrustedConfigurationSnapshot>[0],
+) => subject.applyTrustedConfigurationSnapshot({ ...options, ctx: options.ctx ?? owner() });
 
 const { executeTrustedConfigurationAndWait } = await import("../ops-client");
-const { TrustedConfigurationApplyError, isProvenConfigurationNonCommit } = await import(
-  "../trusted-config-outcome"
-);
+const { isProvenConfigurationNonCommit } = await import("../trusted-config-outcome");
 
 describe("applyTrustedConfiguration", () => {
   beforeEach(() => {
@@ -236,8 +272,8 @@ describe("applyTrustedConfiguration", () => {
       kind: "stack.render",
       operationKey: "opk1_cleanup1234567",
     }).catch((error) => error);
-    expect(error).toBeInstanceOf(TrustedConfigurationApplyError);
-    expect(error.outcome).toMatchObject({
+    expect(error).toMatchObject({ name: "AdminJobFailure" });
+    expect(error.result.configuration).toMatchObject({
       outcome: "committed",
       publisherCleanupFailed: true,
       registryUpdateFailed: true,
@@ -251,7 +287,7 @@ describe("applyTrustedConfiguration", () => {
       kind: "stack.render",
       operationKey: "opk1_unknown1234567",
     }).catch((error) => error);
-    expect(error.outcome).toMatchObject({ outcome: "unknown", publisherCleanupFailed: true });
+    expect(error).toBeInstanceOf(Error);
     expect(isProvenConfigurationNonCommit(error)).toBe(false);
     expect(isProvenConfigurationNonCommit(new Error("generic failure"))).toBe(false);
   });
@@ -269,10 +305,16 @@ describe("applyTrustedConfiguration", () => {
         operationKey: "opk1_render",
         selectedRoots: ["photon"],
       }),
-    ).rejects.toThrow("Trusted configuration unavailable");
+    ).rejects.toMatchObject({
+      name: "AdminJobFailure",
+      result: { configuration: { outcome: "not_committed" } },
+    });
     await expect(
       applyTrustedConfiguration({ kind: "serviceSelection.apply", operationKey: "opk1_sel" }),
-    ).rejects.toThrow("Trusted configuration unavailable");
+    ).rejects.toMatchObject({
+      name: "AdminJobFailure",
+      result: { configuration: { outcome: "not_committed" } },
+    });
   });
 });
 
@@ -367,4 +409,21 @@ it("resumes a retained render without inspecting or rebuilding newer configurati
   expect(published).toEqual([]);
   expect(client.execute).not.toHaveBeenCalled();
   expect(client.status).toHaveBeenCalled();
+});
+
+it("refuses unowned direct configuration before preparing a new snapshot", async () => {
+  prepared.mockClear();
+  published.length = 0;
+  inspect.mockClear();
+  const result = await subject
+    .applyTrustedConfiguration({ kind: "stack.render", operationKey: "opk1_opaqueDirect12345" })
+    .catch((e) => e);
+  expect(result).toMatchObject({
+    name: "TrustedConfigurationUpgradeRequired",
+    outcome: { outcome: "not_committed" },
+  });
+  expect(isProvenConfigurationNonCommit(result)).toBe(true);
+  expect(prepared).not.toHaveBeenCalled();
+  expect(inspect).not.toHaveBeenCalled();
+  expect(published).toEqual([]);
 });

@@ -5,6 +5,7 @@ import {
   preservationAllowsDeletion,
   withPreservationRetentionLock,
 } from "../privacy/preservation.js";
+import { noPendingReceiptDelivery, noUnsettledManagedOperation } from "./admin-job-state";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -72,6 +73,9 @@ export async function pruneCompletedJobs(days: number): Promise<number> {
       .where(
         and(
           lt(adminJob.finishedAt, cutoff),
+          noPendingReceiptDelivery(),
+          noUnsettledManagedOperation(),
+          sql`(coalesce(${adminJob.result}->'opsProjection'->>'version','') <> '3' OR ${adminJob.finishedAt} < ${new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString()}::timestamp)`,
           preservationAllowsDeletion({
             registrationId: "admin-jobs-attribution",
             candidateTimestamp: adminJob.createdAt,

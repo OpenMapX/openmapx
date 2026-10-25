@@ -122,82 +122,99 @@ identities without deleting or settling any descendant evidence.
 
 ### Authority storage capacity and retirement
 
-The lifetime limits below are an interim fail-closed bound. They are not an
-accepted policy for routine administration: renewable retention remains
-unimplemented pending the control-identity contract described below.
+New root authority uses `opk1_t1_<14 lower-case hex expiry>_<22 canonical
+base64url nonce>` keys. The nonce contains 16 random bytes; the expiry is an exact
+millisecond deadline, explicitly supplied before first submission and no more
+than seven days ahead. The browser-safe `@openmapx/core/ops/control-root-key`
+entry point formats and parses these keys without Node imports. The runtime may
+clamp its execution budget independently. Existing undated admissions remain
+available for observation, cancellation and settlement; a missing undated root
+returns `control_upgrade_required` before effects. Retrying an opaque intent with
+a newly minted timed key is not recovery.
 
-`CONTROL_RETENTION_LIMITS` currently fixes these installation lifetime limits:
+A version 2 signed admission, witness, lease certificate or grant binds the
+original `{version, rootKey, issuer, notAfter}` origin. Descendants, including a
+child's independent lease, inherit this origin through verified parent authority.
+Raw caller JSON cannot supply it. Each role holds a signed private retirement
+clock and high-water record. A zero floor is provisioned only with a verified new
+installation's trust bundle. Missing, corrupt or rolled-back state in an existing
+installation requires supervised recovery; provisioning never resets its floor.
+A backward wall clock blocks new forward work and collection while retained
+observation and settlement stay available.
 
-- At most 1,024 admitted executions per role recovery root, including fixed
-  children sharing the agent root. A signed immutable admission reserves capacity
-  before witness publication or effects. Existing identities and settlement remain
-  accessible when admission is full.
-- At most 1,024 lease histories across the physical installation and 256 active
-  leases. Exclusive fixed admission slots reserve both before target acquisition;
-  only authoritative root release removes an active slot. Terminal histories and
-  partial published histories keep their retained slot. Acquisition starts its
-  five-second budget before admission work and probes at most 1,024 history slots
-  plus 256 active slots, without listing or opening historical ledgers.
-- Exactly 18 fixed private receipt namespaces, each capped at 65,536 records
-  (1,024 executions times 64 intents); the execution namespace has the stricter
-  1,024 limit. Each private record is at most 128 KiB, so even the conservative
-  aggregate private record ceiling is finite, below 145 GiB per role, excluding
-  filesystem overhead. Actual typed key/admission/effect records have tighter
-  schema limits. Durable private counters reserve creation before publication;
-  bounded streaming enumeration is needed only to initialize a missing counter.
-  Failed reservations consume capacity rather than allowing undercount/reuse.
-- Fixed-child keys use a direct public-key-digest index plus exact challenge read,
-  never a historical key-directory scan. Each execution may allocate at most 64
-  keys and no more than its admitted plan length. Shared witnesses are bounded by
-  the admitted execution count: immutable witness, lifecycle and attempted-child
-  map each at most 64 KiB, plus at most 4 KiB of key identities and a bounded
-  prepared witness. Lease ledgers remain capped at 128 KiB/64 children.
+`CONTROL_RETENTION_LIMITS` bounds retained state and admission work:
 
-There is **no online retirement** of terminal records or key/identity slots.
-Terminal records therefore survive at least 72 hours; unresolved records survive
-regardless of age, deadline or PID. This deliberately trades lifetime throughput
-for exact one-use/replay evidence: exhaustion refuses new work and requires
-supervised offline capacity planning/recovery after all relevant writers/helpers
-stop. No constructor resets counters, deletes aged evidence or rotates trust to
-make room. Automatic bounded retirement with sustained throughput is not supplied
-by this foundation. Older lease layouts without the admission index require
-supervised indexing; startup never silently excludes their fences. A crashed
-metadata guard likewise requires supervised recovery.
+- Each role has 1,024 reusable origin-family slots. The physical installation has
+  256 active lease slots and 1,024 retained lease-history slots. Slot identities
+  include both inode and generation; partial reservations consume capacity.
+- An origin permits 128 executions and 256 attempted intents, with at most 64
+  children per node and the fixed protocol depth of two. Fixed-child keys have a
+  direct digest index, not a scan through historical keys.
+- Each role-family has at most 4,096 indexed records in 64 pages of 64 entries,
+  each page at most 16 KiB. Its ordinary index, proof, acknowledgement and progress
+  metadata together are capped at 2 MiB. The 19 fixed private receipt namespaces
+  each permit at most 65,536 records of at most 128 KiB. Namespace creation
+  counters and high-water records reserve capacity before publication.
+- Retirement cells are reserved before effects and remain writable outside the
+  ordinary record quota. A capacity refusal occurs before effects. Reconciliation
+  examines at most 16 families by default, accepts 1–64, saves a round-robin cursor
+  past pending families, and reads index pages incrementally.
 
-#### Renewable retention and operation identity
+A family becomes eligible only after its origin expires, at least 72 hours after
+its latest authoritative terminal receipt, and after every attempted execution,
+child and independent lease is known contained. Target locks must have been
+physically released. Live helpers, journal workers, effect writers and streams
+keep it pending. An unaccepted attempted child, unknown effect, corrupt index,
+offline participant, missing proof or unknown writer keeps the original evidence
+regardless of age or PID.
 
-The current protocol accepts opaque `opk1_` keys and permits an unparented root
-to omit its requested deadline. On first admission that root receives a deadline
-based on the current admission time. A duplicate instead needs its original
-admission time; an expired missing attempt must remain unknown and must not be
-retried as a new mutation (control protocol section 2). Section 3.2 also requires
-producers never to reuse keys.
+The origin's coordinator freezes a signed manifest. The coordinator raises its private durable expiry floor before preparing the
+manifest. Each actual participant retains its exact proof copy, then signs ready. All ready acknowledgements and any API terminal-copy acknowledgement
+are required before commit. Each role raises its private durable expiry floor before deleting its own private
+indexed records and signing clean. Shared semantic evidence is removed only after every
+participant is clean and a signed final proof exists. Each participant retains a
+private final proof before release; the shared family slot is reusable only after
+all required releases. Participants never open sibling-private directories.
+Namespace deletion records `planned`, `unlinked`, `counted` and `item_done` in a
+preallocated exact-identity transaction. Only an already retained matching plan
+can resume an absent unlink. Counter decrements and slot reuse check the original
+family, generation, manifest, ordinal and inode. A killed unknown writer is never
+stolen automatically.
 
-After the per-key admission details are reclaimed, the same root operation/key
-without a requested deadline is indistinguishable from a first admission. Fresh
-normalization gives it a new deadline and fingerprint. A timestamp retirement
-floor cannot identify that old key: both newly assigned times exceed the floor.
-Keeping every spent key would recreate unbounded history; a bounded spent-key
-cache eventually loses this exact recognition. Deadline expiry still rejects
-the original unchanged signed child grant, but does not solve this root case.
+### API parent checkpoints and terminal receipt delivery
 
-The proposed minimal protocol amendment is an issuer-controlled monotonic birth
-sequence encoded in control root keys, with that origin certified through the
-existing child authority chains. A durable private retirement floor, with bounded
-exceptions for unresolved original authorities, can then reject retired origins
-without remembering every old key. The fixed child phase-key hash can remain
-unchanged if signed origin evidence accompanies derived child keys. Legacy
-undated roots need an explicit cutover rule: retained originals remain readable,
-and missing old roots cannot be normalized into fresh authority. Ordinary
-transport timestamps are not this birth evidence.
+Owned administrative jobs use `OpsProjection` version 3. A timeless logical step
+address resolves its retained entry before time, body preparation or configuration
+publication. A new step chooses its final timed key and requested deadline, then
+atomically checkpoints that mapping, full operation, attempt and API parent under
+the current database owner/version, active status, cancellation and absence
+fences. Both current maps have a 64-entry capacity limit. Same-address contenders
+observe the durable winner even at capacity; distinct contenders cannot erase
+siblings or exceed the current row's limit. Parent preparation is pure until the
+checkpoint succeeds. Unknown checkpoint outcome sends no POST.
 
-This is a proposed amendment, not an implemented protocol or a renewal guarantee.
-The protocol owner must define the root issuance/cutover and signed origin
-binding before retirement can reclaim terminal details and keys. Any resulting
-collector must still retain terminal evidence for at least 72 hours and through
-authority validity, preserve every unresolved dependency, and coordinate signed
-cross-role settlement and crash-safe counters/indexes before reuse. No expiry,
-PID check or counter reset is settlement proof.
+Before consuming any authority-bearing terminal result, failure or cancellation,
+the API checkpoints a bounded copy and `receiptDelivery: pending`. It then sends
+the API-only, no-effect `controlRetention.acknowledge` operation with a canonical
+HMAC proof using the existing API token. The terminal digest covers exact typed
+version 2 terminal identity and result/failure fields, excluding changing progress
+and diagnostic fields. Acknowledgement has a separate 15-second signal so a
+stopped worker cannot strand a copied receipt. Only a confirmed checkpoint allows
+return or throw of the terminal outcome. Pending copies keep the parent running
+or `cancel_pending` with `receipt_delivery`; both completion SQL and actual expiry
+cleanup preserve them. Terminal version 3 parents are retained for at least 72
+hours. After full family collection, an exact valid acknowledgement retry is
+accepted without creating records only when no retained/index/semantic evidence
+remains and the timed root's expiry is covered by the private floor.
+
+Current owned-job adapters persist the new root identity. Fixed CLI entry retains
+its original phase key and verified inherited origin; it does not issue a new root.
+Unowned direct mutation calls through `executeAndWait`, including direct
+configuration mutation routes, return the explicit client-upgrade prerequisite
+before POST or configuration preparation. These older producers need a durable
+owned-job handoff before they can mutate; they do not receive a replacement root
+from an opaque intent. Sync reads and retained legacy observations remain
+available. The future receiver prerequisites below stay closed.
 
 Settlement requires signed retained structured evidence from the fixed executor:
 a parsed typed result, exact fixed-command completion, or an execution that has

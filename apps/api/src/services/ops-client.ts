@@ -20,6 +20,7 @@ import {
   type OpsOperationKind,
   type OpsResultFor,
   type OpsSubmitResult,
+  opsKindRequiresControlAuthority,
   PRIVACY_BACKUP_TAR_MEDIA_TYPE,
   type PrivacyBackupSubjectExportRequest,
   privacyBackupSubjectExportRequestSchema,
@@ -45,8 +46,8 @@ export class ApiOpsError extends Error {
     readonly failureResult?: OpsFailureResult,
   ) {
     super(
-      errorClass === "host_update_required"
-        ? OPS_PUBLIC_ERROR_MESSAGES.host_update_required
+      errorClass === "host_update_required" || errorClass === "control_upgrade_required"
+        ? OPS_PUBLIC_ERROR_MESSAGES[errorClass]
         : "Operations request failed",
     );
     this.name = "ApiOpsError";
@@ -540,6 +541,9 @@ export async function executeAndWait<K extends OpsOperationKind>(
   options: WaitForOpsResultOptions = {},
 ): Promise<OpsResultFor<K>> {
   throwIfAborted(options.signal);
+  if (opsKindRequiresControlAuthority(operation.kind) && !options.parentAssertion) {
+    throw new ApiOpsError("control_upgrade_required");
+  }
   try {
     const submitted = await submitOpsOperationWithRecovery(client, operation, operationKey, {
       signal: options.signal,

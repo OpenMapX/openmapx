@@ -1,7 +1,8 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createControlRootOperationKey } from "@openmapx/core/ops";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { executionFingerprint } from "../ops/execution-identity";
 import { opsOperationFingerprint } from "../ops/fingerprint";
@@ -36,11 +37,20 @@ function owner() {
   const operationFingerprint = opsOperationFingerprint(operation);
   const deadlineAt = Date.now() + 60000;
   return retainAdmittedControlExecution(installation, {
+    requestedDeadlineAt: {
+      executor: "host-cli",
+      principal: "host-cli",
+      executionId: randomUUID(),
+      operationKey: createControlRootOperationKey({ notAfter: deadlineAt, nonce: randomBytes(16) }),
+      operationFingerprint,
+      fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
+      deadlineAt,
+    }.deadlineAt,
     execution: {
       executor: "host-cli",
       principal: "host-cli",
       executionId: randomUUID(),
-      operationKey: `opk1_${randomUUID().replaceAll("-", "")}`,
+      operationKey: createControlRootOperationKey({ notAfter: deadlineAt, nonce: randomBytes(16) }),
       operationFingerprint,
       fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
       deadlineAt,
@@ -162,6 +172,78 @@ it("detects rollback of a signed shared journal using private high-water evidenc
   writeFileSync(path, previous);
   await expect(a.releaseArtifactTargetLease(lease)).rejects.toThrow(/rollback|replacement/);
 });
+it("preserves private high-water observations for retained legacy lease certificates", async () => {
+  const c = await import("./control-authority"),
+    a = await api();
+  const { createPrivateKey } = await import("node:crypto"),
+    { writeFileSync } = await import("node:fs");
+  const authority = owner(),
+    lease = await a.acquireArtifactTargetLease({
+      dataRoot: join(root, "data"),
+      serviceIds: ["osrm"],
+      owner: authority,
+    });
+  a.closeArtifactTargetLeaseHandle(lease);
+  c.retainControlEffectReceipt(authority, {
+    outcome: "unknown",
+    publication: "unknown",
+    receipt: { kind: "unresolved" },
+  });
+  const state = c.installationState(installation),
+    ledger = join(root, `data/.admin-target-control/leases/${lease.leaseId}`);
+  const privatePath = join(root, `control-private/host-cli/leases/${lease.leaseId}.json`),
+    saved = JSON.parse(readFileSync(privatePath, "utf8"));
+  const { origin: _origin, ...certificate } = saved.certificate.payload;
+  saved.certificate = c.signControl(state.privateKey, "openmapx-lease-certificate-v1", {
+    ...certificate,
+    version: 1,
+  });
+  writeFileSync(privatePath, JSON.stringify(saved));
+  const ownerKey = createPrivateKey({
+    key: Buffer.from(saved.privateKey, "base64url"),
+    format: "der",
+    type: "pkcs8",
+  });
+  const path = join(ledger, "owner.json"),
+    {
+      version: _version,
+      origin: _rootOrigin,
+      ...rootRecord
+    } = JSON.parse(readFileSync(path, "utf8")).payload;
+  const legacy = { ...rootRecord, certificate: saved.certificate };
+  const old = c.signControl(ownerKey, "openmapx-lease-owner-v1", legacy);
+  writeFileSync(path, JSON.stringify(old));
+  const slotsPath = join(ledger, "admission.json"),
+    slots = JSON.parse(readFileSync(slotsPath, "utf8")).payload;
+  writeFileSync(
+    slotsPath,
+    JSON.stringify(
+      c.signControl(state.privateKey, "openmapx-admission-slots-v1", {
+        ...slots,
+        certificateDigest: c.controlDigest(saved.certificate),
+      }),
+    ),
+  );
+  const observation = join(root, `control-private/host-cli/observations/${lease.leaseId}.json`);
+  rmSync(observation);
+  const recovery = c.verifyControlRecoveryAuthority(authority),
+    input = { dataRoot: join(root, "data"), leaseId: lease.leaseId, authority: recovery };
+  expect(await a.reconcileArtifactTargetLease(input)).toBe("fenced");
+  expect(existsSync(observation)).toBe(true);
+  writeFileSync(
+    path,
+    JSON.stringify(
+      c.signControl(ownerKey, "openmapx-lease-owner-v1", {
+        ...legacy,
+        sequence: 1,
+        phase: "cancel_pending",
+      }),
+    ),
+  );
+  expect(await a.reconcileArtifactTargetLease(input)).toBe("fenced");
+  writeFileSync(path, JSON.stringify(old));
+  await expect(a.reconcileArtifactTargetLease(input)).rejects.toThrow(/rollback|replacement/);
+});
 it("rejects arbitrary caller text as effect evidence", async () => {
   const authority = owner();
   expect(() =>
@@ -192,7 +274,7 @@ it("retains terminal maintenance ownership and permits only frozen one-use conti
     executor: "ops-agent" as const,
     principal: "api" as const,
     executionId: `job1_${randomUUID().replaceAll("-", "")}`,
-    operationKey: `opk1_${randomUUID().replaceAll("-", "")}`,
+    operationKey: createControlRootOperationKey({ notAfter: deadlineAt, nonce: randomBytes(16) }),
     operationFingerprint,
     deadlineAt,
     fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
@@ -220,6 +302,7 @@ it("retains terminal maintenance ownership and permits only frozen one-use conti
     recipient: "ops-agent" as const,
   };
   const authority = c.retainAdmittedControlExecution(agent, {
+    requestedDeadlineAt: execution.deadlineAt,
     execution,
     kind: operation.kind,
     operation,
@@ -289,10 +372,11 @@ it("retains terminal maintenance ownership and permits only frozen one-use conti
     serviceIds: ["motis"],
   });
   const childAuthority = c.retainAdmittedControlExecution(agent, {
+    requestedDeadlineAt: child.deadlineAt,
     execution: child,
     kind: body.kind,
     operation: body,
-    parent: c.retainedControlParent(execution),
+    parent: c.verifiedRetainedControlParent(agent, execution),
     admittedAt: deadlineAt - 60000,
     serviceIds: ["motis"],
   });
@@ -422,7 +506,7 @@ it("admits from a bounded active index without opening retained terminal ledgers
   }
   expect(new Set(historicalReads).size, "new acquisition must read only its new ledger").toBe(1);
   if (lease) a.closeArtifactTargetLeaseHandle(lease);
-});
+}, 60000);
 
 it("retains terminal and unresolved records past 72h and refuses at retained capacity before effects", async () => {
   const a = await api();

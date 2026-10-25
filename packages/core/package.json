@@ -197,6 +197,10 @@
     "./build-artifacts": {
       "types": "./src/build-artifacts/index.ts",
       "default": "./src/build-artifacts/index.ts"
+    },
+    "./ops/control-root-key": {
+      "types": "./src/ops/control-root-key.ts",
+      "default": "./src/ops/control-root-key.ts"
     }
   },
   "scripts": {

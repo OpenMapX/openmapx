@@ -72,7 +72,6 @@ export async function withCliControlContext<T>(
     let parent: ReturnType<typeof verifyParentExecution> | undefined;
     if (delegation) {
       parent = verifiedParentForArtifactDelegation(installation, assertion, execution);
-      beginFixedCliExecution(installation, execution);
       lease = await adoptArtifactTargetLease({
         dataRoot: join(infraDir, "data"),
         assertion,
@@ -86,7 +85,6 @@ export async function withCliControlContext<T>(
         kind: intent.operation.kind,
         requestedDeadlineAt: execution.deadlineAt,
       });
-      beginFixedCliExecution(installation, execution);
     }
     // The lease grant's parent is verified in admission; role fingerprints were checked by the fixed runner.
     const authority = retainAdmittedControlExecution(installation, {
@@ -98,6 +96,7 @@ export async function withCliControlContext<T>(
       serviceIds: intent.serviceIds,
       plan: intent.plan,
     });
+    beginFixedCliExecution(installation, execution);
     if (lease) bindBorrowedControlExecution(lease, authority);
     if (lease) assertArtifactTargetLeaseForward(lease);
     try {

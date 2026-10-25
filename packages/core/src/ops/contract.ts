@@ -14,6 +14,7 @@ export const OPS_MAX_BACKUP_ID_LENGTH = 128;
 export const OPS_MAX_BACKUP_INVENTORY_ENTRIES = 128;
 
 export const OPS_OPERATION_KINDS = [
+  "controlRetention.acknowledge",
   "docker.status",
   "stack.status",
   "stack.render",
@@ -130,6 +131,7 @@ const asyncEffect = (
 const LIFECYCLE_TIMEOUT_MS = 10 * 60_000 + 30_000;
 
 export const OPS_KIND_POLICIES = {
+  "controlRetention.acknowledge": sync("api", 15_000),
   "docker.status": sync("api", 5_000),
   "stack.status": sync("api", 15_000, 256 * 1024),
   "configuration.inspect": sync("api", 15_000),
@@ -204,6 +206,13 @@ export const OPS_KIND_POLICIES = {
   "gbfsCatalogLock.inspect": sync("data-manager", 30_000),
 } as const satisfies Record<OpsOperationKind, OpsKindPolicy>;
 
+/** Read streams/diagnostics do not acquire control-root authority or a retention dependency. */
+export function opsKindRequiresControlAuthority(kind: OpsOperationKind): boolean {
+  return (
+    OPS_KIND_POLICIES[kind].execution === "async" &&
+    !["service.logs.follow", "system.diagnostics", "serviceRepository.inspect"].includes(kind)
+  );
+}
 const operationKindSchema = z.enum(OPS_OPERATION_KINDS);
 const serviceIdSchema = z
   .string()
@@ -289,6 +298,14 @@ const serviceOperation = <T extends OpsOperationKind>(kind: T) =>
 export const configurationGenerationRevisionSchema = z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/);
 
 export const opsOperationSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("controlRetention.acknowledge"),
+    originRootKey: operationKeySchema,
+    operationKey: operationKeySchema,
+    fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    terminalDigest: z.string().regex(/^[a-f0-9]{64}$/),
+    proof: z.string().min(1).max(4096),
+  }),
   kindOnly("docker.status"),
   kindOnly("stack.status"),
   kindOnly("configuration.inspect"),
@@ -519,6 +536,7 @@ export type OpsErrorClass =
   | "conflict"
   | "not_found"
   | "not_wired"
+  | "control_upgrade_required"
   | "recovery_required"
   | "host_update_required"
   | "runtime";
@@ -534,6 +552,8 @@ export const OPS_PUBLIC_ERROR_MESSAGES: Record<OpsErrorClass, string> = {
   conflict: "Operation key conflicts with an existing operation",
   not_found: "Operation was not found",
   not_wired: "Operation is not available",
+  control_upgrade_required:
+    "Update the API or CLI client to persist a timed control root before submitting this mutation.",
   recovery_required: "Operation requires an explicit retry",
   host_update_required:
     "Host update required: the operations agent or its backup helper could not be updated from the admin panel. Run `pnpm openmapx compose release`, then `pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner` on the host.",
@@ -867,6 +887,7 @@ const pinnedImageReference = z
   .regex(/^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$/);
 
 export const OPS_RESULT_SCHEMAS = {
+  "controlRetention.acknowledge": z.strictObject({ acknowledged: z.literal(true) }),
   "docker.status": z.strictObject({
     reachable: z.boolean(),
     version: z.string().max(128).optional(),

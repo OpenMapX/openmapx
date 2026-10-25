@@ -18,7 +18,9 @@ export function publicAdminJobResult<T>(result: T): T {
 }
 
 export class JobObservationPending extends Error {
-  constructor(readonly reason: "transport" | "recovery_required" | "invalid_identity") {
+  constructor(
+    readonly reason: "transport" | "recovery_required" | "invalid_identity" | "receipt_delivery",
+  ) {
     super("Administrative job observation is pending");
   }
 }

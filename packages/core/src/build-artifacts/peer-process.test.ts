@@ -1,10 +1,11 @@
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createControlRootOperationKey } from "@openmapx/core/ops";
 import { build } from "esbuild";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type ControlIssuer,
   type ExecutionRef,
@@ -14,6 +15,7 @@ import { opsOperationFingerprint } from "../ops/fingerprint";
 import {
   type ControlChildPhase,
   type ControlPlannedChild,
+  closeControlInstallation,
   controlChildOperationKey,
   controlDigest,
   openControlInstallation,
@@ -74,7 +76,7 @@ function ref(
     executionId: role === "ops-agent" ? `job1_${randomUUID().replaceAll("-", "")}` : randomUUID(),
     operationKey: parent
       ? controlChildOperationKey(parent.operationKey, phase ?? "hardlinks", 0)
-      : `opk1_${randomUUID().replaceAll("-", "")}`,
+      : createControlRootOperationKey({ notAfter: deadlineAt, nonce: randomBytes(16) }),
     operationFingerprint,
     deadlineAt,
     fingerprint: executionFingerprint({
@@ -98,7 +100,16 @@ async function child(input: unknown) {
     p.once("error", reject);
     p.once("exit", (code) => (code === 0 ? resolve() : reject(Error(err))));
   });
-  return JSON.parse(out) as { ok: boolean; retained?: boolean; error?: string; leaseId?: string };
+  return JSON.parse(out) as {
+    ok: boolean;
+    retired?: number;
+    pending?: number;
+    origin?: { rootKey: string; issuer: string; notAfter: number };
+    injected?: boolean;
+    retained?: boolean;
+    error?: string;
+    leaseId?: string;
+  };
 }
 describe("separate-process physical-mount delegation", () => {
   it.each(["data-manager", "ops-agent"] as const)(
@@ -136,6 +147,7 @@ describe("separate-process physical-mount delegation", () => {
         recipient: receiver,
       };
       const authority = retainAdmittedControlExecution(installation, {
+        requestedDeadlineAt: rootRef.deadlineAt,
         execution: rootRef,
         kind,
         operation,
@@ -215,6 +227,7 @@ it("keeps owner-death recovery fenced until a separately admitted child settles"
     recipient: "ops-agent",
   };
   const admitted = {
+    requestedDeadlineAt: execution.deadlineAt,
     execution,
     kind: operation.kind,
     operation,
@@ -291,6 +304,7 @@ it.each([false, true])(
       serviceIds: ["motis", "osrm"],
     });
     const authority = c.retainAdmittedControlExecution(installation, {
+      requestedDeadlineAt: execution.deadlineAt,
       execution,
       kind: operation.kind,
       operation,
@@ -378,6 +392,7 @@ it.each([false, true])(
     await releaseArtifactTargetLease(lease);
     c.closeControlInstallation(installation);
   },
+  60000,
 );
 it("keeps an attempted child fenced after SIGKILL of its actual owner process", async () => {
   const c = await import("./control-authority");
@@ -395,6 +410,7 @@ it("keeps an attempted child fenced after SIGKILL of its actual owner process", 
     recipient: "ops-agent",
   };
   const admitted = {
+    requestedDeadlineAt: execution.deadlineAt,
     execution,
     kind: operation.kind,
     operation,
@@ -489,6 +505,7 @@ it.each([false, true])(
       recipient: "configuration-helper",
     };
     const admitted = {
+      requestedDeadlineAt: execution.deadlineAt,
       execution,
       kind: operation.kind,
       operation,
@@ -594,6 +611,7 @@ it("keeps paired-pin approval a one-use leaf under its original activation root"
     serviceIds: ["motis"],
   });
   const authority = c.retainAdmittedControlExecution(installation, {
+    requestedDeadlineAt: execution.deadlineAt,
     execution,
     kind: operation.kind,
     operation,
@@ -669,6 +687,7 @@ it("settles the logical configuration-fence leaf without releasing the maintenan
     serviceIds: ["motis"],
   });
   const authority = c.retainAdmittedControlExecution(installation, {
+    requestedDeadlineAt: execution.deadlineAt,
     execution,
     kind: operation.kind,
     operation,
@@ -739,6 +758,7 @@ it("serializes a paused observer and a newer writer across actual processes", as
     recipient: "ops-agent",
   };
   const authority = c.retainAdmittedControlExecution(installation, {
+    requestedDeadlineAt: execution.deadlineAt,
     execution,
     operation,
     kind: operation.kind,
@@ -795,4 +815,238 @@ it("serializes a paused observer and a newer writer across actual processes", as
   ).toThrow(/rollback/);
   l.closeArtifactTargetLeaseHandle(lease);
   c.closeControlInstallation(installation);
+});
+
+describe("renewable retention with independent processes", () => {
+  it("inherits origin through a deadline-only independent lease and retains an offline participant while unrelated families renew", async () => {
+    const c = await import("./control-authority"),
+      { admittedRoot, terminalWithoutEffect } = await import("./test-fixtures/authority");
+    const operation = { kind: "data.update" as const },
+      execution = ref("ops-agent", operation.kind, operation),
+      childOperation = { kind: "download-osm", regionId: "europe/germany" };
+    const leaf = ref("data-manager", childOperation.kind, childOperation, execution, "osm"),
+      installation = c.openControlInstallation({
+        infraDir: root,
+        role: "ops-agent",
+        serviceIds: ["osrm"],
+      });
+    const plan = {
+      phase: "osm" as const,
+      ordinal: 0,
+      kind: childOperation.kind,
+      execution: leaf,
+      serviceIds: ["osrm"],
+      recipient: "data-manager" as const,
+    };
+    const authority = c.retainAdmittedControlExecution(installation, {
+      execution,
+      operation,
+      kind: operation.kind,
+      admittedAt: execution.deadlineAt - 60000,
+      requestedDeadlineAt: execution.deadlineAt,
+      serviceIds: ["osrm"],
+      plan: [plan],
+    });
+    const key = JSON.parse(readFileSync(join(root, "secrets/control-verifiers.json"), "utf8"))
+      .publicKeys["data-manager"];
+    const assertion = await c.attestParentExecution(authority, { ...plan, childPublicKey: key });
+    const adopted = await child({
+      mode: "deadline-lease",
+      infraDir: root,
+      role: "data-manager",
+      assertion,
+      execution: leaf,
+      operation: childOperation,
+      admittedAt: leaf.deadlineAt - 60000,
+    });
+    expect(adopted, JSON.stringify(adopted)).toMatchObject({
+      ok: true,
+      origin: {
+        rootKey: execution.operationKey,
+        issuer: "ops-agent",
+        notAfter: execution.deadlineAt,
+      },
+    });
+    terminalWithoutEffect(authority);
+    c.closeControlInstallation(installation);
+    const unrelated = admittedRoot(root, "ops-agent");
+    terminalWithoutEffect(unrelated.authority);
+    c.closeControlInstallation(unrelated.installation);
+    const now = unrelated.execution.deadlineAt + 96 * 3600_000,
+      gc = (role: string) =>
+        child({
+          mode: "retention",
+          infraDir: root,
+          role,
+          now,
+          maxFamilies: 1,
+          assertPrivateRole: true,
+        });
+    expect(await gc("ops-agent")).toMatchObject({ retired: 0, pending: 1 });
+    expect(await gc("ops-agent")).toMatchObject({ retired: 1, pending: 0 });
+    expect(
+      readFileSync(
+        join(root, `control-private/data-manager/executions/${leaf.operationKey}.json`),
+        "utf8",
+      ),
+    ).toContain(leaf.operationKey);
+    let retired = 0;
+    for (let n = 0; n < 12 && retired < 2; n++) {
+      const a = await gc("data-manager"),
+        b = await gc("ops-agent");
+      retired += (a.retired ?? 0) + (b.retired ?? 0);
+    }
+    expect(retired).toBe(2);
+    expect(
+      (await import("node:fs")).existsSync(
+        join(root, `control-private/data-manager/executions/${leaf.operationKey}.json`),
+      ),
+    ).toBe(false);
+    expect(
+      (await import("node:fs")).existsSync(
+        join(root, `control-private/ops-agent/executions/${execution.operationKey}.json`),
+      ),
+    ).toBe(false);
+  }, 120000);
+  it.each(["planned", "unlinked", "counted", "item_done"])(
+    "resumes contained failure after durable %s without double decrement",
+    async (phase) => {
+      const { admittedRoot, terminalWithoutEffect } = await import("./test-fixtures/authority");
+      const f = admittedRoot(root);
+      terminalWithoutEffect(f.authority);
+      closeControlInstallation(f.installation);
+      const now = f.execution.deadlineAt + 96 * 3600_000;
+      const first = await child({ mode: "retention", infraDir: root, now, fault: phase });
+      expect(first.injected).toBe(true);
+      expect(first.retired).toBe(0);
+      const again = await child({ mode: "retention", infraDir: root, now });
+      expect(
+        again.retired,
+        again.retired === 1
+          ? undefined
+          : readFileSync(
+              join(root, "control-private/host-cli/retention-families/slot-0/progress.json"),
+              "utf8",
+            ).trim(),
+      ).toBe(1);
+      const counter = JSON.parse(
+        readFileSync(join(root, "control-private/host-cli/executions/.retention-count"), "utf8"),
+      );
+      expect(counter.count).toBe(0);
+      const restarted = openControlInstallation({
+        infraDir: root,
+        role: "host-cli",
+        serviceIds: ["motis", "osrm"],
+      });
+      expect(() =>
+        retainAdmittedControlExecution(restarted, {
+          execution: f.execution,
+          operation: f.operation,
+          kind: f.operation.kind,
+          admittedAt: f.execution.deadlineAt - 60000,
+          requestedDeadlineAt: f.execution.deadlineAt,
+          serviceIds: ["osrm"],
+        }),
+      ).toThrow(/clock|expired/i);
+      closeControlInstallation(restarted);
+    },
+    60000,
+  );
+  it("cannot release a reused family slot through its old inode/generation transaction", async () => {
+    const { admittedRoot, terminalWithoutEffect } = await import("./test-fixtures/authority"),
+      c = await import("./control-authority");
+    const first = admittedRoot(root);
+    terminalWithoutEffect(first.authority);
+    c.closeControlInstallation(first.installation);
+    const now = first.execution.deadlineAt + 96 * 3600_000;
+    expect(
+      await child({ mode: "retention", infraDir: root, now, fault: "slot_planned" }),
+    ).toMatchObject({ retired: 0, injected: true });
+    const journal = readFileSync(
+      join(root, "control-private/host-cli/retention-slot-transaction.json"),
+      "utf8",
+    );
+    expect(await child({ mode: "retention", infraDir: root, now })).toMatchObject({ retired: 1 });
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now),
+      replacement = admittedRoot(root);
+    try {
+      writeFileSync(
+        join(root, "control-private/host-cli/retention-slot-transaction.json"),
+        journal,
+      );
+      await expect(c.reconcileControlRetention(replacement.installation)).rejects.toThrow(
+        /slot.*(inode|generation).*replaced/i,
+      );
+      expect(
+        readFileSync(
+          join(
+            root,
+            `control-private/host-cli/executions/${replacement.execution.operationKey}.json`,
+          ),
+          "utf8",
+        ),
+      ).toContain(replacement.execution.operationKey);
+      expect(
+        JSON.parse(
+          readFileSync(join(root, "control-private/host-cli/executions/.retention-count"), "utf8"),
+        ).count,
+      ).toBe(1);
+    } finally {
+      clock.mockRestore();
+      c.closeControlInstallation(replacement.installation);
+    }
+  }, 60000);
+  it("does not steal an unknown killed namespace writer or release its family", async () => {
+    const { admittedRoot, terminalWithoutEffect } = await import("./test-fixtures/authority");
+    const f = admittedRoot(root);
+    terminalWithoutEffect(f.authority);
+    closeControlInstallation(f.installation);
+    const now = f.execution.deadlineAt + 96 * 3600_000,
+      p = spawn(process.execPath, [fixture], { stdio: ["pipe", "pipe", "pipe"] });
+    let output = "";
+    p.stdout.on("data", (b) => (output += b));
+    p.stdin.end(
+      `${JSON.stringify({ mode: "retention", infraDir: root, now, fault: "unlinked", kill: true })}\n`,
+    );
+    await vi.waitFor(() => expect(output).toContain('"ready":true'), { timeout: 30000 });
+    p.kill("SIGKILL");
+    await new Promise((resolve) => p.once("exit", resolve));
+    const again = await child({ mode: "retention", infraDir: root, now });
+    expect(again).toMatchObject({ retired: 0, pending: 1 });
+    expect(
+      readFileSync(
+        join(root, "control-private/host-cli/executions/.retention-transaction"),
+        "utf8",
+      ),
+    ).toContain('"phase":"unlinked"');
+  }, 60000);
+  it("advances a bounded round-robin cursor beyond an older unresolved family", async () => {
+    const { admittedRoot, terminalWithoutEffect } = await import("./test-fixtures/authority");
+    const unknown = admittedRoot(root),
+      done = admittedRoot(root);
+    terminalWithoutEffect(done.authority);
+    closeControlInstallation(unknown.installation);
+    closeControlInstallation(done.installation);
+    const now = done.execution.deadlineAt + 96 * 3600_000;
+    expect(await child({ mode: "retention", infraDir: root, now })).toMatchObject({
+      retired: 0,
+      pending: 1,
+    });
+    const next = await child({ mode: "retention", infraDir: root, now });
+    expect(
+      next,
+      next.retired === 1
+        ? undefined
+        : readFileSync(
+            join(root, "control-private/host-cli/retention-families/slot-1/progress.json"),
+            "utf8",
+          ).trim(),
+    ).toMatchObject({ retired: 1, pending: 0 });
+    expect(
+      readFileSync(
+        join(root, `control-private/host-cli/executions/${unknown.execution.operationKey}.json`),
+        "utf8",
+      ),
+    ).toContain(unknown.execution.operationKey);
+  }, 60000);
 });

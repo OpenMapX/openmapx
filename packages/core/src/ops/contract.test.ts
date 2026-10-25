@@ -30,6 +30,14 @@ function request(operation: unknown, extra: Record<string, unknown> = {}) {
 }
 
 const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
+  "controlRetention.acknowledge": {
+    kind: "controlRetention.acknowledge",
+    originRootKey: "opk1_abcdefghijklmnop",
+    operationKey: "opk1_abcdefghijklmnop",
+    fingerprint: "a".repeat(64),
+    terminalDigest: "b".repeat(64),
+    proof: "test",
+  },
   "docker.status": { kind: "docker.status" },
   "stack.status": { kind: "stack.status" },
   "configuration.inspect": { kind: "configuration.inspect" },

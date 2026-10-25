@@ -120,6 +120,15 @@ export class AnchoredDirectory {
       dir.closeSync();
     }
   }
+  hasEntries(): boolean {
+    this.check();
+    const dir = opendirSync(this.anchor);
+    try {
+      return dir.readSync() !== null;
+    } finally {
+      dir.closeSync();
+    }
+  }
   read(name: string, maximum: number, privateMode = true): Buffer {
     const path = this.name(name);
     const fd = openSync(path, C.O_RDONLY | C.O_NOFOLLOW | C.O_NONBLOCK);
@@ -156,7 +165,30 @@ export class AnchoredDirectory {
       closeSync(fd);
     }
   }
-  write(name: string, bytes: string | Buffer, exclusive = false) {
+  fileIdentity(name: string): FileIdentity {
+    const path = this.name(name);
+    const fd = openSync(path, C.O_RDONLY | C.O_NOFOLLOW | C.O_NONBLOCK);
+    try {
+      const value = fstatSync(fd, { bigint: true });
+      if (
+        !value.isFile() ||
+        value.nlink !== 1n ||
+        value.uid !== BigInt(process.getuid?.() ?? -1) ||
+        (value.mode & 0o077n) !== 0n ||
+        !sameInode(identity(value), identity(lstatSync(path, { bigint: true })))
+      )
+        throw Error("Unsafe retained record inode");
+      return identity(value);
+    } finally {
+      closeSync(fd);
+    }
+  }
+  write(
+    name: string,
+    bytes: string | Buffer,
+    exclusive = false,
+    beforePublish?: (inode: FileIdentity) => void,
+  ) {
     const target = this.name(name);
     const temporary = exclusive ? name : `.write-${randomUUID()}`;
     const path = this.name(temporary);
@@ -166,6 +198,7 @@ export class AnchoredDirectory {
       try {
         writeFileSync(fd, bytes);
         fsyncSync(fd);
+        beforePublish?.(expected);
         this.check();
       } finally {
         closeSync(fd);

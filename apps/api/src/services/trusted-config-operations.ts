@@ -16,6 +16,7 @@ import {
   executeAdminJobOperation,
   hasRetainedAdminJobOperation,
   observeRetainedAdminJobOperation,
+  prepareAdminJobOperationRoot,
 } from "./admin-job-ops";
 import { projectIntegrationConfig } from "./integration-config-projection";
 import type { JobContext } from "./job-runner";
@@ -31,6 +32,7 @@ import { resolveServiceVaultSecretsStrict } from "./service-secrets";
 import {
   TrustedConfigurationApplyError,
   type TrustedConfigurationApplyOutcome,
+  TrustedConfigurationUpgradeRequired,
 } from "./trusted-config-outcome";
 import {
   consumePublishedTrustedConfiguration,
@@ -156,6 +158,12 @@ export async function applyTrustedConfigurationWithEvidence(
     }
     return { outcome: retained };
   }
+  if (!options.ctx) throw new TrustedConfigurationUpgradeRequired();
+  const preparedRoot = prepareAdminJobOperationRoot(
+    options.ctx,
+    options.kind,
+    options.operationKey,
+  );
   let payload: TrustedConfigurationPayload;
   let previousApplied: OpsResultFor<"configuration.inspect">;
   try {
@@ -186,7 +194,7 @@ export async function applyTrustedConfigurationWithEvidence(
   return {
     payload,
     previousApplied,
-    outcome: await applySnapshot(options, payload, previousApplied.revisionId),
+    outcome: await applySnapshot(options, payload, previousApplied.revisionId, preparedRoot),
   };
 }
 
@@ -196,6 +204,7 @@ export async function applyTrustedConfigurationSnapshot(options: {
   expectedCurrentRevisionId: string | null;
   operationKey: string;
   signal?: AbortSignal;
+  ctx?: JobContext;
 }): Promise<TrustedConfigurationApplyOutcome> {
   if (
     !configurationGenerationRevisionSchema.nullable().safeParse(options.expectedCurrentRevisionId)
@@ -210,7 +219,12 @@ export async function applyTrustedConfigurationSnapshot(options: {
     };
   }
   return applySnapshot(
-    { kind: "stack.render", operationKey: options.operationKey, signal: options.signal },
+    {
+      kind: "stack.render",
+      operationKey: options.operationKey,
+      signal: options.signal,
+      ctx: options.ctx,
+    },
     options.payload,
     options.expectedCurrentRevisionId,
   );
@@ -220,7 +234,21 @@ async function applySnapshot(
   options: ApplyTrustedConfigurationOptions,
   input: TrustedConfigurationPayload,
   expectedCurrentRevisionId: string | null,
+  rootCandidate?: import("./admin-job-parent").ApiPreparedRoot,
 ): Promise<TrustedConfigurationApplyOutcome> {
+  if (!options.ctx) throw new TrustedConfigurationUpgradeRequired();
+  if (hasRetainedAdminJobOperation(options.ctx, options.operationKey)) {
+    await observeRetainedAdminJobOperation(options.ctx, options.operationKey);
+    const outcome = (
+      options.ctx.checkpointResult?._configurationOutcomes as
+        | Record<string, TrustedConfigurationApplyOutcome>
+        | undefined
+    )?.[options.operationKey];
+    if (!outcome) throw new JobObservationPending("recovery_required");
+    return outcome;
+  }
+  const preparedRoot =
+    rootCandidate ?? prepareAdminJobOperationRoot(options.ctx, options.kind, options.operationKey);
   let submitted = false;
   try {
     const payload = trustedConfigurationPayloadSchema.parse(input);
@@ -262,7 +290,7 @@ async function applySnapshot(
       token,
       ownerUid: exactInteger(process.env, "OPS_TRUSTED_CONFIG_UID"),
       ownerGid: exactInteger(process.env, "OPS_TRUSTED_CONFIG_GID"),
-      operationKey: options.operationKey,
+      operationKey: preparedRoot.operationKey,
       operationForRevision,
       payload,
     });
@@ -272,6 +300,7 @@ async function applySnapshot(
       if (options.ctx)
         return executeAdminJobOperation(options.ctx, sealed.operation, "admin-job.configuration", {
           operationKey: options.operationKey,
+          preparedRoot,
         }).then((result) => configurationApplyResultSchema.parse(result));
       return executeTrustedConfigurationAndWait(
         client,

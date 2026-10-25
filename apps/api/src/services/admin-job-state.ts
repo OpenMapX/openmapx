@@ -3,6 +3,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob, adminJobLog } from "../db/schema";
 
+export const ADMIN_JOB_LOG_LIMITS = { events: 2000, bytes: 1024 * 1024 } as const;
 export interface JobExecution {
   owner: string;
   version: number;
@@ -11,6 +12,44 @@ export class JobOwnershipLost extends Error {
   constructor() {
     super("Administrative job ownership changed");
   }
+}
+export class JobStepAllocationConflict extends Error {
+  constructor(readonly checkpoint: Record<string, unknown>) {
+    super("Stable administrative step already reserved");
+  }
+}
+export class JobStepCapacityExceeded extends Error {
+  constructor() {
+    super("Administrative step capacity exhausted");
+  }
+}
+export function hasPendingReceiptDelivery(result: unknown): boolean {
+  const projection = (
+    result as {
+      opsProjection?: {
+        version?: number;
+        operations?: Record<string, { receiptDelivery?: { state?: string } }>;
+      };
+    } | null
+  )?.opsProjection;
+  return (
+    projection?.version === 3 &&
+    Object.values(projection.operations ?? {}).some((o) => o.receiptDelivery?.state === "pending")
+  );
+}
+export function hasUnsettledManagedOperation(result: unknown): boolean {
+  const p = (
+    result as {
+      opsProjection?: { version?: number; operations?: Record<string, { terminal?: boolean }> };
+    } | null
+  )?.opsProjection;
+  return p?.version === 3 && Object.values(p.operations ?? {}).some((o) => o.terminal !== true);
+}
+export function noUnsettledManagedOperation() {
+  return sql`NOT (coalesce(${adminJob.result}->'opsProjection'->>'version','') = '3' AND EXISTS(SELECT 1 FROM jsonb_each(coalesce(${adminJob.result}->'opsProjection'->'operations','{}'::jsonb)) AS active_entry WHERE coalesce(active_entry.value->>'terminal','false') <> 'true'))`;
+}
+export function noPendingReceiptDelivery() {
+  return sql`NOT (coalesce(${adminJob.result}->'opsProjection'->>'version','') = '3' AND EXISTS (SELECT 1 FROM jsonb_each(coalesce(${adminJob.result}->'opsProjection'->'operations','{}'::jsonb)) AS receipt_entry WHERE receipt_entry.value->'receiptDelivery'->>'state' = 'pending'))`;
 }
 export function readJobExecution(result: unknown): JobExecution | undefined {
   if (
@@ -48,7 +87,7 @@ export function jobOwnership(
 export const ADMIN_JOB_LEASE_MS = 60_000;
 export function adminJobObservationDue(now = new Date().toISOString()) {
   return and(
-    sql`(${adminJob.status} = 'cancel_pending' OR ${adminJob.result}->'observation'->>'state' = 'unknown' OR ${adminJob.result}->>'_observationLeaseUntil' IS NOT NULL)`,
+    sql`(${adminJob.status} = 'cancel_pending' OR ${adminJob.result}->'observation'->>'state' IN ('unknown','receipt_delivery') OR ${adminJob.result}->>'_observationLeaseUntil' IS NOT NULL)`,
     sql`coalesce(${adminJob.result}->'observation'->>'nextCheckAt', '') <= ${now}`,
     sql`coalesce(${adminJob.result}->>'_observationLeaseUntil', '') <= ${now}`,
   );
@@ -75,11 +114,20 @@ export async function insertOwnedJobLog(
 ): Promise<boolean> {
   const [result] = await db.execute<{ owned: boolean; inserted: boolean }>(sql`
     WITH owner AS MATERIALIZED (
-      SELECT ${adminJob.id} FROM ${adminJob} WHERE ${jobOwnership(entry.jobId, execution)} FOR UPDATE
+      SELECT ${adminJob.id}, ${adminJob.result} FROM ${adminJob} WHERE ${jobOwnership(entry.jobId, execution)} FOR UPDATE
     ), inserted AS (
       INSERT INTO ${adminJobLog} (id, job_id, seq, stream, line, created_at)
       SELECT ${entry.id}, ${entry.jobId}, ${entry.seq}, ${entry.stream}, ${entry.line}, ${entry.createdAt?.toISOString()}::timestamp
-      FROM owner ON CONFLICT (id) DO NOTHING RETURNING id
+      FROM owner WHERE coalesce(owner.result->'opsProjection'->>'version','') <> '3' OR (
+        coalesce((owner.result->>'_opsLogEvents')::integer,0) < ${ADMIN_JOB_LOG_LIMITS.events}
+        AND coalesce((owner.result->>'_opsLogBytes')::integer,0) + ${Buffer.byteLength(entry.line, "utf8")} <= ${ADMIN_JOB_LOG_LIMITS.bytes}
+      ) ON CONFLICT (id) DO NOTHING RETURNING job_id
+    ), charged AS (
+      UPDATE ${adminJob} SET result=coalesce(${adminJob.result},'{}'::jsonb) || jsonb_build_object(
+        '_opsLogEvents',coalesce((owner.result->>'_opsLogEvents')::integer,0)+1,
+        '_opsLogBytes',coalesce((owner.result->>'_opsLogBytes')::integer,0)+${Buffer.byteLength(entry.line, "utf8")})
+      FROM owner,inserted WHERE ${adminJob.id}=owner.id AND inserted.job_id=owner.id AND owner.result->'opsProjection'->>'version'='3'
+      RETURNING ${adminJob.id}
     )
     SELECT EXISTS (SELECT 1 FROM owner) AS owned, EXISTS (SELECT 1 FROM inserted) AS inserted
   `);

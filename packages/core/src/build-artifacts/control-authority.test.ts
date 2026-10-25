@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -11,12 +12,62 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createControlRootOperationKey } from "@openmapx/core/ops";
 import { afterEach, beforeEach, expect, it } from "vitest";
 
 let root: string;
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "omx-control-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
+});
+it("renewal refuses an expired timed root after all original identity details were reclaimed", async () => {
+  const c = await api();
+  const { randomUUID } = await import("node:crypto");
+  const { executionFingerprint } = await import("../ops/execution-identity");
+  const { opsOperationFingerprint } = await import("../ops/fingerprint");
+  await c.provisionControlInstallation(root);
+  const installation = c.openControlInstallation({
+    infraDir: root,
+    role: "host-cli",
+    serviceIds: ["osrm"],
+  });
+  const operation = { kind: "service.build" as const, serviceId: "osrm" };
+  const hash = opsOperationFingerprint(operation);
+  const expiredAt = Date.now() - 96 * 3600_000;
+  const operationKey = `opk1_t1_${expiredAt.toString(16).padStart(14, "0")}_AAAAAAAAAAAAAAAAAAAAAA`;
+  const currentDeadline = Date.now() + 60000;
+  // The old implementation accepts this exact expired timed key with a freshly
+  // normalized deadline, even with no historical receipt left to find.
+  const execution = {
+    executor: "host-cli" as const,
+    principal: "host-cli" as const,
+    executionId: randomUUID(),
+    operationKey,
+    operationFingerprint: hash,
+    deadlineAt: currentDeadline,
+    fingerprint: executionFingerprint({
+      kind: operation.kind,
+      operationFingerprint: hash,
+      deadlineAt: currentDeadline,
+    }),
+  };
+  try {
+    expect(() =>
+      c.retainAdmittedControlExecution(installation, {
+        execution,
+        operation,
+        kind: operation.kind,
+        admittedAt: currentDeadline - 60000,
+        requestedDeadlineAt: expiredAt,
+        serviceIds: ["osrm"],
+      }),
+    ).toThrow(/expired|expiry|deadline/i);
+    expect(existsSync(join(root, `control-private/host-cli/executions/${operationKey}.json`))).toBe(
+      false,
+    );
+  } finally {
+    c.closeControlInstallation(installation);
+  }
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 async function api() {
@@ -104,7 +155,7 @@ it("retains deadline-only attempts separately from execution witnesses", async (
     executor: "ops-agent" as const,
     principal: "api" as const,
     executionId: `job1_${randomUUID().replaceAll("-", "")}`,
-    operationKey: `opk1_${randomUUID().replaceAll("-", "")}`,
+    operationKey: createControlRootOperationKey({ notAfter: deadlineAt, nonce: randomBytes(16) }),
     operationFingerprint,
     deadlineAt,
     fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
@@ -134,6 +185,7 @@ it("retains deadline-only attempts separately from execution witnesses", async (
     recipient: "data-manager" as const,
   };
   const authority = a.retainAdmittedControlExecution(installation, {
+    requestedDeadlineAt: parent.deadlineAt,
     execution: parent,
     operation,
     kind: operation.kind,
@@ -237,7 +289,7 @@ it("verifies the certified ephemeral fixed-CLI deadline chain without exporting 
     executor: "ops-agent" as const,
     principal: "api" as const,
     executionId: `job1_${randomUUID().replaceAll("-", "")}`,
-    operationKey: `opk1_${randomUUID().replaceAll("-", "")}`,
+    operationKey: createControlRootOperationKey({ notAfter: deadlineAt, nonce: randomBytes(16) }),
     operationFingerprint: hash,
     deadlineAt,
     fingerprint: executionFingerprint({
@@ -293,6 +345,7 @@ it("verifies the certified ephemeral fixed-CLI deadline chain without exporting 
     recipient: "data-manager" as const,
   };
   const authority = c.retainAdmittedControlExecution(agent, {
+    requestedDeadlineAt: execution.deadlineAt,
     execution,
     kind: operation.kind,
     operation,
@@ -336,6 +389,7 @@ it("verifies the certified ephemeral fixed-CLI deadline chain without exporting 
     requestedDeadlineAt: deadlineAt,
   });
   const cliAuthority = c.retainAdmittedControlExecution(fixed, {
+    requestedDeadlineAt: cli.deadlineAt,
     execution: cli,
     kind: operation.kind,
     operation,
@@ -398,7 +452,7 @@ async function deadlineFamily() {
     executor: "ops-agent" as const,
     principal: "api" as const,
     executionId: `job1_${randomUUID().replaceAll("-", "")}`,
-    operationKey: `opk1_${randomUUID().replaceAll("-", "")}`,
+    operationKey: createControlRootOperationKey({ notAfter: deadlineAt, nonce: randomBytes(16) }),
     operationFingerprint,
     deadlineAt,
     fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
@@ -427,6 +481,7 @@ async function deadlineFamily() {
     recipient: "data-manager" as const,
   };
   const authority = c.retainAdmittedControlExecution(agent, {
+    requestedDeadlineAt: execution.deadlineAt,
     execution,
     operation,
     kind: operation.kind,
@@ -504,6 +559,7 @@ it("retained deadline-only duplicates observe after cancellation but cannot star
     expect(f.admit(assertion)).toEqual(parent);
     const body = { kind: "download-osm", regionId: "europe/germany" };
     const authority = f.c.retainAdmittedControlExecution(f.dm, {
+      requestedDeadlineAt: f.child.deadlineAt,
       execution: f.child,
       operation: body,
       kind: body.kind,
@@ -532,10 +588,25 @@ it("refuses exhausted private admission capacity before publishing a witness or 
   try {
     // A durable consumed-reservation fixture, not a mocked authorization decision.
     const count = join(root, "control-private/ops-agent/executions/.retention-count");
-    writeFileSync(count, String(CONTROL_RETENTION_LIMITS.executionsPerRole), { mode: 0o600 });
-    const replacement = { ...f.execution, operationKey: `opk1_${"z".repeat(32)}` };
+    const full = {
+      version: 1,
+      sequence: 100000,
+      count: CONTROL_RETENTION_LIMITS.recordsPerNamespace,
+    };
+    writeFileSync(count, JSON.stringify(full), { mode: 0o600 });
+    writeFileSync(count.replace(".retention-count", ".retention-highwater"), JSON.stringify(full), {
+      mode: 0o600,
+    });
+    const replacement = {
+      ...f.execution,
+      operationKey: createControlRootOperationKey({
+        notAfter: f.execution.deadlineAt,
+        nonce: randomBytes(16),
+      }),
+    };
     expect(() =>
       f.c.retainAdmittedControlExecution(f.agent, {
+        requestedDeadlineAt: replacement.deadlineAt,
         execution: replacement,
         operation: { kind: "data.update" },
         kind: "data.update",
@@ -588,3 +659,88 @@ it("expired exact deadline-only adoption stays observable without renewing one-u
     f.c.closeControlInstallation(f.agent);
   }
 });
+
+it("keeps a same-role unaccepted fixed child even if its shared intent ticket disappears", async () => {
+  const c = await api(),
+    { vi } = await import("vitest"),
+    { randomUUID } = await import("node:crypto"),
+    { executionFingerprint } = await import("../ops/execution-identity"),
+    { opsOperationFingerprint } = await import("../ops/fingerprint");
+  await c.provisionControlInstallation(root);
+  const installation = c.openControlInstallation({
+    infraDir: root,
+    role: "ops-agent",
+    serviceIds: ["osrm"],
+  });
+  const operation = { kind: "data.update" as const },
+    operationFingerprint = opsOperationFingerprint(operation),
+    deadlineAt = Date.now() + 60000;
+  const execution = {
+    executor: "ops-agent" as const,
+    principal: "api" as const,
+    executionId: `job1_${randomUUID().replaceAll("-", "")}`,
+    operationKey: createControlRootOperationKey({ notAfter: deadlineAt, nonce: randomBytes(16) }),
+    operationFingerprint,
+    deadlineAt,
+    fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
+  };
+  const child = {
+    executor: "host-cli" as const,
+    principal: "host-cli" as const,
+    executionId: randomUUID(),
+    operationKey: c.controlChildOperationKey(execution.operationKey, "data-workflow", 0),
+    operationFingerprint,
+    deadlineAt,
+    fingerprint: executionFingerprint({
+      kind: operation.kind,
+      operationFingerprint,
+      deadlineAt,
+      parent: c.retainedControlParent(execution),
+    }),
+  };
+  const plan = {
+    phase: "data-workflow" as const,
+    ordinal: 0,
+    kind: operation.kind,
+    execution: child,
+    serviceIds: ["osrm"],
+    recipient: "fixed-cli" as const,
+  };
+  try {
+    const authority = c.retainAdmittedControlExecution(installation, {
+      execution,
+      operation,
+      kind: operation.kind,
+      admittedAt: deadlineAt - 60000,
+      requestedDeadlineAt: deadlineAt,
+      serviceIds: ["osrm"],
+      plan: [plan],
+    });
+    const id = randomUUID(),
+      publicKey = c.prepareFixedControlChild(authority, id);
+    c.retainFixedCliSpawnIntent(authority, {
+      delegationId: id,
+      execution: child,
+      operation,
+      args: c.fixedCliArguments(operation),
+    });
+    await c.attestParentExecution(authority, { ...plan, childPublicKey: publicKey });
+    c.retainControlEffectReceipt(authority, {
+      outcome: "failed_without_effect",
+      publication: "not_started",
+      receipt: { kind: "not-started" },
+    });
+    const origin = c.executionAuthorityState(authority).origin,
+      hash = c.controlDigest(origin);
+    rmSync(join(root, `data/.admin-target-control/retention-families/${hash}/intents/slot-0.json`));
+    vi.spyOn(Date, "now").mockReturnValue(deadlineAt + 96 * 3600_000);
+    expect(await c.reconcileControlRetention(installation, { maxFamilies: 1 })).toEqual({
+      retired: 0,
+      pending: 1,
+    });
+    expect(existsSync(join(root, `control-private/ops-agent/children/${id}.key`))).toBe(true);
+  } finally {
+    vi.restoreAllMocks();
+    c.closeControlInstallation(installation);
+  }
+}, 60000);

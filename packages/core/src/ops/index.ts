@@ -1,5 +1,7 @@
 export * from "./client";
 export * from "./contract";
+export * from "./control-retention-receipt";
+export * from "./control-root-key";
 export * from "./execution-identity";
 export * from "./fingerprint";
 export * from "./job-evidence";

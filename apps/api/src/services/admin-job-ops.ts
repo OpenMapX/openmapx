@@ -1,25 +1,42 @@
+import { createHash, randomUUID } from "node:crypto";
 import {
+  apiRetentionProofSchema,
+  canonicalJson,
   configurationApplyResultSchema,
+  controlTerminalReceiptDigest,
+  createControlRootOperationKey,
   OPS_KIND_POLICIES,
   type OpsFailureResult,
+  type OpsJobStatus,
   type OpsOperation,
   type OpsOperationKind,
   type OpsResultFor,
   type OpsSubmitResult,
   opsFailureResultSchema,
+  opsKindRequiresControlAuthority,
   opsOperationFingerprint,
   opsOperationSchema,
   type ProcessDiagnostics,
+  parseControlRootOperationKey,
+  parseOpsJobStatus,
   processDiagnosticsSchema,
+  readOpsTokenFile,
+  signApiRetentionProof,
 } from "@openmapx/core/ops";
 import { AdminJobFailure, JobObservationPending } from "./admin-job-failure";
 import {
   type ApiJobChildAttempt,
+  type ApiPreparedRoot,
   apiJobChildAttemptSchema,
   issueApiJobChildAssertion,
   prepareApiJobChildAttempt,
+  prepareApiJobRoot,
 } from "./admin-job-parent";
-import { JobOwnershipLost } from "./admin-job-state";
+import {
+  ADMIN_JOB_LOG_LIMITS,
+  JobOwnershipLost,
+  JobStepAllocationConflict,
+} from "./admin-job-state";
 import type { JobContext } from "./job-runner";
 import {
   type ApiOpsClient,
@@ -32,10 +49,22 @@ import {
   waitForOpsResult,
 } from "./ops-client";
 
-const ADMIN_EVENT_LIMIT = 2_000;
-const ADMIN_EVENT_BYTE_LIMIT = 1024 * 1024;
+const ADMIN_EVENT_LIMIT = ADMIN_JOB_LOG_LIMITS.events;
+const ADMIN_EVENT_BYTE_LIMIT = ADMIN_JOB_LOG_LIMITS.bytes;
 const MAX_PROJECTED_OPERATIONS = 64;
 const CANCEL_POLL_ATTEMPTS = 8;
+const ADMISSION_REFUSALS = new Set([
+  "authentication",
+  "authorization",
+  "validation",
+  "expired",
+  "future",
+  "busy",
+  "not_wired",
+  "host_update_required",
+  "control_upgrade_required",
+  "recovery_required",
+]);
 const OPERATION_KEY = /^opk1_[A-Za-z0-9_-]{16,64}$/;
 const OPERATION_ID = /^job1_[A-Za-z0-9_-]{16,64}$/;
 
@@ -44,7 +73,7 @@ interface ProjectedOperation {
   operationKey: string;
   operationId?: string;
   operation?: OpsOperation;
-  phase: "admitting" | "observing" | "terminal";
+  phase: "admitting" | "observing" | "terminal" | "refused";
   attempt?: ApiJobChildAttempt;
   fingerprint?: string;
   deadlineAt?: number;
@@ -59,10 +88,18 @@ interface ProjectedOperation {
   bytes: number;
   truncated: boolean;
   terminal: boolean;
+  receiptDelivery?: {
+    state: "pending" | "confirmed";
+    terminalCopyId: string;
+    checkpointOwnerVersion: number;
+    terminalDigest: string;
+    terminalReceipt: OpsJobStatus;
+  };
 }
 
 interface OpsProjection {
-  version: 2;
+  version: 1 | 2 | 3;
+  steps: Record<string, { operationKey: string; requestedDeadlineAt: number }>;
   eventTotal: number;
   byteTotal: number;
   truncated: boolean;
@@ -74,6 +111,7 @@ export interface ExecuteAdminJobOperationOptions {
   operationKey?: string;
   pollIntervalMs?: number;
   durableIdentity?: string;
+  preparedRoot?: ApiPreparedRoot;
 }
 
 function boundedInteger(value: unknown, maximum: number): value is number {
@@ -81,10 +119,10 @@ function boundedInteger(value: unknown, maximum: number): value is number {
 }
 
 function emptyProjection(): OpsProjection {
-  return { version: 2, eventTotal: 0, byteTotal: 0, truncated: false, operations: {} };
+  return { version: 3, steps: {}, eventTotal: 0, byteTotal: 0, truncated: false, operations: {} };
 }
 
-function readProjection(result: unknown): OpsProjection {
+export function readProjection(result: unknown): OpsProjection {
   if (!result || typeof result !== "object" || Array.isArray(result)) return emptyProjection();
   const candidate = (result as Record<string, unknown>).opsProjection;
   if (candidate === undefined) return emptyProjection();
@@ -93,7 +131,7 @@ function readProjection(result: unknown): OpsProjection {
   }
   const value = candidate as Record<string, unknown>;
   if (
-    (value.version !== 1 && value.version !== 2) ||
+    (value.version !== 1 && value.version !== 2 && value.version !== 3) ||
     !boundedInteger(value.eventTotal, ADMIN_EVENT_LIMIT) ||
     !boundedInteger(value.byteTotal, ADMIN_EVENT_BYTE_LIMIT) ||
     typeof value.truncated !== "boolean" ||
@@ -129,8 +167,10 @@ function readProjection(result: unknown): OpsProjection {
     if (!Object.hasOwn(OPS_KIND_POLICIES, operation.kind as string))
       throw new JobObservationPending("invalid_identity");
     if (
-      value.version === 2 &&
-      !["admitting", "observing", "terminal"].includes(operation.phase as string)
+      value.version !== 1 &&
+      !["admitting", "observing", "terminal", ...(value.version === 3 ? ["refused"] : [])].includes(
+        operation.phase as string,
+      )
     )
       throw new JobObservationPending("invalid_identity");
     const checked =
@@ -169,6 +209,47 @@ function readProjection(result: unknown): OpsProjection {
       )
         throw new JobObservationPending("invalid_identity");
     }
+    if (
+      operation.phase === "refused" &&
+      (!operation.terminal ||
+        !ADMISSION_REFUSALS.has(operation.errorClass as string) ||
+        operation.operationId !== undefined ||
+        operation.result !== undefined ||
+        operation.receiptDelivery !== undefined ||
+        operation.fingerprint !== undefined ||
+        operation.deadlineAt !== undefined)
+    )
+      throw new JobObservationPending("invalid_identity");
+    if (operation.receiptDelivery !== undefined) {
+      const d = operation.receiptDelivery as ProjectedOperation["receiptDelivery"];
+      try {
+        if (
+          value.version !== 3 ||
+          !operation.attempt ||
+          operation.terminal !== true ||
+          operation.phase !== "terminal" ||
+          !d ||
+          !["pending", "confirmed"].includes(d.state) ||
+          !apiRetentionProofSchema.shape.terminalCopyId.safeParse(d.terminalCopyId).success ||
+          !Number.isSafeInteger(d.checkpointOwnerVersion) ||
+          d.checkpointOwnerVersion < 1 ||
+          controlTerminalReceiptDigest(d.terminalReceipt) !== d.terminalDigest ||
+          d.terminalReceipt.operationId !== operation.operationId ||
+          d.terminalReceipt.kind !== operation.kind ||
+          d.terminalReceipt.operationKey !== key ||
+          canonicalJson(d.terminalReceipt.result ?? null) !==
+            canonicalJson(operation.result ?? null) ||
+          canonicalJson(d.terminalReceipt.failureResult ?? null) !==
+            canonicalJson(operation.failureResult ?? null) ||
+          (d.terminalReceipt.errorClass ?? null) !== (operation.errorClass ?? null) ||
+          d.terminalReceipt.fingerprint !== operation.fingerprint ||
+          d.terminalReceipt.deadlineAt !== operation.deadlineAt
+        )
+          throw Error();
+      } catch {
+        throw new JobObservationPending("recovery_required");
+      }
+    }
     if (parsed && parsed.kind !== operation.kind)
       throw new JobObservationPending("invalid_identity");
     operations[key] = {
@@ -178,8 +259,43 @@ function readProjection(result: unknown): OpsProjection {
         value.version === 1 ? (operation.terminal ? "terminal" : "observing") : operation.phase,
     } as ProjectedOperation;
   }
+  const steps: OpsProjection["steps"] = {};
+  if (value.version === 3) {
+    if (
+      !value.steps ||
+      typeof value.steps !== "object" ||
+      Array.isArray(value.steps) ||
+      Object.keys(value.steps).length > 64
+    )
+      throw new JobObservationPending("invalid_identity");
+    for (const [address, raw] of Object.entries(value.steps)) {
+      const step = raw as { operationKey: string; requestedDeadlineAt: number };
+      if (
+        !OPERATION_KEY.test(address) ||
+        !step ||
+        Object.keys(step).length !== 2 ||
+        !operations[step.operationKey] ||
+        parseControlRootOperationKey(step.operationKey).notAfter !== step.requestedDeadlineAt ||
+        operations[step.operationKey]?.attempt?.requestedDeadlineAt !== step.requestedDeadlineAt
+      )
+        throw new JobObservationPending("invalid_identity");
+      steps[address] = step;
+    }
+  }
+  for (const mapping of Object.values(steps)) {
+    const entry = operations[mapping.operationKey];
+    if (!entry) throw new JobObservationPending("invalid_identity");
+    if (
+      entry.terminal &&
+      entry.phase !== "refused" &&
+      opsKindRequiresControlAuthority(entry.kind) &&
+      !entry.receiptDelivery
+    )
+      throw new JobObservationPending("recovery_required");
+  }
   return {
-    version: 2,
+    version: value.version as 1 | 2 | 3,
+    steps,
     eventTotal: value.eventTotal,
     byteTotal: value.byteTotal,
     truncated: value.truncated,
@@ -191,13 +307,108 @@ async function persistProjection(
   context: JobContext,
   projection: OpsProjection,
   admissionKey?: string,
+  stepAddress?: string,
+  parentExecution?: Record<string, unknown>,
 ): Promise<void> {
-  const value = { ...(context.checkpointResult ?? {}), opsProjection: projection };
-  if (admissionKey) await context.checkpoint(value, undefined, admissionKey);
+  const value = {
+    ...(context.checkpointResult ?? {}),
+    ...(parentExecution ? { _parentExecution: parentExecution } : {}),
+    opsProjection: projection,
+  };
+  if (admissionKey) await context.checkpoint(value, undefined, admissionKey, stepAddress);
   else await context.checkpoint(value);
-  context.checkpointResult = value;
+  if (!context.execution) context.checkpointResult = value;
 }
 
+/** Delivery is a durable observation obligation, independent of the worker's abort signal. */
+export async function ensureAdminJobReceiptDelivery(
+  context: JobContext,
+  projection: OpsProjection,
+  projected: ProjectedOperation,
+  client: ApiOpsClient,
+  status?: OpsJobStatus,
+): Promise<void> {
+  if (
+    projected.phase === "refused" ||
+    projection.version !== 3 ||
+    !projected.attempt ||
+    !Object.values(projection.steps).some((s) => s.operationKey === projected.operationKey) ||
+    !opsKindRequiresControlAuthority(projected.kind)
+  )
+    return;
+  try {
+    if (!projected.receiptDelivery) {
+      if (!status || !context.execution) throw new JobObservationPending("recovery_required");
+      const { diagnostics: _diagnostics, ...safe } = parseOpsJobStatus(status);
+      if (
+        safe.operationKey !== projected.operationKey ||
+        safe.operationId !== projected.operationId ||
+        safe.fingerprint !== projected.fingerprint ||
+        safe.deadlineAt !== projected.deadlineAt ||
+        safe.kind !== projected.kind ||
+        Buffer.byteLength(JSON.stringify(safe)) > 128 * 1024
+      )
+        throw new JobObservationPending("recovery_required");
+      projected.receiptDelivery = {
+        state: "pending",
+        terminalCopyId: randomUUID(),
+        checkpointOwnerVersion: context.execution.version,
+        terminalDigest: controlTerminalReceiptDigest(safe),
+        terminalReceipt: safe,
+      };
+      await persistProjection(context, projection);
+      // Only the confirmed CAS result is authority to mint the proof.
+      const retained = readProjection(context.checkpointResult).operations[projected.operationKey]
+        ?.receiptDelivery;
+      if (!retained || retained.terminalCopyId !== projected.receiptDelivery.terminalCopyId)
+        throw new JobObservationPending("receipt_delivery");
+      projected.receiptDelivery = retained;
+    }
+    const delivery = projected.receiptDelivery;
+    if (delivery.state === "confirmed") return;
+    const fingerprint = projected.fingerprint;
+    if (!fingerprint) throw new JobObservationPending("recovery_required");
+    const token = await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? "");
+    const proof = signApiRetentionProof(token, {
+      version: 1,
+      apiJobId: projected.attempt.apiJobId,
+      originalApiOwnerVersion: projected.attempt.apiOwnerVersion,
+      attemptId: projected.attempt.attemptId,
+      checkpointOwnerVersion: delivery.checkpointOwnerVersion,
+      terminalCopyId: delivery.terminalCopyId,
+      operationKey: projected.operationKey,
+      fingerprint: fingerprint,
+      terminalDigest: delivery.terminalDigest,
+    });
+    const response = await client.execute(
+      {
+        kind: "controlRetention.acknowledge",
+        originRootKey: projected.operationKey,
+        operationKey: projected.operationKey,
+        fingerprint: fingerprint,
+        terminalDigest: delivery.terminalDigest,
+        proof,
+      },
+      { signal: AbortSignal.timeout(15_000) },
+    );
+    if (response.execution !== "sync" || response.value.acknowledged !== true)
+      throw Error("Receipt acknowledgement unavailable");
+    projected.receiptDelivery = { ...delivery, state: "confirmed" };
+    await persistProjection(context, projection);
+    if (
+      readProjection(context.checkpointResult).operations[projected.operationKey]?.receiptDelivery
+        ?.state !== "confirmed"
+    )
+      throw Error("Receipt confirmation checkpoint unavailable");
+  } catch (error) {
+    if (
+      error instanceof JobOwnershipLost ||
+      (error instanceof JobObservationPending && error.reason === "recovery_required")
+    )
+      throw error;
+    throw new JobObservationPending("receipt_delivery");
+  }
+}
 /**
  * Submit a typed administrative effect and mirror its bounded durable event
  * stream into the existing API job log. The agent journal remains the source
@@ -213,49 +424,110 @@ export async function executeAdminJobOperation<K extends OpsOperationKind>(
   const durableIdentity = options.durableIdentity
     ? `${context.jobId}:${options.durableIdentity}`
     : context.jobId;
-  const operationKey = options.operationKey ?? createDurableOpsKey(keyNamespace, durableIdentity);
-  const projection = readProjection(context.checkpointResult);
-  const restored = projection.operations[operationKey];
+  const stepAddress = options.operationKey ?? createDurableOpsKey(keyNamespace, durableIdentity);
+  let projection = readProjection(context.checkpointResult);
+  const retainedKey = projection.steps[stepAddress]?.operationKey ?? stepAddress;
+  let restored = projection.operations[retainedKey];
   if (restored && restored.kind !== operation.kind)
     throw new JobObservationPending("invalid_identity");
-
-  if (!restored && Object.keys(projection.operations).length >= MAX_PROJECTED_OPERATIONS)
-    throw new Error("Durable operations projection limit exceeded");
-  // A retained typed body wins over any newer desired state. Legacy v1 entries
-  // have only an ID and are observed directly; no body/identity is invented.
-  const exactOperation =
-    restored?.operation ?? (restored ? undefined : opsOperationSchema.parse(operation));
-  const projected: ProjectedOperation = restored ?? {
-    kind: operation.kind,
+  if (restored)
+    return observeOperation(context, projection, restored, client, options, false) as Promise<
+      OpsResultFor<K>
+    >;
+  if (context.observationOnly) throw new JobObservationPending("recovery_required");
+  if (!context.execution) throw Error("Fresh managed operation requires a durable job owner");
+  const exactOperation = opsOperationSchema.parse(operation);
+  const root = options.preparedRoot ?? prepareApiJobRoot(context, exactOperation.kind, stepAddress);
+  const expectedNonce = createHash("sha256")
+    .update("openmapx-api-control-root-nonce-v1\0")
+    .update(canonicalJson({ jobId: context.jobId, stepAddress }))
+    .digest()
+    .subarray(0, 16);
+  if (
+    root.operationKey !==
+    createControlRootOperationKey({ notAfter: root.requestedDeadlineAt, nonce: expectedNonce })
+  )
+    throw new JobObservationPending("invalid_identity");
+  const operationKey = root.operationKey,
+    attempt = prepareApiJobChildAttempt(context, exactOperation, operationKey, root);
+  if (!attempt) throw Error("Fresh managed operation requires a durable job attempt");
+  const projected: ProjectedOperation = {
+    kind: exactOperation.kind,
     operationKey,
     operation: exactOperation,
+    attempt,
     phase: "admitting",
     cursor: 0,
-    events: projection.eventTotal,
-    bytes: projection.byteTotal,
+    events: 0,
+    bytes: 0,
     truncated: false,
     terminal: false,
-    attempt: prepareApiJobChildAttempt(context, operation, operationKey),
   };
-  projection.operations[operationKey] = projected;
-  if (!restored) await persistProjection(context, projection, operationKey); // CAS BEFORE first POST or signing
-  return observeOperation(context, projection, projected, client, options, !restored) as Promise<
+  projection = {
+    ...projection,
+    version: 3,
+    steps: {
+      ...projection.steps,
+      [stepAddress]: { operationKey, requestedDeadlineAt: attempt.requestedDeadlineAt },
+    },
+    operations: { ...projection.operations, [operationKey]: projected },
+  };
+  const parentExecution = {
+    operationKey: attempt.parentOperationKey,
+    fingerprint: attempt.parentFingerprint,
+    deadlineAt: attempt.parentDeadlineAt,
+  };
+  // Submit only the candidate entry. The locked current row determines both
+  // map capacities and any winning mapping, even for a full stale snapshot.
+  const reservation = {
+    ...projection,
+    steps: { [stepAddress]: { operationKey, requestedDeadlineAt: attempt.requestedDeadlineAt } },
+    operations: { [operationKey]: projected },
+  };
+  try {
+    await persistProjection(context, reservation, operationKey, stepAddress, parentExecution);
+  } catch (error) {
+    if (!(error instanceof JobStepAllocationConflict)) throw error;
+    projection = readProjection(context.checkpointResult);
+    restored = projection.operations[projection.steps[stepAddress]?.operationKey ?? stepAddress];
+    if (!restored || restored.kind !== operation.kind)
+      throw new JobObservationPending("recovery_required");
+    return observeOperation(context, projection, restored, client, options, false) as Promise<
+      OpsResultFor<K>
+    >;
+  }
+  projection = readProjection(context.checkpointResult);
+  const admitted = projection.operations[operationKey];
+  if (!admitted) throw new JobObservationPending("recovery_required");
+  return observeOperation(context, projection, admitted, client, options, true) as Promise<
     OpsResultFor<K>
   >;
 }
 
+export function prepareAdminJobOperationRoot(
+  ctx: JobContext,
+  kind: OpsOperationKind,
+  stepAddress: string,
+): ApiPreparedRoot {
+  const p = readProjection(ctx.checkpointResult);
+  if (p.operations[p.steps[stepAddress]?.operationKey ?? stepAddress])
+    throw new JobObservationPending("recovery_required");
+  return prepareApiJobRoot(ctx, kind, stepAddress);
+}
 export function retainedAdminJobOperation(ctx: JobContext, key: string): OpsOperation | undefined {
-  return readProjection(ctx.checkpointResult).operations[key]?.operation;
+  const p = readProjection(ctx.checkpointResult);
+  return p.operations[p.steps[key]?.operationKey ?? key]?.operation;
 }
 export function hasRetainedAdminJobOperation(ctx: JobContext, key: string): boolean {
-  return readProjection(ctx.checkpointResult).operations[key] !== undefined;
+  const p = readProjection(ctx.checkpointResult);
+  return p.operations[p.steps[key]?.operationKey ?? key] !== undefined;
 }
 export async function observeRetainedAdminJobOperation(
   ctx: JobContext,
   key: string,
 ): Promise<unknown> {
   const projection = readProjection(ctx.checkpointResult);
-  const retained = projection.operations[key];
+  const retained = projection.operations[projection.steps[key]?.operationKey ?? key];
   if (!retained) throw new JobObservationPending("recovery_required");
   return observeOperation(ctx, projection, retained, createApiOpsClient(), {});
 }
@@ -268,7 +540,10 @@ async function observeOperation(
   options: ExecuteAdminJobOperationOptions,
   fresh = false,
 ): Promise<unknown> {
-  context.signal.throwIfAborted();
+  if (projected.terminal)
+    await ensureAdminJobReceiptDelivery(context, projection, projected, client);
+  if (!projected.terminal) context.signal.throwIfAborted();
+  let terminalStatus: OpsJobStatus | undefined;
   const observer = new AbortController();
   const signal = AbortSignal.any([context.signal, observer.signal]);
   let ownershipLost: JobOwnershipLost | undefined;
@@ -371,6 +646,27 @@ async function observeOperation(
         throw new OpsObservationPending(identity, "transport");
       }
     }
+    const ownEventBase = { events: projected.events, bytes: projected.bytes };
+    const mirrorBase = { events: projection.eventTotal, bytes: projection.byteTotal };
+    const isMapped = Object.values(projection.steps).some(
+      (step) => step.operationKey === projected.operationKey,
+    );
+    const updateMirror = (state: {
+      cursor: number;
+      events: number;
+      bytes: number;
+      truncated: boolean;
+    }) =>
+      Object.assign(
+        projected,
+        state,
+        isMapped
+          ? {
+              events: ownEventBase.events + Math.max(0, state.events - mirrorBase.events),
+              bytes: ownEventBase.bytes + Math.max(0, state.bytes - mirrorBase.bytes),
+            }
+          : {},
+      );
     const mirrorController = new AbortController();
     const mirrorSignal = AbortSignal.any([signal, mirrorController.signal]);
     const mirror = projected.mirrorStopped
@@ -397,7 +693,7 @@ async function observeOperation(
             }
           },
           onProgress: async (state) => {
-            Object.assign(projected, state);
+            updateMirror(state);
             projection.eventTotal = state.events;
             projection.byteTotal = state.bytes;
             projection.truncated ||= state.truncated;
@@ -406,7 +702,7 @@ async function observeOperation(
         })
           .then(async (state) => {
             if (state) {
-              Object.assign(projected, state);
+              updateMirror(state);
               projected.mirrorStopped = true;
               projection.truncated ||= state.truncated;
               await safeCheckpoint();
@@ -425,6 +721,7 @@ async function observeOperation(
       pollIntervalMs: options.pollIntervalMs,
       ...(context.observationOnly ? { timeoutMs: 2_000 } : {}),
       onStatus: (status) => {
+        if (["succeeded", "failed", "timed_out"].includes(status.state)) terminalStatus = status;
         if (status.diagnostics) projected.diagnostics = status.diagnostics;
         if (status.failureResult) projected.failureResult = status.failureResult;
       },
@@ -447,9 +744,22 @@ async function observeOperation(
     projected.terminal = true;
     projected.phase = "terminal";
     delete projected.outcome;
+    await ensureAdminJobReceiptDelivery(context, projection, projected, client, terminalStatus);
     return result;
   } catch (error) {
     if (error instanceof ApiOpsError) {
+      if (!terminalStatus) {
+        if (!projected.operationId && fresh && ADMISSION_REFUSALS.has(error.errorClass)) {
+          projected.phase = "refused";
+          projected.terminal = true;
+          projected.errorClass = error.errorClass;
+          delete projected.outcome;
+          await persistProjection(context, projection);
+          throw error;
+        }
+        projected.outcome = "unknown";
+        throw new JobObservationPending("recovery_required");
+      }
       projected.failureResult = error.failureResult;
       projected.errorClass = error.errorClass;
       projected.terminal = true;
@@ -459,7 +769,8 @@ async function observeOperation(
         ...error.failureResult,
         ...(error.errorClass === "host_update_required" ? { errorCode: error.errorClass } : {}),
       };
-    } else {
+      await ensureAdminJobReceiptDelivery(context, projection, projected, client, terminalStatus);
+    } else if (!(error instanceof JobObservationPending && error.reason === "receipt_delivery")) {
       projected.outcome = "unknown";
     }
     throw error;
@@ -517,9 +828,15 @@ export async function resumeAdminJobObservation(
   const completion = evidence._completion as
     | { operationKey?: string; result?: Record<string, unknown> }
     | undefined;
+  const completionAddress = completion?.operationKey;
   if (
-    completion?.operationKey &&
-    entries.some((entry) => entry.operationKey === completion.operationKey && entry.terminal)
+    completionAddress &&
+    entries.some(
+      (entry) =>
+        entry.operationKey ===
+          (projection.steps[completionAddress]?.operationKey ?? completionAddress) &&
+        entry.terminal,
+    )
   )
     return { ...evidence, ...completion.result };
   // Single-effect jobs have a complete retained receipt. Multi-step workflows
@@ -552,6 +869,7 @@ function hasUnsettledHardlinks(result: unknown): boolean {
 }
 
 export interface CancelAdminJobOperationsOptions {
+  context?: JobContext;
   pollIntervalMs?: number;
   sleep?: (ms: number) => Promise<void>;
   signal?: AbortSignal;
@@ -598,6 +916,33 @@ export async function cancelAdminJobOperations(
       ? AbortSignal.any([options.signal, AbortSignal.timeout(2_000)])
       : AbortSignal.timeout(2_000);
   for (const operation of pending) {
+    if (operation.phase === "refused") {
+      outcomes.push("already_terminal");
+      continue;
+    }
+    if (operation.terminal && operation.receiptDelivery) {
+      if (!options.context) return "pending";
+      try {
+        await ensureAdminJobReceiptDelivery(
+          options.context,
+          projection,
+          operation,
+          client as ApiOpsClient,
+        );
+      } catch (error) {
+        if (error instanceof JobObservationPending) throw error;
+        return "pending";
+      }
+      const receipt = operation.receiptDelivery.terminalReceipt;
+      outcomes.push(
+        receipt.state === "succeeded"
+          ? "succeeded"
+          : receipt.terminationRequestedAt !== undefined
+            ? "contained"
+            : "already_terminal",
+      );
+      continue;
+    }
     if (options.signal?.aborted) return "pending";
     if (options.jobId && operation.attempt && operation.attempt.apiJobId !== options.jobId)
       return "pending";
@@ -676,6 +1021,30 @@ export async function cancelAdminJobOperations(
       if (attempt + 1 < CANCEL_POLL_ATTEMPTS) await sleep(pollIntervalMs);
     }
     if (!status || !["succeeded", "failed", "timed_out"].includes(status.state)) return "pending";
+    operation.terminal = true;
+    operation.phase = "terminal";
+    operation.fingerprint = status.fingerprint;
+    operation.deadlineAt = status.deadlineAt;
+    if (status.state === "succeeded") operation.result = status.result;
+    else {
+      operation.errorClass = status.errorClass;
+      operation.failureResult = status.failureResult;
+    }
+    if (projection.version === 3 && opsKindRequiresControlAuthority(operation.kind)) {
+      if (!options.context) return "pending";
+      try {
+        await ensureAdminJobReceiptDelivery(
+          options.context,
+          projection,
+          operation,
+          client as ApiOpsClient,
+          status,
+        );
+      } catch (error) {
+        if (error instanceof JobObservationPending) throw error;
+        return "pending";
+      }
+    }
     outcomes.push(
       status.state === "succeeded"
         ? "succeeded"

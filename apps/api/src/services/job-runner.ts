@@ -3,15 +3,22 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob } from "../db/schema";
 import { dbActorId } from "../utils/actor";
+import { checkpointOwnedAdminJob } from "./admin-job-checkpoint";
 import { AdminJobFailure, JobObservationPending, publicAdminJobResult } from "./admin-job-failure";
 import { cancelAdminJobOperations, resumeAdminJobObservation } from "./admin-job-ops";
 import {
   adminJobObservationDue,
   claimAdminJob,
+  hasPendingReceiptDelivery,
+  hasUnsettledManagedOperation,
   insertOwnedJobLog,
   type JobExecution,
   JobOwnershipLost,
+  JobStepAllocationConflict,
+  JobStepCapacityExceeded,
   jobOwnership,
+  noPendingReceiptDelivery,
+  noUnsettledManagedOperation,
   readJobExecution,
   renewAdminJobClaim,
 } from "./admin-job-state";
@@ -45,11 +52,36 @@ export interface JobContext {
     result: Record<string, unknown>,
     progress?: number,
     admissionKey?: string,
+    stepAddress?: string,
   ): Promise<void>;
   /** Last durable checkpoint loaded with the job and updated after each checkpoint. */
   checkpointResult?: Record<string, unknown> | null;
 }
 
+function cancellationReceiptContext(job: typeof adminJob.$inferSelect): JobContext {
+  const context: JobContext = {
+    jobId: job.id,
+    jobType: job.type,
+    execution: readJobExecution(job.result),
+    checkpointResult: job.result as Record<string, unknown> | null,
+    payload: {},
+    signal: new AbortController().signal,
+    log: async () => {},
+    setProgress: async () => {},
+    checkpoint: async (value) => {
+      context.checkpointResult = await checkpointOwnedAdminJob(
+        job.id,
+        context.execution,
+        value,
+        undefined,
+        undefined,
+        undefined,
+        context.checkpointResult ?? {},
+      );
+    },
+  };
+  return context;
+}
 type JobHandler = (ctx: JobContext) => Promise<Record<string, unknown> | undefined>;
 
 export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
@@ -110,7 +142,14 @@ class AdminJobRunner {
     const queued = await db
       .update(adminJob)
       .set({ status: "canceled", finishedAt: canceledAt })
-      .where(and(eq(adminJob.id, jobId), eq(adminJob.status, "queued")))
+      .where(
+        and(
+          eq(adminJob.id, jobId),
+          eq(adminJob.status, "queued"),
+          noPendingReceiptDelivery(),
+          noUnsettledManagedOperation(),
+        ),
+      )
       .returning({ id: adminJob.id });
     if (queued.length > 0) {
       this.announce(jobId, "canceled", { finishedAt: canceledAt.toISOString() });
@@ -132,6 +171,7 @@ class AdminJobRunner {
     let outcome: Awaited<ReturnType<typeof cancelAdminJobOperations>> = "pending";
     try {
       outcome = await cancelAdminJobOperations(job.result, undefined, {
+        context: cancellationReceiptContext(job),
         jobId,
         onEvidence: async (evidence) => {
           await db
@@ -142,7 +182,20 @@ class AdminJobRunner {
             .where(jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]));
         },
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof JobObservationPending && error.reason === "receipt_delivery") {
+        const observation = {
+          state: "receipt_delivery",
+          reason: "receipt_delivery",
+          nextCheckAt: new Date(Date.now() + 5000).toISOString(),
+        };
+        await db
+          .update(adminJob)
+          .set({
+            result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify({ observation })}::jsonb`,
+          })
+          .where(jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]));
+      }
       /* Retain intent. */
     }
     if (outcome !== "canceled") return false;
@@ -154,7 +207,13 @@ class AdminJobRunner {
         finishedAt,
         result: sql`coalesce(${adminJob.result}, '{}'::jsonb) - 'observation'`,
       })
-      .where(jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]))
+      .where(
+        and(
+          jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]),
+          noPendingReceiptDelivery(),
+          noUnsettledManagedOperation(),
+        ),
+      )
       .returning({ id: adminJob.id, result: adminJob.result });
     if (rows.length === 0) return false;
     this.announce(jobId, "canceled", {
@@ -378,6 +437,7 @@ class AdminJobRunner {
     const handler = observe ? resumeAdminJobObservation : this.handlers.get(type);
     const execution = readJobExecution(checkpointResult);
     let checkpointTail = Promise.resolve();
+    let checkpointBaseline = structuredClone((checkpointResult ?? {}) as Record<string, unknown>);
     const ctx: JobContext = {
       jobId,
       jobType: type,
@@ -431,8 +491,30 @@ class AdminJobRunner {
         if (!rows.length) lost();
         jobEventBus.publish(jobId, { type: "progress", progress });
       },
-      checkpoint: async (result, progress, admissionKey) => {
+      checkpoint: async (result, progress, admissionKey, stepAddress) => {
         const write = checkpointTail.then(async () => {
+          const isV3 = (result.opsProjection as { version?: number } | undefined)?.version === 3;
+          if (isV3) {
+            if (admissionKey) signal.throwIfAborted();
+            try {
+              ctx.checkpointResult = await checkpointOwnedAdminJob(
+                jobId,
+                execution,
+                result,
+                progress,
+                admissionKey,
+                stepAddress,
+                checkpointBaseline,
+              );
+              checkpointBaseline = structuredClone(ctx.checkpointResult);
+            } catch (error) {
+              if (error instanceof JobStepAllocationConflict)
+                ctx.checkpointResult = error.checkpoint;
+              throw error;
+            }
+            if (progress !== undefined) jobEventBus.publish(jobId, { type: "progress", progress });
+            return;
+          }
           signal.throwIfAborted();
           // A handler cannot replace the runner's ownership member.
           const merged: Record<string, unknown> = {
@@ -464,7 +546,13 @@ class AdminJobRunner {
         });
         checkpointTail = write.catch(() => undefined);
         return write.catch((error) => {
-          if (error instanceof JobOwnershipLost || signal.aborted) throw error;
+          if (
+            error instanceof JobOwnershipLost ||
+            error instanceof JobStepAllocationConflict ||
+            error instanceof JobStepCapacityExceeded ||
+            signal.aborted
+          )
+            throw error;
           throw new JobPersistenceUnavailable("Administrative job checkpoint unavailable");
         });
       },
@@ -472,14 +560,14 @@ class AdminJobRunner {
 
     if (!observe) this.announce(jobId, "running", { startedAt: new Date().toISOString() });
     const startedAtMs = Date.now();
-    const pending = async (reason: OpsObservationPending["reason"]) => {
+    const pending = async (reason: OpsObservationPending["reason"] | "receipt_delivery") => {
       try {
         const attempts = Math.min(12, Number(ctx.checkpointResult?._observationAttempts ?? 0) + 1);
         const observationPatch = {
           _observationAttempts: attempts,
           _observationLeaseUntil: null,
           observation: {
-            state: "unknown",
+            state: reason === "receipt_delivery" ? "receipt_delivery" : "unknown",
             reason,
             nextCheckAt: new Date(
               Date.now() + Math.min(60_000, 5_000 * 2 ** (attempts - 1)),
@@ -505,6 +593,7 @@ class AdminJobRunner {
       status: "success" | "failed",
       result: Record<string, unknown> | null,
       error?: string,
+      knownFailure = false,
     ) => {
       try {
         await checkpointTail;
@@ -514,17 +603,42 @@ class AdminJobRunner {
           ...(execution ? { _execution: execution } : {}),
         };
         delete merged.observation;
+        if (hasUnsettledManagedOperation(ctx.checkpointResult)) {
+          if (status === "success" || knownFailure)
+            await db
+              .update(adminJob)
+              .set({
+                result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify({ _settled: { status, result: publicAdminJobResult(merged), error } })}::jsonb`,
+              })
+              .where(jobOwnership(jobId, execution, ["running", "cancel_pending"]));
+          throw new JobObservationPending("recovery_required");
+        }
+        if (hasPendingReceiptDelivery(ctx.checkpointResult)) {
+          await db
+            .update(adminJob)
+            .set({
+              result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify({ _settled: { status, result: publicAdminJobResult(merged), error } })}::jsonb`,
+            })
+            .where(jobOwnership(jobId, execution, ["running", "cancel_pending"]));
+          throw new JobObservationPending("receipt_delivery");
+        }
         const finishedAt = new Date();
         const rows = await db
           .update(adminJob)
           .set({
             status,
-            result: merged,
+            result: sql`(coalesce(${adminJob.result}, '{}'::jsonb) - 'observation') || ${JSON.stringify(Object.fromEntries(Object.entries(merged).filter(([key]) => !["opsProjection", "_opsLogEvents", "_opsLogBytes"].includes(key))))}::jsonb`,
             error: error ?? null,
             finishedAt,
             ...(status === "success" ? { progress: 100 } : {}),
           })
-          .where(jobOwnership(jobId, execution))
+          .where(
+            and(
+              jobOwnership(jobId, execution),
+              noPendingReceiptDelivery(),
+              noUnsettledManagedOperation(),
+            ),
+          )
           .returning({ id: adminJob.id });
         if (rows.length) {
           this.announce(jobId, status, {
@@ -540,9 +654,11 @@ class AdminJobRunner {
             .set({
               result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify({ _settled: { status, result: publicAdminJobResult(merged), error } })}::jsonb`,
             })
-            .where(jobOwnership(jobId, execution, ["cancel_pending"]));
+            .where(jobOwnership(jobId, execution, ["running", "cancel_pending"]));
+          await pending("receipt_delivery");
         }
-      } catch {
+      } catch (error) {
+        if (error instanceof JobObservationPending) throw error;
         throw new JobPersistenceUnavailable("Administrative job persistence unavailable");
       }
     };
@@ -558,6 +674,7 @@ class AdminJobRunner {
         if (!current) return;
         if (current.status === "cancel_pending") {
           const outcome = await cancelAdminJobOperations(current.result, undefined, {
+            context: ctx,
             jobId,
             signal,
             onEvidence: async (evidence) => {
@@ -583,7 +700,13 @@ class AdminJobRunner {
                 finishedAt,
                 result: sql`coalesce(${adminJob.result}, '{}'::jsonb) - 'observation'`,
               })
-              .where(jobOwnership(jobId, execution, ["cancel_pending"]))
+              .where(
+                and(
+                  jobOwnership(jobId, execution, ["cancel_pending"]),
+                  noPendingReceiptDelivery(),
+                  noUnsettledManagedOperation(),
+                ),
+              )
               .returning({ id: adminJob.id, result: adminJob.result });
             if (rows.length)
               this.announce(jobId, "canceled", {
@@ -606,8 +729,8 @@ class AdminJobRunner {
       // turn an accepted successful effect into failed because PostgreSQL failed.
       try {
         await settle("success", result ?? null);
-      } catch {
-        await pending("transport");
+      } catch (error) {
+        await pending(error instanceof JobObservationPending ? error.reason : "transport");
       }
     } catch (err) {
       if (err instanceof JobOwnershipLost || err instanceof JobPersistenceUnavailable) return;
@@ -617,16 +740,23 @@ class AdminJobRunner {
         await pending("observer_deadline");
       else if (observe && !(err instanceof AdminJobFailure) && !(err instanceof ApiOpsError))
         await pending("transport");
-      else
-        await settle(
-          "failed",
-          err instanceof AdminJobFailure
-            ? err.result
-            : err instanceof ApiOpsError
-              ? (err.failureResult ?? null)
-              : null,
-          err instanceof Error ? err.message : "Administrative job failed",
-        );
+      else {
+        try {
+          await settle(
+            "failed",
+            err instanceof AdminJobFailure
+              ? err.result
+              : err instanceof ApiOpsError
+                ? (err.failureResult ?? null)
+                : null,
+            err instanceof Error ? err.message : "Administrative job failed",
+            err instanceof AdminJobFailure || err instanceof ApiOpsError,
+          );
+        } catch (error) {
+          if (error instanceof JobObservationPending) await pending(error.reason);
+          else if (!(error instanceof JobPersistenceUnavailable)) throw error;
+        }
+      }
     } finally {
       jobEventBus.recordHandlerDuration(Date.now() - startedAtMs);
     }

@@ -1,7 +1,7 @@
 import { opsOperationSchema } from "../ops/contract";
 import type { ExecutionRef, VerifiedParentExecution } from "../ops/execution-identity";
 import { opsOperationFingerprint } from "../ops/fingerprint";
-import { verifiedParents } from "../ops/verified-parent-internal";
+import { verifiedParentOrigins, verifiedParents } from "../ops/verified-parent-internal";
 import {
   type ControlInstallation,
   controlDigest,
@@ -75,6 +75,7 @@ export function inspectControlAdmission(
   });
   const parent = Object.freeze(retainedControlParent(inspected.parent)) as VerifiedParentExecution;
   verifiedParents.add(parent);
+  if (inspected.origin) verifiedParentOrigins.set(parent, inspected.origin);
   return Object.freeze({
     ...inspected,
     parent,
@@ -106,5 +107,6 @@ export function verifiedParentForArtifactDelegation(
     throw Error("Wrong delegated execution");
   const parent = Object.freeze(retainedControlParent(inspected.parent)) as VerifiedParentExecution;
   verifiedParents.add(parent);
+  if (inspected.origin) verifiedParentOrigins.set(parent, inspected.origin);
   return parent;
 }

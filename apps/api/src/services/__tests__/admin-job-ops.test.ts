@@ -1,5 +1,5 @@
 import { OpsClientError, type OpsOperation } from "@openmapx/core/ops";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   cancelAdminJobOperations,
   executeAdminJobOperation,
@@ -7,38 +7,84 @@ import {
 } from "../admin-job-ops";
 import type { JobContext } from "../job-runner";
 
+let fixtureRoot: string, previousToken: string | undefined;
+beforeAll(async () => {
+  const { mkdtemp, writeFile } = await import("node:fs/promises"),
+    { join } = await import("node:path"),
+    { tmpdir } = await import("node:os");
+  fixtureRoot = await mkdtemp(join(tmpdir(), "omx-api-broker-"));
+  const file = join(fixtureRoot, "api-token");
+  await writeFile(file, Buffer.alloc(32, 7).toString("base64url"), { mode: 0o600 });
+  previousToken = process.env.OPS_AGENT_TOKEN_FILE;
+  process.env.OPS_AGENT_TOKEN_FILE = file;
+});
+afterAll(async () => {
+  if (previousToken === undefined) delete process.env.OPS_AGENT_TOKEN_FILE;
+  else process.env.OPS_AGENT_TOKEN_FILE = previousToken;
+  await (await import("node:fs/promises")).rm(fixtureRoot, { recursive: true, force: true });
+});
 function context(): JobContext {
-  return {
+  const ctx: JobContext = {
     jobId: "1d2b29cd-23de-4b19-8c32-86c196833b79",
+    execution: { owner: "4c0c9623-252c-41b6-8f99-41915ad38b12", version: 1 },
     payload: {},
     signal: new AbortController().signal,
     log: vi.fn().mockResolvedValue(undefined),
     setProgress: vi.fn().mockResolvedValue(undefined),
-    checkpoint: vi.fn().mockResolvedValue(undefined),
+    checkpoint: vi.fn(async (value) => {
+      ctx.checkpointResult = structuredClone(value);
+    }),
+  };
+  return ctx;
+}
+function legacy(ctx: JobContext, key: string, kind: OpsOperation["kind"], id?: string) {
+  ctx.checkpointResult = {
+    opsProjection: {
+      version: 2,
+      eventTotal: 0,
+      byteTotal: 0,
+      truncated: false,
+      operations: {
+        [key]: {
+          kind,
+          operationKey: key,
+          ...(id ? { operationId: id } : {}),
+          phase: id ? "observing" : "admitting",
+          operation: kind === "backup.delete" ? { kind, backupId: "nightly" } : undefined,
+          cursor: 0,
+          events: 0,
+          bytes: 0,
+          truncated: false,
+          terminal: false,
+        },
+      },
+    },
   };
 }
 
 describe("administrative job operations broker", () => {
   it("submits an exact typed operation under a deterministic durable key", async () => {
     const ctx = context();
-    const operation = { kind: "backup.create", backupId: "nightly" } as const;
+    const operation = { kind: "backup.list" } as const;
     const execute = vi.fn().mockResolvedValue({
       execution: "sync",
       kind: operation.kind,
-      value: { backupId: "nightly" },
+      value: { backups: [], warningCount: 0 },
     });
 
     await expect(
       executeAdminJobOperation(ctx, operation, "admin-job.backup.create", {
         client: { execute } as never,
       }),
-    ).resolves.toEqual({ backupId: "nightly" });
+    ).resolves.toEqual({ backups: [], warningCount: 0 });
 
     expect(execute).toHaveBeenCalledOnce();
     expect(execute.mock.calls[0]?.[0]).toEqual(operation);
-    expect(execute.mock.calls[0]?.[1]).toEqual({
-      operationKey: expect.stringMatching(/^opk1_[A-Za-z0-9_-]+$/),
+    expect(execute.mock.calls[0]?.[1]).toMatchObject({
+      operationKey: expect.stringMatching(/^opk1_t1_/),
       signal: expect.any(AbortSignal),
+      execution: { requestedDeadlineAt: expect.any(Number) },
+      parentAssertion: expect.any(String),
     });
   });
 
@@ -50,9 +96,12 @@ describe("administrative job operations broker", () => {
     let durable: Record<string, unknown> | undefined;
     ctx.checkpoint = vi.fn(async (value) => {
       durable = structuredClone(value);
+      ctx.checkpointResult = structuredClone(value);
     });
     const client = {
-      execute: vi.fn(async () => {
+      execute: vi.fn(async (operation: OpsOperation) => {
+        if (operation.kind === "controlRetention.acknowledge")
+          return { execution: "sync", kind: operation.kind, value: { acknowledged: true } };
         throw new OpsClientError("timeout");
       }),
       lookup: vi.fn(async (..._args: unknown[]) => {
@@ -67,20 +116,23 @@ describe("administrative job operations broker", () => {
       operationKey,
       pollIntervalMs: 1,
     }).catch(() => undefined);
-    expect(durable).toMatchObject({
-      opsProjection: {
-        version: 2,
-        operations: {
-          [operationKey]: { operation, phase: "admitting", operationKey },
-        },
-      },
+    const saved = (await import("../admin-job-ops")).readProjection(durable),
+      mapping = saved.steps[operationKey];
+    if (!mapping) throw Error("Missing stable fixture mapping");
+    const finalKey = mapping.operationKey;
+    expect(saved).toMatchObject({
+      version: 3,
+      operations: { [finalKey]: { operation, phase: "admitting", operationKey: finalKey } },
     });
     const restarted = context();
     restarted.checkpointResult = durable;
     const status = {
-      version: 1,
+      version: 2,
+      admittedAt: mapping.requestedDeadlineAt - 300000,
+      deadlineAt: mapping.requestedDeadlineAt,
+      fingerprint: "a".repeat(64),
       operationId,
-      operationKey,
+      operationKey: finalKey,
       kind: operation.kind,
       resourceId: "original",
       state: "succeeded",
@@ -110,12 +162,14 @@ describe("administrative job operations broker", () => {
         },
       ),
     ).resolves.toEqual({ backupId: "original" });
-    expect(client.execute).toHaveBeenCalledTimes(1);
+    expect(
+      client.execute.mock.calls.filter(([operation]) => operation.kind === "backup.delete"),
+    ).toHaveLength(1);
     expect(client.lookup.mock.calls.at(-1)?.[0]).toEqual(operation);
     expect(restarted.checkpointResult).toMatchObject({
       opsProjection: {
         operations: {
-          [operationKey]: { operation, operationId, phase: "terminal" },
+          [finalKey]: { operation, operationId, phase: "terminal" },
         },
       },
     });
@@ -125,6 +179,7 @@ describe("administrative job operations broker", () => {
     const ctx = context();
     const operationKey = "opk1_abcdefghijklmnop";
     const operationId = "job1_abcdefghijklmnop";
+    legacy(ctx, operationKey, "system.update", operationId);
     const client = {
       execute: vi.fn().mockResolvedValue({
         execution: "async",
@@ -185,6 +240,7 @@ describe("administrative job operations broker", () => {
     };
     const operationKey = "opk1_abcdefghijklmnop";
     const operationId = "job1_abcdefghijklmnop";
+    legacy(ctx, operationKey, operation.kind, operationId);
     const cancel = vi.fn();
     const client = {
       execute: vi.fn().mockResolvedValue({
@@ -521,6 +577,14 @@ it("retains a service workflow parent budget beyond its short render child", asy
       },
       "opk1_renderAttempt12345",
     );
+    if (!render) throw Error("Missing retained parent fixture");
+    ctx.checkpointResult = {
+      _parentExecution: {
+        operationKey: render.parentOperationKey,
+        fingerprint: render.parentFingerprint,
+        deadlineAt: render.parentDeadlineAt,
+      },
+    };
     now.mockReturnValue(1_800_000_000_000 + opsExecutionBudget("stack.render").processMs);
     const start = prepareApiJobChildAttempt(
       ctx,
@@ -596,7 +660,7 @@ it("validates a resumed operation identity before reading its event stream", asy
 it.each([false, true])(
   "observes one real journal admission across lost response and both restarts (failure=%s)",
   async (failed) => {
-    const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+    const { mkdtemp, writeFile, rm, mkdir } = await import("node:fs/promises");
     const { join } = await import("node:path");
     const { tmpdir } = await import("node:os");
     const { OpsClient } = await import("@openmapx/core/ops");
@@ -604,6 +668,14 @@ it.each([false, true])(
     const { openOpsJobJournal } = await import("../../../../ops-agent/src/journal");
     const { OpsExecutionFailure } = await import("../../../../ops-agent/src/runtime");
     const root = await mkdtemp(join(tmpdir(), "task022-admission-"));
+    const control = await import("@openmapx/core/build-artifacts");
+    await mkdir(join(root, "data"), { mode: 0o700 });
+    await control.provisionControlInstallation(root);
+    const installation = control.openControlInstallation({
+      infraDir: root,
+      role: "ops-agent",
+      serviceIds: ["motis"],
+    });
     const token = Buffer.alloc(32, 7).toString("base64url");
     const tokenFile = join(root, "token");
     await writeFile(tokenFile, token, { mode: 0o600 });
@@ -623,6 +695,7 @@ it.each([false, true])(
     let app = buildOpsAgentServer({
       tokens: { api: token, "data-manager": Buffer.alloc(32, 8).toString("base64url") },
       journal,
+      controlInstallation: installation,
       dispatch,
       resourcePolicy: { allowBackup: () => true },
     });
@@ -639,7 +712,10 @@ it.each([false, true])(
         payload: init?.body as string,
       });
       responses.push({ path: url.pathname, status: response.statusCode, body: response.body });
-      if (init?.method === "POST") {
+      if (
+        init?.method === "POST" &&
+        JSON.parse(String(init.body)).operation.kind !== "controlRetention.acknowledge"
+      ) {
         posts++;
         if (loseResponse) {
           controller.abort();
@@ -659,6 +735,7 @@ it.each([false, true])(
     first.execution = { owner: "4c0c9623-252c-41b6-8f99-41915ad38b12", version: 3 };
     first.checkpoint = async (value) => {
       durable = structuredClone(value);
+      first.checkpointResult = structuredClone(value);
     };
     const key = "opk1_restartAccepted1234";
     try {
@@ -674,6 +751,7 @@ it.each([false, true])(
       );
       const admitted = journal.records()[0];
       if (!admitted) throw new Error("Missing retained admission");
+      if (admitted.parent?.issuer !== "api") throw Error("Missing exact API parent");
       expect(admitted.parent?.apiJobId).toBe(first.jobId);
       expect(admitted.parent?.apiOwnerVersion).toBe(3);
       expect(admitted.operation).toEqual({ kind: "backup.delete", backupId: "original" });
@@ -682,11 +760,16 @@ it.each([false, true])(
       app = buildOpsAgentServer({
         tokens: { api: token, "data-manager": Buffer.alloc(32, 8).toString("base64url") },
         journal: reloaded,
+        controlInstallation: installation,
         dispatch,
       });
       loseResponse = false;
       const restarted = context();
       restarted.checkpointResult = durable;
+      restarted.checkpoint = async (value) => {
+        durable = structuredClone(value);
+        restarted.checkpointResult = structuredClone(value);
+      };
       restarted.execution = { owner: "5c0c9623-252c-41b6-8f99-41915ad38b12", version: 4 };
       const observation = executeAdminJobOperation(
         restarted,
@@ -722,7 +805,7 @@ it.each([false, true])(
       expect(restarted.checkpointResult).toMatchObject({
         opsProjection: {
           operations: {
-            [key]: {
+            [admitted.operationKey]: {
               operationId: admitted.operationId,
               fingerprint: admitted.fingerprint,
               phase: "terminal",
@@ -737,7 +820,7 @@ it.each([false, true])(
       for (const path of [
         `/v1/operations/${admitted.operationId}`,
         `/v1/operations/${admitted.operationId}/events`,
-        `/v1/operation-keys/${key}`,
+        `/v1/operation-keys/${admitted.operationKey}`,
       ]) {
         const denied = await app.inject({
           method: "GET",
@@ -758,6 +841,7 @@ it.each([false, true])(
       expect(dispatch).toHaveBeenCalledTimes(1);
     } finally {
       await app.close();
+      control.closeControlInstallation(installation);
       vi.unstubAllEnvs();
       vi.unstubAllGlobals();
       await rm(root, { recursive: true, force: true });
@@ -832,13 +916,14 @@ it.each(["log", "checkpoint", "output"])(
     const entered = Promise.withResolvers<void>();
     const resume = Promise.withResolvers<void>();
     let writes = 0;
-    ctx.checkpoint = async () => {
+    ctx.checkpoint = async (value) => {
       writes++;
       if (edge === "checkpoint" && writes >= 3) {
         entered.resolve();
         await resume.promise;
         throw new JobOwnershipLost();
       }
+      ctx.checkpointResult = structuredClone(value);
     };
     if (edge === "log" || edge === "output")
       ctx.log = async () => {
@@ -848,6 +933,7 @@ it.each(["log", "checkpoint", "output"])(
       };
     const key = "opk1_displacedObserver1";
     const id = "job1_displacedObserver1";
+    legacy(ctx, key, "backup.delete");
     const client = {
       execute: vi.fn().mockResolvedValue({
         execution: "async",
@@ -875,7 +961,13 @@ it.each(["log", "checkpoint", "output"])(
         events: [{ cursor: 1, type: "log", stream: "stdout", message: "old owner" }],
       }),
       cancel: vi.fn(),
-      lookup: vi.fn(),
+      lookup: vi.fn().mockResolvedValue({
+        version: 1,
+        kind: "backup.delete",
+        operationId: id,
+        operationKey: key,
+        state: "queued",
+      }),
     };
     const result = executeAdminJobOperation(
       ctx,
@@ -892,6 +984,6 @@ it.each(["log", "checkpoint", "output"])(
     if (edge === "output") expect(await outcome).toBe("fulfilled");
     else expect(await outcome).toBeInstanceOf(JobOwnershipLost);
     expect(client.cancel).not.toHaveBeenCalled();
-    expect(client.execute).toHaveBeenCalledTimes(1);
+    expect(client.execute).not.toHaveBeenCalled();
   },
 );

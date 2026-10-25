@@ -199,6 +199,7 @@ describe("bounded async ops helpers", () => {
         fakeClient({ execute, status, lookup }),
         { kind: "service.pull", serviceId: "redis" },
         operationKey,
+        { parentAssertion: "retained-test-parent" },
       ),
     ).resolves.toEqual({ changed: true });
     expect(execute).toHaveBeenCalledTimes(1);
@@ -570,7 +571,9 @@ describe("configuration outcome evidence", () => {
       execute: vi.fn().mockRejectedValue(new Error("connection lost after send")),
     });
     expect(
-      await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome123"),
+      await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome123", {
+        parentAssertion: "retained-test-parent",
+      }),
     ).toEqual({ outcome: "unknown", reason: "transport_or_result" });
     expect(client.execute).toHaveBeenCalledTimes(1);
   });
@@ -592,7 +595,9 @@ describe("configuration outcome evidence", () => {
         }),
       });
       expect(
-        await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome123"),
+        await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome123", {
+          parentAssertion: "retained-test-parent",
+        }),
       ).toEqual({ outcome: "unknown", reason: "transport_or_result" });
       expect(client.execute).toHaveBeenCalledTimes(1);
     },
@@ -621,10 +626,14 @@ describe("configuration outcome evidence", () => {
       });
     const client = fakeClient({ execute });
     expect(
-      await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome123"),
+      await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome123", {
+        parentAssertion: "retained-test-parent",
+      }),
     ).toMatchObject({ outcome: "not_committed", reason: "conflict" });
     expect(
-      await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome456"),
+      await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome456", {
+        parentAssertion: "retained-test-parent",
+      }),
     ).toEqual({ outcome: "unknown", reason: "transport_or_result" });
   });
 });

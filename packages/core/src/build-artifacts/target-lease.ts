@@ -22,6 +22,7 @@ import {
   childSettlementState,
   controlChildOperationKey,
   controlDigest,
+  controlOriginSchema,
   controlPeerState,
   digest,
   encodePrivate,
@@ -30,11 +31,13 @@ import {
   type InstallationState,
   installationState,
   newControlKey,
+  originRecordDomain,
   parseControlAssertion,
   readControlExecutionWitness,
   readPrivateRecord,
   recoveryAuthorityState,
   retainedControlParent,
+  sameControlOrigin,
   signControl,
   targetSchema,
   uuid,
@@ -42,6 +45,7 @@ import {
   type VerifiedControlPeer,
   type VerifiedExecutionAuthority,
   type VerifiedRecoveryAuthority,
+  validateOriginRecord,
   verifyControl,
   verifyControlEffectSettlement,
   verifyControlPreparedTerminal,
@@ -49,6 +53,16 @@ import {
 } from "./control-authority";
 import { CONTROL_RETENTION_LIMITS, reserveAuthoritySlot } from "./control-retention";
 import { AnchoredDirectory, type FileIdentity, identity, sameInode } from "./filesystem";
+import { assertOriginClockForward } from "./retention-clock";
+import {
+  enlistFamilyIntent,
+  familyRecordWrite,
+  hasLocalRetentionFamily,
+  markFamilyLeaseReleased,
+  registerFamilyLease,
+  reserveControlFamily,
+  trackFamilyDirectory,
+} from "./retention-family";
 
 export type { ChildSettlement } from "./control-authority";
 export type ArtifactTargetLease = {
@@ -67,7 +81,8 @@ export type BorrowedArtifactTargetLease = {
 export type TargetLeaseAuthority = ArtifactTargetLease | BorrowedArtifactTargetLease;
 const inode = z.strictObject({ dev: z.string().regex(/^\d+$/), ino: z.string().regex(/^\d+$/) });
 const certificateSchema = z.strictObject({
-  version: z.literal(1),
+  version: z.union([z.literal(1), z.literal(2)]),
+  origin: controlOriginSchema.optional(),
   installationId: uuid,
   leaseId: uuid,
   dataRootIdentity: inode,
@@ -78,7 +93,11 @@ const certificateSchema = z.strictObject({
   createdAt: z.number().int().nonnegative().safe(),
 });
 type Certificate = z.infer<typeof certificateSchema>;
-const slotSchema = z.strictObject({ name: z.string().regex(/^slot-\d{1,4}$/), identity: inode });
+const slotSchema = z.strictObject({
+  name: z.string().regex(/^slot-\d{1,4}$/),
+  identity: inode,
+  generation: uuid.optional(),
+});
 const admissionSlotSchema = z.strictObject({
   version: z.literal(1),
   installationId: uuid,
@@ -86,6 +105,16 @@ const admissionSlotSchema = z.strictObject({
   certificateDigest: digest,
   active: slotSchema,
   history: slotSchema,
+  release: z
+    .object({
+      phase: z.enum(["planned", "released"]),
+      locks: z.array(z.string()).max(16),
+      active: z.boolean(),
+      pending: z.string().optional(),
+      activePlanned: z.boolean().optional(),
+    })
+    .optional(),
+  releasedAt: z.number().int().positive().safe().optional(),
 });
 type AdmissionSlots = z.infer<typeof admissionSlotSchema>;
 
@@ -101,6 +130,8 @@ const outcomeSchema = z.strictObject({
 });
 const phaseSchema = z.enum(["held", "cancel_pending", "recovery_required", "settled"]);
 const rootSchema = z.strictObject({
+  version: z.literal(2).optional(),
+  origin: controlOriginSchema.optional(),
   certificate: signedCertificateSchema,
   sequence: z.number().int().nonnegative().safe(),
   phase: phaseSchema,
@@ -109,7 +140,8 @@ const rootSchema = z.strictObject({
 });
 type RootRecord = z.infer<typeof rootSchema>;
 const grantSchema = z.strictObject({
-  version: z.literal(1),
+  version: z.union([z.literal(1), z.literal(2)]),
+  origin: controlOriginSchema.optional(),
   installationId: uuid,
   leaseId: uuid,
   ownerCertificateDigest: digest,
@@ -128,6 +160,8 @@ const grantSchema = z.strictObject({
 });
 type Grant = z.infer<typeof grantSchema>;
 const childSchema = z.strictObject({
+  version: z.literal(2).optional(),
+  origin: controlOriginSchema.optional(),
   delegationId: uuid,
   grantDigest: digest,
   execution: executionRefSchema,
@@ -200,7 +234,7 @@ function json(dir: AnchoredDirectory, name: string, max = 131072): unknown {
 function readRoot(s: State): RootRecord {
   return verifyControl(
     s.certificate.ownerPublicKey,
-    "openmapx-lease-owner-v1",
+    originRecordDomain("openmapx-lease-owner", json(s.ledger, "owner.json")),
     json(s.ledger, "owner.json"),
     rootSchema,
   );
@@ -214,7 +248,12 @@ function readGrant(s: State, id: string, parentKey: string): Grant {
     const envelope = z
       .strictObject({ grant: z.unknown(), transition: z.unknown() })
       .parse(json(dir, `${uuid.parse(id)}.json`));
-    const grant = verifyControl(parentKey, "openmapx-lease-grant-v1", envelope.grant, grantSchema);
+    const grant = verifyControl(
+      parentKey,
+      originRecordDomain("openmapx-lease-grant", envelope.grant),
+      envelope.grant,
+      grantSchema,
+    );
     const transition = verifyControl(
       parentKey,
       "openmapx-lease-intent-v1",
@@ -222,6 +261,8 @@ function readGrant(s: State, id: string, parentKey: string): Grant {
       transitionSchema,
     );
     if (
+      !validateOriginRecord(grant) ||
+      !sameControlOrigin(grant.origin, s.certificate.origin) ||
       grant.delegationId !== id ||
       transition.delegationId !== id ||
       transition.grantDigest !== controlDigest(envelope.grant) ||
@@ -245,8 +286,15 @@ function readChild(s: State, grant: Grant): ChildRecord | undefined {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return;
       throw e;
     }
-    const child = verifyControl(grant.childPublicKey, "openmapx-lease-child-v1", raw, childSchema);
+    const child = verifyControl(
+      grant.childPublicKey,
+      originRecordDomain("openmapx-lease-child", raw),
+      raw,
+      childSchema,
+    );
     if (
+      !validateOriginRecord(child) ||
+      !sameControlOrigin(child.origin, grant.origin) ||
       child.delegationId !== grant.delegationId ||
       controlDigest(child.execution) !== controlDigest(grant.child)
     )
@@ -278,7 +326,8 @@ function highWater(s: State, nodes: Record<string, { sequence: number; digest: s
     )
       throw Error("Shared ledger rollback or replacement");
   }
-  writePrivateRecord(s.installation, "observations", name, nodes);
+  if (!s.certificate.origin || hasLocalRetentionFamily(s.installation, s.certificate.origin))
+    writePrivateRecord(s.installation, "observations", name, nodes, false, s.certificate.origin);
 }
 type LeaseTree = {
   root: RootRecord;
@@ -288,7 +337,11 @@ type LeaseTree = {
 function tree(s: State): LeaseTree {
   if (!s.journalGuardHeld) return guarded(s, () => tree(s), false);
   const root = readRoot(s);
-  if (controlDigest(root.certificate) !== controlDigest(s.certificateEnvelope))
+  if (
+    !validateOriginRecord(root) ||
+    !sameControlOrigin(root.origin, s.certificate.origin) ||
+    controlDigest(root.certificate) !== controlDigest(s.certificateEnvelope)
+  )
     throw Error("Owner certificate replacement");
   const nodes: Record<string, { sequence: number; digest: string }> = {
     owner: { sequence: root.sequence, digest: controlDigest(root) },
@@ -338,6 +391,7 @@ function tree(s: State): LeaseTree {
       );
       const allowedKinds = childPhaseKinds[grant.phase as ControlChildPhase];
       if (
+        !sameControlOrigin(witness.origin, grant.origin) ||
         !allowedKinds?.includes(grant.childKind) ||
         grant.child.operationKey !==
           controlChildOperationKey(
@@ -434,7 +488,21 @@ function writeBounded(
     }
     if (ledgerBytes(s) - old + Buffer.byteLength(bytes) > 131072)
       throw Error("Lease ledger capacity exceeded");
-    dir.write(name, bytes, exclusive);
+    if (s.certificate.origin)
+      familyRecordWrite(
+        s.installation,
+        s.certificate.origin,
+        {
+          scope: "shared",
+          namespace: kind === "owner" ? "lease-owner" : `lease-${kind}`,
+          container: s.certificate.leaseId,
+          name,
+        },
+        bytes,
+        (before) => dir.write(name, bytes, exclusive, before),
+        exclusive,
+      );
+    else dir.write(name, bytes, exclusive);
   } finally {
     if (dir !== s.ledger) dir.close();
   }
@@ -465,7 +533,7 @@ function guarded<T>(s: State, run: () => T, checkTargets = true): T {
   }
 }
 function writeNode(s: State, node: RootRecord | ChildRecord) {
-  const domain = s.node === null ? "openmapx-lease-owner-v1" : "openmapx-lease-child-v1";
+  const domain = `${s.node === null ? "openmapx-lease-owner" : "openmapx-lease-child"}-v${node.version === 2 ? 2 : 1}`;
   writeBounded(
     s,
     s.node === null ? "owner" : "children",
@@ -526,12 +594,29 @@ function admissionIndex(
     throw e;
   }
 }
-function releaseActiveSlot(s: State) {
+function removeSlot(dir: AnchoredDirectory, slot: z.infer<typeof slotSchema>) {
+  const child = dir.directory(slot.name);
+  try {
+    if (!sameInode(identity(child.stat), slot.identity))
+      throw Error("Replaced admission slot inode");
+    if (slot.generation) {
+      const value = z
+        .strictObject({ generation: uuid })
+        .parse(json(child, "generation.json", 1024));
+      if (value.generation !== slot.generation) throw Error("Reused admission slot generation");
+      child.removeFile("generation.json");
+    }
+  } finally {
+    child.close();
+  }
+  dir.removeDirectory(slot.name, slot.identity);
+}
+function _releaseActiveSlot(s: State) {
   if (!s.slots) throw Error("Missing retained admission slots");
   const index = s.control.directory("admission-index-v1"),
     active = index.directory("active");
   try {
-    active.removeDirectory(s.slots.active.name, s.slots.active.identity);
+    removeSlot(active, s.slots.active);
   } finally {
     active.close();
     index.close();
@@ -619,7 +704,8 @@ export async function acquireArtifactTargetLease(options: {
     ledger.directory("children", true).close();
     const key = newControlKey();
     const certificate: Certificate = {
-      version: 1,
+      version: 2,
+      origin: authority.origin,
       installationId: authority.installation.installation.installationId,
       leaseId,
       dataRootIdentity: identity(data.stat),
@@ -631,7 +717,7 @@ export async function acquireArtifactTargetLease(options: {
     };
     const certificateEnvelope = signControl(
       authority.installation.privateKey,
-      "openmapx-lease-certificate-v1",
+      "openmapx-lease-certificate-v2",
       certificate,
     );
     const slots: AdmissionSlots = {
@@ -642,11 +728,49 @@ export async function acquireArtifactTargetLease(options: {
       active: activeSlot,
       history: historySlot,
     };
-    ledger.write(
-      "admission.json",
-      canonicalJson(
-        signControl(authority.installation.privateKey, "openmapx-admission-slots-v1", slots),
-      ),
+    if (!authority.origin) throw Error("Legacy root cannot acquire a fresh lease");
+    registerFamilyLease(
+      authority.installation,
+      authority.origin,
+      leaseId,
+      controlDigest(certificateEnvelope),
+      authority.execution.executor,
+    );
+    trackFamilyDirectory(
+      authority.installation,
+      authority.origin,
+      { namespace: "lease-directory", container: leaseId, name: leaseId },
+      identity(ledger.stat),
+    );
+    for (const name of ["grants", "children"]) {
+      const dir = ledger.directory(name);
+      try {
+        trackFamilyDirectory(
+          authority.installation,
+          authority.origin,
+          { namespace: "lease-directory", container: leaseId, name },
+          identity(dir.stat),
+        );
+      } finally {
+        dir.close();
+      }
+    }
+    trackFamilyDirectory(
+      authority.installation,
+      authority.origin,
+      { namespace: "history-slot", container: leaseId, name: historySlot.name },
+      historySlot.identity,
+      historySlot.generation,
+    );
+    const admissionBytes = canonicalJson(
+      signControl(authority.installation.privateKey, "openmapx-admission-slots-v1", slots),
+    );
+    familyRecordWrite(
+      authority.installation,
+      authority.origin,
+      { scope: "shared", namespace: "lease-owner", container: leaseId, name: "admission.json" },
+      admissionBytes,
+      (before) => ledger?.write("admission.json", admissionBytes, true, before),
       true,
     );
     writePrivateRecord(
@@ -659,8 +783,11 @@ export async function acquireArtifactTargetLease(options: {
         executionReceiptDigest: authority.receiptDigest,
       },
       true,
+      authority.origin,
     );
     const record: RootRecord = {
+      version: 2,
+      origin: authority.origin,
       certificate: certificateEnvelope,
       sequence: 0,
       phase: "held",
@@ -673,11 +800,18 @@ export async function acquireArtifactTargetLease(options: {
       `${authority.execution.operationKey}.json`,
       { leaseId, certificateDigest: controlDigest(certificateEnvelope) },
       true,
+      authority.origin,
     );
     published = true;
-    ledger.write(
-      "owner.json",
-      canonicalJson(signControl(key.privateKey, "openmapx-lease-owner-v1", record)),
+    const ownerBytes = canonicalJson(
+      signControl(key.privateKey, "openmapx-lease-owner-v2", record),
+    );
+    familyRecordWrite(
+      authority.installation,
+      authority.origin,
+      { scope: "shared", namespace: "lease-owner", container: leaseId, name: "owner.json" },
+      ownerBytes,
+      (before) => ledger?.write("owner.json", ownerBytes, true, before),
       true,
     );
     const state: State = {
@@ -721,7 +855,7 @@ export async function acquireArtifactTargetLease(options: {
         if (kind === "history" && ledger) continue; // Partial records consume retained capacity too.
         const dir = index.directory(kind);
         try {
-          dir.removeDirectory(slot.name, slot.identity);
+          removeSlot(dir, slot);
         } finally {
           dir.close();
         }
@@ -910,8 +1044,11 @@ export async function delegateArtifactTargetLease(
       delegationId = fixedControlChildId(s.installation, child.childPublicKey, s.execution);
     } else if (child.childPublicKey !== s.installation.publicKeys[child.recipient])
       throw Error("Child role key mismatch");
+    if (!s.certificate.origin) throw Error("Legacy lease is observation-only; upgrade producer");
+    assertOriginClockForward(s.installation, s.certificate.origin);
     const grant: Grant = {
-      version: 1,
+      version: 2,
+      origin: s.certificate.origin,
       installationId: s.certificate.installationId,
       leaseId: lease.leaseId,
       ownerCertificateDigest: controlDigest(s.certificateEnvelope),
@@ -928,7 +1065,7 @@ export async function delegateArtifactTargetLease(
       permittedFurtherEdges: edges,
       depth: (parentGrant?.depth ?? 0) + 1,
     };
-    const envelope = signControl(s.key, "openmapx-lease-grant-v1", grant);
+    const envelope = signControl(s.key, "openmapx-lease-grant-v2", grant);
     const grantDigest = controlDigest(envelope);
     const transition = signControl(s.key, "openmapx-lease-intent-v1", {
       delegationId,
@@ -956,12 +1093,20 @@ export async function delegateArtifactTargetLease(
       "base64url",
     ) as ArtifactDelegationAssertion;
     parseControlAssertion(assertion);
+    enlistFamilyIntent(
+      s.installation,
+      s.certificate.origin,
+      delegationId,
+      child.execution,
+      child.recipient === "data-manager" ? "data-manager" : "ops-agent",
+    );
     writePrivateRecord(
       s.installation,
       "attempts",
       `${delegationId}.json`,
       { grant: envelope, transition, assertion },
       true,
+      s.certificate.origin,
     );
     writeBounded(s, "grants", `${delegationId}.json`, { grant: envelope, transition }, true);
     node.grantDigests[delegationId] = grantDigest;
@@ -989,11 +1134,12 @@ function openState(
     const cert = certificateSchema.parse(envelope.payload);
     const certificate = verifyControl(
       installation.publicKeys[cert.owner.executor],
-      "openmapx-lease-certificate-v1",
+      originRecordDomain("openmapx-lease-certificate", envelope),
       envelope,
       certificateSchema,
     );
     if (
+      !validateOriginRecord(certificate) ||
       certificate.installationId !== installation.installation.installationId ||
       certificate.leaseId !== leaseId
     )
@@ -1118,6 +1264,11 @@ export async function adoptArtifactTargetLease(options: {
         (!forwardAncestry(t, grant.parentNode) || Date.now() >= grant.child.deadlineAt)
       )
         throw Error("Stale or canceled delegation");
+      if (!retained) {
+        if (!grant.origin) throw Error("Legacy lease grant is observation-only; upgrade producer");
+        assertOriginClockForward(peer.installation, grant.origin);
+        reserveControlFamily(peer.installation, grant.origin);
+      }
       const admissionName = `${grant.delegationId}.json`;
       const pending = {
         version: 1,
@@ -1145,7 +1296,15 @@ export async function adoptArtifactTargetLease(options: {
           controlDigest(old.execution) !== controlDigest(grant.child)
         )
           throw Error("Durable duplicate admission conflict");
-      } else writePrivateRecord(peer.installation, "adoptions", admissionName, pending, true);
+      } else
+        writePrivateRecord(
+          peer.installation,
+          "adoptions",
+          admissionName,
+          pending,
+          true,
+          grant.origin,
+        );
       s.key = peer.childPrivateKey;
       s.node = grant.delegationId;
       s.execution = grant.child;
@@ -1154,7 +1313,9 @@ export async function adoptArtifactTargetLease(options: {
           s,
           "children",
           `${s.node}.json`,
-          signControl(s.key, "openmapx-lease-child-v1", {
+          signControl(s.key, "openmapx-lease-child-v2", {
+            version: 2,
+            origin: grant.origin,
             delegationId: s.node,
             grantDigest: assertion.grantDigest,
             execution: grant.child,
@@ -1165,10 +1326,17 @@ export async function adoptArtifactTargetLease(options: {
           } satisfies ChildRecord),
           true,
         );
-      writePrivateRecord(peer.installation, "adoptions", admissionName, {
-        ...pending,
-        state: "ready",
-      });
+      writePrivateRecord(
+        peer.installation,
+        "adoptions",
+        admissionName,
+        {
+          ...pending,
+          state: "ready",
+        },
+        false,
+        grant.origin,
+      );
       tree(s);
       const handle = Object.freeze({
         leaseId: assertion.leaseId,
@@ -1194,6 +1362,7 @@ export function bindBorrowedControlExecution(
     a = executionAuthorityState(authority);
   if (
     controlDigest(a.execution) !== controlDigest(lease.execution) ||
+    !sameControlOrigin(a.origin, s.certificate.origin) ||
     a.installation.installation.installationId !== s.certificate.installationId
   )
     throw Error("Borrower execution authority mismatch");
@@ -1229,25 +1398,140 @@ export async function settleArtifactTargetLeaseChild(
     tree(s);
   });
 }
+function finishOwnedRelease(s: State): void {
+  guarded(
+    s,
+    () => {
+      const t = tree(s);
+      if (t.root.phase !== "settled" || !knownOutcome(t.root.settlement))
+        throw Error("Durable own-effect settlement is required");
+      for (const id of t.grants.keys()) {
+        const child = t.children.get(id);
+        if (child?.phase !== "settled" || !knownOutcome(child.settlement))
+          throw Error("Every attempted descendant must settle");
+      }
+      if (!s.slots) throw Error("Missing admission slots");
+      const persist = () =>
+        writeBounded(
+          s,
+          "owner",
+          "admission.json",
+          signControl(s.installation.privateKey, "openmapx-admission-slots-v1", s.slots),
+        );
+      const release = s.slots.release ?? { phase: "planned" as const, locks: [], active: false };
+      s.slots.release = release;
+      if (
+        release.locks.some((id) => !s.certificate.serviceIds.includes(id)) ||
+        (release.pending && !s.certificate.serviceIds.includes(release.pending))
+      )
+        throw Error("Invalid release journal target");
+      for (const id of s.certificate.serviceIds) {
+        if (release.locks.includes(id)) continue;
+        if (release.pending && release.pending !== id)
+          throw Error("Conflicting physical release step");
+        if (release.pending !== id) {
+          const lock = s.locks.directory(id);
+          try {
+            if (
+              !sameInode(
+                identity(lock.stat),
+                required(s.certificate.lockIdentities[id], "Missing certified inode"),
+              ) ||
+              lock.hasEntries()
+            )
+              throw Error("Changed unplanned target release");
+          } finally {
+            lock.close();
+          }
+          release.pending = id;
+          persist();
+        }
+        try {
+          s.locks.removeDirectory(
+            id,
+            required(s.certificate.lockIdentities[id], "Missing certified target inode"),
+          );
+        } catch (e) {
+          if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+        }
+        release.locks.push(id);
+        delete release.pending;
+        persist();
+      }
+      if (!release.active) {
+        const previouslyPlanned = release.activePlanned === true;
+        const index = s.control.directory("admission-index-v1"),
+          active = index.directory("active");
+        try {
+          if (!previouslyPlanned) {
+            const current = active.directory(s.slots.active.name);
+            try {
+              if (!sameInode(identity(current.stat), s.slots.active.identity))
+                throw Error("Replaced unplanned active slot");
+              if (
+                s.slots.active.generation &&
+                z.strictObject({ generation: uuid }).parse(json(current, "generation.json", 1024))
+                  .generation !== s.slots.active.generation
+              )
+                throw Error("Reused unplanned active slot");
+            } finally {
+              current.close();
+            }
+            release.activePlanned = true;
+            persist();
+          }
+          let slot: AnchoredDirectory | undefined;
+          try {
+            slot = active.directory(s.slots.active.name);
+          } catch (e) {
+            if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+          }
+          if (slot) {
+            try {
+              if (!sameInode(identity(slot.stat), s.slots.active.identity))
+                throw Error("Replaced active slot inode");
+              if (s.slots.active.generation) {
+                try {
+                  const g = z
+                    .strictObject({ generation: uuid })
+                    .parse(json(slot, "generation.json", 1024));
+                  if (g.generation !== s.slots.active.generation)
+                    throw Error("Reused active slot generation");
+                  slot.removeFile("generation.json");
+                } catch (e) {
+                  if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+                }
+              }
+            } finally {
+              slot.close();
+            }
+            active.removeDirectory(s.slots.active.name, s.slots.active.identity);
+          }
+        } finally {
+          active.close();
+          index.close();
+        }
+        release.active = true;
+        persist();
+      }
+      release.phase = "released";
+      s.slots.releasedAt ??= Date.now();
+      persist();
+      if (s.certificate.origin)
+        markFamilyLeaseReleased(
+          s.installation,
+          s.certificate.origin,
+          s.certificate.leaseId,
+          controlDigest(s.certificateEnvelope),
+        );
+    },
+    !s.slots?.release,
+  );
+}
 export async function releaseArtifactTargetLease(lease: ArtifactTargetLease): Promise<void> {
   const s = stateOf(lease);
   if (s.node !== null) throw Error("Borrower cannot release root");
-  await guarded(s, () => {
-    const t = tree(s);
-    if (t.root.phase !== "settled" || !knownOutcome(t.root.settlement))
-      throw Error("Durable own-effect settlement is required");
-    for (const id of t.grants.keys()) {
-      const child = t.children.get(id);
-      if (child?.phase !== "settled" || !knownOutcome(child.settlement))
-        throw Error("Every attempted descendant must settle");
-    }
-  });
-  for (const id of s.certificate.serviceIds)
-    s.locks.removeDirectory(
-      id,
-      required(s.certificate.lockIdentities[id], "Missing certified target inode"),
-    );
-  releaseActiveSlot(s);
+  finishOwnedRelease(s);
   closeState(s);
 }
 export async function reconcileArtifactTargetLease(options: {
@@ -1256,7 +1540,7 @@ export async function reconcileArtifactTargetLease(options: {
   authority: VerifiedRecoveryAuthority;
 }): Promise<"released" | "fenced"> {
   const recovery = recoveryAuthorityState(options.authority);
-  const s = openState(options.dataRoot, options.leaseId, recovery.authority.installation);
+  const s = openState(options.dataRoot, options.leaseId, recovery.authority.installation, true);
   try {
     if (controlDigest(s.execution) !== controlDigest(recovery.authority.execution))
       throw Error("Foreign recovery execution");
@@ -1286,6 +1570,10 @@ export async function reconcileArtifactTargetLease(options: {
       )
     )
       return "fenced";
+    if (s.slots?.release) {
+      finishOwnedRelease(s);
+      return "released";
+    }
     await guarded(s, () => {
       const root = readRoot(s);
       root.settlement = recovery.evidence;
@@ -1393,6 +1681,7 @@ export function inspectArtifactDelegation(options: {
       throw Error("Grant digest mismatch");
     return Object.freeze({
       leaseId: parsed.leaseId,
+      origin: grant.origin,
       parent: grant.parent,
       execution: grant.child,
       kind: grant.childKind,
@@ -1457,6 +1746,9 @@ export function verifyConfigurationHelperReady(lease: BorrowedArtifactTargetLeas
 /** Observation/adoption of an old identity is not permission to start another forward effect. */
 export function assertArtifactTargetLeaseForward(lease: TargetLeaseAuthority): void {
   const s = stateOf(lease);
+  if (!s.certificate.origin)
+    throw Error("Legacy lease is observation/settlement only; upgrade producer");
+  assertOriginClockForward(s.installation, s.certificate.origin);
   if (s.verifiedAuthority) assertControlExecutionForward(s.verifiedAuthority);
   const t = tree(s);
   const node = s.node === null ? t.root : t.children.get(s.node);
