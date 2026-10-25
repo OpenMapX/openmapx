@@ -9,6 +9,12 @@
 export type KeypairEncryptionMode = "unencrypted" | "encrypted";
 export type KeypairWrapType = "passphrase" | "webauthn";
 
+/**
+ * Preflight mirror of the API's authoritative encrypted-keypair wrap limit.
+ * Keep this value aligned with `apps/api/src/routes/reviews-keypair.ts`.
+ */
+export const MAX_KEYPAIR_WRAPS = 32;
+
 export interface KeypairWrap {
   id: string;
   wrapType: KeypairWrapType;

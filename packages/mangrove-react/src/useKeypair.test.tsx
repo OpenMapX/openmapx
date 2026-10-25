@@ -13,7 +13,7 @@ import { useKeypairStore } from "./keypairStore";
 import { MangroveProvider } from "./provider";
 import type { MangroveCurrentUser, MangroveTransport } from "./transport";
 import type { CreateKeypairEnvelopePayload, EnvelopeState, WrapMeta } from "./types";
-import { useSetupKeypair, useUnlockKeypair, useUserKeypair } from "./useKeypair";
+import { useAddWrap, useSetupKeypair, useUnlockKeypair, useUserKeypair } from "./useKeypair";
 
 // Tests that run a real age/scrypt passphrase KDF are skipped under the coverage
 // run: v8 instrumentation inflates scrypt ~4x (a single KDF blows past the 15s
@@ -331,6 +331,39 @@ describe("useUnlockKeypair", () => {
       await waitFor(() => expect(result.current.isError).toBe(true));
     },
   );
+});
+
+describe("useAddWrap", () => {
+  beforeEach(() => useKeypairStore.getState().clear());
+  afterEach(() => useKeypairStore.getState().clear());
+
+  it("rejects a 33rd unlock method before credential or transport work", async () => {
+    const { transport } = createMockTransport({
+      state: "ready",
+      mode: "encrypted",
+      publicJwk: { kty: "EC", crv: "P-256", x: "x", y: "y" },
+      passphraseCiphertext: null,
+      recipientsCiphertext: "ciphertext",
+      wraps: Array.from({ length: 32 }, (_, index) => ({
+        id: `wrap-${index}`,
+        wrapType: "webauthn" as const,
+        label: `Passkey ${index + 1}`,
+        identityString: `AGE-PLUGIN-FIDO2PRF-${index + 1}`,
+        createdAt: "2026-06-14T00:00:00Z",
+      })),
+    });
+    useKeypairStore.setState({
+      privateJwk: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" },
+    });
+    const { result } = renderHook(() => useAddWrap(), {
+      wrapper: createWrapper(transport, USER),
+    });
+
+    await expect(result.current.mutateAsync({ wrapType: "webauthn" })).rejects.toThrow(
+      "At most 32 unlock methods are supported",
+    );
+    expect(transport.updateKeypairWraps).not.toHaveBeenCalled();
+  });
 });
 
 describe("signing path (end-to-end signature verification)", () => {

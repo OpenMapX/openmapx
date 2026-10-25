@@ -41,7 +41,13 @@ import {
   useMangroveTransport,
   useMangroveWebauthnKeyName,
 } from "./provider";
-import type { EnvelopeState, KeypairEnvelopeEncrypted, KeypairWrap, WrapMeta } from "./types";
+import {
+  type EnvelopeState,
+  type KeypairEnvelopeEncrypted,
+  type KeypairWrap,
+  MAX_KEYPAIR_WRAPS,
+  type WrapMeta,
+} from "./types";
 
 // ── envelope state query ────────────────────────────────────────────────
 
@@ -394,6 +400,9 @@ export function useAddWrap() {
       }
 
       const env = await fetchReadyEncryptedEnvelope(transport);
+      if (env.wraps.length >= MAX_KEYPAIR_WRAPS) {
+        throw new Error(`At most ${MAX_KEYPAIR_WRAPS} unlock methods are supported`);
+      }
 
       if (input.wrapType === "passphrase") {
         if (currentPassphraseWrap(env)) {

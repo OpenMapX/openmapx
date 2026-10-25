@@ -22,6 +22,7 @@ export type {
   UploadReviewImagePayload,
   WrapMeta,
 } from "./types";
+export { MAX_KEYPAIR_WRAPS } from "./types";
 export {
   type AddPassphraseWrapInput,
   type AddWebAuthnWrapInput,

@@ -39,6 +39,7 @@ export const mangroveKeypair = pgTable("mangrove_keypair", {
 
 /**
  * Metadata for each unlock method. Server enforces:
+ *   - at most 32 total wraps per user
  *   - at most one passphrase wrap per user
  *   - at least one wrap per user (the LAST one cannot be removed)
  *   - when encryptionMode = "encrypted", at least one wrap must exist

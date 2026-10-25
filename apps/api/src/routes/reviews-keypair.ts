@@ -54,6 +54,11 @@ interface WrapWire {
 const MAX_CIPHERTEXT_CHARS = 64 * 1024;
 // Age webauthn plugin identity strings are ~200–400 chars. 4 KB is generous.
 const MAX_IDENTITY_STRING_CHARS = 4 * 1024;
+// One passphrase plus a generous set of device passkeys. Check this before
+// per-wrap validation so authenticated callers cannot fan one request out into
+// unbounded object mapping or database rows. The React client mirrors this
+// value as a preflight; this server-side check remains authoritative.
+export const MAX_KEYPAIR_WRAPS = 32;
 
 // P-256 x/y/d are 32 bytes → 43 chars base64url. Allow slack for padding/variants.
 const MAX_JWK_COORD_CHARS = 128;
@@ -150,6 +155,9 @@ export function validateEncryptedState(body: {
 
   if (!Array.isArray(body.wraps) || body.wraps.length === 0) {
     throw httpError(400, "At least one wrap is required");
+  }
+  if (body.wraps.length > MAX_KEYPAIR_WRAPS) {
+    throw httpError(400, `At most ${MAX_KEYPAIR_WRAPS} keypair wraps are supported`);
   }
   const wraps = body.wraps.map(validateWrap);
 
