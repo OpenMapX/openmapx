@@ -27,9 +27,10 @@ containers keep their user and nothing else changes.
 Run renders and stack commands as the checkout's owner. On a host whose
 operator is not uid 1000:
 
-- change the owner of files an earlier release's containers wrote as uid 1000
-  once, as root, with the `sudo chown -R` that `pnpm openmapx check` prints for
-  each path containers write that holds them;
+- change the owner of what an earlier release's containers wrote as uid 1000
+  once, as root, with the `sudo chown` commands `pnpm openmapx check` prints:
+  they name exactly the entries another uid owns that the stack's containers
+  write, and leave out what services running as their image's own user write;
 - if `app-api`'s startup log reports a volume an earlier image created for uid
   1000, do not remove it: it holds subject-export ciphertexts the database
   refers to and the runtime-recovery journal. With `app-api` stopped, change

@@ -21,6 +21,7 @@ import {
   deploymentUserProblems,
   dockerComposeAfterDeploymentSecretCheck,
   envFilePermissionWarning,
+  FOREIGN_ENTRY_DISPLAY_LIMIT,
   PROBE_IMAGE,
   probeFailureDetail,
 } from "../src/commands/check";
@@ -318,9 +319,107 @@ describe("deploymentUserProblems", () => {
         ),
       });
       expect(problems).toEqual([
-        expect.stringContaining(`data/erasure (nested/journal.jsonl: uid 1000)`),
+        expect.stringContaining("data/erasure/nested/journal.jsonl (uid 1000)"),
       ]);
-      expect(problems[0]).toContain(`sudo chown -R ${owner.uid}:${owner.gid} ${mount}`);
+      // Exactly that file, not the whole mount.
+      expect(problems[0]).toMatch(
+        new RegExp(
+          `sudo chown -R ${owner.uid}:${owner.gid} ${join(mount, "nested", "journal.jsonl")}$`,
+        ),
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves out what services running as their image's user write, as on openmapx.com", () => {
+    const { root, infraDir, owner } = deployment("");
+    try {
+      writeFileSync(join(infraDir, ".env"), `UID=${owner.uid}\nGID=${owner.gid}\n`, {
+        mode: 0o600,
+      });
+      const data = join(infraDir, "data");
+      const at = (...parts: string[]) => join(data, ...parts);
+      const user = `${owner.uid}:${owner.gid}`;
+      const problems = deploymentUserProblems({
+        infraDir,
+        processUid: owner.uid,
+        composeServices: {
+          // data-manager writes all of data/, as the deployment's user.
+          "data-manager": { user, volumes: [{ type: "bind", source: data }] },
+          // valhalla, as its image's root, writes its extracts through its own mount.
+          valhalla: { volumes: [{ type: "bind", source: at("valhalla", "osm-pbf") }] },
+          // A read-only mount of a service without a user exempts nothing.
+          tileserver: { volumes: [{ type: "bind", source: at("tiles"), read_only: true }] },
+        },
+        runningUsers: new Map([["data-manager", user]]),
+        filesystem: fakeFilesystem(
+          {
+            [data]: owner.uid,
+            // Docker created the parent of valhalla's bind source as root.
+            [at("valhalla")]: 0,
+            [at("valhalla", "osm-pbf")]: 0,
+            [at("valhalla", "osm-pbf", "germany-latest.osm.pbf")]: 0,
+            [at("valhalla", "tiles")]: owner.uid,
+            // Docker created this missing bind source, empty, as root.
+            [at("motis")]: 0,
+            [at("tiles")]: 0,
+            [at("tiles", "planet.mbtiles")]: 0,
+            [at("osm")]: owner.uid,
+          },
+          {
+            [data]: ["valhalla", "motis", "tiles", "osm"],
+            [at("valhalla")]: ["osm-pbf", "tiles"],
+            [at("valhalla", "osm-pbf")]: ["germany-latest.osm.pbf"],
+            [at("valhalla", "tiles")]: [],
+            [at("motis")]: [],
+            [at("tiles")]: ["planet.mbtiles"],
+            [at("osm")]: [],
+          },
+        ),
+      });
+      expect(problems).toHaveLength(2);
+      // valhalla's own directory: changed alone, so its extracts keep their owner.
+      expect(problems[0]).toContain("1 directory that containers running as");
+      expect(problems[0]).toMatch(
+        new RegExp(`not recursively: sudo chown ${owner.uid}:${owner.gid} ${at("valhalla")}$`),
+      );
+      // The empty root-owned directory and the read-only service's data, each exactly.
+      expect(problems[1]).toContain("data/motis (uid 0), data/tiles (uid 0)");
+      expect(problems[1]).toMatch(
+        new RegExp(`sudo chown -R ${owner.uid}:${owner.gid} ${at("motis")} ${at("tiles")}$`),
+      );
+      expect(problems.join("\n")).not.toContain("osm-pbf");
+      expect(problems.join("\n")).not.toMatch(new RegExp(`chown -R \\S+ ${data}( |$)`));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("lists a bounded number of paths", () => {
+    const { root, infraDir, owner } = deployment("");
+    try {
+      writeFileSync(join(infraDir, ".env"), `UID=${owner.uid}\nGID=${owner.gid}\n`, {
+        mode: 0o600,
+      });
+      const mount = join(infraDir, "data");
+      const user = `${owner.uid}:${owner.gid}`;
+      const names = Array.from(
+        { length: FOREIGN_ENTRY_DISPLAY_LIMIT + 5 },
+        (_, index) => `entry-${String(index).padStart(2, "0")}`,
+      );
+      const owners: Record<string, number> = { [mount]: owner.uid };
+      for (const name of names) owners[join(mount, name)] = 1000;
+      const [problem] = deploymentUserProblems({
+        infraDir,
+        processUid: owner.uid,
+        composeServices: { "data-manager": { user, volumes: [{ type: "bind", source: mount }] } },
+        runningUsers: new Map([["data-manager", user]]),
+        filesystem: fakeFilesystem(owners, { [mount]: names }),
+      });
+      expect(problem).toContain(`${FOREIGN_ENTRY_DISPLAY_LIMIT + 5} paths`);
+      expect(problem).toContain("5 more are not shown");
+      expect(problem).not.toContain(join(mount, names.at(-1) as string));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -382,7 +481,7 @@ describe("deploymentUserProblems", () => {
           runningUsers: new Map([["app-api", "1001:1001"]]),
         });
         expect(problems).toEqual([
-          expect.stringContaining("data/erasure (nested/journal.jsonl: uid 1000)"),
+          expect.stringContaining("data/erasure/nested/journal.jsonl (uid 1000)"),
         ]);
       } finally {
         rmSync(root, { recursive: true, force: true });

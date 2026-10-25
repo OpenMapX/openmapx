@@ -214,22 +214,38 @@ const hostFilesystem: OwnershipFilesystem = {
   readdir: (path) => readdirSync(path),
 };
 
+/** How many paths another uid owns a report lists, and names in its chown. */
+export const FOREIGN_ENTRY_DISPLAY_LIMIT = 20;
+
+function within(path: string, root: string): boolean {
+  return path === root || path.startsWith(`${root}/`);
+}
+
 /**
- * The first entry under `root`, itself included, that `uid` does not own, or
- * "limit" when the shared budget ran out first. Links are not followed: a
- * symbolic link's own owner is what counts, and a linked directory is not
- * entered. An entry that vanishes or cannot be read is skipped.
+ * Walk `root` without following links and collect each topmost entry `uid`
+ * does not own, without descending into it: one `chown -R` of that entry
+ * covers what is below it. Subtrees in `exempt` are not entered: a service
+ * that runs as its image's own user writes them. A foreign directory that
+ * encloses one of them goes into `shallow` instead, for a `chown` of itself
+ * alone, and the walk continues inside it. A symbolic link's own owner
+ * counts, and a linked directory is not entered; an entry that vanishes or
+ * cannot be read is skipped. Returns false when the shared budget ran out
+ * first.
  */
-function firstForeignEntry(
+function collectForeignEntries(
   root: string,
   uid: number,
   filesystem: OwnershipFilesystem,
   budget: { left: number },
-): { path: string; uid: number } | "limit" | null {
+  exempt: readonly string[],
+  found: Map<string, number>,
+  shallow: Map<string, number>,
+): boolean {
   const pending = [root];
   while (pending.length > 0) {
-    if (budget.left <= 0) return "limit";
     const path = pending.pop() as string;
+    if (exempt.some((subtree) => within(path, subtree))) continue;
+    if (budget.left <= 0) return false;
     budget.left -= 1;
     let stats: ReturnType<OwnershipFilesystem["lstat"]>;
     try {
@@ -237,8 +253,16 @@ function firstForeignEntry(
     } catch {
       continue;
     }
-    if (stats.uid !== uid) return { path, uid: stats.uid };
-    if (!stats.isDirectory() || stats.isSymbolicLink()) continue;
+    const directory = stats.isDirectory() && !stats.isSymbolicLink();
+    if (stats.uid !== uid) {
+      const enclosesExempt = directory && exempt.some((subtree) => subtree.startsWith(`${path}/`));
+      if (!enclosesExempt) {
+        found.set(path, stats.uid);
+        continue;
+      }
+      shallow.set(path, stats.uid);
+    }
+    if (!directory) continue;
     let names: string[];
     try {
       names = filesystem.readdir(path);
@@ -247,15 +271,16 @@ function firstForeignEntry(
     }
     for (const name of names) pending.push(join(path, name));
   }
-  return null;
+  return true;
 }
 
 /**
  * How the deployment's user (UID and GID in .env) disagrees with the checkout's
  * owner, the uid running this check, the stack's running containers and the
  * host paths those containers write. Only services Compose runs as a user are
- * compared, and only their bind mounts under infra/docker: services that run
- * as their image's own user keep their data that way.
+ * compared, and only their writable bind mounts under infra/docker; what a
+ * service that runs as its image's own user writes is left out, also where an
+ * enclosing mount reaches it.
  */
 export function deploymentUserProblems(input: {
   infraDir: string;
@@ -296,48 +321,70 @@ export function deploymentUserProblems(input: {
   if (input.composeServices === null) return problems;
   const filesystem = input.filesystem ?? hostFilesystem;
   const budget = { left: input.entryLimit ?? OWNERSHIP_ENTRY_LIMIT };
+  const writable = (volume: { type?: unknown; source?: unknown; read_only?: unknown }) =>
+    volume.type === "bind" &&
+    typeof volume.source === "string" &&
+    volume.read_only !== true &&
+    volume.source.startsWith(`${input.infraDir}/`);
   const mounts: string[] = [];
+  // What a service without a user writes, its image's own user owns (valhalla's
+  // OSM extracts, overpass's database): not compared, wherever an enclosing
+  // mount of a service with a user reaches it. A read-only mount exempts nothing.
+  const exempt: string[] = [];
   for (const [service, config] of Object.entries(input.composeServices)) {
-    if (typeof config.user !== "string" || !config.user) continue;
-    const running = input.runningUsers.get(service);
-    if (running !== undefined && running !== config.user) {
-      problems.push(
-        `${service} runs as ${running ? `"${running}"` : "its image's default user"}, not "${config.user}": recreate it with \`pnpm openmapx services update ${service}\`.`,
-      );
+    const runsAsUser = typeof config.user === "string" && config.user !== "";
+    if (runsAsUser) {
+      const running = input.runningUsers.get(service);
+      if (running !== undefined && running !== config.user) {
+        problems.push(
+          `${service} runs as ${running ? `"${running}"` : "its image's default user"}, not "${config.user}": recreate it with \`pnpm openmapx services update ${service}\`.`,
+        );
+      }
     }
     for (const volume of config.volumes ?? []) {
-      // Only what they write: a read-only mount may belong to anyone.
-      if (volume.type !== "bind" || typeof volume.source !== "string" || volume.read_only === true)
-        continue;
-      if (!volume.source.startsWith(`${input.infraDir}/`)) continue;
-      if (!mounts.includes(volume.source)) mounts.push(volume.source);
+      if (!writable(volume)) continue;
+      const list = runsAsUser ? mounts : exempt;
+      if (!list.includes(volume.source as string)) list.push(volume.source as string);
     }
   }
-  // Each writable mount is walked to its first entry another uid owns: an
-  // earlier release's containers wrote files as uid 1000 inside directories
-  // the operator owns.
-  const foreign: Array<{ mount: string; path: string; uid: number }> = [];
+  // Mounts another one encloses are walked with it, once.
+  const roots = mounts
+    .sort((left, right) => left.length - right.length)
+    .filter(
+      (mount, index, sorted) => !sorted.slice(0, index).some((outer) => within(mount, outer)),
+    );
+  // An earlier release's containers wrote files as uid 1000 inside directories
+  // the operator owns; Docker creates a missing bind source as root.
+  const foreign = new Map<string, number>();
+  const shallow = new Map<string, number>();
   const unchecked: string[] = [];
-  for (const mount of mounts) {
-    const found = firstForeignEntry(mount, uid, filesystem, budget);
-    if (found === "limit") unchecked.push(mount);
-    else if (found) foreign.push({ mount, ...found });
+  for (const root of roots) {
+    if (!collectForeignEntries(root, uid, filesystem, budget, exempt, foreign, shallow))
+      unchecked.push(root);
   }
-  if (foreign.length > 0) {
-    const listed = foreign
-      .map(({ mount, path, uid: owner }) =>
-        path === mount
-          ? `${relative(input.infraDir, mount)} (uid ${owner})`
-          : `${relative(input.infraDir, mount)} (${relative(mount, path)}: uid ${owner})`,
-      )
-      .join(", ");
+  if (shallow.size > 0) {
+    const paths = [...shallow.keys()].sort();
+    const shown = paths.slice(0, FOREIGN_ENTRY_DISPLAY_LIMIT);
+    const more =
+      paths.length > shown.length ? `; ${paths.length - shown.length} more are not shown` : "";
     problems.push(
-      `${foreign.length} path${foreign.length === 1 ? "" : "s"} that containers running as ${uid}:${gid} write hold${foreign.length === 1 ? "s" : ""} entries another uid owns, which they cannot change: ${listed}. Fix once, as root: sudo chown -R ${uid}:${gid} ${foreign.map(({ mount }) => mount).join(" ")}`,
+      `${paths.length} director${paths.length === 1 ? "y" : "ies"} that containers running as ${uid}:${gid} write belong${paths.length === 1 ? "s" : ""} to another uid but hold${paths.length === 1 ? "s" : ""} data a service running as its image's user writes: ${shown.map((path) => `${relative(input.infraDir, path)} (uid ${shallow.get(path)})`).join(", ")}${more}. Change the owner of the director${paths.length === 1 ? "y" : "ies"} alone, as root, not recursively: sudo chown ${uid}:${gid} ${shown.join(" ")}`,
+    );
+  }
+  if (foreign.size > 0) {
+    const paths = [...foreign.keys()].sort();
+    const shown = paths.slice(0, FOREIGN_ENTRY_DISPLAY_LIMIT);
+    const more =
+      paths.length > shown.length
+        ? `; ${paths.length - shown.length} more are not shown, run check again once these are fixed`
+        : "";
+    problems.push(
+      `${paths.length} path${paths.length === 1 ? "" : "s"} that containers running as ${uid}:${gid} write belong${paths.length === 1 ? "s" : ""} to another uid, which they cannot change: ${shown.map((path) => `${relative(input.infraDir, path)} (uid ${foreign.get(path)})`).join(", ")}${more}. Fix once, as root: sudo chown -R ${uid}:${gid} ${shown.join(" ")}`,
     );
   }
   if (unchecked.length > 0) {
     problems.push(
-      `Stopped checking ownership after ${input.entryLimit ?? OWNERSHIP_ENTRY_LIMIT} entries; not fully checked: ${unchecked.map((mount) => relative(input.infraDir, mount)).join(", ")}. If containers fail to write there, change its owner the same way.`,
+      `Stopped checking ownership after ${input.entryLimit ?? OWNERSHIP_ENTRY_LIMIT} entries; not fully checked: ${unchecked.map((mount) => relative(input.infraDir, mount)).join(", ")}. If containers fail to write there, change the owner of what they cannot write the same way.`,
     );
   }
   return problems;

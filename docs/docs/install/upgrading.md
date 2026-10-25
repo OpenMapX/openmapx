@@ -163,9 +163,13 @@ Where the checkout's owner is uid 1000, nothing changes: the containers keep
 their user, and `app-api` keeps using the volumes it wrote. Elsewhere:
 
 - Files an earlier release's containers wrote as uid 1000 stay owned by it,
-  also inside directories the operator owns. `pnpm openmapx check`, and
-  **Run diagnostics** in the admin panel, name each path containers write that
-  holds such files, with the one-time `sudo chown -R UID:GID …` that fixes it.
+  also inside directories the operator owns, and Docker creates a missing bind
+  source as root. `pnpm openmapx check`, and **Run diagnostics** in the admin
+  panel, list each such entry that the stack's containers write, and print the
+  one-time `sudo chown -R UID:GID …` for exactly those entries. What a service
+  running as its image's own user writes (Valhalla's extracts, Overpass's
+  database) is left out, and a directory that holds such data gets a
+  non-recursive `chown` of itself only.
 - `app-api` refuses a volume an earlier image created for uid 1000, and its
   startup log (`pnpm openmapx services logs app-api`) names the volume. Do not
   remove it: it holds the subject-export ciphertexts the database refers to and
