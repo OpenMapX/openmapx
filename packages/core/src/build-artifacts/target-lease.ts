@@ -8,10 +8,12 @@ import {
   executionRefSchema,
 } from "../ops/execution-identity";
 import { canonicalJson } from "../ops/fingerprint";
+// biome-ignore lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
+import { prepareControlChildPublication, resolveControlChildPlan } from "./child-phase";
+// biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
 import {
   type ArtifactDelegationAssertion,
   type AuthorityState,
-  assertControlDelegationForward,
   assertControlExecutionForward,
   assertionSchema,
   type ChildSettlement,
@@ -21,36 +23,41 @@ import {
   childPhaseKinds,
   childSettlementState,
   controlChildOperationKey,
-  controlDigest,
-  controlOriginSchema,
   controlPeerState,
-  digest,
   encodePrivate,
   executionAuthorityState,
   fixedControlChildId,
   type InstallationState,
   installationState,
   newControlKey,
-  originRecordDomain,
   parseControlAssertion,
   readControlExecutionWitness,
   readPrivateRecord,
+  recordLeaseControlAttempt,
   recoveryAuthorityState,
   retainedControlParent,
-  sameControlOrigin,
-  signControl,
-  targetSchema,
-  uuid,
   type VerifiedChildSettlement,
   type VerifiedControlPeer,
   type VerifiedExecutionAuthority,
   type VerifiedRecoveryAuthority,
-  validateOriginRecord,
-  verifyControl,
   verifyControlEffectSettlement,
   verifyControlPreparedTerminal,
+  withControlDelegationPublication,
   writePrivateRecord,
 } from "./control-authority";
+// biome-ignore-end lint/suspicious/noImportCycles: Live protocol dependency described above.
+import {
+  controlDigest,
+  controlOriginSchema,
+  digest,
+  originRecordDomain,
+  sameControlOrigin,
+  signControl,
+  targetSchema,
+  uuid,
+  validateOriginRecord,
+  verifyControl,
+} from "./control-records";
 import { CONTROL_RETENTION_LIMITS, reserveAuthoritySlot } from "./control-retention";
 import { AnchoredDirectory, type FileIdentity, identity, sameInode } from "./filesystem";
 import { assertOriginClockForward } from "./retention-clock";
@@ -64,6 +71,7 @@ import {
   trackFamilyDirectory,
 } from "./retention-family";
 
+// biome-ignore lint/suspicious/noImportCycles: Type re-export for the existing shared settlement protocol.
 export type { ChildSettlement } from "./control-authority";
 export type ArtifactTargetLease = {
   readonly leaseId: string;
@@ -201,6 +209,7 @@ interface State {
   verifiedAuthority?: VerifiedExecutionAuthority;
   closed: boolean;
   journalGuardHeld?: boolean;
+  settlementOnly?: boolean;
   slots?: AdmissionSlots;
 }
 const handles = new WeakMap<object, State>();
@@ -412,7 +421,7 @@ function tree(s: State): LeaseTree {
       const parentRecipient =
         node === null ? s.certificate.owner.executor : grants.get(node)?.recipient;
       if (!parentRecipient) throw Error("Missing parent recipient");
-      const expectedEdges = verifyFiniteEdge(
+      const expectedEdges = verifyFiniteControlEdge(
         parentRecipient,
         witness.kind,
         grant.phase as ControlChildPhase,
@@ -888,7 +897,7 @@ export async function acquireArtifactTargetLease(options: {
     throw e;
   }
 }
-function verifyFiniteEdge(
+export function verifyFiniteControlEdge(
   role: ControlRecipient | "host-cli",
   kind: string,
   phase: ControlChildPhase,
@@ -978,7 +987,7 @@ function permitted(s: State, child: ControlPlannedChild, parentGrant?: Grant): s
     s.execution,
     s.node === null ? s.installation.publicKeys[s.execution.executor] : key,
   );
-  return verifyFiniteEdge(
+  return verifyFiniteControlEdge(
     parentGrant?.recipient ?? s.installation.installation.role,
     witness.kind,
     child.phase,
@@ -1006,131 +1015,156 @@ export async function delegateArtifactTargetLease(
   },
 ): Promise<ArtifactDelegationAssertion> {
   const s = stateOf(lease);
-  if (s.verifiedAuthority) assertControlDelegationForward(s.verifiedAuthority, child.phase);
-  return guarded(s, () => {
-    const current = tree(s);
-    const node =
-      s.node === null
-        ? current.root
-        : required(current.children.get(s.node), "Missing retained child node");
-    if (!forwardAncestry(current, s.node) || Date.now() >= s.execution.deadlineAt)
-      throw Error("Lease does not permit forward delegation");
-    let plan = s.authority?.plan.find(
-      (p) =>
-        controlDigest(p.execution) === controlDigest(child.execution) &&
-        p.phase === child.phase &&
-        p.recipient === child.recipient &&
-        canonicalJson(p.serviceIds) === canonicalJson(child.serviceIds),
-    );
-    if (!plan && s.node !== null) {
-      const inherited = required(current.grants.get(s.node), "Missing retained child grant");
-      const kinds = childPhaseKinds[child.phase];
-      if (
-        inherited.permittedFurtherEdges.includes(child.phase) &&
-        kinds.length === 1 &&
-        child.execution.operationKey ===
-          controlChildOperationKey(s.execution.operationKey, child.phase, 0)
-      )
-        plan = { ...child, kind: required(kinds[0], "Missing finite child kind"), ordinal: 0 };
-    }
-    if (!plan) throw Error("Child is absent from immutable admitted plan");
-    if (current.grants.size >= 64) throw Error("Child intent capacity exhausted");
+  if (s.settlementOnly) throw Error("Recovered lease permits settlement only");
+  const authority = s.verifiedAuthority;
+  if (!authority) throw Error("A durable local execution must own child grant publication");
+  return guarded(s, () =>
+    withControlDelegationPublication(authority, child.phase, () =>
+      publishReservedLeaseGrant(s, lease, child, authority),
+    ),
+  );
+}
+/** Lease → ancestor execution scopes → local execution scope stay held through
+ * private reference/outbox, cancellation index and shared/node publication. */
+function publishReservedLeaseGrant(
+  s: State,
+  lease: TargetLeaseAuthority,
+  child: {
+    execution: ExecutionRef;
+    phase: ControlChildPhase;
+    serviceIds: readonly string[];
+    recipient: ControlRecipient;
+    childPublicKey: string;
+  },
+  authority: VerifiedExecutionAuthority,
+): ArtifactDelegationAssertion {
+  const current = tree(s);
+  const node =
+    s.node === null
+      ? current.root
+      : required(current.children.get(s.node), "Missing retained child node");
+  if (!forwardAncestry(current, s.node) || Date.now() >= s.execution.deadlineAt)
+    throw Error("Lease does not permit forward delegation");
+  let plan = resolveControlChildPlan(authority, child);
+  if (plan && canonicalJson(plan.serviceIds) !== canonicalJson(child.serviceIds))
+    throw Error("Reserved child target subset changed");
+  if (!plan && s.node !== null) {
+    const inherited = required(current.grants.get(s.node), "Missing retained child grant");
+    const kinds = childPhaseKinds[child.phase];
     if (
-      [...current.grants.values()].some(
-        (g) => g.child.operationKey === child.execution.operationKey,
-      )
+      inherited.permittedFurtherEdges.includes(child.phase) &&
+      kinds.length === 1 &&
+      child.execution.operationKey ===
+        controlChildOperationKey(s.execution.operationKey, child.phase, 0)
     )
-      throw Error("Attempted child cannot be replayed");
-    if (child.serviceIds.some((id) => !lease.serviceIds.includes(id)))
-      throw Error("Widened target subset");
-    const parentGrant = s.node === null ? undefined : current.grants.get(s.node);
-    const edges = permitted(s, plan, parentGrant);
-    if (
-      s.authority?.kind === "configurationMaintenance.prepare" &&
-      [
-        "configuration-commit",
-        "maintenance-hardlinks",
-        "maintenance-recreate",
-        "maintenance-handoff",
-      ].includes(child.phase)
-    )
-      verifyControlPreparedTerminal(s.installation, s.execution);
-    let delegationId: string = randomUUID();
-    if (child.recipient === "fixed-cli" || child.recipient === "configuration-helper") {
-      delegationId = fixedControlChildId(s.installation, child.childPublicKey, s.execution);
-    } else if (child.childPublicKey !== s.installation.publicKeys[child.recipient])
-      throw Error("Child role key mismatch");
-    if (!s.certificate.origin) throw Error("Legacy lease is observation-only; upgrade producer");
-    assertOriginClockForward(s.installation, s.certificate.origin);
-    const grant: Grant = {
-      version: 2,
-      origin: s.certificate.origin,
-      installationId: s.certificate.installationId,
-      leaseId: lease.leaseId,
-      ownerCertificateDigest: controlDigest(s.certificateEnvelope),
-      delegationId,
-      parentNode: s.node,
-      parent: s.execution,
-      child: child.execution,
-      childKind: plan.kind,
-      phase: child.phase,
-      ordinal: plan.ordinal,
-      serviceIds: [...child.serviceIds],
-      recipient: child.recipient,
-      childPublicKey: child.childPublicKey,
-      permittedFurtherEdges: edges,
-      depth: (parentGrant?.depth ?? 0) + 1,
-    };
-    const envelope = signControl(s.key, "openmapx-lease-grant-v2", grant);
-    const grantDigest = controlDigest(envelope);
-    const transition = signControl(s.key, "openmapx-lease-intent-v1", {
-      delegationId,
-      grantDigest,
-      sequence: 1 as const,
-      state: "attempted" as const,
-    });
-    const ancestors: string[] = [];
-    let ancestor = s.node;
-    while (ancestor) {
-      ancestors.unshift(ancestor);
-      ancestor = current.grants.get(ancestor)?.parentNode ?? null;
-    }
-    const fields = {
-      version: 1 as const,
-      installationId: s.certificate.installationId,
-      leaseId: lease.leaseId,
-      ownerCertificateDigest: controlDigest(s.certificateEnvelope),
-      delegationId,
-      grantDigest,
-      ancestorDelegationIds: ancestors,
-    };
-    const signature = signControl(s.key, "openmapx-lease-assertion-v1", fields).signature;
-    const assertion = Buffer.from(canonicalJson({ ...fields, signature })).toString(
-      "base64url",
-    ) as ArtifactDelegationAssertion;
-    parseControlAssertion(assertion);
-    enlistFamilyIntent(
-      s.installation,
-      s.certificate.origin,
-      delegationId,
-      child.execution,
-      child.recipient === "data-manager" ? "data-manager" : "ops-agent",
-    );
-    writePrivateRecord(
-      s.installation,
-      "attempts",
-      `${delegationId}.json`,
-      { grant: envelope, transition, assertion },
-      true,
-      s.certificate.origin,
-    );
-    writeBounded(s, "grants", `${delegationId}.json`, { grant: envelope, transition }, true);
-    node.grantDigests[delegationId] = grantDigest;
-    node.sequence++;
-    writeNode(s, node);
-    tree(s);
-    return assertion;
+      plan = { ...child, kind: required(kinds[0], "Missing finite child kind"), ordinal: 0 };
+  }
+  if (!plan) throw Error("Child is absent from immutable admitted plan");
+  if (current.grants.size >= 64) throw Error("Child intent capacity exhausted");
+  if (
+    [...current.grants.values()].some((g) => g.child.operationKey === child.execution.operationKey)
+  )
+    throw Error("Attempted child cannot be replayed");
+  if (child.serviceIds.some((id) => !lease.serviceIds.includes(id)))
+    throw Error("Widened target subset");
+  const parentGrant = s.node === null ? undefined : current.grants.get(s.node);
+  const edges = permitted(s, plan, parentGrant);
+  if (
+    s.authority?.kind === "configurationMaintenance.prepare" &&
+    [
+      "configuration-commit",
+      "maintenance-hardlinks",
+      "maintenance-recreate",
+      "maintenance-handoff",
+    ].includes(child.phase)
+  )
+    verifyControlPreparedTerminal(s.installation, s.execution);
+  let delegationId: string = randomUUID();
+  if (child.recipient === "fixed-cli" || child.recipient === "configuration-helper") {
+    delegationId = fixedControlChildId(s.installation, child.childPublicKey, s.execution);
+  } else if (child.childPublicKey !== s.installation.publicKeys[child.recipient])
+    throw Error("Child role key mismatch");
+  if (!s.certificate.origin) throw Error("Legacy lease is observation-only; upgrade producer");
+  assertOriginClockForward(s.installation, s.certificate.origin);
+  const grant: Grant = {
+    version: 2,
+    origin: s.certificate.origin,
+    installationId: s.certificate.installationId,
+    leaseId: lease.leaseId,
+    ownerCertificateDigest: controlDigest(s.certificateEnvelope),
+    delegationId,
+    parentNode: s.node,
+    parent: s.execution,
+    child: child.execution,
+    childKind: plan.kind,
+    phase: child.phase,
+    ordinal: plan.ordinal,
+    serviceIds: [...child.serviceIds],
+    recipient: child.recipient,
+    childPublicKey: child.childPublicKey,
+    permittedFurtherEdges: edges,
+    depth: (parentGrant?.depth ?? 0) + 1,
+  };
+  const envelope = signControl(s.key, "openmapx-lease-grant-v2", grant);
+  const grantDigest = controlDigest(envelope);
+  const transition = signControl(s.key, "openmapx-lease-intent-v1", {
+    delegationId,
+    grantDigest,
+    sequence: 1 as const,
+    state: "attempted" as const,
   });
+  const ancestors: string[] = [];
+  let ancestor = s.node;
+  while (ancestor) {
+    ancestors.unshift(ancestor);
+    ancestor = current.grants.get(ancestor)?.parentNode ?? null;
+  }
+  const fields = {
+    version: 1 as const,
+    installationId: s.certificate.installationId,
+    leaseId: lease.leaseId,
+    ownerCertificateDigest: controlDigest(s.certificateEnvelope),
+    delegationId,
+    grantDigest,
+    ancestorDelegationIds: ancestors,
+  };
+  const signature = signControl(s.key, "openmapx-lease-assertion-v1", fields).signature;
+  const assertion = Buffer.from(canonicalJson({ ...fields, signature })).toString(
+    "base64url",
+  ) as ArtifactDelegationAssertion;
+  parseControlAssertion(assertion);
+  enlistFamilyIntent(
+    s.installation,
+    s.certificate.origin,
+    delegationId,
+    child.execution,
+    child.recipient === "data-manager" ? "data-manager" : "ops-agent",
+  );
+  prepareControlChildPublication(authority, plan, {
+    delegationId,
+    grantDigest,
+    leaseId: lease.leaseId,
+  });
+  recordLeaseControlAttempt(authority, {
+    child: child.execution,
+    leaseId: lease.leaseId,
+    delegationId,
+    grantDigest,
+  });
+  writePrivateRecord(
+    s.installation,
+    "attempts",
+    `${delegationId}.json`,
+    { grant: envelope, transition, assertion },
+    true,
+    s.certificate.origin,
+  );
+  writeBounded(s, "grants", `${delegationId}.json`, { grant: envelope, transition }, true);
+  node.grantDigests[delegationId] = grantDigest;
+  node.sequence++;
+  writeNode(s, node);
+  tree(s);
+  return assertion;
 }
 function openState(
   dataRoot: string,
@@ -1384,6 +1418,137 @@ export function bindBorrowedControlExecution(
     throw Error("Borrower execution authority mismatch");
   s.authority = a;
   s.verifiedAuthority = authority;
+  if (a.kind === "generation-hardlinks" && a.installation.installation.role === "data-manager") {
+    if (!s.node || !a.origin) throw Error("Original generation adoption required");
+    const payload = {
+      version: 2,
+      origin: a.origin,
+      execution: a.execution,
+      admissionDigest: a.receiptDigest,
+      leaseId: s.certificate.leaseId,
+      delegationId: s.node,
+      certificateDigest: controlDigest(s.certificateEnvelope),
+    };
+    const name = `${a.execution.operationKey}.json`;
+    let prior: unknown;
+    try {
+      prior = readPrivateRecord(a.installation, "execution-adoptions", name, 8192);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    if (prior !== undefined) {
+      const saved = verifyControl(
+        a.installation.installation.publicKey,
+        "openmapx-generation-adoption-v2",
+        prior,
+        z.unknown(),
+      );
+      if (controlDigest(saved) !== controlDigest(payload))
+        throw Error("Generation adoption changed");
+    } else
+      writePrivateRecord(
+        a.installation,
+        "execution-adoptions",
+        name,
+        signControl(a.installation.privateKey, "openmapx-generation-adoption-v2", payload),
+        true,
+        a.origin,
+      );
+  }
+}
+/** Reopen only the original authenticated generation leaf for settlement.
+ * There is no adopt, target acquire, deadline renewal or owner-release path. */
+export function restoreGenerationHardlinksLeaseForSettlement(
+  authority: VerifiedExecutionAuthority,
+): BorrowedArtifactTargetLease {
+  const a = executionAuthorityState(authority);
+  if (
+    a.kind !== "generation-hardlinks" ||
+    a.installation.installation.role !== "data-manager" ||
+    !a.origin
+  )
+    throw Error("Original generation receiver required");
+  const retained = verifyControl(
+    a.installation.installation.publicKey,
+    "openmapx-generation-adoption-v2",
+    readPrivateRecord(
+      a.installation,
+      "execution-adoptions",
+      `${a.execution.operationKey}.json`,
+      8192,
+    ),
+    z.strictObject({
+      version: z.literal(2),
+      origin: controlOriginSchema,
+      execution: executionRefSchema,
+      admissionDigest: digest,
+      leaseId: uuid,
+      delegationId: uuid,
+      certificateDigest: digest,
+    }),
+  );
+  if (
+    controlDigest(retained.execution) !== controlDigest(a.execution) ||
+    retained.admissionDigest !== a.receiptDigest ||
+    !sameControlOrigin(retained.origin, a.origin)
+  )
+    throw Error("Generation retained adoption identity changed");
+  const s = openState(a.installation.dataRoot, retained.leaseId, a.installation);
+  try {
+    return guarded(s, () => {
+      const adoption = z
+        .object({
+          state: z.literal("ready"),
+          execution: executionRefSchema,
+          assertion: z.string(),
+          grantDigest: digest,
+        })
+        .parse(
+          readPrivateRecord(a.installation, "adoptions", `${retained.delegationId}.json`, 8192),
+        );
+      const assertion = parseControlAssertion(adoption.assertion);
+      if (
+        assertion.leaseId !== retained.leaseId ||
+        assertion.delegationId !== retained.delegationId ||
+        assertion.grantDigest !== adoption.grantDigest ||
+        retained.certificateDigest !== controlDigest(s.certificateEnvelope) ||
+        controlDigest(adoption.execution) !== controlDigest(a.execution) ||
+        !sameControlOrigin(a.origin, s.certificate.origin)
+      )
+        throw Error("Original ready generation grant required");
+      s.node = retained.delegationId;
+      s.execution = a.execution;
+      s.key = a.installation.privateKey;
+      s.authority = a;
+      s.verifiedAuthority = authority;
+      s.settlementOnly = true;
+      const t = tree(s),
+        grant = t.grants.get(s.node),
+        child = t.children.get(s.node);
+      if (
+        !grant ||
+        !child ||
+        grant.recipient !== "data-manager" ||
+        grant.childKind !== "generation-hardlinks" ||
+        grant.childPublicKey !== a.installation.installation.publicKey ||
+        controlDigest(grant.child) !== controlDigest(a.execution) ||
+        controlDigest(child.execution) !== controlDigest(a.execution)
+      )
+        throw Error("Original generation child is missing or foreign");
+      const handle = Object.freeze({
+        leaseId: retained.leaseId,
+        owner: s.certificate.owner,
+        execution: a.execution,
+        serviceIds: Object.freeze([...grant.serviceIds]),
+        mode: "borrowed" as const,
+      });
+      handles.set(handle, s);
+      return handle;
+    });
+  } catch (error) {
+    closeState(s);
+    throw error;
+  }
 }
 export async function settleArtifactTargetLeaseChild(
   lease: TargetLeaseAuthority,
@@ -1412,6 +1577,27 @@ export async function settleArtifactTargetLeaseChild(
     node.sequence++;
     writeNode(s, node);
     tree(s);
+  });
+}
+/** Verify the exact agent-signed shared child node; no sibling private mount or
+ * caller status can stand in for actual target containment. */
+export function inspectArtifactTargetLeaseChildSettlement(
+  lease: TargetLeaseAuthority,
+  execution: ExecutionRef,
+): ChildSettlement | null {
+  const s = stateOf(lease);
+  return guarded(s, () => {
+    const t = tree(s),
+      entries = [...t.grants.values()].filter(
+        (grant) =>
+          grant.parentNode === s.node && controlDigest(grant.child) === controlDigest(execution),
+      );
+    if (entries.length !== 1) throw Error("Exact retained child grant required");
+    const child = t.children.get(entries[0]!.delegationId);
+    if (!child || child.phase !== "settled" || !knownOutcome(child.settlement)) return null;
+    if (controlDigest(child.execution) !== controlDigest(execution))
+      throw Error("Shared child execution changed");
+    return child.settlement;
   });
 }
 function finishOwnedRelease(s: State): void {
@@ -1579,6 +1765,87 @@ export async function releaseArtifactTargetLease(lease: ArtifactTargetLease): Pr
   finishOwnedRelease(s);
   closeState(s);
 }
+/** Read-only original root release proof for a data command's parent. */
+export function verifyRetainedArtifactTargetRootRelease(
+  authority: VerifiedExecutionAuthority,
+): void {
+  const a = executionAuthorityState(authority),
+    reference = z
+      .strictObject({ leaseId: uuid, certificateDigest: digest })
+      .parse(
+        readPrivateRecord(a.installation, "execution-leases", `${a.execution.operationKey}.json`),
+      );
+  const s = openState(a.installation.dataRoot, reference.leaseId, a.installation, true);
+  try {
+    const t = tree(s),
+      effect = childSettlementState(
+        verifyControlEffectSettlement(a.installation.installation, a.execution),
+      ).evidence;
+    if (
+      controlDigest(s.execution) !== controlDigest(a.execution) ||
+      controlDigest(s.certificateEnvelope) !== reference.certificateDigest ||
+      s.slots?.release?.phase !== "released" ||
+      t.root.phase !== "settled" ||
+      controlDigest(t.root.settlement) !== controlDigest(effect) ||
+      [...t.grants.keys()].some(
+        (id) =>
+          t.children.get(id)?.phase !== "settled" || !knownOutcome(t.children.get(id)?.settlement),
+      )
+    )
+      throw Error("Original root release is not proved");
+  } finally {
+    closeState(s);
+  }
+}
+/** Reopen the original owned lease for cancellation/settlement only. This never
+ * acquires a target, creates a certificate, renews a deadline or permits grants. */
+export function restoreArtifactTargetLeaseForSettlement(
+  authority: VerifiedExecutionAuthority,
+): ArtifactTargetLease {
+  const a = executionAuthorityState(authority);
+  const retained = z
+    .strictObject({ leaseId: uuid, certificateDigest: digest })
+    .parse(
+      readPrivateRecord(a.installation, "execution-leases", `${a.execution.operationKey}.json`),
+    );
+  const s = openState(a.installation.dataRoot, retained.leaseId, a.installation);
+  try {
+    const saved = z
+      .strictObject({
+        certificate: signedCertificateSchema,
+        privateKey: z.string(),
+        executionReceiptDigest: digest,
+      })
+      .parse(readPrivateRecord(a.installation, "leases", `${retained.leaseId}.json`));
+    if (
+      controlDigest(s.execution) !== controlDigest(a.execution) ||
+      retained.certificateDigest !== controlDigest(s.certificateEnvelope) ||
+      controlDigest(saved.certificate) !== retained.certificateDigest ||
+      saved.executionReceiptDigest !== a.receiptDigest ||
+      !sameControlOrigin(a.origin, s.certificate.origin)
+    )
+      throw Error("Original retained lease identity changed");
+    s.key = createPrivateKey({
+      key: Buffer.from(saved.privateKey, "base64url"),
+      type: "pkcs8",
+      format: "der",
+    });
+    s.authority = a;
+    s.verifiedAuthority = authority;
+    s.settlementOnly = true;
+    const lease = Object.freeze({
+      leaseId: retained.leaseId,
+      owner: s.execution,
+      serviceIds: s.certificate.serviceIds,
+      mode: "owner" as const,
+    });
+    handles.set(lease, s);
+    return lease;
+  } catch (error) {
+    closeState(s);
+    throw error;
+  }
+}
 export async function reconcileArtifactTargetLease(options: {
   dataRoot: string;
   leaseId: string;
@@ -1726,6 +1993,8 @@ export function inspectArtifactDelegation(options: {
       throw Error("Grant digest mismatch");
     return Object.freeze({
       leaseId: parsed.leaseId,
+      ownerCertificateDigest: controlDigest(s.certificateEnvelope),
+      owner: s.certificate.owner,
       origin: grant.origin,
       parent: grant.parent,
       execution: grant.child,
@@ -1791,6 +2060,7 @@ export function verifyConfigurationHelperReady(lease: BorrowedArtifactTargetLeas
 /** Observation/adoption of an old identity is not permission to start another forward effect. */
 export function assertArtifactTargetLeaseForward(lease: TargetLeaseAuthority): void {
   const s = stateOf(lease);
+  if (s.settlementOnly) throw Error("Recovered lease permits settlement only");
   if (!s.certificate.origin)
     throw Error("Legacy lease is observation/settlement only; upgrade producer");
   assertOriginClockForward(s.installation, s.certificate.origin);

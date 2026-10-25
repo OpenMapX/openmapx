@@ -1,4 +1,8 @@
 import z from "zod/v4";
+import {
+  pairedPinApprovalInputSchema,
+  pairedPinApprovalResultSchema,
+} from "./catalog-pin-approval";
 import { opsFailureResultSchema, processDiagnosticsSchema } from "./job-evidence";
 
 export const OPS_PROTOCOL_VERSION = 2 as const;
@@ -202,7 +206,7 @@ export const OPS_KIND_POLICIES = {
   "postgis.capacity.inspect": sync("data-manager", 30_000),
   "transitousLock.inspect": sync("data-manager", 30_000),
   "transitousLock.propose": sync("data-manager", 30_000),
-  "transitousLock.approve": sync("data-manager", 30_000),
+  "transitousLock.approve": asyncEffect("data-manager", 120_000, 4096),
   "gbfsCatalogLock.inspect": sync("data-manager", 30_000),
 } as const satisfies Record<OpsOperationKind, OpsKindPolicy>;
 
@@ -491,13 +495,7 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
     lockedBy: actorLabelSchema,
     comment: z.string().min(1).max(512).optional(),
   }),
-  z.strictObject({
-    kind: z.literal("transitousLock.approve"),
-    // The exact ref being activated, so an approval cannot land on a proposal
-    // that changed after the reviewer read it.
-    ref: transitousRefSchema,
-    approvedBy: actorLabelSchema,
-  }),
+  pairedPinApprovalInputSchema,
   kindOnly("gbfsCatalogLock.inspect"),
 ]);
 export type OpsOperation = z.infer<typeof opsOperationSchema>;
@@ -1171,10 +1169,7 @@ export const OPS_RESULT_SCHEMAS = {
     proposed: transitousLockRecordSchema.nullable(),
   }),
   "transitousLock.propose": z.strictObject({ ref: transitousRefSchema, proposed: z.literal(true) }),
-  "transitousLock.approve": z.strictObject({
-    ref: transitousRefSchema,
-    lockedAt: timestampSchema,
-  }),
+  "transitousLock.approve": pairedPinApprovalResultSchema,
   "gbfsCatalogLock.inspect": z.strictObject({
     commit: z.string().regex(/^[0-9a-f]{40}$/),
     url: z.string().min(1).max(2_048),

@@ -45,7 +45,13 @@ const PRIVATE = new Set([
   "spawn-started",
   "prepared",
   "execution-adoptions",
+  "configuration-maintenance",
+  "hardlinks",
 ]);
+const recordMaximum = (record: { scope: string; namespace: string }) =>
+  record.scope === "private" && record.namespace === "hardlinks"
+    ? 1024 * 1024
+    : LIMITS.privateRecordBytes;
 const SHARED = new Set([
   "execution",
   "lease-owner",
@@ -719,6 +725,38 @@ function equalAddress(
     a.container === b.container
   );
 }
+/** Fixed protocol readers compare the current indexed digest and physical
+ * record before accepting an older still-valid signed payload. */
+export function verifyFamilyOwnedRecord(
+  state: InstallationState,
+  origin: ControlExecutionOrigin,
+  address: Pick<FamilyRecord, "scope" | "namespace" | "name" | "container">,
+  bytes: string,
+): void {
+  const family = openFamily(state, origin);
+  try {
+    guard(family.slot, ".family-writer", () => {
+      checkLocalIdentity(family);
+      const retained = findRecord(family, address);
+      if (!retained || retained.state !== "written" || retained.digest !== controlDigest(bytes))
+        throw Error("Retained record digest changed");
+      const opened = recordDirectory(family, retained);
+      try {
+        if (
+          !sameInode(opened.dir.fileIdentity(retained.name), retained.inode) ||
+          controlDigest(
+            opened.dir.read(retained.name, recordMaximum(retained)).toString("utf8"),
+          ) !== retained.digest
+        )
+          throw Error("Retained record identity changed");
+      } finally {
+        opened.close();
+      }
+    });
+  } finally {
+    family.close();
+  }
+}
 export function familyRecordWrite(
   state: InstallationState,
   origin: ControlExecutionOrigin,
@@ -743,8 +781,7 @@ export function familyRecordWrite(
         try {
           if (
             sameInode(d.dir.fileIdentity(old.name), old.inode) &&
-            controlDigest(d.dir.read(old.name, LIMITS.privateRecordBytes).toString("utf8")) ===
-              old.digest
+            controlDigest(d.dir.read(old.name, recordMaximum(old)).toString("utf8")) === old.digest
           ) {
             ref = old;
             return;
@@ -1472,7 +1509,7 @@ function publishCandidate(f: Family, p: Progress): Candidate | null {
         }
       } else if (
         !sameInode(d.dir.fileIdentity(e.name), e.inode) ||
-        controlDigest(d.dir.read(e.name, LIMITS.privateRecordBytes).toString("utf8")) !== e.digest
+        controlDigest(d.dir.read(e.name, recordMaximum(e)).toString("utf8")) !== e.digest
       )
         throw Error("Retirement record replaced");
     } finally {
@@ -1672,7 +1709,7 @@ function unlinkShared(f: Family, p: Progress, e: FamilyRecord) {
         }
       } else if (
         !sameInode(d.dir.fileIdentity(e.name), e.inode) ||
-        controlDigest(d.dir.read(e.name, LIMITS.privateRecordBytes).toString("utf8")) !== e.digest
+        controlDigest(d.dir.read(e.name, recordMaximum(e)).toString("utf8")) !== e.digest
       )
         throw Error("Replaced shared retirement record");
       p.sharedTransaction = { ordinal: e.ordinal, phase: "planned", record: e };
@@ -1706,8 +1743,7 @@ function unlinkShared(f: Family, p: Progress, e: FamilyRecord) {
         } else {
           if (
             !sameInode(d.dir.fileIdentity(e.name), e.inode) ||
-            controlDigest(d.dir.read(e.name, LIMITS.privateRecordBytes).toString("utf8")) !==
-              e.digest
+            controlDigest(d.dir.read(e.name, recordMaximum(e)).toString("utf8")) !== e.digest
           )
             throw Error("Replaced shared retirement record");
           d.dir.removeFile(e.name);
@@ -1775,6 +1811,7 @@ function cleanupLocalRecords(f: Family, p: Progress, m: Manifest): boolean {
           };
           progress(f, p);
         },
+        recordMaximum(e),
       );
       delete p.lastDone;
       progress(f, p);
@@ -2037,6 +2074,11 @@ function assertPrivateRetirementProof(f: Family, m: Manifest): void {
 async function step(f: Family): Promise<boolean> {
   if (f.state.fixedChildId) throw Error("Fixed children do not coordinate role-private retirement");
   let p = readProgress(f);
+  await f.state.retentionJournal?.prepare?.(
+    Object.values(p.executions)
+      .filter((fact) => fact.requiresJournal)
+      .map((fact) => ({ execution: fact.execution, digest: fact.terminalDigest })),
+  );
   checkLocalIdentity(f);
   if (p.phase === "released" && f.state.installation.role !== f.meta.origin.issuer) {
     freeFamily(f, p);
@@ -2115,7 +2157,11 @@ async function step(f: Family): Promise<boolean> {
           .filter((e) => e.requiresJournal)
           .map((e) => {
             if (!e.terminalDigest) throw Error("Missing retiring terminal digest");
-            return { execution: e.execution, digest: e.terminalDigest };
+            return {
+              execution: e.execution,
+              digest: e.terminalDigest,
+              terminalAt: e.canonicalTerminalAt,
+            };
           }),
         md,
       );

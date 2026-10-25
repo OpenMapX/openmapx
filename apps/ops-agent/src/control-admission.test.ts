@@ -11,9 +11,61 @@ import {
 } from "@openmapx/core/ops";
 import { expect, it } from "vitest";
 import { type OpsJobJournal, openOpsJobJournal } from "./journal";
+import type { OpsExecutionContext } from "./runtime";
 import { buildOpsAgentServer } from "./server";
 
-it.each(["normal", "ready-failure", "wrong-target"])(
+it("refuses paired approval as a bearer-only root before reserving a worker", async () => {
+  const root = mkdtempSync(join(tmpdir(), "omx-closed-approval-"));
+  mkdirSync(join(root, "data"), { mode: 0o700 });
+  await control.provisionControlInstallation(root);
+  const installation = control.openControlInstallation({
+    infraDir: root,
+    role: "ops-agent",
+    serviceIds: ["motis"],
+  });
+  const journal = await openOpsJobJournal(join(root, "data/ops-agent/jobs-v1.json"));
+  const app = buildOpsAgentServer({
+    controlInstallation: installation,
+    journal,
+    tokens: { api: "a".repeat(32), "data-manager": "b".repeat(32) },
+    resourcePolicy: { allowGlobal: () => true },
+  });
+  try {
+    const requestedDeadlineAt = Date.now() + 60000;
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/operations",
+      headers: { authorization: `Bearer ${"b".repeat(32)}`, "x-ops-protocol-version": "2" },
+      payload: {
+        version: 2,
+        requestId: `ops1_${randomUUID().replaceAll("-", "")}`,
+        operationKey: createControlRootOperationKey({
+          notAfter: requestedDeadlineAt,
+          nonce: randomBytes(16),
+        }),
+        issuedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 10000).toISOString(),
+        execution: { requestedDeadlineAt },
+        operation: {
+          kind: "transitousLock.approve",
+          proposalId: randomUUID(),
+          validationId: randomUUID(),
+          expectedGenerationId: null,
+          diffDigest: "a".repeat(64),
+          acknowledgeLicenseChanges: false,
+        },
+      },
+    });
+    expect(response.statusCode, response.body).toBe(403);
+    expect(journal.records()).toEqual([]);
+  } finally {
+    await app.close();
+    control.closeControlInstallation(installation);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+it.each(["normal", "ready-failure", "wrong-target", "canceled", "cancel-journal-failure"])(
   "adopts at authenticated HTTP admission without replay (%s)",
   async (scenario) => {
     const failReadyWrite = scenario === "ready-failure";
@@ -91,14 +143,21 @@ it.each(["normal", "ready-failure", "wrong-target"])(
       childPublicKey: agent.publicKey,
     });
     let calls = 0;
+    let releaseWorker = () => {};
+    const worker = new Promise<void>((resolve) => {
+      releaseWorker = resolve;
+    });
+    let workerContext: OpsExecutionContext | undefined;
     const token = "b".repeat(32);
     const journalFile = join(root, "data/ops-agent/jobs-v1.json");
     const options = {
       tokens: { api: "a".repeat(32), "data-manager": token },
       controlInstallation: agent,
       resourcePolicy: { allowGlobal: () => true, allowService: () => true },
-      dispatch: async () => {
+      dispatch: async (_operation: unknown, _runtime: unknown, context: OpsExecutionContext) => {
         calls++;
+        workerContext = context;
+        if (scenario === "canceled" || scenario === "cancel-journal-failure") await worker;
         return { changed: true, state: "stopped" };
       },
     };
@@ -108,6 +167,11 @@ it.each(["normal", "ready-failure", "wrong-target"])(
       records: () => journal.records(),
       replace: async (records) => {
         if (failReadyWrite && ++writes === 2) throw Error("synthetic ready journal failure");
+        if (
+          scenario === "cancel-journal-failure" &&
+          records.some((record) => record.state === "termination_pending")
+        )
+          throw Error("synthetic cancellation journal failure");
         await journal.replace(records);
       },
     };
@@ -152,6 +216,39 @@ it.each(["normal", "ready-failure", "wrong-target"])(
         return;
       }
       expect(result.statusCode, result.body).toBe(202);
+      if (scenario === "canceled" || scenario === "cancel-journal-failure") {
+        await expect.poll(() => calls).toBe(1);
+        const cancellation = app.inject({
+          method: "DELETE",
+          url: `/v1/operations/${child.executionId}`,
+          headers: {
+            authorization: `Bearer ${token}`,
+            "x-ops-protocol-version": "2",
+            "x-ops-operation-fingerprint": child.fingerprint,
+          },
+        });
+        await expect.poll(() => workerContext?.signal.aborted).toBe(true);
+        if (!workerContext?.artifactLease || !workerContext.controlAuthority)
+          throw Error("Missing real adopted authority");
+        const { artifactLease, controlAuthority } = workerContext;
+        expect(() => control.assertArtifactTargetLeaseForward(artifactLease)).toThrow();
+        expect(() => control.assertControlExecutionForward(controlAuthority)).toThrow();
+        await expect(control.releaseArtifactTargetLease(lease)).rejects.toThrow();
+        if (scenario === "canceled")
+          expect(journal.records()[0]).toMatchObject({ state: "termination_pending" });
+        expect(journal.records()[0]?.terminalAt).toBeUndefined();
+        if (scenario === "cancel-journal-failure") {
+          expect((await cancellation).statusCode).toBe(500);
+          const status = await app.inject({
+            url: `/v1/operations/${child.executionId}`,
+            headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" },
+          });
+          expect(status.json().result.state).toBe("termination_pending");
+        }
+        releaseWorker();
+        await cancellation;
+        return;
+      }
       await expect
         .poll(
           async () =>
@@ -194,6 +291,7 @@ it.each(["normal", "ready-failure", "wrong-target"])(
       expect(status.json().result.state).toBe("succeeded");
       await releasedRestart.close();
     } finally {
+      releaseWorker();
       await app.close();
       control.closeArtifactTargetLeaseHandle(lease);
       control.closeControlInstallation(agent);

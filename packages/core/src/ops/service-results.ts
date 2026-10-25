@@ -1,6 +1,16 @@
 import { z } from "zod";
 
 export type CoordinatorMode = "ensure-running" | "require-running";
+const count = z.number().int().nonnegative().safe();
+export const hardlinkApplySummarySchema = z.strictObject({
+  applied: z.boolean(),
+  linked: count,
+  skipped: count,
+  pruned: count,
+  entries: count,
+  via: z.enum(["data-manager", "local", "none"]).optional(),
+});
+export type HardlinkApplySummary = z.infer<typeof hardlinkApplySummarySchema>;
 const serviceId = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
 const ids = z
   .array(serviceId)

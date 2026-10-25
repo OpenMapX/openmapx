@@ -75,7 +75,13 @@ export function resolveAuthToken(app: FastifyInstance): string {
  * before body parsing. Health endpoints remain open so container/k8s probes
  * and cross-service discovery keep working.
  */
-export function registerAuth(app: FastifyInstance, expectedToken: string): void {
+export function registerAuth(
+  app: FastifyInstance,
+  expectedToken: string,
+  options: {
+    executionReceiver?: () => import("./jobs/execution/api.js").DataExecutionReceiver | undefined;
+  } = {},
+): void {
   // Register the maintained limiter in this root scope, while invoking it only
   // for failed credentials. Successful long-running jobs and probes have no
   // authentication-attempt budget. The root hook runs before body parsing.
@@ -103,7 +109,19 @@ export function registerAuth(app: FastifyInstance, expectedToken: string): void 
     // Task02.3 owns durable receiver admission. Never silently ignore an internal authority header.
     try {
       const headers = controlHeaders(req.raw.rawHeaders);
-      if (headers.delegation !== undefined || headers.parent !== undefined)
+      const path = req.url.split("?")[0] ?? "";
+      const admission =
+        req.method === "POST" &&
+        ([
+          "/executions",
+          "/executions/generation-hardlinks",
+          "/executions/configuration-maintenance/prepare",
+        ].includes(path) ||
+          /^\/executions\/configuration-maintenance\/[a-f0-9-]{36}\/settle$/.test(path));
+      if (
+        (headers.delegation !== undefined || headers.parent !== undefined) &&
+        (!admission || !options.executionReceiver?.())
+      )
         return reply
           .code(503)
           .send({ error: "Managed data-manager execution requires the durable receiver upgrade" });

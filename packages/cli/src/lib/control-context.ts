@@ -7,6 +7,7 @@ import {
   type BorrowedArtifactTargetLease,
   beginFixedCliExecution,
   bindBorrowedControlExecution,
+  type ControlInstallation,
   closeArtifactTargetLeaseHandle,
   closeControlInstallation,
   openFixedChildInstallation,
@@ -25,6 +26,7 @@ import { repoPaths } from "./paths";
 
 const contexts = new AsyncLocalStorage<{
   authority: VerifiedExecutionAuthority;
+  installation: ControlInstallation;
   lease?: BorrowedArtifactTargetLease;
 }>();
 class FixedCliCommandExit extends Error {
@@ -95,6 +97,7 @@ export async function withCliControlContext<T>(
       ...(parent ? { parent } : {}),
       serviceIds: intent.serviceIds,
       plan: intent.plan,
+      ...(intent.reservations ? { reservations: intent.reservations } : {}),
     });
     beginFixedCliExecution(installation, execution);
     if (lease) bindBorrowedControlExecution(lease, authority);
@@ -102,7 +105,7 @@ export async function withCliControlContext<T>(
     try {
       let result: T;
       try {
-        result = await contexts.run({ authority, lease }, run);
+        result = await contexts.run({ authority, lease, installation }, run);
       } catch (e) {
         if (e instanceof FixedCliCommandExit && e.code === 0) result = undefined as T;
         else throw e;
@@ -137,4 +140,13 @@ export async function withCliControlContext<T>(
     if (lease) closeArtifactTargetLeaseHandle(lease);
     closeControlInstallation(installation);
   }
+}
+
+export function withHostDataControlContext<T>(
+  installation: ControlInstallation,
+  authority: VerifiedExecutionAuthority,
+  run: () => Promise<T>,
+): Promise<T> {
+  if (contexts.getStore()) throw Error("Existing CLI control context");
+  return contexts.run({ installation, authority }, run);
 }

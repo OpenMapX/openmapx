@@ -3,6 +3,7 @@ import { createReadStream } from "node:fs";
 import type { SearchIndexStatus as CanonicalSearchIndexStatus } from "@openmapx/core/data-manager-contracts";
 import type postgres from "postgres";
 import type { DatasetMetadata, StateStore } from "../../state.js";
+import { dataWorkerSignal, publishDataChange } from "../execution/worker-scope.js";
 
 export interface SearchIndexRuntimeState {
   building: boolean;
@@ -20,7 +21,7 @@ export async function fingerprintDataset(dataset: DatasetMetadata): Promise<stri
   if (dataset.md5) return `md5:${dataset.md5.toLowerCase()}`;
   return await new Promise<string>((resolve, reject) => {
     const hash = createHash("sha256");
-    const stream = createReadStream(dataset.path);
+    const stream = createReadStream(dataset.path, { signal: dataWorkerSignal() });
     stream.on("data", (chunk) => hash.update(chunk));
     stream.on("end", () => resolve(`sha256:${hash.digest("hex")}`));
     stream.on("error", reject);
@@ -45,11 +46,13 @@ export async function updateCurrentSearchIndexFingerprint(
     `SELECT to_regclass('osm_search.index_state') IS NOT NULL AS exists`,
   );
   if (!rows[0]?.exists) return;
-  await sql.unsafe(
-    `UPDATE osm_search.index_state
+  await publishDataChange(() =>
+    sql.unsafe(
+      `UPDATE osm_search.index_state
         SET current_fingerprint = $2, updated_at = NOW()
       WHERE singleton = 1 AND region = $1`,
-    [region, fingerprint],
+      [region, fingerprint],
+    ),
   );
 }
 

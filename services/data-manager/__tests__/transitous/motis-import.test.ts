@@ -1,3 +1,10 @@
+vi.mock("../../src/jobs/transitous/owned-ops.js", async () => {
+  const original = await vi.importActual<typeof import("../../src/jobs/transitous/owned-ops.js")>(
+    "../../src/jobs/transitous/owned-ops.js",
+  );
+  return { ...original, ...(await import("../helpers/owned-transit-unit.js")) };
+});
+
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

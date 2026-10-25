@@ -1,4 +1,5 @@
 import type {
+  ArtifactTargetLease,
   BorrowedArtifactTargetLease,
   VerifiedExecutionAuthority,
 } from "@openmapx/core/build-artifacts";
@@ -50,7 +51,14 @@ export class OpsAgentBusyError extends Error {
 export interface OpsExecutionContext {
   readonly execution: ExecutionRef;
   readonly artifactLease?: BorrowedArtifactTargetLease;
+  readonly ownedTargetLease?: ArtifactTargetLease;
   readonly controlAuthority?: VerifiedExecutionAuthority;
+  commitFeedProxyValidationFailure?(input: {
+    candidateDigest: string;
+    validationExitCode: number;
+    completionDigest: string;
+  }): Promise<void>;
+  markFeedProxyReloadAttempted?(): Promise<void>;
   signal: AbortSignal;
   emitLog(stream: "stdout" | "stderr", message: string): void;
   claim: OpsTrustedClaim;

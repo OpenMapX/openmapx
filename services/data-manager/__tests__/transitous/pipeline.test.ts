@@ -59,6 +59,55 @@ const ORDERED_STAGES: StageName[] = [
 ];
 
 describe("runTransitousPipeline orchestrator", () => {
+  it("stops at a failed owner checkpoint before the next stage can mutate", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-pipeline-owner-"));
+    mkdirSync(join(tmp, ".transitous-catalog", ".git"), { recursive: true });
+    mkdirSync(join(tmp, ".transitous-catalog", "feeds"), { recursive: true });
+    writeFileSync(
+      join(tmp, ".transitous-catalog", "feeds", "de.json"),
+      JSON.stringify({ sources: [{ name: "fixture" }] }),
+    );
+    const stages: StageResult[] = [];
+    const ctx = buildJobContext({
+      dataDir: tmp,
+      store: new StateStore(tmp),
+      countries: ["de"],
+      runner: async () => {},
+      runScript: async () => {},
+      onStageComplete: async (result) => {
+        stages.push(result);
+        throw Error("durable execution owner checkpoint lost");
+      },
+    });
+    await expect(runTransitousPipeline(ctx, { stopAt: "filter" })).rejects.toThrow(
+      "durable execution owner checkpoint lost",
+    );
+    expect(stages.map((result) => result.stage)).toEqual(["prepare"]);
+  });
+  it("never reports ok when cancellation follows a successful stage", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-pipeline-cancel-"));
+    const catalogDir = join(tmp, ".transitous-catalog");
+    mkdirSync(join(catalogDir, ".git"), { recursive: true });
+    const controller = new AbortController();
+    const persisted: StageResult[] = [];
+    const ctx = buildJobContext({
+      dataDir: tmp,
+      store: new StateStore(tmp),
+      countries: ["de"],
+      runner: async () => {},
+      abortSignal: controller.signal,
+      onStageComplete: async (result) => {
+        persisted.push(result);
+        controller.abort(new Error("operator canceled transit execution"));
+      },
+    });
+
+    await expect(runTransitousPipeline(ctx)).rejects.toThrow(/cancel|abort/i);
+    expect(persisted.map(({ stage, status }) => ({ stage, status }))).toEqual([
+      { stage: "prepare", status: "ok" },
+    ]);
+  });
+
   it("invokes all stages in order against an in-memory persistence hook", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-pipeline-orchestrator-"));
     const dataDir = tmp;

@@ -21,6 +21,7 @@ import {
   installCommunityRepositoryRuntime,
 } from "./community-repositories";
 import { loadOpsAgentConfig } from "./config";
+import { createDataTransitTrustedOpsDataSource } from "./data-transit-resource-source";
 import {
   createDockerDawarichCollector,
   createDockerDawarichRuntimeInspector,
@@ -234,12 +235,15 @@ async function main(): Promise<void> {
             );
             return trusted ?? bootstrapEnabledServiceIds;
           },
-          trustedData: createFileTrustedOpsDataSource({
-            directory: config.trustedConfigDirectory,
-            token: apiToken,
-            allowedUids: [uid],
-            expectedGid: gid,
-          }),
+          trustedData: createDataTransitTrustedOpsDataSource(
+            controlStartup.installation,
+            createFileTrustedOpsDataSource({
+              directory: config.trustedConfigDirectory,
+              token: apiToken,
+              allowedUids: [uid],
+              expectedGid: gid,
+            }),
+          ),
           resourceAuthority: {
             allowBackup: (kind, backupId, serviceIds) =>
               inspectBackupAuthority(config.rootDir, kind, backupId, serviceIds),

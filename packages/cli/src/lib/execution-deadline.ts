@@ -103,7 +103,8 @@ export function constrainCliDataManagerTransport(
       assertCliExecutionAvailable();
       if (
         deadlines.getStore() &&
-        !["GET", "HEAD"].includes((options?.method ?? "GET").toUpperCase())
+        !["GET", "HEAD"].includes((options?.method ?? "GET").toUpperCase()) &&
+        !["startDataExecution", "cancelDataExecution"].includes(operationId)
       )
         throw Error("Managed data-manager execution requires a deadline-aware receiver upgrade");
       return transport.request(operationId, url, options);

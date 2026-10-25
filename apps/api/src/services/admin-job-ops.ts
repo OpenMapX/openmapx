@@ -23,6 +23,7 @@ import {
   readOpsTokenFile,
   signApiRetentionProof,
 } from "@openmapx/core/ops";
+import { cancelAdminDataChildren } from "./admin-data-children";
 import { AdminJobFailure, JobObservationPending } from "./admin-job-failure";
 import {
   type ApiJobChildAttempt,
@@ -898,6 +899,11 @@ export async function cancelAdminJobOperations(
 ): Promise<AdminJobCancellationOutcome> {
   const projection = readProjection(result);
   const pending = Object.values(projection.operations);
+  const backend = await cancelAdminDataChildren(result, pending, options);
+  // Reconcile every known root even when a backend sibling remains pending.
+  // No agent projection is not proof that no registered backend remains.
+  // Known descendants have been explicitly canceled/observed above; missing
+  // original parent containment still keeps the application pending.
   if (pending.length === 0) return "pending";
   const sleep =
     options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
@@ -906,6 +912,51 @@ export async function cancelAdminJobOperations(
     throw new Error("Invalid cancellation poll interval");
   }
 
+  const cancellationSent = new Set<string>();
+  // Send exact retained cancellation to all roots before any held sibling can
+  // cause observation to return pending. Adoption is checkpointed first.
+  if (pending.length > 1 || backend !== "none")
+    for (const operation of pending) {
+      if (operation.phase === "refused" || operation.terminal || options.signal?.aborted) continue;
+      try {
+        const status = operation.operationId
+          ? await client.status(operation.kind, operation.operationId, {
+              signal: options.signal
+                ? AbortSignal.any([options.signal, AbortSignal.timeout(2000)])
+                : AbortSignal.timeout(2000),
+            })
+          : operation.operation
+            ? await client.lookup(operation.operation, operation.operationKey, {
+                signal: AbortSignal.timeout(2000),
+                ...(operation.attempt
+                  ? { execution: { requestedDeadlineAt: operation.attempt.requestedDeadlineAt } }
+                  : {}),
+              })
+            : undefined;
+        if (
+          !status ||
+          status.kind !== operation.kind ||
+          status.operationKey !== operation.operationKey ||
+          (operation.operationId && status.operationId !== operation.operationId) ||
+          (operation.fingerprint && status.fingerprint !== operation.fingerprint) ||
+          (operation.deadlineAt && status.deadlineAt !== operation.deadlineAt)
+        )
+          continue;
+        operation.operationId = status.operationId;
+        operation.fingerprint = status.fingerprint;
+        operation.deadlineAt = status.deadlineAt;
+        if (options.context) await persistProjection(options.context, projection);
+        if (!["succeeded", "failed", "timed_out"].includes(status.state)) {
+          cancellationSent.add(operation.operationKey);
+          await client.cancel(status.operationId, {
+            signal: AbortSignal.timeout(2000),
+            ...(status.fingerprint ? { fingerprint: status.fingerprint } : {}),
+          });
+        }
+      } catch {
+        /* Every sibling is still attempted; response loss is observed below. */
+      }
+    }
   // Each operation is reconciled on its own. A sibling that finished
   // successfully must not mask another that this request actually contained,
   // and a failure that predates this request must not be reported as a
@@ -979,7 +1030,10 @@ export async function cancelAdminJobOperations(
       status = await client.status(operation.kind, operation.operationId, { signal: readSignal() });
       if (!matches(status)) return "pending";
       sawTerminationPending = status.state === "termination_pending";
-      if (!["succeeded", "failed", "timed_out"].includes(status.state))
+      if (
+        !["succeeded", "failed", "timed_out"].includes(status.state) &&
+        !cancellationSent.has(operation.operationKey)
+      )
         status = await client.cancel(operation.operationId, {
           signal: readSignal(),
           ...(operation.fingerprint ? { fingerprint: operation.fingerprint } : {}),
@@ -1053,6 +1107,15 @@ export async function cancelAdminJobOperations(
           : "already_terminal",
     );
   }
+  const latestBackend = await cancelAdminDataChildren(
+    options.context?.checkpointResult ?? result,
+    pending,
+    options,
+  );
+  if (backend === "pending" || latestBackend === "pending") return "pending";
+  if (backend === "contained" || latestBackend === "contained") outcomes.push("contained");
+  else if (backend === "already_terminal" || latestBackend === "already_terminal")
+    outcomes.push("already_terminal");
   if (hasUnsettledHardlinks(result)) return "pending";
   if (outcomes.includes("contained")) return "canceled";
   return outcomes.every((outcome) => outcome === "succeeded") ? "completed" : "already_terminal";

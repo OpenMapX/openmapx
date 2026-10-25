@@ -7,8 +7,10 @@ import {
   controlDigest,
   controlHeaders,
   installationState,
+  readParentGrant,
   retainedControlParent,
   verifyControlPeer,
+  verifyParentExecution,
 } from "./control-authority";
 import { adoptArtifactTargetLease, inspectArtifactDelegation } from "./target-lease";
 /** Both receivers keep transport auth and resource policy. This verifies only the exact signed internal attempt. */
@@ -109,4 +111,92 @@ export function verifiedParentForArtifactDelegation(
   verifiedParents.add(parent);
   if (inspected.origin) verifiedParentOrigins.set(parent, inspected.origin);
   return parent;
+}
+
+/** Fixed DM receiver: the only proposed ID comes from the authenticated grant.
+ * Reading the grant is observation; normalized equality is checked at adoption. */
+export function inspectDataExecutionAdmission(
+  installation: ControlInstallation,
+  input: {
+    rawHeaders: readonly string[];
+    input: import("../services/data-manager/contracts/executions").DataExecutionInput;
+    operationKey: string;
+    operationFingerprint: string;
+    requestedDeadlineAt?: number;
+  },
+) {
+  const local = installationState(installation),
+    headers = controlHeaders(input.rawHeaders);
+  if (installation.role !== "data-manager") throw Error("Data-manager receiver required");
+  if (!headers.parent && !headers.delegation) return null;
+  if (headers.parent) {
+    const grant = readParentGrant(local, headers.parent),
+      assertion = headers.parent;
+    if (
+      grant.recipient !== "data-manager" ||
+      grant.child.executor !== "data-manager" ||
+      grant.kind !== input.input.kind ||
+      grant.child.operationKey !== input.operationKey ||
+      grant.child.operationFingerprint !== input.operationFingerprint ||
+      grant.child.deadlineAt !== input.requestedDeadlineAt
+    )
+      throw Error("Signed data parent identity mismatch");
+    const peer = verifyControlPeer(installation, {
+      rawHeaders: input.rawHeaders,
+      transportPrincipal: "shared-data-manager-bearer",
+      execution: grant.child,
+      kind: grant.kind,
+    });
+    const parent = verifyParentExecution(assertion, peer, {
+      execution: grant.child,
+      kind: grant.kind,
+      requestedDeadlineAt: grant.child.deadlineAt,
+    });
+    return Object.freeze({
+      execution: grant.child,
+      parent,
+      serviceIds: [] as string[],
+      async adopt(execution: ExecutionRef) {
+        if (controlDigest(execution) !== controlDigest(grant.child))
+          throw Error("Normalized data child differs from grant");
+        return undefined;
+      },
+    });
+  }
+  const assertion = headers.delegation!;
+  const grant = inspectArtifactDelegation({ dataRoot: local.dataRoot, assertion, installation });
+  if (
+    input.input.kind !== "generation-hardlinks" ||
+    grant.kind !== input.input.kind ||
+    grant.execution.executor !== "data-manager" ||
+    grant.execution.operationKey !== input.operationKey ||
+    grant.execution.operationFingerprint !== input.operationFingerprint ||
+    grant.execution.deadlineAt !== input.requestedDeadlineAt
+  )
+    throw Error("Unsupported or mismatched borrowed data leaf");
+  const peer = verifyControlPeer(installation, {
+    rawHeaders: input.rawHeaders,
+    transportPrincipal: "shared-data-manager-bearer",
+    execution: grant.execution,
+    kind: grant.kind,
+  });
+  const parent = verifiedParentForArtifactDelegation(installation, assertion, grant.execution);
+  return Object.freeze({
+    execution: grant.execution,
+    parent,
+    serviceIds: [] as string[],
+    async adopt(execution: ExecutionRef) {
+      if (controlDigest(execution) !== controlDigest(grant.execution))
+        throw Error("Normalized data child differs from grant");
+      const lease = await adoptArtifactTargetLease({
+        dataRoot: local.dataRoot,
+        assertion,
+        peer,
+        execution,
+        serviceIds: grant.serviceIds,
+      });
+      local.registeredTargets = new Set([...local.registeredTargets, ...lease.serviceIds]);
+      return lease;
+    },
+  });
 }

@@ -1,55 +1,39 @@
 import { createReadStream } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as observerDelay } from "node:timers/promises";
 import {
   type OfflinePackageRequest,
   parseOfflinePackageRequest,
   type TrafficApplicationSnapshot,
 } from "@openmapx/core";
+import {
+  type DataExecutionInput,
+  type DataExecutionStatus,
+  isDataExecutionTerminal,
+} from "@openmapx/core/data-manager-contracts";
 import { feedState } from "@openmapx/db-schema";
-import { parseTransitSource } from "@openmapx/transitous-core";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type postgres from "postgres";
 import { type CoverageApiOptions, registerCoverageEvidenceRoute } from "./coverage/api.js";
 import type { CoverageSnapshotStore } from "./coverage/snapshot-store.js";
 import { db, sql } from "./db/index.js";
 import { registerAmbientPlacesApi } from "./jobs/ambient-places/api.js";
-import { convertPbfToBz2ForRegion } from "./jobs/convert-overpass.js";
-import { downloadFonts } from "./jobs/download-fonts.js";
-import { downloadOsm } from "./jobs/download-osm.js";
-import { applyHardlinkPlan } from "./jobs/link.js";
+import { type DataExecutionReceiver, registerDataExecutionApi } from "./jobs/execution/api.js";
 import {
-  type BuildNotablePlacesOptions,
-  buildNotablePlaces,
-  type NotablePlacesBuildResult,
-} from "./jobs/notable-places/build.js";
-import { notablePlacesSettings } from "./jobs/notable-places/schedule.js";
+  startLegacyDataMutation,
+  withLegacyDataMutation,
+} from "./jobs/execution/legacy-mutation.js";
 import {
   createNotablePlacesRuntimeState,
   getNotablePlacesStatus,
   type NotablePlacesRuntimeState,
 } from "./jobs/notable-places/state.js";
-import { extractOsmPois } from "./jobs/overture/extract-osm-pois.js";
-import { ingestOverture } from "./jobs/overture/ingest.js";
-import { withOvertureOperationLock } from "./jobs/overture/operation-lock.js";
-import { assertValidRegion, pullOverture } from "./jobs/overture/pull.js";
-import { getOvertureConflationState, rebuildOvertureLinks } from "./jobs/overture/rebuild-links.js";
-import { syncOvertureRegion } from "./jobs/overture/sync.js";
-import {
-  type BuildOsmSearchIndexOptions,
-  buildOsmSearchIndex,
-  type SearchIndexBuildResult,
-} from "./jobs/search-index/build.js";
+import { getOvertureConflationState } from "./jobs/overture/rebuild-links.js";
 import {
   createNotablePlacesOperationLock,
-  createSearchIndexOperationLock,
   type SearchIndexOperationLock,
 } from "./jobs/search-index/operation-lock.js";
-import {
-  createSearchIndexRuntimeState,
-  fingerprintDataset,
-  getSearchIndexStatus,
-  updateCurrentSearchIndexFingerprint,
-} from "./jobs/search-index/state.js";
+import { createSearchIndexRuntimeState, getSearchIndexStatus } from "./jobs/search-index/state.js";
 import type { BakePredictedResult } from "./jobs/traffic/bake-predicted.js";
 import {
   CatalogBumpError,
@@ -57,7 +41,6 @@ import {
   lockFromCandidate,
   resolveCatalogBumpCandidate,
 } from "./jobs/transitous/catalog-bump.js";
-import { buildJobContext, runTransitousPipeline } from "./jobs/transitous/index.js";
 import { resolveTransitOverlayPath } from "./jobs/transitous/internal.js";
 import {
   type MotisOperationsPolicy,
@@ -69,11 +52,10 @@ import {
   OperatorFeedRelayCapabilityError,
   type OperatorFeedRelayStore,
 } from "./jobs/transitous/operator-feed-relay.js";
-import { finalizeJobRow, makePersistingOnStageComplete } from "./jobs/transitous/persistence.js";
+import { finalizeJobRow } from "./jobs/transitous/persistence.js";
 import { runMotisPreflight } from "./jobs/transitous/preflight.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
 import type { SingleFlightController } from "./jobs/transitous/single-flight.js";
-import { asJobLogger, jobChildLogger } from "./logger.js";
 import {
   OFFLINE_PACKAGE_PRINCIPAL_PATTERN,
   OfflinePackagePrincipalQuotaError,
@@ -102,6 +84,7 @@ import {
 } from "./transit-sources.js";
 
 export interface ApiOptions {
+  executionReceiver?: DataExecutionReceiver;
   dataDir?: string;
   /**
    * Single-flight controller. Defaults to the process-wide singleton so the
@@ -109,8 +92,6 @@ export interface ApiOptions {
    */
   singleFlight?: SingleFlightController;
   operationsPolicy?: MotisOperationsPolicy;
-  /** Test seam invoked after reservation; production launches the real pipeline. */
-  launchTransitSync?: (args: { jobId: string; countries: string[]; trigger: string }) => void;
   /**
    * Runs the predicted-traffic bake. Wired in `service.ts` only when
    * `OPENCONDITIONS_URL` is configured, so the route can answer 501 rather than
@@ -123,8 +104,7 @@ export interface ApiOptions {
   offlinePackages?: OfflinePackageGenerator;
   /** Search-index database/test seam. */
   searchIndexSql?: postgres.Sql;
-  /** Test seam for the country-scale OSM search-index build. */
-  buildSearchIndex?: (opts: BuildOsmSearchIndexOptions) => Promise<SearchIndexBuildResult>;
+  searchIndexRuntimeState?: ReturnType<typeof createSearchIndexRuntimeState>;
   /**
    * Build state and lock shared with the scheduled refresh, so a build started
    * here and one started by the schedule never overlap. Created here when the
@@ -133,7 +113,6 @@ export interface ApiOptions {
   notablePlaces?: {
     runtimeState: NotablePlacesRuntimeState;
     operationLock: SearchIndexOperationLock;
-    build?: (opts: BuildNotablePlacesOptions) => Promise<NotablePlacesBuildResult>;
   };
   /** Process startup readiness; omitted by isolated route tests, which are ready immediately. */
   readiness?: () => DataManagerReadinessSnapshot;
@@ -418,13 +397,13 @@ function registerOfflinePackageRoutes(
 }
 
 export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
+  registerDataExecutionApi(app, opts.executionReceiver);
   const dataDir = opts.dataDir ?? process.env.DATA_DIR ?? "/data";
   const singleFlight = opts.singleFlight ?? getSingleFlightController();
   const store = new StateStore(dataDir);
   const searchIndexSql = opts.searchIndexSql ?? sql;
   registerAmbientPlacesApi(app, searchIndexSql);
-  const searchIndexRuntimeState = createSearchIndexRuntimeState();
-  const searchIndexOperationLock = createSearchIndexOperationLock(searchIndexSql);
+  const searchIndexRuntimeState = opts.searchIndexRuntimeState ?? createSearchIndexRuntimeState();
   const notablePlaces = opts.notablePlaces ?? {
     runtimeState: createNotablePlacesRuntimeState(),
     operationLock: createNotablePlacesOperationLock(searchIndexSql),
@@ -450,41 +429,62 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
 
   if (opts.offlinePackages) registerOfflinePackageRoutes(app, opts.offlinePackages);
 
-  function launchReservedTransitSync(jobId: string, countries: string[], trigger: string): void {
-    if (opts.launchTransitSync) {
-      opts.launchTransitSync({ jobId, countries, trigger });
-      return;
-    }
-    const jobLog = asJobLogger(jobChildLogger({ job: "transitous-sync", jobId, trigger }));
-    const persistingHook = makePersistingOnStageComplete(jobId, jobLog);
-    void (async () => {
-      try {
-        const ctx = buildJobContext({
-          dataDir,
-          store,
-          countries,
-          source: parseTransitSource(),
-          operationsPolicy: { ...operationsPolicy, countries },
-          jobId,
-          logger: jobLog,
-          onStageComplete: persistingHook,
-          feedsOverlayPath: overlayPath,
-          operatorFeedRelay,
-        });
-        const result = await runTransitousPipeline(ctx);
-        await finalizeJobRow(jobId, result.finalStatus);
-        app.log.info({ jobId, finalStatus: result.finalStatus }, "transitous-api: sync finished");
-      } catch (err) {
-        app.log.error({ jobId, err }, "transitous-api: sync threw");
-        try {
-          await finalizeJobRow(jobId, "error");
-        } catch {
-          // The row remains visible as running if Postgres itself is unavailable.
-        }
-      } finally {
-        singleFlight.markSyncFinished();
+  async function admitLegacyData(input: DataExecutionInput) {
+    if (!opts.executionReceiver)
+      throw Object.assign(Error("Durable data receiver is unavailable"), { statusCode: 503 });
+    return opts.executionReceiver.admitLocal(input);
+  }
+  async function observeLegacyData(
+    status: DataExecutionStatus,
+    reply: FastifyReply,
+    operationId?: import("@openmapx/core/data-manager-contracts").DataManagerOperationKey,
+  ) {
+    const receiver = opts.executionReceiver;
+    if (!receiver)
+      throw Object.assign(Error("Durable data receiver is unavailable"), { statusCode: 503 });
+    const observer = new AbortController(),
+      closed = () => observer.abort();
+    reply.raw.once("close", closed);
+    reply.request.raw.once("aborted", closed);
+    const stream = operationId ? openNdjsonStream(reply, operationId) : undefined;
+    const unsubscribe = receiver.subscribe(status.id, (event) => stream?.writeLine(event));
+    try {
+      let current = status;
+      while (!isDataExecutionTerminal(current) || current.publication === "unknown") {
+        if (observer.signal.aborted) return undefined;
+        const remaining = status.deadlineAt - Date.now();
+        if (remaining <= 0)
+          throw Error(
+            `Data execution ${status.id} observer deadline elapsed; inspect its retained status`,
+          );
+        await observerDelay(Math.min(200, remaining), undefined, { signal: observer.signal });
+        const found = await receiver.inspect(status.id);
+        if (
+          !found ||
+          found.operationKey !== status.operationKey ||
+          found.fingerprint !== status.fingerprint ||
+          found.admittedAt !== status.admittedAt ||
+          found.deadlineAt !== status.deadlineAt
+        )
+          throw Error(`Execution ${status.id} requires retained status observation`);
+        current = found;
       }
-    })();
+      if (current.status !== "ok" && current.status !== "partial")
+        throw Error(`Execution ${status.id} ${current.status}`);
+      if (stream) stream.writeLine(receiver.legacyResult(status.id) ?? { event: "done", ok: true });
+      return current;
+    } catch (error) {
+      if (!observer.signal.aborted) {
+        if (stream) stream.writeLine({ event: "error", message: (error as Error).message });
+        else throw error;
+      }
+      return undefined;
+    } finally {
+      unsubscribe();
+      reply.raw.removeListener("close", closed);
+      reply.request.raw.removeListener("aborted", closed);
+      stream?.end();
+    }
   }
 
   async function reserveSourceMutation(options: {
@@ -496,11 +496,17 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   }): Promise<
     { ok: true; jobId: string } | { ok: false; status: number; body: Record<string, unknown> }
   > {
+    if (!opts.executionReceiver)
+      return {
+        ok: false,
+        status: 503,
+        body: { ok: false, error: "Durable data receiver is unavailable" },
+      };
     const start = await singleFlight.tryStartSync({
       trigger: "api",
       triggeredBy: options.triggeredBy,
       idempotencyKey: options.idempotencyKey,
-      kind: "transitous-sync",
+      kind: `transit-source-${options.action}`,
       metadata: {
         source: "source-mutation",
         action: options.action,
@@ -532,8 +538,18 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         body: { ok: false, error: (error as Error).message, jobId: start.jobId },
       };
     }
-    launchReservedTransitSync(start.jobId, operationsPolicy.countries, `source-${options.action}`);
-    return { ok: true, jobId: start.jobId };
+    singleFlight.markSyncFinished(start.jobId);
+    try {
+      const admitted = await opts.executionReceiver.admitLocal(
+        { kind: "transit-sync", countries: operationsPolicy.countries },
+        { sourceJobId: start.jobId },
+      );
+      await finalizeJobRow(start.jobId, "ok");
+      return { ok: true, jobId: admitted.id };
+    } catch (error) {
+      await finalizeJobRow(start.jobId, "error");
+      throw error;
+    }
   }
 
   registerDataManagerRoute(app, "getLive", async () => ({ ok: true }));
@@ -734,8 +750,11 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   });
 
   registerDataManagerRoute(app, "reloadDatasets", async () => {
-    const result = store.reload();
-    return { ok: true, ...result };
+    return withLegacyDataMutation(
+      "data-reload",
+      async () => ({ ok: true, ...store.reload() }),
+      searchIndexSql,
+    );
   });
 
   // Single-flight: the bake shells out to a slow tile-rewriting tool and
@@ -752,10 +771,20 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       return { error: "a predicted bake is already running" };
     }
     bakeInFlight = true;
-    void opts
-      .bakePredicted()
+    let owned: Awaited<ReturnType<typeof startLegacyDataMutation>>;
+    try {
+      owned = await startLegacyDataMutation(
+        "traffic-predicted",
+        opts.bakePredicted,
+        searchIndexSql,
+      );
+    } catch (error) {
+      bakeInFlight = false;
+      throw error;
+    }
+    void owned.completion
       .then((result) => {
-        app.log.info({ ...result }, "traffic-predicted: manual bake complete");
+        app.log.info({ result }, "traffic-predicted: manual bake complete");
       })
       .catch((err: unknown) => {
         app.log.error({ err: (err as Error).message }, "traffic-predicted: manual bake failed");
@@ -778,53 +807,8 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   });
 
   registerDataManagerRoute(app, "downloadOsm", async (req, reply) => {
-    const { region } = req.body ?? {};
-    if (!region || typeof region !== "string") throw new Error("region required");
-    // Same Geofabrik path shape the Overture routes enforce — the region becomes
-    // both a download URL segment and a local filename.
-    assertValidRegion(region);
-
-    // Stream NDJSON progress events back to the client. Hijacking the reply
-    // lets us write line-by-line; Fastify otherwise buffers the full body.
-    const stream = openNdjsonStream(reply, "downloadOsm");
-
-    try {
-      const result = await downloadOsm({
-        region,
-        dataDir,
-        store,
-        onProgress: (bytes, totalBytes) =>
-          stream.writeLine({ event: "progress", bytes, totalBytes }),
-        // Network transfer and checksum verification stay outside the lock;
-        // only the final atomic rename can race Overture fingerprinting.
-        withPublishLock: (publish) =>
-          withOvertureOperationLock(async () => {
-            publish();
-          }),
-      });
-      const dataset = store
-        .getAll()
-        .find((entry) => entry.type === "osm-pbf" && (entry.region ?? entry.id) === region);
-      if (dataset) {
-        try {
-          await updateCurrentSearchIndexFingerprint(
-            searchIndexSql,
-            region,
-            await fingerprintDataset(dataset),
-          );
-        } catch (error) {
-          req.log.warn(
-            { err: error },
-            "download-osm: could not update current search-index fingerprint",
-          );
-        }
-      }
-      stream.writeLine({ event: "done", ok: true, ...result });
-    } catch (err) {
-      stream.writeLine({ event: "error", message: (err as Error).message });
-    } finally {
-      stream.end();
-    }
+    const admitted = await admitLegacyData({ kind: "download-osm", region: req.body.region });
+    await observeLegacyData(admitted, reply, "downloadOsm");
   });
 
   registerDataManagerRoute(app, "getSearchIndexStatus", async (_req, reply) => {
@@ -841,29 +825,8 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   });
 
   registerDataManagerRoute(app, "buildSearchIndex", async (req, reply) => {
-    const { region } = req.body ?? {};
-    if (!region || typeof region !== "string") {
-      return reply.code(400).send({ ok: false, error: "region required" });
-    }
-    assertValidRegion(region);
-    const stream = openNdjsonStream(reply, "buildSearchIndex");
-    try {
-      const build = opts.buildSearchIndex ?? buildOsmSearchIndex;
-      const result = await build({
-        region,
-        dataDir,
-        store,
-        sql: searchIndexSql,
-        runtimeState: searchIndexRuntimeState,
-        operationLock: searchIndexOperationLock,
-        onProgress: (progress) => stream.writeLine({ event: "progress", ...progress }),
-      });
-      stream.writeLine({ event: "done", ok: true, ...result });
-    } catch (error) {
-      stream.writeLine({ event: "error", message: (error as Error).message });
-    } finally {
-      stream.end();
-    }
+    const admitted = await admitLegacyData({ kind: "search-index-build", region: req.body.region });
+    await observeLegacyData(admitted, reply, "buildSearchIndex");
   });
 
   registerDataManagerRoute(app, "getNotablePlacesStatus", async (_req, reply) => {
@@ -878,75 +841,33 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   });
 
   registerDataManagerRoute(app, "buildNotablePlaces", async (_req, reply) => {
-    const stream = openNdjsonStream(reply, "buildNotablePlaces");
-    try {
-      const build = notablePlaces.build ?? buildNotablePlaces;
-      const result = await build({
-        sql: searchIndexSql,
-        runtimeState: notablePlaces.runtimeState,
-        operationLock: notablePlaces.operationLock,
-        ...notablePlacesSettings(),
-        onProgress: (progress) => stream.writeLine({ event: "progress", ...progress }),
-      });
-      stream.writeLine({ event: "done", ok: true, ...result });
-    } catch (error) {
-      stream.writeLine({ event: "error", message: (error as Error).message });
-    } finally {
-      stream.end();
-    }
+    const admitted = await admitLegacyData({ kind: "notable-places-build" });
+    await observeLegacyData(admitted, reply, "buildNotablePlaces");
   });
 
-  registerDataManagerRoute(app, "downloadFonts", async () => {
-    await downloadFonts({ dataDir, store });
-    return { ok: true };
-  });
-
-  registerDataManagerRoute(app, "link", async (req) => {
-    const { plan, prune } = req.body;
-    const result = await applyHardlinkPlan(plan, { rootDir: dataDir, prune });
-    return { ok: true, ...result };
-  });
-
-  registerDataManagerRoute(app, "convertOverpass", async (req, reply) => {
-    const { region } = req.body ?? {};
-
-    const stream = openNdjsonStream(reply, "convertOverpass");
-    try {
-      const result = await convertPbfToBz2ForRegion({
-        region,
-        dataDir,
-        store,
-        onProgress: (bytes, totalBytes) =>
-          stream.writeLine({ event: "progress", bytes, totalBytes }),
-      });
-      stream.writeLine({ event: "done", ok: true, ...result });
-    } catch (err) {
-      stream.writeLine({ event: "error", message: (err as Error).message });
-    } finally {
-      stream.end();
-    }
+  registerDataManagerRoute(app, "downloadFonts", async (_req, reply) => {
+    const admitted = await admitLegacyData({ kind: "download-fonts" });
+    await observeLegacyData(admitted, reply);
+    if (!reply.raw.destroyed) return { ok: true };
     return undefined;
   });
 
+  registerDataManagerRoute(app, "link", async (_req, reply) =>
+    reply.code(503).send({ error: "A signed generation-hardlinks execution is required" }),
+  );
+
+  registerDataManagerRoute(app, "convertOverpass", async (req, reply) => {
+    const admitted = await admitLegacyData({
+      kind: "convert-overpass",
+      region:
+        req.body?.region ?? store.getAll().find((entry) => entry.type === "osm-pbf")?.region ?? "",
+    });
+    await observeLegacyData(admitted, reply, "convertOverpass");
+  });
+
   registerDataManagerRoute(app, "pullOverture", async (req, reply) => {
-    const { region } = req.body;
-    if (!region) throw new Error("region required");
-    assertValidRegion(region);
-
-    const stream = openNdjsonStream(reply, "pullOverture");
-
-    try {
-      const result = await pullOverture({
-        region,
-        dataDir,
-        onProgress: (msg) => stream.writeLine({ event: "progress", message: msg }),
-      });
-      stream.writeLine({ event: "done", ok: true, path: result });
-    } catch (err) {
-      stream.writeLine({ event: "error", message: (err as Error).message });
-    } finally {
-      stream.end();
-    }
+    const admitted = await admitLegacyData({ kind: "overture-pull", region: req.body.region });
+    await observeLegacyData(admitted, reply, "pullOverture");
   });
 
   registerDataManagerRoute(app, "getOvertureStatus", async (_req, reply) => {
@@ -965,177 +886,54 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   });
 
   registerDataManagerRoute(app, "syncOverture", async (req, reply) => {
-    const { region } = req.body;
-    if (!region) throw new Error("region required");
-    assertValidRegion(region);
-
-    const stream = openNdjsonStream(reply, "syncOverture");
-
-    try {
-      const result = await syncOvertureRegion({
-        region,
-        dataDir,
-        onProgress: (message) => stream.writeLine({ event: "progress", message }),
-      });
-      stream.writeLine({ event: "done", ok: true, ...result });
-    } catch (err) {
-      stream.writeLine({ event: "error", message: (err as Error).message });
-    } finally {
-      stream.end();
-    }
+    const admitted = await admitLegacyData({ kind: "overture-sync", region: req.body.region });
+    await observeLegacyData(admitted, reply, "syncOverture");
   });
 
   registerDataManagerRoute(app, "ingestOverture", async (req, reply) => {
-    const { region } = req.body;
-    if (!region) throw new Error("region required");
-    assertValidRegion(region);
-
-    const stream = openNdjsonStream(reply, "ingestOverture");
-
-    try {
-      await withOvertureOperationLock(() =>
-        ingestOverture({
-          region,
-          dataDir,
-          onProgress: (msg) => stream.writeLine({ event: "progress", message: msg }),
-        }),
-      );
-      stream.writeLine({ event: "done", ok: true });
-    } catch (err) {
-      stream.writeLine({ event: "error", message: (err as Error).message });
-    } finally {
-      stream.end();
-    }
+    const admitted = await admitLegacyData({ kind: "overture-ingest", region: req.body.region });
+    await observeLegacyData(admitted, reply, "ingestOverture");
   });
 
   registerDataManagerRoute(app, "extractOverture", async (req, reply) => {
-    const { region } = req.body;
-    if (!region) throw new Error("region required");
-    assertValidRegion(region);
-
-    const stream = openNdjsonStream(reply, "extractOverture");
-
-    try {
-      await withOvertureOperationLock(() =>
-        extractOsmPois({
-          region,
-          dataDir,
-          onProgress: (msg) => stream.writeLine({ event: "progress", message: msg }),
-        }),
-      );
-      stream.writeLine({ event: "done", ok: true });
-    } catch (err) {
-      stream.writeLine({ event: "error", message: (err as Error).message });
-    } finally {
-      stream.end();
-    }
+    const admitted = await admitLegacyData({ kind: "overture-extract", region: req.body.region });
+    await observeLegacyData(admitted, reply, "extractOverture");
   });
 
   registerDataManagerRoute(app, "conflateOverture", async (req, reply) => {
-    const { region, restart } = req.body;
-    if (!region) throw new Error("region required");
-    assertValidRegion(region);
-
-    const ollamaUrl = process.env.OLLAMA_URL || "http://local-ai:11434";
-
-    const stream = openNdjsonStream(reply, "conflateOverture");
-
-    try {
-      const result = await rebuildOvertureLinks({
-        region,
-        dataDir,
-        force: restart === true,
-        ollamaUrl,
-        useEmbeddings: false,
-        onProgress: (msg) => stream.writeLine({ event: "progress", message: msg }),
-      });
-      stream.writeLine({
-        event: "done",
-        ok: result.status !== "failed" && result.status !== "waiting_for_osm",
-        message:
-          result.status === "failed"
-            ? result.error
-            : result.status === "waiting_for_osm"
-              ? `OSM PBF not found at ${result.pbfPath}`
-              : result.status === "already_running"
-                ? "Another worker still owns the active conflation lease"
-                : undefined,
-        ...result,
-      });
-    } catch (err) {
-      stream.writeLine({ event: "error", message: (err as Error).message });
-    } finally {
-      stream.end();
-    }
+    const admitted = await admitLegacyData({
+      kind: "overture-conflate",
+      region: req.body.region,
+      restart: req.body.restart,
+    });
+    await observeLegacyData(admitted, reply, "conflateOverture");
   });
 
   // POST /transit/sync — fire-and-forget Transitous pipeline trigger. Honours
   // the single-flight lock + idempotency key. apps/api proxies user-facing
   // sync requests here.
   registerDataManagerRoute(app, "syncTransit", async (req, reply) => {
-    const body = req.body ?? {};
-    // Default to the deployment's configured countries (same as the cron) when
-    // the caller doesn't specify any — an empty list means "every country",
-    // which would kick off a global multi-GB fetch by accident.
-    const countries = body.countries ?? operationsPolicy.countries;
-    const outsideScope = countries.filter(
-      (country) => !operationsPolicy.countries.includes(country.toLowerCase()),
-    );
-    if (operationsPolicy.profile !== "planet" && outsideScope.length > 0) {
-      return reply.code(422).send({
-        ok: false,
-        reason: `countries outside configured operations profile: ${outsideScope.join(", ")}`,
-      });
-    }
-    const start = await singleFlight.tryStartSync({
-      trigger: "api",
-      triggeredBy: body.triggeredBy ?? "api",
-      idempotencyKey: body.idempotencyKey,
-      kind: "transitous-sync",
-      metadata: {
-        source: "api",
-        countries,
-      },
+    const admitted = await admitLegacyData({
+      kind: "transit-sync",
+      countries: req.body?.countries ?? operationsPolicy.countries,
     });
-
-    if (!start.ok) {
-      // 409 Conflict captures both "in-flight" and "duplicate-idempotency-key".
-      // The caller distinguishes via the `reason` payload.
-      return reply.code(409).send({
-        ok: false,
-        reason: start.reason,
-        existingJobId: start.existingJobId,
-      });
-    }
-
-    const jobId = start.jobId;
-    launchReservedTransitSync(jobId, countries, "api");
-
-    reply.code(202);
-    return { ok: true, jobId, status: "started" };
+    return reply.code(202).send({ ok: true, jobId: admitted.id, status: "started" });
   });
 
   // POST /transit/restart-motis — bounce the primary MOTIS container. Used
   // when a config change requires a full restart rather than the partial
   // reloads the pipeline already performs.
   registerDataManagerRoute(app, "restartMotis", async (_req, reply) => {
-    try {
-      // Data-manager holds no Docker socket: the restart is a typed operation
-      // the agent performs against its own fixed container.
-      await runOpsOperation({ kind: "motis.primary.restart" });
-      return { ok: true, status: "restart-initiated" };
-    } catch (err) {
-      // The most common failure mode is that the operations agent is
-      // unreachable or has not been configured. Surface a 503 so the operator
-      // sees an actionable error.
-      app.log.warn({ err }, "transitous-api: motis restart operation failed");
-      reply.code(503);
-      return {
+    if (!opts.executionReceiver)
+      return reply.code(503).send({
         ok: false,
         error: "ops-agent-unavailable",
-        message: (err as Error).message,
-      };
-    }
+        message: "Durable data receiver is unavailable",
+      });
+    const admitted = await opts.executionReceiver.admitMaintenance("restart-primary");
+    await observeLegacyData(admitted, reply);
+    if (!reply.raw.destroyed) return { ok: true, status: "restart-initiated" };
+    return undefined;
   });
 
   // POST /transit/bump — propose a new pin set. It never activates the lock;
@@ -1177,13 +975,15 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     );
     // The proposal file lives under the repository's `infra/docker/`, which only
     // the operations agent may write.
-    await runOpsOperation({
-      kind: "transitousLock.propose",
-      ref: lock.ref,
-      submodules: lock.submodules,
-      lockedBy: lock.lockedBy,
-      ...(lock.comment ? { comment: lock.comment } : {}),
-    });
+    await withLegacyDataMutation("transit-proposal", () =>
+      runOpsOperation({
+        kind: "transitousLock.propose",
+        ref: lock.ref,
+        submodules: lock.submodules,
+        lockedBy: lock.lockedBy,
+        ...(lock.comment ? { comment: lock.comment } : {}),
+      }),
+    );
 
     return {
       ok: true,
@@ -1197,23 +997,9 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     };
   });
 
-  registerDataManagerRoute(app, "approveTransitBump", async (req, reply) => {
-    const { proposed } = await runOpsOperation({ kind: "transitousLock.inspect" });
-    if (!proposed) return reply.code(404).send({ ok: false, error: "no-proposal" });
-    if (req.body?.approveRef !== proposed.ref) {
-      return reply.code(422).send({
-        ok: false,
-        error: "typed-confirmation-mismatch",
-        expected: proposed.ref,
-      });
-    }
-    // The agent re-matches the ref under its own read, so an approval cannot
-    // land on a proposal that changed after this check.
-    const approved = await runOpsOperation({
-      kind: "transitousLock.approve",
-      ref: proposed.ref,
-      approvedBy: req.body?.approvedBy?.trim() || "api-approval",
-    });
-    return { ok: true, activated: true, ref: approved.ref, lockedAt: approved.lockedAt };
+  registerDataManagerRoute(app, "approveTransitBump", async (_req, reply) => {
+    return reply
+      .code(503)
+      .send({ error: "Catalog approval requires paired validation and durable activation" });
   });
 }

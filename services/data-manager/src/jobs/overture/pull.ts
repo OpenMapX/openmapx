@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:
 import { basename, join } from "node:path";
 import { execa } from "execa";
 import { resolveOsmPolyUrl } from "../download-osm.js";
+import { dataWorkerSignal, publishDataChange } from "../execution/worker-scope.js";
 import { captureOvertureCatalogue } from "./attribution-capture.js";
 import { assertOvertureDiskCapacity, estimateOverturePullBytes, freeBytesAt } from "./capacity.js";
 import { runDuckDb } from "./duckdb.js";
@@ -106,7 +107,10 @@ export async function fetchRegionBbox(region: string): Promise<RegionBbox> {
   const safePolyUrl = polyUrl.toString();
   let stdout: string;
   try {
-    ({ stdout } = await execa("curl", ["-fsSL", safePolyUrl], { timeout: 30_000 }));
+    ({ stdout } = await execa("curl", ["-fsSL", safePolyUrl], {
+      timeout: 30_000,
+      cancelSignal: dataWorkerSignal(),
+    }));
   } catch {
     throw new Error(
       `Could not fetch Geofabrik boundary for region "${region}" (${safePolyUrl}). ` +
@@ -262,10 +266,11 @@ export async function pullOverture(opts: PullOvertureOptions): Promise<string> {
       flag: "wx",
       mode: 0o600,
     });
-    renameSync(partialPath, outPath);
-    // Publish the contract last: ingest never observes a new contract pointing
-    // at a partial parquet snapshot.
-    renameSync(partialContractPath, contractPath);
+    await publishDataChange(() => {
+      renameSync(partialPath, outPath);
+      // Publish metadata last; interruption of this pair remains unknown.
+      renameSync(partialContractPath, contractPath);
+    });
     opts.onProgress?.(
       `Validated ${contract.rowCount} places and ${contract.contributors.length} contributor(s).`,
     );

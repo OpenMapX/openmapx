@@ -14,7 +14,9 @@ import {
   regionSchema,
   serviceErrors,
 } from "./common";
+import * as cm from "./configuration-maintenance";
 import * as d from "./datasets";
+import * as e from "./executions";
 import * as h from "./headers";
 import * as i from "./indexes";
 import * as f from "./offline";
@@ -23,14 +25,19 @@ import { trafficApplicationSnapshotSchema } from "./traffic";
 import * as t from "./transit";
 
 const service = "service" as const;
+const dataMutationErrors = {
+  ...serviceErrors,
+  409: json(httpErrorSchema),
+  503: json(httpErrorSchema),
+};
 const sourceParams = z.strictObject({ sourceId: z.string().min(1) });
 const sourceMutationErrors = {
-  ...serviceErrors,
+  ...dataMutationErrors,
   404: json(httpErrorSchema),
   409: json(z.union([httpErrorSchema, t.transitConflictSchema])),
 };
 const offlineErrors = {
-  ...serviceErrors,
+  ...dataMutationErrors,
   400: json(z.union([httpErrorSchema, f.offlinePackageErrorSchema])),
   404: json(httpErrorSchema),
 };
@@ -56,6 +63,114 @@ export const coverageEvidenceQuerySchema = z
   .refine((v) => !v.offset || !!v.snapshotId, "snapshotId is required for continuation pages");
 /** The sole method/path/status authority for the internal service and its generated SDK. */
 export const dataManagerOperations = {
+  startDataExecution: {
+    method: "POST",
+    path: "/executions",
+    auth: service,
+    request: { body: e.startDataExecutionSchema },
+    responses: {
+      ...serviceErrors,
+      202: json(e.dataExecutionStatusSchema),
+      403: json(httpErrorSchema),
+      409: json(httpErrorSchema),
+      503: json(httpErrorSchema),
+    },
+  },
+  startGenerationHardlinksExecution: {
+    method: "POST",
+    path: "/executions/generation-hardlinks",
+    auth: service,
+    request: { body: e.startGenerationHardlinksExecutionSchema },
+    responses: {
+      ...serviceErrors,
+      202: json(e.dataExecutionStatusSchema),
+      403: json(httpErrorSchema),
+      409: json(httpErrorSchema),
+      503: json(httpErrorSchema),
+    },
+  },
+  prepareDataConfigurationFence: {
+    method: "POST",
+    path: "/executions/configuration-maintenance/prepare",
+    auth: service,
+    request: { body: cm.dataConfigurationFencePrepareSchema },
+    responses: {
+      ...serviceErrors,
+      200: json(cm.dataConfigurationFenceReceiptSchema),
+      403: json(httpErrorSchema),
+      409: json(httpErrorSchema),
+      503: json(httpErrorSchema),
+    },
+  },
+  inspectDataConfigurationFence: {
+    method: "GET",
+    path: "/executions/configuration-maintenance/:maintenanceId",
+    auth: service,
+    request: { params: z.strictObject({ maintenanceId: z.uuid() }) },
+    responses: {
+      ...serviceErrors,
+      200: json(cm.dataConfigurationFenceReceiptSchema),
+      403: json(httpErrorSchema),
+      404: json(httpErrorSchema),
+      503: json(httpErrorSchema),
+    },
+  },
+  settleDataConfigurationFence: {
+    method: "POST",
+    path: "/executions/configuration-maintenance/:maintenanceId/settle",
+    auth: service,
+    request: {
+      params: z.strictObject({ maintenanceId: z.uuid() }),
+      body: cm.dataConfigurationFenceSettleSchema,
+    },
+    responses: {
+      ...serviceErrors,
+      200: json(cm.dataConfigurationFenceReceiptSchema),
+      403: json(httpErrorSchema),
+      404: json(httpErrorSchema),
+      409: json(httpErrorSchema),
+      503: json(httpErrorSchema),
+    },
+  },
+  lookupDataExecution: {
+    method: "GET",
+    path: "/executions/by-key/:operationKey",
+    auth: service,
+    request: { params: z.strictObject({ operationKey: e.dataOperationKeySchema }) },
+    responses: {
+      ...serviceErrors,
+      200: json(e.dataExecutionStatusSchema),
+      404: json(httpErrorSchema),
+      410: json(httpErrorSchema),
+      503: json(httpErrorSchema),
+    },
+  },
+  getDataExecution: {
+    method: "GET",
+    path: "/executions/:id",
+    auth: service,
+    request: { params: z.strictObject({ id: z.uuid() }) },
+    responses: {
+      ...serviceErrors,
+      200: json(e.dataExecutionStatusSchema),
+      404: json(httpErrorSchema),
+      410: json(httpErrorSchema),
+      503: json(httpErrorSchema),
+    },
+  },
+  cancelDataExecution: {
+    method: "POST",
+    path: "/executions/:id/cancel",
+    auth: service,
+    request: { params: z.strictObject({ id: z.uuid() }), body: e.cancelDataExecutionSchema },
+    responses: {
+      ...serviceErrors,
+      200: json(e.dataExecutionStatusSchema),
+      404: json(httpErrorSchema),
+      409: json(httpErrorSchema),
+      503: json(httpErrorSchema),
+    },
+  },
   getLive: {
     method: "GET",
     path: "/live",
@@ -82,20 +197,20 @@ export const dataManagerOperations = {
     method: "POST",
     path: "/datasets/reload",
     auth: service,
-    responses: { ...serviceErrors, 200: json(d.reloadDatasetsSchema) },
+    responses: { ...dataMutationErrors, 200: json(d.reloadDatasetsSchema) },
   },
   downloadFonts: {
     method: "POST",
     path: "/download/fonts",
     auth: service,
-    responses: { ...serviceErrors, 200: json(okSchema) },
+    responses: { ...dataMutationErrors, 200: json(okSchema) },
   },
   link: {
     method: "POST",
     path: "/link",
     auth: service,
     request: { body: d.linkRequestSchema },
-    responses: { ...serviceErrors, 200: json(d.linkResultSchema) },
+    responses: { ...dataMutationErrors, 200: json(d.linkResultSchema) },
   },
   downloadOsm: {
     method: "POST",
@@ -103,7 +218,7 @@ export const dataManagerOperations = {
     auth: service,
     request: { body: regionBodySchema },
     responses: {
-      ...serviceErrors,
+      ...dataMutationErrors,
       200: ndjson(d.downloadOsmEventSchema, h.ndjsonResponseHeadersSchema),
     },
   },
@@ -113,7 +228,7 @@ export const dataManagerOperations = {
     auth: service,
     request: { body: z.strictObject({ region: regionSchema.optional() }).optional() },
     responses: {
-      ...serviceErrors,
+      ...dataMutationErrors,
       200: ndjson(d.convertOverpassEventSchema, h.ndjsonResponseHeadersSchema),
     },
   },
@@ -133,7 +248,7 @@ export const dataManagerOperations = {
     auth: service,
     request: { body: regionBodySchema },
     responses: {
-      ...serviceErrors,
+      ...dataMutationErrors,
       200: ndjson(i.searchIndexEventSchema, h.ndjsonResponseHeadersSchema),
     },
   },
@@ -152,7 +267,7 @@ export const dataManagerOperations = {
     path: "/notable-places/build",
     auth: service,
     responses: {
-      ...serviceErrors,
+      ...dataMutationErrors,
       200: ndjson(i.notablePlacesEventSchema, h.ndjsonResponseHeadersSchema),
     },
   },
@@ -168,7 +283,7 @@ export const dataManagerOperations = {
     auth: service,
     request: { body: regionBodySchema },
     responses: {
-      ...serviceErrors,
+      ...dataMutationErrors,
       200: ndjson(o.overturePullEventSchema, h.ndjsonResponseHeadersSchema),
     },
   },
@@ -178,7 +293,7 @@ export const dataManagerOperations = {
     auth: service,
     request: { body: regionBodySchema },
     responses: {
-      ...serviceErrors,
+      ...dataMutationErrors,
       200: ndjson(o.overtureSyncEventSchema, h.ndjsonResponseHeadersSchema),
     },
   },
@@ -188,7 +303,7 @@ export const dataManagerOperations = {
     auth: service,
     request: { body: regionBodySchema },
     responses: {
-      ...serviceErrors,
+      ...dataMutationErrors,
       200: ndjson(o.overtureSimpleEventSchema, h.ndjsonResponseHeadersSchema),
     },
   },
@@ -198,7 +313,7 @@ export const dataManagerOperations = {
     auth: service,
     request: { body: regionBodySchema },
     responses: {
-      ...serviceErrors,
+      ...dataMutationErrors,
       200: ndjson(o.overtureSimpleEventSchema, h.ndjsonResponseHeadersSchema),
     },
   },
@@ -208,7 +323,7 @@ export const dataManagerOperations = {
     auth: service,
     request: { body: regionBodySchema.extend({ restart: z.boolean().optional() }) },
     responses: {
-      ...serviceErrors,
+      ...dataMutationErrors,
       200: ndjson(o.overtureConflateEventSchema, h.ndjsonResponseHeadersSchema),
     },
   },
@@ -269,7 +384,7 @@ export const dataManagerOperations = {
     auth: service,
     request: { body: t.transitPreflightRequestSchema },
     responses: {
-      ...serviceErrors,
+      ...dataMutationErrors,
       200: json(t.transitPreflightSchema.extend({ ok: z.literal(true) })),
       422: json(t.transitPreflightSchema.extend({ ok: z.literal(false) })),
     },
@@ -280,9 +395,9 @@ export const dataManagerOperations = {
     auth: service,
     request: { body: t.transitSyncRequestSchema },
     responses: {
-      ...serviceErrors,
+      ...dataMutationErrors,
       202: json(t.transitSyncAcceptedSchema),
-      409: json(t.transitConflictSchema),
+      409: json(z.union([httpErrorSchema, t.transitConflictSchema])),
       422: json(t.transitScopeRejectedSchema),
     },
   },
@@ -291,7 +406,7 @@ export const dataManagerOperations = {
     path: "/transit/restart-motis",
     auth: service,
     responses: {
-      ...serviceErrors,
+      ...dataMutationErrors,
       200: json(z.strictObject({ ok: z.literal(true), status: z.literal("restart-initiated") })),
       503: json(httpErrorSchema),
     },
@@ -302,7 +417,7 @@ export const dataManagerOperations = {
     auth: service,
     request: { body: t.transitBumpRequestSchema },
     responses: {
-      ...serviceErrors,
+      ...dataMutationErrors,
       200: json(t.transitBumpResultSchema),
       409: json(httpErrorSchema),
       502: json(httpErrorSchema),
@@ -314,10 +429,11 @@ export const dataManagerOperations = {
     auth: service,
     request: { body: t.transitApproveRequestSchema },
     responses: {
-      ...serviceErrors,
+      ...dataMutationErrors,
       200: json(t.transitApprovalSchema),
       404: json(httpErrorSchema),
       422: json(t.transitApprovalMismatchSchema),
+      503: json(httpErrorSchema),
     },
   },
   bakePredictedTraffic: {
@@ -325,7 +441,7 @@ export const dataManagerOperations = {
     path: "/traffic/predicted/bake",
     auth: service,
     responses: {
-      ...serviceErrors,
+      ...dataMutationErrors,
       202: json(acceptedSchema),
       409: json(httpErrorSchema),
       501: json(httpErrorSchema),
@@ -364,34 +480,34 @@ export const dataManagerOperations = {
     path: "/ambient-places/build",
     auth: service,
     request: { body: a.ambientRegionSchema },
-    responses: { ...serviceErrors, 202: json(acceptedSchema), 409: json(httpErrorSchema) },
+    responses: { ...dataMutationErrors, 202: json(acceptedSchema), 409: json(httpErrorSchema) },
   },
   resumeAmbientPlaces: {
     method: "POST",
     path: "/ambient-places/resume",
     auth: service,
     request: { body: a.ambientGenerationRequestSchema },
-    responses: { ...serviceErrors, 202: json(acceptedSchema), 409: json(httpErrorSchema) },
+    responses: { ...dataMutationErrors, 202: json(acceptedSchema), 409: json(httpErrorSchema) },
   },
   discardAmbientPlaces: {
     method: "POST",
     path: "/ambient-places/discard",
     auth: service,
     request: { body: a.ambientGenerationRequestSchema },
-    responses: { ...serviceErrors, 200: json(okSchema), 409: json(httpErrorSchema) },
+    responses: { ...dataMutationErrors, 200: json(okSchema), 409: json(httpErrorSchema) },
   },
   setAmbientPlacesEnabled: {
     method: "POST",
     path: "/ambient-places/enabled",
     auth: service,
     request: { body: a.ambientEnabledRequestSchema },
-    responses: { ...serviceErrors, 200: json(okSchema), 409: json(httpErrorSchema) },
+    responses: { ...dataMutationErrors, 200: json(okSchema), 409: json(httpErrorSchema) },
   },
   rollbackAmbientPlaces: {
     method: "POST",
     path: "/ambient-places/rollback",
     auth: service,
-    responses: { ...serviceErrors, 200: json(okSchema), 409: json(httpErrorSchema) },
+    responses: { ...dataMutationErrors, 200: json(okSchema), 409: json(httpErrorSchema) },
   },
   getOfflinePackageCapability: {
     method: "GET",

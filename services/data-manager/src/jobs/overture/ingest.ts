@@ -3,6 +3,11 @@ import { join } from "node:path";
 import { assertSupportedOvertureContributors } from "@openmapx/core/utils/overtureSource";
 import { latLngToCell } from "h3-js";
 import { sql } from "../../db/index.js";
+import {
+  assertDataPublication,
+  publishDataChange,
+  retainDataPublication,
+} from "../execution/worker-scope.js";
 import { assertOverturePostgresCapacity, estimateOvertureIngestBytes } from "./capacity.js";
 import { duckDbSqlLiteral, runDuckDbScript } from "./duckdb.js";
 import { validateOvertureQuality } from "./eval/quality-gate.js";
@@ -98,14 +103,16 @@ export async function activateOvertureStagingSchema(
     `SELECT to_regclass($1) IS NOT NULL AS exists`,
     [`${schema}.osm_pois`],
   );
-  await sql.begin(async (tx) => {
-    if (existingOsmSnapshot?.exists) {
-      // `rebuildOvertureLinks` verifies this fingerprint against the current
-      // on-disk PBF before reuse and restarts extraction if it changed.
-      await tx.unsafe(`DROP TABLE "${stagingSchema}".osm_pois CASCADE`);
-      await tx.unsafe(`ALTER TABLE "${schema}".osm_pois SET SCHEMA "${stagingSchema}"`);
-      await tx.unsafe(
-        `UPDATE "${stagingSchema}".conflation_state AS target
+  assertDataPublication();
+  await publishDataChange(() =>
+    sql.begin(async (tx) => {
+      if (existingOsmSnapshot?.exists) {
+        // `rebuildOvertureLinks` verifies this fingerprint against the current
+        // on-disk PBF before reuse and restarts extraction if it changed.
+        await tx.unsafe(`DROP TABLE "${stagingSchema}".osm_pois CASCADE`);
+        await tx.unsafe(`ALTER TABLE "${schema}".osm_pois SET SCHEMA "${stagingSchema}"`);
+        await tx.unsafe(
+          `UPDATE "${stagingSchema}".conflation_state AS target
          SET phase = 'score', source_fingerprint = source.source_fingerprint,
              emitted_count = source.emitted_count, extracted_count = source.extracted_count,
              processed_count = 0, candidate_count = 0,
@@ -115,17 +122,19 @@ export async function activateOvertureStagingSchema(
            AND source.region = target.region
            AND source.source_fingerprint IS NOT NULL
            AND source.extracted_count IS NOT NULL`,
-      );
-    }
-    await tx.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-    await tx.unsafe(`ALTER SCHEMA "${stagingSchema}" RENAME TO "${schema}"`);
-    await tx.unsafe(
-      `UPDATE "${schema}".conflation_state
+        );
+      }
+      await tx.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      await tx.unsafe(`ALTER SCHEMA "${stagingSchema}" RENAME TO "${schema}"`);
+      await tx.unsafe(
+        `UPDATE "${schema}".conflation_state
        SET places_published_at = $1
        WHERE singleton = 1`,
-      [placesPublishedAt],
-    );
-  });
+        [placesPublishedAt],
+      );
+    }),
+  );
+  await retainDataPublication();
 }
 
 export async function ingestOverture(opts: IngestOvertureOptions): Promise<void> {

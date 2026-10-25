@@ -137,9 +137,10 @@ export function writeRetainedRecord(
   exclusive: boolean,
   maximum: number = CONTROL_RETENTION_LIMITS.recordsPerNamespace,
   beforePublish?: (inode: FileIdentity) => void,
+  maximumBytes: number = CONTROL_RETENTION_LIMITS.privateRecordBytes,
 ) {
   try {
-    dir.read(name, CONTROL_RETENTION_LIMITS.privateRecordBytes);
+    dir.read(name, maximumBytes);
     dir.write(name, bytes, exclusive, beforePublish);
     return;
   } catch (e) {
@@ -176,6 +177,7 @@ export function deleteRetainedRecord(
   dir: AnchoredDirectory,
   item: RetentionDeletion,
   itemDone: () => void,
+  maximumBytes: number = CONTROL_RETENTION_LIMITS.privateRecordBytes,
 ): void {
   withRetentionNamespaceWriter(dir, () => {
     let t = transaction(dir);
@@ -195,9 +197,7 @@ export function deleteRetainedRecord(
       // A new plan cannot turn an old continuation into a second decrement.
       if (
         !sameInode(dir.fileIdentity(item.name), item.inode) ||
-        controlDigest(
-          dir.read(item.name, CONTROL_RETENTION_LIMITS.privateRecordBytes).toString("utf8"),
-        ) !== item.digest
+        controlDigest(dir.read(item.name, maximumBytes).toString("utf8")) !== item.digest
       )
         throw Error("Retirement record inode/digest replacement");
       const before = readCounter(dir);
@@ -216,9 +216,7 @@ export function deleteRetainedRecord(
       try {
         if (
           !sameInode(dir.fileIdentity(item.name), item.inode) ||
-          controlDigest(
-            dir.read(item.name, CONTROL_RETENTION_LIMITS.privateRecordBytes).toString("utf8"),
-          ) !== item.digest
+          controlDigest(dir.read(item.name, maximumBytes).toString("utf8")) !== item.digest
         )
           throw Error("Retirement record inode/digest replacement");
         dir.removeFile(item.name);

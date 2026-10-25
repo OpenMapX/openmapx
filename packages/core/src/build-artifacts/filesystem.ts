@@ -165,7 +165,7 @@ export class AnchoredDirectory {
       closeSync(fd);
     }
   }
-  fileIdentity(name: string): FileIdentity {
+  fileIdentity(name: string, privateMode = true): FileIdentity {
     const path = this.name(name);
     const fd = openSync(path, C.O_RDONLY | C.O_NOFOLLOW | C.O_NONBLOCK);
     try {
@@ -174,7 +174,7 @@ export class AnchoredDirectory {
         !value.isFile() ||
         value.nlink !== 1n ||
         value.uid !== BigInt(process.getuid?.() ?? -1) ||
-        (value.mode & 0o077n) !== 0n ||
+        (value.mode & BigInt(privateMode ? 0o077 : 0o022)) !== 0n ||
         !sameInode(identity(value), identity(lstatSync(path, { bigint: true })))
       )
         throw Error("Unsafe retained record inode");

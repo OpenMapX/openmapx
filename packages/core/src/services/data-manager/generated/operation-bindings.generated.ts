@@ -44,6 +44,13 @@ export async function buildSearchIndexRequest<T>(
 ): Promise<T> {
   return buildSearchIndexBound<T>(url, options);
 }
+const cancelDataExecutionBound = bindDataManagerOperation("cancelDataExecution");
+export async function cancelDataExecutionRequest<T>(
+  url: string,
+  options?: DataManagerRequestOptions,
+): Promise<T> {
+  return cancelDataExecutionBound<T>(url, options);
+}
 const conflateOvertureBound = bindDataManagerOperation("conflateOverture");
 export async function conflateOvertureRequest<T>(
   url: string,
@@ -113,6 +120,13 @@ export async function getCoverageEvidenceRequest<T>(
   options?: DataManagerRequestOptions,
 ): Promise<T> {
   return getCoverageEvidenceBound<T>(url, options);
+}
+const getDataExecutionBound = bindDataManagerOperation("getDataExecution");
+export async function getDataExecutionRequest<T>(
+  url: string,
+  options?: DataManagerRequestOptions,
+): Promise<T> {
+  return getDataExecutionBound<T>(url, options);
 }
 const getDatasetsBound = bindDataManagerOperation("getDatasets");
 export async function getDatasetsRequest<T>(
@@ -247,9 +261,25 @@ export async function ingestOvertureRequest<T>(
 ): Promise<T> {
   return ingestOvertureBound<T>(url, options);
 }
+const inspectDataConfigurationFenceBound = bindDataManagerOperation(
+  "inspectDataConfigurationFence",
+);
+export async function inspectDataConfigurationFenceRequest<T>(
+  url: string,
+  options?: DataManagerRequestOptions,
+): Promise<T> {
+  return inspectDataConfigurationFenceBound<T>(url, options);
+}
 const linkBound = bindDataManagerOperation("link");
 export async function linkRequest<T>(url: string, options?: DataManagerRequestOptions): Promise<T> {
   return linkBound<T>(url, options);
+}
+const lookupDataExecutionBound = bindDataManagerOperation("lookupDataExecution");
+export async function lookupDataExecutionRequest<T>(
+  url: string,
+  options?: DataManagerRequestOptions,
+): Promise<T> {
+  return lookupDataExecutionBound<T>(url, options);
 }
 const preflightTransitBound = bindDataManagerOperation("preflightTransit");
 export async function preflightTransitRequest<T>(
@@ -257,6 +287,15 @@ export async function preflightTransitRequest<T>(
   options?: DataManagerRequestOptions,
 ): Promise<T> {
   return preflightTransitBound<T>(url, options);
+}
+const prepareDataConfigurationFenceBound = bindDataManagerOperation(
+  "prepareDataConfigurationFence",
+);
+export async function prepareDataConfigurationFenceRequest<T>(
+  url: string,
+  options?: DataManagerRequestOptions,
+): Promise<T> {
+  return prepareDataConfigurationFenceBound<T>(url, options);
 }
 const prepareOfflinePackageBound = bindDataManagerOperation("prepareOfflinePackage");
 export async function prepareOfflinePackageRequest<T>(
@@ -320,6 +359,29 @@ export async function setAmbientPlacesEnabledRequest<T>(
   options?: DataManagerRequestOptions,
 ): Promise<T> {
   return setAmbientPlacesEnabledBound<T>(url, options);
+}
+const settleDataConfigurationFenceBound = bindDataManagerOperation("settleDataConfigurationFence");
+export async function settleDataConfigurationFenceRequest<T>(
+  url: string,
+  options?: DataManagerRequestOptions,
+): Promise<T> {
+  return settleDataConfigurationFenceBound<T>(url, options);
+}
+const startDataExecutionBound = bindDataManagerOperation("startDataExecution");
+export async function startDataExecutionRequest<T>(
+  url: string,
+  options?: DataManagerRequestOptions,
+): Promise<T> {
+  return startDataExecutionBound<T>(url, options);
+}
+const startGenerationHardlinksExecutionBound = bindDataManagerOperation(
+  "startGenerationHardlinksExecution",
+);
+export async function startGenerationHardlinksExecutionRequest<T>(
+  url: string,
+  options?: DataManagerRequestOptions,
+): Promise<T> {
+  return startGenerationHardlinksExecutionBound<T>(url, options);
 }
 const syncOvertureBound = bindDataManagerOperation("syncOverture");
 export async function syncOvertureRequest<T>(

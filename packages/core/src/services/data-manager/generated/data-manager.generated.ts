@@ -10,16 +10,19 @@ import type {
   AddTransitSource415,
   AddTransitSource429,
   AddTransitSource500,
+  AddTransitSource503,
   AddTransitSourceBody,
   ApproveTransitBump200,
   ApproveTransitBump400,
   ApproveTransitBump401,
   ApproveTransitBump404,
+  ApproveTransitBump409,
   ApproveTransitBump413,
   ApproveTransitBump415,
   ApproveTransitBump422,
   ApproveTransitBump429,
   ApproveTransitBump500,
+  ApproveTransitBump503,
   ApproveTransitBumpBody,
   BakePredictedTraffic202,
   BakePredictedTraffic400,
@@ -30,6 +33,7 @@ import type {
   BakePredictedTraffic429,
   BakePredictedTraffic500,
   BakePredictedTraffic501,
+  BakePredictedTraffic503,
   BuildAmbientPlaces202,
   BuildAmbientPlaces400,
   BuildAmbientPlaces401,
@@ -38,37 +42,57 @@ import type {
   BuildAmbientPlaces415,
   BuildAmbientPlaces429,
   BuildAmbientPlaces500,
+  BuildAmbientPlaces503,
   BuildAmbientPlacesBody,
   BuildNotablePlaces200,
   BuildNotablePlaces400,
   BuildNotablePlaces401,
+  BuildNotablePlaces409,
   BuildNotablePlaces413,
   BuildNotablePlaces415,
   BuildNotablePlaces429,
   BuildNotablePlaces500,
+  BuildNotablePlaces503,
   BuildSearchIndex200,
   BuildSearchIndex400,
   BuildSearchIndex401,
+  BuildSearchIndex409,
   BuildSearchIndex413,
   BuildSearchIndex415,
   BuildSearchIndex429,
   BuildSearchIndex500,
+  BuildSearchIndex503,
   BuildSearchIndexBody,
+  CancelDataExecution200,
+  CancelDataExecution400,
+  CancelDataExecution401,
+  CancelDataExecution404,
+  CancelDataExecution409,
+  CancelDataExecution413,
+  CancelDataExecution415,
+  CancelDataExecution429,
+  CancelDataExecution500,
+  CancelDataExecution503,
+  CancelDataExecutionBody,
   ConflateOverture200,
   ConflateOverture400,
   ConflateOverture401,
+  ConflateOverture409,
   ConflateOverture413,
   ConflateOverture415,
   ConflateOverture429,
   ConflateOverture500,
+  ConflateOverture503,
   ConflateOvertureBody,
   ConvertOverpass200,
   ConvertOverpass400,
   ConvertOverpass401,
+  ConvertOverpass409,
   ConvertOverpass413,
   ConvertOverpass415,
   ConvertOverpass429,
   ConvertOverpass500,
+  ConvertOverpass503,
   ConvertOverpassBody,
   DiscardAmbientPlaces200,
   DiscardAmbientPlaces400,
@@ -78,21 +102,26 @@ import type {
   DiscardAmbientPlaces415,
   DiscardAmbientPlaces429,
   DiscardAmbientPlaces500,
+  DiscardAmbientPlaces503,
   DiscardAmbientPlacesBody,
   DownloadFonts200,
   DownloadFonts400,
   DownloadFonts401,
+  DownloadFonts409,
   DownloadFonts413,
   DownloadFonts415,
   DownloadFonts429,
   DownloadFonts500,
+  DownloadFonts503,
   DownloadOsm200,
   DownloadOsm400,
   DownloadOsm401,
+  DownloadOsm409,
   DownloadOsm413,
   DownloadOsm415,
   DownloadOsm429,
   DownloadOsm500,
+  DownloadOsm503,
   DownloadOsmBody,
   EnableTransitSource202,
   EnableTransitSource400,
@@ -103,14 +132,17 @@ import type {
   EnableTransitSource415,
   EnableTransitSource429,
   EnableTransitSource500,
+  EnableTransitSource503,
   EnableTransitSourceBody,
   ExtractOverture200,
   ExtractOverture400,
   ExtractOverture401,
+  ExtractOverture409,
   ExtractOverture413,
   ExtractOverture415,
   ExtractOverture429,
   ExtractOverture500,
+  ExtractOverture503,
   ExtractOvertureBody,
   GetAmbientPlacesStatus200,
   GetAmbientPlacesStatus400,
@@ -137,6 +169,16 @@ import type {
   GetCoverageEvidence500,
   GetCoverageEvidence503,
   GetCoverageEvidenceParams,
+  GetDataExecution200,
+  GetDataExecution400,
+  GetDataExecution401,
+  GetDataExecution404,
+  GetDataExecution410,
+  GetDataExecution413,
+  GetDataExecution415,
+  GetDataExecution429,
+  GetDataExecution500,
+  GetDataExecution503,
   GetDatasets200,
   GetDatasets400,
   GetDatasets401,
@@ -158,25 +200,31 @@ import type {
   GetOfflineGlyph400,
   GetOfflineGlyph401,
   GetOfflineGlyph404,
+  GetOfflineGlyph409,
   GetOfflineGlyph413,
   GetOfflineGlyph415,
   GetOfflineGlyph429,
   GetOfflineGlyph500,
+  GetOfflineGlyph503,
   GetOfflineGlyphCatalog200,
   GetOfflineGlyphCatalog400,
   GetOfflineGlyphCatalog401,
   GetOfflineGlyphCatalog404,
+  GetOfflineGlyphCatalog409,
   GetOfflineGlyphCatalog413,
   GetOfflineGlyphCatalog415,
   GetOfflineGlyphCatalog429,
   GetOfflineGlyphCatalog500,
+  GetOfflineGlyphCatalog503,
   GetOfflinePackageArchive400,
   GetOfflinePackageArchive401,
   GetOfflinePackageArchive404,
+  GetOfflinePackageArchive409,
   GetOfflinePackageArchive413,
   GetOfflinePackageArchive415,
   GetOfflinePackageArchive429,
   GetOfflinePackageArchive500,
+  GetOfflinePackageArchive503,
   GetOfflinePackageArchiveHeaders,
   GetOfflinePackageCapability200,
   GetOfflinePackageCapability400,
@@ -189,19 +237,23 @@ import type {
   GetOfflinePackageJob400,
   GetOfflinePackageJob401,
   GetOfflinePackageJob404,
+  GetOfflinePackageJob409,
   GetOfflinePackageJob413,
   GetOfflinePackageJob415,
   GetOfflinePackageJob429,
   GetOfflinePackageJob500,
+  GetOfflinePackageJob503,
   GetOfflinePackageJobHeaders,
   GetOfflinePackageManifest200,
   GetOfflinePackageManifest400,
   GetOfflinePackageManifest401,
   GetOfflinePackageManifest404,
+  GetOfflinePackageManifest409,
   GetOfflinePackageManifest413,
   GetOfflinePackageManifest415,
   GetOfflinePackageManifest429,
   GetOfflinePackageManifest500,
+  GetOfflinePackageManifest503,
   GetOvertureStatus200,
   GetOvertureStatus400,
   GetOvertureStatus401,
@@ -260,28 +312,65 @@ import type {
   IngestOverture200,
   IngestOverture400,
   IngestOverture401,
+  IngestOverture409,
   IngestOverture413,
   IngestOverture415,
   IngestOverture429,
   IngestOverture500,
+  IngestOverture503,
   IngestOvertureBody,
+  InspectDataConfigurationFence200,
+  InspectDataConfigurationFence400,
+  InspectDataConfigurationFence401,
+  InspectDataConfigurationFence403,
+  InspectDataConfigurationFence404,
+  InspectDataConfigurationFence413,
+  InspectDataConfigurationFence415,
+  InspectDataConfigurationFence429,
+  InspectDataConfigurationFence500,
+  InspectDataConfigurationFence503,
   Link200,
   Link400,
   Link401,
+  Link409,
   Link413,
   Link415,
   Link429,
   Link500,
+  Link503,
   LinkBody,
+  LookupDataExecution200,
+  LookupDataExecution400,
+  LookupDataExecution401,
+  LookupDataExecution404,
+  LookupDataExecution410,
+  LookupDataExecution413,
+  LookupDataExecution415,
+  LookupDataExecution429,
+  LookupDataExecution500,
+  LookupDataExecution503,
   PreflightTransit200,
   PreflightTransit400,
   PreflightTransit401,
+  PreflightTransit409,
   PreflightTransit413,
   PreflightTransit415,
   PreflightTransit422,
   PreflightTransit429,
   PreflightTransit500,
+  PreflightTransit503,
   PreflightTransitBody,
+  PrepareDataConfigurationFence200,
+  PrepareDataConfigurationFence400,
+  PrepareDataConfigurationFence401,
+  PrepareDataConfigurationFence403,
+  PrepareDataConfigurationFence409,
+  PrepareDataConfigurationFence413,
+  PrepareDataConfigurationFence415,
+  PrepareDataConfigurationFence429,
+  PrepareDataConfigurationFence500,
+  PrepareDataConfigurationFence503,
+  PrepareDataConfigurationFenceBody,
   PrepareOfflinePackage200,
   PrepareOfflinePackage202,
   PrepareOfflinePackage400,
@@ -304,22 +393,27 @@ import type {
   ProposeTransitBump429,
   ProposeTransitBump500,
   ProposeTransitBump502,
+  ProposeTransitBump503,
   ProposeTransitBumpBody,
   PullOverture200,
   PullOverture400,
   PullOverture401,
+  PullOverture409,
   PullOverture413,
   PullOverture415,
   PullOverture429,
   PullOverture500,
+  PullOverture503,
   PullOvertureBody,
   ReloadDatasets200,
   ReloadDatasets400,
   ReloadDatasets401,
+  ReloadDatasets409,
   ReloadDatasets413,
   ReloadDatasets415,
   ReloadDatasets429,
   ReloadDatasets500,
+  ReloadDatasets503,
   RemoveTransitSource202,
   RemoveTransitSource400,
   RemoveTransitSource401,
@@ -329,10 +423,12 @@ import type {
   RemoveTransitSource415,
   RemoveTransitSource429,
   RemoveTransitSource500,
+  RemoveTransitSource503,
   RemoveTransitSourceBody,
   RestartMotis200,
   RestartMotis400,
   RestartMotis401,
+  RestartMotis409,
   RestartMotis413,
   RestartMotis415,
   RestartMotis429,
@@ -346,6 +442,7 @@ import type {
   ResumeAmbientPlaces415,
   ResumeAmbientPlaces429,
   ResumeAmbientPlaces500,
+  ResumeAmbientPlaces503,
   ResumeAmbientPlacesBody,
   RollbackAmbientPlaces200,
   RollbackAmbientPlaces400,
@@ -355,6 +452,7 @@ import type {
   RollbackAmbientPlaces415,
   RollbackAmbientPlaces429,
   RollbackAmbientPlaces500,
+  RollbackAmbientPlaces503,
   SetAmbientPlacesEnabled200,
   SetAmbientPlacesEnabled400,
   SetAmbientPlacesEnabled401,
@@ -363,14 +461,51 @@ import type {
   SetAmbientPlacesEnabled415,
   SetAmbientPlacesEnabled429,
   SetAmbientPlacesEnabled500,
+  SetAmbientPlacesEnabled503,
   SetAmbientPlacesEnabledBody,
+  SettleDataConfigurationFence200,
+  SettleDataConfigurationFence400,
+  SettleDataConfigurationFence401,
+  SettleDataConfigurationFence403,
+  SettleDataConfigurationFence404,
+  SettleDataConfigurationFence409,
+  SettleDataConfigurationFence413,
+  SettleDataConfigurationFence415,
+  SettleDataConfigurationFence429,
+  SettleDataConfigurationFence500,
+  SettleDataConfigurationFence503,
+  SettleDataConfigurationFenceBody,
+  StartDataExecution202,
+  StartDataExecution400,
+  StartDataExecution401,
+  StartDataExecution403,
+  StartDataExecution409,
+  StartDataExecution413,
+  StartDataExecution415,
+  StartDataExecution429,
+  StartDataExecution500,
+  StartDataExecution503,
+  StartDataExecutionBody,
+  StartGenerationHardlinksExecution202,
+  StartGenerationHardlinksExecution400,
+  StartGenerationHardlinksExecution401,
+  StartGenerationHardlinksExecution403,
+  StartGenerationHardlinksExecution409,
+  StartGenerationHardlinksExecution413,
+  StartGenerationHardlinksExecution415,
+  StartGenerationHardlinksExecution429,
+  StartGenerationHardlinksExecution500,
+  StartGenerationHardlinksExecution503,
+  StartGenerationHardlinksExecutionBody,
   SyncOverture200,
   SyncOverture400,
   SyncOverture401,
+  SyncOverture409,
   SyncOverture413,
   SyncOverture415,
   SyncOverture429,
   SyncOverture500,
+  SyncOverture503,
   SyncOvertureBody,
   SyncTransit202,
   SyncTransit400,
@@ -381,6 +516,7 @@ import type {
   SyncTransit422,
   SyncTransit429,
   SyncTransit500,
+  SyncTransit503,
   SyncTransitBody,
 } from "./models";
 import {
@@ -390,6 +526,7 @@ import {
   buildAmbientPlacesRequest,
   buildNotablePlacesRequest,
   buildSearchIndexRequest,
+  cancelDataExecutionRequest,
   conflateOvertureRequest,
   convertOverpassRequest,
   discardAmbientPlacesRequest,
@@ -400,6 +537,7 @@ import {
   getAmbientPlacesStatusRequest,
   getAppliedTrafficConditionsRequest,
   getCoverageEvidenceRequest,
+  getDataExecutionRequest,
   getDatasetsRequest,
   getLiveRequest,
   getNotablePlacesStatusRequest,
@@ -419,8 +557,11 @@ import {
   headOfflineGlyphRequest,
   headOfflinePackageArchiveRequest,
   ingestOvertureRequest,
+  inspectDataConfigurationFenceRequest,
   linkRequest,
+  lookupDataExecutionRequest,
   preflightTransitRequest,
+  prepareDataConfigurationFenceRequest,
   prepareOfflinePackageRequest,
   proposeTransitBumpRequest,
   pullOvertureRequest,
@@ -430,6 +571,9 @@ import {
   resumeAmbientPlacesRequest,
   rollbackAmbientPlacesRequest,
   setAmbientPlacesEnabledRequest,
+  settleDataConfigurationFenceRequest,
+  startDataExecutionRequest,
+  startGenerationHardlinksExecutionRequest,
   syncOvertureRequest,
   syncTransitRequest,
 } from "./operation-bindings.generated";
@@ -437,6 +581,818 @@ import {
 interface TypedResponse<T> extends Response {
   json(): Promise<T>;
 }
+
+export type startDataExecutionResponse202 = {
+  data: StartDataExecution202;
+  status: 202;
+};
+
+export type startDataExecutionResponse400 = {
+  data: StartDataExecution400;
+  status: 400;
+};
+
+export type startDataExecutionResponse401 = {
+  data: StartDataExecution401;
+  status: 401;
+};
+
+export type startDataExecutionResponse403 = {
+  data: StartDataExecution403;
+  status: 403;
+};
+
+export type startDataExecutionResponse409 = {
+  data: StartDataExecution409;
+  status: 409;
+};
+
+export type startDataExecutionResponse413 = {
+  data: StartDataExecution413;
+  status: 413;
+};
+
+export type startDataExecutionResponse415 = {
+  data: StartDataExecution415;
+  status: 415;
+};
+
+export type startDataExecutionResponse429 = {
+  data: StartDataExecution429;
+  status: 429;
+};
+
+export type startDataExecutionResponse500 = {
+  data: StartDataExecution500;
+  status: 500;
+};
+
+export type startDataExecutionResponse503 = {
+  data: StartDataExecution503;
+  status: 503;
+};
+
+export type startDataExecutionResponseSuccess = startDataExecutionResponse202 & {
+  headers: Headers;
+};
+export type startDataExecutionResponseError = (
+  | startDataExecutionResponse400
+  | startDataExecutionResponse401
+  | startDataExecutionResponse403
+  | startDataExecutionResponse409
+  | startDataExecutionResponse413
+  | startDataExecutionResponse415
+  | startDataExecutionResponse429
+  | startDataExecutionResponse500
+  | startDataExecutionResponse503
+) & {
+  headers: Headers;
+};
+
+export type startDataExecutionResponse =
+  | startDataExecutionResponseSuccess
+  | startDataExecutionResponseError;
+
+export const getStartDataExecutionUrl = () => {
+  return `/executions`;
+};
+
+export const startDataExecution = async (
+  startDataExecutionBody: StartDataExecutionBody,
+  options?: Parameters<typeof startDataExecutionRequest>[1],
+): Promise<startDataExecutionResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return startDataExecutionRequest<startDataExecutionResponse>(getStartDataExecutionUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+    body: JSON.stringify(startDataExecutionBody),
+  });
+};
+
+export type startGenerationHardlinksExecutionResponse202 = {
+  data: StartGenerationHardlinksExecution202;
+  status: 202;
+};
+
+export type startGenerationHardlinksExecutionResponse400 = {
+  data: StartGenerationHardlinksExecution400;
+  status: 400;
+};
+
+export type startGenerationHardlinksExecutionResponse401 = {
+  data: StartGenerationHardlinksExecution401;
+  status: 401;
+};
+
+export type startGenerationHardlinksExecutionResponse403 = {
+  data: StartGenerationHardlinksExecution403;
+  status: 403;
+};
+
+export type startGenerationHardlinksExecutionResponse409 = {
+  data: StartGenerationHardlinksExecution409;
+  status: 409;
+};
+
+export type startGenerationHardlinksExecutionResponse413 = {
+  data: StartGenerationHardlinksExecution413;
+  status: 413;
+};
+
+export type startGenerationHardlinksExecutionResponse415 = {
+  data: StartGenerationHardlinksExecution415;
+  status: 415;
+};
+
+export type startGenerationHardlinksExecutionResponse429 = {
+  data: StartGenerationHardlinksExecution429;
+  status: 429;
+};
+
+export type startGenerationHardlinksExecutionResponse500 = {
+  data: StartGenerationHardlinksExecution500;
+  status: 500;
+};
+
+export type startGenerationHardlinksExecutionResponse503 = {
+  data: StartGenerationHardlinksExecution503;
+  status: 503;
+};
+
+export type startGenerationHardlinksExecutionResponseSuccess =
+  startGenerationHardlinksExecutionResponse202 & {
+    headers: Headers;
+  };
+export type startGenerationHardlinksExecutionResponseError = (
+  | startGenerationHardlinksExecutionResponse400
+  | startGenerationHardlinksExecutionResponse401
+  | startGenerationHardlinksExecutionResponse403
+  | startGenerationHardlinksExecutionResponse409
+  | startGenerationHardlinksExecutionResponse413
+  | startGenerationHardlinksExecutionResponse415
+  | startGenerationHardlinksExecutionResponse429
+  | startGenerationHardlinksExecutionResponse500
+  | startGenerationHardlinksExecutionResponse503
+) & {
+  headers: Headers;
+};
+
+export type startGenerationHardlinksExecutionResponse =
+  | startGenerationHardlinksExecutionResponseSuccess
+  | startGenerationHardlinksExecutionResponseError;
+
+export const getStartGenerationHardlinksExecutionUrl = () => {
+  return `/executions/generation-hardlinks`;
+};
+
+export const startGenerationHardlinksExecution = async (
+  startGenerationHardlinksExecutionBody: StartGenerationHardlinksExecutionBody,
+  options?: Parameters<typeof startGenerationHardlinksExecutionRequest>[1],
+): Promise<startGenerationHardlinksExecutionResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return startGenerationHardlinksExecutionRequest<startGenerationHardlinksExecutionResponse>(
+    getStartGenerationHardlinksExecutionUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      body: JSON.stringify(startGenerationHardlinksExecutionBody),
+    },
+  );
+};
+
+export type prepareDataConfigurationFenceResponse200 = {
+  data: PrepareDataConfigurationFence200;
+  status: 200;
+};
+
+export type prepareDataConfigurationFenceResponse400 = {
+  data: PrepareDataConfigurationFence400;
+  status: 400;
+};
+
+export type prepareDataConfigurationFenceResponse401 = {
+  data: PrepareDataConfigurationFence401;
+  status: 401;
+};
+
+export type prepareDataConfigurationFenceResponse403 = {
+  data: PrepareDataConfigurationFence403;
+  status: 403;
+};
+
+export type prepareDataConfigurationFenceResponse409 = {
+  data: PrepareDataConfigurationFence409;
+  status: 409;
+};
+
+export type prepareDataConfigurationFenceResponse413 = {
+  data: PrepareDataConfigurationFence413;
+  status: 413;
+};
+
+export type prepareDataConfigurationFenceResponse415 = {
+  data: PrepareDataConfigurationFence415;
+  status: 415;
+};
+
+export type prepareDataConfigurationFenceResponse429 = {
+  data: PrepareDataConfigurationFence429;
+  status: 429;
+};
+
+export type prepareDataConfigurationFenceResponse500 = {
+  data: PrepareDataConfigurationFence500;
+  status: 500;
+};
+
+export type prepareDataConfigurationFenceResponse503 = {
+  data: PrepareDataConfigurationFence503;
+  status: 503;
+};
+
+export type prepareDataConfigurationFenceResponseSuccess =
+  prepareDataConfigurationFenceResponse200 & {
+    headers: Headers;
+  };
+export type prepareDataConfigurationFenceResponseError = (
+  | prepareDataConfigurationFenceResponse400
+  | prepareDataConfigurationFenceResponse401
+  | prepareDataConfigurationFenceResponse403
+  | prepareDataConfigurationFenceResponse409
+  | prepareDataConfigurationFenceResponse413
+  | prepareDataConfigurationFenceResponse415
+  | prepareDataConfigurationFenceResponse429
+  | prepareDataConfigurationFenceResponse500
+  | prepareDataConfigurationFenceResponse503
+) & {
+  headers: Headers;
+};
+
+export type prepareDataConfigurationFenceResponse =
+  | prepareDataConfigurationFenceResponseSuccess
+  | prepareDataConfigurationFenceResponseError;
+
+export const getPrepareDataConfigurationFenceUrl = () => {
+  return `/executions/configuration-maintenance/prepare`;
+};
+
+export const prepareDataConfigurationFence = async (
+  prepareDataConfigurationFenceBody: PrepareDataConfigurationFenceBody,
+  options?: Parameters<typeof prepareDataConfigurationFenceRequest>[1],
+): Promise<prepareDataConfigurationFenceResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return prepareDataConfigurationFenceRequest<prepareDataConfigurationFenceResponse>(
+    getPrepareDataConfigurationFenceUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      body: JSON.stringify(prepareDataConfigurationFenceBody),
+    },
+  );
+};
+
+export type inspectDataConfigurationFenceResponse200 = {
+  data: InspectDataConfigurationFence200;
+  status: 200;
+};
+
+export type inspectDataConfigurationFenceResponse400 = {
+  data: InspectDataConfigurationFence400;
+  status: 400;
+};
+
+export type inspectDataConfigurationFenceResponse401 = {
+  data: InspectDataConfigurationFence401;
+  status: 401;
+};
+
+export type inspectDataConfigurationFenceResponse403 = {
+  data: InspectDataConfigurationFence403;
+  status: 403;
+};
+
+export type inspectDataConfigurationFenceResponse404 = {
+  data: InspectDataConfigurationFence404;
+  status: 404;
+};
+
+export type inspectDataConfigurationFenceResponse413 = {
+  data: InspectDataConfigurationFence413;
+  status: 413;
+};
+
+export type inspectDataConfigurationFenceResponse415 = {
+  data: InspectDataConfigurationFence415;
+  status: 415;
+};
+
+export type inspectDataConfigurationFenceResponse429 = {
+  data: InspectDataConfigurationFence429;
+  status: 429;
+};
+
+export type inspectDataConfigurationFenceResponse500 = {
+  data: InspectDataConfigurationFence500;
+  status: 500;
+};
+
+export type inspectDataConfigurationFenceResponse503 = {
+  data: InspectDataConfigurationFence503;
+  status: 503;
+};
+
+export type inspectDataConfigurationFenceResponseSuccess =
+  inspectDataConfigurationFenceResponse200 & {
+    headers: Headers;
+  };
+export type inspectDataConfigurationFenceResponseError = (
+  | inspectDataConfigurationFenceResponse400
+  | inspectDataConfigurationFenceResponse401
+  | inspectDataConfigurationFenceResponse403
+  | inspectDataConfigurationFenceResponse404
+  | inspectDataConfigurationFenceResponse413
+  | inspectDataConfigurationFenceResponse415
+  | inspectDataConfigurationFenceResponse429
+  | inspectDataConfigurationFenceResponse500
+  | inspectDataConfigurationFenceResponse503
+) & {
+  headers: Headers;
+};
+
+export type inspectDataConfigurationFenceResponse =
+  | inspectDataConfigurationFenceResponseSuccess
+  | inspectDataConfigurationFenceResponseError;
+
+export const getInspectDataConfigurationFenceUrl = (maintenanceId: string) => {
+  return `/executions/configuration-maintenance/${encodeURIComponent(String(maintenanceId))}`;
+};
+
+export const inspectDataConfigurationFence = async (
+  maintenanceId: string,
+  options?: Parameters<typeof inspectDataConfigurationFenceRequest>[1],
+): Promise<inspectDataConfigurationFenceResponse> => {
+  return inspectDataConfigurationFenceRequest<inspectDataConfigurationFenceResponse>(
+    getInspectDataConfigurationFenceUrl(maintenanceId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export type settleDataConfigurationFenceResponse200 = {
+  data: SettleDataConfigurationFence200;
+  status: 200;
+};
+
+export type settleDataConfigurationFenceResponse400 = {
+  data: SettleDataConfigurationFence400;
+  status: 400;
+};
+
+export type settleDataConfigurationFenceResponse401 = {
+  data: SettleDataConfigurationFence401;
+  status: 401;
+};
+
+export type settleDataConfigurationFenceResponse403 = {
+  data: SettleDataConfigurationFence403;
+  status: 403;
+};
+
+export type settleDataConfigurationFenceResponse404 = {
+  data: SettleDataConfigurationFence404;
+  status: 404;
+};
+
+export type settleDataConfigurationFenceResponse409 = {
+  data: SettleDataConfigurationFence409;
+  status: 409;
+};
+
+export type settleDataConfigurationFenceResponse413 = {
+  data: SettleDataConfigurationFence413;
+  status: 413;
+};
+
+export type settleDataConfigurationFenceResponse415 = {
+  data: SettleDataConfigurationFence415;
+  status: 415;
+};
+
+export type settleDataConfigurationFenceResponse429 = {
+  data: SettleDataConfigurationFence429;
+  status: 429;
+};
+
+export type settleDataConfigurationFenceResponse500 = {
+  data: SettleDataConfigurationFence500;
+  status: 500;
+};
+
+export type settleDataConfigurationFenceResponse503 = {
+  data: SettleDataConfigurationFence503;
+  status: 503;
+};
+
+export type settleDataConfigurationFenceResponseSuccess =
+  settleDataConfigurationFenceResponse200 & {
+    headers: Headers;
+  };
+export type settleDataConfigurationFenceResponseError = (
+  | settleDataConfigurationFenceResponse400
+  | settleDataConfigurationFenceResponse401
+  | settleDataConfigurationFenceResponse403
+  | settleDataConfigurationFenceResponse404
+  | settleDataConfigurationFenceResponse409
+  | settleDataConfigurationFenceResponse413
+  | settleDataConfigurationFenceResponse415
+  | settleDataConfigurationFenceResponse429
+  | settleDataConfigurationFenceResponse500
+  | settleDataConfigurationFenceResponse503
+) & {
+  headers: Headers;
+};
+
+export type settleDataConfigurationFenceResponse =
+  | settleDataConfigurationFenceResponseSuccess
+  | settleDataConfigurationFenceResponseError;
+
+export const getSettleDataConfigurationFenceUrl = (maintenanceId: string) => {
+  return `/executions/configuration-maintenance/${encodeURIComponent(String(maintenanceId))}/settle`;
+};
+
+export const settleDataConfigurationFence = async (
+  maintenanceId: string,
+  settleDataConfigurationFenceBody: SettleDataConfigurationFenceBody,
+  options?: Parameters<typeof settleDataConfigurationFenceRequest>[1],
+): Promise<settleDataConfigurationFenceResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return settleDataConfigurationFenceRequest<settleDataConfigurationFenceResponse>(
+    getSettleDataConfigurationFenceUrl(maintenanceId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      body: JSON.stringify(settleDataConfigurationFenceBody),
+    },
+  );
+};
+
+export type lookupDataExecutionResponse200 = {
+  data: LookupDataExecution200;
+  status: 200;
+};
+
+export type lookupDataExecutionResponse400 = {
+  data: LookupDataExecution400;
+  status: 400;
+};
+
+export type lookupDataExecutionResponse401 = {
+  data: LookupDataExecution401;
+  status: 401;
+};
+
+export type lookupDataExecutionResponse404 = {
+  data: LookupDataExecution404;
+  status: 404;
+};
+
+export type lookupDataExecutionResponse410 = {
+  data: LookupDataExecution410;
+  status: 410;
+};
+
+export type lookupDataExecutionResponse413 = {
+  data: LookupDataExecution413;
+  status: 413;
+};
+
+export type lookupDataExecutionResponse415 = {
+  data: LookupDataExecution415;
+  status: 415;
+};
+
+export type lookupDataExecutionResponse429 = {
+  data: LookupDataExecution429;
+  status: 429;
+};
+
+export type lookupDataExecutionResponse500 = {
+  data: LookupDataExecution500;
+  status: 500;
+};
+
+export type lookupDataExecutionResponse503 = {
+  data: LookupDataExecution503;
+  status: 503;
+};
+
+export type lookupDataExecutionResponseSuccess = lookupDataExecutionResponse200 & {
+  headers: Headers;
+};
+export type lookupDataExecutionResponseError = (
+  | lookupDataExecutionResponse400
+  | lookupDataExecutionResponse401
+  | lookupDataExecutionResponse404
+  | lookupDataExecutionResponse410
+  | lookupDataExecutionResponse413
+  | lookupDataExecutionResponse415
+  | lookupDataExecutionResponse429
+  | lookupDataExecutionResponse500
+  | lookupDataExecutionResponse503
+) & {
+  headers: Headers;
+};
+
+export type lookupDataExecutionResponse =
+  | lookupDataExecutionResponseSuccess
+  | lookupDataExecutionResponseError;
+
+export const getLookupDataExecutionUrl = (operationKey: string) => {
+  return `/executions/by-key/${encodeURIComponent(String(operationKey))}`;
+};
+
+export const lookupDataExecution = async (
+  operationKey: string,
+  options?: Parameters<typeof lookupDataExecutionRequest>[1],
+): Promise<lookupDataExecutionResponse> => {
+  return lookupDataExecutionRequest<lookupDataExecutionResponse>(
+    getLookupDataExecutionUrl(operationKey),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export type getDataExecutionResponse200 = {
+  data: GetDataExecution200;
+  status: 200;
+};
+
+export type getDataExecutionResponse400 = {
+  data: GetDataExecution400;
+  status: 400;
+};
+
+export type getDataExecutionResponse401 = {
+  data: GetDataExecution401;
+  status: 401;
+};
+
+export type getDataExecutionResponse404 = {
+  data: GetDataExecution404;
+  status: 404;
+};
+
+export type getDataExecutionResponse410 = {
+  data: GetDataExecution410;
+  status: 410;
+};
+
+export type getDataExecutionResponse413 = {
+  data: GetDataExecution413;
+  status: 413;
+};
+
+export type getDataExecutionResponse415 = {
+  data: GetDataExecution415;
+  status: 415;
+};
+
+export type getDataExecutionResponse429 = {
+  data: GetDataExecution429;
+  status: 429;
+};
+
+export type getDataExecutionResponse500 = {
+  data: GetDataExecution500;
+  status: 500;
+};
+
+export type getDataExecutionResponse503 = {
+  data: GetDataExecution503;
+  status: 503;
+};
+
+export type getDataExecutionResponseSuccess = getDataExecutionResponse200 & {
+  headers: Headers;
+};
+export type getDataExecutionResponseError = (
+  | getDataExecutionResponse400
+  | getDataExecutionResponse401
+  | getDataExecutionResponse404
+  | getDataExecutionResponse410
+  | getDataExecutionResponse413
+  | getDataExecutionResponse415
+  | getDataExecutionResponse429
+  | getDataExecutionResponse500
+  | getDataExecutionResponse503
+) & {
+  headers: Headers;
+};
+
+export type getDataExecutionResponse =
+  | getDataExecutionResponseSuccess
+  | getDataExecutionResponseError;
+
+export const getGetDataExecutionUrl = (id: string) => {
+  return `/executions/${encodeURIComponent(String(id))}`;
+};
+
+export const getDataExecution = async (
+  id: string,
+  options?: Parameters<typeof getDataExecutionRequest>[1],
+): Promise<getDataExecutionResponse> => {
+  return getDataExecutionRequest<getDataExecutionResponse>(getGetDataExecutionUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export type cancelDataExecutionResponse200 = {
+  data: CancelDataExecution200;
+  status: 200;
+};
+
+export type cancelDataExecutionResponse400 = {
+  data: CancelDataExecution400;
+  status: 400;
+};
+
+export type cancelDataExecutionResponse401 = {
+  data: CancelDataExecution401;
+  status: 401;
+};
+
+export type cancelDataExecutionResponse404 = {
+  data: CancelDataExecution404;
+  status: 404;
+};
+
+export type cancelDataExecutionResponse409 = {
+  data: CancelDataExecution409;
+  status: 409;
+};
+
+export type cancelDataExecutionResponse413 = {
+  data: CancelDataExecution413;
+  status: 413;
+};
+
+export type cancelDataExecutionResponse415 = {
+  data: CancelDataExecution415;
+  status: 415;
+};
+
+export type cancelDataExecutionResponse429 = {
+  data: CancelDataExecution429;
+  status: 429;
+};
+
+export type cancelDataExecutionResponse500 = {
+  data: CancelDataExecution500;
+  status: 500;
+};
+
+export type cancelDataExecutionResponse503 = {
+  data: CancelDataExecution503;
+  status: 503;
+};
+
+export type cancelDataExecutionResponseSuccess = cancelDataExecutionResponse200 & {
+  headers: Headers;
+};
+export type cancelDataExecutionResponseError = (
+  | cancelDataExecutionResponse400
+  | cancelDataExecutionResponse401
+  | cancelDataExecutionResponse404
+  | cancelDataExecutionResponse409
+  | cancelDataExecutionResponse413
+  | cancelDataExecutionResponse415
+  | cancelDataExecutionResponse429
+  | cancelDataExecutionResponse500
+  | cancelDataExecutionResponse503
+) & {
+  headers: Headers;
+};
+
+export type cancelDataExecutionResponse =
+  | cancelDataExecutionResponseSuccess
+  | cancelDataExecutionResponseError;
+
+export const getCancelDataExecutionUrl = (id: string) => {
+  return `/executions/${encodeURIComponent(String(id))}/cancel`;
+};
+
+export const cancelDataExecution = async (
+  id: string,
+  cancelDataExecutionBody: CancelDataExecutionBody,
+  options?: Parameters<typeof cancelDataExecutionRequest>[1],
+): Promise<cancelDataExecutionResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return cancelDataExecutionRequest<cancelDataExecutionResponse>(getCancelDataExecutionUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+    body: JSON.stringify(cancelDataExecutionBody),
+  });
+};
 
 export type getAmbientPlacesStatusResponse200 = {
   data: GetAmbientPlacesStatus200;
@@ -547,6 +1503,11 @@ export type buildAmbientPlacesResponse500 = {
   status: 500;
 };
 
+export type buildAmbientPlacesResponse503 = {
+  data: BuildAmbientPlaces503;
+  status: 503;
+};
+
 export type buildAmbientPlacesResponseSuccess = buildAmbientPlacesResponse202 & {
   headers: Headers;
 };
@@ -558,6 +1519,7 @@ export type buildAmbientPlacesResponseError = (
   | buildAmbientPlacesResponse415
   | buildAmbientPlacesResponse429
   | buildAmbientPlacesResponse500
+  | buildAmbientPlacesResponse503
 ) & {
   headers: Headers;
 };
@@ -641,6 +1603,11 @@ export type resumeAmbientPlacesResponse500 = {
   status: 500;
 };
 
+export type resumeAmbientPlacesResponse503 = {
+  data: ResumeAmbientPlaces503;
+  status: 503;
+};
+
 export type resumeAmbientPlacesResponseSuccess = resumeAmbientPlacesResponse202 & {
   headers: Headers;
 };
@@ -652,6 +1619,7 @@ export type resumeAmbientPlacesResponseError = (
   | resumeAmbientPlacesResponse415
   | resumeAmbientPlacesResponse429
   | resumeAmbientPlacesResponse500
+  | resumeAmbientPlacesResponse503
 ) & {
   headers: Headers;
 };
@@ -735,6 +1703,11 @@ export type discardAmbientPlacesResponse500 = {
   status: 500;
 };
 
+export type discardAmbientPlacesResponse503 = {
+  data: DiscardAmbientPlaces503;
+  status: 503;
+};
+
 export type discardAmbientPlacesResponseSuccess = discardAmbientPlacesResponse200 & {
   headers: Headers;
 };
@@ -746,6 +1719,7 @@ export type discardAmbientPlacesResponseError = (
   | discardAmbientPlacesResponse415
   | discardAmbientPlacesResponse429
   | discardAmbientPlacesResponse500
+  | discardAmbientPlacesResponse503
 ) & {
   headers: Headers;
 };
@@ -829,6 +1803,11 @@ export type setAmbientPlacesEnabledResponse500 = {
   status: 500;
 };
 
+export type setAmbientPlacesEnabledResponse503 = {
+  data: SetAmbientPlacesEnabled503;
+  status: 503;
+};
+
 export type setAmbientPlacesEnabledResponseSuccess = setAmbientPlacesEnabledResponse200 & {
   headers: Headers;
 };
@@ -840,6 +1819,7 @@ export type setAmbientPlacesEnabledResponseError = (
   | setAmbientPlacesEnabledResponse415
   | setAmbientPlacesEnabledResponse429
   | setAmbientPlacesEnabledResponse500
+  | setAmbientPlacesEnabledResponse503
 ) & {
   headers: Headers;
 };
@@ -926,6 +1906,11 @@ export type rollbackAmbientPlacesResponse500 = {
   status: 500;
 };
 
+export type rollbackAmbientPlacesResponse503 = {
+  data: RollbackAmbientPlaces503;
+  status: 503;
+};
+
 export type rollbackAmbientPlacesResponseSuccess = rollbackAmbientPlacesResponse200 & {
   headers: Headers;
 };
@@ -937,6 +1922,7 @@ export type rollbackAmbientPlacesResponseError = (
   | rollbackAmbientPlacesResponse415
   | rollbackAmbientPlacesResponse429
   | rollbackAmbientPlacesResponse500
+  | rollbackAmbientPlacesResponse503
 ) & {
   headers: Headers;
 };
@@ -1262,6 +2248,11 @@ export type getOfflinePackageJobResponse404 = {
   status: 404;
 };
 
+export type getOfflinePackageJobResponse409 = {
+  data: GetOfflinePackageJob409;
+  status: 409;
+};
+
 export type getOfflinePackageJobResponse413 = {
   data: GetOfflinePackageJob413;
   status: 413;
@@ -1282,6 +2273,11 @@ export type getOfflinePackageJobResponse500 = {
   status: 500;
 };
 
+export type getOfflinePackageJobResponse503 = {
+  data: GetOfflinePackageJob503;
+  status: 503;
+};
+
 export type getOfflinePackageJobResponseSuccess = getOfflinePackageJobResponse200 & {
   headers: Headers;
 };
@@ -1289,10 +2285,12 @@ export type getOfflinePackageJobResponseError = (
   | getOfflinePackageJobResponse400
   | getOfflinePackageJobResponse401
   | getOfflinePackageJobResponse404
+  | getOfflinePackageJobResponse409
   | getOfflinePackageJobResponse413
   | getOfflinePackageJobResponse415
   | getOfflinePackageJobResponse429
   | getOfflinePackageJobResponse500
+  | getOfflinePackageJobResponse503
 ) & {
   headers: Headers;
 };
@@ -1359,6 +2357,11 @@ export type getOfflinePackageManifestResponse404 = {
   status: 404;
 };
 
+export type getOfflinePackageManifestResponse409 = {
+  data: GetOfflinePackageManifest409;
+  status: 409;
+};
+
 export type getOfflinePackageManifestResponse413 = {
   data: GetOfflinePackageManifest413;
   status: 413;
@@ -1379,6 +2382,11 @@ export type getOfflinePackageManifestResponse500 = {
   status: 500;
 };
 
+export type getOfflinePackageManifestResponse503 = {
+  data: GetOfflinePackageManifest503;
+  status: 503;
+};
+
 export type getOfflinePackageManifestResponseSuccess = getOfflinePackageManifestResponse200 & {
   headers: Headers;
 };
@@ -1386,10 +2394,12 @@ export type getOfflinePackageManifestResponseError = (
   | getOfflinePackageManifestResponse400
   | getOfflinePackageManifestResponse401
   | getOfflinePackageManifestResponse404
+  | getOfflinePackageManifestResponse409
   | getOfflinePackageManifestResponse413
   | getOfflinePackageManifestResponse415
   | getOfflinePackageManifestResponse429
   | getOfflinePackageManifestResponse500
+  | getOfflinePackageManifestResponse503
 ) & {
   headers: Headers;
 };
@@ -1435,6 +2445,11 @@ export type getOfflineGlyphCatalogResponse404 = {
   status: 404;
 };
 
+export type getOfflineGlyphCatalogResponse409 = {
+  data: GetOfflineGlyphCatalog409;
+  status: 409;
+};
+
 export type getOfflineGlyphCatalogResponse413 = {
   data: GetOfflineGlyphCatalog413;
   status: 413;
@@ -1455,6 +2470,11 @@ export type getOfflineGlyphCatalogResponse500 = {
   status: 500;
 };
 
+export type getOfflineGlyphCatalogResponse503 = {
+  data: GetOfflineGlyphCatalog503;
+  status: 503;
+};
+
 export type getOfflineGlyphCatalogResponseSuccess = getOfflineGlyphCatalogResponse200 & {
   headers: Headers;
 };
@@ -1462,10 +2482,12 @@ export type getOfflineGlyphCatalogResponseError = (
   | getOfflineGlyphCatalogResponse400
   | getOfflineGlyphCatalogResponse401
   | getOfflineGlyphCatalogResponse404
+  | getOfflineGlyphCatalogResponse409
   | getOfflineGlyphCatalogResponse413
   | getOfflineGlyphCatalogResponse415
   | getOfflineGlyphCatalogResponse429
   | getOfflineGlyphCatalogResponse500
+  | getOfflineGlyphCatalogResponse503
 ) & {
   headers: Headers;
 };
@@ -1577,6 +2599,11 @@ export type getOfflineGlyphResponse404 = {
   status: 404;
 };
 
+export type getOfflineGlyphResponse409 = {
+  data: GetOfflineGlyph409;
+  status: 409;
+};
+
 export type getOfflineGlyphResponse413 = {
   data: GetOfflineGlyph413;
   status: 413;
@@ -1597,6 +2624,11 @@ export type getOfflineGlyphResponse500 = {
   status: 500;
 };
 
+export type getOfflineGlyphResponse503 = {
+  data: GetOfflineGlyph503;
+  status: 503;
+};
+
 export type getOfflineGlyphResponseSuccess = getOfflineGlyphResponse200 & {
   headers: Headers;
 };
@@ -1604,10 +2636,12 @@ export type getOfflineGlyphResponseError = (
   | getOfflineGlyphResponse400
   | getOfflineGlyphResponse401
   | getOfflineGlyphResponse404
+  | getOfflineGlyphResponse409
   | getOfflineGlyphResponse413
   | getOfflineGlyphResponse415
   | getOfflineGlyphResponse429
   | getOfflineGlyphResponse500
+  | getOfflineGlyphResponse503
 ) & {
   headers: Headers;
 };
@@ -1757,6 +2791,11 @@ export type getOfflinePackageArchiveResponse404 = {
   status: 404;
 };
 
+export type getOfflinePackageArchiveResponse409 = {
+  data: GetOfflinePackageArchive409;
+  status: 409;
+};
+
 export type getOfflinePackageArchiveResponse413 = {
   data: GetOfflinePackageArchive413;
   status: 413;
@@ -1782,6 +2821,11 @@ export type getOfflinePackageArchiveResponse500 = {
   status: 500;
 };
 
+export type getOfflinePackageArchiveResponse503 = {
+  data: GetOfflinePackageArchive503;
+  status: 503;
+};
+
 export type getOfflinePackageArchiveResponseSuccess = (
   | getOfflinePackageArchiveResponse200
   | getOfflinePackageArchiveResponse206
@@ -1792,11 +2836,13 @@ export type getOfflinePackageArchiveResponseError = (
   | getOfflinePackageArchiveResponse400
   | getOfflinePackageArchiveResponse401
   | getOfflinePackageArchiveResponse404
+  | getOfflinePackageArchiveResponse409
   | getOfflinePackageArchiveResponse413
   | getOfflinePackageArchiveResponse415
   | getOfflinePackageArchiveResponse416
   | getOfflinePackageArchiveResponse429
   | getOfflinePackageArchiveResponse500
+  | getOfflinePackageArchiveResponse503
 ) & {
   headers: Headers;
 };
@@ -2274,6 +3320,11 @@ export type addTransitSourceResponse500 = {
   status: 500;
 };
 
+export type addTransitSourceResponse503 = {
+  data: AddTransitSource503;
+  status: 503;
+};
+
 export type addTransitSourceResponseSuccess = addTransitSourceResponse202 & {
   headers: Headers;
 };
@@ -2286,6 +3337,7 @@ export type addTransitSourceResponseError = (
   | addTransitSourceResponse415
   | addTransitSourceResponse429
   | addTransitSourceResponse500
+  | addTransitSourceResponse503
 ) & {
   headers: Headers;
 };
@@ -2452,6 +3504,11 @@ export type removeTransitSourceResponse500 = {
   status: 500;
 };
 
+export type removeTransitSourceResponse503 = {
+  data: RemoveTransitSource503;
+  status: 503;
+};
+
 export type removeTransitSourceResponseSuccess = removeTransitSourceResponse202 & {
   headers: Headers;
 };
@@ -2464,6 +3521,7 @@ export type removeTransitSourceResponseError = (
   | removeTransitSourceResponse415
   | removeTransitSourceResponse429
   | removeTransitSourceResponse500
+  | removeTransitSourceResponse503
 ) & {
   headers: Headers;
 };
@@ -2556,6 +3614,11 @@ export type enableTransitSourceResponse500 = {
   status: 500;
 };
 
+export type enableTransitSourceResponse503 = {
+  data: EnableTransitSource503;
+  status: 503;
+};
+
 export type enableTransitSourceResponseSuccess = enableTransitSourceResponse202 & {
   headers: Headers;
 };
@@ -2568,6 +3631,7 @@ export type enableTransitSourceResponseError = (
   | enableTransitSourceResponse415
   | enableTransitSourceResponse429
   | enableTransitSourceResponse500
+  | enableTransitSourceResponse503
 ) & {
   headers: Headers;
 };
@@ -2630,6 +3694,11 @@ export type preflightTransitResponse401 = {
   status: 401;
 };
 
+export type preflightTransitResponse409 = {
+  data: PreflightTransit409;
+  status: 409;
+};
+
 export type preflightTransitResponse413 = {
   data: PreflightTransit413;
   status: 413;
@@ -2655,17 +3724,24 @@ export type preflightTransitResponse500 = {
   status: 500;
 };
 
+export type preflightTransitResponse503 = {
+  data: PreflightTransit503;
+  status: 503;
+};
+
 export type preflightTransitResponseSuccess = preflightTransitResponse200 & {
   headers: Headers;
 };
 export type preflightTransitResponseError = (
   | preflightTransitResponse400
   | preflightTransitResponse401
+  | preflightTransitResponse409
   | preflightTransitResponse413
   | preflightTransitResponse415
   | preflightTransitResponse422
   | preflightTransitResponse429
   | preflightTransitResponse500
+  | preflightTransitResponse503
 ) & {
   headers: Headers;
 };
@@ -2724,6 +3800,11 @@ export type reloadDatasetsResponse401 = {
   status: 401;
 };
 
+export type reloadDatasetsResponse409 = {
+  data: ReloadDatasets409;
+  status: 409;
+};
+
 export type reloadDatasetsResponse413 = {
   data: ReloadDatasets413;
   status: 413;
@@ -2744,16 +3825,23 @@ export type reloadDatasetsResponse500 = {
   status: 500;
 };
 
+export type reloadDatasetsResponse503 = {
+  data: ReloadDatasets503;
+  status: 503;
+};
+
 export type reloadDatasetsResponseSuccess = reloadDatasetsResponse200 & {
   headers: Headers;
 };
 export type reloadDatasetsResponseError = (
   | reloadDatasetsResponse400
   | reloadDatasetsResponse401
+  | reloadDatasetsResponse409
   | reloadDatasetsResponse413
   | reloadDatasetsResponse415
   | reloadDatasetsResponse429
   | reloadDatasetsResponse500
+  | reloadDatasetsResponse503
 ) & {
   headers: Headers;
 };
@@ -2818,6 +3906,11 @@ export type bakePredictedTrafficResponse501 = {
   status: 501;
 };
 
+export type bakePredictedTrafficResponse503 = {
+  data: BakePredictedTraffic503;
+  status: 503;
+};
+
 export type bakePredictedTrafficResponseSuccess = bakePredictedTrafficResponse202 & {
   headers: Headers;
 };
@@ -2830,6 +3923,7 @@ export type bakePredictedTrafficResponseError = (
   | bakePredictedTrafficResponse429
   | bakePredictedTrafficResponse500
   | bakePredictedTrafficResponse501
+  | bakePredictedTrafficResponse503
 ) & {
   headers: Headers;
 };
@@ -2941,6 +4035,11 @@ export type downloadOsmResponse401 = {
   status: 401;
 };
 
+export type downloadOsmResponse409 = {
+  data: DownloadOsm409;
+  status: 409;
+};
+
 export type downloadOsmResponse413 = {
   data: DownloadOsm413;
   status: 413;
@@ -2961,16 +4060,23 @@ export type downloadOsmResponse500 = {
   status: 500;
 };
 
+export type downloadOsmResponse503 = {
+  data: DownloadOsm503;
+  status: 503;
+};
+
 export type downloadOsmResponseSuccess = downloadOsmResponse200 & {
   headers: Headers;
 };
 export type downloadOsmResponseError = (
   | downloadOsmResponse400
   | downloadOsmResponse401
+  | downloadOsmResponse409
   | downloadOsmResponse413
   | downloadOsmResponse415
   | downloadOsmResponse429
   | downloadOsmResponse500
+  | downloadOsmResponse503
 ) & {
   headers: Headers;
 };
@@ -3099,6 +4205,11 @@ export type buildSearchIndexResponse401 = {
   status: 401;
 };
 
+export type buildSearchIndexResponse409 = {
+  data: BuildSearchIndex409;
+  status: 409;
+};
+
 export type buildSearchIndexResponse413 = {
   data: BuildSearchIndex413;
   status: 413;
@@ -3119,16 +4230,23 @@ export type buildSearchIndexResponse500 = {
   status: 500;
 };
 
+export type buildSearchIndexResponse503 = {
+  data: BuildSearchIndex503;
+  status: 503;
+};
+
 export type buildSearchIndexResponseSuccess = buildSearchIndexResponse200 & {
   headers: Headers;
 };
 export type buildSearchIndexResponseError = (
   | buildSearchIndexResponse400
   | buildSearchIndexResponse401
+  | buildSearchIndexResponse409
   | buildSearchIndexResponse413
   | buildSearchIndexResponse415
   | buildSearchIndexResponse429
   | buildSearchIndexResponse500
+  | buildSearchIndexResponse503
 ) & {
   headers: Headers;
 };
@@ -3262,6 +4380,11 @@ export type buildNotablePlacesResponse401 = {
   status: 401;
 };
 
+export type buildNotablePlacesResponse409 = {
+  data: BuildNotablePlaces409;
+  status: 409;
+};
+
 export type buildNotablePlacesResponse413 = {
   data: BuildNotablePlaces413;
   status: 413;
@@ -3282,16 +4405,23 @@ export type buildNotablePlacesResponse500 = {
   status: 500;
 };
 
+export type buildNotablePlacesResponse503 = {
+  data: BuildNotablePlaces503;
+  status: 503;
+};
+
 export type buildNotablePlacesResponseSuccess = buildNotablePlacesResponse200 & {
   headers: Headers;
 };
 export type buildNotablePlacesResponseError = (
   | buildNotablePlacesResponse400
   | buildNotablePlacesResponse401
+  | buildNotablePlacesResponse409
   | buildNotablePlacesResponse413
   | buildNotablePlacesResponse415
   | buildNotablePlacesResponse429
   | buildNotablePlacesResponse500
+  | buildNotablePlacesResponse503
 ) & {
   headers: Headers;
 };
@@ -3328,6 +4458,11 @@ export type downloadFontsResponse401 = {
   status: 401;
 };
 
+export type downloadFontsResponse409 = {
+  data: DownloadFonts409;
+  status: 409;
+};
+
 export type downloadFontsResponse413 = {
   data: DownloadFonts413;
   status: 413;
@@ -3348,16 +4483,23 @@ export type downloadFontsResponse500 = {
   status: 500;
 };
 
+export type downloadFontsResponse503 = {
+  data: DownloadFonts503;
+  status: 503;
+};
+
 export type downloadFontsResponseSuccess = downloadFontsResponse200 & {
   headers: Headers;
 };
 export type downloadFontsResponseError = (
   | downloadFontsResponse400
   | downloadFontsResponse401
+  | downloadFontsResponse409
   | downloadFontsResponse413
   | downloadFontsResponse415
   | downloadFontsResponse429
   | downloadFontsResponse500
+  | downloadFontsResponse503
 ) & {
   headers: Headers;
 };
@@ -3392,6 +4534,11 @@ export type linkResponse401 = {
   status: 401;
 };
 
+export type linkResponse409 = {
+  data: Link409;
+  status: 409;
+};
+
 export type linkResponse413 = {
   data: Link413;
   status: 413;
@@ -3412,16 +4559,23 @@ export type linkResponse500 = {
   status: 500;
 };
 
+export type linkResponse503 = {
+  data: Link503;
+  status: 503;
+};
+
 export type linkResponseSuccess = linkResponse200 & {
   headers: Headers;
 };
 export type linkResponseError = (
   | linkResponse400
   | linkResponse401
+  | linkResponse409
   | linkResponse413
   | linkResponse415
   | linkResponse429
   | linkResponse500
+  | linkResponse503
 ) & {
   headers: Headers;
 };
@@ -3478,6 +4632,11 @@ export type convertOverpassResponse401 = {
   status: 401;
 };
 
+export type convertOverpassResponse409 = {
+  data: ConvertOverpass409;
+  status: 409;
+};
+
 export type convertOverpassResponse413 = {
   data: ConvertOverpass413;
   status: 413;
@@ -3498,16 +4657,23 @@ export type convertOverpassResponse500 = {
   status: 500;
 };
 
+export type convertOverpassResponse503 = {
+  data: ConvertOverpass503;
+  status: 503;
+};
+
 export type convertOverpassResponseSuccess = convertOverpassResponse200 & {
   headers: Headers;
 };
 export type convertOverpassResponseError = (
   | convertOverpassResponse400
   | convertOverpassResponse401
+  | convertOverpassResponse409
   | convertOverpassResponse413
   | convertOverpassResponse415
   | convertOverpassResponse429
   | convertOverpassResponse500
+  | convertOverpassResponse503
 ) & {
   headers: Headers;
 };
@@ -3564,6 +4730,11 @@ export type pullOvertureResponse401 = {
   status: 401;
 };
 
+export type pullOvertureResponse409 = {
+  data: PullOverture409;
+  status: 409;
+};
+
 export type pullOvertureResponse413 = {
   data: PullOverture413;
   status: 413;
@@ -3584,16 +4755,23 @@ export type pullOvertureResponse500 = {
   status: 500;
 };
 
+export type pullOvertureResponse503 = {
+  data: PullOverture503;
+  status: 503;
+};
+
 export type pullOvertureResponseSuccess = pullOvertureResponse200 & {
   headers: Headers;
 };
 export type pullOvertureResponseError = (
   | pullOvertureResponse400
   | pullOvertureResponse401
+  | pullOvertureResponse409
   | pullOvertureResponse413
   | pullOvertureResponse415
   | pullOvertureResponse429
   | pullOvertureResponse500
+  | pullOvertureResponse503
 ) & {
   headers: Headers;
 };
@@ -3722,6 +4900,11 @@ export type syncOvertureResponse401 = {
   status: 401;
 };
 
+export type syncOvertureResponse409 = {
+  data: SyncOverture409;
+  status: 409;
+};
+
 export type syncOvertureResponse413 = {
   data: SyncOverture413;
   status: 413;
@@ -3742,16 +4925,23 @@ export type syncOvertureResponse500 = {
   status: 500;
 };
 
+export type syncOvertureResponse503 = {
+  data: SyncOverture503;
+  status: 503;
+};
+
 export type syncOvertureResponseSuccess = syncOvertureResponse200 & {
   headers: Headers;
 };
 export type syncOvertureResponseError = (
   | syncOvertureResponse400
   | syncOvertureResponse401
+  | syncOvertureResponse409
   | syncOvertureResponse413
   | syncOvertureResponse415
   | syncOvertureResponse429
   | syncOvertureResponse500
+  | syncOvertureResponse503
 ) & {
   headers: Headers;
 };
@@ -3808,6 +4998,11 @@ export type ingestOvertureResponse401 = {
   status: 401;
 };
 
+export type ingestOvertureResponse409 = {
+  data: IngestOverture409;
+  status: 409;
+};
+
 export type ingestOvertureResponse413 = {
   data: IngestOverture413;
   status: 413;
@@ -3828,16 +5023,23 @@ export type ingestOvertureResponse500 = {
   status: 500;
 };
 
+export type ingestOvertureResponse503 = {
+  data: IngestOverture503;
+  status: 503;
+};
+
 export type ingestOvertureResponseSuccess = ingestOvertureResponse200 & {
   headers: Headers;
 };
 export type ingestOvertureResponseError = (
   | ingestOvertureResponse400
   | ingestOvertureResponse401
+  | ingestOvertureResponse409
   | ingestOvertureResponse413
   | ingestOvertureResponse415
   | ingestOvertureResponse429
   | ingestOvertureResponse500
+  | ingestOvertureResponse503
 ) & {
   headers: Headers;
 };
@@ -3894,6 +5096,11 @@ export type extractOvertureResponse401 = {
   status: 401;
 };
 
+export type extractOvertureResponse409 = {
+  data: ExtractOverture409;
+  status: 409;
+};
+
 export type extractOvertureResponse413 = {
   data: ExtractOverture413;
   status: 413;
@@ -3914,16 +5121,23 @@ export type extractOvertureResponse500 = {
   status: 500;
 };
 
+export type extractOvertureResponse503 = {
+  data: ExtractOverture503;
+  status: 503;
+};
+
 export type extractOvertureResponseSuccess = extractOvertureResponse200 & {
   headers: Headers;
 };
 export type extractOvertureResponseError = (
   | extractOvertureResponse400
   | extractOvertureResponse401
+  | extractOvertureResponse409
   | extractOvertureResponse413
   | extractOvertureResponse415
   | extractOvertureResponse429
   | extractOvertureResponse500
+  | extractOvertureResponse503
 ) & {
   headers: Headers;
 };
@@ -3980,6 +5194,11 @@ export type conflateOvertureResponse401 = {
   status: 401;
 };
 
+export type conflateOvertureResponse409 = {
+  data: ConflateOverture409;
+  status: 409;
+};
+
 export type conflateOvertureResponse413 = {
   data: ConflateOverture413;
   status: 413;
@@ -4000,16 +5219,23 @@ export type conflateOvertureResponse500 = {
   status: 500;
 };
 
+export type conflateOvertureResponse503 = {
+  data: ConflateOverture503;
+  status: 503;
+};
+
 export type conflateOvertureResponseSuccess = conflateOvertureResponse200 & {
   headers: Headers;
 };
 export type conflateOvertureResponseError = (
   | conflateOvertureResponse400
   | conflateOvertureResponse401
+  | conflateOvertureResponse409
   | conflateOvertureResponse413
   | conflateOvertureResponse415
   | conflateOvertureResponse429
   | conflateOvertureResponse500
+  | conflateOvertureResponse503
 ) & {
   headers: Headers;
 };
@@ -4098,6 +5324,11 @@ export type syncTransitResponse500 = {
   status: 500;
 };
 
+export type syncTransitResponse503 = {
+  data: SyncTransit503;
+  status: 503;
+};
+
 export type syncTransitResponseSuccess = syncTransitResponse202 & {
   headers: Headers;
 };
@@ -4110,6 +5341,7 @@ export type syncTransitResponseError = (
   | syncTransitResponse422
   | syncTransitResponse429
   | syncTransitResponse500
+  | syncTransitResponse503
 ) & {
   headers: Headers;
 };
@@ -4166,6 +5398,11 @@ export type restartMotisResponse401 = {
   status: 401;
 };
 
+export type restartMotisResponse409 = {
+  data: RestartMotis409;
+  status: 409;
+};
+
 export type restartMotisResponse413 = {
   data: RestartMotis413;
   status: 413;
@@ -4197,6 +5434,7 @@ export type restartMotisResponseSuccess = restartMotisResponse200 & {
 export type restartMotisResponseError = (
   | restartMotisResponse400
   | restartMotisResponse401
+  | restartMotisResponse409
   | restartMotisResponse413
   | restartMotisResponse415
   | restartMotisResponse429
@@ -4266,6 +5504,11 @@ export type proposeTransitBumpResponse502 = {
   status: 502;
 };
 
+export type proposeTransitBumpResponse503 = {
+  data: ProposeTransitBump503;
+  status: 503;
+};
+
 export type proposeTransitBumpResponseSuccess = proposeTransitBumpResponse200 & {
   headers: Headers;
 };
@@ -4278,6 +5521,7 @@ export type proposeTransitBumpResponseError = (
   | proposeTransitBumpResponse429
   | proposeTransitBumpResponse500
   | proposeTransitBumpResponse502
+  | proposeTransitBumpResponse503
 ) & {
   headers: Headers;
 };
@@ -4341,6 +5585,11 @@ export type approveTransitBumpResponse404 = {
   status: 404;
 };
 
+export type approveTransitBumpResponse409 = {
+  data: ApproveTransitBump409;
+  status: 409;
+};
+
 export type approveTransitBumpResponse413 = {
   data: ApproveTransitBump413;
   status: 413;
@@ -4366,6 +5615,11 @@ export type approveTransitBumpResponse500 = {
   status: 500;
 };
 
+export type approveTransitBumpResponse503 = {
+  data: ApproveTransitBump503;
+  status: 503;
+};
+
 export type approveTransitBumpResponseSuccess = approveTransitBumpResponse200 & {
   headers: Headers;
 };
@@ -4373,11 +5627,13 @@ export type approveTransitBumpResponseError = (
   | approveTransitBumpResponse400
   | approveTransitBumpResponse401
   | approveTransitBumpResponse404
+  | approveTransitBumpResponse409
   | approveTransitBumpResponse413
   | approveTransitBumpResponse415
   | approveTransitBumpResponse422
   | approveTransitBumpResponse429
   | approveTransitBumpResponse500
+  | approveTransitBumpResponse503
 ) & {
   headers: Headers;
 };

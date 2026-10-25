@@ -25,6 +25,14 @@
     "apps/api/src/services/service-config-writer-postgres.test.ts"
   ],
   "ingestion": [
+    "apps/api/src/services/__tests__/job-runner-postgres.test.ts",
+    "services/data-manager/src/jobs/execution/store-postgres.test.ts",
+    "services/data-manager/src/jobs/execution/runtime.test.ts",
+    "services/data-manager/src/jobs/execution/fixed-cli.test.ts",
+    "services/data-manager/src/jobs/execution/runner-cancellation.test.ts",
+    "services/data-manager/src/jobs/execution/hardlinks.test.ts",
+    "services/data-manager/src/jobs/execution/ops-children.test.ts",
+    "services/data-manager/src/jobs/execution/configuration-maintenance.test.ts",
     "services/data-manager/__tests__/ambient-places/api-postgres.test.ts",
     "services/data-manager/__tests__/ambient-places/extractor-postgres.test.ts",
     "services/data-manager/__tests__/ambient-places/germany-postgres.test.ts",

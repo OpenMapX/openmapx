@@ -1,27 +1,29 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { setTimeout as durableDelay } from "node:timers/promises";
 import { readBoundedResponseText } from "@openmapx/core";
+import {
+  type DataExecutionStatus,
+  isDataExecutionTerminal,
+} from "@openmapx/core/data-manager-contracts";
 import { envInt, envString } from "@openmapx/core/server-env";
-import { feedState } from "@openmapx/db-schema";
 import {
   FEED_PROXY_CONFIG_FILENAME,
   FEED_PROXY_CONFIG_SUBDIR,
 } from "@openmapx/motis-feed-proxy-config";
-import { parseTransitSource } from "@openmapx/transitous-core";
 import { Cron } from "croner";
-import { and, eq } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
+import { z } from "zod/v4";
 import { db } from "./db/index.js";
+import type { DataExecutionReceiver } from "./jobs/execution/api.js";
+import {
+  independentLegacyDataMutation,
+  withLegacyDataMutation,
+} from "./jobs/execution/legacy-mutation.js";
 import { createGithubIssueSink, type GithubIssueSink } from "./jobs/github-issue-sink.js";
 import { discoverLatestOvertureRelease } from "./jobs/overture/pull.js";
-import { rebuildOvertureLinks } from "./jobs/overture/rebuild-links.js";
-import {
-  compareOvertureReleases,
-  finalizeOvertureReleaseFiles,
-  overtureReleaseRetentionFromEnv,
-} from "./jobs/overture/retention.js";
-import { syncOvertureRegion } from "./jobs/overture/sync.js";
+import { compareOvertureReleases } from "./jobs/overture/retention.js";
 import {
   type BakePredictedDeps,
   type BakePredictedResult,
@@ -77,25 +79,17 @@ import {
 } from "./jobs/traffic/write-live.js";
 import {
   type CatalogBumpCandidate,
-  candidateMatchesLock,
   lockFromCandidate,
   resolveCatalogBumpCandidate,
 } from "./jobs/transitous/catalog-bump.js";
-import {
-  buildJobContext,
-  type RunPipelineResult,
-  runTransitousPipeline,
-} from "./jobs/transitous/index.js";
 import { fetchWithTimeout } from "./jobs/transitous/motis-probe.js";
 import type { MotisOperationsPolicy } from "./jobs/transitous/operations-profile.js";
-import { finalizeJobRow, makePersistingOnStageComplete } from "./jobs/transitous/persistence.js";
 import type { SingleFlightController } from "./jobs/transitous/single-flight.js";
 import {
   detectStaleFeeds,
   emitFeedAlerts,
   emitPipelineFailureAlert,
 } from "./jobs/transitous/staleness-alerts.js";
-import { asJobLogger, jobChildLogger } from "./logger.js";
 import { runOpsOperation } from "./ops-client.js";
 import type { StateStore } from "./state.js";
 import { pickCronExpression, pickOptInCronExpression } from "./utils/cron-expression.js";
@@ -155,8 +149,6 @@ const TRAFFIC_LIVE_FETCH_TIMEOUT_MS = 10_000;
  */
 const TRAFFIC_PREDICTED_CRON_DEFAULT = "0 6 * * 1";
 
-const AUTO_BUMP_PROPOSAL_COMMENT =
-  "Candidate Transitous pin under auto-bump canary validation (services/data-manager).";
 export interface CronLogger {
   info: (msg: string, extra?: Record<string, unknown>) => void;
   warn: (msg: string, extra?: Record<string, unknown>) => void;
@@ -164,22 +156,13 @@ export interface CronLogger {
 }
 
 export interface CronSetupOptions {
+  executionReceiver?: DataExecutionReceiver;
   dataDir: string;
   countries: string[];
   operationsPolicy?: MotisOperationsPolicy;
   store: StateStore;
   singleFlight: SingleFlightController;
   logger: FastifyBaseLogger | CronLogger;
-  /**
-   * Test seam: invoked instead of the real Transitous pipeline. Production
-   * callers omit this and get `runTransitousPipeline`.
-   */
-  runPipeline?: (jobId: string) => Promise<RunPipelineResult>;
-  /**
-   * Test seam: invoked instead of the typed agent operation so the
-   * unit suite never shells out to docker.
-   */
-  reloadFeedProxy?: (candidateId: string) => Promise<void>;
   /** Override default schedule strings (e.g. for tests). */
   syncCronExpression?: string;
   feedProxyReloadCronExpression?: string;
@@ -208,14 +191,6 @@ export interface CronSetupOptions {
   discoverOvertureRelease?: () => Promise<string>;
   /** Test seam: read the release currently installed in Postgres. */
   getInstalledOvertureRelease?: () => Promise<string | null>;
-  /** Test seam: run the Overture update for a resolved release. */
-  syncOvertureRelease?: typeof syncOvertureRegion;
-  /** Test seam: rebuild links for the installed release without re-importing Places. */
-  rebuildOvertureLinks?: typeof rebuildOvertureLinks;
-  /** Test seam: persist successful Overture release state. */
-  writeOvertureFeedState?: typeof writeFeedState;
-  /** Test seam: finalize successful release-file retention after any completion path. */
-  finalizeOvertureReleaseFiles?: typeof finalizeOvertureReleaseFiles;
   /** Override the traffic-extract guard cron schedule (e.g. for tests). */
   trafficExtractCronExpression?: string;
   /**
@@ -344,13 +319,6 @@ export interface CronSetupOptions {
     catalogDir: string;
     branch: string;
   }) => Promise<CatalogBumpCandidate>;
-  /**
-   * Test seam: run the canary + promote pipeline against the proposed lock.
-   * Resolves to the pipeline result; rejects when a critical stage (incl. the
-   * canary) fails. Production callers omit this and get a real pipeline run
-   * with `useProposedLock: true`.
-   */
-  runBumpPipeline?: (jobId: string) => Promise<RunPipelineResult>;
 }
 
 export interface CronHandles {
@@ -429,46 +397,6 @@ function asCronLogger(logger: FastifyBaseLogger | CronLogger): CronLogger {
   return logger as CronLogger;
 }
 
-async function writeFeedState(region: string, hash: string, log: CronLogger): Promise<void> {
-  try {
-    const feedRegion = `overture-places-${region}`;
-    const feedName = "overture-places";
-    const existing = await db
-      .select({ id: feedState.id })
-      .from(feedState)
-      .where(and(eq(feedState.region, feedRegion), eq(feedState.name, feedName)))
-      .limit(1);
-    if (existing[0]) {
-      await db
-        .update(feedState)
-        .set({
-          hash,
-          lastFetchedAt: new Date(),
-          lastImportedAt: new Date(),
-          validationStatus: "ok",
-          validationMessage: `Imported Overture release ${hash}`,
-          consecutiveFailures: 0,
-          status: "active",
-        })
-        .where(eq(feedState.id, existing[0].id));
-    } else {
-      await db.insert(feedState).values({
-        region: feedRegion,
-        name: feedName,
-        hash,
-        lastFetchedAt: new Date(),
-        lastImportedAt: new Date(),
-        validationStatus: "ok",
-        validationMessage: `Imported Overture release ${hash}`,
-        consecutiveFailures: 0,
-        status: "active",
-      });
-    }
-  } catch (err) {
-    log.warn("overture-cron: feed_state write failed", { err: (err as Error).message });
-  }
-}
-
 export async function getInstalledOvertureRelease(): Promise<string | null> {
   try {
     const rows = await db.execute<{ release: string }>(
@@ -488,6 +416,15 @@ export async function getInstalledOvertureRelease(): Promise<string | null> {
  * are owned by the data-manager process so that they share its inflight lock
  * (one sync at a time, no matter the trigger).
  */
+const transitFailureSchema = z.object({
+  results: z.array(
+    z.object({
+      stage: z.string(),
+      status: z.string(),
+      error: z.object({ message: z.string() }).optional(),
+    }),
+  ),
+});
 export function setupCron(options: CronSetupOptions): CronHandles {
   const log = asCronLogger(options.logger);
   const syncExpr = pickCronExpression(
@@ -525,103 +462,69 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     FEED_PROXY_CONFIG_FILENAME,
   );
 
+  const receiver = () => {
+    if (!options.executionReceiver) throw Error("Durable data execution receiver is unavailable");
+    return options.executionReceiver;
+  };
+  const observeOwned = async (status: DataExecutionStatus) => {
+    let current = status;
+    while (!isDataExecutionTerminal(current) || current.publication === "unknown") {
+      const remaining = status.deadlineAt - Date.now();
+      if (remaining <= 0)
+        throw Error(`Data execution ${status.id} observation pending at its original deadline`);
+      await durableDelay(Math.min(250, remaining));
+      const found = await receiver().inspect(status.id);
+      if (
+        !found ||
+        found.operationKey !== status.operationKey ||
+        found.fingerprint !== status.fingerprint ||
+        found.admittedAt !== status.admittedAt ||
+        found.deadlineAt !== status.deadlineAt
+      )
+        throw Error(`Data execution ${status.id} requires retained reconciliation`);
+      current = found;
+    }
+    return current;
+  };
+  const requireSuccessful = async (status: DataExecutionStatus) => {
+    const result = await observeOwned(status);
+    if (result.status !== "ok" && result.status !== "partial")
+      throw Error(`Data execution ${result.id} ${result.status}`);
+    return result;
+  };
   const runSync = async (): Promise<void> => {
-    const start = await options.singleFlight.tryStartSync({
-      trigger: "cron",
-      triggeredBy: "data-manager-cron",
-      kind: "transitous-sync",
-      metadata: { source: "cron" },
-    });
-    if (!start.ok) {
-      // Don't escalate: cron firing while a manual sync is in-flight is fine.
-      log.warn("transitous-cron: skipped scheduled run", { reason: start.reason });
-      return;
-    }
-    log.info("transitous-cron: starting scheduled sync", { jobId: start.jobId });
-    let finalStatus: RunPipelineResult["finalStatus"] = "error";
-    let pipelineResult: RunPipelineResult | undefined;
-    let threwReason: string | undefined;
     try {
-      let result: RunPipelineResult;
-      if (options.runPipeline) {
-        result = await options.runPipeline(start.jobId);
-      } else {
-        const jobLog = asJobLogger(
-          jobChildLogger({ job: "transitous-sync", jobId: start.jobId, trigger: "cron" }),
-        );
-        const ctx = buildJobContext({
-          dataDir: options.dataDir,
-          store: options.store,
-          countries: options.countries,
-          source: parseTransitSource(),
-          operationsPolicy: options.operationsPolicy,
-          jobId: start.jobId,
-          logger: jobLog,
-          onStageComplete: makePersistingOnStageComplete(start.jobId, jobLog),
-        });
-        result = await runTransitousPipeline(ctx);
-      }
-      pipelineResult = result;
-      finalStatus = result.finalStatus;
-      log.info("transitous-cron: sync completed", {
-        jobId: start.jobId,
-        finalStatus,
-        stageCount: result.results.length,
-      });
-    } catch (err) {
-      threwReason = (err as Error).message;
-      log.error("transitous-cron: sync threw", {
-        jobId: start.jobId,
-        err: threwReason,
-      });
-      finalStatus = "error";
-    } finally {
-      try {
-        await finalizeJobRow(start.jobId, finalStatus);
-      } catch (err) {
-        log.warn("transitous-cron: finalizeJobRow failed", {
-          jobId: start.jobId,
-          err: (err as Error).message,
-        });
-      }
-      options.singleFlight.markSyncFinished();
-    }
-
-    // A hard failure means the canary rejected the candidate (or a critical
-    // stage errored) and nothing promoted — the live dataset silently ages.
-    // Per-feed staleness can't catch this in mirror mode (feed_state is written
-    // before the canary), so surface it as its own pipeline-level alert.
-    if (finalStatus === "error") {
-      const failed = pipelineResult?.results.find((stage) => stage.status === "error");
-      try {
+      const admitted = await receiver().admitLocal(
+        { kind: "transit-sync", countries: options.countries },
+        { triggeredBy: "cron" },
+      );
+      log.info("transitous-cron: queued durable sync", { jobId: admitted.id });
+      const result = await observeOwned(admitted);
+      log.info("transitous-cron: sync settled", { jobId: result.id, status: result.status });
+      if (result.status !== "ok") {
+        const trusted = receiver().legacyResult(result.id),
+          failure = transitFailureSchema.safeParse(trusted),
+          failed = failure.success
+            ? failure.data.results.find((stage) => stage.status === "error")
+            : undefined;
         await emitPipelineFailureAlert({
           alert: {
             trigger: "cron",
-            jobId: start.jobId,
+            jobId: result.id,
             failedStage: failed?.stage,
-            reason: failed?.error?.message ?? failed?.message ?? threwReason ?? "sync failed",
+            reason:
+              failed?.error?.message ??
+              result.diagnostics.tail.at(-1)?.message ??
+              `Transit execution ${result.status}`,
           },
           log,
           githubIssue: githubIssue ?? undefined,
         });
-      } catch (err) {
-        log.warn("transitous-cron: pipeline failure alert failed", {
-          jobId: start.jobId,
-          err: (err as Error).message,
-        });
       }
-    }
-
-    // Run the staleness check immediately after every sync so an
-    // out-of-band failure that would otherwise wait for the daily 04:00 cron
-    // surfaces at the same wallclock minute as the sync that caused it.
-    try {
-      await runStalenessCheck();
     } catch (err) {
-      log.warn("transitous-cron: post-sync staleness check failed", {
-        err: (err as Error).message,
-      });
+      log.error("transitous-cron: sync remains failed or pending", { err: (err as Error).message });
     }
+    await runStalenessCheck();
   };
 
   const defaultStalenessCheck = async (): Promise<void> => {
@@ -642,24 +545,6 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   const catalogDir = join(options.dataDir, ".transitous-catalog");
   const resolveBumpCandidate =
     options.resolveBumpCandidate ?? ((o) => resolveCatalogBumpCandidate(o));
-  const defaultRunBumpPipeline = async (jobId: string): Promise<RunPipelineResult> => {
-    const jobLog = asJobLogger(
-      jobChildLogger({ job: "transitous-auto-bump", jobId, trigger: "cron" }),
-    );
-    const ctx = buildJobContext({
-      dataDir: options.dataDir,
-      store: options.store,
-      countries: options.countries,
-      source: parseTransitSource(),
-      operationsPolicy: options.operationsPolicy,
-      jobId,
-      logger: jobLog,
-      useProposedLock: true,
-      onStageComplete: makePersistingOnStageComplete(jobId, jobLog),
-    });
-    return runTransitousPipeline(ctx);
-  };
-  const runBumpPipeline = options.runBumpPipeline ?? defaultRunBumpPipeline;
 
   /**
    * Auto-bump the pinned Transitous catalog behind the pipeline's own canary.
@@ -669,110 +554,29 @@ export function setupCron(options: CronSetupOptions): CronHandles {
    * untouched, the proposal is retained for review, and a failure alert fires.
    */
   const runAutoBump = async (): Promise<void> => {
-    const start = await options.singleFlight.tryStartSync({
-      trigger: "cron",
-      triggeredBy: "data-manager-auto-bump",
-      kind: "transitous-auto-bump",
-      metadata: { source: "auto-bump" },
-    });
-    if (!start.ok) {
-      log.warn("transitous-auto-bump: skipped, a sync is in-flight", { reason: start.reason });
-      return;
-    }
-
-    let finalStatus: RunPipelineResult["finalStatus"] = "ok";
-    let pipelineResult: RunPipelineResult | undefined;
-    let threwReason: string | undefined;
-    let ranPipeline = false;
-    try {
-      const candidate = await resolveBumpCandidate({ catalogDir, branch: "main" });
-      const { active } = await runOpsOperation({ kind: "transitousLock.inspect" });
-      if (candidateMatchesLock(candidate, active)) {
-        log.info("transitous-auto-bump: already at upstream tip; nothing to do", {
-          ref: candidate.ref,
-        });
-        return;
-      }
-      log.info("transitous-auto-bump: proposing candidate pin", {
-        ref: candidate.ref,
-        previousRef: active?.ref ?? null,
+    await withLegacyDataMutation("transit-proposal", async () => {
+      const candidate = await resolveBumpCandidate({
+        catalogDir,
+        branch: process.env.TRANSITOUS_AUTO_BUMP_BRANCH ?? "master",
       });
-      const proposal = lockFromCandidate(candidate, "auto-bump", AUTO_BUMP_PROPOSAL_COMMENT);
-      // Agent-owned write: the auto-bump proposes, it never activates.
+      const { active } = await runOpsOperation({ kind: "transitousLock.inspect" });
+      if (active?.ref === candidate.ref) return;
+      const lock = lockFromCandidate(
+        candidate,
+        "data-manager-auto-bump",
+        "Proposed by the scheduled catalog check; validation-bound activation is required",
+      );
       await runOpsOperation({
         kind: "transitousLock.propose",
-        ref: proposal.ref,
-        submodules: proposal.submodules,
-        lockedBy: proposal.lockedBy,
-        comment: AUTO_BUMP_PROPOSAL_COMMENT,
+        ref: lock.ref,
+        submodules: lock.submodules,
+        lockedBy: lock.lockedBy,
+        ...(lock.comment ? { comment: lock.comment } : {}),
       });
-
-      ranPipeline = true;
-      pipelineResult = await runBumpPipeline(start.jobId);
-      finalStatus = pipelineResult.finalStatus;
-
-      if (finalStatus === "ok") {
-        // Only a passing canary activates, and the agent re-matches the exact
-        // ref it is activating.
-        await runOpsOperation({
-          kind: "transitousLock.approve",
-          ref: candidate.ref,
-          approvedBy: "auto-bump",
-        });
-        log.info("transitous-auto-bump: canary passed; activated new catalog pin", {
-          ref: candidate.ref,
-        });
-      } else {
-        log.warn("transitous-auto-bump: canary did not fully pass; keeping current pin", {
-          ref: candidate.ref,
-          finalStatus,
-        });
-      }
-    } catch (err) {
-      // A canary rejection surfaces here (the pipeline rethrows on a critical
-      // stage). Keep the active pin and retain the proposal for review.
-      threwReason = (err as Error).message;
-      finalStatus = "error";
-      log.error("transitous-auto-bump: failed", { err: threwReason });
-    } finally {
-      try {
-        await finalizeJobRow(start.jobId, finalStatus);
-      } catch (err) {
-        log.warn("transitous-auto-bump: finalizeJobRow failed", {
-          jobId: start.jobId,
-          err: (err as Error).message,
-        });
-      }
-      options.singleFlight.markSyncFinished();
-    }
-
-    if (ranPipeline && finalStatus !== "ok") {
-      const failed = pipelineResult?.results.find((stage) => stage.status === "error");
-      try {
-        await emitPipelineFailureAlert({
-          alert: {
-            trigger: "auto-bump",
-            jobId: start.jobId,
-            failedStage: failed?.stage,
-            reason:
-              failed?.error?.message ?? failed?.message ?? threwReason ?? "auto-bump canary failed",
-          },
-          log,
-          githubIssue: githubIssue ?? undefined,
-        });
-      } catch (err) {
-        log.warn("transitous-auto-bump: failure alert failed", {
-          jobId: start.jobId,
-          err: (err as Error).message,
-        });
-      }
-    }
-  };
-
-  const defaultReload = async (candidateId: string): Promise<void> => {
-    // The agent validates the configuration before reloading and owns the
-    // container name; data-manager only names the candidate.
-    await runOpsOperation({ kind: "feedProxy.validateAndReload", candidateId });
+      log.info(
+        "transitous-auto-bump: proposal retained; validation-bound activation is unavailable",
+      );
+    });
   };
 
   const runFeedProxyReload = async (): Promise<void> => {
@@ -794,9 +598,9 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       return;
     }
     try {
-      const reload = options.reloadFeedProxy ?? defaultReload;
-      // The config file's mtime identifies the candidate being activated.
-      await reload(`feedproxy-${Math.trunc(mtimeMs)}`);
+      await requireSuccessful(
+        await receiver().admitMaintenance("reload-feed-proxy", { triggeredBy: "cron" }),
+      );
       lastFeedProxyReloadAt = mtimeMs;
       log.info("transitous-cron: feed-proxy reloaded", { mtimeMs });
     } catch (err) {
@@ -868,97 +672,41 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     : null;
 
   const runOvertureConflationRetry = async (): Promise<void> => {
-    const region =
-      options.overtureRegion ?? (process.env.OPENMAPX_REGION || "europe/germany/berlin");
-    const readInstalledRelease = options.getInstalledOvertureRelease ?? getInstalledOvertureRelease;
-    const rebuildLinks = options.rebuildOvertureLinks ?? rebuildOvertureLinks;
-    const finalizeReleaseFiles =
-      options.finalizeOvertureReleaseFiles ?? finalizeOvertureReleaseFiles;
+    const region = options.overtureRegion ?? process.env.OPENMAPX_REGION ?? "europe/germany/berlin";
     try {
-      const release = await readInstalledRelease();
-      if (!release) {
-        log.info("overture-conflation: no installed Places release; nothing to rebuild", {
-          region,
-        });
-        return;
-      }
-      const result = await rebuildLinks({
-        region,
-        release,
-        dataDir: options.dataDir,
-        onProgress: (msg) => log.info(msg),
-      });
-      if (result.status === "failed") {
-        log.error("overture-conflation: rebuild failed and remains retryable", {
-          region,
-          release,
-          err: result.error,
-        });
-      } else {
-        if (result.status === "completed" || result.status === "already_completed") {
-          await finalizeReleaseFiles({
-            dataDir: options.dataDir,
-            activeRelease: release,
-            retain: overtureReleaseRetentionFromEnv(process.env.OVERTURE_RELEASE_RETENTION),
-            onProgress: (msg) => log.info(msg),
-          });
-        }
-        log.info("overture-conflation: retry check complete", {
-          region,
-          release,
-          status: result.status,
-          linked: result.linked,
-        });
-      }
+      if (!(await (options.getInstalledOvertureRelease ?? getInstalledOvertureRelease)())) return;
+      await requireSuccessful(
+        await receiver().admitLocal({ kind: "overture-conflate", region }, { triggeredBy: "cron" }),
+      );
     } catch (err) {
-      log.error("overture-conflation: retry check failed", { err: (err as Error).message });
+      log.error("overture-conflation: durable retry failed or remains pending", {
+        err: (err as Error).message,
+      });
     }
   };
 
   const runOvertureSync = async (): Promise<void> => {
-    const region =
-      options.overtureRegion ?? (process.env.OPENMAPX_REGION || "europe/germany/berlin");
-    const discoverRelease = options.discoverOvertureRelease ?? discoverLatestOvertureRelease;
-    const readInstalledRelease = options.getInstalledOvertureRelease ?? getInstalledOvertureRelease;
-    const syncRelease = options.syncOvertureRelease ?? syncOvertureRegion;
-    const persistFeedState = options.writeOvertureFeedState ?? writeFeedState;
+    const region = options.overtureRegion ?? process.env.OPENMAPX_REGION ?? "europe/germany/berlin";
     try {
-      const release = await discoverRelease();
-      const installedRelease = await readInstalledRelease();
-      if (installedRelease === release) {
-        log.info("overture-cron: latest Places release already installed; checking links", {
-          region,
-          release,
-        });
+      const latest = await (options.discoverOvertureRelease ?? discoverLatestOvertureRelease)(),
+        installed = await (options.getInstalledOvertureRelease ?? getInstalledOvertureRelease)();
+      if (installed && compareOvertureReleases(latest, installed) <= 0) {
         await runOvertureConflationRetry();
         return;
       }
-      if (installedRelease && compareOvertureReleases(installedRelease, release) > 0) {
-        log.warn("overture-cron: installed release is newer than upstream catalog", {
-          region,
-          installedRelease,
-          upstreamRelease: release,
+      const result = await requireSuccessful(
+        await receiver().admitLocal({ kind: "overture-sync", region }, { triggeredBy: "cron" }),
+      );
+      if (result.status === "partial")
+        log.warn("overture-cron: Places imported; link rebuild remains incomplete", {
+          jobId: result.id,
+          diagnostics: result.diagnostics,
         });
-        return;
-      }
-
-      const result = await syncRelease({
-        region,
-        release,
-        dataDir: options.dataDir,
-        onProgress: (msg) => log.info(msg),
-      });
-      await persistFeedState(region, release, log);
       await runStalenessCheck();
-      if (result.conflation === "failed") {
-        log.error("overture-cron: Places imported; link rebuild will retry independently", {
-          region,
-          release,
-          err: result.conflationError,
-        });
-      }
     } catch (err) {
-      log.error("overture-cron: sync failed", { err: (err as Error).message });
+      log.error("overture-cron: durable sync failed or remains pending", {
+        err: (err as Error).message,
+      });
     }
   };
 
@@ -1009,7 +757,9 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     }
     try {
       const coveredWayIds = await options.getCoveredWayIds();
-      const result = await refreshWaysToEdges(coveredWayIds, { logger: log });
+      const result = await withLegacyDataMutation("traffic-maintenance", () =>
+        refreshWaysToEdges(coveredWayIds, { logger: log }),
+      );
       log.info("ways-to-edges: refresh complete", {
         wayCount: result.wayCount,
         edgeCount: result.edgeCount,
@@ -1022,7 +772,9 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   const runTrafficExtractStartup = async (): Promise<void> => {
     let graphRebuilt = false;
     try {
-      const result = await ensureExtract({ logger: log });
+      const result = await withLegacyDataMutation("traffic-maintenance", () =>
+        ensureExtract({ logger: log }),
+      );
       graphRebuilt = result.built;
       log.info("traffic-extract: startup check complete", { built: result.built });
     } catch (err) {
@@ -1052,7 +804,9 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         // it. `force` skips the redundant presence check: we already know the
         // file exists, just that it's outdated.
         log.info("traffic-extract: graph tiles newer than traffic.tar, rebuilding");
-        const result = await ensureExtract({ logger: log, force: true });
+        const result = await withLegacyDataMutation("traffic-maintenance", () =>
+          ensureExtract({ logger: log, force: true }),
+        );
         log.info("traffic-extract: guard rebuild complete", { built: result.built });
       } else {
         log.info("traffic-extract: guard check found no rebuild needed");
@@ -1073,7 +827,10 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   let graphMaintenanceCheck: Promise<void> | null = null;
   const scheduleGraphMaintenanceCheck = (): void => {
     if (graphMaintenanceCheck) return;
-    graphMaintenanceCheck = runTrafficExtractGuard().finally(() => {
+    graphMaintenanceCheck = independentLegacyDataMutation(
+      "traffic-maintenance",
+      runTrafficExtractGuard,
+    ).finally(() => {
       graphMaintenanceCheck = null;
     });
   };
@@ -1262,7 +1019,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     }
     trafficLiveRunning = true;
     try {
-      await runTrafficLiveCycle();
+      await withLegacyDataMutation("traffic-live", runTrafficLiveCycle);
     } finally {
       trafficLiveRunning = false;
     }
@@ -1409,9 +1166,11 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         });
         // Fire-and-forget: a `valhalla_ways_to_edges` run is far slower than a
         // 2-minute cycle, and this cycle's write must not wait on it.
-        void runWaysToEdgesRefresh().catch((err) => {
-          log.warn("traffic-live: way→edge refresh failed", { err: (err as Error).message });
-        });
+        void independentLegacyDataMutation("traffic-maintenance", runWaysToEdgesRefresh).catch(
+          (err) => {
+            log.warn("traffic-live: way→edge refresh failed", { err: (err as Error).message });
+          },
+        );
       }
       // Live speeds alone hold the full lease. Written road-event overrides
       // also hold it to the policy, the conditions set and each contributing
@@ -1608,7 +1367,9 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       return;
     }
     try {
-      const result = await bake({ openConditionsUrl, openConditionsToken, logger: log });
+      const result = await withLegacyDataMutation("traffic-predicted", () =>
+        bake({ openConditionsUrl, openConditionsToken, logger: log }),
+      );
       log.info("traffic-predicted: cycle complete", { ...result });
     } catch (err) {
       log.error("traffic-predicted: cycle failed", { err: (err as Error).message });

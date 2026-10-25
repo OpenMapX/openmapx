@@ -1,4 +1,13 @@
-import { count, desc, eq, inArray, sql } from "drizzle-orm";
+import {
+  dataExecutionIdentitySchema,
+  dataExecutionInputSchema,
+} from "@openmapx/core/data-manager-contracts";
+import {
+  createDataManagerTransport,
+  requestDataExecutionCancellation,
+} from "@openmapx/core/data-manager-sdk";
+import { envString } from "@openmapx/core/server-env";
+import { and, count, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { unionAll } from "drizzle-orm/pg-core";
 import { db } from "../db";
 import { adminJob, adminJobLog, dataManagerJobStages, dataManagerJobs } from "../db/schema";
@@ -48,8 +57,8 @@ const APPLICATION_STATUSES: Record<ActivityJobFilter, string[]> = {
 };
 
 const DATA_MANAGER_STATUSES: Record<ActivityJobFilter, string[]> = {
-  active: ["running"],
-  completed: ["ok", "partial"],
+  active: ["queued", "running", "cancel_pending"],
+  completed: ["ok", "partial", "canceled"],
   failed: ["error", "interrupted"],
 };
 
@@ -93,7 +102,33 @@ function applicationWhere(filter?: ActivityJobFilter) {
 }
 
 function dataManagerWhere(filter?: ActivityJobFilter) {
-  return filter ? inArray(dataManagerJobs.status, DATA_MANAGER_STATUSES[filter]) : undefined;
+  if (!filter) return undefined;
+  const ordinary = inArray(dataManagerJobs.status, DATA_MANAGER_STATUSES[filter]);
+  return filter === "active"
+    ? or(ordinary, dataManagerRecoveryPending())
+    : filter === "failed"
+      ? and(ordinary, sql`NOT (${dataManagerRecoveryPending()})`)
+      : ordinary;
+}
+function dataManagerRecoveryPending() {
+  return sql<boolean>`coalesce(${dataManagerJobs.executionVersion}=2 AND ${dataManagerJobs.status}='interrupted' AND ${dataManagerJobs.finishedAt} IS NULL AND ${dataManagerJobs.executionState}->>'publication'='unknown',false)`;
+}
+function currentDataManagerMutation(job: {
+  executionVersion: number | null;
+  status: string;
+  finishedAt: Date | null;
+  executionState: unknown;
+}) {
+  return (
+    job.executionVersion === 2 &&
+    (["queued", "running", "cancel_pending"].includes(job.status) ||
+      (job.status === "interrupted" &&
+        job.finishedAt === null &&
+        typeof job.executionState === "object" &&
+        job.executionState !== null &&
+        "publication" in job.executionState &&
+        job.executionState.publication === "unknown"))
+  );
 }
 
 function applicationSelect(filter?: ActivityJobFilter) {
@@ -128,7 +163,10 @@ function dataManagerSelect(filter?: ActivityJobFilter) {
         when ${dataManagerJobs.status} = 'error' then 'failed'
         else ${dataManagerJobs.status}
       end`.as("status"),
-      payload: dataManagerJobs.metadata,
+      payload:
+        sql<unknown>`CASE WHEN ${dataManagerJobs.executionVersion}=2 THEN ${dataManagerJobs.executionInput} ELSE ${dataManagerJobs.metadata} END`.as(
+          "payload",
+        ),
       error: sql<string | null>`null::text`.as("error"),
       progress: sql<number | null>`null::integer`.as("progress"),
       createdBy: sql<string | null>`null::text`.as("created_by"),
@@ -136,7 +174,10 @@ function dataManagerSelect(filter?: ActivityJobFilter) {
       createdAt: dataManagerJobs.startedAt,
       startedAt: dataManagerJobs.startedAt,
       finishedAt: dataManagerJobs.finishedAt,
-      cancelable: sql<boolean>`false`.as("cancelable"),
+      cancelable:
+        sql<boolean>`${dataManagerJobs.executionVersion}=2 AND (${dataManagerJobs.status} IN ('queued','running','cancel_pending') OR ${dataManagerRecoveryPending()}) AND ${dataManagerJobs.kind} IN ('download-osm','download-fonts','convert-overpass','transit-sync','overture-pull','overture-ingest','overture-extract','overture-conflate','overture-sync','search-index-build','notable-places-build','generation-hardlinks','transit-maintenance') AND ${dataManagerJobs.operationKey} IS NOT NULL AND ${dataManagerJobs.executionFingerprint} IS NOT NULL`.as(
+          "cancelable",
+        ),
     })
     .from(dataManagerJobs)
     .where(dataManagerWhere(filter));
@@ -228,7 +269,7 @@ export async function getActivityJob(id: string, source: ActivityJobSource) {
     id: String(job.id),
     type: job.kind,
     status: normalizeDataManagerJobStatus(job.status),
-    payload: job.metadata,
+    payload: job.executionVersion === 2 ? job.executionInput : job.metadata,
     result: null,
     error: null,
     progress: null,
@@ -237,8 +278,36 @@ export async function getActivityJob(id: string, source: ActivityJobSource) {
     createdAt: job.startedAt,
     startedAt: job.startedAt,
     finishedAt: job.finishedAt,
-    cancelable: false,
+    cancelable:
+      currentDataManagerMutation(job) &&
+      dataExecutionInputSchema.safeParse(job.executionInput).success,
     logs: [],
     stages,
   };
+}
+
+/** Load the receiver-owned immutable tuple; browser parameters select only the
+ * visible job. The receiver persists cancellation before signaling its worker. */
+export async function cancelDataManagerActivityJob(id: string): Promise<boolean> {
+  const [job] = await db.select().from(dataManagerJobs).where(eq(dataManagerJobs.id, id)).limit(1);
+  if (
+    !job ||
+    !currentDataManagerMutation(job) ||
+    !dataExecutionInputSchema.safeParse(job.executionInput).success
+  )
+    return false;
+  const identity = dataExecutionIdentitySchema.parse({
+    id: String(job.id),
+    operationKey: job.operationKey,
+    fingerprint: job.executionFingerprint,
+  });
+  await requestDataExecutionCancellation(identity, {
+    transport: createDataManagerTransport({
+      baseUrl: envString("DATA_MANAGER_URL", "http://localhost:4000"),
+      authToken: envString("DATA_MANAGER_AUTH_TOKEN", ""),
+      requestTimeoutMs: 15000,
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+  return true;
 }

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  check,
   index,
   integer,
   jsonb,
@@ -20,25 +21,65 @@ import {
  */
 export const dataManager = pgSchema("data_manager");
 
-export const jobs = dataManager.table("jobs", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  /** e.g. "transitous-sync" */
-  kind: text("kind").notNull(),
-  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
-  finishedAt: timestamp("finished_at", { withTimezone: true }),
-  /** "running" | "ok" | "partial" | "error" */
-  status: text("status").notNull(),
-  /** "cron" | "manual:<user>" */
-  triggeredBy: text("triggered_by"),
-  /**
-   * Client-supplied idempotency token. A POST /sync that replays the same
-   * key within a 24h window (E7 contract) returns 409 instead of starting a
-   * second pipeline. NULL when the caller did not supply a key (cron path).
-   */
-  idempotencyKey: text("idempotency_key"),
-  /** { transitousRef, countries[], ... } */
-  metadata: jsonb("metadata"),
-});
+export const jobs = dataManager.table(
+  "jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** e.g. "transitous-sync" */
+    kind: text("kind").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    /** "running" | "ok" | "partial" | "error" */
+    status: text("status").notNull(),
+    /** "cron" | "manual:<user>" */
+    triggeredBy: text("triggered_by"),
+    /**
+     * Client-supplied idempotency token. A POST /sync that replays the same
+     * key within a 24h window (E7 contract) returns 409 instead of starting a
+     * second pipeline. NULL when the caller did not supply a key (cron path).
+     */
+    idempotencyKey: text("idempotency_key"),
+    /** { transitousRef, countries[], ... } */
+    metadata: jsonb("metadata"),
+    executionVersion: integer("execution_version"),
+    operationKey: text("operation_key"),
+    operationFingerprint: text("operation_fingerprint"),
+    executionFingerprint: text("execution_fingerprint"),
+    admittedAt: bigint("admitted_at", { mode: "number" }),
+    deadlineAt: bigint("deadline_at", { mode: "number" }),
+    requestedDeadlineAt: bigint("requested_deadline_at", { mode: "number" }),
+    executionParent: jsonb("execution_parent"),
+    executionInput: jsonb("execution_input"),
+    executionState: jsonb("execution_state"),
+    executionChildren: jsonb("execution_children").notNull().default([]),
+    ownershipVersion: integer("ownership_version").notNull().default(0),
+  },
+  (table) => [
+    uniqueIndex("data_manager_jobs_execution_key_uq")
+      .on(table.operationKey)
+      .where(sql`${table.operationKey} IS NOT NULL`),
+    uniqueIndex("data_manager_jobs_configuration_maintenance_uq")
+      .on(sql`(${table.metadata}->'configurationMaintenance'->'receipt'->>'maintenanceId')`)
+      .where(sql`${table.kind} = 'configuration-maintenance'`),
+    uniqueIndex("data_manager_jobs_configuration_guard_uq")
+      .on(table.kind)
+      .where(
+        sql`${table.kind} = 'configuration-maintenance' AND coalesce(${table.metadata}->'configurationMaintenance'->>'guardState','recovery_required') <> 'settled'`,
+      ),
+    check(
+      "data_manager_jobs_execution_bounds",
+      sql`${table.ownershipVersion} >= 0 AND jsonb_typeof(${table.executionChildren}) = 'array' AND jsonb_array_length(${table.executionChildren}) <= 32 AND octet_length(${table.executionChildren}::text) <= 131072`,
+    ),
+    check(
+      "data_manager_jobs_execution_shape",
+      sql`${table.executionVersion} IS NULL OR coalesce((${table.executionVersion} = 2 AND ${table.operationKey} ~ '^opk1_[A-Za-z0-9_-]{16,64}$' AND ${table.operationFingerprint} ~ '^[a-f0-9]{64}$' AND ${table.executionFingerprint} ~ '^[a-f0-9]{64}$' AND ${table.admittedAt} >= 0 AND ${table.deadlineAt} > ${table.admittedAt} AND ${table.executionInput} IS NOT NULL AND ${table.executionState} IS NOT NULL), false)`,
+    ),
+    check(
+      "data_manager_jobs_configuration_guard_shape",
+      sql`${table.kind} <> 'configuration-maintenance' OR coalesce((jsonb_typeof(${table.metadata}->'configurationMaintenance') = 'object' AND ${table.metadata}->'configurationMaintenance'->>'version' = '1' AND ${table.metadata}->'configurationMaintenance'->>'guardState' IN ('preparing','prepared','settling','settled','recovery_required') AND jsonb_typeof(${table.metadata}->'configurationMaintenance'->'receipt') = 'object' AND octet_length((${table.metadata}->'configurationMaintenance')::text) <= 65536), false)`,
+    ),
+  ],
+);
 
 export const jobStages = dataManager.table("job_stages", {
   id: uuid("id").primaryKey().defaultRandom(),

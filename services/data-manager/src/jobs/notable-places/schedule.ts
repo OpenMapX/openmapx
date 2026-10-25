@@ -2,7 +2,6 @@ import { Cron } from "croner";
 import type postgres from "postgres";
 import { pickCronExpression } from "../../utils/cron-expression.js";
 import type { SearchIndexOperationLock } from "../search-index/operation-lock.js";
-import { buildNotablePlaces } from "./build.js";
 import { DEFAULT_NOTABLE_MIN_SITELINKS } from "./sparql.js";
 import { hasPublishedNotablePlaces, type NotablePlacesRuntimeState } from "./state.js";
 
@@ -35,7 +34,7 @@ export interface NotablePlacesScheduleOptions {
   logger: NotablePlacesLogger;
   /** Overrides `NOTABLE_PLACES_REFRESH_CRON`; "off" disables refreshes and the first build. */
   cronExpression?: string;
-  build?: typeof buildNotablePlaces;
+  runOwned: () => Promise<void>;
 }
 
 export interface NotablePlacesSchedule {
@@ -56,21 +55,12 @@ export function scheduleNotablePlaces(opts: NotablePlacesScheduleOptions): Notab
     "NOTABLE_PLACES_REFRESH_CRON",
     NOTABLE_PLACES_REFRESH_CRON_DEFAULT,
   );
-  const build = opts.build ?? buildNotablePlaces;
   const run = async (reason: string): Promise<void> => {
     if (opts.operationLock.inFlight) return;
     opts.logger.info({ reason }, "notable-places: build starting");
     try {
-      const result = await build({
-        sql: opts.sql,
-        runtimeState: opts.runtimeState,
-        operationLock: opts.operationLock,
-        ...notablePlacesSettings(),
-      });
-      opts.logger.info(
-        { places: result.placeCount, names: result.nameCount, epoch: result.epoch },
-        "notable-places: published",
-      );
+      if (!opts.runOwned) throw Error("Durable notable-places admission is unavailable");
+      await opts.runOwned();
     } catch (error) {
       opts.logger.warn({ err: (error as Error).message }, "notable-places: build failed");
     }

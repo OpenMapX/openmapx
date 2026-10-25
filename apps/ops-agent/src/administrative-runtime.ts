@@ -18,9 +18,18 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
+  bindControlChildPhase,
   closeControlInstallation,
+  consumeControlChildDispatch,
+  fixedCliArguments as coreFixedCliArguments,
+  isFixedSingleDataCommand,
+  issueControlChildPhase,
   openFixedChildInstallation,
+  prepareFixedControlChild,
   readFixedCliSpawnIntent,
+  readFixedSingleDataPlan,
+  retainFixedCliSpawnIntent,
+  verifyControlEffectSettlement,
 } from "@openmapx/core/build-artifacts";
 import {
   type ExecutionRef,
@@ -1871,40 +1880,60 @@ export function createAdministrativeRuntime(
     return { backupId: operation.backupId };
   };
   runtime["data.inspect"] = async () => inspectDataInventory(options.rootDir);
+  async function runMatchingDataCommand(
+    operation: import("@openmapx/core/ops").OpsOperation,
+    context: import("./runtime").OpsExecutionContext,
+  ): Promise<void> {
+    if (!isFixedSingleDataCommand(operation.kind) || !context.controlAuthority)
+      throw new OpsHostUpdateRequiredError();
+    const plan = readFixedSingleDataPlan(context.controlAuthority),
+      bound = await bindControlChildPhase(context.controlAuthority, plan.rootReservation);
+    const publicKey = prepareFixedControlChild(context.controlAuthority, plan.delegationId);
+    retainFixedCliSpawnIntent(context.controlAuthority, {
+      delegationId: plan.delegationId,
+      execution: bound.execution,
+      operation,
+      args: coreFixedCliArguments(operation),
+      reservations: plan.cliReservations,
+    });
+    const issued = await issueControlChildPhase(context.controlAuthority, {
+      phase: "data-workflow",
+      ordinal: 0,
+      childPublicKey: publicKey,
+    });
+    consumeControlChildDispatch(issued.dispatchTicket);
+    await runFixedCli(coreFixedCliArguments(operation), {
+      ...context,
+      execution: bound.execution,
+      parentAssertion: issued.assertion,
+      operationKind: operation.kind,
+    });
+    const child = openFixedChildInstallation({
+      infraDir: join(options.rootDir, "infra/docker"),
+      assertion: issued.assertion,
+      container: existsSync("/run/secrets/openmapx-control-verifiers"),
+    });
+    try {
+      verifyControlEffectSettlement(child, bound.execution);
+    } finally {
+      closeControlInstallation(child);
+    }
+  }
   runtime["data.downloadOsm"] = async (operation, context) => {
-    await runFixedCli(
-      ["data", "download", "osm", ...(operation.regionId ? [operation.regionId] : [])],
-      { ...context, operationKind: context.claim.operation.kind },
-    );
+    await runMatchingDataCommand(operation, context);
     return { completed: true, ...(operation.regionId ? { resourceId: operation.regionId } : {}) };
   };
-  runtime["data.downloadFonts"] = async (_operation, context) => {
-    await runFixedCli(["data", "download", "fonts"], {
-      ...context,
-      operationKind: context.claim.operation.kind,
-    });
+  runtime["data.downloadFonts"] = async (operation, context) => {
+    await runMatchingDataCommand(operation, context);
     return { completed: true };
   };
-  runtime["data.update"] = async (operation, context) => {
-    await runFixedCli(
-      [
-        "data",
-        "update",
-        ...(operation.regionId ? [operation.regionId] : []),
-        ...(operation.countryCodes?.length
-          ? ["--countries", operation.countryCodes.join(",")]
-          : []),
-        ...(operation.failFast ? ["--fail-fast"] : []),
-      ],
-      { ...context, operationKind: context.claim.operation.kind },
-    );
-    return { completed: true, ...(operation.regionId ? { resourceId: operation.regionId } : {}) };
+  // Full Update build/link finalization is the reviewed Task02.4 owner. Until
+  // then reject before any download rather than report partial workflow success.
+  runtime["data.update"] = async () => {
+    throw new OpsHostUpdateRequiredError();
   };
   runtime["data.convertOverpass"] = async (operation, context) => {
-    await runFixedCli(
-      ["data", "convert", "overpass", ...(operation.regionId ? [operation.regionId] : [])],
-      { ...context, operationKind: context.claim.operation.kind },
-    );
+    await runMatchingDataCommand(operation, context);
     return { completed: true, ...(operation.regionId ? { resourceId: operation.regionId } : {}) };
   };
   runtime["data.link"] = async (_operation, context) => {
@@ -1929,36 +1958,19 @@ export function createAdministrativeRuntime(
     return { completed: true };
   };
   runtime["data.overtureSync"] = async (operation, context) => {
-    await runFixedCli(["data", "overture-sync", operation.regionId], {
-      ...context,
-      operationKind: context.claim.operation.kind,
-    });
+    await runMatchingDataCommand(operation, context);
     return { completed: true, resourceId: operation.regionId };
   };
   runtime["data.overtureConflate"] = async (operation, context) => {
-    await runFixedCli(
-      [
-        "data",
-        "overture-conflate",
-        operation.regionId,
-        ...(operation.restart ? ["--restart"] : []),
-      ],
-      { ...context, operationKind: context.claim.operation.kind },
-    );
+    await runMatchingDataCommand(operation, context);
     return { completed: true, resourceId: operation.regionId };
   };
   runtime["data.searchIndexBuild"] = async (operation, context) => {
-    await runFixedCli(["data", "search-index", "build", operation.regionId], {
-      ...context,
-      operationKind: context.claim.operation.kind,
-    });
+    await runMatchingDataCommand(operation, context);
     return { completed: true, resourceId: operation.regionId };
   };
-  runtime["data.notablePlacesBuild"] = async (_operation, context) => {
-    await runFixedCli(["data", "notable-places", "build"], {
-      ...context,
-      operationKind: context.claim.operation.kind,
-    });
+  runtime["data.notablePlacesBuild"] = async (operation, context) => {
+    await runMatchingDataCommand(operation, context);
     return { completed: true };
   };
   runtime["system.diagnostics"] = async (_operation, context) => {

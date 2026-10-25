@@ -1,4 +1,5 @@
 import type postgres from "postgres";
+import { withDataSqlSettlement } from "../execution/worker-scope.js";
 
 export const SEARCH_INDEX_LOCK_NAMESPACE = 1_330_466_120;
 export const SEARCH_INDEX_LOCK_KEY = 2;
@@ -35,8 +36,10 @@ function createAdvisoryOperationLock(
       } finally {
         if (connection) {
           try {
-            await connection.unsafe(
-              `SELECT pg_advisory_unlock(${SEARCH_INDEX_LOCK_NAMESPACE}, ${key})`,
+            await withDataSqlSettlement(() =>
+              connection!.unsafe(
+                `SELECT pg_advisory_unlock(${SEARCH_INDEX_LOCK_NAMESPACE}, ${key})`,
+              ),
             );
           } finally {
             connection.release();

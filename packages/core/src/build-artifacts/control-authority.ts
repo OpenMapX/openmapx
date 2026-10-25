@@ -7,10 +7,13 @@ import {
   originRecordDomain,
   sameControlOrigin,
   signControl,
+  targetSchema,
   uuid,
   validateOriginRecord,
   verifyControl,
 } from "./control-records";
+// biome-ignore lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
+import { verifyRetainedArtifactTargetRootRelease } from "./target-lease";
 
 export {
   type ControlInstallation,
@@ -21,6 +24,7 @@ export {
   originRecordDomain,
   sameControlOrigin,
   signControl,
+  targetSchema,
   uuid,
   validateOriginRecord,
   verifyControl,
@@ -59,7 +63,28 @@ import {
 } from "../ops/execution-identity";
 import { canonicalJson, opsOperationFingerprint } from "../ops/fingerprint";
 import { verifiedParentOrigins, verifiedParents } from "../ops/verified-parent-internal";
+import { dataConfigurationFenceReceiptSchema } from "../services/data-manager/contracts/configuration-maintenance";
+import { dataExecutionStatusSchema } from "../services/data-manager/contracts/executions";
+// biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
+import {
+  type ControlChildReservation,
+  controlChildReservationSchema,
+  initializeControlChildReservations,
+  inspectControlChildPublication,
+  lookupControlChildPhase,
+  prepareControlChildPublication,
+  resolveControlChildPlan,
+  validateControlChildReservations,
+} from "./child-phase";
+// biome-ignore-end lint/suspicious/noImportCycles: Live protocol dependency described above.
 import { CONTROL_RETENTION_LIMITS, writeRetainedRecord } from "./control-retention";
+// biome-ignore-start lint/suspicious/noImportCycles: Fixed proof verification uses this module's original nominal authority and effect writer after initialization.
+import {
+  inspectFeedProxyValidationFailure,
+  publishFeedProxyCanonicalTerminal,
+  recordFeedProxyReloadAttempted,
+} from "./feed-proxy-validation";
+// biome-ignore-end lint/suspicious/noImportCycles: Fixed live proof dependency described above.
 import { AnchoredDirectory, identity } from "./filesystem";
 import {
   assertOriginClockForward,
@@ -146,14 +171,7 @@ const roleKeySchema = z.strictObject({
   role: z.enum(CONTROL_ROLES),
   privateKey: z.string().max(512),
 });
-export const targetSchema = z
-  .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
-  .min(1)
-  .max(256)
-  .refine(
-    (x) => x.every((v, i) => i === 0 || (x[i - 1] ?? v) < v),
-    "Targets must be sorted and unique",
-  );
+
 export function newControlKey() {
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
   return {
@@ -454,6 +472,7 @@ export interface AuthorityState {
   kind: string;
   serviceIds: readonly string[];
   plan: readonly ControlPlannedChild[];
+  reservations: readonly ControlChildReservation[];
   receiptDigest: string;
   origin?: ControlExecutionOrigin;
 }
@@ -483,7 +502,8 @@ export function writePrivateRecord(
   const dir = state.privateRoot.directory(namespace, true, true);
   try {
     const bytes = canonicalJson(value);
-    if (Buffer.byteLength(bytes) > 131072) throw Error("Private receipt limit");
+    if (Buffer.byteLength(bytes) > (namespace === "hardlinks" ? 1024 * 1024 : 131072))
+      throw Error("Private receipt limit");
     if (
       ![
         "executions",
@@ -505,6 +525,8 @@ export function writePrivateRecord(
         "spawn-started",
         "prepared",
         "execution-adoptions",
+        "configuration-maintenance",
+        "hardlinks",
       ].includes(namespace)
     )
       throw Error("Unknown fixed authority namespace");
@@ -516,6 +538,7 @@ export function writePrivateRecord(
         exclusive,
         CONTROL_RETENTION_LIMITS.recordsPerNamespace,
         beforePublish,
+        namespace === "hardlinks" ? 1024 * 1024 : CONTROL_RETENTION_LIMITS.privateRecordBytes,
       );
     if (origin)
       familyRecordWrite(
@@ -782,6 +805,8 @@ export function retainControlTerminalStatus(
     const proof = verifyAndSealTerminalCommitment(s, status, terminalAt),
       origin = s.origin;
     if (!origin) throw Error("Missing terminal origin");
+    if (s.kind === "feedProxy.validateAndReload")
+      publishFeedProxyCanonicalTerminal(authority, status, proof.terminalAt);
     const settlement = childSettlementState(verifyControlEffectSettlement(installation, execution));
     publishFamilyCanonicalTerminal(
       s.installation,
@@ -853,9 +878,18 @@ export function repairControlJournalTerminal(
       proof.outcome === "failed_without_effect" &&
       proof.publication === "not_started" &&
       proof.receipt.kind === "not-started";
-    if (!succeeded && !failedWithoutEffect)
+    const validationFailed =
+      terminal.state === "failed" &&
+      s.kind === "feedProxy.validateAndReload" &&
+      proof.outcome === "contained" &&
+      proof.publication === "not_started" &&
+      proof.receipt.kind === "feed-proxy-validation-failure" &&
+      inspectFeedProxyValidationFailure(authority, proof.receipt.commitmentDigest) !== null;
+    if (!succeeded && !failedWithoutEffect && !validationFailed)
       throw Error("Terminal worker containment is not proved");
     const committed = verifyAndSealTerminalCommitment(s, terminal, terminalAt);
+    if (s.kind === "feedProxy.validateAndReload")
+      publishFeedProxyCanonicalTerminal(authority, terminal, committed.terminalAt);
     publishFamilyCanonicalTerminal(
       s.installation,
       origin,
@@ -934,8 +968,17 @@ export function assertFreshControlRoot(
     notAfter: parsed.notAfter,
   });
 }
+export function controlInstallationDataRoot(installation: ControlInstallation): string {
+  return installationState(installation).dataRoot;
+}
 export function controlRegisteredServiceIds(installation: ControlInstallation): string[] {
   return [...installationState(installation).registeredTargets].sort();
+}
+export function controlRolePublicKey(
+  installation: ControlInstallation,
+  role: ControlIssuer,
+): string {
+  return installationState(installation).publicKeys[role];
 }
 function writeExecutionShared(
   state: InstallationState,
@@ -982,6 +1025,7 @@ export function retainAdmittedControlExecution(
     parent?: RetainedParentExecution;
     serviceIds: readonly string[];
     plan?: readonly ControlPlannedChild[];
+    reservations?: readonly ControlChildReservation[];
   },
 ): VerifiedExecutionAuthority {
   const state = installationState(installation);
@@ -1007,6 +1051,9 @@ export function retainAdmittedControlExecution(
       "download-fonts",
       "convert-overpass",
       "overture-sync",
+      "overture-pull",
+      "overture-ingest",
+      "overture-extract",
       "overture-conflate",
       "search-index-build",
       "notable-places-build",
@@ -1042,6 +1089,18 @@ export function retainAdmittedControlExecution(
     .array(plannedChildSchema)
     .max(64)
     .parse(input.plan ?? []);
+  const reservations = z
+    .array(controlChildReservationSchema)
+    .max(64)
+    .parse(input.reservations ?? []);
+  validateControlChildReservations({
+    role: state.fixedChildId ? "fixed-cli" : installation.role,
+    kind: input.kind,
+    execution,
+    serviceIds,
+    plan,
+    reservations,
+  });
   const budget = (() => {
     try {
       return opsExecutionMaximumMs(input.kind);
@@ -1065,13 +1124,13 @@ export function retainAdmittedControlExecution(
   })();
   if (execution.deadlineAt > input.admittedAt + budget)
     throw Error("Control execution exceeds kind budget");
-  if (plan.length > 64) throw Error("Control child intent capacity");
+  if (plan.length + reservations.length > 64) throw Error("Control child intent capacity");
   const keys = new Set<string>();
-  for (const [ordinal, child] of plan.entries()) {
+  for (const child of plan) {
     executionRefSchema.parse(child.execution);
     targetSchema.parse(child.serviceIds);
     if (
-      child.ordinal !== ordinal ||
+      !Number.isSafeInteger(child.ordinal) ||
       keys.has(child.execution.operationKey) ||
       child.execution.operationKey !==
         controlChildOperationKey(execution.operationKey, child.phase, child.ordinal) ||
@@ -1111,7 +1170,10 @@ export function retainAdmittedControlExecution(
       origin: _origin,
       ...oldInput
     } = stored;
-    if (controlDigest(oldInput) !== controlDigest({ ...input, execution, serviceIds, plan }))
+    if (
+      controlDigest({ ...oldInput, reservations: oldInput.reservations ?? [] }) !==
+      controlDigest({ ...input, execution, serviceIds, plan, reservations })
+    )
       throw Error("Conflicting retained execution identity");
     return restoreAdmittedControlExecution(installation, execution);
   }
@@ -1164,12 +1226,6 @@ export function retainAdmittedControlExecution(
     writePrivateRecord(state, "effect-started", name, null, true, origin);
     newlyAdmitted = true;
   }
-  publishControlExecutionWitness(
-    state,
-    { execution, kind: input.kind, serviceIds, origin },
-    controlDigest(receipt),
-  );
-  initializeLifecycle(state, execution, newlyAdmitted);
   const authority = Object.freeze({ execution }) as VerifiedExecutionAuthority;
   authorities.set(authority, {
     installation: state,
@@ -1177,9 +1233,17 @@ export function retainAdmittedControlExecution(
     kind: input.kind,
     serviceIds,
     plan,
+    reservations,
     receiptDigest: controlDigest(receipt),
     origin,
   });
+  if (newlyAdmitted) initializeControlChildReservations(authority);
+  publishControlExecutionWitness(
+    state,
+    { execution, kind: input.kind, serviceIds, origin },
+    controlDigest(receipt),
+  );
+  initializeLifecycle(state, execution, newlyAdmitted);
   return authority;
 }
 export interface PeerState {
@@ -1336,7 +1400,10 @@ export function prepareFixedControlChild(
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
     }
-    if (ids.length >= Math.min(64, s.plan.length) || ids.includes(delegationId))
+    if (
+      ids.length >= Math.min(64, s.plan.length + s.reservations.length) ||
+      ids.includes(delegationId)
+    )
       throw Error("Fixed child key capacity/replay");
     writeExecutionShared(
       s.installation,
@@ -1435,7 +1502,25 @@ const settlementSchema = z.strictObject({
   terminalReceiptDigest: digest,
 });
 const effectObservationSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("data-configuration-fence-refused"),
+    maintenanceId: uuid,
+    reason: z.literal("busy"),
+  }),
+  z.strictObject({
+    kind: z.literal("data-configuration-fence"),
+    receipt: dataConfigurationFenceReceiptSchema,
+    guardDigest: digest,
+  }),
+  z.strictObject({
+    kind: z.literal("data-execution"),
+    status: dataExecutionStatusSchema,
+    workerId: uuid,
+    childrenDigest: digest,
+  }),
+  z.strictObject({ kind: z.literal("data-command"), status: dataExecutionStatusSchema }),
   z.strictObject({ kind: z.literal("ops-result"), result: z.unknown() }),
+  z.strictObject({ kind: z.literal("feed-proxy-validation-failure"), commitmentDigest: digest }),
   z.strictObject({
     kind: z.literal("fixed-cli-exit"),
     args: z.array(z.string().max(256)).max(64),
@@ -1444,7 +1529,7 @@ const effectObservationSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("not-started") }),
   z.strictObject({ kind: z.literal("unresolved") }),
 ]);
-function withPrivateEffectWriter<T>(s: AuthorityState, write: () => T): T {
+export function withPrivateEffectWriter<T>(s: AuthorityState, write: () => T): T {
   const guards = s.installation.privateRoot.directory("effect-writers", true, true);
   try {
     const name = s.execution.operationKey;
@@ -1511,11 +1596,52 @@ export function retainControlEffectReceipt(
         outcome = "committed";
         publication = "committed";
       }
+    } else if (receipt.kind === "feed-proxy-validation-failure") {
+      if (
+        s.kind !== "feedProxy.validateAndReload" ||
+        inspectFeedProxyValidationFailure(authority, receipt.commitmentDigest) === null
+      )
+        throw Error("Original contained validation failure required");
+      outcome = "contained";
+      publication = "not_started";
+    } else if (receipt.kind === "data-command") {
+      const slots = s.reservations.filter(
+        (slot) => slot.recipient === "data-manager" && slot.phase === "data-step",
+      );
+      if (slots.length !== 1) throw Error("Exact single data command required");
+      const bound = lookupControlChildPhase(authority, slots[0]!);
+      if (
+        !bound ||
+        bound.execution.executionId !== receipt.status.id ||
+        bound.execution.fingerprint !== receipt.status.fingerprint
+      )
+        throw Error("Bound data command identity required");
+      verifyDeadlineEdge(s.kind, "data-step", "data-manager", receipt.status.kind);
+      verifyDataControlTerminalWitness(
+        s.installation.installation,
+        bound.execution,
+        receipt.status,
+      );
+      if (receipt.status.status === "ok") {
+        outcome = "committed";
+        publication = "committed";
+      }
     } else if (receipt.kind === "fixed-cli-exit") {
       if (!s.installation.fixedChildId)
         throw Error("Fixed command receipt requires certified child");
       readFixedCliSpawnIntent(s.installation.installation, s.execution, receipt.args);
       readPrivateRecord(s.installation, "spawn-started", `${s.installation.fixedChildId}.json`);
+      for (const slot of s.reservations.filter(
+        (item) => item.recipient === "data-manager" && item.phase === "data-step",
+      )) {
+        const binding = lookupControlChildPhase(authority, slot);
+        if (
+          !binding ||
+          verifyDataControlTerminalWitness(s.installation.installation, binding.execution).status
+            .status !== "ok"
+        )
+          throw Error("Actual backend data containment required before fixed command success");
+      }
       outcome = "committed";
       publication = "committed";
     } else if (receipt.kind === "not-started") {
@@ -1711,6 +1837,114 @@ function executionWitnessDirectory(
     },
   };
 }
+const dataContainmentWitnessSchema = z.strictObject({
+  version: z.literal(1),
+  installationId: uuid,
+  execution: executionRefSchema,
+  status: dataExecutionStatusSchema,
+  terminalAt: z.number().int().positive().safe(),
+  terminalDigest: digest,
+});
+/** Fixed DM journal calls only after verifying its own DB tuple, private
+ * original terminal commitment, all children and actual target release. */
+export function publishDataControlTerminalWitness(
+  authority: VerifiedExecutionAuthority,
+  status: import("../services/data-manager/contracts/executions").DataExecutionStatus,
+  terminalAt: number,
+): void {
+  const s = executionAuthorityState(authority);
+  if (s.installation.installation.role !== "data-manager" || s.installation.fixedChildId)
+    throw Error("Original data journal required");
+  verifyRetainedArtifactTargetRootRelease(authority);
+  const expected = controlDigest({ version: 1, status: dataExecutionStatusSchema.parse(status) });
+  const original = verifyControl(
+    s.installation.installation.publicKey,
+    "openmapx-data-terminal-v1",
+    readPrivateRecord(
+      s.installation,
+      "observations",
+      `terminal-${s.execution.operationKey}.json`,
+      8192,
+    ),
+    z
+      .object({
+        phase: z.literal("canonical"),
+        execution: executionRefSchema,
+        terminalDigest: digest,
+        terminalAt: z.number(),
+        admissionDigest: digest,
+      })
+      .passthrough(),
+  );
+  if (
+    original.terminalDigest !== expected ||
+    original.terminalAt !== terminalAt ||
+    original.admissionDigest !== s.receiptDigest ||
+    controlDigest(original.execution) !== controlDigest(s.execution)
+  )
+    throw Error("Original canonical data commitment required");
+  const payload = dataContainmentWitnessSchema.parse({
+      version: 1,
+      installationId: s.installation.installation.installationId,
+      execution: s.execution,
+      status,
+      terminalAt,
+      terminalDigest: expected,
+    }),
+    directory = executionWitnessDirectory(s.installation, "data-manager");
+  try {
+    const name = `${s.execution.operationKey}.data-terminal.json`,
+      bytes = canonicalJson(
+        signControl(s.installation.privateKey, "openmapx-data-contained-terminal-v1", payload),
+      );
+    let prior: Buffer | undefined;
+    try {
+      prior = directory.role.read(name, 65536);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    if (prior) {
+      if (prior.toString("utf8") !== bytes) throw Error("Canonical data witness changed");
+      return;
+    }
+    writeExecutionShared(s.installation, s.execution, directory.role, name, bytes, true);
+  } finally {
+    directory.close();
+  }
+}
+/** A parent verifies the pinned DM signature and exact bound execution; a GET
+ * status or dead child process alone is never backend containment evidence. */
+export function verifyDataControlTerminalWitness(
+  installation: ControlInstallation,
+  execution: ExecutionRef,
+  status?: import("../services/data-manager/contracts/executions").DataExecutionStatus,
+) {
+  const local = installationState(installation),
+    directory = executionWitnessDirectory(local, "data-manager");
+  try {
+    const proof = verifyControl(
+      local.publicKeys["data-manager"],
+      "openmapx-data-contained-terminal-v1",
+      JSON.parse(
+        directory.role.read(`${execution.operationKey}.data-terminal.json`, 65536).toString("utf8"),
+      ),
+      dataContainmentWitnessSchema,
+    );
+    if (
+      proof.installationId !== installation.installationId ||
+      controlDigest(proof.execution) !== controlDigest(execution) ||
+      proof.terminalDigest !== controlDigest({ version: 1, status: proof.status }) ||
+      (status && canonicalJson(status) !== canonicalJson(proof.status)) ||
+      !["ok", "partial", "error", "canceled", "interrupted"].includes(proof.status.status) ||
+      proof.status.publication === "unknown"
+    )
+      throw Error("Exact canonical data containment witness required");
+    readControlExecutionWitness(local, execution, local.publicKeys["data-manager"]);
+    return proof;
+  } finally {
+    directory.close();
+  }
+}
 const lifecycleSchema = z.strictObject({
   version: z.literal(1),
   installationId: uuid,
@@ -1718,6 +1952,17 @@ const lifecycleSchema = z.strictObject({
   sequence: z.number().int().nonnegative().safe(),
   phase: z.enum(["held", "cancel_pending", "recovery_required", "settled"]),
   childIntents: z.record(uuid, digest),
+  leaseIntents: z
+    .record(
+      uuid,
+      z.strictObject({
+        child: executionRefSchema,
+        leaseId: uuid,
+        grantDigest: digest,
+        attemptDigest: digest,
+      }),
+    )
+    .optional(),
 });
 type ExecutionLifecycle = z.infer<typeof lifecycleSchema>;
 function withExecutionWriter<T>(
@@ -1755,7 +2000,7 @@ function readLifecycle(
   if (
     current.installationId !== state.installation.installationId ||
     controlDigest(current.execution) !== controlDigest(execution) ||
-    Object.keys(current.childIntents).length > 64
+    Object.keys(current.childIntents).length + Object.keys(current.leaseIntents ?? {}).length > 64
   )
     throw Error("Execution lifecycle identity/capacity mismatch");
   const observationName = `${execution.executor}-${execution.operationKey}.json`;
@@ -1888,6 +2133,10 @@ function withParentLifecycles<T>(
   return lock(0, true);
 }
 /** Narrow local runtime fence; exact duplicate admission alone never grants forward permission. */
+export class ControlExecutionFencedError extends Error {}
+export function markFeedProxyReloadAttempted(authority: VerifiedExecutionAuthority): void {
+  withControlExecutionForward(authority, () => recordFeedProxyReloadAttempted(authority));
+}
 function withControlExecutionForward<T>(authority: VerifiedExecutionAuthority, run: () => T): T {
   const s = executionAuthorityState(authority);
   if (!s.origin)
@@ -1904,7 +2153,7 @@ function withControlExecutionForward<T>(authority: VerifiedExecutionAuthority, r
         s.installation.installation.publicKey,
       );
       if (lifecycle.phase !== "held" || Date.now() >= s.execution.deadlineAt)
-        throw Error(
+        throw new ControlExecutionFencedError(
           "Execution cannot restart effects; observation/settlement only; forward phase fenced",
         );
       return run();
@@ -1912,10 +2161,72 @@ function withControlExecutionForward<T>(authority: VerifiedExecutionAuthority, r
   const assertion = retainedParentAssertion(s);
   return assertion
     ? withParentLifecycles(s.installation, assertion, (forward) => {
-        if (!forward) throw Error("Canceled/terminal ancestor permits observation only");
+        if (!forward)
+          throw new ControlExecutionFencedError(
+            "Canceled/terminal ancestor permits observation only",
+          );
         return check();
       })
     : check();
+}
+/** Internal publication scope. All filesystem writes complete before guards
+ * release; callers may not await HTTP/DB or acquire a lease from this scope. */
+const publicationScopes = new WeakMap<VerifiedExecutionAuthority, AnchoredDirectory>();
+export function assertControlPublicationScope(
+  authority: VerifiedExecutionAuthority,
+): AnchoredDirectory {
+  const directory = publicationScopes.get(authority);
+  if (!directory) throw Error("Control publication scope is not held");
+  return directory;
+}
+export function withControlDelegationPublication<T>(
+  authority: VerifiedExecutionAuthority,
+  phase: ControlChildPhase,
+  run: (directory: AnchoredDirectory) => T,
+): T {
+  const s = executionAuthorityState(authority);
+  if (!s.origin) throw Error("Legacy control admission cannot publish grants");
+  assertOriginClockForward(s.installation, s.origin);
+  const own = () =>
+    withExecutionWriter(s.installation, s.execution, (directory) => {
+      const current = readLifecycle(
+        s.installation,
+        directory,
+        s.execution,
+        s.installation.installation.publicKey,
+      );
+      const prepared =
+        (s.kind === "configurationMaintenance.prepare" &&
+          [
+            "configuration-commit",
+            "maintenance-hardlinks",
+            "maintenance-recreate",
+            "maintenance-handoff",
+          ].includes(phase)) ||
+        (s.kind === "configurationHandoff.prepare" && phase === "configuration-handoff");
+      if (
+        Date.now() >= s.execution.deadlineAt ||
+        !(current.phase === "held" || (current.phase === "settled" && prepared))
+      )
+        throw new ControlExecutionFencedError(
+          "Control grant publication is fenced; terminal or canceled execution prevents forward effects",
+        );
+      if (current.phase === "settled") verifyControlPreparedTerminal(s.installation, s.execution);
+      if (publicationScopes.has(authority)) throw Error("Nested control publication scope");
+      publicationScopes.set(authority, directory);
+      try {
+        return run(directory);
+      } finally {
+        publicationScopes.delete(authority);
+      }
+    });
+  const assertion = retainedParentAssertion(s);
+  return assertion
+    ? withParentLifecycles(s.installation, assertion, (forward) => {
+        if (!forward) throw Error("Canceled ancestor prevents grant publication");
+        return own();
+      })
+    : own();
 }
 export function assertControlExecutionForward(authority: VerifiedExecutionAuthority): void {
   withControlExecutionForward(authority, () => {});
@@ -1925,34 +2236,7 @@ export function assertControlDelegationForward(
   authority: VerifiedExecutionAuthority,
   phase: ControlChildPhase,
 ): void {
-  try {
-    assertControlExecutionForward(authority);
-  } catch (error) {
-    const s = executionAuthorityState(authority);
-    if (
-      !(
-        (s.kind === "configurationMaintenance.prepare" &&
-          [
-            "configuration-commit",
-            "maintenance-hardlinks",
-            "maintenance-recreate",
-            "maintenance-handoff",
-          ].includes(phase)) ||
-        (s.kind === "configurationHandoff.prepare" && phase === "configuration-handoff")
-      )
-    )
-      throw error;
-    withExecutionWriter(s.installation, s.execution, (dir) => {
-      const lifecycle = readLifecycle(
-        s.installation,
-        dir,
-        s.execution,
-        s.installation.installation.publicKey,
-      );
-      if (lifecycle.phase !== "settled" || Date.now() >= s.execution.deadlineAt) throw error;
-      verifyControlPreparedTerminal(s.installation, s.execution);
-    });
-  }
+  withControlDelegationPublication(authority, phase, () => {});
 }
 function retainedParentAssertion(s: AuthorityState): string | undefined {
   if (s.installation.fixedParentAssertion) return s.installation.fixedParentAssertion;
@@ -1985,24 +2269,127 @@ export function cancelControlExecution(
       lifecycle.sequence++;
       writeLifecycle(s.installation, dir, lifecycle);
     }
-    return Object.freeze(
-      Object.keys(lifecycle.childIntents).map((id) => {
-        const saved = z
-          .object({ grant: z.unknown() })
-          .parse(readPrivateRecord(s.installation, "parent-attempts", `${id}.json`));
-        return Object.freeze(
-          verifyControl(
-            s.installation.installation.publicKey,
-            originRecordDomain("openmapx-parent-grant", saved.grant),
-            saved.grant,
-            parentGrantSchema,
-          ).child,
+    const children = Object.keys(lifecycle.childIntents).map((id) => {
+      const saved = z
+        .object({ grant: z.unknown() })
+        .parse(readPrivateRecord(s.installation, "parent-attempts", `${id}.json`));
+      return Object.freeze(
+        verifyControl(
+          s.installation.installation.publicKey,
+          originRecordDomain("openmapx-parent-grant", saved.grant),
+          saved.grant,
+          parentGrantSchema,
+        ).child,
+      );
+    });
+    for (const [id, intent] of Object.entries(lifecycle.leaseIntents ?? {})) {
+      // The signed index is published before its private outbox. A crash in
+      // that gap retains this exact identity for cancellation/lookup.
+      let saved: unknown;
+      try {
+        saved = readPrivateRecord(s.installation, "parent-attempts", `${id}.json`, 8192);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      if (saved !== undefined && saved !== null) {
+        const parsed = z
+          .strictObject({ kind: z.literal("lease"), attempt: z.unknown() })
+          .parse(saved);
+        const value = verifyControl(
+          s.installation.installation.publicKey,
+          "openmapx-lease-execution-attempt-v2",
+          parsed.attempt,
+          leaseExecutionAttemptSchema,
         );
-      }),
-    );
+        if (
+          value.installationId !== s.installation.installation.installationId ||
+          controlDigest(value.origin) !== controlDigest(s.origin) ||
+          controlDigest(value.parent) !== controlDigest(s.execution) ||
+          controlDigest(parsed.attempt) !== intent.attemptDigest ||
+          controlDigest(value.child) !== controlDigest(intent.child) ||
+          value.leaseId !== intent.leaseId ||
+          value.grantDigest !== intent.grantDigest
+        )
+          throw Error("Retained lease cancellation intent changed");
+      }
+      children.push(Object.freeze({ ...intent.child }));
+    }
+    for (const reserved of s.reservations) {
+      const saved = inspectControlChildPublication(authority, reserved);
+      if (saved.publication.state === "grant_prepared" && saved.binding)
+        children.push(Object.freeze({ ...saved.binding.child.execution }));
+    }
+    const distinct = new Map<string, ExecutionRef>();
+    for (const child of children) {
+      const prior = distinct.get(child.operationKey);
+      if (prior && controlDigest(prior) !== controlDigest(child))
+        throw Error("Cancellation child identity disagreement");
+      distinct.set(child.operationKey, child);
+    }
+    return Object.freeze([...distinct.values()]);
   });
 }
-function settleExecutionLifecycle(s: AuthorityState) {
+const leaseExecutionAttemptSchema = z.strictObject({
+  version: z.literal(2),
+  installationId: uuid,
+  origin: controlOriginSchema,
+  parent: executionRefSchema,
+  child: executionRefSchema,
+  leaseId: uuid,
+  delegationId: uuid,
+  grantDigest: digest,
+});
+/** Fixed lease issuer only; exact identities become cancellation-visible before
+ * outbox/shared exposure, including a crash before the parent node update. */
+export function recordLeaseControlAttempt(
+  authority: VerifiedExecutionAuthority,
+  input: { child: ExecutionRef; leaseId: string; delegationId: string; grantDigest: string },
+): void {
+  const s = executionAuthorityState(authority),
+    directory = assertControlPublicationScope(authority);
+  if (!s.origin) throw Error("Lease attempt origin is missing");
+  const lifecycle = readLifecycle(
+    s.installation,
+    directory,
+    s.execution,
+    s.installation.installation.publicKey,
+  );
+  const leases = lifecycle.leaseIntents ?? {};
+  if (
+    Object.keys(lifecycle.childIntents).length + Object.keys(leases).length >= 64 ||
+    leases[input.delegationId]
+  )
+    throw Error("Execution cancellation intent capacity/replay");
+  const attempt = signControl(
+    s.installation.privateKey,
+    "openmapx-lease-execution-attempt-v2",
+    leaseExecutionAttemptSchema.parse({
+      version: 2,
+      installationId: s.installation.installation.installationId,
+      origin: s.origin,
+      parent: s.execution,
+      ...input,
+    }),
+  );
+  leases[input.delegationId] = {
+    child: input.child,
+    leaseId: input.leaseId,
+    grantDigest: input.grantDigest,
+    attemptDigest: controlDigest(attempt),
+  };
+  lifecycle.leaseIntents = leases;
+  lifecycle.sequence++;
+  writeLifecycle(s.installation, directory, lifecycle);
+  writePrivateRecord(
+    s.installation,
+    "parent-attempts",
+    `${input.delegationId}.json`,
+    { kind: "lease", attempt },
+    true,
+    s.origin,
+  );
+}
+export function settleExecutionLifecycle(s: AuthorityState) {
   withExecutionWriter(s.installation, s.execution, (dir) => {
     const lifecycle = readLifecycle(
       s.installation,
@@ -2029,12 +2416,7 @@ export async function attestParentExecution(
 ): Promise<string> {
   const s = executionAuthorityState(authority);
   if (Date.now() >= s.execution.deadlineAt) throw Error("Expired parent execution");
-  const plan = s.plan.find(
-    (p) =>
-      controlDigest(p.execution) === controlDigest(child.execution) &&
-      p.phase === child.phase &&
-      p.recipient === child.recipient,
-  );
+  const plan = resolveControlChildPlan(authority, child);
   if (!plan || !childPhaseKinds[child.phase].includes(plan.kind))
     throw Error("Child absent from retained plan");
   try {
@@ -2097,71 +2479,69 @@ export async function attestParentExecution(
     }),
   ).toString("base64url");
   parseParentAssertion(assertion);
-  const issue = () =>
-    withExecutionWriter(s.installation, s.execution, (dir) => {
-      const lifecycle = readLifecycle(
-        s.installation,
-        dir,
-        s.execution,
+  return withControlDelegationPublication(authority, child.phase, (dir) => {
+    const lifecycle = readLifecycle(
+      s.installation,
+      dir,
+      s.execution,
+      s.installation.installation.publicKey,
+    );
+    if (lifecycle.phase !== "held" || Date.now() >= s.execution.deadlineAt)
+      throw Error("Canceled/terminal execution cannot authorize forward children");
+    const name = `${s.execution.operationKey}.children.json`;
+    let witness: Record<string, unknown> = {};
+    try {
+      witness = z
+        .record(uuid, z.unknown())
+        .parse(JSON.parse(dir.read(name, 65536).toString("utf8")));
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+    }
+    for (const value of Object.values(witness)) {
+      const previous = verifyControl(
         s.installation.installation.publicKey,
+        originRecordDomain("openmapx-parent-grant", value),
+        value,
+        parentGrantSchema,
       );
-      if (lifecycle.phase !== "held" || Date.now() >= s.execution.deadlineAt)
-        throw Error("Canceled/terminal execution cannot authorize forward children");
-      const name = `${s.execution.operationKey}.children.json`;
-      let witness: Record<string, unknown> = {};
-      try {
-        witness = z
-          .record(uuid, z.unknown())
-          .parse(JSON.parse(dir.read(name, 65536).toString("utf8")));
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      }
-      for (const value of Object.values(witness)) {
-        const previous = verifyControl(
-          s.installation.installation.publicKey,
-          originRecordDomain("openmapx-parent-grant", value),
-          value,
-          parentGrantSchema,
-        );
-        if (previous.child.operationKey === child.execution.operationKey)
-          throw Error("Attempted parent child cannot be replayed");
-      }
-      if (Object.keys(witness).length >= 64) throw Error("Parent attempt capacity");
-      witness[attemptId] = signed;
-      const bytes = canonicalJson(witness);
-      if (Buffer.byteLength(bytes) > 65536) throw Error("Parent witness capacity");
-      if (!s.origin) throw Error("Legacy origin is observation-only");
-      enlistFamilyIntent(
-        s.installation,
-        s.origin,
-        attemptId,
-        child.execution,
-        child.recipient === "data-manager" ? "data-manager" : "ops-agent",
-      );
-      writePrivateRecord(
-        s.installation,
-        "parent-attempts",
-        `${attemptId}.json`,
-        { grant: signed, assertion },
-        true,
-        s.origin,
-      );
-      lifecycle.childIntents[attemptId] = fields.grantDigest;
-      lifecycle.sequence++;
-      writeLifecycle(s.installation, dir, lifecycle);
-      writeExecutionShared(s.installation, s.execution, dir, name, bytes);
-      return assertion;
+      if (previous.child.operationKey === child.execution.operationKey)
+        throw Error("Attempted parent child cannot be replayed");
+    }
+    if (Object.keys(witness).length + Object.keys(lifecycle.leaseIntents ?? {}).length >= 64)
+      throw Error("Parent attempt capacity");
+    witness[attemptId] = signed;
+    const bytes = canonicalJson(witness);
+    if (Buffer.byteLength(bytes) > 65536) throw Error("Parent witness capacity");
+    if (!s.origin) throw Error("Legacy origin is observation-only");
+    enlistFamilyIntent(
+      s.installation,
+      s.origin,
+      attemptId,
+      child.execution,
+      child.recipient === "data-manager" ? "data-manager" : "ops-agent",
+    );
+    prepareControlChildPublication(authority, plan, {
+      delegationId: attemptId,
+      grantDigest: fields.grantDigest,
+      leaseId: null,
     });
-  const inherited = retainedParentAssertion(s);
-  return inherited
-    ? withParentLifecycles(s.installation, inherited, (forward) => {
-        if (!forward) throw Error("Canceled ancestor prevents forward delegation");
-        return issue();
-      })
-    : issue();
+    writePrivateRecord(
+      s.installation,
+      "parent-attempts",
+      `${attemptId}.json`,
+      { grant: signed, assertion },
+      true,
+      s.origin,
+    );
+    lifecycle.childIntents[attemptId] = fields.grantDigest;
+    lifecycle.sequence++;
+    writeLifecycle(s.installation, dir, lifecycle);
+    writeExecutionShared(s.installation, s.execution, dir, name, bytes);
+    return assertion;
+  });
 }
 
-function readParentGrant(
+export function readParentGrant(
   state: InstallationState,
   assertion: string,
   depth = 0,
@@ -2224,7 +2604,7 @@ function readParentGrant(
   verifyDeadlineEdge(parent.kind, grant.phase, grant.recipient, grant.kind);
   return grant;
 }
-function verifyDeadlineEdge(
+export function verifyDeadlineEdge(
   parentKind: string,
   phase: ControlChildPhase,
   recipient: ControlRecipient,
@@ -2235,6 +2615,9 @@ function verifyDeadlineEdge(
     "data.downloadFonts": "download-fonts",
     "data.convertOverpass": "convert-overpass",
     "data.overtureSync": "overture-sync",
+    "data.overturePull": "overture-pull",
+    "data.overtureIngest": "overture-ingest",
+    "data.overtureExtract": "overture-extract",
     "data.overtureConflate": "overture-conflate",
     "data.searchIndexBuild": "search-index-build",
     "data.notablePlacesBuild": "notable-places-build",
@@ -2412,15 +2795,22 @@ export function retainFixedCliSpawnIntent(
     operation: unknown;
     args: readonly string[];
     plan?: readonly ControlPlannedChild[];
+    reservations?: readonly ControlChildReservation[];
   },
 ): void {
   const s = executionAuthorityState(authority);
   const id = uuid.parse(input.delegationId);
   const operation = opsOperationSchema.parse(input.operation);
-  const plan = s.plan.find(
-    (p) =>
-      controlDigest(p.execution) === controlDigest(input.execution) && p.recipient === "fixed-cli",
+  const slot = [...s.plan, ...s.reservations].find(
+    (p) => p.execution.executionId === input.execution.executionId && p.recipient === "fixed-cli",
   );
+  const plan = slot
+    ? resolveControlChildPlan(authority, {
+        phase: slot.phase,
+        execution: input.execution,
+        recipient: "fixed-cli",
+      })
+    : undefined;
   if (
     !plan ||
     opsOperationFingerprint(operation) !== input.execution.operationFingerprint ||
@@ -2442,6 +2832,11 @@ export function retainFixedCliSpawnIntent(
         .array(plannedChildSchema)
         .max(64)
         .parse(input.plan ?? []),
+      ...(input.reservations === undefined
+        ? {}
+        : {
+            reservations: z.array(controlChildReservationSchema).max(64).parse(input.reservations),
+          }),
     },
     true,
     s.origin,
@@ -2513,6 +2908,7 @@ export function readFixedCliSpawnIntent(
   const saved = z
     .strictObject({
       plan: z.array(plannedChildSchema).max(64),
+      reservations: z.array(controlChildReservationSchema).max(64).optional(),
       execution: executionRefSchema,
       operation: opsOperationSchema,
       args: z.array(z.string().max(4096)).max(64),
@@ -2652,6 +3048,7 @@ export function restoreAdmittedControlExecution(
         serviceIds: targetSchema,
         origin: controlOriginSchema.optional(),
         plan: z.array(plannedChildSchema).max(64),
+        reservations: z.array(controlChildReservationSchema).max(64).optional(),
       })
       .passthrough(),
   );
@@ -2668,6 +3065,7 @@ export function restoreAdmittedControlExecution(
     kind: payload.kind,
     serviceIds: payload.serviceIds,
     plan: payload.plan,
+    reservations: payload.reservations ?? [],
     receiptDigest: controlDigest(raw),
     origin: payload.origin,
   });

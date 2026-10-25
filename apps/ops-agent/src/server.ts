@@ -1,28 +1,39 @@
 import { createHash, randomBytes as nodeRandomBytes, timingSafeEqual } from "node:crypto";
 import {
   acknowledgeControlRetention,
+  acquireArtifactTargetLease,
   assertArtifactTargetLeaseForward,
   assertFreshControlRoot,
-  type BorrowedArtifactTargetLease,
   beginControlEffect,
   type ControlInstallation,
   cancelArtifactTargetLease,
+  cancelControlExecution,
   closeArtifactTargetLeaseHandle,
+  commitFeedProxyValidationFailure,
   completeControlJournalExecution,
+  controlInstallationDataRoot,
   controlRegisteredServiceIds,
   inspectControlAdmission,
+  inspectFeedProxyValidationFailure,
+  isFixedSingleDataCommand,
+  markFeedProxyReloadAttempted,
+  planFixedSingleDataCommand,
   controlHeaders as readControlHeaders,
   reconcileControlRetention,
   registerControlRetentionJournal,
+  releaseArtifactTargetLease,
   repairControlJournalTerminal,
   requireControlJournalRetention,
+  reserveFeedProxyValidation,
   restoreAdmittedControlExecution,
   retainAdmittedControlExecution,
   retainControlEffectReceipt,
   retainControlTerminalCommitment,
   retainControlTerminalStatus,
   retainedControlAdoptionAssertion,
+  retainFixedSingleDataPlan,
   settleArtifactTargetLeaseChild,
+  type TargetLeaseAuthority,
   type VerifiedExecutionAuthority,
   verifyControlEffectSettlement,
   verifyRetainedArtifactTargetSettlement,
@@ -426,7 +437,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     }
   };
 
-  const controlLeases = new Map<string, BorrowedArtifactTargetLease>();
+  const controlLeases = new Map<string, TargetLeaseAuthority>();
   const controlAuthorities = new Map<string, VerifiedExecutionAuthority>();
   app.addHook("onClose", async () => {
     for (const lease of controlLeases.values()) closeArtifactTargetLeaseHandle(lease);
@@ -560,26 +571,40 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     > = {},
   ): Promise<void> => {
     await withAdmissionLock(async () => {
+      if (state === "termination_pending" && job.terminalAt !== undefined) return;
       const updatedAt = now().toISOString();
       const lease = controlLeases.get(job.operationId);
       const authority = controlAuthorities.get(job.operationId);
+      if (authority && state === "termination_pending") cancelControlExecution(authority);
       if (lease && state === "termination_pending") await cancelArtifactTargetLease(lease);
       if (authority && ["succeeded", "failed", "timed_out"].includes(state)) {
         if (!options.controlInstallation) throw Error("Missing control settlement installation");
         // The fixed runtime's validated result is own-effect evidence. Failure alone is not containment.
         const committed = state === "succeeded" && updates.result !== undefined;
+        let validationFailure: string | null = null;
+        if (state === "failed" && job.operation.kind === "feedProxy.validateAndReload") {
+          try {
+            validationFailure = inspectFeedProxyValidationFailure(authority);
+          } catch {
+            /* Missing/corrupt producer evidence stays unknown. */
+          }
+        }
         retainControlEffectReceipt(authority, {
-          outcome: committed ? "committed" : "unknown",
-          publication: committed ? "committed" : "unknown",
+          outcome: committed ? "committed" : validationFailure ? "contained" : "unknown",
+          publication: committed ? "committed" : validationFailure ? "not_started" : "unknown",
           receipt: committed
             ? { kind: "ops-result", result: updates.result }
-            : { kind: "unresolved" },
+            : validationFailure
+              ? { kind: "feed-proxy-validation-failure", commitmentDigest: validationFailure }
+              : { kind: "unresolved" },
         });
-        if (lease)
+        if (lease) {
           await settleArtifactTargetLeaseChild(
             lease,
             verifyControlEffectSettlement(options.controlInstallation, authority.execution),
           );
+          if (lease.mode === "owner" && committed) await releaseArtifactTargetLease(lease);
+        }
       }
       const candidate: JobRecord = { ...job, ...updates, state, updatedAt };
       if (authority && ["succeeded", "failed", "timed_out"].includes(state)) {
@@ -612,13 +637,14 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
 
   const forceRecoveryRequired = (job: JobRecord): void => {
     stickyRecoveryRequired.add(job.operationId);
+    const workerActive = activeControllers.has(job.operationId);
     job.result = undefined;
-    job.errorClass = "recovery_required";
-    job.terminalAt = now().getTime();
+    job.errorClass = workerActive ? undefined : "recovery_required";
+    job.terminalAt = workerActive ? undefined : now().getTime();
     job.updatedAt = now().toISOString();
-    job.state = "failed";
+    job.state = workerActive ? "termination_pending" : "failed";
     job.cursor += 1;
-    pushEvent(job, { cursor: job.cursor, type: "state", state: "failed" });
+    pushEvent(job, { cursor: job.cursor, type: "state", state: job.state });
   };
 
   const identityFor = (job: JobRecord) =>
@@ -636,6 +662,14 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       // Compatibility records never resume a forward execution or gain a new budget.
       deadlineAt: job.deadlineAt ?? Date.parse(job.submittedAt),
     });
+  function borrowedLeaseFor(id: string) {
+    const lease = controlLeases.get(id);
+    return lease?.mode === "borrowed" ? lease : undefined;
+  }
+  function ownedLeaseFor(id: string) {
+    const lease = controlLeases.get(id);
+    return lease?.mode === "owner" ? lease : undefined;
+  }
   const contextFor = (
     job: JobRecord,
     signal: AbortSignal,
@@ -644,8 +678,27 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     signal,
     claim,
     execution: executionFor(job),
-    artifactLease: controlLeases.get(job.operationId),
+    artifactLease: borrowedLeaseFor(job.operationId),
+    ownedTargetLease: ownedLeaseFor(job.operationId),
     controlAuthority: controlAuthorities.get(job.operationId),
+    ...(job.operation.kind === "feedProxy.validateAndReload"
+      ? {
+          async commitFeedProxyValidationFailure(input: {
+            candidateDigest: string;
+            validationExitCode: number;
+            completionDigest: string;
+          }) {
+            const authority = controlAuthorities.get(job.operationId);
+            if (!authority) throw Error("Original validation authority missing");
+            commitFeedProxyValidationFailure(authority, input);
+          },
+          async markFeedProxyReloadAttempted() {
+            const authority = controlAuthorities.get(job.operationId);
+            if (!authority) throw Error("Original validation authority missing");
+            markFeedProxyReloadAttempted(authority);
+          },
+        }
+      : {}),
     otherActiveOperations: () =>
       [...jobsById.values()].filter(
         (other) =>
@@ -825,6 +878,11 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         if (authority) {
           const lease = controlLeases.get(job.operationId);
           if (lease) assertArtifactTargetLeaseForward(lease);
+          if (job.operation.kind === "feedProxy.validateAndReload") {
+            const digest = claim.capability.values.candidateDigest;
+            if (typeof digest !== "string") throw Error("Original candidate claim missing");
+            reserveFeedProxyValidation(authority, job.operation.candidateId, digest);
+          }
           beginControlEffect(authority);
         }
         return dispatch(job.operation, runtime, contextFor(job, controller.signal, claim));
@@ -867,6 +925,12 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 startedAt,
               );
             } else if (stickyRecoveryRequired.has(job.operationId)) {
+              await transition(job, "failed", {
+                result: undefined,
+                errorClass: "recovery_required",
+                terminalAt: now().getTime(),
+              });
+              terminalDurable = true;
               audit(
                 job.role,
                 job.operation.kind,
@@ -875,6 +939,30 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 startedAt,
                 "recovery_required",
               );
+            } else if (
+              (timedOut || job.state === "termination_pending") &&
+              job.role === "data-manager" &&
+              [
+                "motis.primary.stop",
+                "motis.staging.stop",
+                "motis.staging.restart",
+                "motis.primary.restart",
+                "motis.primary.promote",
+                "feedProxy.validateAndReload",
+                "transitousLock.approve",
+              ].includes(job.operation.kind)
+            ) {
+              // These fixed leaf handlers return only after their host call
+              // settles. Cancellation cannot erase a validated commit receipt
+              // from an already-started call; no new forward phase is allowed.
+              const result = parseBoundedOpsResult(job.operation.kind, rawResult);
+              await transition(job, "succeeded", {
+                result,
+                errorClass: undefined,
+                terminalAt: now().getTime(),
+              });
+              terminalDurable = true;
+              audit(job.role, job.operation.kind, job.resourceId, "late_completion", startedAt);
             } else if (timedOut) {
               await transition(job, "timed_out", {
                 errorClass: "timeout",
@@ -981,6 +1069,12 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           clearTimeout(timer);
           try {
             if (stickyRecoveryRequired.has(job.operationId)) {
+              await transition(job, "failed", {
+                result: undefined,
+                errorClass: "recovery_required",
+                terminalAt: now().getTime(),
+              });
+              terminalDurable = true;
               audit(
                 job.role,
                 job.operation.kind,
@@ -1244,6 +1338,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       let controlAdmission: ReturnType<typeof inspectControlAdmission> | undefined;
       const parentHeader = request.headers["x-openmapx-parent-execution"];
       const delegationHeader = request.headers["x-openmapx-control-delegation"];
+      // Approval is exclusively a borrowed activation leaf. Installing its
+      // future validation runtime must never enable a bearer-only root path.
+      if (operation.kind === "transitousLock.approve" && delegationHeader === undefined)
+        throw new RequestGuardError("authorization", 403);
       try {
         readControlHeaders(request.raw.rawHeaders);
       } catch {
@@ -1515,6 +1613,14 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 "serviceId" in operation
                   ? [operation.serviceId]
                   : controlRegisteredServiceIds(options.controlInstallation);
+              const fixedDataPlan = isFixedSingleDataCommand(job.operation.kind)
+                ? planFixedSingleDataCommand(
+                    executionFor(job),
+                    job.operation,
+                    targets,
+                    process.env.OPENMAPX_REGION,
+                  )
+                : undefined;
               const authority = retainAdmittedControlExecution(options.controlInstallation, {
                 execution: executionFor(job),
                 operation: job.operation,
@@ -1523,9 +1629,23 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 requestedDeadlineAt: job.requestedDeadlineAt,
                 parent: job.parent,
                 serviceIds: targets,
+                ...(fixedDataPlan ? { reservations: [fixedDataPlan.rootReservation] } : {}),
               });
+              if (fixedDataPlan) retainFixedSingleDataPlan(authority, fixedDataPlan);
               requireControlJournalRetention(authority);
               controlAuthorities.set(job.operationId, authority);
+              if (
+                ["valhalla.traffic.maintain", "valhalla.traffic.refreshWaysToEdges"].includes(
+                  job.operation.kind,
+                )
+              ) {
+                const lease = await acquireArtifactTargetLease({
+                  dataRoot: controlInstallationDataRoot(options.controlInstallation),
+                  serviceIds: ["valhalla"],
+                  owner: authority,
+                });
+                controlLeases.set(job.operationId, lease);
+              }
             } catch (error) {
               forceRecoveryRequired(job);
               await journal.replace([...jobsById.values()].map(persisted));
@@ -1783,23 +1903,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       return reply.code(409).send(redactedOpsError(requestId, "conflict"));
     }
     try {
-      await withAdmissionLock(async () => {
-        if (job.terminalAt !== undefined || job.state === "termination_pending") return;
-        const updatedAt = now().toISOString();
-        const candidate: JobRecord = {
-          ...job,
-          state: "termination_pending",
-          updatedAt,
-          terminationRequestedAt: job.terminationRequestedAt ?? updatedAt,
-        };
-        await journal.replace(
-          [...jobsById.values()].map((entry) => persisted(entry === job ? candidate : entry)),
-        );
-        job.state = "termination_pending";
-        job.updatedAt = updatedAt;
-        job.terminationRequestedAt = candidate.terminationRequestedAt;
-        job.cursor += 1;
-        pushEvent(job, { cursor: job.cursor, type: "state", state: "termination_pending" });
+      await transition(job, "termination_pending", {
+        terminationRequestedAt: job.terminationRequestedAt ?? now().toISOString(),
       });
     } catch {
       forceRecoveryRequired(job);

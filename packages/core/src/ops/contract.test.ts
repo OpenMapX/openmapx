@@ -205,8 +205,11 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   },
   "transitousLock.approve": {
     kind: "transitousLock.approve",
-    ref: `main@${"a".repeat(40)}`,
-    approvedBy: "fixture-actor",
+    proposalId: "00000000-0000-4000-8000-000000000001",
+    validationId: "00000000-0000-4000-8000-000000000002",
+    expectedGenerationId: null,
+    diffDigest: "a".repeat(64),
+    acknowledgeLicenseChanges: false,
   },
   "gbfsCatalogLock.inspect": { kind: "gbfsCatalogLock.inspect" },
 };

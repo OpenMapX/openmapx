@@ -585,11 +585,14 @@ it("keeps paired-pin approval a one-use leaf under its original activation root"
   const execution = ref("data-manager", operation.kind, operation);
   const body = {
     kind: "transitousLock.approve" as const,
-    ref: `main@${"a".repeat(40)}`,
-    approvedBy: "synthetic-reviewer",
+    proposalId: randomUUID(),
+    validationId: operation.validationId,
+    expectedGenerationId: null,
+    diffDigest: "a".repeat(64),
+    acknowledgeLicenseChanges: false,
   };
   const childRef = ref("ops-agent", body.kind, body, execution, "paired-pin-commit");
-  // The current legacy kind has a 30 s budget and stays closed in the real adapter.
+  // The exact async120s leaf stays closed in the production adapter until05.3.
   childRef.deadlineAt = Date.now() + 20000;
   childRef.fingerprint = executionFingerprint({
     kind: body.kind,

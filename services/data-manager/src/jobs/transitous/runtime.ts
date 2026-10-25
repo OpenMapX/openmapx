@@ -1,4 +1,4 @@
-import { db } from "../../db/index.js";
+import { db, rawSql } from "../../db/index.js";
 import { createSingleFlightController, type SingleFlightController } from "./single-flight.js";
 
 /**
@@ -14,7 +14,7 @@ let cached: SingleFlightController | null = null;
 
 export function getSingleFlightController(): SingleFlightController {
   if (!cached) {
-    cached = createSingleFlightController({ db });
+    cached = createSingleFlightController({ db, admissionSql: rawSql });
   }
   return cached;
 }

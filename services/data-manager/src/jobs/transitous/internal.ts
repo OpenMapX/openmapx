@@ -29,6 +29,7 @@ import {
   type TransitousFeedSource,
 } from "@openmapx/transitous-core";
 import { execa } from "execa";
+import { dataWorkerSignal } from "../execution/worker-scope.js";
 import type { TransitousScriptRunner } from "./script-runner.js";
 import type { FeedDownloadFailure, FeedFileEntry, JobLogger } from "./types.js";
 
@@ -93,7 +94,11 @@ export async function defaultRunner(
   args: string[],
   opts: { cwd?: string; stdio?: "inherit" | "pipe" },
 ): Promise<void> {
-  await execa(command, args, { cwd: opts.cwd, stdio: opts.stdio ?? "pipe" });
+  await execa(command, args, {
+    cwd: opts.cwd,
+    stdio: opts.stdio ?? "pipe",
+    cancelSignal: dataWorkerSignal(),
+  });
 }
 
 export function normaliseCountries(countries: string[]): string[] {

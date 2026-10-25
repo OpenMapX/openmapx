@@ -8,7 +8,6 @@ import { createTransitousLockRuntime } from "./transitous-lock-runtime";
 
 const roots: string[] = [];
 const REF = `main@${"a".repeat(40)}`;
-const OTHER_REF = `main@${"b".repeat(40)}`;
 
 function root(): string {
   const directory = mkdtempSync(join(tmpdir(), "openmapx-lock-runtime-"));
@@ -89,11 +88,21 @@ describe("agent-owned Transitous catalog lock", () => {
       { kind: "transitousLock.propose", ref: REF, submodules: {}, lockedBy: "auto-bump" },
       context(),
     );
-    for (const ref of [REF, OTHER_REF])
+    for (const proposalId of [
+      "00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+    ])
       await expect(
         dispatchOpsOperation(
           runtime,
-          { kind: "transitousLock.approve", ref, approvedBy: "admin" },
+          {
+            kind: "transitousLock.approve",
+            proposalId,
+            validationId: "00000000-0000-4000-8000-000000000003",
+            expectedGenerationId: null,
+            diffDigest: "a".repeat(64),
+            acknowledgeLicenseChanges: false,
+          },
           context(),
         ),
       ).rejects.toThrow(/paired-pin/);

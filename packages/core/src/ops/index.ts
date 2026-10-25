@@ -1,3 +1,4 @@
+export * from "./catalog-pin-approval";
 export * from "./client";
 export * from "./contract";
 export * from "./control-retention-receipt";

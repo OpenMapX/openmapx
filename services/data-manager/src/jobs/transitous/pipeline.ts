@@ -144,17 +144,11 @@ export async function runTransitousPipeline(
       if (!entry) continue;
       if (ctx.abortSignal.aborted) {
         ctx.logger.warn(`transitous-pipeline: aborted before ${entry.name}`);
-        break;
+        ctx.abortSignal.throwIfAborted();
       }
       const result = await entry.run(ctx);
       results.push(result);
-      try {
-        await ctx.onStageComplete(result);
-      } catch (err) {
-        ctx.logger.warn(
-          `transitous-pipeline: onStageComplete threw for ${entry.name}: ${(err as Error).message}`,
-        );
-      }
+      await ctx.onStageComplete(result);
       if (result.status === "error" && entry.criticality === "critical") {
         hardStopError = new Error(
           result.error?.message ?? result.message ?? `${entry.name} failed`,
@@ -196,6 +190,7 @@ export async function runTransitousPipeline(
   }
 
   if (hardStopError) throw hardStopError;
+  ctx.abortSignal.throwIfAborted();
 
   return {
     jobId: ctx.jobId,
@@ -214,6 +209,7 @@ function aggregateFinalStatus(results: StageResult[]): StageStatus {
 }
 
 export interface BuildJobContextOptions {
+  executionContext?: import("../execution/runtime.js").DataExecutionContext;
   dataDir: string;
   store: StateStore;
   countries?: string[];
@@ -269,6 +265,7 @@ export function buildJobContext(opts: BuildJobContextOptions): JobContext {
   const slotLayout =
     process.env.MOTIS_TWO_SLOT === "true" ? ensureMotisSlotLayout(opts.dataDir) : undefined;
   return {
+    executionContext: opts.executionContext,
     jobId: opts.jobId ?? randomUUID(),
     dataDir: opts.dataDir,
     catalogDir,

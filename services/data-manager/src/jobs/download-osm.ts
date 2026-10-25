@@ -51,29 +51,34 @@ export function resolveOsmMd5Url(osmUrl: string): string {
   return `${osmUrl}.md5`;
 }
 
-function computeMd5(filePath: string): Promise<string> {
+function computeMd5(filePath: string, signal?: AbortSignal): Promise<string> {
   return new Promise((resolve, reject) => {
     const hash = createHash("md5");
-    const stream = createReadStream(filePath);
+    const stream = createReadStream(filePath, { signal });
     stream.on("data", (chunk) => hash.update(chunk));
     stream.on("end", () => resolve(hash.digest("hex")));
     stream.on("error", reject);
   });
 }
 
-async function fetchExpectedMd5(url: string): Promise<string | null> {
+async function fetchExpectedMd5(url: string, signal?: AbortSignal): Promise<string | null> {
   try {
-    const { stdout } = await execa("curl", ["-fsSL", url], { timeout: 30_000 });
+    const { stdout } = await execa("curl", ["-fsSL", url], {
+      timeout: 30_000,
+      cancelSignal: signal,
+    });
     // `<md5>  <filename>` — take the first whitespace-delimited token.
     const token = stdout.trim().split(/\s+/)[0];
     if (token && /^[0-9a-f]{32}$/i.test(token)) return token.toLowerCase();
   } catch {
+    signal?.throwIfAborted();
     // Sidecar not published or curl failed; treat as "no verification available".
   }
   return null;
 }
 
 export interface DownloadOsmOptions {
+  signal?: AbortSignal;
   region: string;
   dataDir: string;
   store: StateStore;
@@ -102,6 +107,7 @@ export interface DownloadOsmResult {
 }
 
 export async function downloadOsm(opts: DownloadOsmOptions): Promise<DownloadOsmResult> {
+  opts.signal?.throwIfAborted();
   const url = resolveOsmUrl(opts.region);
   const fileName = osmPbfName(opts.region);
   const targetDir = join(opts.dataDir, "osm");
@@ -110,14 +116,18 @@ export async function downloadOsm(opts: DownloadOsmOptions): Promise<DownloadOsm
 
   let md5: string | undefined;
   const expected =
-    opts.verifyChecksum === false ? null : await fetchExpectedMd5(resolveOsmMd5Url(url));
+    opts.verifyChecksum === false
+      ? null
+      : await fetchExpectedMd5(resolveOsmMd5Url(url), opts.signal);
   const download = opts.downloadImpl ?? curlAtomicWithResult;
   const result = await download(url, targetPath, {
+    signal: opts.signal,
+    publication: "data-output",
     onProgress: opts.onProgress,
     withPublishLock: opts.withPublishLock,
     beforePublish: async (tempPath) => {
       if (expected) {
-        const actual = await computeMd5(tempPath);
+        const actual = await computeMd5(tempPath, opts.signal);
         if (actual !== expected) {
           throw new Error(
             `OSM PBF checksum mismatch for ${opts.region}: expected ${expected}, got ${actual}. The download is corrupt — re-run to retry.`,
@@ -131,7 +141,7 @@ export async function downloadOsm(opts: DownloadOsmOptions): Promise<DownloadOsm
   // A 304 has no temp file to validate, so retain the previous behavior of
   // verifying the already-published target against the current sidecar.
   if (!result.published && expected) {
-    const actual = await computeMd5(targetPath);
+    const actual = await computeMd5(targetPath, opts.signal);
     if (actual !== expected) {
       throw new Error(
         `OSM PBF checksum mismatch for ${opts.region}: expected ${expected}, got ${actual}. The download is corrupt — re-run to retry.`,

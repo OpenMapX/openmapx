@@ -1,3 +1,10 @@
+vi.mock("../../src/jobs/transitous/owned-ops.js", async () => {
+  const original = await vi.importActual<typeof import("../../src/jobs/transitous/owned-ops.js")>(
+    "../../src/jobs/transitous/owned-ops.js",
+  );
+  return { ...original, ...(await import("../helpers/owned-transit-unit.js")) };
+});
+
 import {
   chmodSync,
   closeSync,
@@ -434,117 +441,26 @@ describe("promote stage", () => {
       },
     );
 
-    it("bounds nonterminal old-primary recovery after job cancellation with real status polling", async () => {
-      const { fx, ctx } = readyFixture(layout);
-      const actual =
-        await vi.importActual<typeof import("../../src/ops-client.js")>("../../src/ops-client.js");
-      const tokenFile = join(fx.dataDir, "ops-test-token");
-      writeFileSync(tokenFile, "a".repeat(43));
-      const unchanged = directorySnapshot(fx.dataDir);
-      vi.stubEnv("OPS_AGENT_URL", "http://ops-agent:4300");
-      vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
-      actual.resetOpsClient();
-      const cancelled = new AbortController();
-      ctx.abortSignal = cancelled.signal;
-      const cleanup = new AbortController();
-      const nativeTimeout = AbortSignal.timeout.bind(AbortSignal);
-      const timeout = vi
-        .spyOn(AbortSignal, "timeout")
-        .mockImplementation((ms) => nativeTimeout(ms > 120_000 ? 100 : ms));
-      let polls = 0;
-      let deletes = 0;
-      let admitted = false;
-      let operationKey = "";
-      globalThis.fetch = vi.fn(async (input: unknown, init?: RequestInit) => {
-        const url = String(input);
-        if (!url.startsWith("http://ops-agent:4300/")) return jsonResponse(successfulBody(url));
-        init?.signal?.throwIfAborted();
-        if (init?.method === "DELETE") deletes++;
-        const operationId = "job1_pendingRecovery000";
-        let requestId: string | null;
-        let result: unknown;
-        if (init?.method === "POST") {
-          const request = JSON.parse(String(init.body));
-          requestId = request.requestId;
-          operationKey = request.operationKey;
-          admitted = true;
-          result = {
-            execution: "async",
-            operationId,
-            operationKey,
-            kind: "motis.primary.restart",
-            state: "running",
-          };
-        } else {
-          polls++;
-          requestId = new Headers(init?.headers).get("x-ops-request-id");
-          result = {
-            version: 1,
-            operationId,
-            operationKey,
-            kind: "motis.primary.restart",
-            resourceId: "motis",
-            state: "termination_pending",
-            submittedAt: "2026-05-01T00:00:00.000Z",
-            updatedAt: "2026-05-01T00:00:01.000Z",
-          };
-        }
-        return jsonResponse({ version: 1, requestId, ok: true, result });
-      }) as typeof fetch;
-      vi.mocked(runOpsOperation).mockImplementation(async (operation, options) => {
+    it("does not start old-primary recovery after job cancellation", async () => {
+      const { fx, ctx } = readyFixture(layout),
+        before = directorySnapshot(fx.dataDir),
+        controller = new AbortController();
+      ctx.abortSignal = controller.signal;
+      vi.mocked(runOpsOperation).mockImplementation(async (operation) => {
         opsCalls.push(operation);
         if (operation.kind === "motis.staging.stop") {
-          cancelled.abort();
-          throw new Error("staging stop timed out");
-        }
-        if (operation.kind === "motis.primary.restart") {
-          return actual.runOpsOperation(operation, {
-            ...options,
-            signal: options?.signal ?? cleanup.signal,
-            pollIntervalMs: 10,
-          });
+          controller.abort();
+          throw Error("staging stop timed out");
         }
         return { changed: true, state: "stopped" };
       });
-      const pending = promoteRun(ctx);
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      try {
-        // The shortened 100 ms recovery deadline is what must end promotion;
-        // this watchdog only turns a regression into a failure instead of a
-        // hang, so it leaves room for a saturated runner.
-        const result = await Promise.race([
-          pending,
-          new Promise<undefined>((resolve) => {
-            timer = setTimeout(() => resolve(undefined), 10_000);
-          }),
-        ]);
-        expect(cancelled.signal.aborted).toBe(true);
-        expect(admitted).toBe(true);
-        expect(polls).toBeGreaterThan(1);
-        expect(
-          result,
-          "nonterminal recovery must not keep promotion pending indefinitely",
-        ).toBeDefined();
-        expect(result?.status).toBe("error");
-        expect(result?.message).toContain("staging stop timed out");
-        expect(result?.message).toMatch(/recovery completion unknown.*deadline/i);
-        expect(timeout).toHaveBeenCalledWith(125_000);
-        expect(deletes).toBe(0);
-        expect(directorySnapshot(fx.dataDir)).toEqual(unchanged);
-        expect(opsCalls.map(({ kind }) => kind)).toEqual([
-          "motis.primary.stop",
-          "motis.staging.stop",
-          "motis.primary.restart",
-        ]);
-        expect(recordPromotedSource).not.toHaveBeenCalled();
-      } finally {
-        if (timer) clearTimeout(timer);
-        cleanup.abort();
-        await pending;
-        timeout.mockRestore();
-        actual.resetOpsClient();
-        vi.unstubAllEnvs();
-      }
+      await expect(promoteRun(ctx)).rejects.toThrow(/abort/i);
+      expect(directorySnapshot(fx.dataDir)).toEqual(before);
+      expect(opsCalls.map((call) => call.kind)).toEqual([
+        "motis.primary.stop",
+        "motis.staging.stop",
+      ]);
+      expect(recordPromotedSource).not.toHaveBeenCalled();
     });
 
     it("refuses promotion when the data target changes despite confirmed stops", async () => {
@@ -863,8 +779,9 @@ describe("promote stage", () => {
       opsBehaviour.failPromote = false;
     });
     expect(result.status).toBe("error");
-    // initial promote + rollback promote
-    expect(opsCalls.filter((call) => call.kind === "motis.primary.promote")).toHaveLength(2);
+    // The retained recovery phase restarts the original primary, never replays promotion.
+    expect(opsCalls.filter((call) => call.kind === "motis.primary.promote")).toHaveLength(1);
+    expect(opsCalls.filter((call) => call.kind === "motis.primary.restart")).toHaveLength(1);
     // After successful rollback the previous data is back in `currentDir`,
     // and staging holds the (now-stale) new data.
     expect(existsSync(fx.currentDir)).toBe(true);
@@ -902,7 +819,8 @@ describe("promote stage", () => {
 
     expect(result.status).toBe("error");
     expect(result.message).toMatch(/slot B restart failed.*rollback ok/);
-    expect(promoteCalls).toBe(2);
+    expect(promoteCalls).toBe(1);
+    expect(opsCalls.filter((call) => call.kind === "motis.primary.restart")).toHaveLength(1);
     expect(aliasSlot(ctx.slotLayout, "live")).toBe("A");
     expect(aliasSlot(ctx.slotLayout, "staging")).toBe("B");
     expect(ctx.slotLayout.record.activeSlot).toBe("A");

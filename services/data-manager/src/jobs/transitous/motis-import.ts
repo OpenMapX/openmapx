@@ -1,9 +1,9 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { runOpsOperation } from "../../ops-client.js";
 import { verifyCandidateManifest } from "./candidate.js";
 import { IMPORT_MARKER_FILE } from "./internal.js";
 import { STAGING_CONTAINER as STAGING_CONTAINER_NAME } from "./motis-containers.js";
+import { assertTransitForward, preserveTransitPending, runTransitOwnedPhase } from "./owned-ops.js";
 import type { StageFn, StageResult } from "./types.js";
 
 /**
@@ -75,8 +75,9 @@ export const run: StageFn = async (ctx) => {
     // here anyway.
     try {
       // Restarting a container is host authority; the agent owns the name.
-      await runOpsOperation({ kind: "motis.staging.restart" });
+      await runTransitOwnedPhase(ctx, "restart-staging");
     } catch (error) {
+      preserveTransitPending(ctx, error);
       const err = error as Error;
       return {
         stage: "motis-import",
@@ -97,6 +98,7 @@ export const run: StageFn = async (ctx) => {
     // Best-effort: if the write fails (read-only mount, race with restart) we
     // still return ok and let promote fall through to its MOTIS-file sentinel.
     try {
+      assertTransitForward(ctx);
       writeFileSync(
         join(ctx.motisStagingDataDir, IMPORT_MARKER_FILE),
         `${JSON.stringify(
@@ -130,6 +132,7 @@ export const run: StageFn = async (ctx) => {
       },
     } satisfies StageResult;
   } catch (error) {
+    preserveTransitPending(ctx, error);
     const err = error as Error;
     return {
       stage: "motis-import",

@@ -130,12 +130,10 @@ it("retains a fulfilled backend's partial failure evidence in failed DB and SSE 
     new AbortController().signal,
   );
   unsubscribe();
-  expect(database.updates).toContainEqual(
-    expect.objectContaining({
-      status: "failed",
-      result: expect.objectContaining({ phase: "build", ...evidence }),
-    }),
-  );
+  const failed = database.updates.find((update) => update.status === "failed");
+  expect(failed).toBeDefined();
+  const stored = new PgDialect().sqlToQuery(failed!.result as SQL);
+  expect(JSON.parse(stored.params[0] as string)).toMatchObject({ phase: "build", ...evidence });
   expect(events).toContainEqual(
     expect.objectContaining({
       status: "failed",

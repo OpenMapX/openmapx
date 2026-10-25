@@ -2,14 +2,14 @@ import { mkdirSync } from "node:fs";
 import type { DatasetMetadata } from "@openmapx/core/data-manager-contracts";
 import * as dm from "@openmapx/core/data-manager-sdk";
 import type { Command } from "commander";
-import kleur from "kleur";
 import {
   BUILD_ARTIFACTS,
   buildArtifactSpec,
   exportBuildBundle,
   importBuildBundle,
 } from "../lib/build-artifacts";
-import { completeCliCommand } from "../lib/control-context";
+import { cliControlContext, completeCliCommand } from "../lib/control-context";
+import { runCliDataStep } from "../lib/data-execution";
 import {
   applyDataCleanup,
   collectOfflineDataStatus,
@@ -47,67 +47,6 @@ function formatBytes(n: number): string {
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
   return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
-}
-
-function formatDuration(ms: number): string {
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const rs = s % 60;
-  if (m < 60) return `${m}m ${rs}s`;
-  const h = Math.floor(m / 60);
-  return `${h}h ${m % 60}m`;
-}
-
-interface ProgressRenderer {
-  update: (bytes: number, total: number | undefined, startedAtMs: number) => void;
-  done: () => void;
-}
-
-/**
- * Single-line progress bar that rewrites itself in-place via `\r`. Falls back
- * to plain text (and never repeats a line) when stdout isn't a TTY — useful
- * for CI logs and `tee`/pipe redirections.
- */
-function progressRenderer(): ProgressRenderer {
-  const isTty = process.stdout.isTTY === true;
-  const barWidth = 24;
-  let lastLine = "";
-
-  const write = (line: string) => {
-    if (!isTty) {
-      if (line === lastLine) return;
-      process.stdout.write(`${line}\n`);
-      lastLine = line;
-      return;
-    }
-    process.stdout.write(`\r${" ".repeat(lastLine.length)}\r${line}`);
-    lastLine = line;
-  };
-
-  return {
-    update(bytes, total, startedAtMs) {
-      const elapsed = Date.now() - startedAtMs;
-      const rate = elapsed > 0 ? bytes / (elapsed / 1000) : 0;
-      const rateStr = `${formatBytes(rate)}/s`;
-      if (total && total > 0) {
-        const pct = Math.min(100, (bytes / total) * 100);
-        const filled = Math.round((pct / 100) * barWidth);
-        const bar = `${"█".repeat(filled)}${"░".repeat(barWidth - filled)}`;
-        const etaMs = rate > 0 ? ((total - bytes) / rate) * 1000 : 0;
-        const etaStr = rate > 0 ? ` · ETA ${formatDuration(etaMs)}` : "";
-        write(
-          `${kleur.cyan(bar)} ${pct.toFixed(1).padStart(5)}%  ${formatBytes(bytes)} / ${formatBytes(total)}  ${rateStr}${etaStr}`,
-        );
-      } else {
-        write(`${kleur.dim("downloading")}  ${formatBytes(bytes)}  ${rateStr}`);
-      }
-    },
-    done() {
-      if (isTty && lastLine) process.stdout.write("\n");
-      lastLine = "";
-    },
-  };
 }
 
 function printDataManagerStatusTable(datasets: DatasetMetadata[]): void {
@@ -204,17 +143,14 @@ async function runOsmDownload(
     );
   }
 
-  const started = Date.now();
-  const render = progressRenderer();
-  const r = await dm.downloadOsmWithProgress(
-    { region: resolvedRegion.value },
-    {
-      onProgress: ({ bytes, totalBytes }) => render.update(bytes, totalBytes, started),
-      transport,
-    },
+  const status = await runCliDataStep(
+    { kind: "download-osm", region: resolvedRegion.value },
+    transport,
   );
-  render.done();
-  log.ok(`Downloaded ${resolvedRegion.value} (${(r.sizeBytes / 1e9).toFixed(2)} GB) → ${r.path}`);
+  if (status.result?.kind !== "download-osm") throw Error("OSM execution result is unavailable");
+  log.ok(
+    `Downloaded ${resolvedRegion.value} (${(status.result.sizeBytes / 1e9).toFixed(2)} GB); execution ${status.id}`,
+  );
   return resolvedRegion.value;
 }
 
@@ -238,12 +174,14 @@ async function runTransitSync(
       { transport },
     ),
   );
-  log.ok(`Transit sync started: jobId=${result.jobId}`);
+  log.info(
+    `Transit sync queued: ${result.jobId}; inspect this execution in Activity or GET /executions/${result.jobId}`,
+  );
   return result.jobId;
 }
 
 async function runFontDownload(transport: ReturnType<typeof createCliTransport>): Promise<void> {
-  dm.unwrapDataManagerResponse(await dm.downloadFonts({ transport }));
+  await runCliDataStep({ kind: "download-fonts" }, transport);
   log.ok("Downloaded map glyphs");
 }
 
@@ -384,6 +322,8 @@ export function registerDataCommands(program: Command): void {
     .option("--fail-fast", "Stop build-all after the first build failure")
     .action(
       async (region: string | undefined, options: { countries?: string; failFast?: boolean }) => {
+        if (cliControlContext())
+          throw Error("Managed Full Update requires the reviewed build/link workflow upgrade");
         const transport = createCliTransport();
         let resolvedRegion: string;
         try {
@@ -435,17 +375,17 @@ export function registerDataCommands(program: Command): void {
           if (resolvedRegion.sourceEnv) {
             log.dim(`using region "${resolvedRegion.value}" from $${resolvedRegion.sourceEnv}`);
           }
-          const started = Date.now();
-          const render = progressRenderer();
-          const r = await dm.convertOverpassWithProgress(
-            { region: resolvedRegion.value },
-            {
-              onProgress: ({ bytes, totalBytes }) => render.update(bytes, totalBytes, started),
-              transport,
-            },
+          if (!resolvedRegion.value)
+            throw Error("Overpass conversion requires a configured region");
+          const status = await runCliDataStep(
+            { kind: "convert-overpass", region: resolvedRegion.value },
+            transport,
           );
-          render.done();
-          log.ok(`Converted → ${r.targetBz2} (${(r.sizeBytes / 1e9).toFixed(2)} GB)`);
+          if (status.result?.kind !== "convert-overpass")
+            throw Error("Conversion execution result is unavailable");
+          log.ok(
+            `Converted ${(status.result.sizeBytes / 1e9).toFixed(2)} GB; execution ${status.id}`,
+          );
         } else {
           log.err(`Unknown kind: ${kind} (use: overpass)`);
           completeCliCommand(1);
@@ -516,14 +456,11 @@ export function registerDataCommands(program: Command): void {
         return;
       }
       try {
-        const result = await dm.buildSearchIndexWithProgress(
-          { region: resolvedRegion.value },
-          { onProgress: ({ message }) => log.dim(message), transport: createCliTransport() },
+        const status = await runCliDataStep(
+          { kind: "search-index-build", region: resolvedRegion.value },
+          createCliTransport(),
         );
-        log.ok(
-          `Search index published for ${resolvedRegion.value}: ${result.placeCount ?? 0} places, ${result.termCount ?? 0} terms` +
-            (result.epoch ? ` (epoch ${result.epoch})` : ""),
-        );
+        log.ok(`Search index published for ${resolvedRegion.value}; execution ${status.id}`);
       } catch (err) {
         log.err(`search-index build failed: ${(err as Error).message}`);
         dataManagerHint();
@@ -576,14 +513,8 @@ export function registerDataCommands(program: Command): void {
     .description("Fetch the notable places from Wikidata and publish them for search")
     .action(async () => {
       try {
-        const result = await dm.buildNotablePlacesWithProgress({
-          onProgress: ({ message }) => log.dim(message),
-          transport: createCliTransport(),
-        });
-        log.ok(
-          `Notable places published: ${result.placeCount ?? 0} places, ${result.nameCount ?? 0} names` +
-            (result.epoch ? ` (epoch ${result.epoch})` : ""),
-        );
+        const status = await runCliDataStep({ kind: "notable-places-build" }, createCliTransport());
+        log.ok(`Notable places published; execution ${status.id}`);
       } catch (err) {
         log.err(`notable-places build failed: ${(err as Error).message}`);
         dataManagerHint();
@@ -813,22 +744,11 @@ export function registerDataCommands(program: Command): void {
       const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/germany/berlin";
       try {
         log.dim(`Refreshing Overture places for "${resolvedRegion}"…`);
-        const result = await dm.syncOvertureWithProgress(
-          { region: resolvedRegion },
-          {
-            onProgress: ({ message }) => log.dim(message),
-            transport,
-          },
+        const status = await runCliDataStep(
+          { kind: "overture-sync", region: resolvedRegion },
+          transport,
         );
-        log.ok(`Overture ${result.release ?? "release"} active for "${resolvedRegion}"`);
-        if (result.conflation === "failed" || result.conflation === "waiting_for_osm") {
-          log.warn(
-            `OSM link rebuild is ${result.conflation.replaceAll("_", " ")} and will retry independently` +
-              (result.conflationError ? `: ${result.conflationError}` : ""),
-          );
-        } else {
-          log.ok(`${result.linked ?? 0} OSM↔Overture links active`);
-        }
+        log.ok(`Overture active for ${resolvedRegion}; execution ${status.id}`);
       } catch (err) {
         log.err(`overture-sync failed: ${(err as Error).message}`);
         dataManagerHint();
@@ -891,39 +811,11 @@ export function registerDataCommands(program: Command): void {
       const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/germany/berlin";
       try {
         log.dim(`Running Overture conflation for "${resolvedRegion}"…`);
-        const result = await dm.conflateOvertureWithProgress(
-          { region: resolvedRegion, restart: options.restart === true },
-          {
-            onProgress: ({ message }) => log.dim(message),
-            transport,
-          },
+        const status = await runCliDataStep(
+          { kind: "overture-conflate", region: resolvedRegion, restart: options.restart === true },
+          transport,
         );
-        if (!result.ok) {
-          log.err(
-            `overture-conflate failed: ${result.message ?? result.status ?? "unknown error"}`,
-          );
-          completeCliCommand(1);
-        }
-        if (result.status === "already_running") {
-          log.warn(
-            result.message ??
-              "Overture conflation is still running under another worker; no work was claimed",
-          );
-          return;
-        }
-        const linked = result.linked ?? 0;
-        if (result.status === "already_completed") {
-          log.ok(
-            `Overture conflation was already complete: ${linked} link${linked === 1 ? "" : "s"} active`,
-          );
-        } else {
-          log.ok(
-            `Overture conflation complete: ${linked} link${linked === 1 ? "" : "s"} written` +
-              ("extracted" in result && "candidates" in result
-                ? ` from ${result.extracted} OSM POIs and ${result.candidates} accepted edges`
-                : ""),
-          );
-        }
+        log.ok(`Overture conflation complete for ${resolvedRegion}; execution ${status.id}`);
       } catch (err) {
         log.err(`overture-conflate failed: ${(err as Error).message}`);
         dataManagerHint();

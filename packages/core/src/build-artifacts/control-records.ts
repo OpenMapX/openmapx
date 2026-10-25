@@ -23,9 +23,10 @@ export interface InstallationState {
   dataRoot: string;
   registeredTargets: ReadonlySet<string>;
   retentionJournal?: {
+    prepare?(executions: readonly { execution: ExecutionRef; digest?: string }[]): Promise<void>;
     contained(execution: ExecutionRef, digest: string | undefined): boolean;
     retire(
-      executions: readonly { execution: ExecutionRef; digest: string }[],
+      executions: readonly { execution: ExecutionRef; digest: string; terminalAt?: number }[],
       manifestDigest: string,
     ): Promise<void>;
   };
@@ -104,3 +105,12 @@ export function verifyControl<T>(
     throw Error("Invalid control signature");
   return e.payload;
 }
+
+export const targetSchema = z
+  .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
+  .min(1)
+  .max(256)
+  .refine(
+    (x) => x.every((v, i) => i === 0 || (x[i - 1] ?? v) < v),
+    "Targets must be sorted and unique",
+  );

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { setTimeout as runnerDelay } from "node:timers/promises";
 import {
   mintTransitousCapability,
   parseCapabilityKey,
@@ -6,8 +7,10 @@ import {
   TRANSITOUS_RUNNER_TIMEOUT_MS,
   type TransitousRunnerScript,
   transitousRunnerResultSchema,
+  transitousRunnerStatusSchema,
 } from "@openmapx/core/transitous-runner";
 import { scrubSecrets } from "../../utils/scrub-secrets.js";
+import { dataExecutionWorkerContext, dataWorkerSignal } from "../execution/worker-scope.js";
 
 /**
  * Client for the private Transitous runner.
@@ -56,45 +59,112 @@ export function createTransitousScriptRunner(
     // The capability is minted at dispatch, not at queue time: it authorizes
     // this one run and expires within minutes.
     const capability = mintTransitousCapability(options.capabilityKey, { now: now(), run });
-    const controller = new AbortController();
-    // Slightly beyond the runner's own ceiling so its bounded result, not a
-    // client abort, is what the pipeline sees for a script that overruns.
-    const timer = setTimeout(() => controller.abort(), TRANSITOUS_RUNNER_TIMEOUT_MS + 30_000);
-
-    let response: Response;
-    try {
-      response = await fetchImpl(`${options.baseUrl.replace(/\/+$/, "")}/v1/run`, {
+    const controller = new AbortController(),
+      workerSignal = dataWorkerSignal(),
+      context = dataExecutionWorkerContext(),
+      request = { version: TRANSITOUS_RUNNER_PROTOCOL_VERSION, capability, run };
+    const journal = context?.store.controlJournal;
+    if (context && !journal) throw Error("Retained runner owner is unavailable");
+    journal?.retainRunnerAttempt(context!.authority, request);
+    const timer = setTimeout(() => controller.abort(), TRANSITOUS_RUNNER_TIMEOUT_MS + 30000),
+      signal = workerSignal
+        ? AbortSignal.any([workerSignal, controller.signal])
+        : controller.signal;
+    const endpoint = options.baseUrl.replace(/\/+$/, "");
+    async function body(response: Response): Promise<unknown> {
+      const reader = response.body?.getReader();
+      if (!reader) throw Error("Runner response missing");
+      const chunks: Uint8Array[] = [];
+      let length = 0;
+      try {
+        for (;;) {
+          const next = await reader.read();
+          if (next.done) break;
+          length += next.value.byteLength;
+          if (length > 8 * 1024 * 1024) {
+            await reader.cancel();
+            throw Error("Runner response capacity exceeded");
+          }
+          chunks.push(next.value);
+        }
+        return JSON.parse(Buffer.concat(chunks, length).toString("utf8"));
+      } finally {
+        reader.releaseLock();
+      }
+    }
+    const control = async (
+      action: "inspect" | "cancel" | "acknowledge",
+      settlement: AbortSignal,
+    ) => {
+      const response = await fetchImpl(`${endpoint}/v1/run/${action}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          version: TRANSITOUS_RUNNER_PROTOCOL_VERSION,
-          capability,
-          run,
-        }),
-        signal: controller.signal,
+        body: JSON.stringify(request),
+        signal: settlement,
       });
+      if (!response.ok) throw Error("Original runner outcome is unknown");
+      return body(response);
+    };
+    let result: unknown,
+      remoteContained = false;
+    try {
+      try {
+        const response = await fetchImpl(`${endpoint}/v1/run`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(request),
+          signal,
+        });
+        if (!response.ok) throw Error(`Runner HTTP ${response.status}`);
+        result = await body(response);
+      } catch (error) {
+        if (!context && !signal.aborted) throw error; // Standalone client tests have no durable platform owner.
+        const settlement = AbortSignal.timeout(30000);
+        for (;;) {
+          settlement.throwIfAborted();
+          if (signal.aborted)
+            try {
+              await control("cancel", settlement);
+            } catch {
+              /* Retry cancellation only, never execution. */
+            }
+          const state = transitousRunnerStatusSchema.parse(await control("inspect", settlement));
+          if (state.state === "terminal") {
+            result = state.result;
+            break;
+          }
+          await runnerDelay(100, undefined, { signal: settlement });
+        }
+      }
+      const checked = transitousRunnerResultSchema.safeParse(result);
+      if (!checked.success)
+        throw new TransitousScriptError(
+          `Transitous runner returned an unexpected response for ${describe(run)}`,
+        );
+      const parsed = checked.data;
+      journal?.completeRunnerAttempt(context!.authority, request, parsed);
+      remoteContained = true;
+      if (context)
+        try {
+          await control("acknowledge", AbortSignal.timeout(5000));
+        } catch {
+          /* Original contained result is already retained locally. */
+        }
+      if (signal.aborted) signal.throwIfAborted();
+      result = parsed;
     } catch (error) {
-      // The request body carries a live capability; only the reason is safe to
-      // repeat, never the request itself.
+      if (context && !remoteContained) await context.checkpoint({ publication: "unknown" });
       throw new TransitousScriptError(
-        `Transitous runner is unreachable for ${describe(run)}: ${scrubSecrets((error as Error).message)}`,
+        `Transitous runner outcome is unresolved for ${describe(run)}: ${scrubSecrets((error as Error).message)}`,
       );
     } finally {
       clearTimeout(timer);
     }
-
-    if (!response.ok) {
-      throw new TransitousScriptError(
-        `Transitous runner refused ${describe(run)} (HTTP ${response.status})`,
-      );
-    }
-
-    const parsed = transitousRunnerResultSchema.safeParse(await response.json());
-    if (!parsed.success) {
+    const parsed = transitousRunnerResultSchema.safeParse(result);
+    if (!parsed.success)
       throw new TransitousScriptError(
         `Transitous runner returned an unexpected response for ${describe(run)}`,
       );
-    }
     if (!parsed.data.ok) {
       // The output is the script's own stderr, which downstream failure
       // attribution parses. It is scrubbed first: a feed URL in it can carry an
@@ -125,5 +195,10 @@ export function createDefaultTransitousScriptRunner(): TransitousScriptRunner {
       // runner, which is the correct outcome for a missing secret.
     }
   }
-  return createTransitousScriptRunner({ baseUrl, capabilityKey });
+  const runner = createTransitousScriptRunner({ baseUrl, capabilityKey });
+  return async (run) => {
+    if (!dataExecutionWorkerContext())
+      throw new TransitousScriptError("Durable transit worker ownership is required");
+    return runner(run);
+  };
 }
