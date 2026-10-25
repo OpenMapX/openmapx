@@ -162,6 +162,7 @@ export {
   MAX_TOTAL_RECORDED_FILES,
   parseIntegrationRecord,
   readIntegrationRecords,
+  repairIntegrationRecordLocators,
   safeRelativePath,
   sha256Hex,
 } from "./integration-records";
