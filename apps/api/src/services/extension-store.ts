@@ -282,10 +282,14 @@ async function getExtraSources(): Promise<{
 }
 
 function withDefaultSource(sources: ExtensionCatalogSource[]): ExtensionCatalogSource[] {
-  return [
-    { url: DEFAULT_EXTENSION_CATALOG_URL, label: "OpenMapX Community", isDefault: true },
-    ...sources,
-  ];
+  let canonical: string;
+  try {
+    canonical = normalizeExtensionLocator(DEFAULT_EXTENSION_CATALOG_URL);
+    validatePublicUrl(canonical);
+  } catch {
+    throw new ExtensionStoreError("invalid_source_url");
+  }
+  return [{ url: canonical, label: "OpenMapX Community", isDefault: true }, ...sources];
 }
 
 export async function addExtensionSource(url: string, label: string): Promise<void> {
@@ -426,7 +430,14 @@ function isCatalogControlList(value: unknown, critical: boolean): boolean {
 }
 
 async function fetchCatalogFromUrl(url: string): Promise<FetchedCatalog> {
-  const data = await safeFetchJson<unknown>(url, {
+  let canonical: string;
+  try {
+    canonical = normalizeExtensionLocator(url);
+    validatePublicUrl(canonical);
+  } catch {
+    throw new ExtensionStoreError("catalog_acquisition_failed");
+  }
+  const data = await safeFetchJson<unknown>(canonical, {
     headers: { "User-Agent": USER_AGENT_ADMIN },
     timeoutMs: 15_000,
   });

@@ -89,6 +89,22 @@ beforeEach(() => {
 });
 
 describe("extension source and catalog coherence", () => {
+  it.each([
+    "http://catalog.example.test/catalog.json",
+    "https://catalog.example.test/catalog.json?token=secret",
+  ])("rejects an unsafe configured default source before acquisition: %s", async (url) => {
+    vi.stubEnv("EXTENSION_CATALOG_URL", url);
+    vi.resetModules();
+    try {
+      const isolated = await import("../extension-store");
+      await expect(isolated.getExtensionCatalog(true)).rejects.toBeDefined();
+      expect(ports.fetch).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
+  });
+
   it("atomically drops legacy secret-bearing sources and invalidates their catalog", async () => {
     const unsafe = [
       "https://user:password@example.test/catalog.json",

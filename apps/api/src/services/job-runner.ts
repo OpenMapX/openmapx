@@ -34,6 +34,19 @@ export interface JobContext {
 }
 
 type JobHandler = (ctx: JobContext) => Promise<Record<string, unknown> | undefined>;
+const EXTENSION_OUTPUT_URL = /\b(?:https?|git|ssh):/iu;
+
+function sanitizeExtensionRecord(value: Record<string, unknown>): Record<string, unknown> {
+  try {
+    const serialized = JSON.stringify(value, (_key, child: unknown) =>
+      typeof child === "string" && EXTENSION_OUTPUT_URL.test(child) ? "[redacted-url]" : child,
+    );
+    if (serialized === undefined) return { value: "[redacted]" };
+    return sanitizeLogMetadata(JSON.parse(serialized) as unknown);
+  } catch {
+    return { value: "[redacted]" };
+  }
+}
 
 export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
   "backup.operation",
@@ -430,9 +443,13 @@ class AdminJobRunner {
       }
     }
     const durableRecord = (value: Record<string, unknown>): Record<string, unknown> =>
-      sanitizeExtensionOutput ? sanitizeLogMetadata(value) : value;
+      sanitizeExtensionOutput ? sanitizeExtensionRecord(value) : value;
     const durableLine = (value: string): string =>
-      sanitizeExtensionOutput ? sanitizeLogString(value) : value;
+      sanitizeExtensionOutput
+        ? EXTENSION_OUTPUT_URL.test(value)
+          ? "[redacted-url]"
+          : sanitizeLogString(value)
+        : value;
 
     const ctx: JobContext = {
       jobId,

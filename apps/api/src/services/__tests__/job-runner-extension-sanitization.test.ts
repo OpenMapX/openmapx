@@ -33,6 +33,8 @@ const { jobEventBus } = await import("../job-events");
 
 const sensitive =
   "https://sentinel-user:sentinel-password@example.test/private?token=sentinel-query#sentinel-fragment";
+const spacedQuery = "https://example.test/archive.tgz? sentinel-query-secret";
+const spacedFragment = "https://example.test/archive.tgz# sentinel-fragment-secret";
 const validPayload = {
   manifest: {
     id: "fixture-extension",
@@ -89,9 +91,9 @@ describe("extension job durable boundaries", () => {
 
   it("sanitizes extension log, checkpoint, result and live-event values", async () => {
     jobRunner.register("extension.install", async (ctx) => {
-      await ctx.log(`installing ${sensitive}`);
-      await ctx.checkpoint({ checkpoint: sensitive }, 25);
-      return { result: sensitive };
+      await ctx.log(`installing ${sensitive} and ${spacedQuery}`);
+      await ctx.checkpoint({ checkpoint: sensitive, spacedQuery }, 25);
+      return { result: sensitive, spacedFragment };
     });
 
     await executeJob(
@@ -107,13 +109,15 @@ describe("extension job durable boundaries", () => {
       updates: database.updates,
       events: jobEventBus.history("extension-success", 0),
     };
-    expect(JSON.stringify(durableAndLive)).not.toMatch(/sentinel-|example\.test|\/private/);
+    expect(JSON.stringify(durableAndLive)).not.toMatch(
+      /sentinel-|query-secret|fragment-secret|example\.test|\/private/,
+    );
     expect(JSON.stringify(durableAndLive)).toContain("[redacted-url]");
   });
 
   it("sanitizes extension handler failures in storage and live events", async () => {
     jobRunner.register("extension.install", async () => {
-      throw new Error(`failed ${sensitive}`);
+      throw new Error(`failed ${spacedFragment}`);
     });
 
     await executeJob(
@@ -128,7 +132,7 @@ describe("extension job durable boundaries", () => {
       updates: database.updates,
       events: jobEventBus.history("extension-failure", 0),
     };
-    expect(JSON.stringify(durableAndLive)).not.toMatch(/sentinel-|example\.test|\/private/);
+    expect(JSON.stringify(durableAndLive)).not.toMatch(/fragment-secret|example\.test/);
     expect(JSON.stringify(durableAndLive)).toContain("[redacted-url]");
   });
 

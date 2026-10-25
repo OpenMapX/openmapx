@@ -25,9 +25,14 @@ const SAFE_QUESTION_PROSE =
   "Download https://example.test/archive.tgz when ready? Ask an operator.";
 const SPACE_QUERY_URL = `https://example.test/archive name.tgz?token=${SECRET}`;
 const SPACE_FRAGMENT_URL = `https://example.test/archive name.tgz#${SECRET}`;
+const SPACE_LEADING_QUERY_URL = `https://example.test/archive.tgz? ${SECRET}`;
+const SPACE_LEADING_FRAGMENT_URL = `https://example.test/archive.tgz# ${SECRET}`;
+const DOTTED_USER_PASSWORD_URL = `https://user.name:openmapx ${SECRET}@example.test/archive.tgz`;
 const CONTROL_SPACE_QUERY_URL = `\u0001https://example.test/archive name.tgz?token=${SECRET}`;
 const SAFE_HOST_EMAIL_PROSE = "Contact https://example.test:443 owner@example.org for access.";
 const SAFE_URL_LEADING_PROSE = "https://example.test/archive.tgz is ready? Ask an operator.";
+const SAFE_IPV6_EMAIL_PROSE = "Contact https://[2001:db8::1] owner@example.org for access.";
+const SAFE_HOMEPAGE = "https://example.test/docs#installation";
 
 const integration = describe.runIf(process.env.OPENMAPX_RUN_DATABASE_TESTS === "1");
 
@@ -121,7 +126,13 @@ integration("extension URL credential cleanup migration", () => {
             { id: "space-password", artifact: SPACE_IN_PASSWORD_URL, sha256: "f".repeat(64) },
           ],
           services: [{ service: "unsafe", repo: LEGACY_GIT_URL }],
-          notes: [`Downloading ${SPACE_QUERY_URL}`, `Inspect ${SPACE_FRAGMENT_URL}`],
+          notes: [
+            `Downloading ${SPACE_QUERY_URL}`,
+            `Inspect ${SPACE_FRAGMENT_URL}`,
+            `Downloading ${SPACE_LEADING_QUERY_URL}`,
+            `Inspect ${SPACE_LEADING_FRAGMENT_URL}`,
+            `Downloading ${DOTTED_USER_PASSWORD_URL}`,
+          ],
         })}),
         ('clean-extension', 'https://example.test/extension.json', ${sql.json({
           integrations: [{ id: "clean", artifact: "https://example.test/clean.tgz" }],
@@ -133,7 +144,8 @@ integration("extension URL credential cleanup migration", () => {
             { id: "empty-fragment", artifact: SAFE_EMPTY_FRAGMENT_URL },
           ],
           description: SAFE_QUESTION_PROSE,
-          notes: [SAFE_HOST_EMAIL_PROSE, SAFE_URL_LEADING_PROSE],
+          notes: [SAFE_HOST_EMAIL_PROSE, SAFE_URL_LEADING_PROSE, SAFE_IPV6_EMAIL_PROSE],
+          homepage: SAFE_HOMEPAGE,
         })});
     `;
     await sql`
@@ -157,9 +169,12 @@ integration("extension URL credential cleanup migration", () => {
               NEWLINE_BEFORE_FRAGMENT_URL,
               TAB_IN_SCHEME_URL,
               SPACE_IN_PASSWORD_URL,
+              SPACE_LEADING_QUERY_URL,
+              SPACE_LEADING_FRAGMENT_URL,
+              DOTTED_USER_PASSWORD_URL,
             ],
           })},
-          ${`Fetch failed for ${SPACE_QUERY_URL}`}),
+          ${`Fetch failed for ${SPACE_LEADING_QUERY_URL}`}),
         ('safe-job', 'extension.install', ${sql.json({ message: SAFE_HOST_EMAIL_PROSE })},
           ${sql.json({ message: SAFE_URL_LEADING_PROSE })}, ${SAFE_HOST_EMAIL_PROSE}),
         ('other-job', 'system.update', ${sql.json({ url: "https://example.test/keep", keep: "exact" })},
@@ -167,7 +182,7 @@ integration("extension URL credential cleanup migration", () => {
     `;
     await sql`
       INSERT INTO admin_job_log (id, job_id, line) VALUES
-        ('unsafe-log', 'unsafe-job', ${`Downloading ${SPACE_FRAGMENT_URL}`}),
+        ('unsafe-log', 'unsafe-job', ${`Downloading ${SPACE_LEADING_FRAGMENT_URL}`}),
         ('safe-log', 'safe-job', ${SAFE_URL_LEADING_PROSE}),
         ('other-log', 'other-job', 'Keep exact');
     `;
@@ -209,7 +224,7 @@ integration("extension URL credential cleanup migration", () => {
           { id: "space-password", artifact: null, sha256: "f".repeat(64) },
         ],
         services: [{ service: "unsafe", repo: null }],
-        notes: [null, null],
+        notes: [null, null, null, null, null],
       },
     });
     const [integrationRow] = await sql<{ repository: string }[]>`
