@@ -7,11 +7,8 @@ import {
   unwrapDataManagerResponse,
 } from "@openmapx/core/data-manager-sdk";
 import { repoPaths } from "@openmapx/core/server";
-import {
-  type DockerComposeAction,
-  dockerComposeAction,
-  dockerStatus,
-} from "../utils/docker-compose";
+import { dockerComposeAction, dockerStatus } from "../utils/docker-compose";
+import { executeAdminJobOperation } from "./admin-job-ops";
 import type { JobContext } from "./job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-client";
 import { getServiceRegistry } from "./service-registry";
@@ -204,19 +201,43 @@ function assertKnownService(service: string) {
   return svc;
 }
 
+type ServiceLifecycleAction = "start" | "stop" | "restart" | "recreate";
+
+function lifecycleOperation(service: string, action: ServiceLifecycleAction) {
+  switch (action) {
+    case "start":
+      return { kind: "service.start", serviceId: service } as const;
+    case "stop":
+      return { kind: "service.stop", serviceId: service } as const;
+    case "restart":
+      return { kind: "service.restart", serviceId: service } as const;
+    case "recreate":
+      return { kind: "service.recreate", serviceId: service } as const;
+  }
+}
+
 async function serviceComposeAction(
   service: string,
-  action: Exclude<DockerComposeAction, "recreate-isolated">,
+  action: ServiceLifecycleAction,
   ctx: JobContext,
 ): Promise<{ exitCode: number }> {
   assertKnownService(service);
-  // Community and built-in services now take the same typed path: the agent
-  // authorizes the id against its own trusted selection, so the API no longer
-  // needs a direct-Docker adapter for community lifecycle.
-  return dockerComposeAction(service, action, {
-    operationKey: createDurableOpsKey(`admin-job.service.${action}`, `${ctx.jobId}:${service}`),
-    signal: ctx.signal,
-  });
+  // Community and built-in services take the same typed path: the agent
+  // authorizes the id against its own trusted selection, so the API needs no
+  // direct-Docker adapter for community lifecycle. The broker persists the
+  // admitted operation before waiting, which is what lets a job cancellation
+  // reach this exact agent operation.
+  const operation = lifecycleOperation(service, action);
+  try {
+    await executeAdminJobOperation(ctx, operation, `admin-job.service.${action}`, {
+      durableIdentity: service,
+    });
+    return { exitCode: 0 };
+  } catch {
+    // Callers report the established exit-code wording; raw agent and
+    // transport detail is never surfaced.
+    return { exitCode: 1 };
+  }
 }
 
 export async function serviceStart(service: string, ctx: JobContext): Promise<void> {
