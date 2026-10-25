@@ -9,7 +9,7 @@ import {
   resolveTransportApisCandidate,
   transportApisLockJson,
   writeTransportApisLock,
-} from "../src/commands/transport-apis-pin";
+} from "./pin-transport-apis";
 
 let temporaryRoot: string | undefined;
 

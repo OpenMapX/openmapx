@@ -19,7 +19,7 @@ import type { GbfsCatalogEntry, VehicleFormFactor } from "./types/shared-mobilit
 
 // Runtime fallback stays enabled until the MOTIS-first rollout (Plan 006), but
 // it consumes the same immutable registry revision as the import compiler.
-// Bumped transactionally by `openmapx transitous bump`; never point this at master.
+// Bumped with its lock by maintainers (`pnpm pin:gbfs-catalog`); never point this at master.
 const CATALOG_URL = MOBILITYDATA_GBFS_CATALOG_URL;
 const CATALOG_CACHE_KEY = "shared-mobility:gbfs-catalog";
 const ENTUR_CATALOG_CACHE_KEY = "shared-mobility:gbfs-catalog:entur";

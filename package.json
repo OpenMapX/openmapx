@@ -47,6 +47,8 @@
     "discovery-eval": "pnpm -C packages/cli exec tsx ../../scripts/discovery-eval/run.ts",
     "search-eval:record": "pnpm -C packages/cli exec tsx ../../scripts/record-search-eval.mts",
     "check-toolchain-pins": "pnpm -C packages/cli exec tsx ../../scripts/check-toolchain-pins.ts",
+    "pin:gbfs-catalog": "pnpm -C packages/cli exec tsx ../../scripts/pin-gbfs-catalog.ts",
+    "pin:transport-apis": "pnpm -C packages/cli exec tsx ../../scripts/pin-transport-apis.ts",
     "check-production-audits": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/check-production-audits.ts",
     "check:policy": "pnpm check-legal-tables && pnpm check-legal-updated && pnpm check-data-flows && pnpm check-subject-data && pnpm check-license-metadata && pnpm check-air-quality-release-gates && pnpm check-toolchain-pins && pnpm check-feed-ids && pnpm check-credential-keys && pnpm check-dockerfile-sync && pnpm check-image-size-dos && pnpm check-docker-context-secrets && pnpm check-ops-authority && pnpm check-entur-graphql && pnpm check-entur-geocoder && pnpm check-mbta && pnpm check-otp && pnpm check-api-sdk && pnpm check-data-manager-openapi && pnpm check-data-manager-sdk",
     "check-openapi": "pnpm -C apps/api exec tsx scripts/openapi/generate.ts --check",

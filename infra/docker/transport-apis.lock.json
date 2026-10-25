@@ -7,5 +7,5 @@
   "entryCount": 85,
   "lockedAt": "2026-09-22T09:38:51.745Z",
   "lockedBy": "dev@fwcr.de",
-  "comment": "Pinned commit of public-transport/transport-apis consumed by integrations/transit-dynamic-registry. Bump via `pnpm openmapx transit-registry bump`."
+  "comment": "Pinned commit of public-transport/transport-apis consumed by integrations/transit-dynamic-registry. Bump via `pnpm pin:transport-apis`."
 }

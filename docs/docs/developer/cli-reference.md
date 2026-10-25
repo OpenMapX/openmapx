@@ -272,12 +272,12 @@ probe.
 ## `transitous`
 
 Inspect the active [Transitous](https://github.com/public-transport/transitous)
-catalog pin or propose a new Transitous and MobilityData GBFS pin set.
+catalog pin or propose a new one.
 
-| Command           | Description                                                                                                                                                                                                                       |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `transitous show` | Print the current lockfile contents.                                                                                                                                                                                              |
-| `transitous bump` | Fetch upstream pins, summarize changes, and write `transitous.lock.proposed.json` and `gbfs-catalog.lock.proposed.json` under `infra/docker/`. Flags: `--yes` (skip the confirmation prompt), `--branch <name>` (default `main`). |
+| Command           | Description                                                                                                                                                                                               |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `transitous show` | Print the current lockfile contents.                                                                                                                                                                      |
+| `transitous bump` | Fetch the upstream Transitous pin, summarize changes, and write `transitous.lock.proposed.json` under `infra/docker/`. Flags: `--yes` (skip the confirmation prompt), `--branch <name>` (default `main`). |
 
 `transitous bump` reads from a catalog clone the data-manager maintains, so run a
 transit sync once (`pnpm openmapx data sync`) before the first bump. The command
@@ -286,18 +286,9 @@ proposal and validate an inactive MOTIS slot before activation; restarting the
 data-manager does not activate the proposal. See
 [MOTIS operations profiles](../administration/motis-operations-profiles.md).
 
-## `transit-registry`
-
-Manage the pinned commit of the upstream `public-transport/transport-apis` catalog
-used by the dynamic transit registry, recorded in `infra/docker/transport-apis.lock.json`.
-
-| Command                 | Description                                                                                                                                                                                                                                                                      |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `transit-registry show` | Print the current `transport-apis.lock.json` lockfile contents.                                                                                                                                                                                                                  |
-| `transit-registry bump` | Resolve and validate the upstream catalog, report the candidate, and update the lockfile, `integrations/transit-dynamic-registry/pin.ts`, and its manifest health checks. Flags: `--yes` (skip interactive prompt), `--branch <name>` (defaults to the upstream default branch). |
-
-Review all three changed files and run `pnpm check-toolchain-pins`. Updating the
-source pin does not rebuild or deploy the running API image.
+The MobilityData GBFS registry pin and the transport-apis catalog pin are the
+release's. No CLI command changes them: maintainers update them in the
+repository, see [Catalog pins](../guides/transit-engines.md#catalog-pins).
 
 ## Where to go next
 

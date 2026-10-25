@@ -2,9 +2,9 @@
  * Immutable revision of the public-transport/transport-apis catalog this
  * integration consumes. The catalog's `options.endpoint` values become
  * server-side POST targets, so the runtime must never follow a moving branch.
- * Mirrors the MobilityData GBFS pin; bumped by `pnpm openmapx transit-registry
- * bump` and kept in sync with infra/docker/transport-apis.lock.json by
- * `pnpm check-toolchain-pins`.
+ * Mirrors the MobilityData GBFS pin; bumped by maintainers with
+ * `pnpm pin:transport-apis` and kept in sync with
+ * infra/docker/transport-apis.lock.json by `pnpm check-toolchain-pins`.
  */
 export const TRANSPORT_APIS_REPO = "public-transport/transport-apis";
 
