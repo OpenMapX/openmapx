@@ -202,8 +202,8 @@ pnpm openmapx transitous show
 pnpm openmapx transitous bump
 ```
 
-Bump asks permission to write the proposed Transitous lockfile. It does not
-change the active pin or running graph. Follow
+Bump asks permission to write a proposed Transitous pin into the operations
+agent's state. It does not change the pin in effect or the running graph. Follow
 [Pin upgrades](../administration/motis-operations-profiles.md#pin-upgrades)
 to review the proposal, validate an inactive slot, and separately approve the
 exact proposed ref. Opt-in `TRANSITOUS_AUTO_BUMP_CRON` tests a proposed upstream revision through the
@@ -216,8 +216,13 @@ healthy dataset can still become stale.
 
 A release ships three catalog pins in `infra/docker/`:
 
-- `transitous.lock.json`: the Transitous catalog the release was tested with;
+- `transitous.lock.json`: the Transitous catalog the release was tested with.
   `transitous bump` and the auto-bump propose newer ones as described above;
+  the agent keeps a proposal and an approved pin in its own state,
+  `infra/docker/state/ops-agent/transitous/`, never in this file. An approved
+  pin holds until a release ships a different one: that release's pin then
+  takes over, the agent logs the approval it retired, and the auto-bump
+  proposes again through its canary;
 - `gbfs-catalog.lock.json`: the MobilityData GBFS registry revision and its
   SHA-256, paired with `MOBILITYDATA_GBFS_CATALOG_COMMIT` in
   `@openmapx/transitous-core`;
@@ -225,8 +230,9 @@ A release ships three catalog pins in `infra/docker/`:
   dynamic transit registry consumes, paired with its `pin.ts` and manifest
   health checks.
 
-The operations agent reads the GBFS pin from the copy its image carries, not
-from the host checkout, and no deployment command rewrites these files.
+The operations agent reads the release's pins from the copies its image
+carries, not from the host checkout, and no deployment command rewrites these
+files.
 Maintainers change the GBFS and transport-apis pins in a development checkout
 and commit the result:
 

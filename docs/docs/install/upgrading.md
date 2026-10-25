@@ -113,6 +113,19 @@ Maintenance in the admin panel say when the checkout's built-in services differ
 from the release's. The host `pnpm openmapx check` cannot: it runs the
 checkout's own code and manifests.
 
+Releases before the operations agent kept the Transitous pin in its own state
+wrote an approved pin into the tracked `infra/docker/transitous.lock.json`. If
+`git status` shows that file modified, restore it before pulling:
+
+```bash
+git checkout -- infra/docker/transitous.lock.json
+```
+
+The new release's pin then applies, and the auto-bump, if enabled, proposes a
+newer one again through its canary. A leftover
+`infra/docker/transitous.lock.proposed.json` is no longer read and can be
+deleted.
+
 The checkout has changed, but running containers still use their existing
 images. Continue with release selection and replacement.
 

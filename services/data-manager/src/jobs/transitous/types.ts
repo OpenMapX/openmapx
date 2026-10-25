@@ -191,9 +191,9 @@ export interface JobContext {
   /** Process-local one-run acquisition relay; Track 4 may inject a private-network base URL. */
   operatorFeedRelay: OperatorFeedRelayStore;
   /**
-   * Build from `transitous.lock.proposed.json` instead of the active
-   * `transitous.lock.json`. Used by the auto-bump cron to validate a candidate
-   * catalog ref in the staging slot before activating it. Defaults to false.
+   * Build from the operations agent's proposed pin instead of the pin in
+   * effect. Used by the auto-bump cron to validate a candidate catalog ref in
+   * the staging slot before approving it. Defaults to false.
    */
   useProposedLock?: boolean;
   /** Scratch state passed between stages. */

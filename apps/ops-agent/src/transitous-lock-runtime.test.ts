@@ -1,8 +1,19 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  releaseGbfsCatalogPin,
+  releaseTransitousPin,
+  transitousStatePaths,
+} from "@openmapx/transitous-core/pins";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { releaseGbfsCatalogPin } from "./release-catalog-pins";
 import { createUnavailableRuntime, dispatchOpsOperation } from "./runtime";
 import { createTransitousLockRuntime } from "./transitous-lock-runtime";
 
@@ -10,10 +21,15 @@ const roots: string[] = [];
 const REF = `main@${"a".repeat(40)}`;
 const OTHER_REF = `main@${"b".repeat(40)}`;
 
+/** A checkout under umask 002 with the agent's state directory. */
 function root(): string {
   const directory = mkdtempSync(join(tmpdir(), "openmapx-lock-runtime-"));
   roots.push(directory);
-  mkdirSync(join(directory, "infra", "docker"), { recursive: true });
+  mkdirSync(join(directory, "infra", "docker", "state", "ops-agent"), {
+    recursive: true,
+    mode: 0o700,
+  });
+  chmodSync(join(directory, "infra", "docker"), 0o775);
   return directory;
 }
 
@@ -37,12 +53,13 @@ function runtimeFor(rootDir: string) {
   });
 }
 
-function lockPath(rootDir: string): string {
-  return join(rootDir, "infra", "docker", "transitous.lock.json");
-}
+const infraDir = (rootDir: string) => join(rootDir, "infra", "docker");
+const state = (rootDir: string) => transitousStatePaths(infraDir(rootDir));
 
-function proposedPath(rootDir: string): string {
-  return join(rootDir, "infra", "docker", "transitous.lock.proposed.json");
+/** The release pin as the operation reports it. */
+function releaseRecord() {
+  const { ref, submodules, lockedAt, lockedBy, comment } = releaseTransitousPin();
+  return { ref, submodules, lockedAt, lockedBy, ...(comment ? { comment } : {}) };
 }
 
 afterEach(async () => {
@@ -51,14 +68,18 @@ afterEach(async () => {
 });
 
 describe("agent-owned Transitous catalog lock", () => {
-  it("reports both slots as absent on a fresh checkout", async () => {
+  it("reports the release's pin and no proposal, whatever the checkout holds", async () => {
     const rootDir = root();
+    // Planted in the group-writable checkout: never read.
+    const planted = JSON.stringify({ ref: OTHER_REF, submodules: {}, lockedAt: "", lockedBy: "x" });
+    writeFileSync(join(infraDir(rootDir), "transitous.lock.json"), planted);
+    writeFileSync(join(infraDir(rootDir), "transitous.lock.proposed.json"), planted);
     await expect(
       dispatchOpsOperation(runtimeFor(rootDir), { kind: "transitousLock.inspect" }, context()),
-    ).resolves.toEqual({ active: null, proposed: null });
+    ).resolves.toEqual({ active: releaseRecord(), proposed: null });
   });
 
-  it("writes a proposal without activating anything", async () => {
+  it("writes a proposal into its state without activating anything", async () => {
     const rootDir = root();
     const result = await dispatchOpsOperation(
       runtimeFor(rootDir),
@@ -70,14 +91,15 @@ describe("agent-owned Transitous catalog lock", () => {
       },
       context(),
     );
-
     expect(result).toEqual({ ref: REF, proposed: true });
-    // A proposal must never become the active pin on its own.
-    expect(existsSync(lockPath(rootDir))).toBe(false);
-    expect(JSON.parse(readFileSync(proposedPath(rootDir), "utf-8"))).toMatchObject({
+    expect(JSON.parse(readFileSync(state(rootDir).proposed, "utf-8"))).toMatchObject({
       ref: REF,
       lockedBy: "auto-bump",
     });
+    expect(existsSync(join(infraDir(rootDir), "transitous.lock.proposed.json"))).toBe(false);
+    await expect(
+      dispatchOpsOperation(runtimeFor(rootDir), { kind: "transitousLock.inspect" }, context()),
+    ).resolves.toMatchObject({ active: releaseRecord(), proposed: { ref: REF } });
   });
 
   it("activates a proposal only when the approved ref matches exactly", async () => {
@@ -88,8 +110,6 @@ describe("agent-owned Transitous catalog lock", () => {
       { kind: "transitousLock.propose", ref: REF, submodules: {}, lockedBy: "auto-bump" },
       context(),
     );
-
-    // Approving a different ref than the one proposed must not activate.
     await expect(
       dispatchOpsOperation(
         runtime,
@@ -97,20 +117,25 @@ describe("agent-owned Transitous catalog lock", () => {
         context(),
       ),
     ).rejects.toThrow(/does not match/i);
-    expect(existsSync(lockPath(rootDir))).toBe(false);
+    expect(existsSync(state(rootDir).approved)).toBe(false);
 
     const approved = await dispatchOpsOperation(
       runtime,
       { kind: "transitousLock.approve", ref: REF, approvedBy: "admin" },
       context(),
     );
-    expect(approved).toMatchObject({ ref: REF });
-    expect(JSON.parse(readFileSync(lockPath(rootDir), "utf-8"))).toMatchObject({
+    expect(approved).toEqual({ ref: REF, lockedAt: "2026-08-25T00:00:00.000Z" });
+    expect(JSON.parse(readFileSync(state(rootDir).approved, "utf-8"))).toMatchObject({
       ref: REF,
       lockedBy: "admin",
+      releasePin: releaseTransitousPin().ref,
     });
-    // The consumed proposal is cleared.
-    expect(existsSync(proposedPath(rootDir))).toBe(false);
+    expect(existsSync(state(rootDir).proposed)).toBe(false);
+    await expect(
+      dispatchOpsOperation(runtime, { kind: "transitousLock.inspect" }, context()),
+    ).resolves.toMatchObject({ active: { ref: REF, lockedBy: "admin" }, proposed: null });
+    // The tracked pin is untouched.
+    expect(existsSync(join(infraDir(rootDir), "transitous.lock.json"))).toBe(false);
   });
 
   it("refuses to approve when there is no proposal", async () => {
@@ -124,41 +149,26 @@ describe("agent-owned Transitous catalog lock", () => {
     ).rejects.toThrow(/no transitous lock proposal/i);
   });
 
-  it("reads back an existing active lock", async () => {
+  it("refuses a proposal another account could have written", async () => {
     const rootDir = root();
-    writeFileSync(
-      lockPath(rootDir),
-      JSON.stringify({
-        ref: REF,
-        submodules: { "transitland-atlas": "d".repeat(40) },
-        lockedAt: "2026-01-01T00:00:00.000Z",
-        lockedBy: "operator",
-        comment: "pinned",
-      }),
-    );
-    const result = (await dispatchOpsOperation(
-      runtimeFor(rootDir),
-      { kind: "transitousLock.inspect" },
+    const runtime = runtimeFor(rootDir);
+    await dispatchOpsOperation(
+      runtime,
+      { kind: "transitousLock.propose", ref: REF, submodules: {}, lockedBy: "auto-bump" },
       context(),
-    )) as { active: { ref: string; comment?: string } | null };
-    expect(result.active).toMatchObject({ ref: REF, lockedBy: "operator", comment: "pinned" });
-  });
-
-  it("rejects an oversized lock rather than loading it", async () => {
-    const rootDir = root();
-    writeFileSync(lockPath(rootDir), `{"ref":"${"x".repeat(300_000)}"}`);
+    );
+    chmodSync(state(rootDir).proposed, 0o666);
     await expect(
-      dispatchOpsOperation(runtimeFor(rootDir), { kind: "transitousLock.inspect" }, context()),
-    ).rejects.toThrow(/too large/i);
+      dispatchOpsOperation(runtime, { kind: "transitousLock.inspect" }, context()),
+    ).rejects.toThrow(/no group or other write/);
   });
 });
 
 describe("the release's GBFS registry pin", () => {
   it("is answered from the release, whatever the checkout holds", async () => {
     const rootDir = root();
-    // A group-writable checkout another account planted a pin in.
     writeFileSync(
-      join(rootDir, "infra", "docker", "gbfs-catalog.lock.json"),
+      join(infraDir(rootDir), "gbfs-catalog.lock.json"),
       JSON.stringify({ commit: "f".repeat(40), url: "https://example.test/systems.csv" }),
     );
     const release = releaseGbfsCatalogPin();

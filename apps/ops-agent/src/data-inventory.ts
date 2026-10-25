@@ -6,6 +6,7 @@ import {
   type MotisConfigExpectations,
   parseMotisConfigExpectations,
 } from "@openmapx/transitous-core";
+import { readTransitousProposal } from "@openmapx/transitous-core/pins";
 import {
   type DescriptorWriteModeOption,
   listDescriptorAnchoredDirectory,
@@ -61,6 +62,15 @@ function safeLstat(path: string) {
 function isDirectory(path: string): boolean {
   const stat = safeLstat(path);
   return stat?.isDirectory() === true && stat.isSymbolicLink() === false;
+}
+
+/** Whether the agent holds a Transitous pin proposal; unreadable state reads as none. */
+function transitousProposalPending(infraDir: string): boolean {
+  try {
+    return readTransitousProposal(infraDir) !== null;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -421,8 +431,7 @@ async function inspectMotis(infraDir: string, dataRoot: string): Promise<MotisIn
       capacity.freeDiskBytes >= 0
         ? capacity.freeDiskBytes
         : null,
-    pinProposalPending:
-      readBoundedUtf8(infraDir, join(infraDir, "transitous.lock.proposed.json"), {}) !== null,
+    pinProposalPending: transitousProposalPending(infraDir),
     crowdsourceState: "disabled-pending-review" as const,
     gbfsCatalog: inspectGbfsCatalog(dataRoot, motisDir),
   };

@@ -1,10 +1,17 @@
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { parseRefShaPair, type TransitousLock } from "@openmapx/transitous-core";
+import {
+  activeTransitousPin,
+  readTransitousApproval,
+  readTransitousProposal,
+  releaseTransitousPin,
+  transitousStatePaths,
+  writeTransitousProposal,
+} from "@openmapx/transitous-core/pins";
 import type { Command } from "commander";
 import { execa } from "execa";
-import { readTransitousLock } from "../../../../services/data-manager/src/transitous-lock";
 import { log } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 
@@ -15,33 +22,6 @@ export function transitousPinIsCurrent(
   transitousSha: string,
 ): boolean {
   return (lock ? parseRefShaPair(lock.ref).sha : null) === transitousSha;
-}
-
-function transitousLockJson(lock: TransitousLock): string {
-  return `${JSON.stringify(
-    {
-      $schema: "./transitous.lock.schema.json",
-      ref: lock.ref,
-      submodules: lock.submodules,
-      lockedAt: lock.lockedAt,
-      lockedBy: lock.lockedBy,
-      ...(lock.comment ? { comment: lock.comment } : {}),
-    },
-    null,
-    2,
-  )}\n`;
-}
-
-/**
- * Write a reviewable Transitous pin proposal for an inactive slot. This command
- * writes neither the active pin nor the GBFS registry pin, which is the
- * release's: maintainers change it in the repository (`pnpm pin:gbfs-catalog`).
- */
-export function writeTransitousLockProposal(repoRoot: string, transitous: TransitousLock): void {
-  const transitousPath = join(repoRoot, "infra", "docker", "transitous.lock.proposed.json");
-  const staged = `${transitousPath}.candidate-${process.pid}`;
-  writeFileSync(staged, transitousLockJson(transitous), "utf-8");
-  renameSync(staged, transitousPath);
 }
 
 export interface FeedFile {
@@ -261,7 +241,7 @@ export function registerTransitousCommands(program: Command): void {
         "transitland-atlas",
       );
 
-      const existing = readTransitousLock(paths.root);
+      const existing = activeTransitousPin(paths.infraDir);
       const lockedBy = await resolveLockedBy();
       if (transitousPinIsCurrent(existing, newSha)) {
         log.ok(`Already pinned to Transitous ${newSha.slice(0, 12)} — nothing to do.`);
@@ -305,24 +285,37 @@ export function registerTransitousCommands(program: Command): void {
         comment:
           "Pinned commit of public-transport/transitous consumed by services/data-manager. Bump via `pnpm openmapx transitous bump`.",
       };
-      writeTransitousLockProposal(paths.root, lock);
+      // The agent's state, which the host CLI shares as the same user. This
+      // command writes neither the pin in effect nor a pin the repository
+      // tracks.
+      writeTransitousProposal(paths.infraDir, lock);
 
-      log.ok(`Proposed Transitous catalog pin under ${join("infra", "docker")}`);
+      log.ok(`Proposed Transitous catalog pin → ${transitousStatePaths(paths.infraDir).proposed}`);
       log.dim("Review diffs and validate an inactive MOTIS slot before activating the proposal.");
     });
 
   transitous
     .command("show")
-    .description("Print the current Transitous lockfile contents")
+    .description("Print the release's Transitous pin, the pin in effect, and any proposal")
     .action(() => {
       const paths = repoPaths();
-      const lockPath = join(paths.infraDir, "transitous.lock.json");
-      if (!existsSync(lockPath)) {
-        log.warn(
-          "No infra/docker/transitous.lock.json found. Run `pnpm openmapx transitous bump` to create one.",
-        );
-        return;
-      }
-      console.log(readFileSync(lockPath, "utf-8"));
+      const release = releaseTransitousPin();
+      const approval = readTransitousApproval(paths.infraDir);
+      const proposal = readTransitousProposal(paths.infraDir);
+      console.log(
+        JSON.stringify(
+          {
+            release,
+            active: activeTransitousPin(paths.infraDir),
+            approved: approval,
+            ...(approval && approval.releasePin !== release.ref
+              ? { approvedFor: "an earlier release; this release's pin takes over" }
+              : {}),
+            proposed: proposal,
+          },
+          null,
+          2,
+        ),
+      );
     });
 }

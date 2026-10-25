@@ -274,14 +274,14 @@ probe.
 Inspect the active [Transitous](https://github.com/public-transport/transitous)
 catalog pin or propose a new one.
 
-| Command           | Description                                                                                                                                                                                               |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `transitous show` | Print the current lockfile contents.                                                                                                                                                                      |
-| `transitous bump` | Fetch the upstream Transitous pin, summarize changes, and write `transitous.lock.proposed.json` under `infra/docker/`. Flags: `--yes` (skip the confirmation prompt), `--branch <name>` (default `main`). |
+| Command           | Description                                                                                                                                                                                                                                               |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `transitous show` | Print the release's pin, the pin in effect, an approved pin and a proposal.                                                                                                                                                                               |
+| `transitous bump` | Fetch the upstream Transitous pin, summarize changes, and write a proposal into the operations agent's state, `infra/docker/state/ops-agent/transitous/proposed.json`. Flags: `--yes` (skip the confirmation prompt), `--branch <name>` (default `main`). |
 
 `transitous bump` reads from a catalog clone the data-manager maintains, so run a
 transit sync once (`pnpm openmapx data sync`) before the first bump. The command
-does not replace the active lockfiles or switch the running graph. Review the
+does not change the pin in effect or switch the running graph. Review the
 proposal and validate an inactive MOTIS slot before activation; restarting the
 data-manager does not activate the proposal. See
 [MOTIS operations profiles](../administration/motis-operations-profiles.md).
