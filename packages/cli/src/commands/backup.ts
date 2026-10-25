@@ -447,17 +447,11 @@ export async function resolveVolumeNames(
  */
 export async function listRunningServices(ctx: ComposeContext): Promise<Set<string>> {
   const stdout = await dockerCompose(ctx, ["ps", "--status=running", "--format", "json"]);
+  // Output that can't be read refuses the restore: reading it as no running
+  // services would skip stopping the ones it needs stopped.
   const running = new Set<string>();
-  // `docker compose ps --format json` emits one JSON object per line.
-  for (const line of stdout.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    try {
-      const obj = JSON.parse(trimmed) as { Service?: string };
-      if (obj.Service) running.add(obj.Service);
-    } catch {
-      // ignore malformed lines
-    }
+  for (const entry of coreServices.parseComposePsJson(stdout)) {
+    if (typeof entry.Service === "string" && entry.Service) running.add(entry.Service);
   }
   return running;
 }

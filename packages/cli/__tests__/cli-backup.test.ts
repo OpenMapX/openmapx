@@ -31,6 +31,7 @@ import {
   isCompatiblePlatformVersion,
   isValidBackupName,
   listBackups,
+  listRunningServices,
   preflightRestore,
   pruneExpiredBackups,
   readBackupManifest,
@@ -1407,6 +1408,41 @@ describe("listBackups", () => {
 
   it("returns a placeholder string when no backups exist", () => {
     expect(formatBackupsTable([])).toBe("(no backups)");
+  });
+});
+
+describe("listRunningServices", () => {
+  // Real `docker compose ps --format json` output; see the README beside it.
+  const captured = (name: string) =>
+    readFileSync(
+      new URL(`../../core/src/services/__tests__/__fixtures__/compose-ps/${name}`, import.meta.url),
+      "utf8",
+    );
+  const running = (stdout: string) => {
+    vi.mocked(execa).mockResolvedValueOnce({ exitCode: 0, stdout, stderr: "" } as never);
+    return listRunningServices({ composeArgs: ["compose"], cwd: tmp });
+  };
+
+  it.each([["compose-5.6.1.stdout"], ["compose-2.20.3.stdout"]])(
+    "reads the services Compose printed in %s",
+    async (name) => {
+      await expect(running(captured(name))).resolves.toEqual(
+        new Set(["crashloop", "web", "worker"]),
+      );
+    },
+  );
+
+  it.each([["compose-5.6.1-empty.stdout"], ["compose-2.20.3-empty.stdout"]])(
+    "reads the empty stack in %s as nothing running",
+    async (name) => {
+      await expect(running(captured(name))).resolves.toEqual(new Set());
+    },
+  );
+
+  it("refuses output it cannot read instead of reporting nothing running", async () => {
+    await expect(running('{"Service":"timeline"}\nnot json\n')).rejects.toThrow(
+      /line 2 is not JSON/,
+    );
   });
 });
 
