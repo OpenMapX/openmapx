@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type DescriptorReadOptions,
   listDescriptorAnchoredDirectory,
@@ -98,6 +98,17 @@ describe("descriptor-anchored bounded reads", () => {
     expect(() => listTestDirectory(root, ["one", "two"], 1)).toThrow(
       "Trusted directory listing rejected",
     );
+  });
+
+  it("refuses an anchor directory another account owns", () => {
+    const { root } = fixture();
+    expect(listTestDirectory(root, ["one", "two"], 2)).toHaveLength(1);
+    const spy = vi.spyOn(process, "geteuid").mockReturnValue((process.geteuid?.() ?? 0) + 1);
+    try {
+      expect(() => listTestDirectory(root, ["one", "two"], 2)).toThrow();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("reads an exact stable regular file through opened directory descriptors", () => {
