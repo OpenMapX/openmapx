@@ -15,6 +15,7 @@ import { services } from "@openmapx/core/server";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildProbeArgs,
+  chownCommand,
   composeNetworkName,
   DEEP_PROBES,
   deploymentStateErrors,
@@ -219,6 +220,23 @@ function fakeFilesystem(owners: Record<string, number>, children: Record<string,
   };
 }
 
+describe("chownCommand", () => {
+  it("quotes container-written names for a shell, and never follows a link", () => {
+    const fix = chownCommand(
+      "1001:1001",
+      ["/srv/data/x; rm -rf ~", "/srv/data/it's $(id)", "/srv/data/a\nb"],
+      true,
+    );
+    expect(fix.command).toBe(
+      "sudo chown -h -R 1001:1001 -- '/srv/data/x; rm -rf ~' '/srv/data/it'\\''s $(id)'",
+    );
+    expect(fix.omitted).toEqual(['"/srv/data/a\\nb"']);
+    expect(chownCommand("1001:1001", ["/srv/data/motis"], false).command).toBe(
+      "sudo chown -h 1001:1001 -- '/srv/data/motis'",
+    );
+  });
+});
+
 describe("deploymentUserProblems", () => {
   function deployment(env: string | null) {
     const root = mkdtempSync(join(tmpdir(), "openmapx-check-user-"));
@@ -284,7 +302,7 @@ describe("deploymentUserProblems", () => {
         expect.stringContaining('app-api runs as its image\'s default user, not "4321:4321"'),
         expect.stringMatching(
           new RegExp(
-            `state/ops-agent/trusted-config \\(uid 1000\\).*sudo chown -R 4321:4321 ${join(infraDir, "state", "ops-agent", "trusted-config")}$`,
+            `state/ops-agent/trusted-config \\(uid 1000\\).*sudo chown -h -R 4321:4321 -- '${join(infraDir, "state", "ops-agent", "trusted-config")}'$`,
           ),
         ),
       ]);
@@ -324,7 +342,7 @@ describe("deploymentUserProblems", () => {
       // Exactly that file, not the whole mount.
       expect(problems[0]).toMatch(
         new RegExp(
-          `sudo chown -R ${owner.uid}:${owner.gid} ${join(mount, "nested", "journal.jsonl")}$`,
+          `sudo chown -h -R ${owner.uid}:${owner.gid} -- '${join(mount, "nested", "journal.jsonl")}'$`,
         ),
       );
     } finally {
@@ -382,12 +400,16 @@ describe("deploymentUserProblems", () => {
       // valhalla's own directory: changed alone, so its extracts keep their owner.
       expect(problems[0]).toContain("1 directory that containers running as");
       expect(problems[0]).toMatch(
-        new RegExp(`not recursively: sudo chown ${owner.uid}:${owner.gid} ${at("valhalla")}$`),
+        new RegExp(
+          `not recursively: sudo chown -h ${owner.uid}:${owner.gid} -- '${at("valhalla")}'$`,
+        ),
       );
       // The empty root-owned directory and the read-only service's data, each exactly.
       expect(problems[1]).toContain("data/motis (uid 0), data/tiles (uid 0)");
       expect(problems[1]).toMatch(
-        new RegExp(`sudo chown -R ${owner.uid}:${owner.gid} ${at("motis")} ${at("tiles")}$`),
+        new RegExp(
+          `sudo chown -h -R ${owner.uid}:${owner.gid} -- '${at("motis")}' '${at("tiles")}'$`,
+        ),
       );
       expect(problems.join("\n")).not.toContain("osm-pbf");
       expect(problems.join("\n")).not.toMatch(new RegExp(`chown -R \\S+ ${data}( |$)`));

@@ -217,6 +217,40 @@ const hostFilesystem: OwnershipFilesystem = {
 /** How many paths another uid owns a report lists, and names in its chown. */
 export const FOREIGN_ENTRY_DISPLAY_LIMIT = 20;
 
+/** Control characters, which neither a report line nor a pasted command may carry raw. */
+const CONTROL_CHARACTERS = /\p{Cc}/u;
+
+/** A path as a report shows it: control characters escaped. */
+function displayPath(path: string): string {
+  return CONTROL_CHARACTERS.test(path) ? JSON.stringify(path) : path;
+}
+
+/**
+ * A root command for the operator to paste: each path quoted for a POSIX
+ * shell, after `--`, with `-h` so a symbolic link swapped in meanwhile has its
+ * own owner changed, not its target's. Container-written names can hold shell
+ * syntax; a name with control characters is left out, and said so.
+ */
+export function chownCommand(
+  owner: string,
+  paths: readonly string[],
+  recursive: boolean,
+): { command: string; omitted: string[] } {
+  const quotable = paths.filter((path) => !CONTROL_CHARACTERS.test(path));
+  const omitted = paths.filter((path) => CONTROL_CHARACTERS.test(path)).map(displayPath);
+  const quoted = quotable.map((path) => `'${path.replaceAll("'", "'\\''")}'`);
+  return {
+    command: `sudo chown -h${recursive ? " -R" : ""} ${owner} -- ${quoted.join(" ")}`,
+    omitted,
+  };
+}
+
+function commandNote(fix: { command: string; omitted: string[] }): string {
+  return fix.omitted.length > 0
+    ? `${fix.command} (not in it, as their names hold control characters: ${fix.omitted.join(", ")})`
+    : fix.command;
+}
+
 function within(path: string, root: string): boolean {
   return path === root || path.startsWith(`${root}/`);
 }
@@ -368,7 +402,7 @@ export function deploymentUserProblems(input: {
     const more =
       paths.length > shown.length ? `; ${paths.length - shown.length} more are not shown` : "";
     problems.push(
-      `${paths.length} director${paths.length === 1 ? "y" : "ies"} that containers running as ${uid}:${gid} write belong${paths.length === 1 ? "s" : ""} to another uid but hold${paths.length === 1 ? "s" : ""} data a service running as its image's user writes: ${shown.map((path) => `${relative(input.infraDir, path)} (uid ${shallow.get(path)})`).join(", ")}${more}. Change the owner of the director${paths.length === 1 ? "y" : "ies"} alone, as root, not recursively: sudo chown ${uid}:${gid} ${shown.join(" ")}`,
+      `${paths.length} director${paths.length === 1 ? "y" : "ies"} that containers running as ${uid}:${gid} write belong${paths.length === 1 ? "s" : ""} to another uid but hold${paths.length === 1 ? "s" : ""} data a service running as its image's user writes: ${shown.map((path) => `${displayPath(relative(input.infraDir, path))} (uid ${shallow.get(path)})`).join(", ")}${more}. Change the owner of the director${paths.length === 1 ? "y" : "ies"} alone, as root, not recursively: ${commandNote(chownCommand(`${uid}:${gid}`, shown, false))}`,
     );
   }
   if (foreign.size > 0) {
@@ -379,7 +413,7 @@ export function deploymentUserProblems(input: {
         ? `; ${paths.length - shown.length} more are not shown, run check again once these are fixed`
         : "";
     problems.push(
-      `${paths.length} path${paths.length === 1 ? "" : "s"} that containers running as ${uid}:${gid} write belong${paths.length === 1 ? "s" : ""} to another uid, which they cannot change: ${shown.map((path) => `${relative(input.infraDir, path)} (uid ${foreign.get(path)})`).join(", ")}${more}. Fix once, as root: sudo chown -R ${uid}:${gid} ${shown.join(" ")}`,
+      `${paths.length} path${paths.length === 1 ? "" : "s"} that containers running as ${uid}:${gid} write belong${paths.length === 1 ? "s" : ""} to another uid, which they cannot change: ${shown.map((path) => `${displayPath(relative(input.infraDir, path))} (uid ${foreign.get(path)})`).join(", ")}${more}. Fix once, as root: ${commandNote(chownCommand(`${uid}:${gid}`, shown, true))}`,
     );
   }
   if (unchecked.length > 0) {
