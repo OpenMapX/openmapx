@@ -33,15 +33,22 @@ const PLUS_USER_PASSWORD_URL = `https://user+name:openmapx ${SECRET}@example.tes
 const UNICODE_USER_PASSWORD_URL = `https://usér:openmapx ${SECRET}@example.test/archive.tgz`;
 const SPACED_USER_PASSWORD_URL = `https://user name:openmapx ${SECRET}@example.test/archive.tgz`;
 const SPACED_USER_URL = `https://user ${SECRET}@example.test/archive`;
+const SPACED_USER_ROOT_URL = `https://user ${SECRET}@example.test`;
+const SPACED_PASSWORD_ROOT_URL = `https://user: ${SECRET}@example.test`;
 const PUNCTUATED_USER_PASSWORD_URL = `https://user!name:openmapx ${SECRET}@example.test/archive`;
 const EXTENSIONLESS_SPACE_QUERY_URL = `https://example.test/archive name?token=${SECRET}`;
 const EXTENSIONLESS_SPACE_FRAGMENT_URL = `https://example.test/archive name#${SECRET}`;
+const EXTENSIONLESS_SPACE_LEADING_QUERY_URL = `https://example.test/archive name? ${SECRET}`;
+const EXTENSIONLESS_SPACE_LEADING_FRAGMENT_URL = `https://example.test/archive name# ${SECRET}`;
 const CONTROL_SPACE_QUERY_URL = `\u0001https://example.test/archive name.tgz?token=${SECRET}`;
 const SAFE_HOST_EMAIL_PROSE = "Contact https://example.test:443 owner@example.org for access.";
 const SAFE_URL_LEADING_PROSE = "https://example.test/archive.tgz is ready? Ask an operator.";
 const SAFE_IPV6_EMAIL_PROSE = "Contact https://[2001:db8::1] owner@example.org for access.";
 const SAFE_HOMEPAGE = "https://example.test/docs#installation";
 const SAFE_ISSUE_PROSE = "Download https://example.test/archive.tgz and follow issue #123.";
+const SAFE_REPOSITORY_ISSUE_PROSE =
+  "Download https://example.test/archive.tgz and follow OpenMapX/openmapx#123.";
+const SAFE_EMAIL_PATH_PROSE = "Contact https://example.test owner@example.org/support.";
 
 const integration = describe.runIf(process.env.OPENMAPX_RUN_DATABASE_TESTS === "1");
 
@@ -146,9 +153,13 @@ integration("extension URL credential cleanup migration", () => {
             `Downloading ${UNICODE_USER_PASSWORD_URL}`,
             `Downloading ${SPACED_USER_PASSWORD_URL}`,
             `Downloading ${SPACED_USER_URL}`,
+            `Downloading ${SPACED_USER_ROOT_URL}`,
+            `Downloading ${SPACED_PASSWORD_ROOT_URL}`,
             `Downloading ${PUNCTUATED_USER_PASSWORD_URL}`,
             `Downloading ${EXTENSIONLESS_SPACE_QUERY_URL}`,
             `Downloading ${EXTENSIONLESS_SPACE_FRAGMENT_URL}`,
+            `Downloading ${EXTENSIONLESS_SPACE_LEADING_QUERY_URL}`,
+            `Downloading ${EXTENSIONLESS_SPACE_LEADING_FRAGMENT_URL}`,
           ],
         })}),
         ('clean-extension', 'https://example.test/extension.json', ${sql.json({
@@ -166,6 +177,8 @@ integration("extension URL credential cleanup migration", () => {
             SAFE_URL_LEADING_PROSE,
             SAFE_IPV6_EMAIL_PROSE,
             SAFE_ISSUE_PROSE,
+            SAFE_REPOSITORY_ISSUE_PROSE,
+            SAFE_EMAIL_PATH_PROSE,
           ],
           homepage: SAFE_HOMEPAGE,
         })});
@@ -199,17 +212,25 @@ integration("extension URL credential cleanup migration", () => {
               UNICODE_USER_PASSWORD_URL,
               SPACED_USER_PASSWORD_URL,
               SPACED_USER_URL,
+              SPACED_USER_ROOT_URL,
+              SPACED_PASSWORD_ROOT_URL,
               PUNCTUATED_USER_PASSWORD_URL,
               EXTENSIONLESS_SPACE_QUERY_URL,
               EXTENSIONLESS_SPACE_FRAGMENT_URL,
+              EXTENSIONLESS_SPACE_LEADING_QUERY_URL,
+              EXTENSIONLESS_SPACE_LEADING_FRAGMENT_URL,
             ],
           })},
           ${`Fetch failed for ${EXTENSIONLESS_SPACE_QUERY_URL}`}),
         ('safe-job', 'extension.install', ${sql.json({
           message: SAFE_HOST_EMAIL_PROSE,
+          messages: [SAFE_REPOSITORY_ISSUE_PROSE, SAFE_EMAIL_PATH_PROSE],
           manifest: { homepage: SAFE_HOMEPAGE },
         })},
-          ${sql.json({ message: SAFE_URL_LEADING_PROSE })}, ${SAFE_HOST_EMAIL_PROSE}),
+          ${sql.json({
+            message: SAFE_URL_LEADING_PROSE,
+            messages: [SAFE_REPOSITORY_ISSUE_PROSE, SAFE_EMAIL_PATH_PROSE],
+          })}, ${SAFE_HOST_EMAIL_PROSE}),
         ('other-job', 'system.update', ${sql.json({ url: "https://example.test/keep", keep: "exact" })},
           ${sql.json({ url: "https://example.test/keep" })}, 'Keep exact');
     `;
@@ -217,6 +238,8 @@ integration("extension URL credential cleanup migration", () => {
       INSERT INTO admin_job_log (id, job_id, line) VALUES
         ('unsafe-log', 'unsafe-job', ${`Downloading ${SPACED_USER_URL}`}),
         ('safe-log', 'safe-job', ${SAFE_URL_LEADING_PROSE}),
+        ('safe-email-log', 'safe-job', ${SAFE_EMAIL_PATH_PROSE}),
+        ('safe-issue-log', 'safe-job', ${SAFE_REPOSITORY_ISSUE_PROSE}),
         ('other-log', 'other-job', 'Keep exact');
     `;
   }
@@ -234,7 +257,8 @@ integration("extension URL credential cleanup migration", () => {
     `;
     const [safeJobBefore] = await sql`
       SELECT row_to_json(j)::text AS job,
-             (SELECT row_to_json(l)::text FROM admin_job_log l WHERE l.job_id = j.id) AS log
+             (SELECT json_agg(row_to_json(l) ORDER BY l.id)::text
+                FROM admin_job_log l WHERE l.job_id = j.id) AS log
         FROM admin_job j WHERE id = 'safe-job'
     `;
 
@@ -257,7 +281,25 @@ integration("extension URL credential cleanup migration", () => {
           { id: "space-password", artifact: null, sha256: "f".repeat(64) },
         ],
         services: [{ service: "unsafe", repo: null }],
-        notes: [null, null, null, null, null, null, null, null, null, null, null, null, null],
+        notes: [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+        ],
       },
     });
     const [integrationRow] = await sql<{ repository: string }[]>`
@@ -281,7 +323,8 @@ integration("extension URL credential cleanup migration", () => {
     expect(safeAfter).toEqual(safeBefore);
     const [safeJobAfter] = await sql`
       SELECT row_to_json(j)::text AS job,
-             (SELECT row_to_json(l)::text FROM admin_job_log l WHERE l.job_id = j.id) AS log
+             (SELECT json_agg(row_to_json(l) ORDER BY l.id)::text
+                FROM admin_job_log l WHERE l.job_id = j.id) AS log
         FROM admin_job j WHERE id = 'safe-job'
     `;
     expect(safeJobAfter).toEqual(safeJobBefore);

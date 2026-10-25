@@ -707,7 +707,7 @@ describe("installExtension", () => {
   });
 
   it("scrubs provider details from cleanup diagnostics", async () => {
-    const secret = "provider failed\nhttps://example.test/private? sentinel-query";
+    const secret = "provider failed\nht\ttps://example.test/private? sentinel-query";
     settleIntegrationMock.mockRejectedValueOnce(new Error(secret));
     const ctx = makeCtx();
 

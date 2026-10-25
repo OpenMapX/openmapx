@@ -26,9 +26,13 @@ AS $$
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
            ~* '(git|ssh):[/\\]*[^/?#[:space:]]*@'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* 'https?:[/\\]*[^/?#@]*[[:space:]][^/?#@]*@[^/?#[:space:]]+[/\\]'
+           ~* 'https?:[/\\]*[[:alnum:]%+_~-]+[[:space:]]+[^/?#@[:space:]][^/?#@]*@[^/?#[:space:]]+'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(git|ssh):[/\\]*[^/?#@]*[[:space:]][^/?#@]*@[^/?#[:space:]]+[/\\]'
+           ~* '(git|ssh):[/\\]*[[:alnum:]%+_~-]+[[:space:]]+[^/?#@[:space:]][^/?#@]*@[^/?#[:space:]]+'
+      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
+           ~* 'https?:[/\\]*[-[:alnum:]!$&''()*+,;=%._~ ]+:[[:space:]]+[^/?#@[:space:]][^/?#@]*@'
+      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
+           ~* '(git|ssh):[/\\]*[-[:alnum:]!$&''()*+,;=%._~ ]+:[[:space:]]+[^/?#@[:space:]][^/?#@]*@'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
            ~* 'https?:[/\\]*[-[:alnum:]!$&''()*+,;=%._~ ]+:[^0-9/?#\\[:space:]][^/?#\\]*@'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
@@ -42,9 +46,13 @@ AS $$
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
            ~* '(https?|git|ssh):[^[:space:]#]*#[^[:space:]]+'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(https?|git|ssh):[^?#]*[^[:space:]?#][?][^#[:space:]]+'
+           ~* '(https?|git|ssh):[/\\]*[^/?#[:space:]]+[/\\]([^/?#[:space:]]+[/\\])*[^./?#[:space:]]+[[:space:]][^?#]*[?][^#[:space:]]+'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
-           ~* '(https?|git|ssh):[^#]*[^[:space:]#]#[^[:space:]]+'
+           ~* '(https?|git|ssh):[/\\]*[^/?#[:space:]]+[/\\]([^/?#[:space:]]+[/\\])*[^./?#[:space:]]+[[:space:]][^#]*#[^[:space:]]+'
+      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
+           ~* '(https?|git|ssh):[/\\]*[^/?#[:space:]]+[/\\]([^/?#[:space:]]+[/\\])*[^./?#[:space:]]+[[:space:]][^?#]*[?][[:space:]]+[^[:space:]]+'
+      OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
+           ~* '(https?|git|ssh):[/\\]*[^/?#[:space:]]+[/\\]([^/?#[:space:]]+[/\\])*[^./?#[:space:]]+[[:space:]][^#]*#[[:space:]]+[^[:space:]]+'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')
            ~* '(https?|git|ssh):[^?#]*[.][A-Za-z0-9_-]+[?][^#[:space:]]+'
       OR regexp_replace(value, E'[\\t\\n\\r]', '', 'g')

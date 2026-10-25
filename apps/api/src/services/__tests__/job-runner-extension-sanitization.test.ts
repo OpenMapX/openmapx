@@ -40,6 +40,8 @@ const spacedQuery = "https://example.test/archive.tgz? sentinel-query-secret";
 const spacedFragment = "https://example.test/archive.tgz# sentinel-fragment-secret";
 const tabbedScheme = "ht\ttps://example.test/archive.tgz? tabbed-scheme-secret";
 const multilineUrl = "failed\r\nhttps://example.test/archive.tgz? multiline-secret";
+const combinedWhitespaceUrl =
+  "failed\nht\ttps://example.test/archive.tgz? combined-whitespace-secret";
 const validPayload = {
   manifest: {
     id: "fixture-extension",
@@ -173,9 +175,9 @@ describe("extension job durable boundaries", () => {
 
   it("redacts schemes containing legacy parser whitespace as a complete value", async () => {
     jobRunner.register("extension.install", async (ctx) => {
-      await ctx.log(multilineUrl);
+      await ctx.log(combinedWhitespaceUrl);
       await ctx.checkpoint({ diagnostic: `failed\t${spacedQuery}` });
-      return { diagnostic: tabbedScheme };
+      return { diagnostic: multilineUrl, tabbedScheme };
     });
 
     await executeJob(
@@ -192,7 +194,7 @@ describe("extension job durable boundaries", () => {
       events: jobEventBus.history("extension-tabbed-scheme", 0),
     };
     expect(JSON.stringify(durableAndLive)).not.toMatch(
-      /tabbed-scheme-secret|multiline-secret|query-secret|example\.test/,
+      /tabbed-scheme-secret|multiline-secret|combined-whitespace-secret|query-secret|example\.test/,
     );
     expect(JSON.stringify(durableAndLive)).toContain("[redacted-url]");
   });

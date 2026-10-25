@@ -405,7 +405,8 @@ export function sanitizeLogMetadata(value: unknown): Record<string, unknown> {
   return output;
 }
 
-const EXTENSION_OUTPUT_URL = /\b(?:https?|git|ssh):/iu;
+const EXTENSION_OUTPUT_URL =
+  /(?:^|[^\p{L}\p{N}_])(?:h[\t\n\r]*t[\t\n\r]*t[\t\n\r]*p(?:[\t\n\r]*s)?|g[\t\n\r]*i[\t\n\r]*t|s[\t\n\r]*s[\t\n\r]*h)[\t\n\r]*:/iu;
 
 /**
  * Extension acquisition diagnostics can contain legacy WHATWG-accepted URLs
@@ -413,10 +414,7 @@ const EXTENSION_OUTPUT_URL = /\b(?:https?|git|ssh):/iu;
  * the generic log sanitizer can detach and leave a credential/query suffix.
  */
 export function sanitizeExtensionOutputString(value: string): string {
-  const normalized = value.replace(/[\t\n\r]/gu, "");
-  return EXTENSION_OUTPUT_URL.test(value) || EXTENSION_OUTPUT_URL.test(normalized)
-    ? "[redacted-url]"
-    : sanitizeLogString(value);
+  return EXTENSION_OUTPUT_URL.test(value) ? "[redacted-url]" : sanitizeLogString(value);
 }
 
 const PINO_RECORD_CORE_KEYS = new Set(["level", "time", "pid", "hostname", "name", "msg"]);
