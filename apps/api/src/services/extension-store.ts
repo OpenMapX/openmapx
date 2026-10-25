@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { USER_AGENT_ADMIN, validatePublicUrl } from "@openmapx/core";
-import { services as coreServices, safeFetchJson, safeFetchText } from "@openmapx/core/server";
+import {
+  assertAllowedGitUrl,
+  services as coreServices,
+  safeFetchJson,
+  safeFetchText,
+} from "@openmapx/core/server";
 import { envString } from "@openmapx/core/server-env";
 import { PLATFORM_VERSION, satisfiesPlatformVersion } from "@openmapx/integration-framework";
 import { db } from "../db";
@@ -232,23 +237,21 @@ function withDefaultSource(sources: ExtensionCatalogSource[]): ExtensionCatalogS
 }
 
 export async function addExtensionSource(url: string, label: string): Promise<void> {
-  if (!redis) throw new ExtensionStoreError("source_storage_unavailable");
+  let canonical: string;
   try {
-    validatePublicUrl(url);
-    const parsed = new URL(url);
-    if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
-      throw new ExtensionStoreError("invalid_source_url");
-    }
+    canonical = normalizeExtensionLocator(url);
+    validatePublicUrl(canonical);
   } catch {
     throw new ExtensionStoreError("invalid_source_url");
   }
+  if (!redis) throw new ExtensionStoreError("source_storage_unavailable");
   const { raw, sources } = await getExtraSources();
-  if (sources.some((s) => s.url === url)) return;
+  if (sources.some((s) => s.url === canonical)) return;
   await editExtensionSources(
     redis,
     catalogKeys,
     raw,
-    JSON.stringify([...sources, { url, label, isDefault: false }]),
+    JSON.stringify([...sources, { url: canonical, label, isDefault: false }]),
   );
 }
 
@@ -318,6 +321,28 @@ function isCatalogEntryList(value: unknown): value is ExtensionCatalogEntry[] {
   );
 }
 
+function normalizeCatalogEntry(entry: ExtensionCatalogEntry): ExtensionCatalogEntry {
+  const normalized: ExtensionCatalogEntry = { ...entry };
+  if (entry.manifest !== undefined) {
+    if (typeof entry.manifest !== "string")
+      throw new ExtensionStoreError("catalog_acquisition_failed");
+    normalized.manifest = normalizeExtensionLocator(entry.manifest);
+  }
+  if (entry.services !== undefined || entry.integrations !== undefined) {
+    const manifest = validatedManifest({
+      id: entry.id,
+      name: entry.name,
+      version: entry.version,
+      platform: entry.minPlatform,
+      services: entry.services,
+      integrations: entry.integrations,
+    });
+    normalized.services = manifest.services;
+    normalized.integrations = manifest.integrations;
+  }
+  return normalized;
+}
+
 function isCatalogControlList(value: unknown, critical: boolean): boolean {
   return (
     Array.isArray(value) &&
@@ -341,7 +366,7 @@ async function fetchCatalogFromUrl(url: string): Promise<FetchedCatalog> {
   // not evidence of an empty catalog, and must not clear cached denials.
   if (Array.isArray(data)) {
     if (!isCatalogEntryList(data)) throw new ExtensionStoreError("catalog_acquisition_failed");
-    return { entries: data, control: {} };
+    return { entries: data.map(normalizeCatalogEntry), control: {} };
   }
   if (
     !isCatalogRecord(data) ||
@@ -353,7 +378,7 @@ async function fetchCatalogFromUrl(url: string): Promise<FetchedCatalog> {
   }
   const obj = data as { extensions?: ExtensionCatalogEntry[] } & CatalogControl;
   return {
-    entries: obj.extensions ?? [],
+    entries: (obj.extensions ?? []).map(normalizeCatalogEntry),
     control: { removed: obj.removed, critical: obj.critical },
   };
 }
@@ -573,7 +598,7 @@ export async function resolveExtensionManifest(
     // Verify the digest over the exact received bytes BEFORE they are parsed or
     // cached. Parsing first would expose the parser to unverified content and
     // would let a cache hold bytes that were never authorized.
-    const text = await safeFetchText(entry.manifest, {
+    const text = await safeFetchText(normalizeExtensionLocator(entry.manifest), {
       headers: { "User-Agent": USER_AGENT_ADMIN },
       timeoutMs: 15_000,
     });
@@ -586,7 +611,7 @@ export async function resolveExtensionManifest(
     if (entry.trust === "verified") {
       throw new ExtensionStoreError("missing_digest");
     }
-    raw = await safeFetchJson<unknown>(entry.manifest, {
+    raw = await safeFetchJson<unknown>(normalizeExtensionLocator(entry.manifest), {
       headers: { "User-Agent": USER_AGENT_ADMIN },
       timeoutMs: 15_000,
     });
@@ -613,14 +638,36 @@ export async function resolveExtensionManifest(
 }
 
 function validatedManifest(raw: unknown): ExtensionManifest {
-  const validation = coreServices.validateExtensionManifest(raw);
-  if (!validation.valid) throw new ExtensionStoreError("invalid_manifest");
-  return raw as ExtensionManifest;
+  const parsed = coreServices.extensionManifestSchema.safeParse(raw);
+  if (!parsed.success) throw new ExtensionStoreError("invalid_manifest");
+  try {
+    return {
+      ...parsed.data,
+      services: parsed.data.services?.map((service) => ({
+        ...service,
+        repo: assertAllowedGitUrl(service.repo).canonical,
+      })),
+      integrations: parsed.data.integrations?.map((integration) => ({
+        ...integration,
+        artifact: coreServices.canonicalExtensionLocator(integration.artifact),
+      })),
+    };
+  } catch {
+    throw new ExtensionStoreError("invalid_manifest");
+  }
+}
+
+export function normalizeExtensionLocator(url: string): string {
+  try {
+    return coreServices.canonicalExtensionLocator(url);
+  } catch {
+    throw new ExtensionStoreError("invalid_manifest");
+  }
 }
 
 /** Direct content has no catalog authorization to bind against or trust to inherit. */
 export async function resolveDirectExtensionManifest(url: string): Promise<ExtensionManifest> {
-  const raw = await safeFetchJson<unknown>(url, {
+  const raw = await safeFetchJson<unknown>(normalizeExtensionLocator(url), {
     headers: { "User-Agent": USER_AGENT_ADMIN },
     timeoutMs: 15_000,
   });

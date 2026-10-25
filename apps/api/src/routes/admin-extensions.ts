@@ -12,6 +12,7 @@ import {
   type KillSwitch,
   listExtensionSources,
   listInstalledExtensions,
+  normalizeExtensionLocator,
   PLATFORM_VERSION,
   removeExtensionSource,
   resolveDirectExtensionManifest,
@@ -71,18 +72,19 @@ async function resolveInstallRequest(body: AdminExtensionInstallRequest): Promis
     assertAdmission(entry, kill);
     return {
       manifest: await resolveExtensionManifest(entry),
-      sourceUrl: entry.manifest ?? undefined,
+      sourceUrl: entry.manifest ? normalizeExtensionLocator(entry.manifest) : undefined,
       sourceTrust: entry.trust === "verified" ? "verified" : "community",
     };
   }
   if (body.manifestUrl) {
-    const manifest = await resolveDirectExtensionManifest(body.manifestUrl);
+    const sourceUrl = normalizeExtensionLocator(body.manifestUrl);
+    const manifest = await resolveDirectExtensionManifest(sourceUrl);
     // The validated identity, never a selector sentinel or supplied trust, owns denial.
     assertAdmission(
       { id: manifest.id, name: manifest.name, minPlatform: manifest.platform },
       await getKillSwitch(),
     );
-    return { manifest, sourceUrl: body.manifestUrl, sourceTrust: "community" };
+    return { manifest, sourceUrl, sourceTrust: "community" };
   }
   throw new ExtensionInstallRequestError("Either `id` or `manifestUrl` is required");
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canonicalExtensionLocator,
   type ExtensionManifest,
   extensionComponentSummary,
   validateExtensionManifest,
@@ -78,6 +79,43 @@ describe("validateExtensionManifest", () => {
     });
     expect(r.valid).toBe(false);
     expect(r.errors.some((e) => e.toLowerCase().includes("https"))).toBe(true);
+  });
+
+  it.each([
+    "https://user@example.test/foo.tar.gz",
+    "https://user:password@example.test/foo.tar.gz",
+    "https://example.test/foo.tar.gz?token=secret",
+    "https://example.test/foo.tar.gz#secret",
+  ])("rejects a non-portable integration artifact locator: %s", (artifact) => {
+    const r = validateExtensionManifest({
+      ...bundle,
+      integrations: [{ artifact, id: "x", sha256: "b".repeat(64) }],
+    });
+    expect(r.valid).toBe(false);
+  });
+
+  it.each([
+    "http://example.test/repo.git",
+    "https://user@example.test/repo.git",
+    "https://user:password@example.test/repo.git",
+    "https://example.test/repo.git?token=secret",
+    "https://example.test/repo.git#secret",
+  ])("rejects a non-portable service repository locator: %s", (repo) => {
+    const r = validateExtensionManifest({
+      ...bundle,
+      services: [{ repo, service: "x" }],
+      integrations: undefined,
+    });
+    expect(r.valid).toBe(false);
+  });
+
+  it("canonicalizes accepted component locators", () => {
+    expect(canonicalExtensionLocator("https://EXAMPLE.test:443/releases/../repo.git")).toBe(
+      "https://example.test/repo.git",
+    );
+    expect(canonicalExtensionLocator("https://EXAMPLE.test:443/releases/../artifact.tar.gz")).toBe(
+      "https://example.test/artifact.tar.gz",
+    );
   });
 
   it("rejects a malformed sha256", () => {
@@ -220,5 +258,20 @@ describe("verifiedCatalogEntrySchema", () => {
       verifiedCatalogEntrySchema.safeParse({ ...entry, manifest: "http://example.test/e.json" })
         .success,
     ).toBe(false);
+  });
+
+  it.each([
+    "https://user@example.test/extension.json",
+    "https://user:password@example.test/extension.json",
+    "https://example.test/extension.json?token=secret",
+    "https://example.test/extension.json#secret",
+  ])("rejects a non-portable verified manifest locator: %s", (manifest) => {
+    expect(verifiedCatalogEntrySchema.safeParse({ ...entry, manifest }).success).toBe(false);
+  });
+
+  it("canonicalizes an accepted verified manifest locator", () => {
+    expect(canonicalExtensionLocator("https://EXAMPLE.test:443/releases/../extension.json")).toBe(
+      "https://example.test/extension.json",
+    );
   });
 });

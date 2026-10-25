@@ -7,7 +7,12 @@ export {
 export type { Attribution } from "./attribution";
 export { parseContributors, parseFieldContributors } from "./contributors";
 export type { ExtensionManifest } from "./extension";
-export { extensionManifestSchema, validateExtensionManifest } from "./extension";
+export {
+  canonicalExtensionLocator,
+  extensionLocatorSchema,
+  extensionManifestSchema,
+  validateExtensionManifest,
+} from "./extension";
 export type { IntegrationDataSource, IntegrationManifest } from "./integration";
 export { integrationManifestSchema, validateDataSource, validateManifest } from "./integration";
 export { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";

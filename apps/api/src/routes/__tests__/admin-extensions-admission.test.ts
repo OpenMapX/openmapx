@@ -141,6 +141,17 @@ describe("real resolver through extension routes and final SDK", () => {
       expect.any(String),
     );
   });
+  it("canonicalizes a direct manifest locator before fetch and enqueue", async () => {
+    const supplied = "https://EXAMPLE.test:443/releases/../extension.json";
+    const result = await sdk.installAdminExtension({ manifestUrl: supplied }, options());
+    expect(result.status).toBe(202);
+    expect(ports.provider.mock.calls[0]?.[0]).toBe(url);
+    expect(ports.enqueue).toHaveBeenCalledWith(
+      "extension.install",
+      expect.objectContaining({ sourceUrl: url }),
+      expect.any(String),
+    );
+  });
   it.each(["install", "update"])(
     "preview leaves immediate deliberate %s admission available",
     async (operation) => {
@@ -228,6 +239,8 @@ describe("real resolver through extension routes and final SDK", () => {
   it.each([
     "http://example.test/catalog",
     "https://user:password@example.test/catalog",
+    "https://example.test/catalog?token=secret",
+    "https://example.test/catalog#secret",
     "https://127.0.0.1/catalog",
   ])("keeps source URL admission safe: %s", async (sourceUrl) => {
     expect(
@@ -238,6 +251,64 @@ describe("real resolver through extension routes and final SDK", () => {
     });
     expect(ports.persist).not.toHaveBeenCalled();
     expect(ports.audit).not.toHaveBeenCalled();
+  });
+  it.each([
+    "https://user@example.test/extension.json",
+    "https://user:password@example.test/extension.json",
+    "https://example.test/extension.json?token=secret",
+    "https://example.test/extension.json#secret",
+  ])("rejects a non-portable direct manifest locator before fetching: %s", async (manifestUrl) => {
+    expect(await sdk.installAdminExtension({ manifestUrl }, options())).toMatchObject({
+      status: 400,
+      data: { error: "Invalid extension.json" },
+    });
+    expect(ports.provider).not.toHaveBeenCalled();
+    expect(ports.enqueue).not.toHaveBeenCalled();
+  });
+  it.each(["https://evil.example.test/org/repo.git", "https://github.com:8443/org/repo.git"])(
+    "rejects a service repository outside the Git allowlist: %s",
+    async (repo) => {
+      ports.provider.mockImplementation(
+        async (input: string) =>
+          new Response(
+            JSON.stringify(
+              input === url
+                ? {
+                    id: manifest.id,
+                    name: manifest.name,
+                    version: manifest.version,
+                    services: [{ repo, service: "safe-service" }],
+                  }
+                : advisory,
+            ),
+            { headers: { "content-type": "application/json" } },
+          ),
+      );
+      expect(await sdk.installAdminExtension({ manifestUrl: url }, options())).toMatchObject({
+        status: 400,
+        data: { error: "Invalid extension.json" },
+      });
+      expect(ports.enqueue).not.toHaveBeenCalled();
+    },
+  );
+  it("rejects an unsafe catalog manifest locator before fetch or cache publication", async () => {
+    const unsafeManifest = "https://example.test/extension.json?token=secret";
+    ports.provider.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          extensions: [{ id: manifest.id, name: manifest.name, manifest: unsafeManifest }],
+        }),
+        { headers: { "content-type": "application/json" } },
+      ),
+    );
+
+    expect(await sdk.refreshAdminExtensionCatalog(undefined, options())).toMatchObject({
+      status: 500,
+      data: { error: "Internal Server Error" },
+    });
+    expect(ports.provider.mock.calls.some(([input]) => input === unsafeManifest)).toBe(false);
+    expect(ports.persist).not.toHaveBeenCalled();
+    expect(ports.enqueue).not.toHaveBeenCalled();
   });
   it.each(["private", "redirect", "oversize", "invalid-manifest"])(
     "retains safe direct acquisition and validation for %s",
