@@ -246,6 +246,31 @@ describe("moving an earlier release's configuration", () => {
   });
 });
 
+describe("the release overlay stack commands use", () => {
+  it("is used only as this user's own file", () => {
+    const { infraDir } = checkout();
+    const overlay = join(infraDir, "state", "ops-agent", "releases", "docker-compose.release.yml");
+    const paths = {
+      infraDir,
+      composePath: join(infraDir, CURRENT_CONFIGURATION, "docker-compose.generated.yml"),
+      composeReleasePath: overlay,
+    };
+    expect(stackComposeArgs(paths)).not.toContain(overlay);
+    mkdirSync(join(infraDir, "state", "ops-agent", "releases"), { recursive: true, mode: 0o700 });
+    writeFileSync(overlay, "services: {}\n", { mode: 0o600 });
+    expect(stackComposeArgs(paths)).toContain(overlay);
+    chmodSync(overlay, 0o664);
+    expect(() => stackComposeArgs(paths)).toThrow("no group or other write");
+    chmodSync(overlay, 0o600);
+    linkSync(overlay, join(infraDir, "overlay-alias.yml"));
+    expect(() => stackComposeArgs(paths)).toThrow("one link");
+    rmSync(join(infraDir, "overlay-alias.yml"));
+    renameSync(overlay, join(infraDir, "overlay.yml"));
+    symlinkSync(join(infraDir, "overlay.yml"), overlay);
+    expect(() => stackComposeArgs(paths)).toThrow("regular file");
+  });
+});
+
 describe("the deployment's .env", () => {
   it("is used only as the operator's own file", () => {
     const { infraDir } = checkout();

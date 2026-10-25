@@ -249,7 +249,9 @@ async function main(): Promise<void> {
       `${authority.revisionId.slice(0, 48)}-${loadConfiguredResourceAuthority().revisionId}`;
     const runtime = createDockerRuntime({
       stack: paths,
-      fileExists: existsSync,
+      // The overlay is used only as this user's own file, as everywhere else.
+      fileExists: (path) =>
+        path === paths.composeReleasePath ? services.ownedStateFilePresent(path) : existsSync(path),
       trafficDataRoot: join(paths.infraDir, "data"),
     });
     installTrustedConfigurationRuntime(runtime, {

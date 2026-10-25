@@ -109,6 +109,7 @@ export {
   LEGACY_CURRENT_CONFIGURATION,
   LEGACY_SERVICE_SELECTION_FILE,
   loadIntegrationSchemas,
+  ownedStateFilePresent,
   readDesiredSelection,
   readOwnedStateFile,
   readServiceSelectionFile,

@@ -65,18 +65,46 @@ export function currentConfigurationFile(infraDir: string, name: string): string
  */
 export function stackComposeArgs(
   paths: StackPaths,
-  fileExists: (path: string) => boolean = existsSync,
+  fileExists?: (path: string) => boolean,
 ): string[] {
   const envFile = join(paths.infraDir, ".env");
-  const hasEnvFile = fileExists(envFile);
+  const hasEnvFile = (fileExists ?? existsSync)(envFile);
   if (hasEnvFile) assertDeploymentEnvironmentFile(envFile);
+  const hasOverlay = (fileExists ?? ownedStateFilePresent)(paths.composeReleasePath);
   return [
     "compose",
     ...(hasEnvFile ? ["--env-file", envFile] : []),
     "-f",
     paths.composePath,
-    ...(fileExists(paths.composeReleasePath) ? ["-f", paths.composeReleasePath] : []),
+    ...(hasOverlay ? ["-f", paths.composeReleasePath] : []),
   ];
+}
+
+/**
+ * Whether a file of the agent's state is there: false when it is missing, and
+ * true only for a regular file of this user with one link and no group or
+ * other write. Anything else in its place is refused, never passed on.
+ */
+export function ownedStateFilePresent(path: string): boolean {
+  let stats: ReturnType<typeof lstatSync>;
+  try {
+    stats = lstatSync(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+  const owner = process.geteuid?.();
+  if (
+    !stats.isFile() ||
+    stats.nlink !== 1 ||
+    (owner !== undefined && stats.uid !== owner) ||
+    (stats.mode & 0o022) !== 0
+  ) {
+    throw new Error(
+      `${path} must be a regular file owned by uid ${owner}, with one link and no group or other write`,
+    );
+  }
+  return true;
 }
 
 /**
