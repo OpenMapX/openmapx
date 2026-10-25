@@ -53,7 +53,7 @@ export function LockfileCard({ state }: { state: TransitStateSummary }) {
           size="small"
           color={hasLock ? "success" : "warning"}
           variant="outlined"
-          label={hasLock ? "locked" : "no lockfile"}
+          label={hasLock ? "locked" : "no pin"}
         />
         <Button
           size="small"
@@ -67,8 +67,8 @@ export function LockfileCard({ state }: { state: TransitStateSummary }) {
       </Stack>
       {!hasLock && (
         <Alert severity="warning" sx={{ mb: 1 }}>
-          No <code>infra/docker/transitous.lock.json</code> found. Run the bump CLI to pin the
-          catalog to a specific upstream ref before syncing.
+          The operations agent reports no Transitous pin, so syncing refuses to run. Every release
+          ships one: check the agent with <strong>Run diagnostics</strong> under Maintenance.
         </Alert>
       )}
       <Stack
