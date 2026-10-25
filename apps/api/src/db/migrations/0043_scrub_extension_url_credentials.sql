@@ -16,6 +16,19 @@ AS $$
            ~* '^[[:cntrl:][:space:]]*(https?|git|ssh):[^#]*#.+$'
 $$;
 --> statement-breakpoint
+CREATE OR REPLACE FUNCTION public.openmapx_unsafe_extension_removal_log_0043(value text)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT COALESCE(
+    public.openmapx_unsafe_extension_locator_0043(
+      substring(value from '^Removing service repository (.*)\.\.\.$')
+    ),
+    false
+  )
+$$;
+--> statement-breakpoint
 CREATE OR REPLACE FUNCTION public.openmapx_extension_locators_0043(value jsonb)
 RETURNS text[]
 LANGUAGE sql
@@ -169,6 +182,13 @@ UPDATE service_repository
 SET url = 'redacted-extension-locator:' || hash
 WHERE public.openmapx_unsafe_extension_locator_0043(url);
 --> statement-breakpoint
+UPDATE admin_job_log AS log
+SET line = 'Extension install output removed because it contained a legacy unsafe URL'
+FROM admin_job AS job
+WHERE log.job_id = job.id
+  AND job.type = 'extension.remove'
+  AND public.openmapx_unsafe_extension_removal_log_0043(log.line);
+--> statement-breakpoint
 WITH candidates AS (
   SELECT id,
          array_cat(
@@ -229,5 +249,7 @@ DROP FUNCTION public.openmapx_scrub_extension_json_0043(jsonb, text[]);
 DROP FUNCTION public.openmapx_scrub_extension_manifest_json_0043(jsonb, text[]);
 --> statement-breakpoint
 DROP FUNCTION public.openmapx_extension_locators_0043(jsonb);
+--> statement-breakpoint
+DROP FUNCTION public.openmapx_unsafe_extension_removal_log_0043(text);
 --> statement-breakpoint
 DROP FUNCTION public.openmapx_unsafe_extension_locator_0043(text);

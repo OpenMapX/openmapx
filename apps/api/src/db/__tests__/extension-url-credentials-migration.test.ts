@@ -246,6 +246,10 @@ integration("extension URL credential cleanup migration", () => {
             message: SAFE_URL_LEADING_PROSE,
             messages: [SAFE_REPOSITORY_ISSUE_PROSE, SAFE_EMAIL_PATH_PROSE],
           })}, ${SAFE_HOST_EMAIL_PROSE}),
+        ('unsafe-removal-job', 'extension.remove', ${sql.json({ id: "unsafe-extension" })},
+          NULL, NULL),
+        ('safe-removal-job', 'extension.remove', ${sql.json({ id: "clean-extension" })},
+          NULL, NULL),
         ('other-job', 'system.update', ${sql.json({ url: "https://example.test/keep", keep: "exact" })},
           ${sql.json({ url: "https://example.test/keep" })}, 'Keep exact');
     `;
@@ -255,6 +259,10 @@ integration("extension URL credential cleanup migration", () => {
         ('safe-log', 'safe-job', ${SAFE_URL_LEADING_PROSE}),
         ('safe-email-log', 'safe-job', ${SAFE_EMAIL_PATH_PROSE}),
         ('safe-issue-log', 'safe-job', ${SAFE_REPOSITORY_ISSUE_PROSE}),
+        ('unsafe-removal-log', 'unsafe-removal-job',
+          ${`Removing service repository ${SPACE_IN_PASSWORD_URL}...`}),
+        ('safe-removal-log', 'safe-removal-job',
+          'Removing service repository https://example.test/repository.git...'),
         ('other-log', 'other-job', 'Keep exact');
     `;
   }
@@ -275,6 +283,11 @@ integration("extension URL credential cleanup migration", () => {
              (SELECT json_agg(row_to_json(l) ORDER BY l.id)::text
                 FROM admin_job_log l WHERE l.job_id = j.id) AS log
         FROM admin_job j WHERE id = 'safe-job'
+    `;
+    const [safeRemovalBefore] = await sql`
+      SELECT row_to_json(j)::text AS job,
+             (SELECT row_to_json(l)::text FROM admin_job_log l WHERE l.job_id = j.id) AS log
+        FROM admin_job j WHERE id = 'safe-removal-job'
     `;
 
     await applyMigration();
@@ -344,6 +357,12 @@ integration("extension URL credential cleanup migration", () => {
         FROM admin_job j WHERE id = 'safe-job'
     `;
     expect(safeJobAfter).toEqual(safeJobBefore);
+    const [safeRemovalAfter] = await sql`
+      SELECT row_to_json(j)::text AS job,
+             (SELECT row_to_json(l)::text FROM admin_job_log l WHERE l.job_id = j.id) AS log
+        FROM admin_job j WHERE id = 'safe-removal-job'
+    `;
+    expect(safeRemovalAfter).toEqual(safeRemovalBefore);
 
     await applyMigration();
     expect(await snapshot()).toBe(first);
