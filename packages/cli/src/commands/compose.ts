@@ -356,6 +356,11 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
         release: selected.files,
         position: checkoutPosition,
       });
+      // Traefik edits the waiting import would carry over: as the agent's render does.
+      const traefik = coreServices.waitingTraefikEdits(plan, selected.files);
+      if (plan?.kind === "defer" && traefik.length > 0) {
+        throw new Error(coreServices.describeWaitingTraefikEdits(plan.reason, traefik));
+      }
       const importing = new Set(
         plan?.kind === "import" ? plan.edits.map((edit) => `services/${edit.key}`) : [],
       );

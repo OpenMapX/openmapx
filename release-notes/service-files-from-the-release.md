@@ -42,7 +42,12 @@ release's source revision, since one ahead of it can hold newer upstream files
 that also match no released version. Until then it waits, imports and records
 nothing, and render, `check` and Run diagnostics say why and list the checkout
 files not used meanwhile. The host CLI asks git; the operations agent goes by
-the checkout's `services/service-file-history.json`.
+the checkout's `services/service-file-history.json`. Meanwhile render refuses
+if the checkout holds a Traefik file the import would carry over (an
+`auth.yml`, another dynamic file the release doesn't ship, or a changed
+`traefik.yml`), naming it, until it is an override, so a basic-auth gate
+can't drop. A configuration saved in the admin panel then fails with that
+reason.
 
 If Valhalla's writable copy is missing and can't be written, render fails with
 the reason, rather than let Docker create a root-owned directory in its place.
@@ -70,8 +75,8 @@ commit is published.
 
 - **After the upgrade, check the render's output, or `pnpm openmapx check`,
   for the files it imported, or why the import waits.** If it waits, an edit
-  of yours (a basic-auth gate, for example) is not applied until it runs: put
-  that file in an override yourself, or bring the checkout to the release's
+  of yours is not applied until it runs, and Traefik edits make render refuse:
+  put the file in an override yourself, or bring the checkout to the release's
   source revision. From then on, edit those files in
   `infra/docker/overrides/services`, not in the checkout. Create new
   overrides under `umask 022`: Debian's and Ubuntu's default `002` makes

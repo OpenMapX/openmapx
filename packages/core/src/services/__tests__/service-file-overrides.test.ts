@@ -392,10 +392,11 @@ describe("the one-time import of checkout edits", () => {
     );
   });
 
-  it("waits, importing and recording nothing, while the checkout is ahead of the release", async () => {
-    const f = checkout();
-    // One commit ahead of the release: upstream changed martin.yaml, and its
-    // regenerated history lists the new bytes. The operator added auth.yml.
+  /**
+   * A checkout one commit ahead of the release: upstream changed martin.yaml,
+   * and its regenerated history lists the new bytes.
+   */
+  function ahead(f: ReturnType<typeof checkout>) {
     const newer = "listen_addresses: 0.0.0.0:3000\nworker_processes: 8\n";
     const martin = join(f.root, "services", "martin", "config", "martin.yaml");
     const shipped = readFileSync(martin, "utf8");
@@ -406,13 +407,21 @@ describe("the one-time import of checkout edits", () => {
     };
     history.files["martin/config/martin.yaml"]?.push(sha256(newer));
     writeFileSync(historyPath, JSON.stringify(history));
-    writeFileSync(join(f.root, "services", "traefik", "config", "dynamic", "auth.yml"), AUTH);
+    return { newer, shipped, historyPath, history };
+  }
+
+  it("waits, importing and recording nothing, while the checkout is ahead of the release", async () => {
+    const f = checkout();
+    const { newer, shipped, historyPath, history } = ahead(f);
+    // The operator changed OTP's build configuration.
+    const otp = join(f.root, "services", "otp", "config", "build-config.json");
+    writeFileSync(otp, '{"osm": []}\n');
 
     const waiting = await commit(f, f.release());
     expect(existsSync(join(f.infraDir, "overrides"))).toBe(false);
     expect(serviceFilesImported(f.infraDir)).toBe(false);
     expect(waiting.serviceFileReport[0]).toBe(
-      "The one-time import of your edits in the checkout's service files waits: the checkout's services/service-file-history.json lists versions of services/martin/config/martin.yaml that the release doesn't, so the checkout may be ahead of it. A checkout file ahead of the release could be a newer upstream version rather than your edit, so nothing is imported or recorded until the checkout is at or behind the release's source revision; render tries again each time. Meanwhile render uses the release's files, not these checkout files, which match no version it shipped: services/martin/config/martin.yaml, services/traefik/config/dynamic/auth.yml. To keep an edit among them now, put the whole file in infra/docker/overrides/services/<id>/<path>.",
+      "The one-time import of your edits in the checkout's service files waits: the checkout's services/service-file-history.json lists versions of services/martin/config/martin.yaml that the release doesn't, so the checkout may be ahead of it. A checkout file ahead of the release could be a newer upstream version rather than your edit, so nothing is imported or recorded until the checkout is at or behind the release's source revision; render tries again each time. Meanwhile render uses the release's files, not these checkout files, which match no version it shipped: services/martin/config/martin.yaml, services/otp/config/build-config.json. To keep an edit among them now, put the whole file in infra/docker/overrides/services/<id>/<path>.",
     );
     expect(readFileSync(mounted(f.infraDir, "martin", "/etc/martin/martin.yaml"), "utf8")).toBe(
       shipped,
@@ -432,10 +441,47 @@ describe("the one-time import of checkout edits", () => {
     // the operator's file is imported.
     const caughtUp = await commit(f, f.release({ "martin/config/martin.yaml": newer }));
     expect(caughtUp.serviceFileReport[0]).toBe(
-      "Imported 1 checkout service file that differs from every version a release shipped as overrides, used from now on in place of the release's: infra/docker/overrides/services/traefik/config/dynamic/auth.yml. Edit them there; the checkout's copies are no longer read.",
+      "Imported 1 checkout service file that differs from every version a release shipped as overrides, used from now on in place of the release's: infra/docker/overrides/services/otp/config/build-config.json. Edit them there; the checkout's copies are no longer read.",
     );
     expect(existsSync(join(f.infraDir, "overrides", "services", "martin"))).toBe(false);
     expect(serviceFilesImported(f.infraDir)).toBe(true);
+  });
+
+  it("refuses, while the import waits, a basic-auth gate it would carry over, until it is in overrides", async () => {
+    const f = checkout();
+    ahead(f);
+    const traefik = join(f.root, "services", "traefik", "config");
+    const gated = readFileSync(join(traefik, "traefik.yml"), "utf8").replace(
+      "middlewares:",
+      "middlewares:\n          - basic-auth@file",
+    );
+    writeFileSync(join(traefik, "traefik.yml"), gated);
+    writeFileSync(join(traefik, "dynamic", "auth.yml"), AUTH);
+
+    const refused = await commit(f, f.release()).catch((error: Error) => error.message);
+    expect(refused).toBe(
+      "Render refuses while the one-time import of your service file edits waits (the checkout's services/service-file-history.json lists versions of services/martin/config/martin.yaml that the release doesn't, so the checkout may be ahead of it): the checkout holds Traefik files the import would carry over, and the release's files in their place could drop a basic-auth gate: services/traefik/config/dynamic/auth.yml, services/traefik/config/traefik.yml. Put each, as a whole file at the same path, in infra/docker/overrides/services/traefik/, created under umask 022 (an auth.yml holding password hashes with mode 0600), or delete it if you don't need it. An override ends the wait for that file, and render goes on.",
+    );
+    expect(refused).not.toContain("secret-hash");
+    expect(existsSync(join(f.infraDir, "overrides"))).toBe(false);
+    expect(serviceFilesImported(f.infraDir)).toBe(false);
+    expect(existsSync(join(f.infraDir, CURRENT_CONFIGURATION))).toBe(false);
+
+    // The same files, placed in overrides: render goes on and serves the gate.
+    f.override("traefik/config/dynamic/auth.yml", AUTH, 0o600);
+    f.override("traefik/config/traefik.yml", gated);
+    const committed = await commit(f, f.release());
+    expect(
+      readFileSync(join(f.infraDir, CURRENT_CONFIGURATION, TRAEFIK_STATIC_GENERATION_FILE), "utf8"),
+    ).toContain("basic-auth@file");
+    expect(readFileSync(join(agentStatePaths(f.infraDir).traefikDynamic, "auth.yml"), "utf8")).toBe(
+      AUTH,
+    );
+    // The rest still waits, reported: upstream's martin.yaml keeps the release's bytes.
+    expect(committed.serviceFileReport[0]).toContain(
+      "Meanwhile render uses the release's files, not these checkout files, which match no version it shipped: services/martin/config/martin.yaml.",
+    );
+    expect(serviceFilesImported(f.infraDir)).toBe(false);
   });
 
   it("runs only for the release's files, and fails rather than lose an edit it may not read", async () => {

@@ -685,6 +685,31 @@ describe("renderComposeForRepo", () => {
       expect(existsSync(f.overrides)).toBe(false);
       expect(existsSync(f.marker)).toBe(false);
 
+      // A basic-auth file the waiting import would carry over: refused by name,
+      // until it is an override; then the rest of the refusal stands.
+      const dynamic = join(tmp, "services", "traefik", "config", "dynamic");
+      mkdirSync(dynamic, { recursive: true });
+      writeFileSync(join(dynamic, "auth.yml"), "http: {}\n");
+      await expect(f.render()).rejects.toThrow(
+        "the checkout holds Traefik files the import would carry over, and the release's files in their place could drop a basic-auth gate: services/traefik/config/dynamic/auth.yml.",
+      );
+      const overridden = join(f.overrides, "services", "traefik", "config", "dynamic");
+      mkdirSync(overridden, { recursive: true, mode: 0o755 });
+      for (const directory of [f.overrides, join(f.overrides, "services")]) {
+        chmodSync(directory, 0o755);
+      }
+      for (const directory of ["traefik", "traefik/config", "traefik/config/dynamic"]) {
+        chmodSync(join(f.overrides, "services", directory), 0o755);
+      }
+      writeFileSync(join(overridden, "auth.yml"), "http: {}\n", { mode: 0o600 });
+      chmodSync(join(overridden, "auth.yml"), 0o600);
+      const rest = await f.render().catch((error: Error) => error.message);
+      expect(rest).toContain("  services/martin/config/martin.yaml (changed)");
+      expect(rest).not.toContain("auth.yml");
+      expect(existsSync(f.marker)).toBe(false);
+      rmSync(f.overrides, { recursive: true });
+      rmSync(join(dynamic, "auth.yml"));
+
       // Without a revision to compare with, the import waits too.
       f.select(null, f.shipped);
       await expect(f.render()).rejects.toThrow(

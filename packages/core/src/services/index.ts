@@ -315,11 +315,13 @@ export {
   checkoutPositionFromHistory,
   describeDeferredServiceFileImport,
   describeServiceFileImport,
+  describeWaitingTraefikEdits,
   importCheckoutServiceFiles,
   planServiceFileImport,
   type ServiceFileImport,
   type ServiceFileImportPlan,
   serviceFilesImported,
+  waitingTraefikEdits,
 } from "./service-file-import";
 export { describeServiceFiles } from "./service-file-report";
 export { readGenerationServiceFiles, serviceFileStore } from "./service-file-store";

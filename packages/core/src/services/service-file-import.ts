@@ -292,6 +292,33 @@ function writeOverride(path: string, bytes: Buffer, mode: number): void {
   fsyncDirectory(dirname(path));
 }
 
+/**
+ * The Traefik files a waiting import would carry over, which render refuses
+ * to go without: a dynamic YAML or TOML file the release doesn't ship (an
+ * operator's `auth.yml`) or a differing `traefik.yml` (its `basic-auth@file`
+ * reference). Using the release's files in their place could drop a
+ * basic-auth gate. Other differing files, Traefik's shipped dynamic files
+ * included, keep the release's bytes and are reported.
+ */
+export function waitingTraefikEdits(
+  plan: ServiceFileImportPlan | null,
+  release: ReleaseServiceFiles,
+): string[] {
+  if (plan?.kind !== "defer") return [];
+  return plan.pending.filter(
+    (key) =>
+      key === "traefik/config/traefik.yml" ||
+      (key.startsWith("traefik/") &&
+        overridableWithoutRelease("traefik", key.slice("traefik/".length)) &&
+        !release.files.has(key)),
+  );
+}
+
+/** Why render refuses while the import waits on Traefik files, and how to go on. */
+export function describeWaitingTraefikEdits(reason: string, keys: readonly string[]): string {
+  return `Render refuses while the one-time import of your service file edits waits (${reason}): the checkout holds Traefik files the import would carry over, and the release's files in their place could drop a basic-auth gate: ${keys.map((key) => `services/${key}`).join(", ")}. Put each, as a whole file at the same path, in infra/docker/overrides/services/traefik/, created under umask 022 (an auth.yml holding password hashes with mode 0600), or delete it if you don't need it. An override ends the wait for that file, and render goes on.`;
+}
+
 /** What the import did: the files it made overrides of (`<id>/<path>`), or why it waits. */
 export type ServiceFileImport =
   | { readonly imported: readonly string[] }
@@ -312,7 +339,13 @@ export function importCheckoutServiceFiles(options: {
   const { infraDir, release } = options;
   const plan = planServiceFileImport(options);
   if (!plan) return null;
-  if (plan.kind === "defer") return { deferred: plan.reason, pending: plan.pending };
+  if (plan.kind === "defer") {
+    const traefik = waitingTraefikEdits(plan, release);
+    if (traefik.length > 0) {
+      throw new ServiceFileError(describeWaitingTraefikEdits(plan.reason, traefik));
+    }
+    return { deferred: plan.reason, pending: plan.pending };
+  }
   const overrides = overridesDirectory(infraDir);
   const records: Record<string, { override: string; base: string | null }> = {};
   for (const { key, bytes, mode } of plan.edits) {

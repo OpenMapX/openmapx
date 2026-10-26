@@ -515,6 +515,10 @@ checkout's `services/`. Changes of your own go in
   match no version the release shipped either. There the import waits: render
   imports and records nothing, says why each time, and uses the release's
   files meanwhile, so an edit of yours is not applied until the import runs.
+  Traefik files are the exception: a checkout `auth.yml` (or another dynamic
+  file the release doesn't ship) or a changed `traefik.yml` makes render
+  refuse, by name, until you put it in
+  `infra/docker/overrides/services/traefik/`, so a basic-auth gate can't drop.
   A host render asks git and refuses meanwhile. The operations agent, which
   has no git, goes by the checkout's `services/service-file-history.json`. To
   apply an edit sooner, put it in an override yourself.

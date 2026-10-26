@@ -59,10 +59,18 @@ export async function serviceFileReport(): Promise<
       message: `The next render imports, once, your edits in the checkout's service files as overrides in infra/docker/overrides/services${keys.length > 0 ? ` (${keys.join(", ")})` : ""}, and from then on uses the release's files.`,
     });
   } else if (plan?.kind === "defer") {
-    lines.push({
-      level: "warn",
-      message: coreServices.describeDeferredServiceFileImport(plan.reason, plan.pending),
-    });
+    const traefik = coreServices.waitingTraefikEdits(plan, release);
+    lines.push(
+      traefik.length > 0
+        ? {
+            level: "err",
+            message: coreServices.describeWaitingTraefikEdits(plan.reason, traefik),
+          }
+        : {
+            level: "warn",
+            message: coreServices.describeDeferredServiceFileImport(plan.reason, plan.pending),
+          },
+    );
   }
   const mounts = await containerBindMounts();
   for (const message of coreServices.describeServiceFiles({

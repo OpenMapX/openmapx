@@ -481,6 +481,14 @@ source revision. A checkout ahead of it can hold newer upstream files, which
 also match no released version. Until then the import waits: render imports
 and records nothing, says why on every render, in `check` and in Run
 diagnostics, lists the checkout files it does not use, and uses the release's.
+Traefik is the exception: while the import waits, render refuses if the
+checkout holds a Traefik file the import would carry over, an `auth.yml` or
+another dynamic YAML or TOML file the release doesn't ship, or a changed
+`traefik.yml`. Using the release's files instead could drop a basic-auth gate.
+The refusal names the files. Put each in
+`infra/docker/overrides/services/traefik/` at the same path, under `umask 022`
+(`auth.yml` with mode 0600), and render goes on: an override ends the wait for
+that file.
 The host CLI asks git; the operations agent goes by the checkout's
 `services/service-file-history.json`, which each commit keeps current. A
 checkout without that file predates it and is taken to be behind.
