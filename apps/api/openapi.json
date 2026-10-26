@@ -34333,7 +34333,8 @@
                               "restarting",
                               "created",
                               "paused",
-                              "not-running"
+                              "not-running",
+                              "unknown"
                             ]
                           }
                         },
@@ -37379,7 +37380,8 @@
                               "restarting",
                               "created",
                               "paused",
-                              "not-running"
+                              "not-running",
+                              "unknown"
                             ]
                           }
                         },
@@ -40726,7 +40728,8 @@
                         "restarting",
                         "created",
                         "paused",
-                        "not-running"
+                        "not-running",
+                        "unknown"
                       ]
                     }
                   },
