@@ -17,7 +17,7 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm typecheck && pnpm build
 
-FROM nginx:1.31.6-alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2
+FROM nginx:1.31.7-alpine@sha256:892bb2152464f0c5d8972593a5f5afaf8054552580b699d95f8ff4af08c2d33d
 # The current official image predates Alpine's OpenSSL fix for CVE-2026-14456
 # and later libexpat, util-linux, PCRE2, TIFF (CVE-2026-4775), libX11
 # (CVE-2026-88806), Brotli (CVE-2026-111497) and curl (CVE-2026-92392,
