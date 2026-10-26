@@ -15,6 +15,10 @@ and its binding supplement `docs/superpowers/specs/2026-10-23-admin-control-prot
 
 All Global Constraints and Product and security decisions in the specification are binding. User authorization includes autonomous decisions and execution through one PR with green CI; no additional approval or planning pause is required. Delegated work uses only Codex6.1-Sol or ClaudeOpus, preferablyCodex; Astra is prohibited by the latest user instruction. Local rendered verification, no screenshots attached to PR.
 
+## Approved Task01.2 maintenance coordinator ordering
+
+The [approved coordinator prerequisite ordering](../specs/2026-10-26-admin-maintenance-coordinator-order-design.md) resolves the held-root/helper-Start conflict without extending the graph. Maintenance-bound nonempty ensure-running uses the existing ordinary old-revision Start after full candidate preflight, conclusively settles/releases it, then acquires the original maintenance root/guard and rechecks. Require-running/empty links retain zero-lifecycle guarantees; no late fallback or new deadline. Existing Task01.2/runtime acceptance and50-task order remain binding.
+
 ## Approved Task01.2 existing ordinary-import allocation
 
 The [approved ordinary-import ruling](../specs/2026-10-26-admin-ordinary-integration-import-design.md), independently READY at R1, moves only the existing nonsecret integration-config batch import adapter from04.5 into01.2. It retains the closed migration participant/purpose, whole-candidate preflight and one writer transaction; future auth/binding/vault/feed workflows stay with their assigned tasks. No new task or migration; exact current-route and runtime acceptance remain required.
