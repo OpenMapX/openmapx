@@ -90,10 +90,19 @@ RUN node scripts/copy-runtime-packages.mjs /tmp/runtime-packages.json /app /runt
 # dependencies, out of the shipped image.
 FROM node:24.22.1-alpine@sha256:6a1c190e17215d844926b0677f4bf87273ff7d5e54db06d3b5b5863ab0b09a3d AS runner
 WORKDIR /app
-# The pinned base predates Alpine's OpenSSL fix for CVE-2026-14456.
+# The pinned base predates Alpine's OpenSSL fix for CVE-2026-14456. curl and
+# libcurl 8.23.0-r0 fix CVE-2026-92392.
 # git fetches community service repositories into the agent's community store.
-RUN apk upgrade --no-cache libcrypto3 libssl3 && \
-    apk add --no-cache ca-certificates curl docker-cli docker-cli-compose git tini && \
+# The upgrade runs after the install: `apk upgrade` of a package that isn't
+# installed yet does nothing. `apk add` alone is not enough: a release build can
+# restore this layer from the registry build cache with the curl it held then.
+# Naming curl in the upgrade, and the version floor checked after, change this
+# instruction, which keeps such a layer from being reused; the floor also fails
+# the build on a mirror that doesn't have the fix yet.
+RUN apk add --no-cache ca-certificates curl docker-cli docker-cli-compose git tini && \
+    apk upgrade --no-cache libcrypto3 libssl3 curl libcurl && \
+    libcurl="$(apk query --fields version libcurl)" && libcurl="${libcurl#Version: }" && \
+    test -n "$libcurl" && test "$(apk version -t "$libcurl" 8.23.0-r0)" != "<" && \
     rm -rf /usr/local/lib/node_modules/npm && \
     rm -f /usr/local/bin/npm /usr/local/bin/npx
 

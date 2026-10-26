@@ -84,13 +84,17 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # git is required because the upstream attribution script reads the catalog's
 # submodule metadata; there is no credential helper and no remote configured.
-# Explicitly upgrade PCRE2 and Expat inherited from the pinned base to their
-# security fixes. The version check fails a stale mirror and, when raised,
-# invalidates this layer in the registry build cache.
+# Explicitly upgrade PCRE2 and Expat inherited from the pinned base, and
+# libssl3 and openssl (3.0.22-1~deb12u2 fixes CVE-2026-84782) that curl, git,
+# Python and ca-certificates pull in, to their security fixes. The version
+# checks fail a stale mirror and, when raised, invalidate this layer in the
+# registry build cache.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-      ca-certificates curl git python3 python3-pip python3-venv age libpcre2-8-0 libexpat1 \
+      ca-certificates curl git python3 python3-pip python3-venv age libpcre2-8-0 libexpat1 libssl3 openssl \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libexpat1)" ge 2.5.0-1+deb12u5 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3)" ge 3.0.22-1~deb12u2 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' openssl)" ge 3.0.22-1~deb12u2 \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED

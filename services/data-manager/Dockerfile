@@ -93,14 +93,20 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # Require at least Expat's 2.5.0-1+deb12u4 security update; Debian may replace
 # older revisions in its repositories. libpcre2-8-0 fixes CVE-2026-86145,
 # CVE-2026-89157 and CVE-2026-89161. libbrotli1 1.0.9-2+deb12u1 fixes
-# CVE-2026-111497.
+# CVE-2026-111497. libssl3 and openssl 3.0.22-1~deb12u2 fix CVE-2026-84782;
+# curl, git, Python and ca-certificates pull them in, and a release build can
+# restore this layer from the registry build cache with the versions it held
+# then. Raising a version check here changes the instruction, so that layer is
+# not reused.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
       osmium-tool curl unzip bzip2 lbzip2 ca-certificates age \
       git python3 python3-pip python3-venv wget rsync openssh-client \
-      libexpat1 libpcre2-8-0 libbrotli1 \
+      libexpat1 libpcre2-8-0 libbrotli1 libssl3 openssl \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libexpat1)" ge '2.5.0-1+deb12u4' \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge '1.0.9-2+deb12u1' \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3)" ge '3.0.22-1~deb12u2' \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' openssl)" ge '3.0.22-1~deb12u2' \
     && rm -rf /var/lib/apt/lists/*
 
 ARG DUCKDB_VERSION=1.5.6

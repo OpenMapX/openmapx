@@ -22,14 +22,18 @@ ARG MOTIS_SHA256_ARM64=eda48ad1744e7be9bdd1cb515e7229e9c7ecdc3cf82c6621a64670505
 # available inside the RUN below.
 ARG TARGETARCH
 
-# Explicitly upgrade PCRE2, Expat and Brotli inherited from the pinned base to
-# their security fixes. The version checks fail a stale mirror and, when raised,
-# invalidate this layer in the registry build cache.
+# Explicitly upgrade PCRE2, Expat and Brotli inherited from the pinned base,
+# and libssl3 and openssl (3.0.22-1~deb12u2 fixes CVE-2026-84782) that curl,
+# git, Python and ca-certificates pull in, to their security fixes. The version
+# checks fail a stale mirror and, when raised, invalidate this layer in the
+# registry build cache.
 RUN apt-get update -y \
     && apt-get install -y --no-install-recommends \
-      git python3-pip python3-venv curl wget bzip2 rsync openssh-client ca-certificates age libpcre2-8-0 libexpat1 libbrotli1 \
+      git python3-pip python3-venv curl wget bzip2 rsync openssh-client ca-certificates age libpcre2-8-0 libexpat1 libbrotli1 libssl3 openssl \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libexpat1)" ge 2.5.0-1+deb12u5 \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge 1.0.9-2+deb12u1 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3)" ge 3.0.22-1~deb12u2 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' openssl)" ge 3.0.22-1~deb12u2 \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED
