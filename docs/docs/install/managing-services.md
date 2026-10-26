@@ -415,12 +415,17 @@ To change one, put the whole file in an override, at the same path below
 `infra/docker/overrides/services/<service>/`:
 
 ```bash
-mkdir -p infra/docker/overrides/services/martin/config
-cp services/martin/config/martin.yaml infra/docker/overrides/services/martin/config/
+(umask 022
+  mkdir -p infra/docker/overrides/services/martin/config
+  cp services/martin/config/martin.yaml infra/docker/overrides/services/martin/config/)
 "$EDITOR" infra/docker/overrides/services/martin/config/martin.yaml
 pnpm openmapx compose render
 pnpm openmapx services update martin
 ```
+
+The `umask 022` matters on Debian and Ubuntu, whose default umask of `002`
+makes new files and directories group-writable, and render refuses those. To
+fix existing ones: `chmod -R g-w,o-w infra/docker/overrides`.
 
 Render uses the override in place of the release's file. Because the copy's
 directory is named after what it holds, `services update` (or **Recreate** in

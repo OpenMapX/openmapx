@@ -60,7 +60,9 @@ commit is published.
 
 - **After the upgrade, check the render's output, or `pnpm openmapx check`,
   for the files it imported.** From then on, edit those files in
-  `infra/docker/overrides/services`, not in the checkout.
+  `infra/docker/overrides/services`, not in the checkout. Create new
+  overrides under `umask 022`: Debian's and Ubuntu's default `002` makes
+  them group-writable, and render refuses those.
 - **Select the release before rendering on a host.** The documented host
   update already does: `git pull`, `pnpm install`, `pnpm openmapx compose
 release`, `pnpm openmapx compose render`. A first installation now runs

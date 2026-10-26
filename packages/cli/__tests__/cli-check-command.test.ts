@@ -152,6 +152,8 @@ it("reports the service files: overrides, the import to come, a host render's re
   const override = join(tmp, "infra", "docker", "overrides", "services", "martin", "config");
   mkdirSync(override, { recursive: true, mode: 0o755 });
   writeFileSync(join(override, "martin.yaml"), "users: ['op:$2y$05$secret-hash']\n");
+  // Whatever the umask: overrides group or others may write are refused.
+  chmodSync(join(override, "martin.yaml"), 0o644);
   const checkout = services.releaseServiceFiles([
     { manifest, directory, isBuiltIn: true, enabled: true } as services.LoadedService,
   ]);

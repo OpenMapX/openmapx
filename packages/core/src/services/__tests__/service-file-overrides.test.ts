@@ -196,7 +196,9 @@ describe("service file overrides", () => {
     // A link for a directory that holds shipped paths.
     const config = join(f.infraDir, "overrides", "services", "martin", "config");
     mkdirSync(join(f.root, "linked-config"));
-    mkdirSync(join(config, ".."), { recursive: true });
+    // 0755 whatever the umask: under 002 a plain mkdir is group-writable,
+    // which render refuses before it reaches the link.
+    mkdirSync(join(config, ".."), { recursive: true, mode: 0o755 });
     symlinkSync(join(f.root, "linked-config"), config);
     await expect(commit()).rejects.toThrow(
       "infra/docker/overrides/services/martin/config can't be used: it is a symbolic link",

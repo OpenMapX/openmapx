@@ -173,6 +173,9 @@ two [overrides](../install/managing-services.md#service-file-overrides) in
 - `traefik.yml`: a copy of `services/traefik/config/traefik.yml` with
   `basic-auth@file` appended to the existing middleware list.
 
+Create them, and their directories, under `umask 022`: render refuses overrides
+that group or others may write.
+
 Render the stack, then recreate Traefik, which reads `traefik.yml` only when it
 starts; the middleware file alone does not activate it.
 
