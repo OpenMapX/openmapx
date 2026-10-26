@@ -33,6 +33,12 @@ import {
 } from "./runtime";
 import { decideServiceAction } from "./service-action-policy";
 
+const containedProcessFailures = new WeakSet<object>();
+/** Only actual contained-process adapters mint this observation; it is not request authority. */
+export function isContainedProcessFailure(error: unknown): boolean {
+  return typeof error === "object" && error !== null && containedProcessFailures.has(error);
+}
+
 const DEFAULT_TIMEOUT_MS = 120_000;
 const LIFECYCLE_TIMEOUT_MS = 10 * 60_000;
 const PULL_TIMEOUT_MS = 10 * 60_000;
@@ -162,8 +168,11 @@ export async function runContainedStreamingProcess(
       exit.containmentFailed ||
       exit.code !== 0 ||
       exit.signal !== null
-    )
-      throw new OpsExecutionFailure(timedOut ? "timeout" : "runtime", { diagnostics });
+    ) {
+      const error = new OpsExecutionFailure(timedOut ? "timeout" : "runtime", { diagnostics });
+      if (!exit.residualDescendants && !exit.containmentFailed) containedProcessFailures.add(error);
+      throw error;
+    }
     return diagnostics;
   } finally {
     clearTimeout(timer);
@@ -268,7 +277,10 @@ export function runContainedProcess(
         exit.code !== 0 ||
         exit.signal !== null
       ) {
-        reject(new Error("Contained process failed"));
+        const error = new Error("Contained process failed");
+        if (!exit.residualDescendants && !exit.containmentFailed)
+          containedProcessFailures.add(error);
+        reject(error);
         return;
       }
       resolve({
@@ -434,6 +446,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   ) => {
     const remaining = context.execution.deadlineAt - Date.now();
     if (remaining <= 0 || context.signal.aborted) throw new OpsExecutionFailure("timeout", {});
+    context.beginServiceCreation?.();
     if (options.execFile) await run(args, context.signal, Math.min(timeout, remaining));
     else
       await runContainedStreamingProcess("docker", args, {

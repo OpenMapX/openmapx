@@ -1,4 +1,4 @@
-import { lstatSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { services } from "@openmapx/core/server";
 import type { DockerRuntimeOptions } from "./docker-runtime";
@@ -122,6 +122,21 @@ export function createOwnedServiceResolver(options: {
         try {
           configFiles = files.split(",").map(canonical);
           workingDirectory = canonical(working);
+          const legacyCurrentFiles = [infra, configuredInfra].map((root) =>
+            join(root, services.CURRENT_CONFIGURATION, services.GENERATED_COMPOSE_FILE),
+          );
+          if (legacyCurrentFiles.includes(files.split(",")[0] ?? "")) {
+            const retained = services.retainedContainerComposeFile(infra, row.Id as string);
+            if (retained) {
+              configFiles[0] = retained;
+              if (
+                [infra, configuredInfra].some(
+                  (root) => working === join(root, services.CURRENT_CONFIGURATION),
+                )
+              )
+                workingDirectory = dirname(retained);
+            }
+          }
         } catch {
           continue;
         }
@@ -164,18 +179,16 @@ export function createOwnedServiceResolver(options: {
         const key = JSON.stringify(configFiles);
         let configuration = configurations.get(key);
         if (!configuration) {
-          const config = JSON.parse(
-            await run([
-              "compose",
-              "--project-name",
-              services.STACK_PROJECT,
-              ...configFiles.flatMap((file) => ["-f", file]),
-              ...realpathEnv(infra),
-              "config",
-              "--format",
-              "json",
-            ]),
-          ) as { services?: Record<string, { image?: string }> };
+          const releasePath = join(infra, "docker-compose.release.yml");
+          const args = services.stackComposeArgs(
+            { infraDir: infra, composePath: first, composeReleasePath: releasePath },
+            (path) => (path === releasePath ? configFiles.includes(releasePath) : existsSync(path)),
+          );
+          if (!args.includes("--project-name"))
+            args.splice(1, 0, "--project-name", services.STACK_PROJECT);
+          const config = JSON.parse(await run([...args, "config", "--format", "json"])) as {
+            services?: Record<string, { image?: string }>;
+          };
           if (
             !config.services ||
             typeof config.services !== "object" ||
@@ -249,13 +262,4 @@ export function createOwnedServiceResolver(options: {
     inspectInventory,
     inspectOwnedServices: async (signal) => (await inspectInventory(signal)).services,
   };
-}
-
-function realpathEnv(infra: string): string[] {
-  try {
-    return ["--env-file", realpathSync(join(infra, ".env"))];
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw error;
-  }
 }

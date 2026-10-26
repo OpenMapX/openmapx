@@ -1,16 +1,28 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { composePathHost, installedCompose } from "../__fixtures__/compose-path-host";
 import {
   type ConfigurationInput,
   commitConfigurationGeneration,
+  initializeConfigurationGenerations,
   readAppliedConfiguration,
   readAppliedServiceIds,
   renderConfiguration,
   withConfigurationGenerationWriter,
 } from "../configuration-generation";
 import {
+  configurationGenerationBasePath,
   readDesiredSelection,
   readServiceSelectionFile,
   stackComposeArgs,
@@ -230,6 +242,67 @@ describe("desired selection", () => {
 });
 
 describe("stack compose arguments", () => {
+  it("adds fixed bases to existing generations without modifying their bytes and rejects forged bases", async () => {
+    const host = await composePathHost();
+    roots.push(host.root);
+    const composeHash = host.hash(host.firstCompose),
+      secretHash = host.hash(host.secretFile(host.firstCompose));
+    const base = configurationGenerationBasePath(host.infraDir, host.first.revisionId);
+    rmSync(base);
+    expect(() => host.currentArgs()).toThrow();
+    await initializeConfigurationGenerations(host.infraDir);
+    expect(realpathSync(base)).toBe(realpathSync(join(host.infraDir, ".trusted-config-current")));
+    expect(host.currentArgs()).toContain(base);
+    expect(host.hash(host.firstCompose)).toBe(composeHash);
+    expect(host.hash(host.secretFile(host.firstCompose))).toBe(secretHash);
+    rmSync(base);
+    symlinkSync(".trusted-config-current", base);
+    expect(() => host.currentArgs()).toThrow("Unsafe generation Compose base");
+    await expect(initializeConfigurationGenerations(host.infraDir)).rejects.toThrow(
+      "Unsafe generation Compose base",
+    );
+    expect(host.hash(host.firstCompose)).toBe(composeHash);
+    expect(host.hash(host.secretFile(host.firstCompose))).toBe(secretHash);
+  });
+
+  it.runIf(installedCompose)(
+    "resolves real rendered current and retained paths without redirecting generation secrets",
+    async () => {
+      const host = await composePathHost();
+      roots.push(host.root);
+      const originalBytes = host.hash(host.firstCompose),
+        originalSecret = host.hash(host.secretFile(host.firstCompose));
+      const oldArgs = host.currentArgs();
+      for (const noEnv of [false, true]) {
+        const result = host.config(oldArgs, noEnv);
+        expect(result.status, "real Compose must validate production-rendered env_file paths").toBe(
+          0,
+        );
+        if (!result.model) throw Error("Real Compose fixture acquisition failed");
+        expect(Object.values(host.pathChecks(result.model, host.firstCompose)).every(Boolean)).toBe(
+          true,
+        );
+      }
+      await host.commit("second");
+      const nextCompose = realpathSync(host.stack.composePath);
+      expect(host.sameFile(host.secretFile(host.firstCompose), host.secretFile(nextCompose))).toBe(
+        false,
+      );
+      for (const [args, file] of [
+        [oldArgs, host.firstCompose],
+        [host.retainedArgs(), host.firstCompose],
+        [host.currentArgs(), nextCompose],
+      ] as const) {
+        const result = host.config(args);
+        expect(result.status).toBe(0);
+        if (!result.model) throw Error("Real Compose fixture acquisition failed");
+        expect(Object.values(host.pathChecks(result.model, file)).every(Boolean)).toBe(true);
+      }
+      expect(host.hash(host.firstCompose)).toBe(originalBytes);
+      expect(host.hash(host.secretFile(host.firstCompose))).toBe(originalSecret);
+    },
+  );
+
   it("addresses the stack as one project with the deployment environment", () => {
     const paths = {
       infraDir: "/stack",

@@ -43,10 +43,13 @@ import {
 } from "./configuration-ownership";
 import { validateTrustedConfigurationValues } from "./configuration-schema";
 import {
+  CONFIGURATION_GENERATION_BASE_PREFIX,
   CONFIGURATION_GENERATIONS,
   CURRENT_CONFIGURATION,
+  configurationGenerationBasePath,
   GENERATED_COMPOSE_FILE,
   GENERATED_HARDLINK_PLAN_FILE,
+  readConfigurationGenerationBase,
   SERVICE_SELECTION_FILE,
 } from "./deployment";
 import { buildAppApiServiceEnv, expandServiceSelection } from "./selection";
@@ -714,6 +717,29 @@ function retainedConfigurationGenerations(infraDir: string): Set<string> {
   const retained = readGenerationRetention(infraDir);
   return new Set([...retained.conservative, ...Object.values(retained.containers).flat()]);
 }
+
+/**
+ * Recover only the first recorded generation of a legacy container whose Docker
+ * labels named the movable current alias. This is path selection, never an
+ * ownership claim: callers must still verify registry, labels and image identity.
+ */
+export function retainedContainerComposeFile(infraDir: string, containerId: string): string | null {
+  if (!/^[a-f0-9]{64}$/.test(containerId)) throw new Error(UNSAFE);
+  const retained = readGenerationRetention(infraDir);
+  const revisions = retained.containers[containerId];
+  if (!revisions) {
+    const current = currentConfigurationGeneration(infraDir);
+    if (
+      [...retained.conservative, ...Object.values(retained.containers).flat()].some(
+        (id) => id !== current,
+      )
+    )
+      throw new Error(UNSAFE);
+    return null;
+  }
+  if (revisions.length !== 1) throw new Error(UNSAFE);
+  return configurationGenerationComposeFile(infraDir, revisions[0] ?? "");
+}
 async function retainConfigurationGenerations(
   infraDir: string,
   owned?: CommitConfigurationOptions["ownedServiceGenerations"],
@@ -811,6 +837,21 @@ export function configurationGenerationComposeFile(infraDir: string, revisionId:
   return join(path, GENERATED_COMPOSE_FILE);
 }
 
+function ensureConfigurationGenerationBase(infraDir: string, revisionId: string): boolean {
+  try {
+    readConfigurationGenerationBase(infraDir, revisionId);
+    return false;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  symlinkSync(
+    `${CONFIGURATION_GENERATIONS}/${revisionId}`,
+    configurationGenerationBasePath(infraDir, revisionId),
+  );
+  readConfigurationGenerationBase(infraDir, revisionId);
+  return true;
+}
+
 async function initializeOwnedConfigurationGenerations(infraDir: string): Promise<void> {
   const generations = join(infraDir, CONFIGURATION_GENERATIONS);
   try {
@@ -850,8 +891,17 @@ async function initializeOwnedConfigurationGenerations(infraDir: string): Promis
     complete.push({ name: entry.name, path, mtimeMs: lstatSync(path).mtimeMs });
   }
   const pointerTemporaries: string[] = [];
+  const generationBases: { revisionId: string; path: string }[] = [];
   const pointerName = new RegExp(`^\\.\\${CURRENT_CONFIGURATION}\\.[a-f0-9]{32}\\.tmp$`);
   for (const entry of readdirSync(infraDir, { withFileTypes: true })) {
+    if (entry.name.startsWith(CONFIGURATION_GENERATION_BASE_PREFIX)) {
+      const revisionId = entry.name.slice(CONFIGURATION_GENERATION_BASE_PREFIX.length);
+      generationBases.push({
+        revisionId,
+        path: readConfigurationGenerationBase(infraDir, revisionId),
+      });
+      continue;
+    }
     if (!pointerName.test(entry.name)) continue;
     const path = join(infraDir, entry.name);
     const stats = lstatSync(path);
@@ -879,6 +929,17 @@ async function initializeOwnedConfigurationGenerations(infraDir: string): Promis
     retainedCount -= 1;
   }
   if (complete.some((entry) => !existsSync(entry.path))) await syncDirectory(generations);
+  let basesChanged = false;
+  for (const base of generationBases) {
+    if (!existsSync(join(generations, base.revisionId))) {
+      rmSync(base.path);
+      basesChanged = true;
+    }
+  }
+  for (const entry of complete)
+    if (existsSync(entry.path))
+      basesChanged = ensureConfigurationGenerationBase(infraDir, entry.name) || basesChanged;
+  if (basesChanged) await syncDirectory(infraDir);
   if (active && !existsSync(join(generations, active))) {
     throw new Error(`The applied generation ${active} is missing`);
   }
@@ -936,6 +997,8 @@ export function renderConfiguration(options: RenderConfigurationOptions) {
   );
   const context: RenderContext = {
     domain: input.domain,
+    // Runtime supplies a fixed generation alias at this same directory depth.
+    // Keep these bytes compatible with existing current/retained generations.
     composeOutDir: join(infraDir, CURRENT_CONFIGURATION),
     infraDir,
     allServices: resolved.allServices,
@@ -1050,6 +1113,7 @@ async function commitOwnedConfigurationGeneration(
       await options.afterGenerationRename?.();
     }
     options.signal?.throwIfAborted();
+    if (ensureConfigurationGenerationBase(infraDir, revisionId)) await syncDirectory(infraDir);
     const currentRevisionId = currentConfigurationGeneration(infraDir);
     if (
       options.expectedCurrentRevisionId !== undefined &&

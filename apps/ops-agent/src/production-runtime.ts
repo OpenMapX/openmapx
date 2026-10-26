@@ -18,6 +18,7 @@ import {
   type DockerRuntimeOptions,
   runContainedProcess,
 } from "./docker-runtime";
+import { ServiceLifecycleExclusion } from "./lifecycle-exclusion";
 import { createOwnedServiceResolver, type OwnedServiceResolver } from "./owned-services";
 import { serviceActionForOperation } from "./policy";
 import type { OpsExecutionContext, OpsRuntime } from "./runtime";
@@ -76,6 +77,7 @@ export async function createProductionOpsRuntime(
   options: ProductionOpsRuntimeOptions,
 ): Promise<OpsRuntime> {
   const initial = await options.loadAuthority();
+  const lifecycle = new ServiceLifecycleExclusion(options.stack.infraDir);
   const owned = createOwnedServiceResolver({
     stack: options.stack,
     execFile: options.docker?.execFile ?? runContainedProcess,
@@ -96,7 +98,7 @@ export async function createProductionOpsRuntime(
     infraDir: options.stack.infraDir,
     ownedServices: owned,
   });
-  installCommunityRepositoryRuntime(runtime, options.communityRepositories, owned);
+  installCommunityRepositoryRuntime(runtime, options.communityRepositories, owned, lifecycle);
   const runFixedCli = options.runFixedCli ?? createDefaultFixedCli(options.rootDir);
   const releaseEffects = createDefaultReleaseEffects(options.rootDir, runFixedCli);
   createTransitousLockRuntime(runtime, { rootDir: options.rootDir });
@@ -149,7 +151,7 @@ export async function createProductionOpsRuntime(
       operation: OpsOperation,
       context: OpsExecutionContext,
     ) => Promise<unknown>;
-    const guarded = async (
+    const execute = async (
       operation: Extract<OpsOperation, { serviceId: string }>,
       context: OpsExecutionContext,
     ) => {
@@ -181,9 +183,54 @@ export async function createProductionOpsRuntime(
         throw new Error("Service action denied");
       return handler(operation, context);
     };
+    const guarded = async (
+      operation: Extract<OpsOperation, { serviceId: string }>,
+      context: OpsExecutionContext,
+    ) => {
+      if (
+        ![
+          "service.start",
+          "service.restart",
+          "service.recreate",
+          "service.recreateIsolated",
+        ].includes(kind)
+      )
+        return execute(operation, context);
+      // Compose up may also create dependencies, including release-overlay
+      // dependencies. Conservatively exclude every registered service for those
+      // commands; this local boundary does not acquire or replace root authority.
+      const ids =
+        kind === "service.start" || kind === "service.recreate"
+          ? (await options.loadAuthority()).services.map((service) => service.manifest.id).sort()
+          : [operation.serviceId];
+      return lifecycle.creating(ids, context.signal, async (begin) => {
+        if (kind === "service.start" || kind === "service.recreate") {
+          const current = (await options.loadAuthority()).services
+            .map((service) => service.manifest.id)
+            .sort();
+          if (JSON.stringify(current) !== JSON.stringify(ids))
+            throw new Error("Service authority changed while waiting");
+        }
+        return execute(operation, { ...context, beginServiceCreation: begin });
+      });
+    };
     // The finite loop preserves each handler's operation/result correspondence.
     Object.assign(runtime, { [kind]: guarded });
   }
+  const stackStart = runtime["stack.start"];
+  runtime["stack.start"] = async (operation, context) => {
+    const ids = (await options.loadAuthority()).services
+      .map((service) => service.manifest.id)
+      .sort();
+    return lifecycle.creating(ids, context.signal, async (begin) => {
+      const authority = await options.loadAuthority();
+      const current = authority.services.map((service) => service.manifest.id).sort();
+      if (JSON.stringify(current) !== JSON.stringify(ids))
+        throw new Error("Service authority changed while waiting");
+      serviceActionAuthority(authority, options.stack.infraDir);
+      return stackStart(operation, { ...context, beginServiceCreation: begin });
+    });
+  };
   resolvers.set(runtime, owned);
   releaseAdapters.set(runtime, releaseEffects);
   return runtime;

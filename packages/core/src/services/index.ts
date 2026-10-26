@@ -40,6 +40,7 @@ export {
   readAppliedConfiguration,
   readAppliedServiceIds,
   renderConfiguration,
+  retainedContainerComposeFile,
   withConfigurationGenerationWriter,
 } from "./configuration-generation";
 export {

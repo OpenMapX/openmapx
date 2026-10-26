@@ -59,6 +59,8 @@ export interface OpsExecutionContext {
     completionDigest: string;
   }): Promise<void>;
   markFeedProxyReloadAttempted?(): Promise<void>;
+  /** Installed only by the shared production exclusion; records denial before external creation. */
+  beginServiceCreation?(): void;
   signal: AbortSignal;
   emitLog(stream: "stdout" | "stderr", message: string): void;
   claim: OpsTrustedClaim;

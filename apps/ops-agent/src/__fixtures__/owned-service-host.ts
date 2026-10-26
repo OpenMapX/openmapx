@@ -95,12 +95,19 @@ export async function ownedServiceHost() {
   let rawListing: string | undefined;
   let malformedInspect = false;
   const calls: string[][] = [];
-  const execFile: NonNullable<DockerRuntimeOptions["execFile"]> = async (_file, args) => {
+  let creatingProcess:
+    | ((args: readonly string[], signal: AbortSignal) => Promise<void>)
+    | undefined;
+  let inventoryProcess: (() => Promise<void>) | undefined;
+  const execFile: NonNullable<DockerRuntimeOptions["execFile"]> = async (_file, args, options) => {
     calls.push([...args]);
     let stdout = "";
-    if (args[0] === "container" && args[1] === "ls")
+    if (args[0] === "container" && args[1] === "ls") {
       stdout = rawListing ?? rows.map((r) => r.Id).join("\n");
-    else if (args[0] === "container" && args[1] === "inspect")
+      const pending = inventoryProcess;
+      inventoryProcess = undefined;
+      await pending?.();
+    } else if (args[0] === "container" && args[1] === "inspect")
       stdout = malformedInspect ? "{" : rows.map((r) => JSON.stringify(r)).join("\n");
     else if (args[0] === "compose" && args.includes("config"))
       stdout = JSON.stringify({
@@ -112,8 +119,12 @@ export async function ownedServiceHost() {
         ),
       });
     else if (args[0] === "image" && args[1] === "inspect") stdout = imageId;
-    else if (args[0] === "stop") row.State = "exited";
-    else if (args[0] === "logs") stdout = "retained log\n";
+    else if (args[0] === "compose" && args.includes("up"))
+      await creatingProcess?.(args, options.signal);
+    else if (args[0] === "stop") {
+      const stopped = rows.find((candidate) => candidate.Id === args[1]);
+      if (stopped) stopped.State = "exited";
+    } else if (args[0] === "logs") stdout = "retained log\n";
     return { stdout, stderr: "" };
   };
   const repositories = new CommunityRepositoryStore({
@@ -171,6 +182,7 @@ export async function ownedServiceHost() {
       serviceId: s.manifest.id,
       enabled: s.enabled,
       isBuiltIn: s.isBuiltIn,
+      selectionAuthority: s,
     })),
     integrationIds: [],
     loadAuthority: async () => {
@@ -181,17 +193,24 @@ export async function ownedServiceHost() {
           serviceId: s.manifest.id,
           enabled: s.enabled,
           isBuiltIn: s.isBuiltIn,
+          selectionAuthority: s,
         })),
         integrationIds: [...a.integrationSchemas.keys()],
       };
     },
-    enabledServiceIds: () => services.readAppliedServiceIds(infraDir, loaded) ?? new Set(),
+    enabledServiceIds: (authorityServices) =>
+      services.readAppliedServiceIds(
+        infraDir,
+        authorityServices.map((service) => service.selectionAuthority),
+      ) ?? new Set(),
     trustedData,
     ownedServices: productionOwnedServices(runtime),
     serviceMetadata: (ss) => ss.map((s) => ({ ...s, buildable: false })),
   });
-  const context = async (operation: OpsOperation) => {
-    const signal = new AbortController().signal;
+  const context = async (
+    operation: OpsOperation,
+    signal: AbortSignal = new AbortController().signal,
+  ) => {
     const claim = await claimer.claim(operation, opsOperationFingerprint(operation), signal, {
       role: "api",
       operationKey: testExecution().operationKey,
@@ -249,6 +268,12 @@ export async function ownedServiceHost() {
     select,
     owned: productionOwnedServices(runtime),
     actionAuthority: async () => serviceActionAuthority(await loadAuthority(), infraDir),
+    setCreatingProcess(value: typeof creatingProcess) {
+      creatingProcess = value;
+    },
+    setInventoryProcess(value: typeof inventoryProcess) {
+      inventoryProcess = value;
+    },
     setRows(value: typeof rows) {
       rows = value;
     },

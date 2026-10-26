@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import {
   closeControlInstallation,
   openControlInstallation,
@@ -9,8 +9,12 @@ import {
 import { createControlRootOperationKey, type OpsOperation } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { afterEach, describe, expect, it } from "vitest";
+import { installedCompose } from "../../../packages/core/src/services/__fixtures__/compose-path-host";
+import { ownedComposePathRuntime } from "./__fixtures__/owned-compose-path-runtime";
 import { ownedServiceHost } from "./__fixtures__/owned-service-host";
+import { runContainedProcess } from "./docker-runtime";
 import { openOpsJobJournal } from "./journal";
+import { createProductionOpsRuntime } from "./production-runtime";
 import { dispatchOpsOperation } from "./runtime";
 import { buildOpsAgentServer } from "./server";
 import { initializeTrustedConfigurationRuntime } from "./trusted-config-runtime";
@@ -331,5 +335,297 @@ describe("assembled production service authority", () => {
     expect(entry.indexOf("await communityRepositories.recover()")).toBeLessThan(
       entry.indexOf("const controlStartup ="),
     );
+  });
+});
+
+async function installedCommunity() {
+  const host = await fixture();
+  host.setRows([]);
+  const publication = await host.repositories.publish(
+    {
+      kind: "serviceRepository.publish",
+      url: "https://github.com/example/services",
+      commit: "1".repeat(40),
+      extensionId: "test-extension",
+      recovery: {
+        selectionBefore: ["motis"],
+        touchedServiceIds: ["community-live"],
+        previouslyEnabledServiceIds: [],
+      },
+    },
+    new AbortController().signal,
+  );
+  await host.repositories.settle({
+    kind: "serviceRepository.settle",
+    repository: publication.repository,
+    transactionId: publication.transactionId,
+    outcome: "commit",
+  });
+  expect(await host.select(["community-live"])).toMatchObject({ outcome: "committed" });
+  const remove = {
+    kind: "serviceRepository.remove",
+    repository: publication.repository,
+    extensionId: "test-extension",
+  } as const;
+  const start = { kind: "service.start", serviceId: "community-live" } as const;
+  const checkout = join(host.root, "services/.community", publication.repository);
+  const record = join(
+    host.root,
+    "services/.community",
+    `.repository-${publication.repository}.json`,
+  );
+  const create = () => {
+    const file = realpathSync(host.stack.composePath);
+    host.setRows([
+      {
+        ...host.row,
+        Id: "c".repeat(64),
+        State: "running",
+        ConfigImage: `example/community-live:1@sha256:${"b".repeat(64)}`,
+        Labels: {
+          ...host.row.Labels,
+          "com.docker.compose.service": "community-live",
+          "com.docker.compose.project.working_dir": dirname(file),
+          "com.docker.compose.project.config_files": file,
+        },
+      },
+    ]);
+  };
+  return { host, start, remove, checkout, record, create };
+}
+const drain = () => new Promise<void>((resolve) => setImmediate(resolve));
+describe("assembled lifecycle/removal exclusion", () => {
+  it("fences selected dependencies created by another service's Compose Start", async () => {
+    const { host, remove, checkout, create } = await installedCommunity();
+    await host.select(["motis", "community-live"]);
+    writeFileSync(
+      host.stack.composeReleasePath,
+      "services:\n  motis:\n    depends_on:\n      community-live:\n        condition: service_started\n",
+    );
+    const start = { kind: "service.start", serviceId: "motis" } as const;
+    const entered = Promise.withResolvers<void>(),
+      finish = Promise.withResolvers<void>();
+    host.setCreatingProcess(async () => {
+      entered.resolve();
+      await finish.promise;
+      create();
+    });
+    const starting = dispatchOpsOperation(host.runtime, start, await host.context(start));
+    await entered.promise;
+    const removing = dispatchOpsOperation(host.runtime, remove, await host.context(remove)).then(
+      (value) => ({ value }),
+      (error) => ({ error }),
+    );
+    try {
+      await drain();
+      expect(existsSync(checkout), "Compose can also create the selected dependency").toBe(true);
+      finish.resolve();
+      await starting;
+      expect("error" in (await removing)).toBe(true);
+    } finally {
+      finish.resolve();
+      await starting.catch(() => undefined);
+      await removing;
+    }
+  });
+
+  it("retains authority throughout a community Start process and renewed removal inventory", async () => {
+    const { host, start, remove, checkout, record, create } = await installedCommunity();
+    const entered = Promise.withResolvers<void>(),
+      finish = Promise.withResolvers<void>();
+    host.setCreatingProcess(async () => {
+      entered.resolve();
+      await finish.promise;
+      create();
+    });
+    const starting = dispatchOpsOperation(host.runtime, start, await host.context(start));
+    await entered.promise;
+    let removed = false;
+    const removing = dispatchOpsOperation(host.runtime, remove, await host.context(remove))
+      .then(
+        (value) => ({ value }),
+        (error) => ({ error }),
+      )
+      .finally(() => {
+        removed = true;
+      });
+    try {
+      await drain();
+      expect(
+        existsSync(checkout),
+        "checkout cannot disappear while Start's real process is pending",
+      ).toBe(true);
+      expect(existsSync(record)).toBe(true);
+      expect(removed).toBe(false);
+      finish.resolve();
+      await starting;
+      const outcome = await removing;
+      expect(
+        "error" in outcome &&
+          outcome.error instanceof Error &&
+          outcome.error.message.includes("require cleanup"),
+      ).toBe(true);
+      const stop = { kind: "service.stop", serviceId: "community-live" } as const;
+      await dispatchOpsOperation(host.runtime, stop, await host.context(stop));
+      const logs = { kind: "service.logs", serviceId: "community-live", tail: 20 } as const;
+      await expect(
+        dispatchOpsOperation(host.runtime, logs, await host.context(logs)),
+      ).resolves.toMatchObject({ lines: ["retained log"] });
+    } finally {
+      finish.resolve();
+      await starting.catch(() => undefined);
+      await removing;
+    }
+  });
+
+  it("revalidates a previously admitted Start after removal wins the same boundary", async () => {
+    const { host, start, remove, checkout, create } = await installedCommunity();
+    const startContext = await host.context(start),
+      removeContext = await host.context(remove);
+    const stackStart = { kind: "stack.start" } as const;
+    const stackContext = await host.context(stackStart);
+    const entered = Promise.withResolvers<void>(),
+      finish = Promise.withResolvers<void>();
+    host.setInventoryProcess(async () => {
+      entered.resolve();
+      await finish.promise;
+    });
+    let starts = 0;
+    host.setCreatingProcess(async () => {
+      starts++;
+      create();
+    });
+    const removing = dispatchOpsOperation(host.runtime, remove, removeContext);
+    await entered.promise;
+    const starting = dispatchOpsOperation(host.runtime, start, startContext).then(
+      (value) => ({ value }),
+      (error) => ({ error }),
+    );
+    try {
+      await drain();
+      expect(starts).toBe(0);
+      finish.resolve();
+      await expect(removing).resolves.toMatchObject({ removed: true });
+      expect(existsSync(checkout)).toBe(false);
+      const outcome = await starting;
+      expect("error" in outcome && outcome.error instanceof Error).toBe(true);
+      await expect(dispatchOpsOperation(host.runtime, stackStart, stackContext)).rejects.toThrow();
+      expect(starts).toBe(0);
+    } finally {
+      finish.resolve();
+      await removing.catch(() => undefined);
+      await starting;
+    }
+  });
+});
+
+it.runIf(installedCompose)(
+  "executes assembled retained-generation cleanup after real Compose path qualification",
+  async () => {
+    const fixture = await ownedComposePathRuntime();
+    roots.push(fixture.host.root);
+    await fixture.host.commit("advanced");
+    const stop = { kind: "service.stop", serviceId: "alpha" } as const;
+    await dispatchOpsOperation(fixture.runtime, stop, await fixture.context(stop));
+    const logs = { kind: "service.logs", serviceId: "alpha", tail: 20 } as const;
+    await expect(
+      dispatchOpsOperation(fixture.runtime, logs, await fixture.context(logs)),
+    ).resolves.toMatchObject({ lines: ["public fixture log"] });
+    expect(fixture.calls).toContainEqual(["stop", fixture.row.Id]);
+    expect(fixture.calls).toContainEqual(["logs", "--tail=20", fixture.row.Id]);
+    expect(fixture.pathChecks.every((checks) => Object.values(checks).every(Boolean))).toBe(true);
+  },
+);
+
+describe("settlement and cancellation at the installed lifecycle boundary", () => {
+  it("cancels a waiting removal without stealing the still-executing Start guard", async () => {
+    const { host, start, remove, checkout, create } = await installedCommunity();
+    const entered = Promise.withResolvers<void>(),
+      finish = Promise.withResolvers<void>();
+    host.setCreatingProcess(async () => {
+      entered.resolve();
+      await finish.promise;
+      create();
+    });
+    const starting = dispatchOpsOperation(host.runtime, start, await host.context(start));
+    await entered.promise;
+    const controller = new AbortController();
+    const removeContext = await host.context(remove, controller.signal);
+    const removing = dispatchOpsOperation(host.runtime, remove, removeContext).then(
+      (value) => ({ value }),
+      (error) => ({ error }),
+    );
+    await drain();
+    controller.abort(new Error("synthetic waiting cancellation"));
+    try {
+      const result = await removing;
+      expect("error" in result).toBe(true);
+      expect(existsSync(checkout)).toBe(true);
+      expect(host.row.State).toBe("running");
+    } finally {
+      finish.resolve();
+      await starting;
+    }
+    await expect(
+      dispatchOpsOperation(host.runtime, remove, await host.context(remove)),
+    ).rejects.toThrow("require cleanup");
+  });
+
+  it("retains an unknown aborted process fence across production runtime reconstruction", async () => {
+    const { host, start, remove, checkout } = await installedCommunity();
+    const entered = Promise.withResolvers<void>(),
+      finish = Promise.withResolvers<void>();
+    host.setCreatingProcess(async () => {
+      entered.resolve();
+      await finish.promise;
+      throw Error("unknown external process settlement");
+    });
+    const controller = new AbortController(),
+      ctx = await host.context(start, controller.signal);
+    const starting = dispatchOpsOperation(host.runtime, start, ctx).then(
+      (value) => ({ value }),
+      (error) => ({ error }),
+    );
+    await entered.promise;
+    controller.abort();
+    finish.resolve();
+    expect("error" in (await starting)).toBe(true);
+    const restarted = await createProductionOpsRuntime({
+      rootDir: host.root,
+      stack: host.stack,
+      loadAuthority: host.loadAuthority,
+      communityRepositories: host.repositories,
+      docker: { execFile: host.execFile, fileExists: existsSync },
+    });
+    await expect(
+      dispatchOpsOperation(restarted, remove, await host.context(remove)),
+    ).rejects.toThrow("settlement is unresolved");
+    expect(existsSync(checkout)).toBe(true);
+  });
+
+  it("releases a known-contained failing process and orders multi-service Start without deadlock", async () => {
+    const { host, start, remove, checkout } = await installedCommunity();
+    let first = true;
+    host.setCreatingProcess(async (_args, signal) => {
+      if (first) {
+        first = false;
+        await runContainedProcess(process.execPath, ["-e", "process.exit(7)"], {
+          signal,
+          timeout: 5_000,
+          maxBuffer: 1024,
+        });
+      }
+    });
+    await expect(
+      dispatchOpsOperation(host.runtime, start, await host.context(start)),
+    ).rejects.toThrow("Contained process failed");
+    const global = { kind: "stack.start" } as const;
+    await expect(
+      dispatchOpsOperation(host.runtime, global, await host.context(global)),
+    ).resolves.toMatchObject({ changed: true });
+    await expect(
+      dispatchOpsOperation(host.runtime, remove, await host.context(remove)),
+    ).resolves.toMatchObject({ removed: true });
+    expect(existsSync(checkout)).toBe(false);
   });
 });
