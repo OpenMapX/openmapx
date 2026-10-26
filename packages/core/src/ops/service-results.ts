@@ -67,3 +67,43 @@ export const serviceLifecycleFailureEvidenceSchema = z.strictObject({
     .optional(),
 });
 export type ServiceLifecycleFailureEvidence = z.infer<typeof serviceLifecycleFailureEvidenceSchema>;
+
+export const SERVICE_ACTIONS = [
+  "start",
+  "stop",
+  "restart",
+  "update",
+  "build",
+  "logs",
+  "pull",
+  "apply",
+] as const;
+export type ServiceAction = (typeof SERVICE_ACTIONS)[number];
+export const serviceActionDecisionSchema = z
+  .strictObject({
+    available: z.boolean(),
+    execution: z.enum(["direct", "workflow", "host"]),
+    reason: z
+      .enum([
+        "disabled",
+        "not_owned",
+        "not_running",
+        "control_plane",
+        "host_only",
+        "unavailable",
+        "not_buildable",
+      ])
+      .nullable(),
+    workflow: z.enum(["core-restart", "system-update"]).nullable(),
+  })
+  .refine((decision) =>
+    decision.available
+      ? decision.reason === null &&
+        (decision.execution === "direct"
+          ? decision.workflow === null
+          : decision.execution === "workflow" && decision.workflow !== null)
+      : decision.reason !== null &&
+        (decision.execution !== "host" || decision.reason === "host_only"),
+  );
+export type ServiceActionDecision = z.infer<typeof serviceActionDecisionSchema>;
+export const serviceActionsSchema = z.record(z.enum(SERVICE_ACTIONS), serviceActionDecisionSchema);

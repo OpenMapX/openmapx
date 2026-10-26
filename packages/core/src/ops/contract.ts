@@ -4,9 +4,10 @@ import {
   pairedPinApprovalResultSchema,
 } from "./catalog-pin-approval";
 import { opsFailureResultSchema, processDiagnosticsSchema } from "./job-evidence";
+import { serviceActionsSchema } from "./service-results";
 
 export const OPS_PROTOCOL_VERSION = 2 as const;
-export const OPS_MAX_LOG_TAIL = 2_000;
+export const OPS_MAX_LOG_TAIL = 1_000;
 export const OPS_MAX_EVENT_MESSAGE_BYTES = 4_096;
 export const OPS_MAX_EVENT_BATCH = 100;
 export const OPS_MAX_FOLLOW_LOG_EVENTS = 2_000;
@@ -21,6 +22,7 @@ export const OPS_OPERATION_KINDS = [
   "controlRetention.acknowledge",
   "docker.status",
   "stack.status",
+  "services.inspect",
   "stack.render",
   "configuration.inspect",
   "configuration.hardlinks.inspect",
@@ -138,6 +140,7 @@ export const OPS_KIND_POLICIES = {
   "controlRetention.acknowledge": sync("api", 15_000),
   "docker.status": sync("api", 5_000),
   "stack.status": sync("api", 15_000, 256 * 1024),
+  "services.inspect": sync("api", 15_000, 512 * 1024),
   "configuration.inspect": sync("api", 15_000),
   "configuration.hardlinks.inspect": sync("api", 15_000, 1024 * 1024),
   "stack.render": asyncEffect("api", 120_000),
@@ -312,6 +315,7 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   }),
   kindOnly("docker.status"),
   kindOnly("stack.status"),
+  kindOnly("services.inspect"),
   kindOnly("configuration.inspect"),
   z.strictObject({
     kind: z.literal("stack.render"),
@@ -625,7 +629,9 @@ export async function authorizeOpsResources(
 ): Promise<boolean> {
   if ("serviceId" in operation) {
     if (
-      NEVER_MANAGE.has(operation.serviceId) ||
+      (NEVER_MANAGE.has(operation.serviceId) &&
+        operation.kind !== "service.logs" &&
+        operation.kind !== "service.logs.follow") ||
       !(await allowed(policy.allowService?.(operation.kind, operation.serviceId)))
     )
       return false;
@@ -889,6 +895,17 @@ export const OPS_RESULT_SCHEMAS = {
   "docker.status": z.strictObject({
     reachable: z.boolean(),
     version: z.string().max(128).optional(),
+  }),
+  "services.inspect": z.strictObject({
+    services: z
+      .array(
+        z.strictObject({
+          serviceId: serviceIdSchema,
+          state: serviceRuntimeState,
+          actions: serviceActionsSchema,
+        }),
+      )
+      .max(256),
   }),
   "stack.status": z.strictObject({
     services: z

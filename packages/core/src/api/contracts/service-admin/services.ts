@@ -53,6 +53,7 @@ export const adminServiceStatusSchema = z.enum([
   "created",
   "paused",
   "not-running",
+  "unknown",
 ]);
 export const adminServiceSummarySchema = z.strictObject({
   id: serviceManifestSchema.shape.id,

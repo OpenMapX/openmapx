@@ -1067,7 +1067,7 @@ it("keeps log pre-hijack JSON statuses/media, required single headers and bounde
         ...options,
         onTextChunk: () => {},
       }),
-    ).toMatchObject({ status: 409, data: { error: expect.any(String) } });
+    ).toMatchObject({ status: 200 });
     registry.mockImplementationOnce(() => {
       throw Error("unavailable");
     });
@@ -1077,7 +1077,7 @@ it("keeps log pre-hijack JSON statuses/media, required single headers and bounde
         onTextChunk: () => {},
       }),
     ).toMatchObject({ status: 503, data: { error: "Service registry not available" } });
-    expect(execute).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledTimes(1);
     for (const [lines, tail] of [
       ["", 1],
       ["-2", 1],

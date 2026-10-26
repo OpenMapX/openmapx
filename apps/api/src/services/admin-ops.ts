@@ -7,6 +7,8 @@ import {
   link,
   unwrapDataManagerResponse,
 } from "@openmapx/core/data-manager-sdk";
+import type { HardlinkApplySummary } from "@openmapx/core/ops";
+
 import { repoPaths } from "@openmapx/core/server";
 import {
   type DockerComposeAction,
@@ -21,17 +23,10 @@ import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-c
 import { getServiceRegistry } from "./service-registry";
 import { applyTrustedConfiguration } from "./trusted-config-operations";
 
+export type { HardlinkApplySummary } from "@openmapx/core/ops";
+
 const DATA_MANAGER_STARTUP_TIMEOUT_MS = 60_000;
 const DATA_MANAGER_POLL_INTERVAL_MS = 2_000;
-
-export interface HardlinkApplySummary {
-  applied: boolean;
-  linked: number;
-  skipped: number;
-  pruned: number;
-  entries: number;
-  via?: string;
-}
 
 // Path resolution for an API running on the host (`pnpm dev`), which can read
 // the deployment directly. The app-api container has no host checkout: its
@@ -211,7 +206,7 @@ export async function applyGenerationHardlinks(opts: {
   }
 
   await opts.log?.(`Applying hardlink plan (${plan.length} entries, prune enabled)...`);
-  const { transport, url } = await waitForDataManagerTransport(signal);
+  const { transport } = await waitForDataManagerTransport(signal);
   signal?.throwIfAborted();
   const checkpoint = async (phase: "attempted" | "complete", result?: HardlinkApplySummary) => {
     if (!opts.ctx) return;
@@ -236,7 +231,12 @@ export async function applyGenerationHardlinks(opts: {
     const result = unwrapDataManagerResponse(
       await link({ plan, prune: true }, { transport, signal }),
     );
-    const summary = { applied: true, entries: plan.length, via: url, ...result };
+    const summary: HardlinkApplySummary = {
+      applied: true,
+      entries: plan.length,
+      via: "data-manager",
+      ...result,
+    };
     await checkpoint("complete", summary);
     return summary;
   } catch (error) {
@@ -249,7 +249,7 @@ export async function applyGenerationHardlinks(opts: {
 // Service control (job handlers) — registry-authorized + routed through the
 // docker-compose helper that targets the generated compose file.
 
-function assertKnownService(service: string) {
+function assertKnownService(service: string, requireEnabled = true) {
   let svc: ReturnType<ReturnType<typeof getServiceRegistry>["get"]>;
   try {
     svc = getServiceRegistry().get(service);
@@ -259,7 +259,7 @@ function assertKnownService(service: string) {
   if (!svc) {
     throw new Error(`Unknown service "${service}" — not present in the service registry`);
   }
-  if (!svc.enabled) {
+  if (requireEnabled && !svc.enabled) {
     throw new Error(`Service "${service}" is disabled in the registry`);
   }
   return svc;
@@ -270,7 +270,7 @@ async function serviceComposeAction(
   action: Exclude<DockerComposeAction, "recreate-isolated">,
   ctx: JobContext,
 ): Promise<{ exitCode: number }> {
-  assertKnownService(service);
+  assertKnownService(service, action !== "stop");
   // Community and built-in services now take the same typed path: the agent
   // authorizes the id against its own trusted selection, so the API no longer
   // needs a direct-Docker adapter for community lifecycle.

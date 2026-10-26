@@ -45,13 +45,13 @@ function context(): JobContext {
 
 describe("admin service authority split", () => {
   it("keeps enabled built-ins on typed ops-agent lifecycle", async () => {
-    registryGet.mockReturnValue({ manifest: { id: "redis" }, enabled: true, isBuiltIn: true });
-    await serviceStop("redis", context());
+    registryGet.mockReturnValue({ manifest: { id: "motis" }, enabled: true, isBuiltIn: true });
+    await serviceStop("motis", context());
     expect(executeAdminJobOperation).toHaveBeenCalledWith(
       expect.objectContaining({ jobId: "job-123" }),
-      { kind: "service.stop", serviceId: "redis" },
+      { kind: "service.stop", serviceId: "motis" },
       "admin-job.service.stop",
-      { durableIdentity: "redis" },
+      { durableIdentity: "motis" },
     );
     expect(dockerComposeAction).not.toHaveBeenCalled();
   });
@@ -76,13 +76,21 @@ describe("admin service authority split", () => {
     expect(dockerComposeAction).not.toHaveBeenCalled();
   });
 
-  it("denies disabled services before either authority boundary", async () => {
+  it("passes disabled known-service Stop to agent ownership policy but still denies Restart", async () => {
     registryGet.mockReturnValue({
       manifest: { id: "community-weather" },
       enabled: false,
       isBuiltIn: false,
     });
-    await expect(serviceStop("community-weather", context())).rejects.toThrow("is disabled");
+    await serviceStop("community-weather", context());
+    expect(executeAdminJobOperation).toHaveBeenCalledWith(
+      expect.anything(),
+      { kind: "service.stop", serviceId: "community-weather" },
+      "admin-job.service.stop",
+      { durableIdentity: "community-weather" },
+    );
+    executeAdminJobOperation.mockClear();
+    await expect(serviceRestart("community-weather", context())).rejects.toThrow("is disabled");
     expect(dockerComposeAction).not.toHaveBeenCalled();
     expect(executeAdminJobOperation).not.toHaveBeenCalled();
   });

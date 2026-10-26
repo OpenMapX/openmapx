@@ -1,13 +1,10 @@
 import { constants, existsSync } from "node:fs";
 import { open } from "node:fs/promises";
-import { join } from "node:path";
 import { loadControlStartup } from "@openmapx/core/build-artifacts";
 import { readOpsTokenFile } from "@openmapx/core/ops";
 import { repoPaths, services } from "@openmapx/core/server";
 import {
-  createAdministrativeRuntime,
   createDefaultFixedCli,
-  createDefaultReleaseEffects,
   inspectBackupAuthority,
   inspectDataTypeAuthority,
   inspectReleaseAuthority,
@@ -16,17 +13,13 @@ import {
 } from "./administrative-runtime";
 import { isTerminalHandoff, readAgentHandoff } from "./agent-handoff";
 import { startOpsAgentServer } from "./bootstrap";
-import {
-  CommunityRepositoryStore,
-  installCommunityRepositoryRuntime,
-} from "./community-repositories";
+import { CommunityRepositoryStore } from "./community-repositories";
 import { loadOpsAgentConfig } from "./config";
 import { createDataTransitTrustedOpsDataSource } from "./data-transit-resource-source";
 import {
   createDockerDawarichCollector,
   createDockerDawarichRuntimeInspector,
 } from "./dawarich-subject-export";
-import { createDockerRuntime } from "./docker-runtime";
 import { openOpsJobJournal } from "./journal";
 import { createProductionRegistryResourceClaimer } from "./policy";
 import type { PrivacyBackupExtractionRouteOptions } from "./privacy-backup-extraction";
@@ -36,13 +29,16 @@ import {
   probePrivacyBackupRuntime,
 } from "./privacy-backup-runtime";
 import {
+  createProductionOpsRuntime,
+  productionOwnedServices,
+  productionReleaseEffects,
+} from "./production-runtime";
+import {
   afterValidatedServiceAuthority,
   resolveBootstrapEnabledServiceIds,
 } from "./startup-authority";
-import { createTransitousLockRuntime } from "./transitous-lock-runtime";
 import {
   initializeTrustedConfigurationRuntime,
-  installTrustedConfigurationRuntime,
   readTrustedEnabledServiceIds,
 } from "./trusted-config-runtime";
 import {
@@ -154,18 +150,6 @@ async function main(): Promise<void> {
       builtInServices,
     });
     const initialAuthority = await authorityLoader();
-    const runtime = createDockerRuntime({
-      stack: paths,
-      fileExists: existsSync,
-      trafficDataRoot: join(paths.infraDir, "data"),
-    });
-    installTrustedConfigurationRuntime(runtime, {
-      services: initialAuthority.services,
-      integrationSchemas: initialAuthority.integrationSchemas,
-      loadAuthority: authorityLoader,
-      infraDir: paths.infraDir,
-    });
-    installCommunityRepositoryRuntime(runtime, communityRepositories);
     // The managed timeline endpoint is registered only when the trusted
     // service selection explicitly enables `dawarich-app`.  Its request path,
     // container name and collector script remain fixed; every call re-checks
@@ -184,20 +168,14 @@ async function main(): Promise<void> {
       ? createDockerDawarichCollector({ inspect: dawarichInspector })
       : undefined;
     const administrativeCli = createDefaultFixedCli(config.rootDir);
-    const releaseEffects = createDefaultReleaseEffects(config.rootDir, administrativeCli);
-    createTransitousLockRuntime(runtime, { rootDir: config.rootDir });
-    createAdministrativeRuntime(runtime, {
+    const runtime = await createProductionOpsRuntime({
       rootDir: config.rootDir,
+      stack: paths,
+      loadAuthority: authorityLoader,
+      communityRepositories,
       runFixedCli: administrativeCli,
-      releaseEffects,
-      loadBuildAuthority: async () =>
-        (await authorityLoader()).services.map((service) => ({
-          serviceId: service.manifest.id,
-          enabled: service.enabled,
-          isBuiltIn: service.isBuiltIn,
-          ...(service.manifest.buildCommand ? { buildCommand: service.manifest.buildCommand } : {}),
-        })),
     });
+    const releaseEffects = productionReleaseEffects(runtime);
     const retentionDays = Number(process.env.BACKUP_RETENTION_DAYS?.trim() || "30");
     if (!Number.isSafeInteger(retentionDays) || retentionDays <= 0 || retentionDays > 36_500) {
       throw new Error("Invalid BACKUP_RETENTION_DAYS");
@@ -228,6 +206,13 @@ async function main(): Promise<void> {
           services: initialPolicyAuthority.services,
           integrationIds: initialPolicyAuthority.integrationIds,
           loadAuthority: policyAuthority,
+          ownedServices: productionOwnedServices(runtime),
+          serviceMetadata: (authorityServices) =>
+            authorityServices.map((service) => ({
+              serviceId: service.serviceId,
+              isBuiltIn: service.isBuiltIn,
+              buildable: !!service.selectionAuthority.manifest.buildCommand,
+            })),
           enabledServiceIds: (authorityServices) => {
             const trusted = readTrustedEnabledServiceIds(
               paths.infraDir,

@@ -21,7 +21,21 @@ import {
 } from "./docker-runtime";
 import { dispatchOpsOperation } from "./runtime";
 
-const context = () => ({
+const ownedSnapshot = (serviceId = "redis") => ({
+  serviceId,
+  containerId: "a".repeat(64),
+  state: "running" as const,
+  provenance: {
+    project: "docker",
+    composeWorkingDirectory: "/trusted",
+    composeConfigFiles: ["/trusted/compose.yml"],
+    imageId: `sha256:${"b".repeat(64)}`,
+  },
+});
+const ownedServices = {
+  inspectOwnedServices: async () => ["redis", "motis", "postgis"].map(ownedSnapshot),
+};
+const context = (serviceId = "redis") => ({
   execution: testExecution(),
   signal: new AbortController().signal,
   emitLog: () => undefined,
@@ -29,7 +43,10 @@ const context = () => ({
     fingerprint: "f".repeat(64),
     operation: { kind: "docker.status" } as const,
     source: "registry" as const,
-    capability: { revisionId: "registry-v1", values: {} },
+    capability: {
+      revisionId: "registry-v1",
+      values: { ownedService: JSON.stringify(ownedSnapshot(serviceId)) },
+    },
   },
 });
 
@@ -804,7 +821,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
   it.each([
     { kind: "stack.start" },
     { kind: "service.start", serviceId: "postgis" },
-    { kind: "service.stop", serviceId: "postgis" },
+    { kind: "service.stop", serviceId: "motis" },
     { kind: "service.restart", serviceId: "postgis" },
     { kind: "service.recreate", serviceId: "postgis" },
     { kind: "service.recreateIsolated", serviceId: "postgis" },
@@ -817,13 +834,20 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
+      ownedServices,
       execFile: async (_file, _args, options) => {
         expect(options.timeout).toBe(600_000);
         expect(options.signal.aborted).toBe(false);
         return { stdout: "", stderr: "" };
       },
     });
-    await expect(dispatchOpsOperation(runtime, operation, context())).resolves.toEqual({
+    await expect(
+      dispatchOpsOperation(
+        runtime,
+        operation,
+        context("serviceId" in operation ? operation.serviceId : "redis"),
+      ),
+    ).resolves.toEqual({
       changed: true,
     });
   });
@@ -843,12 +867,17 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           composeReleasePath: "/trusted/release.yml",
         },
         fileExists: () => false,
+        ownedServices,
         execFile: async (_file, _args, options) => {
           expect(options.timeout).toBe(timeout);
           return { stdout: "", stderr: "" };
         },
       });
-      await dispatchOpsOperation(runtime, operation, context());
+      await dispatchOpsOperation(
+        runtime,
+        operation,
+        context("serviceId" in operation ? operation.serviceId : "redis"),
+      );
     },
   );
 
@@ -863,6 +892,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
+      ownedServices,
       execFile: (_file, _args, options) =>
         new Promise((resolve, reject) => {
           const deadline = setTimeout(() => {
@@ -951,6 +981,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
+      ownedServices,
       execFile: async (_file, args) => {
         calls.push([...args]);
         return {
@@ -993,6 +1024,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           composeReleasePath: "/trusted/release.yml",
         },
         fileExists: () => false,
+        ownedServices,
         execFile,
       });
 
@@ -1133,6 +1165,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
+      ownedServices,
       execFile: async (_file, args) => {
         calls.push([...args]);
         return {
@@ -1180,6 +1213,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           composeReleasePath: "/trusted/release.yml",
         },
         fileExists: () => false,
+        ownedServices,
         execFile: execFile as never,
       });
 
@@ -1195,6 +1229,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
             composeReleasePath: "/trusted/release.yml",
           },
           fileExists: () => false,
+          ownedServices,
           trafficDataRoot: dataRoot,
           execFile: async (_file, args) => {
             calls.push([...args]);
@@ -1280,6 +1315,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
             composeReleasePath: "/trusted/release.yml",
           },
           fileExists: () => false,
+          ownedServices,
           trafficDataRoot: dataRoot,
           execFile: async (_file, args) => {
             calls.push([...args]);
@@ -1329,6 +1365,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
             composeReleasePath: "/trusted/release.yml",
           },
           fileExists: () => false,
+          ownedServices,
           trafficDataRoot: dataRoot,
           execFile: async (_file, args) => {
             if (args[0] === "inspect" && args.includes("{{.State.Running}}")) {
@@ -1409,6 +1446,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           composeReleasePath: "/trusted/release.yml",
         },
         fileExists: () => false,
+        ownedServices,
         trafficDataRoot: dataRoot,
         execFile: async (_file, args) => ({
           stdout:
@@ -1485,6 +1523,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
+      ownedServices,
       execFile: async () => ({ stdout: "", stderr: "" }),
     });
     await expect(
@@ -1513,6 +1552,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
+      ownedServices,
       execFile: async (_file, args) => {
         calls.push([...args]);
         if (args.includes("ps")) {
@@ -1577,16 +1617,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
   it("follows one fixed service with a bounded duration and typed event emitter", async () => {
     const emitted: Array<{ stream: "stdout" | "stderr"; message: string }> = [];
     const followLogs = vi.fn(async (_file, args, options) => {
-      expect(args).toEqual([
-        "compose",
-        "-f",
-        "/trusted/compose.yml",
-        "logs",
-        "-f",
-        "--no-color",
-        "--tail=20",
-        "redis",
-      ]);
+      expect(args).toEqual(["logs", "--follow", "--tail=20", "a".repeat(64)]);
       expect(options.timeout).toBe(3_000);
       options.onLine("stdout", "ready");
       options.onLine("stderr", "bounded warning");
@@ -1599,6 +1630,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
+      ownedServices,
       execFile: async () => ({ stdout: "", stderr: "" }),
       followLogs,
     });
@@ -1632,6 +1664,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
+      ownedServices,
       execFile: async () => ({ stdout: `${"😀".repeat(1_500)}\nsecond\nthird\n`, stderr: "" }),
     });
     const result = await dispatchOpsOperation(
@@ -1768,6 +1801,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
+      ownedServices,
       execFile: (_file, _args, options) =>
         runContainedProcess(process.execPath, ["-e", script, ready, marker], {
           ...options,
@@ -1776,8 +1810,8 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     });
     const operation = dispatchOpsOperation(
       runtime,
-      { kind: "service.stop", serviceId: "postgis" },
-      { ...context(), signal: controller.signal },
+      { kind: "service.stop", serviceId: "motis" },
+      { ...context("motis"), signal: controller.signal },
     );
     const rejected = expect(operation).rejects.toThrow("Contained process failed");
     try {

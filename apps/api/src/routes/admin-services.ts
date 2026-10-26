@@ -669,12 +669,6 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
           reply.status(404);
           return reply.send({ error: `Service "${(req.params as { id: string }).id}" not found` });
         }
-        if (!service.enabled) {
-          reply.status(409);
-          return reply.send({
-            error: `Service "${(req.params as { id: string }).id}" is disabled`,
-          });
-        }
         try {
           parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]);
         } catch (error) {

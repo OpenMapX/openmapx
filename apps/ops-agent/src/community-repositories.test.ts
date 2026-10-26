@@ -348,11 +348,15 @@ describe("community repository store", () => {
     });
     expect((await store.list()).repositories[0]).toMatchObject({ commit: FIRST, pending: null });
 
-    await store.remove({
-      kind: "serviceRepository.remove",
-      repository: REPOSITORY,
-      extensionId: "live-bundle",
-    });
+    await store.remove(
+      {
+        kind: "serviceRepository.remove",
+        repository: REPOSITORY,
+        extensionId: "live-bundle",
+      },
+      signal(),
+      { inspectOwnedServices: async () => [] },
+    );
     const fresh = await publish(store, SECOND);
     await store.settle({
       kind: "serviceRepository.settle",
@@ -405,11 +409,15 @@ describe("community repository store", () => {
       }),
     ).rejects.toThrow("The repository belongs to another extension");
     await expect(
-      store.remove({
-        kind: "serviceRepository.remove",
-        repository: REPOSITORY,
-        extensionId: "live-bundle",
-      }),
+      store.remove(
+        {
+          kind: "serviceRepository.remove",
+          repository: REPOSITORY,
+          extensionId: "live-bundle",
+        },
+        signal(),
+        { inspectOwnedServices: async () => [] },
+      ),
     ).resolves.toEqual({ repository: REPOSITORY, removed: true });
   });
 

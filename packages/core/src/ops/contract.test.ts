@@ -40,6 +40,7 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   },
   "docker.status": { kind: "docker.status" },
   "stack.status": { kind: "stack.status" },
+  "services.inspect": { kind: "services.inspect" },
   "configuration.inspect": { kind: "configuration.inspect" },
   "configuration.hardlinks.inspect": {
     kind: "configuration.hardlinks.inspect",

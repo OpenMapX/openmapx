@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { basename, dirname } from "node:path";
 import {
   type ConfigurationApplyResult,
   type OpsOperation,
@@ -6,6 +7,7 @@ import {
   type TrustedConfigurationPayload,
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
+import type { OwnedServiceResolver } from "./owned-services";
 import type { OpsRuntime, OpsTrustedClaim } from "./runtime";
 
 const FAILED = "Trusted configuration apply failed";
@@ -21,6 +23,7 @@ export interface TrustedConfigurationRuntimeOptions {
   integrationSchemas: ReadonlyMap<string, Record<string, unknown>>;
   loadAuthority?: () => Promise<TrustedConfigurationAuthoritySnapshot>;
   infraDir: string;
+  ownedServices?: OwnedServiceResolver;
   /** The process environment, read for the operator's selection override. */
   env?: NodeJS.ProcessEnv;
   beforeCommit?: () => Promise<void>;
@@ -86,6 +89,21 @@ async function commitGeneration(
         }
         const services = authority?.services ?? options.services;
         const env = options.env ?? process.env;
+        // Capture cleanup retention before selection effects under the same writer.
+        const inventory = options.ownedServices?.inspectInventory
+          ? await options.ownedServices.inspectInventory(signal)
+          : options.ownedServices
+            ? {
+                services: await options.ownedServices.inspectOwnedServices(signal),
+                observedContainerIds: undefined,
+              }
+            : undefined;
+        const ownedServiceGenerations = inventory?.services.map((snapshot) => ({
+          containerId: snapshot.containerId,
+          revisionIds: snapshot.provenance.composeConfigFiles
+            .map((file) => basename(dirname(file)))
+            .filter((id) => /^cfg1_[A-Za-z0-9_-]{43}$/.test(id)),
+        }));
         let selectedRoots: string[];
         let allowMissingSelected = false;
         if (operation.kind === "serviceSelection.apply") {
@@ -112,6 +130,8 @@ async function commitGeneration(
         }
         const committed = await writer.commit({
           services,
+          ownedServiceGenerations,
+          observedServiceContainerIds: inventory?.observedContainerIds,
           integrationSchemas: authority?.integrationSchemas ?? options.integrationSchemas,
           input: { ...payload, selectedRoots },
           allowMissingSelected,

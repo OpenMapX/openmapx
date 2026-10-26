@@ -3,6 +3,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   writeFileSync,
 } from "node:fs";
@@ -54,11 +55,19 @@ export function stackComposeArgs(
   fileExists: (path: string) => boolean = existsSync,
 ): string[] {
   const envFile = join(paths.infraDir, ".env");
+  // Compose records this path in container provenance. Pin the generation,
+  // rather than the movable current symlink, so deselection retains cleanup authority.
+  let composePath = paths.composePath;
+  try {
+    composePath = realpathSync(composePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
   return [
     "compose",
     ...(fileExists(envFile) ? ["--env-file", envFile] : []),
     "-f",
-    paths.composePath,
+    composePath,
     ...(fileExists(paths.composeReleasePath) ? ["-f", paths.composeReleasePath] : []),
   ];
 }

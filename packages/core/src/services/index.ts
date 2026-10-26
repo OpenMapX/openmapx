@@ -32,6 +32,7 @@ export {
   type ConfigurationGenerationWriter,
   type ConfigurationInput,
   commitConfigurationGeneration,
+  configurationGenerationComposeFile,
   currentConfigurationGeneration,
   initializeConfigurationGenerations,
   inspectAppliedConfiguration,

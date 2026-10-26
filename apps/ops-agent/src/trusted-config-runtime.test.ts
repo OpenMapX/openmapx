@@ -917,7 +917,7 @@ describe("ops-agent trusted configuration runtime", () => {
     expect(existsSync(join(paths.current, ".generated-secrets"))).toBe(false);
   });
 
-  it("prunes validated inactive generations so legitimate revisions cannot brick apply", async () => {
+  it("retains unobserved generations and prunes after complete cleanup acquisition", async () => {
     const paths = fixture();
     const generations = join(paths.infraDir, ".trusted-config-generations");
     mkdirSync(generations, { recursive: true, mode: 0o700 });
@@ -928,6 +928,21 @@ describe("ops-agent trusted configuration runtime", () => {
       mkdirSync(directory, { mode: 0o700 });
       writeFileSync(join(directory, "service-selection.json"), "{}", { mode: 0o600 });
     }
+    await initializeTrustedConfigurationRuntime(paths.infraDir);
+    expect(readdirSync(generations)).toHaveLength(17);
+    await services.commitConfigurationGeneration({
+      infraDir: paths.infraDir,
+      services: [service("alpha")],
+      input: {
+        domain: "example.test",
+        selectedRoots: ["alpha"],
+        serviceConfigs: [],
+        integrationConfigs: [],
+        serviceSecrets: [],
+      },
+      ownedServiceGenerations: [],
+      observedServiceContainerIds: [],
+    });
     await initializeTrustedConfigurationRuntime(paths.infraDir);
     expect(readdirSync(generations)).toHaveLength(15);
   });

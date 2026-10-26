@@ -77,6 +77,7 @@
       "serviceSelection.apply",
       "serviceSelection.inspect",
       "services.buildAll",
+      "services.inspect",
       "stack.render",
       "stack.start",
       "stack.status",
@@ -145,6 +146,12 @@
     ]
   },
   "businessEffects": [
+    {
+      "id": "agent.services-inventory",
+      "callSiteIds": [],
+      "semanticSources": ["apps/ops-agent/src/production-runtime.ts#createProductionOpsRuntime"],
+      "typedKinds": ["services.inspect"]
+    },
     {
       "id": "api.control-retention.acknowledge",
       "callSiteIds": [],

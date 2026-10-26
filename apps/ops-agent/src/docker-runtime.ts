@@ -23,6 +23,7 @@ import {
   createFeedProxyValidationInvocation,
   parseFeedProxyValidationCompletion,
 } from "./feed-proxy-validation";
+import type { OwnedServiceResolver, OwnedServiceSnapshot } from "./owned-services";
 import { createBoundedProcessOutput, safeProcessDiagnostic } from "./process-output";
 import {
   createUnavailableRuntime,
@@ -30,6 +31,7 @@ import {
   OpsExecutionFailure,
   type OpsRuntime,
 } from "./runtime";
+import { decideServiceAction } from "./service-action-policy";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const LIFECYCLE_TIMEOUT_MS = 10 * 60_000;
@@ -72,6 +74,7 @@ export interface DockerRuntimeOptions {
   stack: services.StackPaths;
   fileExists: (path: string) => boolean;
   execFile?: ExecFile;
+  ownedServices?: OwnedServiceResolver;
   followLogs?: FollowLogs;
   /**
    * Owner of the shared `/data` mount. Artifacts a container writes as root
@@ -477,6 +480,40 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     if (after === "running") throw new Error("MOTIS container remains running after stop");
     return { changed: true, state: after };
   };
+  const ownedTarget = async (
+    serviceId: string,
+    context: OpsExecutionContext,
+    action: "stop" | "logs",
+  ): Promise<OwnedServiceSnapshot> => {
+    const encoded = context.claim.capability.values.ownedService;
+    if (!options.ownedServices || typeof encoded !== "string")
+      throw new Error("Owned service claim required");
+    const claimed = JSON.parse(encoded) as OwnedServiceSnapshot;
+    const current = (await options.ownedServices.inspectOwnedServices(context.signal)).find(
+      (s) => s.serviceId === serviceId,
+    );
+    if (
+      !current ||
+      claimed.serviceId !== serviceId ||
+      claimed.containerId !== current.containerId ||
+      JSON.stringify(claimed.provenance) !== JSON.stringify(current.provenance)
+    )
+      throw new Error("Owned service claim changed");
+    if (
+      !decideServiceAction(
+        {
+          revisionId: "owned",
+          services: [{ serviceId, isBuiltIn: true, buildable: false }],
+          enabledServiceIds: new Set(),
+        },
+        current,
+        action,
+      ).available
+    )
+      throw new Error("Service action denied");
+    context.signal.throwIfAborted();
+    return current;
+  };
   const runtime = createUnavailableRuntime();
   const followLogs: FollowLogs = options.followLogs ?? runContainedLogProcess;
 
@@ -492,8 +529,10 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     changed([...composePrefix(), "up", "-d"], context, LIFECYCLE_TIMEOUT_MS);
   runtime["service.start"] = (operation, context) =>
     changed([...composePrefix(), "up", "-d", operation.serviceId], context, LIFECYCLE_TIMEOUT_MS);
-  runtime["service.stop"] = (operation, context) =>
-    changed([...composePrefix(), "stop", operation.serviceId], context, LIFECYCLE_TIMEOUT_MS);
+  runtime["service.stop"] = async (operation, context) => {
+    const target = await ownedTarget(operation.serviceId, context, "stop");
+    return changed(["stop", target.containerId], context, LIFECYCLE_TIMEOUT_MS);
+  };
   runtime["service.restart"] = (operation, context) =>
     changed([...composePrefix(), "restart", operation.serviceId], context, LIFECYCLE_TIMEOUT_MS);
   runtime["service.recreate"] = (operation, context) =>
@@ -513,11 +552,12 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   runtime["service.remove"] = (operation, context) =>
     changed([...composePrefix(), "rm", "-sf", operation.serviceId], context, LIFECYCLE_TIMEOUT_MS);
   runtime["service.logs"] = async (operation, context) => {
+    const target = await ownedTarget(operation.serviceId, context, "logs");
     const result = await run(
-      [...composePrefix(), "logs", "--no-color", `--tail=${operation.tail}`, operation.serviceId],
+      ["logs", `--tail=${operation.tail}`, target.containerId],
       context.signal,
     );
-    const rawLines = result.stdout.split(/\r?\n/).filter(Boolean);
+    const rawLines = `${result.stdout}\n${result.stderr}`.split(/\r?\n/).filter(Boolean);
     const selected = rawLines.slice(0, operation.tail);
     const lines = selected.map((line) => truncateUtf8(line));
     return {
@@ -526,17 +566,11 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
         rawLines.length > operation.tail || lines.some((line, index) => line !== selected[index]),
     };
   };
-  runtime["service.logs.follow"] = (operation, context) =>
-    followLogs(
+  runtime["service.logs.follow"] = async (operation, context) => {
+    const target = await ownedTarget(operation.serviceId, context, "logs");
+    return followLogs(
       "docker",
-      [
-        ...composePrefix(),
-        "logs",
-        "-f",
-        "--no-color",
-        `--tail=${operation.tail}`,
-        operation.serviceId,
-      ],
+      ["logs", "--follow", `--tail=${operation.tail}`, target.containerId],
       {
         signal: context.signal,
         timeout: operation.maxDurationSeconds * 1_000,
@@ -544,6 +578,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
         onLine: context.emitLog,
       },
     );
+  };
   runtime["dawarich.provisioning.inspect"] = async (_operation, context) => {
     const statusResult = await run([...composePrefix(), "ps", "--format", "json"], context.signal);
     const status = parseStackStatus(statusResult.stdout);

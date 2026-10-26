@@ -1,10 +1,13 @@
+import type { ServiceAction } from "@openmapx/core/ops";
 import {
   authorizeOpsResources,
   type OpsOperation,
   type OpsOperationKind,
   type OpsResourcePolicy,
 } from "@openmapx/core/ops";
+import type { OwnedServiceResolver } from "./owned-services";
 import type { OpsTrustedClaim } from "./runtime";
+import { decideServiceAction } from "./service-action-policy";
 
 export interface OpsClaimOwner {
   role: "api" | "data-manager";
@@ -40,23 +43,36 @@ export const denyAllTrustedOpsData: TrustedOpsDataSource = {
   claim: async () => null,
 };
 
-const genericLifecycleKinds = new Set<OpsOperationKind>([
-  "service.start",
-  "service.stop",
-  "service.restart",
-  "service.recreate",
-  "service.recreateIsolated",
-  "service.pull",
-  "service.remove",
-  "service.update",
-  "service.build",
-  "service.logs",
-  "service.logs.follow",
-]);
-const neverGenericLifecycle = new Set(["ops-agent", "traefik", "app-api"]);
+export function serviceActionForOperation(kind: OpsOperationKind): ServiceAction | null {
+  switch (kind) {
+    case "service.start":
+      return "start";
+    case "service.stop":
+      return "stop";
+    case "service.restart":
+      return "restart";
+    case "service.recreate":
+    case "service.recreateIsolated":
+    case "service.remove":
+      return "apply";
+    case "service.pull":
+      return "pull";
+    case "service.update":
+      return "update";
+    case "service.build":
+      return "build";
+    case "service.logs":
+    case "service.logs.follow":
+      return "logs";
+    default:
+      return null;
+  }
+}
 
 export function createRegistryResourcePolicy(options: {
   serviceIds: Iterable<string>;
+  ownedServices?: OwnedServiceResolver;
+  serviceMetadata?: readonly { serviceId: string; isBuiltIn: boolean; buildable: boolean }[];
   enabledServiceIds?: () => ReadonlySet<string>;
   integrationIds: Iterable<string>;
   trustedData: TrustedOpsDataSource;
@@ -75,11 +91,30 @@ export function createRegistryResourcePolicy(options: {
   const integrations = new Set(options.integrationIds);
   return {
     allowGlobal: () => true,
-    allowService: (kind, serviceId) =>
-      services.has(serviceId) &&
-      (!genericLifecycleKinds.has(kind) ||
-        (options.enabledServiceIds?.().has(serviceId) ?? true)) &&
-      !(genericLifecycleKinds.has(kind) && neverGenericLifecycle.has(serviceId)),
+    allowService: async (kind, serviceId) => {
+      if (!services.has(serviceId)) return false;
+      const action = serviceActionForOperation(kind);
+      if (!action) return true;
+      const snapshot = options.ownedServices
+        ? (await options.ownedServices.inspectOwnedServices(AbortSignal.timeout(15_000))).find(
+            (s) => s.serviceId === serviceId,
+          )
+        : undefined;
+      const service = options.serviceMetadata?.find((s) => s.serviceId === serviceId) ?? {
+        serviceId,
+        isBuiltIn: true,
+        buildable: true,
+      };
+      return decideServiceAction(
+        {
+          revisionId: "registry-v1",
+          services: [service],
+          enabledServiceIds: options.enabledServiceIds?.() ?? services,
+        },
+        snapshot,
+        action,
+      ).available;
+    },
     allowBackup: options.resourceAuthority?.allowBackup ?? (() => false),
     allowPreparedRun: () => false,
     allowCandidate: () => false,
@@ -211,6 +246,8 @@ export function createPolicyResourceClaimer(policy: OpsResourcePolicy): OpsResou
 
 export function createRegistryResourceClaimer(options: {
   serviceIds: Iterable<string>;
+  ownedServices?: OwnedServiceResolver;
+  serviceMetadata?: readonly { serviceId: string; isBuiltIn: boolean; buildable: boolean }[];
   enabledServiceIds?: () => ReadonlySet<string>;
   integrationIds: Iterable<string>;
   trustedData: TrustedOpsDataSource;
@@ -226,11 +263,47 @@ export function createRegistryResourceClaimer(options: {
     | "allowUpdateJobId"
   >;
 }): OpsResourceClaimer {
-  const policy = createRegistryResourcePolicy(options);
+  const registeredServiceIds = new Set(options.serviceIds);
+  const policy = createRegistryResourcePolicy({ ...options, serviceIds: registeredServiceIds });
   return {
     claim: async (operation, fingerprint, signal, owner) => {
       if (signal.aborted) throw signal.reason;
       if (!requiresTrustedSource(operation)) {
+        const action = serviceActionForOperation(operation.kind);
+        if ("serviceId" in operation && action && options.ownedServices) {
+          const snapshot = (await options.ownedServices.inspectOwnedServices(signal)).find(
+            (s) => s.serviceId === operation.serviceId,
+          );
+          const service = options.serviceMetadata?.find(
+            (s) => s.serviceId === operation.serviceId,
+          ) ?? { serviceId: operation.serviceId, isBuiltIn: true, buildable: true };
+          if (
+            !registeredServiceIds.has(operation.serviceId) ||
+            !decideServiceAction(
+              {
+                revisionId: options.registryRevision ?? "registry-v1",
+                services: [service],
+                enabledServiceIds: options.enabledServiceIds?.() ?? registeredServiceIds,
+              },
+              snapshot,
+              action,
+            ).available
+          )
+            return null;
+          if (
+            !(await authorizeOpsResources(operation, {
+              ...policy,
+              allowService: (_kind, id) => id === operation.serviceId,
+            }))
+          )
+            return null;
+          signal.throwIfAborted();
+          // The admission is bound to the immutable ID and full verified provenance.
+          return immutableClaim(operation, fingerprint, "registry", {
+            revisionId: options.registryRevision ?? "registry-v1",
+            values: snapshot ? { ownedService: JSON.stringify(snapshot) } : {},
+          });
+        }
         return (await authorizeOpsResources(operation, policy))
           ? immutableClaim(
               operation,
@@ -285,6 +358,10 @@ export function createProductionRegistryResourceClaimer<
   Service extends { serviceId: string; enabled: boolean; isBuiltIn: boolean },
 >(options: {
   services: Iterable<Service>;
+  ownedServices?: OwnedServiceResolver;
+  serviceMetadata?: (
+    services: readonly Service[],
+  ) => readonly { serviceId: string; isBuiltIn: boolean; buildable: boolean }[];
   integrationIds: Iterable<string>;
   trustedData: TrustedOpsDataSource;
   resourceAuthority?: Pick<
@@ -312,6 +389,8 @@ export function createProductionRegistryResourceClaimer<
   if (!options.loadAuthority) {
     return createRegistryResourceClaimer({
       serviceIds,
+      ownedServices: options.ownedServices,
+      serviceMetadata: options.serviceMetadata?.(builtIns),
       enabledServiceIds: () => options.enabledServiceIds?.(builtIns) ?? initialEnabled,
       integrationIds: options.integrationIds,
       trustedData: options.trustedData,
@@ -362,6 +441,8 @@ export function createProductionRegistryResourceClaimer<
       };
       return createRegistryResourceClaimer({
         serviceIds: authority.services.map((service) => service.serviceId),
+        ownedServices: options.ownedServices,
+        serviceMetadata: options.serviceMetadata?.(authority.services),
         enabledServiceIds: () => options.enabledServiceIds?.(authority.services) ?? initialEnabled,
         integrationIds: authority.integrationIds,
         trustedData,

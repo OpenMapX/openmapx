@@ -128,6 +128,7 @@ export const OPS_AGENT_RETENTION_LIMITS = {
 const RELEASE_RECOVERY_READ_KINDS = new Set<OpsOperationKind>([
   "docker.status",
   "stack.status",
+  "services.inspect",
   "configuration.inspect",
   "configuration.hardlinks.inspect",
   "service.logs",

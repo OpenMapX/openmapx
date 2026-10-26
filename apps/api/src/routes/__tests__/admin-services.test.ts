@@ -381,6 +381,21 @@ describe("GET /admin/services/:id", () => {
 });
 
 describe("GET /admin/services/:id/logs", () => {
+  it("passes disabled registered service logs to the agent ownership decision", async () => {
+    mockRegistryGet.mockReturnValueOnce({ ...MOCK_COMMUNITY_RUNNING, enabled: false });
+    const response = await app.inject({
+      method: "GET",
+      url: "/admin/services/community-weather/logs?lines=20",
+      headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(mockDockerComposeLogs).toHaveBeenCalledWith(
+      "community-weather",
+      expect.anything(),
+      expect.objectContaining({ tail: 20 }),
+    );
+  });
+
   it("streams community logs through the same typed operation as built-ins", async () => {
     mockRegistryGet.mockReturnValueOnce(MOCK_COMMUNITY_RUNNING);
 

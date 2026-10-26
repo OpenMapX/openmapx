@@ -76,6 +76,10 @@ export interface CommitConfigurationOptions {
   input: ConfigurationInput;
   /** Tolerate selected services that are not installed (the default selection in a reduced checkout). */
   allowMissingSelected?: boolean;
+  /** Verified Docker generations that still contain owned containers; absent means retain conservatively. */
+  ownedServiceGenerations?: readonly { containerId: string; revisionIds: readonly string[] }[];
+  /** A complete bounded acquisition; omission cannot prove a previous container disappeared. */
+  observedServiceContainerIds?: readonly string[];
   /** The authenticated candidate identity; omitted, use a fresh activation identity (no ABA). */
   revisionId?: string;
   /** Applied identity to compare under writer ownership; null means no pointer. */
@@ -643,6 +647,170 @@ export async function initializeConfigurationGenerations(infraDir: string): Prom
   );
 }
 
+const RETAINED_GENERATIONS = ".owned-service-generations.json";
+interface GenerationRetention {
+  conservative: string[];
+  containers: Record<string, string[]>;
+}
+function readGenerationRetention(infraDir: string): GenerationRetention {
+  const path = join(infraDir, RETAINED_GENERATIONS);
+  try {
+    const metadata = lstatSync(path, { bigint: true });
+    const { contents } = readGenerationFile(path, metadata, 64 * 1024, [0o600n]);
+    const raw = JSON.parse(contents.toString("utf8")) as GenerationRetention;
+    if (
+      !raw ||
+      Object.keys(raw).sort().join(",") !== "conservative,containers" ||
+      !Array.isArray(raw.conservative) ||
+      !raw.containers ||
+      typeof raw.containers !== "object" ||
+      Array.isArray(raw.containers)
+    )
+      throw new Error(UNSAFE);
+    const values = Object.values(raw.containers);
+    if (
+      Object.keys(raw.containers).length > 256 ||
+      Object.keys(raw.containers).some((id) => !/^[a-f0-9]{64}$/.test(id)) ||
+      values.some((ids) => !Array.isArray(ids) || ids.length > 256)
+    )
+      throw new Error(UNSAFE);
+    const revisions = [...raw.conservative, ...values.flat()];
+    if (
+      revisions.length > 512 ||
+      revisions.some((id) => typeof id !== "string" || !REVISION.test(id)) ||
+      new Set(revisions).size > 256
+    )
+      throw new Error(UNSAFE);
+    return raw;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      // An upgraded deployment has no ownership observations yet. Startup and
+      // host-only renders must not prune its old containers' generation files.
+      const generations = join(infraDir, CONFIGURATION_GENERATIONS);
+      let entries: string[];
+      try {
+        const stat = lstatSync(generations);
+        if (
+          !stat.isDirectory() ||
+          stat.isSymbolicLink() ||
+          stat.uid !== (process.geteuid?.() ?? 0) ||
+          (stat.mode & 0o777) !== 0o700
+        )
+          throw new Error(UNSAFE);
+        entries = readdirSync(generations).filter((name) => REVISION.test(name));
+      } catch (missing) {
+        if ((missing as NodeJS.ErrnoException).code === "ENOENT")
+          return { conservative: [], containers: {} };
+        throw missing;
+      }
+      if (entries.length > 256) throw new Error(UNSAFE);
+      for (const revision of entries) configurationGenerationComposeFile(infraDir, revision);
+      return { conservative: entries, containers: {} };
+    }
+    throw error;
+  }
+}
+function retainedConfigurationGenerations(infraDir: string): Set<string> {
+  const retained = readGenerationRetention(infraDir);
+  return new Set([...retained.conservative, ...Object.values(retained.containers).flat()]);
+}
+async function retainConfigurationGenerations(
+  infraDir: string,
+  owned?: CommitConfigurationOptions["ownedServiceGenerations"],
+  observed?: readonly string[],
+): Promise<void> {
+  const previous = readGenerationRetention(infraDir);
+  let retained = previous;
+  if (owned) {
+    if (
+      owned.length > 256 ||
+      new Set(owned.map((entry) => entry.containerId)).size !== owned.length
+    )
+      throw new Error(UNSAFE);
+    if (
+      observed &&
+      (observed.length > 256 ||
+        observed.some((id) => !/^[a-f0-9]{64}$/.test(id)) ||
+        new Set(observed).size !== observed.length)
+    )
+      throw new Error(UNSAFE);
+    // A missing verified claim is not evidence of cleanup. Retain previously
+    // owned IDs still observed by Docker even when their image/provenance no longer verifies.
+    const containers: Record<string, string[]> = Object.fromEntries(
+      Object.entries(previous.containers).filter(([id]) => !observed || observed.includes(id)),
+    );
+    for (const entry of owned) {
+      if (
+        !/^[a-f0-9]{64}$/.test(entry.containerId) ||
+        entry.revisionIds.some((id) => !REVISION.test(id))
+      )
+        throw new Error(UNSAFE);
+      // Labels on a live immutable Docker ID do not change. Remember the first
+      // resolved generation when older containers named the movable current alias.
+      containers[entry.containerId] = previous.containers[entry.containerId] ?? [
+        ...new Set(entry.revisionIds),
+      ];
+    }
+    // Unobserved legacy/CLI generations have no per-container attribution.
+    // Only a complete empty inventory proves that conservative group is unused.
+    retained = { conservative: observed?.length === 0 ? [] : previous.conservative, containers };
+  } else {
+    const active = currentConfigurationGeneration(infraDir);
+    if (active)
+      retained = { ...previous, conservative: [...new Set([...previous.conservative, active])] };
+  }
+  if (new Set([...retained.conservative, ...Object.values(retained.containers).flat()]).size > 256)
+    throw new Error(UNSAFE);
+  const encoded = `${JSON.stringify(retained)}\n`;
+  if (
+    [...retained.conservative, ...Object.values(retained.containers).flat()].length > 512 ||
+    Buffer.byteLength(encoded) > 64 * 1024
+  )
+    throw new Error(UNSAFE);
+  const path = join(infraDir, RETAINED_GENERATIONS);
+  // The generation writer is exclusive. A fixed staging name bounds crash leftovers.
+  const temporary = `${path}.tmp`;
+  try {
+    const stat = lstatSync(temporary);
+    if (
+      !stat.isFile() ||
+      stat.isSymbolicLink() ||
+      stat.nlink !== 1 ||
+      stat.uid !== (process.geteuid?.() ?? 0) ||
+      (stat.mode & 0o777) !== 0o600 ||
+      stat.size > 64 * 1024
+    )
+      throw new Error(UNSAFE);
+    rmSync(temporary);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  try {
+    await writeDurable(temporary, encoded, 0o600);
+    renameSync(temporary, path);
+    await syncDirectory(infraDir);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
+}
+
+/** Validate a retained generation with the same filesystem rules as the active pointer. */
+export function configurationGenerationComposeFile(infraDir: string, revisionId: string): string {
+  if (!REVISION.test(revisionId)) throw new Error(UNSAFE);
+  const generations = join(infraDir, CONFIGURATION_GENERATIONS);
+  const root = lstatSync(generations);
+  if (
+    !root.isDirectory() ||
+    root.isSymbolicLink() ||
+    root.uid !== (process.geteuid?.() ?? 0) ||
+    (root.mode & 0o777) !== 0o700
+  )
+    throw new Error(UNSAFE);
+  const path = join(generations, revisionId);
+  safeGenerationTree(path);
+  return join(path, GENERATED_COMPOSE_FILE);
+}
+
 async function initializeOwnedConfigurationGenerations(infraDir: string): Promise<void> {
   const generations = join(infraDir, CONFIGURATION_GENERATIONS);
   try {
@@ -665,7 +833,8 @@ async function initializeOwnedConfigurationGenerations(infraDir: string): Promis
   }
   const active = currentConfigurationGeneration(infraDir);
   const entries = readdirSync(generations, { withFileTypes: true });
-  if (entries.length > MAX_GENERATIONS + 8) throw new Error(`${generations} has too many entries`);
+  if (entries.length > MAX_GENERATIONS + 256 + 8)
+    throw new Error(`${generations} has too many entries`);
   const temporaryPaths: string[] = [];
   const complete: Array<{ name: string; path: string; mtimeMs: number }> = [];
   for (const entry of entries) {
@@ -698,8 +867,9 @@ async function initializeOwnedConfigurationGenerations(infraDir: string): Promis
   if (pointerTemporaries.length > 0) await syncDirectory(infraDir);
   // Keep space for the next generation and prune only after every existing
   // entry has passed validation.
+  const retained = retainedConfigurationGenerations(infraDir);
   const removable = complete
-    .filter((entry) => entry.name !== active)
+    .filter((entry) => entry.name !== active && !retained.has(entry.name))
     .sort((a, b) => a.mtimeMs - b.mtimeMs || a.name.localeCompare(b.name));
   let retainedCount = complete.length;
   while (retainedCount > MAX_GENERATIONS - 1) {
@@ -807,6 +977,11 @@ async function commitOwnedConfigurationGeneration(
   options.signal?.throwIfAborted();
   const { resolved, context, rendered } = renderConfiguration(options);
   const generations = join(infraDir, CONFIGURATION_GENERATIONS);
+  await retainConfigurationGenerations(
+    infraDir,
+    options.ownedServiceGenerations,
+    options.observedServiceContainerIds,
+  );
   await initializeOwnedConfigurationGenerations(infraDir);
   const nonce = randomUUID().replaceAll("-", "");
   const placeholder = options.revisionId ?? `cfg1_${"0".repeat(43)}`;

@@ -1,8 +1,15 @@
+import { randomBytes } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import {
+  closeControlInstallation,
+  openControlInstallation,
+  provisionControlInstallation,
+} from "@openmapx/core/build-artifacts";
+import {
+  createControlRootOperationKey,
   type OpsOperation,
   opsOperationFingerprint,
   opsOperationSchema,
@@ -360,6 +367,18 @@ describe("authenticated conditional configuration admission", () => {
     async (fault) => {
       const f = fixture();
       const token = Buffer.alloc(32, 7).toString("base64url");
+      mkdirSync(join(f.infraDir, "data"), { mode: 0o700 });
+      await provisionControlInstallation(f.infraDir);
+      const installation = openControlInstallation({
+        infraDir: f.infraDir,
+        role: "ops-agent",
+        serviceIds: ["alpha"],
+      });
+      const requestedDeadlineAt = Date.now() + 60_000;
+      const operationKey = createControlRootOperationKey({
+        notAfter: requestedDeadlineAt,
+        nonce: randomBytes(16),
+      });
       const queue = join(f.root, "queue");
       mkdirSync(queue, { mode: 0o700 });
       mkdirSync(join(queue, ".claimed"), { mode: 0o700 });
@@ -367,7 +386,7 @@ describe("authenticated conditional configuration admission", () => {
         role: "api",
         token,
         nonce: "nonce_conditional1234567",
-        operationKey: "opk1_conditionalApply123",
+        operationKey,
         operationForRevision: (revisionId) => ({
           kind: "stack.render",
           revisionId,
@@ -462,6 +481,10 @@ describe("authenticated conditional configuration admission", () => {
       const app = buildOpsAgentServer({
         tokens: { api: token, "data-manager": Buffer.alloc(32, 8).toString("base64url") },
         resourceClaimer: claimer,
+        controlInstallation: installation,
+        // This deliberately holds one authenticated claim across the other real
+        // control-store/configuration commits; its fixture budget must cover that I/O.
+        claimTimeoutMs: 15_000,
         journal: {
           records: () => journalRecords,
           replace: async (records) => {
@@ -473,13 +496,14 @@ describe("authenticated conditional configuration admission", () => {
         runtime,
       });
       let counter = 0;
-      const submit = (operation: OpsOperation, key = "opk1_conditionalApply123") =>
+      const submit = (operation: OpsOperation, key = operationKey) =>
         app.inject({
           method: "POST",
           url: "/v1/operations",
           headers: { authorization: `Bearer ${token}` },
           payload: {
-            version: 1,
+            version: 2,
+            execution: { requestedDeadlineAt },
             requestId: `ops1_conditional${String(++counter).padStart(12, "0")}`,
             operationKey: key,
             issuedAt: new Date().toISOString(),
@@ -597,6 +621,7 @@ describe("authenticated conditional configuration admission", () => {
         returnCleanup.resolve();
         finish();
         await app.close();
+        closeControlInstallation(installation);
       }
     },
   );
