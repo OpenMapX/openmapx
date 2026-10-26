@@ -81,7 +81,7 @@ import {
 } from "./traefik-files";
 import { renderTraefikDynamicConfiguration, renderTraefikDynamicYaml } from "./traefik-renderer";
 import type { LoadedService } from "./types";
-import { seedWritableCopies } from "./writable-copies";
+import { seedMissingWritableCopies, seedWritableCopies } from "./writable-copies";
 
 const MAX_GENERATIONS = 16;
 const MAX_GENERATION_BYTES = 2 * 1024 * 1024;
@@ -1068,6 +1068,13 @@ async function commitOwnedConfigurationGeneration(
       join(temporary, SERVICE_FILES_GENERATION_FILE),
       serializeGenerationServiceFiles(serviceFiles.trees),
       0o600,
+    );
+    // A writable copy the generation mounts must be there before it commits;
+    // one that is changes after (writeStackFiles).
+    const enabledIds = new Set(resolved.enabled.map((service) => service.manifest.id));
+    seedMissingWritableCopies(
+      infraDir,
+      serviceFiles.writableCopies.filter((seed) => enabledIds.has(seed.serviceId)),
     );
     // Traefik's static configuration, read once at its start, belongs to the
     // generation; its dynamic directory, which it watches, stays put.

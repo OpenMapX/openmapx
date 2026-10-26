@@ -282,27 +282,53 @@ describe("the release's service files in the store", () => {
     await commit({ "valhalla/config/valhalla.json": '{"mjolnir": {"concurrency": 4}}\n' });
     expect(readFileSync(copy, "utf8")).toBe('{"mjolnir": {"concurrency": 4}}\n');
 
-    // A directory Docker made of a missing copy is reported, not followed.
-    rmSync(copy);
+    // A copy that exists but can't be seeded again is reported; Valhalla
+    // keeps it.
+    const config = join(infraDir, "data", "valhalla", "config");
+    if (process.geteuid?.() !== 0) {
+      chmodSync(config, 0o555);
+      try {
+        const kept = await commit({ "valhalla/config/valhalla.json": '{"kept": true}\n' });
+        expect(kept.stackFileProblems).toEqual([
+          expect.stringContaining("could not be written: EACCES. valhalla keeps its current copy."),
+        ]);
+        expect(readFileSync(copy, "utf8")).toBe('{"mjolnir": {"concurrency": 4}}\n');
+
+        // One that isn't there and can't be seeded fails the render: Docker
+        // would mount a root-owned directory in its place.
+        chmodSync(config, 0o755);
+        rmSync(copy);
+        chmodSync(config, 0o555);
+        await expect(commit()).rejects.toThrow(
+          /data\/valhalla\/config\/valhalla\.json, the writable copy of services\/valhalla\/config\/valhalla\.json, could not be written: EACCES\. valhalla has no copy to start with/,
+        );
+        expect(currentConfigurationGeneration(infraDir)).toBe(kept.revisionId);
+      } finally {
+        chmodSync(config, 0o755);
+      }
+    }
+    const before = currentConfigurationGeneration(infraDir);
+
+    // A directory Docker made of a missing copy fails the render, and is not
+    // followed.
+    rmSync(copy, { force: true });
     mkdirSync(copy);
-    const committed = await commit({ "valhalla/config/valhalla.json": "{}\n" });
-    expect(committed.stackFileProblems).toEqual([
-      expect.stringContaining(
-        "the writable copy of services/valhalla/config/valhalla.json, is not a regular file",
-      ),
-    ]);
+    await expect(commit({ "valhalla/config/valhalla.json": "{}\n" })).rejects.toThrow(
+      "the writable copy of services/valhalla/config/valhalla.json, is not a regular file",
+    );
+    expect(currentConfigurationGeneration(infraDir)).toBe(before);
 
     // A container that writes the data directory plants a link for its
-    // directory: render does not write through it.
+    // directory: render does not write through it, and there is no copy.
     const elsewhere = join(infraDir, "elsewhere");
     mkdirSync(elsewhere);
     rmSync(join(infraDir, "data", "valhalla"), { recursive: true });
     symlinkSync(elsewhere, join(infraDir, "data", "valhalla"));
-    const linked = await commit({ "valhalla/config/valhalla.json": '{"planted": false}\n' });
-    expect(linked.stackFileProblems).toEqual([
-      expect.stringContaining("data/valhalla is not a directory"),
-    ]);
+    await expect(
+      commit({ "valhalla/config/valhalla.json": '{"planted": false}\n' }),
+    ).rejects.toThrow("data/valhalla is not a directory");
     expect(readdirSync(elsewhere)).toEqual([]);
+    expect(currentConfigurationGeneration(infraDir)).toBe(before);
   });
 
   it("gives builds the applied generation's copy, and tells them to render first", async () => {

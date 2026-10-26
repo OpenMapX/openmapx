@@ -18,14 +18,16 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import z from "zod/v4";
 import { fsyncDirectory } from "../release-files";
 import { agentStatePaths, writeAgentStateFile } from "./agent-state";
+import { ServiceFileError } from "./release-service-files";
 import type { WritableCopySeed } from "./service-file-store";
 
 /**
  * The writable copies of files a container rewrites (`writableCopy` in its
  * manifest, valhalla.json): `infra/docker/data/...`, seeded from the
  * release's file or the operator's override. A copy is seeded when it is
- * missing and again whenever its seed changes, which the agent's state
- * records; in between, the container's rewrite is kept. A running container
+ * missing, before the generation commits, and again whenever its seed
+ * changes, which the agent's state records; in between, the container's
+ * rewrite is kept. A running container
  * keeps the file it mounted, so a new seed reaches it when it next starts.
  */
 
@@ -162,8 +164,46 @@ function replaceWith(directory: CopyDirectory, name: string, bytes: Buffer): voi
   directory.sync();
 }
 
-/** Seeds each copy whose seed changed; returns what render reports about those it could not. */
+/** Whether a regular file is at the copy's path, by whatever directories lead there. */
+function copyPresent(path: string): boolean {
+  try {
+    return lstatSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Before the generation commits: seeds each copy that is not there yet. One
+ * that can't be seeded fails the render, with the reason: Docker would
+ * create the missing file's mount as a root-owned directory, and the
+ * service could not start.
+ */
+export function seedMissingWritableCopies(
+  infraDir: string,
+  seeds: readonly WritableCopySeed[],
+): void {
+  const problems = seedCopies(
+    infraDir,
+    seeds.filter((entry) => !copyPresent(writableCopyPath(infraDir, entry.copy))),
+    "missing",
+  );
+  if (problems.length > 0) throw new ServiceFileError(problems.join(" "));
+}
+
+/**
+ * After it: seeds each copy whose seed changed; returns what render reports
+ * about those it could not, whose services keep their current copy.
+ */
 export function seedWritableCopies(infraDir: string, seeds: readonly WritableCopySeed[]): string[] {
+  return seedCopies(infraDir, seeds, "changed");
+}
+
+function seedCopies(
+  infraDir: string,
+  seeds: readonly WritableCopySeed[],
+  phase: "missing" | "changed",
+): string[] {
   if (seeds.length === 0) return [];
   const recorded = readRecord(infraDir);
   const next = { ...recorded };
@@ -195,7 +235,7 @@ export function seedWritableCopies(infraDir: string, seeds: readonly WritableCop
       }
     } catch (error) {
       problems.push(
-        `infra/docker/${shown}, the writable copy of services/${key}, could not be written: ${(error as NodeJS.ErrnoException).code ?? (error as Error).message}. ${seed.serviceId} keeps its current copy.`,
+        `infra/docker/${shown}, the writable copy of services/${key}, could not be written: ${(error as NodeJS.ErrnoException).code ?? (error as Error).message}. ${phase === "missing" ? `${seed.serviceId} has no copy to start with, so render stops here.` : `${seed.serviceId} keeps its current copy.`}`,
       );
     }
   }

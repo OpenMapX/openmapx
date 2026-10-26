@@ -15,6 +15,7 @@ import z from "zod/v4";
 import { readRegularFileBytes } from "./built-in-service-source";
 import { embeddedBuiltInServiceManifests } from "./embedded-built-in-services";
 import { embeddedBuiltInServiceFiles } from "./embedded-service-files";
+import { RELEASE_SELECTOR_ENV } from "./release-manifest";
 import type { LoadedService, ServiceManifest } from "./types";
 
 /**
@@ -22,8 +23,8 @@ import type { LoadedService, ServiceManifest } from "./types";
  * another built-in's, through `@service:`), which the release supplies.
  *
  * The ops-agent's runtime bundle embeds them, so the agent and its fixed CLI
- * render the release's bytes. Run from source (tests, development under
- * `OPENMAPX_RELEASE=local`) they are the checkout's.
+ * render the release's bytes. Run from source (tests, the host CLI), and
+ * under `OPENMAPX_RELEASE=local` even when bundled, they are the checkout's.
  */
 
 /** Traefik's files, which its mounts no longer name (they come through the agent's state). */
@@ -284,12 +285,22 @@ export function readCheckoutServiceFiles(
   return { origin: "checkout", files, history: new Map(), manifests: new Map(), missing };
 }
 
+/**
+ * The release's files this process renders, when it renders them: those its
+ * bundle embeds, unless `OPENMAPX_RELEASE=local` makes the checkout's files
+ * the release's, as for the host CLI.
+ */
+export function renderedEmbeddedReleaseServiceFiles(): ReleaseServiceFiles | null {
+  if (process.env[RELEASE_SELECTOR_ENV] === "local") return null;
+  return readEmbeddedReleaseServiceFiles();
+}
+
 /** The service files this process renders: its release's when bundled, otherwise the checkout's. */
 export function releaseServiceFiles(
   services: readonly LoadedService[],
   uid: number = process.geteuid?.() ?? 0,
 ): ReleaseServiceFiles {
-  return readEmbeddedReleaseServiceFiles() ?? readCheckoutServiceFiles(services, uid);
+  return renderedEmbeddedReleaseServiceFiles() ?? readCheckoutServiceFiles(services, uid);
 }
 
 const indexSchema = z.strictObject({
