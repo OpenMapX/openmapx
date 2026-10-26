@@ -391,7 +391,7 @@ jobs:
         timeout-minutes: 10
         run: |
           for id in well-known valhalla; do
-            image="$(node -e 'const {container: c} = require(`./services/${process.argv[1]}/service.json`); console.log(c.image + ":" + c.tag + "@" + c.digest)' "$id")"
+            image="$(node -e 'const {container: c} = require("./services/" + process.argv[1] + "/service.json"); console.log(c.image + ":" + c.tag + "@" + c.digest)' "$id")"
             for backoff in 0 15 30 60 120 fail; do
               if [ "$backoff" = fail ]; then
                 echo "::error::Could not pull $image after 5 attempts"
