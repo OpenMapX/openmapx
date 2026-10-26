@@ -29,6 +29,11 @@ export {
   WELL_KNOWN_CAPABILITIES,
   WELL_KNOWN_DATA_TYPES,
 } from "./capabilities";
+export {
+  type CheckoutDifference,
+  checkoutDifferencesFromRelease,
+  describeCheckoutDifferences,
+} from "./checkout-differences";
 export { communityServiceManifestProblems } from "./community-manifest";
 export {
   COMMUNITY_RECORD_VERSION,
@@ -66,6 +71,7 @@ export {
   serviceConfigEnvPrefix,
 } from "./config-resolver";
 export {
+  appliedServiceFile,
   type CommitConfigurationOptions,
   type CommittedConfiguration,
   ConfigurationGenerationError,
@@ -92,6 +98,10 @@ export {
   assertTrustedConfigurationSchema,
   validateTrustedConfigurationValues,
 } from "./configuration-schema";
+export {
+  type ContainerBindMounts,
+  readContainerBindMounts,
+} from "./container-mounts";
 export type {
   DataManagerCoverageEvidencePage,
   NotablePlacesBuildResult,
@@ -184,12 +194,9 @@ export {
 } from "./manifest-schema";
 export { ServiceRegistry, type ServiceRegistryOptions } from "./registry";
 export {
-  type BuiltInServiceDrift,
   type BuiltInServiceReadOptions,
   builtInServiceManifestSource,
   captureReleaseServiceAuthority,
-  describeBuiltInServiceDrift,
-  inspectBuiltInServiceDrift,
   RELEASE_BUILT_IN_SERVICE_IDS,
   RELEASE_NEVER_MANAGE_SERVICE_IDS,
   type ReleaseServiceAuthorityCapture,
@@ -228,6 +235,17 @@ export {
   validateResolvedSelection,
   writeReleaseComposeArtifacts,
 } from "./release-manifest";
+export {
+  parseReleaseServiceFiles,
+  type ReleaseServiceFile,
+  type ReleaseServiceFiles,
+  readEmbeddedReleaseServiceFiles,
+  releaseServiceFiles,
+  renderedEmbeddedReleaseServiceFiles,
+  ServiceFileError,
+  serializeReleaseServiceFiles,
+  serviceFileReferences,
+} from "./release-service-files";
 export {
   assertReleaseStateDirectory,
   ensureReleaseStateDirectories,
@@ -293,10 +311,24 @@ export {
   SERVICE_SELECTION_ENV,
 } from "./selection";
 export {
-  describeSkippedTraefikFiles,
+  type CheckoutPosition,
+  checkoutPositionFromHistory,
+  describeDeferredServiceFileImport,
+  describeServiceFileImport,
+  describeWaitingTraefikEdits,
+  importCheckoutServiceFiles,
+  planServiceFileImport,
+  type ServiceFileImport,
+  type ServiceFileImportPlan,
+  serviceFilesImported,
+  waitingTraefikEdits,
+} from "./service-file-import";
+export { describeServiceFiles } from "./service-file-report";
+export { readGenerationServiceFiles, serviceFileStore } from "./service-file-store";
+export { readServiceOverrides, staleOverrides } from "./service-overrides";
+export {
   LEGACY_TRAEFIK_MOUNT_NOTICE,
   legacyTraefikDynamicDirectory,
-  readTraefikDynamicSources,
   TRAEFIK_ROUTES_FILE,
 } from "./traefik-files";
 export {

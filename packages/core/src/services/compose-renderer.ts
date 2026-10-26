@@ -247,6 +247,13 @@ export interface RenderContext {
    * Traefik regardless of the environment.
    */
   externalProxyNetwork?: string | null;
+  /**
+   * Where a generation keeps the files built-in services mount from a service
+   * directory: the host path of `path` of `serviceId` in its service-file
+   * tree, or undefined for one it doesn't hold, which is mounted from the
+   * service's directory as before.
+   */
+  serviceFileSource?: (serviceId: string, path: string) => string | undefined;
 }
 
 function externalProxyNetwork(ctx: RenderContext): string | undefined {
@@ -299,6 +306,8 @@ function toComposePath(absolute: string, composeOutDir: string | undefined): str
 interface ResolvedBindSource {
   src: string;
   absoluteHostPath: string | null;
+  /** Render writes it with the generation: a service-file tree or a writable copy. */
+  written?: boolean;
 }
 
 function resolveBindSource(
@@ -307,7 +316,22 @@ function resolveBindSource(
   allServices: LoadedService[],
   composeOutDir: string | undefined,
   infraDir: string | undefined,
+  serviceFileSource?: RenderContext["serviceFileSource"],
 ): ResolvedBindSource {
+  // A file the container rewrites is mounted from its writable copy, which
+  // render seeds from the release's file.
+  if (bm.writableCopy && service.isBuiltIn) {
+    return {
+      ...resolveBindSource(
+        { ...bm, source: bm.writableCopy, writableCopy: undefined },
+        service,
+        allServices,
+        composeOutDir,
+        infraDir,
+      ),
+      written: true,
+    };
+  }
   // Compose-variable pass-through. Sources that start with `$` — including
   // `${VAR}`, `${VAR:-default}`, and `$VAR` — are emitted verbatim so the
   // Docker Compose parser does the substitution at stack-up time. This is
@@ -360,13 +384,24 @@ function resolveBindSource(
         `bindMount source "${bm.source}" on service "${service.manifest.id}": @service:<slug> is only allowed to reference built-in services (target "${slug}" is "${target.manifest.quality}")`,
       );
     }
-    const absolute = resolve(target.directory, relPath);
-    return { src: toComposePath(absolute, composeOutDir), absoluteHostPath: absolute };
+    const copy = serviceFileSource?.(slug, relPath);
+    const absolute = copy ?? resolve(target.directory, relPath);
+    return {
+      src: toComposePath(absolute, composeOutDir),
+      absoluteHostPath: absolute,
+      written: copy !== undefined,
+    };
   }
 
-  // Plain relative path — resolved against the consuming service's own dir.
-  const absolute = resolve(service.directory, bm.source);
-  return { src: toComposePath(absolute, composeOutDir), absoluteHostPath: absolute };
+  // Plain relative path — the release's copy in the generation's tree, or
+  // (outside a generation) the consuming service's own directory.
+  const copy = service.isBuiltIn ? serviceFileSource?.(service.manifest.id, bm.source) : undefined;
+  const absolute = copy ?? resolve(service.directory, bm.source);
+  return {
+    src: toComposePath(absolute, composeOutDir),
+    absoluteHostPath: absolute,
+    written: copy !== undefined,
+  };
 }
 
 export interface ComposeServiceSnippet {
@@ -643,6 +678,7 @@ export function renderServiceSnippet(
       ctx.allServices ?? [service],
       ctx.composeOutDir,
       ctx.infraDir,
+      ctx.serviceFileSource,
     );
     // `optional: true` + resolvable host path + path missing → skip the mount
     // and surface an advisory. If the host path can't be resolved (only true
@@ -654,12 +690,12 @@ export function renderServiceSnippet(
       );
       continue;
     }
-    // A built-in service's manifest comes from the release, but the files it
-    // mounts from a service directory come from the checkout. When the checkout
-    // lacks one (it predates the release), Docker would create an empty
+    // Outside a generation's service-file trees, a built-in mounts its files
+    // from its directory. When that lacks one, Docker would create an empty
     // root-owned directory in its place.
     if (
       service.isBuiltIn &&
+      !resolved.written &&
       resolved.absoluteHostPath &&
       !isAbsolute(bm.source) &&
       !bm.source.startsWith(INFRA_BIND_PREFIX) &&
@@ -680,6 +716,7 @@ export function renderServiceSnippet(
     if (
       !readOnly &&
       resolved.absoluteHostPath &&
+      !bm.writableCopy &&
       bm.source.startsWith(`${INFRA_BIND_PREFIX}data/`)
     ) {
       ctx.bindDirSink?.push(resolved.absoluteHostPath);

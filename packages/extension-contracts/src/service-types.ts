@@ -157,6 +157,14 @@ export interface ServiceBindMount {
    * unknown until stack-up time. Rejected by the manifest schema.
    */
   optional?: boolean;
+  /**
+   * For a file the container itself rewrites: the `@infra:data/<rel-path>`
+   * of its writable copy. Render seeds the copy from the release's file (or
+   * the operator's override) and mounts the copy instead, re-seeding it only
+   * when that seed changes. Such a file is never imported as an override.
+   * Built-in services only, on a writable mount of their own file.
+   */
+  writableCopy?: string;
 }
 
 export interface ServiceContainer {

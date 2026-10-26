@@ -295,9 +295,13 @@ pnpm openmapx services logs otp --follow
 ```
 
 Start re-renders and links automatically. The container uses `--load --serve`
-and publishes `http://otp:8080` as host loopback `8090`. Build and routing config
-files live under `services/otp/config/`. Rebuild for build-config or input changes;
-recreate the runtime for container or router configuration changes.
+and publishes `http://otp:8080` as host loopback `8090`. The release's build and
+routing config files are `services/otp/config/`; change them with
+[overrides](../install/managing-services.md#service-file-overrides) of
+`otp/config/build-config.json` or `otp/config/router-config.json`. The graph
+build reads the copy the applied configuration mounts, so render first. Rebuild
+for build-config or input changes; recreate the runtime for container or router
+configuration changes.
 
 After refreshing the PBF or GTFS files:
 

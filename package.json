@@ -34,6 +34,8 @@
     "check-dockerfile-sync": "pnpm -C packages/cli exec tsx ../../scripts/check-dockerfile-workspace-sync.ts",
     "check-docker-context-secrets": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/check-docker-context-secrets.ts",
     "check-ops-authority": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/check-ops-authority.ts",
+    "check-service-files": "node scripts/service-files.mjs --check",
+    "generate:service-files": "node scripts/service-files.mjs",
     "check-feed-ids": "pnpm -C packages/cli exec tsx ../../scripts/check-feed-ids.ts",
     "check-credential-keys": "pnpm -C packages/cli exec tsx ../../scripts/check-credential-keys.ts",
     "check-legal-tables": "pnpm -C packages/cli exec tsx ../../scripts/check-legal-tables.ts",

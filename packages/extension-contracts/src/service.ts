@@ -257,10 +257,29 @@ const bindMountSchema = z
     // are substituted by docker-compose at stack-up time, so `optional` on
     // those is rejected here — there's no host path to stat.
     optional: z.boolean().optional(),
+    // A file the container rewrites (valhalla.json): it gets a writable copy
+    // at this `@infra:data/...` path, seeded from the release's file or an
+    // operator's override, and is never imported as an override itself.
+    writableCopy: z
+      .string()
+      .refine((copy) => {
+        if (!copy.startsWith(`${INFRA_BIND_SOURCE_PREFIX}data/`)) return false;
+        return !pathHasParentEscape(copy.slice(INFRA_BIND_SOURCE_PREFIX.length));
+      }, "writableCopy must be an @infra:data/<rel-path> without '..'")
+      .optional(),
   })
   .refine(
     (bm) => !(bm.optional && isComposeVarReference(bm.source)),
     "optional: true is not supported with Compose-variable sources — the host path is unknown until stack-up time",
+  )
+  .refine(
+    (bm) =>
+      bm.writableCopy === undefined ||
+      (bm.readOnly === false &&
+        !bm.optional &&
+        !bm.source.startsWith("@") &&
+        !isComposeVarReference(bm.source)),
+    "writableCopy needs a writable, non-optional mount of the service's own file",
   );
 
 const dependsOnSchema = z.object({

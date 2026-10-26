@@ -3,11 +3,12 @@ import { join, relative } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
 import { execa } from "execa";
+import { legacyTraefikDynamicMounted } from "../lib/container-mounts";
 import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
 import { dockerCompose, dockerRun } from "../lib/docker";
-import { legacyTraefikDynamicMounted } from "../lib/legacy-traefik";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
+import { serviceFileReport } from "../lib/service-file-report";
 import { transitousApiKeysLeftBehindWarning } from "../lib/transitous-api-keys";
 
 interface PsLine {
@@ -468,12 +469,9 @@ export function registerCheckCommand(program: Command): void {
           ? envFilePermissionWarning(envPath, envMode)
           : null;
       if (permissionWarning) log.warn(permissionWarning);
-      // Only the ops-agent's fixed CLI runs embedded manifests; from source the
-      // checkout is what runs, so there is nothing to compare.
-      const drift = coreServices.describeBuiltInServiceDrift(
-        coreServices.inspectBuiltInServiceDrift(repoPaths().root),
-      );
-      if (drift) log.warn(drift);
+      // The service files: overrides, the import, checkout edits and
+      // containers still on them, and what a host render would refuse.
+      for (const { level, message } of await serviceFileReport()) log[level](message);
       // Integrations the operations agent installed are trusted by its records;
       // only its fixed CLI reads them, so a check from source has none to report.
       for (const warning of installedIntegrationWarnings(repoPaths().root)) log.warn(warning);
@@ -482,17 +480,9 @@ export function registerCheckCommand(program: Command): void {
       for (const warning of coreServices.agentStoresLeftBehind(repoPaths().infraDir)) {
         log.warn(warning);
       }
-      // Traefik: a container still on the checkout's dynamic directory, and
-      // dynamic files render does not copy.
+      // A Traefik still on the checkout's dynamic directory.
       if ((await legacyTraefikDynamicMounted(repoPaths().infraDir)) === true) {
         log.warn(coreServices.LEGACY_TRAEFIK_MOUNT_NOTICE);
-      }
-      const traefikSkipped = coreServices.readTraefikDynamicSources(
-        join(repoPaths().root, "services", "traefik"),
-        process.geteuid?.() ?? 0,
-      ).skipped;
-      for (const warning of coreServices.describeSkippedTraefikFiles(traefikSkipped)) {
-        log.warn(warning);
       }
       // The render reports a key file it did not copy once; this repeats it
       // while the keys are still missing.

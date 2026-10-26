@@ -88,9 +88,13 @@ enabled in the manifest environment, independently of those two schema fields.
 `services/valhalla/config/valhalla.json` sets build concurrency to 8 and bounds
 request sizes. Current limits include 5,000 km/20 locations for driving,
 500 km for cycling, 250 km for walking, and four isochrone contours up to
-120 minutes. Change tracked engine configuration only as a deliberate custom
-configuration and verify the generated result. Larger limits increase resource
-exposure; they do not enlarge geographic data coverage.
+120 minutes. Change it only as a deliberate custom configuration, in an
+[override](../install/managing-services.md#service-file-overrides) of
+`valhalla/config/valhalla.json`, and verify the generated result. Valhalla
+rewrites its configuration on every start, so it runs from a writable copy,
+`infra/docker/data/valhalla/config/valhalla.json`, which render seeds from the
+release's file or your override when that changes. Larger limits increase
+resource exposure; they do not enlarge geographic data coverage.
 
 ## OSRM: build the graph first
 

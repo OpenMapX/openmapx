@@ -10,16 +10,19 @@ import {
   OTP_GRAPH_DIR,
   OTP_GRAPH_FILENAME,
 } from "../src/lib/otp-graph";
+import { applyServiceFile } from "./applied-service-files";
 
 let tmp: string;
+let buildConfig: string;
 
-beforeEach(() => {
+beforeEach(async () => {
   tmp = mkdtempSync(join(tmpdir(), "openmapx-otp-graph-"));
   writeFileSync(join(tmp, "pnpm-workspace.yaml"), "packages: []\n");
   mkdirSync(join(tmp, "services", "otp", "config"), { recursive: true });
   mkdirSync(join(tmp, "infra", "docker", "data", "osm"), { recursive: true });
   mkdirSync(join(tmp, "infra", "docker", "data", "gtfs"), { recursive: true });
   writeFileSync(join(tmp, "services", "otp", "config", "build-config.json"), "{}");
+  buildConfig = await applyServiceFile(tmp, "otp", "config/build-config.json");
 });
 
 afterEach(() => {
@@ -64,7 +67,8 @@ describe("buildOtpGraph", () => {
       "-v",
       `${graphDir}.next:/var/opentripplanner`,
       "-v",
-      `${join(tmp, "services", "otp", "config", "build-config.json")}:/var/opentripplanner/build-config.json:ro`,
+      // The copy the applied generation mounts, not the checkout's.
+      `${buildConfig}:/var/opentripplanner/build-config.json:ro`,
       "opentripplanner/opentripplanner:2.10.0",
       "--build",
       "--save",

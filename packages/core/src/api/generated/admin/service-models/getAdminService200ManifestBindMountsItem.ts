@@ -8,5 +8,6 @@ export type GetAdminService200ManifestBindMountsItem = {
   target: string;
   readOnly?: boolean;
   optional?: boolean;
+  writableCopy?: string;
   [key: string]: unknown;
 };

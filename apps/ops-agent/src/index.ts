@@ -36,6 +36,7 @@ import {
   probePrivacyBackupRuntime,
 } from "./privacy-backup-runtime";
 import { buildOpsAgentServer } from "./server";
+import { describeServiceFilesAtStart } from "./service-files-at-start";
 import {
   afterValidatedServiceAuthority,
   resolveBootstrapEnabledServiceIds,
@@ -62,12 +63,11 @@ async function main(): Promise<void> {
   // which data-manager can read. OPS_PRIVACY_BACKUP_SCRATCH_ROOT stays set for
   // agents of earlier releases.
   janitorPrivacyBackupScratch(config.rootDir);
-  // The release's built-in manifests apply either way; a checkout that differs
-  // still supplies the configuration files those services mount.
-  const drift = services.describeBuiltInServiceDrift(
-    services.inspectBuiltInServiceDrift(config.rootDir),
-  );
-  if (drift) process.stderr.write(`${drift}\n`);
+  // The release's manifests and service files apply, with the operator's
+  // overrides; the checkout's no longer do. Reported, never fatal at start.
+  for (const line of describeServiceFilesAtStart(join(config.rootDir, "infra", "docker"))) {
+    process.stderr.write(`${line}\n`);
+  }
   await afterValidatedServiceAuthority(config.rootDir, async (releaseAuthority) => {
     const [apiToken, dataManagerToken] = await Promise.all([
       readOpsTokenFile(config.apiTokenFile),
@@ -334,6 +334,17 @@ async function main(): Promise<void> {
           return undefined;
         }
       },
+      containerBindMounts: () =>
+        services.readContainerBindMounts(
+          async (args) =>
+            (
+              await runContainedProcess("docker", args, {
+                signal: AbortSignal.timeout(30_000),
+                timeout: 30_000,
+                maxBuffer: 4 * 1024 * 1024,
+              })
+            ).stdout,
+        ),
     });
     installCommunityRepositoryRuntime(runtime, communityRepositories);
     installIntegrationRuntime(runtime, integrationStore);

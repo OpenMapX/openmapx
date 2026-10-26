@@ -47,11 +47,14 @@ export const RUNTIME_BUNDLES = {
       "agent-handoff-main": "apps/ops-agent/src/agent-handoff-main.ts",
       cli: "packages/cli/src/index.ts",
     },
-    // The agent and its fixed CLI take built-in service manifests from copies
-    // this bundle embeds, not from the host checkout.
+    // The agent and its fixed CLI take built-in service manifests, and the
+    // files those services mount, from copies this bundle embeds, not from
+    // the host checkout.
     replaceModules: {
       "packages/core/src/services/embedded-built-in-services.ts":
         "packages/core/src/services/embedded-built-in-services.bundle.ts",
+      "packages/core/src/services/embedded-service-files.ts":
+        "packages/core/src/services/embedded-service-files.bundle.ts",
     },
   },
   "data-manager": {

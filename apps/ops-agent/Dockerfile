@@ -49,11 +49,25 @@ COPY --parents \
     packages/transitous-core/ \
     ./
 COPY apps/ops-agent/ apps/ops-agent/
-# The bundle embeds every built-in service and integration manifest and the
-# release's catalog pins: the agent and its CLI run the release's, not the host
+# The bundle embeds every built-in service and integration manifest, the files
+# those services mount (scripts/service-files.mjs lists them) and the release's
+# catalog pins: the agent and its CLI run the release's, not the host
 # checkout's.
 COPY --parents \
     services/*/service.json \
+    services/service-file-history.json \
+    services/brouter/scripts/ \
+    services/dawarich-app/scripts/ \
+    services/dawarich-sidekiq/scripts/ \
+    services/martin/config/martin.yaml \
+    services/otp/config/ \
+    services/pelias/config/pelias.json \
+    services/postgis/scripts/sync-password.sh \
+    services/tileserver/config/config.json \
+    services/traefik/config/ \
+    services/valhalla/config/valhalla.json \
+    services/valhalla/scripts/traffic-watchdog.py \
+    services/well-known/config/ \
     integrations/*/manifest.json \
     infra/docker/transitous.lock.json \
     infra/docker/gbfs-catalog.lock.json \

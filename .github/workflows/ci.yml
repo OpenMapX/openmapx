@@ -95,6 +95,15 @@ jobs:
         # invocation reappears outside the private operations agent.
         run: pnpm check-ops-authority
 
+      - name: Check the release's service files and their history
+        # The bundle embeds every file a built-in mounts; the history of each,
+        # generated from Git, tells an operator's edit from an older release.
+        run: |
+          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            git fetch --no-tags --unshallow origin
+          fi
+          pnpm check-service-files
+
       - name: Check the committed OpenAPI document matches the API surface
         # Mounts the route table in-process — no database, cache or network.
         run: pnpm check-openapi
@@ -376,6 +385,32 @@ jobs:
         run: |
           image="$(node -e 'const {container: c} = require("./services/traefik/service.json"); console.log(c.image + ":" + c.tag + "@" + c.digest)')"
           OPENMAPX_RUN_TRAEFIK_TESTS=1 OPENMAPX_TRAEFIK_TEST_IMAGE="$image" pnpm exec vitest run --project node packages/core/src/services/__tests__/traefik-dynamic.integration.test.ts
+
+      - name: Pull the pinned well-known and Valhalla images
+        if: matrix.group == 'api-privacy'
+        timeout-minutes: 10
+        run: |
+          for id in well-known valhalla; do
+            image="$(node -e 'const {container: c} = require("./services/" + process.argv[1] + "/service.json"); console.log(c.image + ":" + c.tag + "@" + c.digest)' "$id")"
+            for backoff in 0 15 30 60 120 fail; do
+              if [ "$backoff" = fail ]; then
+                echo "::error::Could not pull $image after 5 attempts"
+                exit 1
+              fi
+              sleep "$backoff"
+              docker pull --quiet "$image" && break
+              echo "::warning::Pulling $image failed; retrying with backoff"
+            done
+          done
+
+      # Containers mount the release's files from the store beside the
+      # generations: nginx's workers and PostGIS's user (neither root nor the
+      # deployment's) read them, and Valhalla rewrites its writable copy.
+      # PostGIS's pinned image is this job's own service image.
+      - name: Verify service files mounted from the store
+        if: matrix.group == 'api-privacy'
+        timeout-minutes: 10
+        run: OPENMAPX_RUN_SERVICE_FILE_TESTS=1 pnpm exec vitest run --project node packages/core/src/services/__tests__/service-files.integration.test.ts
 
       - name: Pull the pinned managed Dawarich image
         if: matrix.group == 'export-restore'

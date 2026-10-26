@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   type BuiltInServiceManifestSource,
@@ -8,6 +7,7 @@ import {
 } from "./built-in-service-source";
 import { embeddedBuiltInServiceManifests } from "./embedded-built-in-services";
 import { validateServiceManifest } from "./manifest-schema";
+import { type ReleaseServiceFiles, readEmbeddedReleaseServiceFiles } from "./release-service-files";
 import type { LoadedService, ServiceManifest } from "./types";
 
 export const RELEASE_BUILT_IN_SERVICE_IDS = Object.freeze([
@@ -65,6 +65,8 @@ export interface BuiltInServiceReadOptions {
    * source.
    */
   source?: BuiltInServiceManifestSource;
+  /** The release's service files the digest covers; defaults to those the bundle embeds. */
+  serviceFiles?: ReleaseServiceFiles | null;
 }
 
 /**
@@ -122,6 +124,35 @@ export function readBuiltInServices(
       enabled: true,
     });
   }
+  // The release's service files are part of what it runs: a bundle covers
+  // their bytes, executable bits and every earlier version the import knows.
+  // (Run from source, only tests pass an embedded source, without files.)
+  const files =
+    options.serviceFiles !== undefined
+      ? options.serviceFiles
+      : source.embedded
+        ? readEmbeddedReleaseServiceFiles()
+        : null;
+  if (files) {
+    digest.update("files\0");
+    for (const file of files.files.values()) {
+      digest
+        .update(`${file.serviceId}/${file.path}`)
+        .update("\0")
+        .update(file.executable ? "x" : "-")
+        .update("\0")
+        .update(file.sha256)
+        .update("\0");
+    }
+    digest.update("history\0");
+    for (const [key, hashes] of [...files.history].sort(([a], [b]) => a.localeCompare(b))) {
+      digest
+        .update(key)
+        .update("\0")
+        .update([...hashes].sort().join(","))
+        .update("\0");
+    }
+  }
   return { serviceIds, services, digest: `release1_${digest.digest("base64url")}` };
 }
 
@@ -152,76 +183,4 @@ export async function captureReleaseServiceAuthority(
 export async function validateReleaseServiceAuthority(rootDir: string): Promise<Set<string>> {
   const snapshot = await captureReleaseServiceAuthority(rootDir);
   return new Set(snapshot.serviceIds);
-}
-
-/** How the checkout's built-in services differ from the release's. */
-export interface BuiltInServiceDrift {
-  /** Release services the checkout has no manifest for. */
-  readonly missing: readonly string[];
-  /** Release services whose checkout manifest has different bytes or cannot be read. */
-  readonly changed: readonly string[];
-  /** Checkout service directories the release does not have. */
-  readonly unexpected: readonly string[];
-}
-
-/**
- * Compares the checkout's built-in manifests with the release's embedded
- * ones. Returns `null` when running from source, where the checkout is the
- * source. Never throws: drift does not change what runs, the release's
- * manifests do, but configuration files still come from the checkout.
- */
-export function inspectBuiltInServiceDrift(
-  rootDir: string,
-  source: BuiltInServiceManifestSource | null = embeddedBuiltInServiceManifests(),
-): BuiltInServiceDrift | null {
-  if (!source?.embedded) return null;
-  const ids = [...source.ids].sort();
-  const checkout = checkoutBuiltInServiceManifests(rootDir, ids);
-  const missing: string[] = [];
-  const changed: string[] = [];
-  for (const id of ids) {
-    let release: Buffer;
-    let current: Buffer;
-    try {
-      release = readRegularFileBytes(source.manifestPath(id), MAX_MANIFEST_BYTES);
-    } catch {
-      changed.push(id);
-      continue;
-    }
-    try {
-      current = readRegularFileBytes(checkout.manifestPath(id), MAX_MANIFEST_BYTES);
-    } catch (error) {
-      ((error as NodeJS.ErrnoException).code === "ENOENT" ? missing : changed).push(id);
-      continue;
-    }
-    if (!release.equals(current)) changed.push(id);
-  }
-  const unexpected: string[] = [];
-  try {
-    for (const entry of readdirSync(join(resolve(rootDir), "services"), { withFileTypes: true })) {
-      if (entry.name.startsWith(".") || entry.name.startsWith("_") || !entry.isDirectory()) {
-        continue;
-      }
-      if (!ids.includes(entry.name)) unexpected.push(entry.name);
-    }
-  } catch {
-    // A checkout without services/ reports every release service as missing.
-  }
-  return { missing, changed, unexpected: unexpected.sort() };
-}
-
-/** One line for an operator, or `null` when the checkout matches the release. */
-export function describeBuiltInServiceDrift(drift: BuiltInServiceDrift | null): string | null {
-  if (!drift) return null;
-  const parts = [
-    drift.missing.length > 0 ? `missing ${drift.missing.join(", ")}` : null,
-    drift.changed.length > 0 ? `changed ${drift.changed.join(", ")}` : null,
-    drift.unexpected.length > 0 ? `not in this release ${drift.unexpected.join(", ")}` : null,
-  ].filter((part): part is string => part !== null);
-  if (parts.length === 0) return null;
-  return (
-    `The checkout's built-in services differ from this release (${parts.join("; ")}). ` +
-    "The release's service manifests apply; update the checkout to the selected release, " +
-    "because the services still mount their configuration files from it."
-  );
 }

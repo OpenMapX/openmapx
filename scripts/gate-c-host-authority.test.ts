@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { renderCompose } from "../packages/core/src/services/compose-renderer";
+import { renderConfiguration } from "../packages/core/src/services/configuration-generation";
 import { findServiceManifestDirs } from "../packages/core/src/services/manifest-discovery";
 import { serviceManifestSchema } from "../packages/core/src/services/manifest-schema";
 import type { LoadedService, ServiceManifest } from "../packages/core/src/services/types";
@@ -51,10 +52,14 @@ function renderFullStack(): Record<string, RenderedService> {
   );
   // Every optional source present, so each mount is rendered and inspected.
   const compose = renderCompose(loaded, { domain: "maps.example.test", existsSync: () => true });
+  return renderedVolumes(compose.composeYaml);
+}
+
+function renderedVolumes(composeYaml: string): Record<string, RenderedService> {
   // Parsed without a YAML dependency: the renderer emits two-space-indented
   // service keys under a single top-level `services:` block, and this gate only
   // needs each service's volume lines.
-  const lines = compose.composeYaml.split("\n");
+  const lines = composeYaml.split("\n");
   const start = lines.indexOf("services:");
   const out: Record<string, RenderedService> = {};
   let current: string | undefined;
@@ -160,6 +165,56 @@ describe("Gate C — host authority", () => {
     expect(store).toHaveLength(1);
     expect(store[0]).toMatch(/\/app\/custom_integrations\}:ro$/);
     expect(services["data-manager"]?.volumes).toContain("./data:/data");
+  });
+
+  it("mounts each service's release files from its own store tree, read-only, in a generation", () => {
+    const loaded: LoadedService[] = findServiceManifestDirs(join(ROOT, "services")).map(
+      (directory) => ({
+        manifest: serviceManifestSchema.parse(
+          JSON.parse(readFileSync(join(directory, "service.json"), "utf8")),
+        ) as unknown as ServiceManifest,
+        directory,
+        isBuiltIn: true,
+        enabled: true,
+      }),
+    );
+    const {
+      rendered: { composeYaml },
+    } = renderConfiguration({
+      infraDir: join(ROOT, "infra", "docker"),
+      services: loaded,
+      input: {
+        domain: "maps.example.test",
+        selectedRoots: loaded.map((service) => service.manifest.id),
+        serviceConfigs: [],
+        integrationConfigs: [],
+        serviceSecrets: [],
+      },
+    });
+    const rendered = renderedVolumes(composeYaml);
+    const store = "../../service-files/";
+    const fromStore = Object.entries(rendered).flatMap(([id, service]) =>
+      (service.volumes ?? [])
+        .filter((volume) => volume.startsWith(store))
+        .map((volume) => ({ id, volume })),
+    );
+    expect(fromStore.length).toBeGreaterThan(10);
+    for (const { id, volume } of fromStore) {
+      expect(volume).toMatch(/:ro$/);
+      const owner = volume.slice(store.length).split("/")[0];
+      // pelias-pip and pelias-placeholder read pelias's file, through @service:.
+      expect(owner === id || (owner === "pelias" && id.startsWith("pelias-"))).toBe(true);
+    }
+    // Nothing of a service's directory is mounted from the checkout any more.
+    for (const service of Object.values(rendered)) {
+      for (const volume of service.volumes ?? []) {
+        expect(volume.startsWith("../../../../../services/")).toBe(false);
+      }
+    }
+    // valhalla.json, which Valhalla rewrites, from its writable copy.
+    expect(
+      rendered.valhalla?.volumes?.filter((volume) => volume.includes("valhalla.json")),
+    ).toEqual(["../../../../data/valhalla/config/valhalla.json:/custom_files/valhalla.json"]);
   });
 
   it("lets Traefik mount its own files from the agent's state read-only, and no one else", () => {

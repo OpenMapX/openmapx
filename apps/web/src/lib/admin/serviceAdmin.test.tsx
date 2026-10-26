@@ -1,8 +1,13 @@
 import { createApiClient } from "@openmapx/core";
+import * as sdk from "@openmapx/core/api-admin-sdk";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, createTestQueryClient, renderHookWithQuery, waitFor } from "@/test";
-import { invalidateServiceAdministration, serviceAdminQueries } from "./serviceAdmin";
+import {
+  invalidateServiceAdministration,
+  serviceAdminQueries,
+  serviceOrThrow,
+} from "./serviceAdmin";
 
 let apiUrl = "http://admin.test";
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({ useEnv: () => ({ apiUrl }) }));
@@ -241,6 +246,16 @@ describe("service administration query acquisition", () => {
       qc.getQueryData(second.list().queryKey),
     );
   });
+  it("shows why a saved configuration was not applied, when the operator can fix it", async () => {
+    const problem =
+      "infra/docker/overrides/services/martin/config/martin.yaml can't be used: it is a symbolic link.";
+    vi.stubGlobal("fetch", () => Response.json({ error: problem }, { status: 409 }));
+    const client = createApiClient({ baseUrl: apiUrl, credentials: "include" });
+    await expect(
+      serviceOrThrow(sdk.updateAdminServiceConfig("martin", { config: {} }, { client })),
+    ).rejects.toThrow(problem);
+  });
+
   it("forwards query disposal through body cancellation and rejects malformed wire data safely", async () => {
     let canceled = false;
     vi.stubGlobal(

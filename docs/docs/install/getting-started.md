@@ -97,12 +97,14 @@ the defaults, so do not copy a file containing only optional engines.
 ## 4. Render the compose stack
 
 ```bash
-pnpm openmapx compose render
 pnpm openmapx compose release
 pnpm openmapx compose release --status
+pnpm openmapx compose render
 ```
 
-Render creates platform secret files and a configuration generation under
+Select the release first: render takes the services' files from the selected
+release, not from the checkout, and refuses while the checkout's built-in
+services differ from that release's. Render creates platform secret files and a configuration generation under
 `infra/docker/state/ops-agent/configuration/generations/`. The
 `infra/docker/state/ops-agent/configuration/current` pointer selects the generated Compose
 file and hardlink plan. Keep these deployment files; do not edit generated YAML.

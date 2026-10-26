@@ -189,6 +189,28 @@ export async function applyTrustedConfigurationSnapshot(options: {
   );
 }
 
+/** Why the agent did not commit `revisionId`, when the operator can act on it; null otherwise or unknown. */
+async function readConfigurationFailure(
+  revisionId: string,
+  options: ApplyTrustedConfigurationOptions,
+): Promise<string | null> {
+  if (!configurationGenerationRevisionSchema.safeParse(revisionId).success) return null;
+  try {
+    const { problem } = await executeAndWait(
+      createApiOpsClient(),
+      { kind: "configuration.failure.inspect", attemptedRevisionId: revisionId },
+      createDurableOpsKey(
+        "trusted-config.failure.inspect",
+        `${options.operationKey}\0${revisionId}`,
+      ),
+      { signal: options.signal },
+    );
+    return problem;
+  } catch {
+    return null;
+  }
+}
+
 async function applySnapshot(
   options: ApplyTrustedConfigurationOptions,
   input: TrustedConfigurationPayload,
@@ -255,6 +277,15 @@ async function applySnapshot(
         : submitted
           ? { outcome: "unknown" as const, reason: "transport_or_result" as const }
           : { outcome: "not_committed" as const, reason: "failed" as const, cleanupFailed: false };
+    // A failure the operator can fix (an override render may not use) has a
+    // readable reason for the admin panel; an older agent answers none.
+    const problem =
+      result.outcome === "not_committed" && result.reason === "failed"
+        ? await readConfigurationFailure(
+            (sealed.operation as Extract<OpsOperation, { revisionId: string }>).revisionId,
+            options,
+          )
+        : null;
     let registryUpdateFailed = false;
     if (result.outcome === "committed") {
       try {
@@ -263,7 +294,12 @@ async function applySnapshot(
         registryUpdateFailed = true;
       }
     }
-    return { ...result, publisherCleanupFailed: consumed.cleanupFailed, registryUpdateFailed };
+    return {
+      ...result,
+      publisherCleanupFailed: consumed.cleanupFailed,
+      registryUpdateFailed,
+      ...(problem ? { problem } : {}),
+    };
   } catch {
     // Publication/preparation failed before execute, or an unexpected error after submission.
     return {

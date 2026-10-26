@@ -179,35 +179,7 @@ describe("Traefik's files outside the checkout", () => {
     expect(lstatSync(join(f.dynamicTarget, "middlewares.yml")).ino).toBe(inode);
   });
 
-  it("skips a dynamic file it may not read and names it, never its contents", async () => {
-    const f = checkout();
-    writeFileSync(join(f.root, "elsewhere.yml"), AUTH);
-    symlinkSync(join(f.root, "elsewhere.yml"), join(f.dynamic, "linked.yml"));
-    writeFileSync(join(f.dynamic, "auth.yml"), AUTH);
-    linkSync(join(f.dynamic, "auth.yml"), join(f.root, "second-name.yml"));
-    mkdirSync(join(f.dynamic, "folder.yml"));
-
-    const committed = await commitConfigurationGeneration({
-      infraDir: f.infraDir,
-      services: f.services,
-      input: input(["traefik", "web"]),
-      legacyTraefikDynamicMounted: false,
-    });
-
-    const kept = "Traefik keeps the copy of an earlier render, if there is one.";
-    expect(committed.stackFileProblems).toEqual([
-      `services/traefik/config/dynamic/auth.yml was not copied to Traefik's dynamic directory, infra/docker/state/ops-agent/traefik/dynamic: it has 2 links. ${kept}`,
-      `services/traefik/config/dynamic/folder.yml was not copied to Traefik's dynamic directory, infra/docker/state/ops-agent/traefik/dynamic: it is not a regular file. ${kept}`,
-      `services/traefik/config/dynamic/linked.yml was not copied to Traefik's dynamic directory, infra/docker/state/ops-agent/traefik/dynamic: it is a symbolic link. ${kept}`,
-    ]);
-    expect(committed.stackFileProblems.join("\n")).not.toContain("secret-hash");
-    expect(readdirSync(f.dynamicTarget).sort()).toEqual([
-      "generated-routes.yml",
-      "middlewares.yml",
-    ]);
-  });
-
-  it("keeps a copy whose source it may no longer read, and every copy when the directory is not its own", async () => {
+  it("refuses a checkout file it may not use, run from source, and names it, never its contents", async () => {
     const f = checkout();
     writeFileSync(join(f.dynamic, "auth.yml"), AUTH);
     const commit = () =>
@@ -219,36 +191,36 @@ describe("Traefik's files outside the checkout", () => {
       });
     await commit();
 
-    // auth.yml is still there, but now a second name for the same file.
+    // A second name for auth.yml, a link, a link for the directory itself.
     linkSync(join(f.dynamic, "auth.yml"), join(f.root, "second-name.yml"));
-    expect((await commit()).stackFileProblems).toEqual([
-      expect.stringContaining("services/traefik/config/dynamic/auth.yml was not copied"),
-    ]);
-    expect(readFileSync(join(f.dynamicTarget, "auth.yml"), "utf8")).toBe(AUTH);
+    const twoLinks = await commit().catch((error: Error) => error);
+    expect(String(twoLinks)).toContain(
+      "services/traefik/config/dynamic/auth.yml can't be used: it has 2 links",
+    );
+    expect(String(twoLinks)).not.toContain("secret-hash");
+    rmSync(join(f.root, "second-name.yml"));
 
-    // The directory itself replaced by a link: nothing in it is read or dropped.
+    writeFileSync(join(f.root, "elsewhere.yml"), AUTH);
+    symlinkSync(join(f.root, "elsewhere.yml"), join(f.dynamic, "linked.yml"));
+    await expect(commit()).rejects.toThrow(
+      "services/traefik/config/dynamic/linked.yml can't be used: it is a symbolic link",
+    );
+    rmSync(join(f.dynamic, "linked.yml"));
+
     const elsewhere = join(f.root, "elsewhere");
     mkdirSync(elsewhere);
     writeFileSync(join(elsewhere, "planted.yml"), "http: {}\n");
     rmSync(f.dynamic, { recursive: true });
     symlinkSync(elsewhere, f.dynamic);
-    expect((await commit()).stackFileProblems).toEqual([
-      expect.stringContaining(
-        "services/traefik/config/dynamic was not copied to Traefik's dynamic directory, infra/docker/state/ops-agent/traefik/dynamic: it is a symbolic link.",
-      ),
-    ]);
+    await expect(commit()).rejects.toThrow(
+      "services/traefik/config/dynamic can't be used: it is a symbolic link",
+    );
+    // A refused render changes nothing Traefik reads.
     expect(readdirSync(f.dynamicTarget).sort()).toEqual([
       "auth.yml",
       "generated-routes.yml",
       "middlewares.yml",
     ]);
-
-    // Missing altogether, the same.
-    rmSync(f.dynamic);
-    expect((await commit()).stackFileProblems).toEqual([
-      expect.stringContaining("services/traefik/config/dynamic was not copied"),
-    ]);
-    expect(readdirSync(f.dynamicTarget)).toContain("middlewares.yml");
   });
 
   it("removes a temporary a stopped render left behind", async () => {
@@ -298,9 +270,7 @@ describe("Traefik's files outside the checkout", () => {
       input: input(["traefik", "web"]),
     });
     expect(existsSync(f.dynamic)).toBe(false);
-    expect(committed.stackFileProblems).toEqual([
-      expect.stringContaining("services/traefik/config/dynamic was not copied"),
-    ]);
+    expect(committed.stackFileProblems).toEqual([]);
   });
 
   it("refuses a traefik.yml it may not read, rather than mount a missing one", async () => {

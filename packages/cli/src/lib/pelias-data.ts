@@ -10,6 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { atomicWrite } from "@openmapx/core/release-files";
+import { services as coreServices } from "@openmapx/core/server";
 import { execa } from "execa";
 import { withStagedBuildDir } from "./build-staging";
 import { resolveOsmPbf } from "./osm-pbf";
@@ -225,7 +226,12 @@ export async function buildPeliasData(
   // in infra/docker; every path in it is absolute.
   const composeDir = mkdtempSync(join(tmpdir(), "openmapx-pelias-build-"));
   const composeFile = join(composeDir, PELIAS_BUILD_COMPOSE_FILENAME);
-  const configPath = join(paths.root, "services", "pelias", "config", "pelias.json");
+  // The release's copy (or the operator's override) the applied generation mounts.
+  const configPath = coreServices.appliedServiceFile(
+    paths.infraDir,
+    "pelias",
+    "config/pelias.json",
+  );
 
   // The whole tree, including the Elasticsearch index, is built into a staged
   // dir so a failed import never leaves the runtime stack with a half index.
