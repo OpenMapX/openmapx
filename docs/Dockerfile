@@ -20,9 +20,11 @@ RUN pnpm typecheck && pnpm build
 FROM nginx:1.31.6-alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2
 # The current official image predates Alpine's OpenSSL fix for CVE-2026-14456
 # and later libexpat, util-linux, PCRE2, TIFF (CVE-2026-4775), libX11
-# (CVE-2026-88806) and Brotli (CVE-2026-111497) fixes.
+# (CVE-2026-88806), Brotli (CVE-2026-111497) and curl (CVE-2026-92392,
+# 8.23.0-r0) fixes.
 # Upgrade only the affected runtime libraries.
-RUN apk upgrade --no-cache libcrypto3 libssl3 libexpat libuuid pcre2 tiff libx11 brotli-libs
+RUN apk upgrade --no-cache libcrypto3 libssl3 libexpat libuuid pcre2 tiff libx11 brotli-libs \
+    curl libcurl
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/build /usr/share/nginx/html
 EXPOSE 80
