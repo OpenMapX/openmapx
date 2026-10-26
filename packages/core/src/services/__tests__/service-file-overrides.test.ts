@@ -14,7 +14,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { agentStatePaths } from "../agent-state";
@@ -48,7 +48,10 @@ function checkout() {
   roots.push(root);
   cpSync(join(REPOSITORY, "services"), join(root, "services"), {
     recursive: true,
-    filter: (source) => !/node_modules|generated-routes\.yml|[/\\]auth\.yml$/.test(source),
+    // Nothing a working checkout adds: dependencies, earlier routes, an operator's auth.yml.
+    filter: (source) =>
+      !source.split(/[/\\]/).includes("node_modules") &&
+      !["generated-routes.yml", "auth.yml"].includes(basename(source)),
   });
   const infraDir = join(root, "infra", "docker");
   mkdirSync(infraDir, { recursive: true });
