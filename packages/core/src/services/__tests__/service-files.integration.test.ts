@@ -1,13 +1,14 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
+  closeSync,
+  fstatSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   rmSync,
-  statSync,
-  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
@@ -118,6 +119,16 @@ function renderedVolumes(service: string, keep = (_target: string) => true): str
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
+/** A file's inode and text, read through one descriptor. */
+function snapshot(path: string): { ino: number; text: string } {
+  const fd = openSync(path, "r");
+  try {
+    return { ino: fstatSync(fd).ino, text: readFileSync(fd, "utf8") };
+  } finally {
+    closeSync(fd);
+  }
+}
+
 afterEach(() => {
   for (const id of containers.splice(0)) docker("rm", "--force", id);
   for (const volume of volumes.splice(0)) docker("volume", "rm", "--force", volume);
@@ -201,8 +212,7 @@ describe.runIf(runTests)("containers reading the release's files from the store"
     stack();
     await render(["valhalla"]);
     const copy = join(infraDir, "data", "valhalla", "config", "valhalla.json");
-    const seed = readFileSync(copy, "utf8");
-    const inode = statSync(copy).ino;
+    const { text: seed, ino: inode } = snapshot(copy);
 
     // Valhalla's own start: configure_valhalla.sh merges its defaults into
     // the file. Tiles in place and no serving, so it stops after that.
@@ -255,21 +265,22 @@ describe.runIf(runTests)("containers reading the release's files from the store"
     } catch {
       // Its tile build fails on the empty tiles; the configuration is written before.
     }
-    const rewritten = readFileSync(copy, "utf8");
+    const after = snapshot(copy);
+    const rewritten = after.text;
     expect(rewritten).not.toBe(seed);
     expect(JSON.parse(rewritten).mjolnir.concurrency).toBe("12");
     // Merged into the release's file in place, not replaced.
     expect(JSON.parse(rewritten).httpd.service.drain_seconds).toBe(
       JSON.parse(seed).httpd.service.drain_seconds,
     );
-    expect(statSync(copy).ino).toBe(inode);
+    expect(after.ino).toBe(inode);
 
     await render(["valhalla"]);
-    expect(readFileSync(copy, "utf8")).toBe(rewritten);
+    expect(snapshot(copy).text).toBe(rewritten);
 
     await render(["valhalla"], {
       "valhalla/config/valhalla.json": '{"mjolnir": {"concurrency": 2}}\n',
     });
-    expect(readFileSync(copy, "utf8")).toBe('{"mjolnir": {"concurrency": 2}}\n');
+    expect(snapshot(copy).text).toBe('{"mjolnir": {"concurrency": 2}}\n');
   }, 300_000);
 });

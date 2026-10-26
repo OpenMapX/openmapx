@@ -93,13 +93,22 @@ function openCopyDirectory(infraDir: string, path: string): CopyDirectory {
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       }
-      if (!lstatSync(next).isDirectory()) {
-        throw new Error(`${relative(infraDir, directory)} is not a directory`);
+      // Opening it is the check: a link or anything but a directory fails.
+      let child: number;
+      try {
+        child = openSync(next, directoryFlags);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "ELOOP" || code === "ENOTDIR") {
+          throw new Error(`${relative(infraDir, directory)} is not a directory`);
+        }
+        throw error;
       }
       if (descriptors) {
-        const child = openSync(next, directoryFlags);
         closeSync(fd);
         fd = child;
+      } else {
+        closeSync(child);
       }
     }
   } catch (error) {
