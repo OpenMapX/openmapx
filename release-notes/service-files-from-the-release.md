@@ -18,8 +18,9 @@ Deliberate changes go in overrides: whole files in
 release's file.
 
 - An override render may not use fails the render, by name: a link, a second
-  link, another owner, or one its group or others may write. A configuration
-  saved in the admin panel then fails with that reason.
+  link, another owner, one its group or others may write, or a directory in
+  place of a file. A configuration saved in the admin panel then fails with
+  that reason.
 - An override of a path the release doesn't ship is reported and ignored. The
   exception is a YAML or TOML file in Traefik's dynamic directory, such as
   `auth.yml`, which is added to Traefik's configuration.
@@ -36,7 +37,15 @@ them. This covers Traefik's `auth.yml` and a `traefik.yml` naming
 (`valhalla.json`) is never imported, and nothing in the checkout is changed. A
 checkout an earlier release left after panel updates holds only released
 versions, so nothing is imported from it. Later checkout edits are reported as
-unused.
+unused. The import runs only from a checkout at or behind the selected
+release's source revision, since one ahead of it can hold newer upstream files
+that also match no released version. Until then it waits, imports and records
+nothing, and render, `check` and Run diagnostics say why and list the checkout
+files not used meanwhile. The host CLI asks git; the operations agent goes by
+the checkout's `services/service-file-history.json`.
+
+If Valhalla's writable copy is missing and can't be written, render fails with
+the reason, rather than let Docker create a root-owned directory in its place.
 
 The host CLI runs the checkout's code and manifests. A host render now reads
 the selected release's service files from its operations-agent image, and
@@ -46,7 +55,8 @@ the release of the checkout's commit is published and run
 `pnpm openmapx compose release` again, or check out the release's source
 revision. With no release selected yet, render uses the checkout's files and
 says so. Under `OPENMAPX_RELEASE=local` the checkout's files are the
-release's.
+release's, for the host CLI and the operations agent alike, and nothing is
+imported.
 
 ## Who is affected
 
@@ -59,7 +69,10 @@ commit is published.
 ## Required action
 
 - **After the upgrade, check the render's output, or `pnpm openmapx check`,
-  for the files it imported.** From then on, edit those files in
+  for the files it imported, or why the import waits.** If it waits, an edit
+  of yours (a basic-auth gate, for example) is not applied until it runs: put
+  that file in an override yourself, or bring the checkout to the release's
+  source revision. From then on, edit those files in
   `infra/docker/overrides/services`, not in the checkout. Create new
   overrides under `umask 022`: Debian's and Ubuntu's default `002` makes
   them group-writable, and render refuses those.

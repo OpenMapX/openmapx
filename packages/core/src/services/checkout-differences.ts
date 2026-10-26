@@ -97,7 +97,7 @@ export function checkoutDifferencesFromRelease(options: {
 /** Why a host render refuses, and what the operator can do. */
 export function describeCheckoutDifferences(
   differences: readonly CheckoutDifference[],
-  release: { name: string | null; revision: string | null },
+  release: { name: string | null; revision: string | null; importWaits?: string | null },
 ): string {
   const shown = differences.slice(0, 20).map((entry) => `  ${entry.path} (${entry.reason})`);
   if (differences.length > shown.length)
@@ -111,5 +111,10 @@ export function describeCheckoutDifferences(
     ...shown,
     "A host render runs this checkout's code and service manifests, so they must be the release's. Either wait until the release of this checkout's commit is published and run `pnpm openmapx compose release` again, or check out the selected release's source: " +
       `${checkout}. To keep a change to a service file, put the whole file in infra/docker/overrides/services/<id>/<path>; the operations agent, which runs the release's own files, applies it too.`,
+    ...(release.importWaits
+      ? [
+          `Your edits in the checkout's service files are not imported as overrides meanwhile: ${release.importWaits}. A file there ahead of the release could be a newer upstream version rather than your edit; the one-time import runs once the checkout is at or behind the release's source revision.`,
+        ]
+      : []),
   ].join("\n");
 }

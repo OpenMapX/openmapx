@@ -59,7 +59,7 @@ import {
   ServiceFileError,
 } from "./release-service-files";
 import { buildAppApiServiceEnv, expandServiceSelection } from "./selection";
-import { importCheckoutServiceFiles } from "./service-file-import";
+import { type CheckoutPosition, importCheckoutServiceFiles } from "./service-file-import";
 import { describeServiceFiles } from "./service-file-report";
 import {
   appliedServiceFilePath,
@@ -126,6 +126,12 @@ export interface CommitConfigurationOptions {
    * bundled, otherwise the checkout's).
    */
   releaseServiceFiles?: ReleaseServiceFiles;
+  /**
+   * Where the checkout stands against the release, for the one-time import
+   * of its edits: the host CLI asks git. Omitted, the checkout's own service
+   * file history says (the agent, which has no git).
+   */
+  checkoutPosition?: CheckoutPosition;
   /**
    * The bind mounts of every container, running or stopped: a service-file
    * tree one of them mounts is kept, and those still on the checkout's files
@@ -1026,7 +1032,12 @@ async function commitOwnedConfigurationGeneration(
   // The first generation with the release's files takes the operator's
   // checkout edits along as overrides, before it renders.
   const release = options.releaseServiceFiles ?? releaseServiceFiles(options.services);
-  const imported = importCheckoutServiceFiles({ infraDir, services: options.services, release });
+  const imported = importCheckoutServiceFiles({
+    infraDir,
+    services: options.services,
+    release,
+    ...(options.checkoutPosition ? { position: options.checkoutPosition } : {}),
+  });
   const { resolved, context, rendered, serviceFiles, overrides } = renderConfiguration({
     ...options,
     releaseServiceFiles: release,

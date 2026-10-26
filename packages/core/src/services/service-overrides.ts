@@ -131,6 +131,8 @@ export function readServiceOverrides(
       const absolute = join(directory, name);
       const stats = lstatSync(absolute);
       if (stats.isDirectory()) {
+        // In place of a file the release ships, as `mkdir -p` of its path makes one.
+        if (shipped(serviceId, path)) throw unusable(shown, "it is a directory");
         const problem = directoryProblem(stats, uid);
         if (problem && mayHold(serviceId, path)) throw unusable(shown, problem);
         if (problem) ignored.push({ path: shown, reason: problem });

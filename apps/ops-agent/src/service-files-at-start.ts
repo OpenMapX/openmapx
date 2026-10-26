@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { services } from "@openmapx/core/server";
 
 /**
@@ -10,7 +10,8 @@ import { services } from "@openmapx/core/server";
  */
 export function describeServiceFilesAtStart(
   infraDir: string,
-  release: services.ReleaseServiceFiles | null = services.readEmbeddedReleaseServiceFiles(),
+  // Under OPENMAPX_RELEASE=local none: the checkout's files are the release's.
+  release: services.ReleaseServiceFiles | null = services.renderedEmbeddedReleaseServiceFiles(),
 ): string[] {
   if (!release) return [];
   const lines: string[] = [];
@@ -27,8 +28,11 @@ export function describeServiceFilesAtStart(
       );
     }
     if (!services.serviceFilesImported(infraDir)) {
+      const position = services.checkoutPositionFromHistory(resolve(infraDir, "..", ".."), release);
       lines.push(
-        "The next render imports, once, your edits in the checkout's service files as overrides in infra/docker/overrides/services.",
+        position.atOrBehindRelease
+          ? "The next render imports, once, your edits in the checkout's service files as overrides in infra/docker/overrides/services."
+          : services.describeDeferredServiceFileImport(position.reason, []),
       );
     }
     const overrides = services.readServiceOverrides(infraDir, release);

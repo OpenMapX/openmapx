@@ -5,6 +5,7 @@ import { services } from "@openmapx/core/server";
 import { Command } from "commander";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { registerCheckCommand } from "../src/commands/check";
+import { checkoutPositionFromGit } from "../src/lib/checkout-position";
 import { containerBindMounts, legacyTraefikDynamicMounted } from "../src/lib/container-mounts";
 import { dockerCompose } from "../src/lib/docker";
 import { selectedReleaseServiceFiles } from "../src/lib/release-service-files";
@@ -26,6 +27,10 @@ vi.mock("../src/lib/container-mounts", () => ({
 // No release is selected unless a test selects one.
 vi.mock("../src/lib/release-service-files", () => ({
   selectedReleaseServiceFiles: vi.fn(async () => "none"),
+}));
+// Git says the checkout is at or behind the release unless a test says otherwise.
+vi.mock("../src/lib/checkout-position", () => ({
+  checkoutPositionFromGit: vi.fn(async () => ({ atOrBehindRelease: true })),
 }));
 
 let tmp: string;
@@ -174,6 +179,33 @@ it("reports the service files: overrides, the import to come, a host render's re
   };
   const lines = () => errors.mock.calls.flat().map(String);
   try {
+    // Ahead of the release, git says: the import waits, and a host render
+    // would refuse the differing file.
+    vi.mocked(checkoutPositionFromGit).mockResolvedValueOnce({
+      atOrBehindRelease: false,
+      reason: "the checkout's commit is neither the release's source revision r nor one before it",
+    });
+    writeFileSync(join(directory, "config", "martin.yaml"), "listen_addresses: 0.0.0.0:3001\n");
+    rmSync(join(override, "martin.yaml"));
+    await check();
+    expect(lines()).toContainEqual(
+      expect.stringContaining(
+        "The one-time import of your edits in the checkout's service files waits: the checkout's commit is neither",
+      ),
+    );
+    expect(lines()).toContainEqual(
+      expect.stringContaining(
+        "Your edits in the checkout's service files are not imported as overrides meanwhile",
+      ),
+    );
+    expect(lines()).toContainEqual(
+      expect.stringContaining("services/martin/config/martin.yaml (changed)"),
+    );
+    writeFileSync(join(directory, "config", "martin.yaml"), "listen_addresses: 0.0.0.0:3000\n");
+    writeFileSync(join(override, "martin.yaml"), "users: ['op:$2y$05$secret-hash']\n");
+    chmodSync(join(override, "martin.yaml"), 0o644);
+    errors.mockClear();
+
     await check();
     expect(lines()).toContainEqual(expect.stringContaining("The next render imports, once"));
     expect(lines()).toContainEqual(

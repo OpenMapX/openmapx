@@ -241,6 +241,7 @@ export {
   type ReleaseServiceFiles,
   readEmbeddedReleaseServiceFiles,
   releaseServiceFiles,
+  renderedEmbeddedReleaseServiceFiles,
   ServiceFileError,
   serializeReleaseServiceFiles,
   serviceFileReferences,
@@ -310,8 +311,14 @@ export {
   SERVICE_SELECTION_ENV,
 } from "./selection";
 export {
-  describeImportedServiceFiles,
+  type CheckoutPosition,
+  checkoutPositionFromHistory,
+  describeDeferredServiceFileImport,
+  describeServiceFileImport,
   importCheckoutServiceFiles,
+  planServiceFileImport,
+  type ServiceFileImport,
+  type ServiceFileImportPlan,
   serviceFilesImported,
 } from "./service-file-import";
 export { describeServiceFiles } from "./service-file-report";

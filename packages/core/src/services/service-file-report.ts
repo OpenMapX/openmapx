@@ -6,8 +6,9 @@ import {
 } from "./container-mounts";
 import type { ReleaseServiceFiles } from "./release-service-files";
 import {
-  describeImportedServiceFiles,
+  describeServiceFileImport,
   describeUnusedCheckoutEdits,
+  type ServiceFileImport,
   serviceFilesImported,
   unusedCheckoutEdits,
 } from "./service-file-import";
@@ -21,7 +22,7 @@ import type { LoadedService } from "./types";
 
 /**
  * What render's output, the agent's log, `check` and Run diagnostics say
- * about the service files: the import, once; the overrides in use, those
+ * about the service files: the import, once, or why it waits; the overrides in use, those
  * whose release file changed since and those ignored; checkout edits no
  * override carries; and containers still mounting the checkout's files.
  * Names only, never contents.
@@ -32,12 +33,12 @@ export function describeServiceFiles(options: {
   release: ReleaseServiceFiles;
   overrides: ServiceOverrides;
   stale: readonly ActiveOverride[];
-  imported?: readonly string[] | null;
+  imported?: ServiceFileImport | null;
   mounts?: readonly ContainerBindMounts[];
 }): string[] {
   const { infraDir, release, overrides } = options;
   const lines = [
-    ...describeImportedServiceFiles(options.imported ?? []),
+    ...describeServiceFileImport(options.imported ?? null),
     ...describeServiceOverrides(overrides, options.stale),
   ];
   if (release.origin === "release" && serviceFilesImported(infraDir)) {

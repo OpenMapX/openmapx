@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -528,7 +529,8 @@ describe("renderComposeForRepo", () => {
     expect(notices()).toEqual([]);
   });
 
-  it("renders a selected release's files, keeps checkout edits as overrides, and refuses while its manifests differ", async () => {
+  /** Martin in a git checkout, and a release of it as its operations-agent image prints it. */
+  function martinCheckout() {
     const manifest = {
       ...baseManifest,
       id: "martin",
@@ -539,31 +541,56 @@ describe("renderComposeForRepo", () => {
     mkdirSync(config, { recursive: true });
     const shipped = "listen_addresses: 0.0.0.0:3000\n";
     writeFileSync(join(config, "martin.yaml"), shipped);
-    const sha = (text: string) => createHash("sha256").update(text).digest("hex");
-    const release = (yaml: string): coreServices.ReleaseServiceFiles => ({
-      origin: "release",
-      files: new Map([
+    const git = (...args: string[]) =>
+      execFileSync(
+        "git",
         [
-          "martin/config/martin.yaml",
-          {
-            serviceId: "martin",
-            path: "config/martin.yaml",
-            executable: false,
-            bytes: Buffer.from(yaml),
-            sha256: sha(yaml),
-          },
+          "-C",
+          tmp,
+          "-c",
+          "user.name=OpenMapX",
+          "-c",
+          "user.email=ops@example.test",
+          "-c",
+          "commit.gpgsign=false",
+          ...args,
         ],
-      ]),
-      history: new Map([["martin/config/martin.yaml", new Set([sha(shipped), sha(yaml)])]]),
-      manifests: new Map([["martin", sha(JSON.stringify(manifest))]]),
-      missing: [],
-    });
-    const select = (yaml: string) =>
+        { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+      ).trim();
+    /** Commits the checkout's services; returns the commit. */
+    const commit = (message: string) => {
+      git("add", "services");
+      git("commit", "-q", "-m", message);
+      return git("rev-parse", "HEAD");
+    };
+    git("init", "-q");
+    const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+    /** Selects the release built from `revision`, whose martin.yaml is `yaml`. */
+    const select = (revision: string | null, yaml: string, earlier: string[] = []) =>
       vi.mocked(selectedReleaseServiceFiles).mockResolvedValue({
-        files: release(yaml),
+        files: {
+          origin: "release",
+          files: new Map([
+            [
+              "martin/config/martin.yaml",
+              {
+                serviceId: "martin",
+                path: "config/martin.yaml",
+                executable: false,
+                bytes: Buffer.from(yaml),
+                sha256: sha(yaml),
+              },
+            ],
+          ]),
+          history: new Map([
+            ["martin/config/martin.yaml", new Set([sha(yaml), ...earlier.map(sha)])],
+          ]),
+          manifests: new Map([["martin", sha(JSON.stringify(manifest))]]),
+          missing: [],
+        },
         release: "r1",
         image: "ghcr.io/openmapx/ops-agent@sha256:1",
-        revision: "a".repeat(40),
+        revision,
       });
     const render = () =>
       renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["martin"] });
@@ -576,40 +603,95 @@ describe("renderComposeForRepo", () => {
         "utf8",
       );
     };
+    const overrides = join(tmp, "infra", "docker", "overrides");
+    const marker = join(tmp, "infra", "docker", "state", "ops-agent", "overrides-import.json");
+    return {
+      manifest,
+      config,
+      shipped,
+      git,
+      commit,
+      select,
+      render,
+      mountedFile,
+      overrides,
+      marker,
+    };
+  }
+
+  it("renders a selected release's files, keeps checkout edits as overrides, and refuses while its manifests differ", async () => {
+    const f = martinCheckout();
     try {
       // A checkout at the release: the release's file, as the store holds it.
-      select(shipped);
-      await render();
-      expect(mountedFile()).toBe(shipped);
+      const first = f.commit("the release");
+      f.select(first, f.shipped);
+      await f.render();
+      expect(f.mountedFile()).toBe(f.shipped);
 
-      // One an earlier release left: refused, and nothing is imported from it.
+      // One a later release left behind: refused, and nothing is imported from it.
       const newer = "listen_addresses: 0.0.0.0:3000\nworker_processes: 2\n";
-      select(newer);
-      await expect(render()).rejects.toThrow("services/martin/config/martin.yaml (changed)");
-      expect(existsSync(join(tmp, "infra", "docker", "overrides"))).toBe(false);
+      writeFileSync(join(f.config, "martin.yaml"), newer);
+      const later = f.commit("the next release");
+      f.git("checkout", "-q", first);
+      rmSync(f.marker);
+      f.select(later, newer, [f.shipped]);
+      await expect(f.render()).rejects.toThrow("services/martin/config/martin.yaml (changed)");
+      expect(existsSync(f.overrides)).toBe(false);
+      // Refused before the import, which is still to run.
+      expect(existsSync(f.marker)).toBe(false);
 
-      // An operator's edit there: imported once as an override, then used.
-      rmSync(join(tmp, "infra", "docker", "state", "ops-agent", "overrides-import.json"));
-      writeFileSync(join(config, "martin.yaml"), "listen_addresses: 0.0.0.0:3001\n");
-      await render();
+      // An operator's edit in a checkout behind the release: imported once as
+      // an override, then used.
+      writeFileSync(join(f.config, "martin.yaml"), "listen_addresses: 0.0.0.0:3001\n");
+      await f.render();
       expect(
-        readFileSync(
-          join(tmp, "infra", "docker", "overrides", "services", "martin", "config", "martin.yaml"),
-          "utf8",
-        ),
+        readFileSync(join(f.overrides, "services", "martin", "config", "martin.yaml"), "utf8"),
       ).toBe("listen_addresses: 0.0.0.0:3001\n");
-      expect(mountedFile()).toBe("listen_addresses: 0.0.0.0:3001\n");
+      expect(f.mountedFile()).toBe("listen_addresses: 0.0.0.0:3001\n");
+      expect(existsSync(f.marker)).toBe(true);
 
       // A checkout whose manifest is not the release's: refused, with what to do.
-      writeManifest("martin", { ...manifest, version: "2.0.0" });
-      const refused = await render().catch((error: Error) => error.message);
+      writeManifest("martin", { ...f.manifest, version: "2.0.0" });
+      const refused = await f.render().catch((error: Error) => error.message);
       expect(refused).toContain(
-        `The checkout's built-in services differ from the selected release r1, built from ${"a".repeat(40)}:\n  services/martin/service.json (changed)`,
+        `The checkout's built-in services differ from the selected release r1, built from ${later}:\n  services/martin/service.json (changed)`,
       );
       expect(refused).toContain(
-        "Either wait until the release of this checkout's commit is published and run `pnpm openmapx compose release` again, or check out the selected release's source: git checkout aaaaaaaa",
+        `Either wait until the release of this checkout's commit is published and run \`pnpm openmapx compose release\` again, or check out the selected release's source: git checkout ${later}`,
       );
       expect(refused).toContain("infra/docker/overrides/services/<id>/<path>");
+    } finally {
+      vi.mocked(selectedReleaseServiceFiles).mockResolvedValue("none");
+    }
+  });
+
+  it("imports nothing from a checkout one commit ahead of the release with a changed upstream file, and refuses", async () => {
+    const f = martinCheckout();
+    try {
+      const released = f.commit("the release");
+      // Upstream's next commit changes martin.yaml; its release isn't published yet.
+      writeFileSync(
+        join(f.config, "martin.yaml"),
+        "listen_addresses: 0.0.0.0:3000\nworker_processes: 8\n",
+      );
+      f.commit("upstream, ahead of the release");
+      f.select(released, f.shipped);
+
+      const refused = await f.render().catch((error: Error) => error.message);
+      expect(refused).toContain("  services/martin/config/martin.yaml (changed)");
+      expect(refused).toContain(
+        `Your edits in the checkout's service files are not imported as overrides meanwhile: the checkout's commit is neither the release's source revision ${released} nor one before it.`,
+      );
+      expect(existsSync(f.overrides)).toBe(false);
+      expect(existsSync(f.marker)).toBe(false);
+
+      // Without a revision to compare with, the import waits too.
+      f.select(null, f.shipped);
+      await expect(f.render()).rejects.toThrow(
+        "not imported as overrides meanwhile: the selected release's operations-agent image names no source revision",
+      );
+      expect(existsSync(f.overrides)).toBe(false);
+      expect(existsSync(f.marker)).toBe(false);
     } finally {
       vi.mocked(selectedReleaseServiceFiles).mockResolvedValue("none");
     }

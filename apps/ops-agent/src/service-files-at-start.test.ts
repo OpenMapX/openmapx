@@ -83,6 +83,24 @@ describe("the agent's start after a panel self-update", () => {
     expect(describeServiceFilesAtStart(f.infraDir, f.release)).toEqual([]);
   });
 
+  it("says the import waits while the checkout's history lists versions the release doesn't", () => {
+    const f = stack();
+    writeFileSync(
+      join(f.infraDir, "..", "..", "services", "service-file-history.json"),
+      JSON.stringify({ version: 1, files: { "martin/config/martin.yaml": ["f".repeat(64)] } }),
+    );
+    const shipped = f.release.files.get("martin/config/martin.yaml")?.sha256 ?? "";
+    const release = {
+      ...f.release,
+      history: new Map([["martin/config/martin.yaml", new Set([shipped])]]),
+    };
+    expect(describeServiceFilesAtStart(f.infraDir, release)).toEqual([
+      expect.stringContaining(
+        "The one-time import of your edits in the checkout's service files waits: the checkout's services/service-file-history.json lists versions of services/martin/config/martin.yaml that the release doesn't",
+      ),
+    ]);
+  });
+
   it("reports an override it may not use instead of failing to start", () => {
     const f = stack();
     const override = join(f.infraDir, "overrides", "services", "martin", "config", "martin.yaml");

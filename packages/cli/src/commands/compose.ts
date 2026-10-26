@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { initializeErasureJournal } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
 import { type Command, Option } from "commander";
+import { checkoutPositionFromGit } from "../lib/checkout-position";
 import { containerBindMounts, legacyTraefikDynamicMounted } from "../lib/container-mounts";
 import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
 import { dockerComposeStream } from "../lib/docker";
@@ -339,31 +340,42 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
     // release's service files, read from its image, and refuses while the
     // checkout's built-in services differ from them.
     const selected = await selectedReleaseServiceFiles(paths.infraDir);
+    let checkoutPosition: coreServices.CheckoutPosition | undefined;
     if (selected === "none") {
       log.dim(
         "No release is selected yet: the services' files come from this checkout. `pnpm openmapx compose release` selects one.",
       );
     } else if (selected) {
-      const imported = coreServices.importCheckoutServiceFiles({
+      // Before anything is imported: what the checkout holds that the release
+      // doesn't, other than the edits the import takes along, which only a
+      // checkout at or behind the release's source revision may hold.
+      checkoutPosition = await checkoutPositionFromGit(paths.root, selected.revision);
+      const plan = coreServices.planServiceFileImport({
         infraDir: paths.infraDir,
         services,
         release: selected.files,
+        position: checkoutPosition,
       });
-      for (const line of coreServices.describeImportedServiceFiles(imported ?? [])) log.warn(line);
+      const importing = new Set(
+        plan?.kind === "import" ? plan.edits.map((edit) => `services/${edit.key}`) : [],
+      );
       const overrides = coreServices.readServiceOverrides(paths.infraDir, selected.files);
-      const differences = coreServices.checkoutDifferencesFromRelease({
-        rootDir: paths.root,
-        services,
-        release: selected.files,
-        overrides: new Map(
-          overrides.active.map((entry) => [`${entry.serviceId}/${entry.path}`, entry.bytes]),
-        ),
-      });
+      const differences = coreServices
+        .checkoutDifferencesFromRelease({
+          rootDir: paths.root,
+          services,
+          release: selected.files,
+          overrides: new Map(
+            overrides.active.map((entry) => [`${entry.serviceId}/${entry.path}`, entry.bytes]),
+          ),
+        })
+        .filter((difference) => !importing.has(difference.path));
       if (differences.length > 0) {
         throw new Error(
           coreServices.describeCheckoutDifferences(differences, {
             name: selected.release,
             revision: selected.revision,
+            importWaits: plan?.kind === "defer" ? plan.reason : null,
           }),
         );
       }
@@ -372,6 +384,7 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
       legacyTraefikDynamicMounted: legacyTraefik,
       ...(mounts ? { containerBindMounts: mounts } : {}),
       ...(selected && selected !== "none" ? { releaseServiceFiles: selected.files } : {}),
+      ...(checkoutPosition ? { checkoutPosition } : {}),
       services,
       integrationSchemas,
       input: {

@@ -510,10 +510,19 @@ checkout's `services/`. Changes of your own go in
   and a `traefik.yml` naming `basic-auth@file`, so a basic-auth gate stays.
   Files a container writes (Valhalla's `valhalla.json`) are never imported. A
   checkout an earlier release left, after panel updates, imports nothing.
+- **Only from a checkout at or behind the release.** A checkout ahead of the
+  selected release's source revision can hold newer upstream files, which
+  match no version the release shipped either. There the import waits: render
+  imports and records nothing, says why each time, and uses the release's
+  files meanwhile, so an edit of yours is not applied until the import runs.
+  A host render asks git and refuses meanwhile. The operations agent, which
+  has no git, goes by the checkout's `services/service-file-history.json`. To
+  apply an edit sooner, put it in an override yourself.
 - **Valhalla** gets its writable copy in
   `infra/docker/data/valhalla/config/valhalla.json`, seeded from the release's
-  file when Valhalla is recreated. Its own rewrite of the checkout's copy is
-  left behind, unused.
+  file. Its own rewrite of the checkout's copy is left behind, unused. If the
+  copy is missing and can't be written, render fails and says why, rather than
+  let Docker create a directory in its place.
 - **Containers recreate when their mounts move.** Until a service is recreated,
   its container keeps mounting the checkout's files, which still hold the same
   bytes. Render, `check` and Run diagnostics list such containers. The

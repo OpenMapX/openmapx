@@ -24,7 +24,11 @@ import {
 } from "../configuration-generation";
 import { CURRENT_CONFIGURATION } from "../deployment";
 import { findServiceManifestDirs } from "../manifest-discovery";
-import { type ReleaseServiceFiles, readCheckoutServiceFiles } from "../release-service-files";
+import {
+  parseServiceFileHistory,
+  type ReleaseServiceFiles,
+  readCheckoutServiceFiles,
+} from "../release-service-files";
 import { serviceFilesImported } from "../service-file-import";
 import { TRAEFIK_STATIC_GENERATION_FILE } from "../traefik-files";
 import type { LoadedService, ServiceManifest } from "../types";
@@ -65,8 +69,12 @@ function checkout() {
       enabled: false,
     }),
   );
-  // The release: these same files, before any edit.
+  // The release: these same files, before any edit, built at the checkout's
+  // commit or later, so it knows every version the checkout's history lists.
   const shipped = readCheckoutServiceFiles(services, process.geteuid?.() ?? 0);
+  const listed = parseServiceFileHistory(
+    readFileSync(join(root, "services", "service-file-history.json"), "utf8"),
+  );
   const release = (
     changes: Record<string, string> = {},
     history: Record<string, string[]> = {},
@@ -81,7 +89,10 @@ function checkout() {
       origin: "release",
       files,
       history: new Map(
-        [...files].map(([key, file]) => [key, new Set([file.sha256, ...(history[key] ?? [])])]),
+        [...files].map(([key, file]) => [
+          key,
+          new Set([file.sha256, ...(listed.get(key) ?? []), ...(history[key] ?? [])]),
+        ]),
       ),
       manifests: new Map(),
       missing: [],
@@ -207,6 +218,15 @@ describe("service file overrides", () => {
       "infra/docker/overrides/services/martin/config can't be used: it is a symbolic link",
     );
     rmSync(config);
+
+    // A directory where the release ships a file, as `mkdir -p` of its path leaves.
+    mkdirSync(join(config, "martin.yaml"), { recursive: true, mode: 0o755 });
+    chmodSync(config, 0o755);
+    writeFileSync(join(config, "martin.yaml", "martin.yaml"), "listen_addresses: 0.0.0.0:3001\n");
+    await expect(commit()).rejects.toThrow(
+      "infra/docker/overrides/services/martin/config/martin.yaml can't be used: it is a directory",
+    );
+    rmSync(join(f.infraDir, "overrides", "services", "martin"), { recursive: true });
     chmodSync(join(f.infraDir, "overrides", "services"), 0o775);
     await expect(commit()).rejects.toThrow(
       "infra/docker/overrides/services can't be used: group or others may write it",
@@ -336,6 +356,9 @@ describe("the one-time import of checkout edits", () => {
 
   it("imports nothing from a checkout an earlier release left, with only Valhalla's own rewrite (openmapx.com)", async () => {
     const f = checkout();
+    // openmapx.com's checkout predates the service file history, which says
+    // it is behind the release.
+    rmSync(join(f.root, "services", "service-file-history.json"));
     // The checkout is one release behind: martin.yaml and pelias.json hold
     // that release's bytes, which the release's history knows.
     const martin = readFileSync(
@@ -367,6 +390,52 @@ describe("the one-time import of checkout edits", () => {
     expect(readFileSync(mounted(f.infraDir, "martin", "/etc/martin/martin.yaml"), "utf8")).toBe(
       `${martin}# newer\n`,
     );
+  });
+
+  it("waits, importing and recording nothing, while the checkout is ahead of the release", async () => {
+    const f = checkout();
+    // One commit ahead of the release: upstream changed martin.yaml, and its
+    // regenerated history lists the new bytes. The operator added auth.yml.
+    const newer = "listen_addresses: 0.0.0.0:3000\nworker_processes: 8\n";
+    const martin = join(f.root, "services", "martin", "config", "martin.yaml");
+    const shipped = readFileSync(martin, "utf8");
+    writeFileSync(martin, newer);
+    const historyPath = join(f.root, "services", "service-file-history.json");
+    const history = JSON.parse(readFileSync(historyPath, "utf8")) as {
+      files: Record<string, string[]>;
+    };
+    history.files["martin/config/martin.yaml"]?.push(sha256(newer));
+    writeFileSync(historyPath, JSON.stringify(history));
+    writeFileSync(join(f.root, "services", "traefik", "config", "dynamic", "auth.yml"), AUTH);
+
+    const waiting = await commit(f, f.release());
+    expect(existsSync(join(f.infraDir, "overrides"))).toBe(false);
+    expect(serviceFilesImported(f.infraDir)).toBe(false);
+    expect(waiting.serviceFileReport[0]).toBe(
+      "The one-time import of your edits in the checkout's service files waits: the checkout's services/service-file-history.json lists versions of services/martin/config/martin.yaml that the release doesn't, so the checkout may be ahead of it. A checkout file ahead of the release could be a newer upstream version rather than your edit, so nothing is imported or recorded until the checkout is at or behind the release's source revision; render tries again each time. Meanwhile render uses the release's files, not these checkout files, which match no version it shipped: services/martin/config/martin.yaml, services/traefik/config/dynamic/auth.yml. To keep an edit among them now, put the whole file in infra/docker/overrides/services/<id>/<path>.",
+    );
+    expect(readFileSync(mounted(f.infraDir, "martin", "/etc/martin/martin.yaml"), "utf8")).toBe(
+      shipped,
+    );
+    // Again on the next render, still without a record.
+    expect((await commit(f, f.release())).serviceFileReport[0]).toContain("waits");
+    expect(serviceFilesImported(f.infraDir)).toBe(false);
+
+    // A history it can't read says nothing about where the checkout stands.
+    writeFileSync(historyPath, "{}");
+    expect((await commit(f, f.release())).serviceFileReport[0]).toContain(
+      "waits: the checkout's services/service-file-history.json, which says whether it is ahead of the release, is not a service file history.",
+    );
+    writeFileSync(historyPath, JSON.stringify(history));
+
+    // The release of that commit: upstream's martin.yaml is its own, and only
+    // the operator's file is imported.
+    const caughtUp = await commit(f, f.release({ "martin/config/martin.yaml": newer }));
+    expect(caughtUp.serviceFileReport[0]).toBe(
+      "Imported 1 checkout service file that differs from every version a release shipped as overrides, used from now on in place of the release's: infra/docker/overrides/services/traefik/config/dynamic/auth.yml. Edit them there; the checkout's copies are no longer read.",
+    );
+    expect(existsSync(join(f.infraDir, "overrides", "services", "martin"))).toBe(false);
+    expect(serviceFilesImported(f.infraDir)).toBe(true);
   });
 
   it("runs only for the release's files, and fails rather than lose an edit it may not read", async () => {

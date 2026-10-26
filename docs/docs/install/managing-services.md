@@ -434,7 +434,8 @@ back to the release's file.
 
 - An override is a whole file, owned by the deployment's user, with one link,
   that neither its group nor others may write. Its directories must be the
-  same, and none of them may be a symbolic link.
+  same, and none of them may be a symbolic link. A directory at a file's path
+  (as `mkdir -p` of the file's own path leaves) is not an override of it.
 - If an override replaces a file the release ships but breaks these rules, render
   fails and names the file. Using the release's file instead could silently
   drop what the override changes, a basic-auth gate for example. A
@@ -461,6 +462,9 @@ acknowledges it, a comment or a blank line at the end for example.
 gets a writable copy, here `infra/docker/data/valhalla/config/valhalla.json`.
 Render seeds the copy from the release's file or your override, and seeds it
 again only when that seed changes. In between, Valhalla's own rewrite stays.
+A missing copy is seeded before the configuration is applied; if that fails,
+render fails with the reason, since Docker would otherwise create a directory
+in its place and Valhalla could not start.
 Override `services/valhalla/config/valhalla.json` to change what it starts
 from; editing the copy lasts only until the next seed.
 
@@ -472,8 +476,18 @@ nothing in the checkout is changed. The render lists what it imported. A
 checkout service file you edit afterwards is reported as unused; move it into
 `infra/docker/overrides` to keep it.
 
+The import runs only from a checkout at or behind the selected release's
+source revision. A checkout ahead of it can hold newer upstream files, which
+also match no released version. Until then the import waits: render imports
+and records nothing, says why on every render, in `check` and in Run
+diagnostics, lists the checkout files it does not use, and uses the release's.
+The host CLI asks git; the operations agent goes by the checkout's
+`services/service-file-history.json`, which each commit keeps current. A
+checkout without that file predates it and is taken to be behind.
+
 Under `OPENMAPX_RELEASE=local`, for development, the checkout's files are the
-release's. Overrides still apply, and nothing is imported.
+release's, for the host CLI and the operations agent alike. Overrides still
+apply, and nothing is imported.
 
 ## Exposure: what's reachable from outside
 
