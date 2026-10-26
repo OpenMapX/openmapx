@@ -153,6 +153,8 @@ The binding01.2 `persistAndApplyProspectiveConfiguration` signature remains unch
 
 ## Task 5: Configuration migration inventory, preview and apply (I05)
 
+Allocation correction:01.2 owns the existing ordinary-only batch import adapter per the [approved ruling](../specs/2026-10-26-admin-ordinary-integration-import-design.md). It remains in this plan's owning `configuration-migration` module with the existing nominal migration participant. This task reuses that path and installs a SEPARATE staged migration constructor for pending-auth drafts/selected-binding CAS; a legacy intent never supplies that authorization. All other Task5 scope and migration0049 remain here.
+
 **Files:** Create `apps/api/src/services/configuration-migration/inventory.ts`, `preview.ts`, `apply.ts`, `migration.test.ts`, `migration-postgres.test.ts`, `apps/api/src/routes/admin-configuration-migration.ts`, `packages/core/src/api/contracts/integration-admin/configuration-migration.ts`, `apps/web/src/components/admin/settings/ConfigurationMigrationPanel.tsx`, `ConfigurationMigrationPanel.test.tsx`; modify `apps/api/src/routes/admin-settings.ts`, `apps/web/src/components/admin/settings/SystemSettings.tsx`, `apps/api/src/services/integration-config-import.ts`, `docs/docs/administration/integrations-administration.md` via controller's shared-file queue.
 
 **Interfaces:**

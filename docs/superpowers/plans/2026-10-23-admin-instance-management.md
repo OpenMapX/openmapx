@@ -15,6 +15,10 @@ and its binding supplement `docs/superpowers/specs/2026-10-23-admin-control-prot
 
 All Global Constraints and Product and security decisions in the specification are binding. User authorization includes autonomous decisions and execution through one PR with green CI; no additional approval or planning pause is required. Delegated work uses only Codex6.1-Sol or ClaudeOpus, preferablyCodex; Astra is prohibited by the latest user instruction. Local rendered verification, no screenshots attached to PR.
 
+## Approved Task01.2 existing ordinary-import allocation
+
+The [approved ordinary-import ruling](../specs/2026-10-26-admin-ordinary-integration-import-design.md), independently READY at R1, moves only the existing nonsecret integration-config batch import adapter from04.5 into01.2. It retains the closed migration participant/purpose, whole-candidate preflight and one writer transaction; future auth/binding/vault/feed workflows stay with their assigned tasks. No new task or migration; exact current-route and runtime acceptance remain required.
+
 ## Approved Task01.2 fixed-reference settlement correction
 
 Task01.2 consumes the [approved settlement design](../specs/2026-10-26-admin-fence-settlement-reference-design.md) and [implementation steps](2026-10-26-admin-fence-settlement-reference.md), independently READY at R5. Whole root-fixed settle bodies reference preallocated authenticated final proof; the logical-only control is distinct from ordinary forward execution. All revisions apply, including truthful nonterminal rollback, authenticated original reservation, cross-role refusal/UNUSED proof and bounded two-cell representation. No new task/migration/root/general late-body/raised global capacity. Existing50-task order and actual product/runtime/CI acceptance remain unchanged.
