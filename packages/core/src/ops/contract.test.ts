@@ -37,6 +37,10 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     kind: "configuration.hardlinks.inspect",
     revisionId: `cfg1_${"a".repeat(43)}`,
   },
+  "configuration.failure.inspect": {
+    kind: "configuration.failure.inspect",
+    attemptedRevisionId: `cfg1_${"a".repeat(43)}`,
+  },
   "stack.render": {
     expectedCurrentRevisionId: null,
     kind: "stack.render",

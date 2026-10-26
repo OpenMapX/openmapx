@@ -137,7 +137,8 @@ const historySchema = z.strictObject({
   files: z.record(z.string(), z.array(z.string().regex(/^[a-f0-9]{64}$/))),
 });
 
-function parseHistory(raw: string): Map<string, Set<string>> {
+/** `services/service-file-history.json`: every version of each file, by `<serviceId>/<path>`. */
+export function parseServiceFileHistory(raw: string): Map<string, Set<string>> {
   const parsed = historySchema.parse(JSON.parse(raw));
   return new Map(Object.entries(parsed.files).map(([key, hashes]) => [key, new Set(hashes)]));
 }
@@ -168,7 +169,7 @@ export function readEmbeddedReleaseServiceFiles(): ReleaseServiceFiles | null {
   return {
     origin: "release",
     files,
-    history: parseHistory(readFileSync(fileURLToPath(embedded.history), "utf8")),
+    history: parseServiceFileHistory(readFileSync(fileURLToPath(embedded.history), "utf8")),
     manifests,
     missing: [],
   };

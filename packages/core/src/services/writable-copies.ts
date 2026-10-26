@@ -16,8 +16,8 @@ import {
 } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import z from "zod/v4";
-import { atomicWrite, fsyncDirectory } from "../release-files";
-import { agentStatePaths } from "./agent-state";
+import { fsyncDirectory } from "../release-files";
+import { agentStatePaths, writeAgentStateFile } from "./agent-state";
 import { ServiceFileError } from "./release-service-files";
 import type { WritableCopySeed } from "./service-file-store";
 
@@ -240,7 +240,11 @@ function seedCopies(
     }
   }
   if (JSON.stringify(next) !== JSON.stringify(recorded)) {
-    atomicWrite(recordPath(infraDir), `${JSON.stringify({ version: 1, seeds: next })}\n`);
+    writeAgentStateFile(
+      infraDir,
+      "writable-copies.json",
+      `${JSON.stringify({ version: 1, seeds: next })}\n`,
+    );
   }
   return problems;
 }

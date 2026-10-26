@@ -36,6 +36,7 @@
       "backup.list",
       "backup.restore",
       "communityServices.inspect",
+      "configuration.failure.inspect",
       "configuration.hardlinks.inspect",
       "configuration.inspect",
       "data.clean",
@@ -194,6 +195,14 @@
       "callSiteIds": [],
       "semanticSources": ["apps/api/src/services/admin-ops.ts#applyGenerationHardlinks"],
       "typedKinds": ["configuration.hardlinks.inspect"]
+    },
+    {
+      "id": "api.configuration-failure",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/trusted-config-operations.ts#readConfigurationFailure"
+      ],
+      "typedKinds": ["configuration.failure.inspect"]
     },
     {
       "id": "api.compose-runtime",

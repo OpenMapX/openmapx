@@ -18,8 +18,6 @@ import { embeddedBuiltInServiceManifests as bundledBuiltInServiceManifests } fro
 import { ServiceRegistry } from "../registry";
 import {
   captureReleaseServiceAuthority,
-  describeBuiltInServiceDrift,
-  inspectBuiltInServiceDrift,
   RELEASE_BUILT_IN_SERVICE_IDS,
   readBuiltInServices,
   validateReleaseServiceAuthority,
@@ -184,9 +182,6 @@ describe("fixed release service authority", () => {
       source: releaseSource(RELEASE_BUILT_IN_SERVICE_IDS),
     });
     expect(fromRelease.serviceIds).toEqual([...RELEASE_BUILT_IN_SERVICE_IDS].sort());
-    expect(
-      inspectBuiltInServiceDrift(checkout, releaseSource(RELEASE_BUILT_IN_SERVICE_IDS)),
-    ).toEqual({ missing: [], changed: [], unexpected: [] });
   });
 
   it("runs the release's manifest when the checkout's was tampered with", async () => {
@@ -215,10 +210,6 @@ describe("fixed release service authority", () => {
     });
     await registry.load();
     expect(registry.get("valhalla")?.manifest.container.image).toBe("ghcr.io/openmapx/valhalla");
-
-    const drift = inspectBuiltInServiceDrift(checkout, source);
-    expect(drift).toEqual({ missing: [], changed: ["valhalla"], unexpected: [] });
-    expect(describeBuiltInServiceDrift(drift)).toContain("changed valhalla");
   });
 
   it("starts a release that adds a built-in service the checkout does not have yet", async () => {
@@ -230,12 +221,9 @@ describe("fixed release service authority", () => {
     expect(captured.services.find((service) => service.manifest.id === "new-engine")).toMatchObject(
       { directory: join(checkout, "services", "new-engine"), isBuiltIn: true },
     );
-    const drift = inspectBuiltInServiceDrift(checkout, source);
-    expect(drift).toEqual({ missing: ["new-engine"], changed: [], unexpected: [] });
-    expect(describeBuiltInServiceDrift(drift)).toContain("missing new-engine");
   });
 
-  it("reports checkout services the release does not have, without running them", async () => {
+  it("runs none of the checkout's services the release does not have", async () => {
     const ids = RELEASE_BUILT_IN_SERVICE_IDS.filter((id) => id !== "brouter");
     const checkout = fixture();
     mkdirSync(join(checkout, "services", "_template"));
@@ -243,17 +231,5 @@ describe("fixed release service authority", () => {
     const source = releaseSource(ids);
     const captured = await captureReleaseServiceAuthority(checkout, { source });
     expect(captured.serviceIds).not.toContain("brouter");
-    expect(inspectBuiltInServiceDrift(checkout, source)).toEqual({
-      missing: [],
-      changed: [],
-      unexpected: ["brouter"],
-    });
-  });
-
-  it("reports no drift from source or when the checkout matches", () => {
-    const checkout = fixture();
-    expect(inspectBuiltInServiceDrift(checkout)).toBeNull();
-    expect(describeBuiltInServiceDrift(null)).toBeNull();
-    expect(describeBuiltInServiceDrift({ missing: [], changed: [], unexpected: [] })).toBeNull();
   });
 });

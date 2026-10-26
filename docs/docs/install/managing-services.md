@@ -401,6 +401,102 @@ forwarded by `services/data-manager/service.json`; placing an arbitrary variable
 in `.env` does not pass it to that container.
 :::
 
+## Changing a service's files {/* #service-file-overrides */}
+
+Services mount configuration files and scripts that the release ships: Martin's
+`martin.yaml`, OTP's `build-config.json`, Traefik's `traefik.yml` and
+middlewares, PostGIS's entrypoint, and others. They come from the release the
+stack runs, not from the checkout. Render copies them into
+`infra/docker/state/ops-agent/service-files/<service>/<hash>/` with each
+configuration generation, and the containers mount those copies read-only. Editing a
+file under `services/` in the checkout changes nothing.
+
+To change one, put the whole file in an override, at the same path below
+`infra/docker/overrides/services/<service>/`:
+
+```bash
+(umask 022
+  mkdir -p infra/docker/overrides/services/martin/config
+  cp services/martin/config/martin.yaml infra/docker/overrides/services/martin/config/)
+"$EDITOR" infra/docker/overrides/services/martin/config/martin.yaml
+pnpm openmapx compose render
+pnpm openmapx services update martin
+```
+
+The `umask 022` matters on Debian and Ubuntu, whose default umask of `002`
+makes new files and directories group-writable, and render refuses those. To
+fix existing ones: `chmod -R g-w,o-w infra/docker/overrides`.
+
+Render uses the override in place of the release's file. Because the copy's
+directory is named after what it holds, `services update` (or **Recreate** in
+the admin panel) gives the service its new file. Delete the override to go
+back to the release's file.
+
+- An override is a whole file, owned by the deployment's user, with one link,
+  that neither its group nor others may write. Its directories must be the
+  same, and none of them may be a symbolic link. A directory at a file's path
+  (as `mkdir -p` of the file's own path leaves) is not an override of it.
+- If an override replaces a file the release ships but breaks these rules, render
+  fails and names the file. Using the release's file instead could silently
+  drop what the override changes, a basic-auth gate for example. A
+  configuration saved in the admin panel then fails with the same reason, and
+  is not applied.
+- An override of a path the release doesn't ship is reported and ignored.
+  The one exception is Traefik's dynamic directory. A YAML or TOML file there,
+  such as `traefik/config/dynamic/auth.yml`, is added to Traefik's
+  configuration. `generated-routes.yml` is render's own.
+- Render's output, the operations agent's log, `pnpm openmapx check` and
+  **Run diagnostics** list the overrides in use, by name only.
+
+**When a release changes a file you override.** The agent's state records, for
+each override, the release file it replaced. When a later release changes that
+file, render, `check` and Run diagnostics say so, and the override keeps
+replacing it. Compare your override with the new release file, carry over what
+you need, and save the override again. **Editing the override is how you
+acknowledge the release's change**: render then records the current release
+file as reviewed. If the override needs no change, any change to its bytes
+acknowledges it, a comment or a blank line at the end for example.
+
+**Files a container rewrites.** Valhalla's `configure_valhalla.sh` rewrites
+`valhalla.json` on every start. Such a file (`writableCopy` in its manifest)
+gets a writable copy, here `infra/docker/data/valhalla/config/valhalla.json`.
+Render seeds the copy from the release's file or your override, and seeds it
+again only when that seed changes. In between, Valhalla's own rewrite stays.
+A missing copy is seeded before the configuration is applied; if that fails,
+render fails with the reason, since Docker would otherwise create a directory
+in its place and Valhalla could not start.
+Override `services/valhalla/config/valhalla.json` to change what it starts
+from; editing the copy lasts only until the next seed.
+
+**Upgrading from a release before this.** The first render with the release's
+files imports, once, every service file in the checkout that differs from
+every version a release shipped, as an override. This includes an `auth.yml`
+and a changed `traefik.yml`. Files a container writes are never imported, and
+nothing in the checkout is changed. The render lists what it imported. A
+checkout service file you edit afterwards is reported as unused; move it into
+`infra/docker/overrides` to keep it.
+
+The import runs only from a checkout at or behind the selected release's
+source revision. A checkout ahead of it can hold newer upstream files, which
+also match no released version. Until then the import waits: render imports
+and records nothing, says why on every render, in `check` and in Run
+diagnostics, lists the checkout files it does not use, and uses the release's.
+Traefik is the exception: while the import waits, render refuses if the
+checkout holds a Traefik file the import would carry over, an `auth.yml` or
+another dynamic YAML or TOML file the release doesn't ship, or a changed
+`traefik.yml`. Using the release's files instead could drop a basic-auth gate.
+The refusal names the files. Put each in
+`infra/docker/overrides/services/traefik/` at the same path, under `umask 022`
+(`auth.yml` with mode 0600), and render goes on: an override ends the wait for
+that file.
+The host CLI asks git; the operations agent goes by the checkout's
+`services/service-file-history.json`, which each commit keeps current. A
+checkout without that file predates it and is taken to be behind.
+
+Under `OPENMAPX_RELEASE=local`, for development, the checkout's files are the
+release's, for the host CLI and the operations agent alike. Overrides still
+apply, and nothing is imported.
+
 ## Exposure: what's reachable from outside
 
 By default every service is reachable **only** on the private `openmapx` Docker

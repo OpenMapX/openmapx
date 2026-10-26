@@ -41,6 +41,7 @@ import {
   ConfigurationWriterBusyError,
 } from "./configuration-ownership";
 import { validateTrustedConfigurationValues } from "./configuration-schema";
+import type { ContainerBindMounts } from "./container-mounts";
 import {
   CONFIGURATION_GENERATIONS,
   CURRENT_CONFIGURATION,
@@ -58,6 +59,8 @@ import {
   ServiceFileError,
 } from "./release-service-files";
 import { buildAppApiServiceEnv, expandServiceSelection } from "./selection";
+import { type CheckoutPosition, importCheckoutServiceFiles } from "./service-file-import";
+import { describeServiceFiles } from "./service-file-report";
 import {
   appliedServiceFilePath,
   collectServiceFileTrees,
@@ -70,6 +73,7 @@ import {
   serviceFileTreePath,
   writeServiceFileTrees,
 } from "./service-file-store";
+import { overrideOverlay, readServiceOverrides, staleOverrides } from "./service-overrides";
 import {
   TRAEFIK_STATIC_GENERATION_FILE,
   writeLegacyTraefikRoutes,
@@ -123,11 +127,17 @@ export interface CommitConfigurationOptions {
    */
   releaseServiceFiles?: ReleaseServiceFiles;
   /**
-   * The source of every bind mount of every container, running or stopped;
-   * a service-file tree one of them mounts is kept. Omitted (Docker can't
-   * tell), no tree is removed.
+   * Where the checkout stands against the release, for the one-time import
+   * of its edits: the host CLI asks git. Omitted, the checkout's own service
+   * file history says (the agent, which has no git).
    */
-  containerBindSources?: readonly string[];
+  checkoutPosition?: CheckoutPosition;
+  /**
+   * The bind mounts of every container, running or stopped: a service-file
+   * tree one of them mounts is kept, and those still on the checkout's files
+   * are reported. Omitted (Docker can't tell), no tree is removed.
+   */
+  containerBindMounts?: readonly ContainerBindMounts[];
 }
 
 export interface CommittedConfiguration {
@@ -137,6 +147,11 @@ export interface CommittedConfiguration {
   warnings: string[];
   /** Files beside the generation that were not written, and why; for every render's output. */
   stackFileProblems: string[];
+  /**
+   * The service files: the one-time import, the overrides in use, flagged and
+   * ignored, unused checkout edits, containers still on the checkout's files.
+   */
+  serviceFileReport: string[];
 }
 
 /** Evidence about THIS attempt, never inferred from a transport exception. */
@@ -940,14 +955,12 @@ export type RenderConfigurationOptions = Pick<
   | "input"
   | "allowMissingSelected"
   | "releaseServiceFiles"
-> & {
-  /** Replacement bytes for release files, by `<serviceId>/<path>` (the operator's overrides). */
-  serviceFileOverlay?: Parameters<typeof resolveServiceFiles>[2];
-};
+>;
 
 /**
  * What a generation would hold, without writing it: the compose preview and
- * every apply render through here.
+ * every apply render through here. The release's service files, with the
+ * operator's overrides in their place.
  */
 export function renderConfiguration(options: RenderConfigurationOptions) {
   const { infraDir, input } = options;
@@ -957,11 +970,9 @@ export function renderConfiguration(options: RenderConfigurationOptions) {
     input,
     options.allowMissingSelected ?? false,
   );
-  const serviceFiles = resolveServiceFiles(
-    options.services,
-    options.releaseServiceFiles ?? releaseServiceFiles(options.services),
-    options.serviceFileOverlay,
-  );
+  const release = options.releaseServiceFiles ?? releaseServiceFiles(options.services);
+  const overrides = readServiceOverrides(infraDir, release);
+  const serviceFiles = resolveServiceFiles(options.services, release, overrideOverlay(overrides));
   const context: RenderContext = {
     domain: input.domain,
     composeOutDir: join(infraDir, CURRENT_CONFIGURATION),
@@ -984,6 +995,7 @@ export function renderConfiguration(options: RenderConfigurationOptions) {
     context,
     rendered: renderCompose(resolved.enabled, context),
     serviceFiles,
+    overrides,
   };
 }
 
@@ -1017,7 +1029,19 @@ async function commitOwnedConfigurationGeneration(
   // Its bind mount is optional, left out when the directory is missing, so
   // it is there before the generation is rendered.
   ensureTraefikDynamicDirectory(infraDir);
-  const { resolved, context, rendered, serviceFiles } = renderConfiguration(options);
+  // The first generation with the release's files takes the operator's
+  // checkout edits along as overrides, before it renders.
+  const release = options.releaseServiceFiles ?? releaseServiceFiles(options.services);
+  const imported = importCheckoutServiceFiles({
+    infraDir,
+    services: options.services,
+    release,
+    ...(options.checkoutPosition ? { position: options.checkoutPosition } : {}),
+  });
+  const { resolved, context, rendered, serviceFiles, overrides } = renderConfiguration({
+    ...options,
+    releaseServiceFiles: release,
+  });
   const generations = join(infraDir, CONFIGURATION_GENERATIONS);
   await initializeOwnedConfigurationGenerations(infraDir);
   const nonce = randomUUID().replaceAll("-", "");
@@ -1142,6 +1166,7 @@ async function commitOwnedConfigurationGeneration(
         enabledServiceIds: resolved.enabledIdsOrdered,
         warnings: rendered.warnings ?? [],
         stackFileProblems: [],
+        serviceFileReport: [],
       };
       await syncDirectory(dirname(join(infraDir, CURRENT_CONFIGURATION)));
     } else {
@@ -1150,8 +1175,21 @@ async function commitOwnedConfigurationGeneration(
         enabledServiceIds: resolved.enabledIdsOrdered,
         warnings: rendered.warnings ?? [],
         stackFileProblems: [],
+        serviceFileReport: [],
       };
     }
+    committed.serviceFileReport.push(
+      ...describeServiceFiles({
+        infraDir,
+        services: options.services,
+        release,
+        overrides,
+        // This generation's overrides become the reviewed ones.
+        stale: staleOverrides(infraDir, overrides, { record: true }),
+        imported,
+        ...(options.containerBindMounts ? { mounts: options.containerBindMounts } : {}),
+      }),
+    );
     committed.stackFileProblems.push(
       ...writeStackFiles(
         infraDir,
@@ -1166,7 +1204,7 @@ async function commitOwnedConfigurationGeneration(
       collectServiceFileTrees(
         infraDir,
         recordedServiceFileTrees(infraDir),
-        options.containerBindSources,
+        options.containerBindMounts?.flatMap((mount) => mount.sources),
       );
     } catch (error) {
       // They take little space; the next render tries again.

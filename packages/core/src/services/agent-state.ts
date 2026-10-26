@@ -1,5 +1,13 @@
 import { chmodSync, lstatSync, mkdirSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { atomicWrite } from "../release-files";
+
+/** Replaces one of the agent's state files atomically, creating its directory (0700) first. */
+export function writeAgentStateFile(infraDir: string, name: string, contents: string): void {
+  const directory = join(infraDir, "state", "ops-agent");
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  atomicWrite(join(directory, name), contents);
+}
 
 /**
  * Where the operations agent keeps its own state: the job journal, the

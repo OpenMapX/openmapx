@@ -22,6 +22,7 @@ export const OPS_OPERATION_KINDS = [
   "stack.render",
   "configuration.inspect",
   "configuration.hardlinks.inspect",
+  "configuration.failure.inspect",
   "stack.start",
   "stack.stop",
   "service.start",
@@ -144,6 +145,7 @@ export const OPS_KIND_POLICIES = {
   "stack.status": sync("api", 15_000, 256 * 1024),
   "configuration.inspect": sync("api", 15_000),
   "configuration.hardlinks.inspect": sync("api", 15_000, 1024 * 1024),
+  "configuration.failure.inspect": sync("api", 15_000),
   "stack.render": asyncEffect("api", 120_000),
   "stack.start": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "stack.stop": asyncEffect("api", 5 * 60_000),
@@ -340,6 +342,13 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("configuration.hardlinks.inspect"),
     revisionId: configurationGenerationRevisionSchema,
+  }),
+  // Why a configuration apply was not committed, when the operator can act
+  // on it (an override render may not use), as one line for the admin panel.
+  // A separate operation, so the apply result itself stays as before.
+  z.strictObject({
+    kind: z.literal("configuration.failure.inspect"),
+    attemptedRevisionId: configurationGenerationRevisionSchema,
   }),
   kindOnly("stack.start"),
   kindOnly("stack.stop"),
@@ -960,6 +969,10 @@ export const OPS_RESULT_SCHEMAS = {
         }),
       )
       .max(256),
+  }),
+  "configuration.failure.inspect": z.strictObject({
+    attemptedRevisionId: configurationGenerationRevisionSchema,
+    problem: z.string().min(1).max(4_096).nullable(),
   }),
   "configuration.inspect": z.strictObject({
     revisionId: configurationGenerationRevisionSchema.nullable(),

@@ -66,12 +66,15 @@ export async function initializeTrustedConfigurationRuntime(infraDir: string): P
   }
 }
 
+const MAX_RECORDED_FAILURES = 32;
+
 async function commitGeneration(
   options: TrustedConfigurationRuntimeOptions,
   operation: TrustedConfigurationOperation,
   payload: TrustedConfigurationPayload,
   claim: OpsTrustedClaim,
   signal: AbortSignal,
+  failures: Map<string, string>,
 ): Promise<ConfigurationApplyResult> {
   try {
     return await coreServices.withConfigurationGenerationWriter(
@@ -138,7 +141,7 @@ async function commitGeneration(
         const legacyTraefik = await options.legacyTraefikDynamicMounted?.();
         const mounts = await options.containerBindMounts?.();
         const committed = await writer.commit({
-          containerBindSources: coreServices.bindSources(mounts),
+          ...(mounts ? { containerBindMounts: mounts } : {}),
           services,
           integrationSchemas: authority?.integrationSchemas ?? options.integrationSchemas,
           input: { ...payload, selectedRoots },
@@ -151,6 +154,7 @@ async function commitGeneration(
           legacyTraefikDynamicMounted: legacyTraefik,
         });
         for (const problem of committed.stackFileProblems) process.stderr.write(`${problem}\n`);
+        for (const line of committed.serviceFileReport) process.stderr.write(`${line}\n`);
         if (legacyTraefik === true) {
           process.stderr.write(`${coreServices.LEGACY_TRAEFIK_MOUNT_NOTICE}\n`);
         }
@@ -165,9 +169,26 @@ async function commitGeneration(
       signal,
     );
   } catch (error) {
+    const problem = operatorProblem(error);
+    if (problem) {
+      // The agent's log, and the admin panel through configuration.failure.inspect.
+      process.stderr.write(`${problem}\n`);
+      failures.set(operation.revisionId, problem);
+      while (failures.size > MAX_RECORDED_FAILURES) {
+        failures.delete(failures.keys().next().value as string);
+      }
+    }
     if (error instanceof coreServices.ConfigurationGenerationError) return error.result;
     return { outcome: "not_committed", reason: "failed", cleanupFailed: false };
   }
+}
+
+/** The message of a failure the operator can fix (a service file or override), or null. */
+function operatorProblem(error: unknown): string | null {
+  for (let cause = error; cause instanceof Error; cause = cause.cause) {
+    if (cause instanceof coreServices.ServiceFileError) return cause.message;
+  }
+  return null;
 }
 
 function trustedPayload(
@@ -191,6 +212,12 @@ export function installTrustedConfigurationRuntime(
   runtime: OpsRuntime,
   options: TrustedConfigurationRuntimeOptions,
 ): void {
+  // Why recent applies were not committed, when the operator can act on it.
+  const failures = new Map<string, string>();
+  runtime["configuration.failure.inspect"] = async (operation) => ({
+    attemptedRevisionId: operation.attemptedRevisionId,
+    problem: failures.get(operation.attemptedRevisionId)?.slice(0, 4_096) ?? null,
+  });
   runtime["configuration.inspect"] = (_operation, context) =>
     coreServices.withConfigurationGenerationWriter(
       options.infraDir,
@@ -204,6 +231,7 @@ export function installTrustedConfigurationRuntime(
       trustedPayload(operation, context),
       context.claim,
       context.signal,
+      failures,
     );
   // The plan lives in the applied generation, which only this service can
   // read. Data-manager applies it: its mounts confine links and prunes to the
@@ -239,12 +267,13 @@ export function installTrustedConfigurationRuntime(
       trustedPayload(operation, context),
       context.claim,
       context.signal,
+      failures,
     );
   runtime["serviceConfig.apply"] = async (operation, context) => {
     const payload = trustedPayload(operation, context);
     if (!payload.serviceConfigs.some((entry) => entry.serviceId === operation.serviceId))
       throw new Error(FAILED);
-    return commitGeneration(options, operation, payload, context.claim, context.signal);
+    return commitGeneration(options, operation, payload, context.claim, context.signal, failures);
   };
   runtime["integrationConfig.apply"] = async (operation, context) => {
     const payload = trustedPayload(operation, context);
@@ -253,13 +282,13 @@ export function installTrustedConfigurationRuntime(
     ) {
       throw new Error(FAILED);
     }
-    return commitGeneration(options, operation, payload, context.claim, context.signal);
+    return commitGeneration(options, operation, payload, context.claim, context.signal, failures);
   };
   runtime["vault.apply"] = async (operation, context) => {
     const payload = trustedPayload(operation, context);
     if (!payload.serviceSecrets.some((entry) => entry.serviceId === operation.serviceId))
       throw new Error(FAILED);
-    return commitGeneration(options, operation, payload, context.claim, context.signal);
+    return commitGeneration(options, operation, payload, context.claim, context.signal, failures);
   };
   runtime["serviceSelection.inspect"] = async () => {
     try {

@@ -276,6 +276,7 @@ import type {
   SetAdminServiceSelection400,
   SetAdminServiceSelection401,
   SetAdminServiceSelection403,
+  SetAdminServiceSelection409,
   SetAdminServiceSelection413,
   SetAdminServiceSelection415,
   SetAdminServiceSelection429,
@@ -318,6 +319,7 @@ import type {
   UpdateAdminServiceConfig401,
   UpdateAdminServiceConfig403,
   UpdateAdminServiceConfig404,
+  UpdateAdminServiceConfig409,
   UpdateAdminServiceConfig413,
   UpdateAdminServiceConfig415,
   UpdateAdminServiceConfig429,
@@ -2081,6 +2083,11 @@ export type setAdminServiceSelectionResponse403 = {
   status: 403;
 };
 
+export type setAdminServiceSelectionResponse409 = {
+  data: SetAdminServiceSelection409;
+  status: 409;
+};
+
 export type setAdminServiceSelectionResponse413 = {
   data: SetAdminServiceSelection413;
   status: 413;
@@ -2113,6 +2120,7 @@ export type setAdminServiceSelectionResponseError = (
   | setAdminServiceSelectionResponse400
   | setAdminServiceSelectionResponse401
   | setAdminServiceSelectionResponse403
+  | setAdminServiceSelectionResponse409
   | setAdminServiceSelectionResponse413
   | setAdminServiceSelectionResponse415
   | setAdminServiceSelectionResponse429
@@ -2464,6 +2472,11 @@ export type updateAdminServiceConfigResponse404 = {
   status: 404;
 };
 
+export type updateAdminServiceConfigResponse409 = {
+  data: UpdateAdminServiceConfig409;
+  status: 409;
+};
+
 export type updateAdminServiceConfigResponse413 = {
   data: UpdateAdminServiceConfig413;
   status: 413;
@@ -2492,6 +2505,7 @@ export type updateAdminServiceConfigResponseError = (
   | updateAdminServiceConfigResponse401
   | updateAdminServiceConfigResponse403
   | updateAdminServiceConfigResponse404
+  | updateAdminServiceConfigResponse409
   | updateAdminServiceConfigResponse413
   | updateAdminServiceConfigResponse415
   | updateAdminServiceConfigResponse429

@@ -164,12 +164,20 @@ only when it reaches the same service correctly. HTTP/3 also needs UDP 443.
 If certificates fail, inspect DNS, firewall rules, port conflicts, and proxy
 logs before retrying. Repeated ACME attempts can hit upstream limits.
 
-A default deployment exposes routed pages publicly. For staging basic auth,
-copy `services/traefik/config/dynamic/auth.yml.example` to `auth.yml`, replace
-its example hash, and append `basic-auth@file` to the existing middleware list
-in `services/traefik/config/traefik.yml`. Render the stack, then recreate
-Traefik after changing static configuration; copying the middleware file alone
-does not activate it.
+A default deployment exposes routed pages publicly. For staging basic auth, add
+two [overrides](../install/managing-services.md#service-file-overrides) in
+`infra/docker/overrides/services/traefik/config/`:
+
+- `dynamic/auth.yml`: a copy of `services/traefik/config/dynamic/auth.yml.example`
+  with your own hash, mode 0600;
+- `traefik.yml`: a copy of `services/traefik/config/traefik.yml` with
+  `basic-auth@file` appended to the existing middleware list.
+
+Create them, and their directories, under `umask 022`: render refuses overrides
+that group or others may write.
+
+Render the stack, then recreate Traefik, which reads `traefik.yml` only when it
+starts; the middleware file alone does not activate it.
 
 ### Where Traefik reads its configuration
 
@@ -177,20 +185,18 @@ Traefik watches its dynamic directory and reloads a file as soon as it
 changes, so that directory is a stable one in the operations agent's state,
 `infra/docker/state/ops-agent/traefik/dynamic`. Rendering writes
 `generated-routes.yml` there from validated service exposure declarations,
-beside copies of the YAML and TOML files of `services/traefik/config/dynamic`,
-each replaced atomically. The static `traefik.yml`, which Traefik reads when it
-starts, is copied into each configuration generation. Edit both in
-`services/traefik/config` and render; do not edit the copies or the generated
-routes.
+beside the release's YAML and TOML files of `services/traefik/config/dynamic`
+(`middlewares.yml`) and your overrides of that directory (`auth.yml`), each
+replaced atomically. The static `traefik.yml`, which Traefik reads when it
+starts, is copied into each configuration generation, from the release or your
+override. Change either through
+[overrides](../install/managing-services.md#service-file-overrides); do not
+edit the copies or the generated routes. A file removed from your overrides is
+removed from Traefik's directory by the next render.
 
-Render copies only regular files of the deployment's user with one link, from
-directories of that user, and never through a symbolic link. It names any other
-file in its output and in `pnpm openmapx check`, without its contents, and
-keeps the copy an earlier render made of it; a file you delete is removed from
-Traefik's directory by the next render. The directory
-is owner-only (0700, files 0600, `auth.yml`'s password hashes included). The
-Traefik image runs as root, which reads it through the capabilities Docker
-grants by default.
+The directory is owner-only (0700, files 0600, `auth.yml`'s password hashes
+included). The Traefik image runs as root, which reads it through the
+capabilities Docker grants by default.
 
 A Traefik started before this layout reads `services/traefik/config/dynamic`
 until it is recreated. Render keeps writing the routes there while any

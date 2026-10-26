@@ -99,19 +99,22 @@ pnpm install --frozen-lockfile
 ```
 
 The ops-agent runs the built-in service and integration manifests of its own
-release, not the checkout's, and checks no file permissions in it. The checkout
-must still be writable only by the operator's account: services mount
-configuration files from it, `services build` uses its build contexts, and
-`infra/docker/.env` and the release overlay live in it. A private group per user, the Debian and
+release, and the files those services mount, not the checkout's, and checks no
+file permissions in it. The checkout must still be writable only by the
+operator's account: `services build` uses its build contexts, and
+`infra/docker/.env` and the agent's state live in it. A private group per user, the Debian and
 Ubuntu default, meets this even with their umask of `002`. Where the account's
 group has other members, clone and pull with umask `022`.
 
-For the same reason, keep the checkout at the selected release. The ops-agent's
-startup log
-(`pnpm openmapx services logs ops-agent`) and **Run diagnostics** under
-Maintenance in the admin panel say when the checkout's built-in services differ
-from the release's. The host `pnpm openmapx check` cannot: it runs the
-checkout's own code and manifests.
+Keep the checkout at the selected release. The host CLI runs the checkout's
+own code and manifests, so a host render reads the selected release's service
+files from its operations-agent image and refuses while the checkout's built-in
+services differ from that release's. It names the differing files and says
+what to do: wait until the release of the checkout's commit is published and
+run `pnpm openmapx compose release` again, or check out the release's source
+revision. A changed service file belongs in an
+[override](./managing-services.md#service-file-overrides), which the refusal
+ignores. `pnpm openmapx check` reports the same.
 
 Releases before the operations agent kept the Transitous pin in its own state
 wrote an approved pin into the tracked `infra/docker/transitous.lock.json`. If
@@ -474,7 +477,8 @@ Without the password, rendering fails with `MARTIN_DB_PASSWORD must be set`.
 
 Traefik now reads its routes and middlewares from
 `infra/docker/state/ops-agent/traefik/dynamic`, and its `traefik.yml` from the
-configuration generation, both written by render from `services/traefik/config`.
+configuration generation, both written by render from the release's files and
+your overrides.
 A Traefik started by an earlier release keeps reading
 `services/traefik/config/dynamic` until it is recreated, and render keeps
 writing the routes there too while any container still mounts it, so routing
@@ -491,6 +495,54 @@ or **Recreate** on **Admin → Services → Traefik**. OpenMapX does not recreat
 it for you. Once no container mounts the checkout's directory, render stops
 writing there and leaves the last `generated-routes.yml` in place for a
 rollback. See [where Traefik reads its configuration](../guides/supporting-infrastructure.md#where-traefik-reads-its-configuration).
+
+## Service files come from the release
+
+Services mount the configuration files and scripts of the release the stack
+runs, copied into `infra/docker/state/ops-agent/service-files`, no longer the
+checkout's `services/`. Changes of your own go in
+[overrides](./managing-services.md#service-file-overrides) in
+`infra/docker/overrides/services`.
+
+- **Your edits are carried over.** The first render of this release imports,
+  once, every checkout service file that differs from every version a release
+  shipped, as an override, and lists them. This includes Traefik's `auth.yml`
+  and a `traefik.yml` naming `basic-auth@file`, so a basic-auth gate stays.
+  Files a container writes (Valhalla's `valhalla.json`) are never imported. A
+  checkout an earlier release left, after panel updates, imports nothing.
+- **Only from a checkout at or behind the release.** A checkout ahead of the
+  selected release's source revision can hold newer upstream files, which
+  match no version the release shipped either. There the import waits: render
+  imports and records nothing, says why each time, and uses the release's
+  files meanwhile, so an edit of yours is not applied until the import runs.
+  Traefik files are the exception: a checkout `auth.yml` (or another dynamic
+  file the release doesn't ship) or a changed `traefik.yml` makes render
+  refuse, by name, until you put it in
+  `infra/docker/overrides/services/traefik/`, so a basic-auth gate can't drop.
+  A host render asks git and refuses meanwhile. The operations agent, which
+  has no git, goes by the checkout's `services/service-file-history.json`. To
+  apply an edit sooner, put it in an override yourself.
+- **Valhalla** gets its writable copy in
+  `infra/docker/data/valhalla/config/valhalla.json`, seeded from the release's
+  file. Its own rewrite of the checkout's copy is left behind, unused. If the
+  copy is missing and can't be written, render fails and says why, rather than
+  let Docker create a directory in its place.
+- **Containers recreate when their mounts move.** Until a service is recreated,
+  its container keeps mounting the checkout's files, which still hold the same
+  bytes. Render, `check` and Run diagnostics list such containers. The
+  documented host update, `services update` with a list of services, recreates
+  only the services listed. The first stack-wide `pnpm openmapx compose up`
+  recreates every service whose mounts moved, PostGIS and Traefik included:
+  run it when a restart of the database and the proxy suits you. A panel update
+  recreates only the application services, which mount no service files.
+- **A host render refuses while the checkout differs from the selected
+  release** (see above). On a host that follows `main`, the newest commit's
+  release may not be published yet: wait for it and run `compose release`
+  again.
+
+A rollback to the release before this one mounts the checkout's files again,
+which nothing here changed. Edits you made only in `overrides/` meanwhile do
+not apply there.
 
 ## Reclaiming disk after an upgrade
 

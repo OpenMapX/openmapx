@@ -395,12 +395,21 @@ for persistent state instead.
 ]
 ```
 
-| Field      | Type    | Notes                                                                                                                                                                                                                                                          |
-| :--------- | :------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `source`   | string  | **Required.** See the first-party source kinds below. Community services cannot declare this field because all community bind mounts are rejected.                                                                                                             |
-| `target`   | string  | **Required.** Absolute container path; first-party services may use a Compose-variable reference. No `..`.                                                                                                                                                     |
-| `readOnly` | boolean | Defaults to `true`.                                                                                                                                                                                                                                            |
-| `optional` | boolean | First-party only. When `true`, the mount is silently dropped at render time if the host source is absent. Used for operator-supplied secrets declared once but materialized only when the file is dropped in place. Not allowed with Compose-variable sources. |
+| Field          | Type    | Notes                                                                                                                                                                                                                                                                                                                                                                                      |
+| :------------- | :------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `source`       | string  | **Required.** See the first-party source kinds below. Community services cannot declare this field because all community bind mounts are rejected.                                                                                                                                                                                                                                         |
+| `target`       | string  | **Required.** Absolute container path; first-party services may use a Compose-variable reference. No `..`.                                                                                                                                                                                                                                                                                 |
+| `readOnly`     | boolean | Defaults to `true`.                                                                                                                                                                                                                                                                                                                                                                        |
+| `optional`     | boolean | First-party only. When `true`, the mount is silently dropped at render time if the host source is absent. Used for operator-supplied secrets declared once but materialized only when the file is dropped in place. Not allowed with Compose-variable sources.                                                                                                                             |
+| `writableCopy` | string  | First-party only, on a writable (`readOnly: false`), non-optional mount of the service's own file that the container rewrites. An `@infra:data/<path>` where render keeps a writable copy, seeded from the release's file or the operator's override and seeded again only when that seed changes. The container mounts the copy. The one-time overrides import never imports such a file. |
+
+A relative or `@service:` source names a file the release ships. The
+ops-agent's bundle embeds it (`pnpm generate:service-files` lists every one,
+with the history of its versions, and CI checks both). Render writes it, or the
+operator's override, into the generation's content-addressed service-file tree
+in `infra/docker/state/ops-agent/service-files`, which the container mounts
+read-only (files 0444, scripts 0555, directories 0755). After adding or
+changing such a file, run `pnpm generate:service-files` and commit the result.
 
 The `source` may be one of the forms below. These are validator capabilities,
 not permission for an application service to take host authority. Repository
