@@ -219,7 +219,7 @@
     "@types/react-dom": "^19.3.0",
     "esbuild": "^0.28.2",
     "postgres": "^3.4.9",
-    "react-dom": "19.3.0",
+    "react-dom": "19.3.1",
     "typescript": "^6.0.3",
     "vitest": "^5.0.3"
   },
@@ -251,7 +251,7 @@
     "js-yaml": "^5.4.2",
     "opening_hours": "^3.15.0",
     "parse5": "8.0.1",
-    "react": "19.3.0",
+    "react": "19.3.1",
     "tz-lookup": "^6.1.25",
     "undici": "8.12.3",
     "zod": "^4.6.7",
