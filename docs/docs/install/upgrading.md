@@ -158,9 +158,11 @@ Run it as the checkout's owner. Releases before this one ran the stack's own
 containers as uid 1000 unless `.env` said otherwise, and `app-api` always as
 uid 1000. Now they all run as the deployment's user, `UID:GID` in `.env`, and
 generated configuration has no fallback. Where `.env` sets neither, the first
-render writes them from the checkout's owner, as does the operations agent when
-a panel self-update starts it; explicit values are kept. A render refuses to
-run as another uid, or to take the user from a checkout root owns.
+render on the host writes them from the checkout's owner; explicit values are
+kept. The operations agent only reads them: until they are set, it reports
+this when it starts, and the admin panel's renders and configuration changes
+refuse, naming this render. A render refuses to run as another uid, or to take
+the user from a checkout root owns.
 
 Where the checkout's owner is uid 1000, nothing changes: the containers keep
 their user, and `app-api` keeps using the volumes it wrote. Elsewhere:
@@ -543,6 +545,63 @@ checkout's `services/`. Changes of your own go in
 A rollback to the release before this one mounts the checkout's files again,
 which nothing here changed. Edits you made only in `overrides/` meanwhile do
 not apply there.
+
+## The operations agent stops mounting the checkout
+
+The operations agent's container no longer mounts the whole checkout. It
+mounts `infra/docker` read-only (for `.env` and your overrides) and
+`infra/docker/state`, `data`, `secrets` and `backups` read-write, all at
+their host paths. Everything else it uses comes from its image and its state.
+
+**The switch is the usual host update**, nothing more:
+
+```bash
+pnpm openmapx compose release
+pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner
+```
+
+Its render moves the agent to the new mounts only once the host has
+everything an agent without the checkout needs. Otherwise it keeps the whole
+checkout for the agent, and says "The operations agent keeps the whole
+checkout mounted", listing each thing that is missing with its fix:
+
+- `.env` sets `UID` and `GID` (the render writes them from the checkout's owner);
+- the one-time import of your service file edits has run
+  (`infra/docker/state/ops-agent/overrides-import.json`), which needs a
+  selected release;
+- the agent's stores and the Transitous API keys have been copied out of the
+  checkout;
+- this release's agent has started once with no handoff helper running,
+  which retires the earlier releases' writer lock
+  (`legacy-configuration-writer-retired.json`);
+- an earlier release's release state in `infra/docker` has been carried over;
+- a configuration generation is applied;
+- no container, running or stopped, mounts anything from the checkout's
+  `services/`, Traefik's dynamic directory included. Recreate each one listed
+  with `pnpm openmapx services update <service>`.
+
+Fix what it lists and run the update again. `services update`, `services
+start` and `compose up` also check this before they recreate the agent: when
+something has gone missing since the render, they recreate nothing and say
+what. Nothing is ever half switched. A new installation switches at its
+second host update, once its agent has started.
+
+**A panel update** to this release keeps the whole checkout: the agent's own
+renders, and the admin panel's changes, keep whichever mounts the agent runs
+with. The next host update switches it.
+
+**To roll back**, select the release before this one and update on the host,
+or apply it from the admin panel:
+
+```bash
+pnpm openmapx compose release <earlier release>
+pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner
+```
+
+That release works with either mounts, and its renders give the agent the
+whole checkout again. After a panel apply the agent keeps the new mounts
+until it is next recreated, for example with `pnpm openmapx services update
+ops-agent`.
 
 ## Reclaiming disk after an upgrade
 

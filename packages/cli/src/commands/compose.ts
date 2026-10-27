@@ -3,6 +3,12 @@ import { join } from "node:path";
 import { initializeErasureJournal } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
 import { type Command, Option } from "commander";
+import { runsInAgent } from "../lib/agent-integrations";
+import {
+  describeAgentLayoutBlockers,
+  narrowAgentLayoutBlockers,
+  refuseAgentSwitchOrExit,
+} from "../lib/agent-layout";
 import { checkoutPositionFromGit } from "../lib/checkout-position";
 import { containerBindMounts, legacyTraefikDynamicMounted } from "../lib/container-mounts";
 import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
@@ -206,15 +212,20 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   coreServices.assertDeploymentEnvironmentFile(join(paths.infraDir, ".env"));
   assertCliDeploymentSecrets();
   return withConfigurationGenerationWriter(paths.infraDir, async (writer) => {
-    // The deployment's user, which the generation's containers run as, from
-    // .env or, where it has none, from the checkout's owner. This render, the
-    // host's or the operations agent's, must run as that user.
-    const deploymentUser = coreServices.ensureDeploymentUser(paths.infraDir);
-    coreServices.assertRunningAsDeploymentUser(deploymentUser);
-    if (deploymentUser.derived.length > 0) {
-      log.info(
-        `Set the deployment's user in infra/docker/.env from the checkout's owner: UID=${deploymentUser.uid} GID=${deploymentUser.gid}`,
-      );
+    // The deployment's user, which the generation's containers run as. A host
+    // render takes it from .env or, where it has none, from the checkout's
+    // owner, and writes it there. The operations agent's fixed CLI only reads
+    // .env, and refuses one without it. Either must run as that user.
+    if (runsInAgent()) {
+      coreServices.assertRunningAsDeploymentUser(coreServices.readDeploymentUser(paths.infraDir));
+    } else {
+      const deploymentUser = coreServices.ensureDeploymentUser(paths.infraDir);
+      coreServices.assertRunningAsDeploymentUser(deploymentUser);
+      if (deploymentUser.derived.length > 0) {
+        log.info(
+          `Set the deployment's user in infra/docker/.env from the checkout's owner: UID=${deploymentUser.uid} GID=${deploymentUser.gid}`,
+        );
+      }
     }
     // Moves the agent's mounted state out of data-manager's data directory the
     // first time a generation mounts it from its new place.
@@ -385,7 +396,19 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
         );
       }
     }
+    // Only a render on the host moves the operations agent to its narrow
+    // mounts, once nothing it needs is missing; asked after the one-time
+    // import. The agent's own renders keep the layout it runs with.
+    const agentMountLayout = runsInAgent()
+      ? undefined
+      : (): coreServices.AgentMountLayout => {
+          const blockers = narrowAgentLayoutBlockers({ rootDir: paths.root, mounts });
+          if (blockers.length === 0) return "narrow";
+          log.warn(describeAgentLayoutBlockers(blockers));
+          return "checkout";
+        };
     const committed = await writer.commit({
+      ...(agentMountLayout ? { agentMountLayout } : {}),
       legacyTraefikDynamicMounted: legacyTraefik,
       ...(mounts ? { containerBindMounts: mounts } : {}),
       ...(selected && selected !== "none" ? { releaseServiceFiles: selected.files } : {}),
@@ -520,6 +543,7 @@ export function registerComposeCommands(program: Command): void {
       } else if (overlay.status === "disabled") {
         log.dim("Release pinning disabled (OPENMAPX_RELEASE=local); using manifest image tags.");
       }
+      await refuseAgentSwitchOrExit("all");
       const code = await dockerComposeStream(["up", "-d"]);
       process.exit(code);
     });

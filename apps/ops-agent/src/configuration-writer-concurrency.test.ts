@@ -22,6 +22,12 @@ function fixture() {
   const root = mkdtempSync(join(tmpdir(), "openmapx-writers-"));
   roots.push(root);
   mkdirSync(join(root, "infra/docker"), { recursive: true });
+  // The deployment's user, which only a host render writes into .env.
+  writeFileSync(
+    join(root, "infra/docker/.env"),
+    `UID=${process.geteuid?.() ?? 0}\nGID=${process.getegid?.() ?? 0}\n`,
+    { mode: 0o600 },
+  );
   mkdirSync(join(root, "services/alpha"), { recursive: true });
   writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
   writeFileSync(

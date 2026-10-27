@@ -24,6 +24,7 @@ import {
   createDockerDawarichCollector,
   createDockerDawarichRuntimeInspector,
 } from "./dawarich-subject-export";
+import { describeDeploymentUserAtStart } from "./deployment-user-at-start";
 import { createDockerRuntime, runContainedProcess } from "./docker-runtime";
 import { IntegrationStore, installIntegrationRuntime } from "./integration-store";
 import { openOpsJobJournal } from "./journal";
@@ -182,22 +183,10 @@ async function main(): Promise<void> {
       builtInIds: builtInIntegrationIds,
     });
     await integrationStore.recover();
-    // Releases before this one fell back to uid 1000. After a panel
-    // self-update this agent starts from a generation an earlier release
-    // rendered, before anything rendered with its code; the generations it
-    // writes require UID and GID, so .env gets them now, from the checkout's
-    // owner where it has none. Problems are reported, not fatal: every render
-    // and commit checks again and refuses.
-    try {
-      const deploymentUser = services.ensureDeploymentUser(paths.infraDir);
-      if (deploymentUser.derived.length > 0) {
-        process.stderr.write(
-          `Set the deployment's user in infra/docker/.env from the checkout's owner: UID=${deploymentUser.uid} GID=${deploymentUser.gid}\n`,
-        );
-      }
-      services.assertRunningAsDeploymentUser(deploymentUser, "The operations agent");
-    } catch (error) {
-      process.stderr.write(`${(error as Error).message}\n`);
+    // The generations the agent writes require UID and GID in .env, which
+    // only a render on the host writes. Problems are reported, not fatal.
+    for (const line of describeDeploymentUserAtStart(paths.infraDir)) {
+      process.stderr.write(`${line}\n`);
     }
     // Releases before this one kept the applied configuration, the selection
     // and the release state in infra/docker itself. After a panel self-update

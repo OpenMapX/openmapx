@@ -1,4 +1,9 @@
 export {
+  type AgentMountLayout,
+  generationAgentMountLayout,
+  runningAgentMountLayout,
+} from "./agent-mounts";
+export {
   type AgentStatePaths,
   agentStatePaths,
   legacyAgentStatePaths,
@@ -152,7 +157,10 @@ export {
   assertRunningAsDeploymentUser,
   checkoutOwner,
   type DeploymentUser,
+  DeploymentUserError,
   ensureDeploymentUser,
+  missingDeploymentUserProblem,
+  readDeploymentUser,
   readDeploymentUserAssignments,
 } from "./deployment-user";
 export {
@@ -280,6 +288,7 @@ export {
 export {
   type LegacyReleaseStateMigration,
   type LegacyReleaseStateMigrationOptions,
+  legacyReleaseStatePending,
   migrateLegacyReleaseState,
   releaseSelectionHold,
   supersedeLegacyReleaseOverlay,

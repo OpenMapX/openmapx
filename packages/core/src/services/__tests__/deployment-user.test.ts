@@ -2,6 +2,7 @@ import {
   chmodSync,
   closeSync,
   constants,
+  existsSync,
   fstatSync,
   mkdirSync,
   mkdtempSync,
@@ -9,6 +10,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -45,8 +47,13 @@ vi.mock("node:fs", async (importOriginal) => {
   };
 });
 
-const { assertRunningAsDeploymentUser, ensureDeploymentUser, readDeploymentUserAssignments } =
-  await import("../deployment-user");
+const {
+  assertRunningAsDeploymentUser,
+  DeploymentUserError,
+  ensureDeploymentUser,
+  readDeploymentUser,
+  readDeploymentUserAssignments,
+} = await import("../deployment-user");
 const { stackComposeArgs } = await import("../deployment");
 
 const roots: string[] = [];
@@ -105,6 +112,51 @@ describe("the deployment's user", () => {
     chmodSync(env, 0o664);
     expect(() => ensureDeploymentUser(infraDir)).toThrow(/no group or other write/);
     expect(readFileSync(env, "utf8")).toBe("DOMAIN=x\n");
+  });
+
+  it("is only read on the agent's path: .env keeps its bytes, inode and mtime", () => {
+    const { infraDir, env, uid, gid } = checkout();
+    // Read through one descriptor rather than a second lookup by path.
+    const state = () => {
+      const descriptor = openSync(env, constants.O_RDONLY | constants.O_NOFOLLOW);
+      try {
+        const stats = fstatSync(descriptor, { bigint: true });
+        return {
+          bytes: readFileSync(descriptor, "utf8"),
+          ino: stats.ino,
+          mtimeNs: stats.mtimeNs,
+        };
+      } finally {
+        closeSync(descriptor);
+      }
+    };
+    const written = (contents: string) => {
+      writeFileSync(env, contents, { mode: 0o600 });
+      utimesSync(env, new Date("2026-01-01T00:00:00Z"), new Date("2026-01-01T00:00:00Z"));
+      return state();
+    };
+    let before = written(`DOMAIN=x\nUID=${uid}\nGID=${gid}\n`);
+    expect(readDeploymentUser(infraDir)).toEqual({ uid, gid });
+    expect(state()).toEqual(before);
+    for (const [contents, missing] of [
+      ["DOMAIN=x\n# UID=1000\n", "UID or GID"],
+      [`UID=${uid}\n`, "GID"],
+      [`GID=${gid}\n`, "UID"],
+    ] as const) {
+      before = written(contents);
+      expect(() => readDeploymentUser(infraDir)).toThrow(DeploymentUserError);
+      expect(() => readDeploymentUser(infraDir)).toThrow(
+        `infra/docker/.env sets no ${missing}, and the operations agent does not write .env: run \`pnpm openmapx compose render\` on the host`,
+      );
+      expect(state()).toEqual(before);
+    }
+    // An .env that is not the operator's own is refused before it is read.
+    written(`UID=${uid}\nGID=${gid}\n`);
+    chmodSync(env, 0o664);
+    expect(() => readDeploymentUser(infraDir)).toThrow(/no group or other write/);
+    rmSync(env);
+    expect(() => readDeploymentUser(infraDir)).toThrow(/sets no UID or GID/);
+    expect(existsSync(env)).toBe(false);
   });
 
   it("is the only user a render may run as", () => {

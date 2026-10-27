@@ -68,9 +68,14 @@ async function umask002Checkout(): Promise<string> {
   roots.push(parent);
   const checkout = join(parent, "checkout");
   await runUnderUmask002("git", ["clone", "-q", ROOT, checkout]);
+  // The deployment's user, which a host render writes from the checkout's
+  // owner; the bundled CLI is the agent's and only reads it.
+  const owner = statSync(checkout);
   writeFileSync(
     join(checkout, "infra", "docker", ".env"),
     [
+      `UID=${owner.uid}`,
+      `GID=${owner.gid}`,
       `POSTGRES_PASSWORD=${secret()}`,
       `BETTER_AUTH_SECRET=${secret()}`,
       `DATA_MANAGER_AUTH_TOKEN=${secret()}`,

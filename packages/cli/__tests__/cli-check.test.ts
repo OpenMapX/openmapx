@@ -4,6 +4,7 @@ import {
   lchownSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -295,6 +296,31 @@ describe("deploymentUserProblems", () => {
       ).toEqual([expect.stringContaining(`uid ${owner.uid}, gid ${owner.gid}`)]);
     } finally {
       rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("in the operations agent points a missing UID/GID to the host render, which writes them", () => {
+    for (const [env, missing] of [
+      ["DOMAIN=x\n", "UID or GID"],
+      ["DOMAIN=x\nUID=4321\n", "GID"],
+    ] as const) {
+      const { root, infraDir, owner } = deployment(env);
+      try {
+        const problems = deploymentUserProblems({
+          infraDir,
+          processUid: owner.uid,
+          composeServices: null,
+          runningUsers: new Map(),
+          inAgent: true,
+        });
+        expect(problems).toEqual([
+          `infra/docker/.env sets no ${missing}, and the operations agent does not write .env: run \`pnpm openmapx compose render\` on the host, as the checkout's owner, which writes UID and GID from that owner.`,
+        ]);
+        expect(problems.join("")).not.toContain("the next render writes");
+        expect(readFileSync(join(infraDir, ".env"), "utf8")).toBe(env);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
     }
   });
 

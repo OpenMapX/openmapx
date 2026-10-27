@@ -3,6 +3,7 @@ import { join, relative } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
 import { execa } from "execa";
+import { runsInAgent } from "../lib/agent-integrations";
 import { legacyTraefikDynamicMounted } from "../lib/container-mounts";
 import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
 import { dockerCompose, dockerRun } from "../lib/docker";
@@ -329,6 +330,8 @@ export function deploymentUserProblems(input: {
   filesystem?: OwnershipFilesystem;
   /** The entries visited under writable mounts in total; see OWNERSHIP_ENTRY_LIMIT. */
   entryLimit?: number;
+  /** Whether this is the operations agent's fixed CLI, which never writes .env. */
+  inAgent?: boolean;
 }): string[] {
   const problems: string[] = [];
   let assigned: { uid?: number; gid?: number };
@@ -337,6 +340,9 @@ export function deploymentUserProblems(input: {
   } catch (error) {
     return [(error as Error).message];
   }
+  // Only a render on the host writes a missing UID or GID.
+  const missing = coreServices.missingDeploymentUserProblem(assigned);
+  if (missing && (input.inAgent ?? runsInAgent())) return [missing];
   // An operations agent without the checkout has no owner to compare: what
   // holds the checkout's place there is a directory Docker made.
   const owner = coreServices.checkoutMountedAt(input.infraDir)
