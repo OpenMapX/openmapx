@@ -43,6 +43,8 @@ function fixture() {
   roots.push(root);
   const infraDir = join(root, "infra/docker");
   mkdirSync(infraDir, { recursive: true });
+  // The whole checkout is mounted, as this release's manifest has it.
+  mkdirSync(join(root, "services"));
   const selection = coreServices.serviceSelectionPath(infraDir);
   mkdirSync(dirname(selection), { recursive: true, mode: 0o700 });
   writeFileSync(selection, '{"selected":["alpha"]}', { mode: 0o600 });

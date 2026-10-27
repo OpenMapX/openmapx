@@ -242,9 +242,45 @@ describe("deploymentUserProblems", () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-check-user-"));
     const infraDir = join(root, "infra", "docker");
     mkdirSync(infraDir, { recursive: true });
+    mkdirSync(join(root, "services"));
     if (env !== null) writeFileSync(join(infraDir, ".env"), env, { mode: 0o600 });
     return { root, infraDir, owner: statSync(root) };
   }
+
+  it("without the checkout compares no owner, and points a missing UID/GID to the host render", () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-check-user-"));
+    const infraDir = join(root, "infra", "docker");
+    mkdirSync(infraDir, { recursive: true });
+    try {
+      const owner = statSync(root);
+      writeFileSync(join(infraDir, ".env"), "DOMAIN=x\n", { mode: 0o600 });
+      expect(
+        deploymentUserProblems({
+          infraDir,
+          processUid: owner.uid,
+          composeServices: null,
+          runningUsers: new Map(),
+        }),
+      ).toEqual([
+        "infra/docker/.env sets no UID: run `pnpm openmapx compose render` on the host, as the checkout's owner, which writes UID and GID from that owner.",
+      ]);
+      // A UID other than the owner of the directory Docker made in the
+      // checkout's place is no problem.
+      writeFileSync(join(infraDir, ".env"), `UID=${owner.uid + 1}\nGID=${owner.gid}\n`, {
+        mode: 0o600,
+      });
+      expect(
+        deploymentUserProblems({
+          infraDir,
+          processUid: owner.uid + 1,
+          composeServices: null,
+          runningUsers: new Map(),
+        }),
+      ).toEqual([]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 
   it("says the next render writes a missing UID/GID from the checkout's owner", () => {
     const { root, infraDir, owner } = deployment("DOMAIN=x\n");

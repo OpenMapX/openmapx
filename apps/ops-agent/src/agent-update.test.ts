@@ -75,8 +75,13 @@ function fixture(options: { agent: "old" | "current"; helperStarts?: boolean }) 
       if (format?.startsWith("{{range .Config.Env}}{{println")) return "OPENMAPX_ROOT_DIR\n";
       if (format === "{{json .Mounts}}")
         return JSON.stringify([
-          { Source: "/var/run/docker.sock", Destination: "/var/run/docker.sock" },
-          { Source: rootDir, Destination: rootDir },
+          {
+            Type: "bind",
+            Source: "/var/run/docker.sock",
+            Destination: "/var/run/docker.sock",
+            RW: true,
+          },
+          { Type: "bind", Source: rootDir, Destination: rootDir, RW: true },
         ]);
     }
     if (args[0] === "image" && joined.includes("{{.Id}}")) {

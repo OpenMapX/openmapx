@@ -15,6 +15,7 @@ import {
 import { join, resolve } from "node:path";
 import { fsyncDirectory } from "../release-files";
 import { ensureTraefikDynamicDirectory } from "./agent-state";
+import { checkoutMountedAt } from "./checkout-layout";
 
 /**
  * Traefik's configuration outside the checkout. Traefik watches its dynamic
@@ -131,9 +132,15 @@ export function writeTraefikDynamicDirectory(
 /**
  * Writes the routes where an earlier release kept them, for a Traefik not yet
  * recreated, and returns what to report when that fails; the render goes on.
- * A directory that isn't there is mounted by no one and is not created.
+ * A directory that isn't there is mounted by no one and is not created,
+ * unless the operations agent runs without the checkout while a Traefik is
+ * known to mount it (`mounted`): then the routes can't reach that Traefik.
  */
-export function writeLegacyTraefikRoutes(infraDir: string, routes: string): string | null {
+export function writeLegacyTraefikRoutes(
+  infraDir: string,
+  routes: string,
+  mounted?: boolean,
+): string | null {
   const directory = legacyTraefikDynamicDirectory(infraDir);
   const failed = (reason: string) =>
     `The routes could not be written to services/traefik/config/dynamic, where a Traefik started by an earlier release still reads them: ${reason}. That Traefik keeps the routes of an earlier render. Recreate Traefik so it reads infra/docker/state/ops-agent/traefik/dynamic: pnpm openmapx services update traefik, or Recreate on Admin → Services → Traefik.`;
@@ -144,7 +151,11 @@ export function writeLegacyTraefikRoutes(infraDir: string, routes: string): stri
   } catch (error) {
     return failed(code(error));
   }
-  if (!stats) return null;
+  if (!stats) {
+    return mounted === true && !checkoutMountedAt(infraDir)
+      ? failed("this operations agent runs without the checkout")
+      : null;
+  }
   if (!stats.isDirectory()) return failed("it is not a directory");
   let temporary: string | undefined;
   try {

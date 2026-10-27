@@ -19,6 +19,7 @@ import { dirname, join, resolve } from "node:path";
 import z from "zod/v4";
 import { fsyncDirectory } from "../release-files";
 import { agentStatePaths, writeAgentStateFile } from "./agent-state";
+import { checkoutMounted } from "./checkout-layout";
 import {
   ownedDirectoryProblem,
   parseServiceFileHistory,
@@ -65,6 +66,10 @@ const markerSchema = z.strictObject({
   importedAt: z.string(),
   imported: z.array(z.string()),
 });
+/** Why the import waits in an operations agent that runs without the checkout. */
+const NO_CHECKOUT_TO_IMPORT_FROM =
+  "this operations agent runs without the checkout, so it has no edits to read";
+
 /** Each commit's list of every version of its service files; CI fails one that lacks a file's current bytes. */
 export const CHECKOUT_SERVICE_FILE_HISTORY = "services/service-file-history.json";
 
@@ -96,13 +101,18 @@ export type CheckoutPosition =
  * release doesn't. A file the release no longer names is left out (it is not
  * imported), unless it is one of Traefik's dynamic files, which would be. A
  * checkout without the list predates the release that introduced it, which
- * is this one or earlier, so it is behind.
+ * is this one or earlier, so it is behind. An agent without the checkout
+ * mounted has nothing to compare, which is not "at or behind": the import
+ * waits for a render on the host.
  */
 export function checkoutPositionFromHistory(
   rootDir: string,
   release: ReleaseServiceFiles,
   uid: number = process.geteuid?.() ?? 0,
 ): CheckoutPosition {
+  if (!checkoutMounted(rootDir)) {
+    return { atOrBehindRelease: false, reason: NO_CHECKOUT_TO_IMPORT_FROM };
+  }
   const read = readOwnedRegularFile(join(rootDir, CHECKOUT_SERVICE_FILE_HISTORY), uid);
   if ("reason" in read) {
     return read.reason === "it is missing"
@@ -367,6 +377,9 @@ export function describeDeferredServiceFileImport(
   reason: string,
   pending: readonly string[],
 ): string {
+  if (reason === NO_CHECKOUT_TO_IMPORT_FROM) {
+    return `The one-time import of your edits in the checkout's service files has not run, and ${reason}: run \`pnpm openmapx compose render\` on the host, as the checkout's owner, which imports them and records that it did. Nothing is recorded until then. Meanwhile render uses the release's files and your overrides in infra/docker/overrides/services.`;
+  }
   const meanwhile =
     pending.length > 0
       ? ` Meanwhile render uses the release's files, not these checkout files, which match no version it shipped: ${pending.map((key) => `services/${key}`).join(", ")}. To keep an edit among them now, put the whole file in infra/docker/overrides/services/<id>/<path>.`

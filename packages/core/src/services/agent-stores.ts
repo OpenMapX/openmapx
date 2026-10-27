@@ -17,6 +17,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { atomicWrite } from "../release-files";
 import { agentStatePaths } from "./agent-state";
+import { CheckoutRequiredError, checkoutMountedAt } from "./checkout-layout";
 import {
   type CommunityRepositoryRecord,
   communityRecordFileName,
@@ -31,6 +32,10 @@ import {
   readIntegrationRecords,
   safeRelativePath,
 } from "./integration-records";
+
+/** Why an agent without the checkout refuses to prepare stores never copied from it. */
+export const AGENT_STORES_NOT_COPIED =
+  "The operations agent's community and integration stores were never copied from the checkout (infra/docker/state/ops-agent/stores-migration.json is missing), and this agent runs without the checkout: run `pnpm openmapx compose render` on the host, as the checkout's owner, which copies them.";
 
 /**
  * The operations agent's two stores, the community service repositories and
@@ -334,7 +339,9 @@ function ensureStoreDirectory(path: string, uid: number): void {
  * copies what the checkout held, verified against the agent's records, and
  * returns what it copied, refused and found without a record; later calls
  * return `null`. Run under the configuration writer lock. The agent runs it
- * after it has undone unfinished changes in the old locations.
+ * after it has undone unfinished changes in the old locations. An agent
+ * without the checkout can't make that first copy, and refuses rather than
+ * record that there was nothing to copy.
  */
 export function prepareAgentStores(
   infraDir: string,
@@ -348,6 +355,7 @@ export function prepareAgentStores(
     ensureStoreDirectory(paths.customIntegrations, uid);
     return null;
   }
+  if (!checkoutMountedAt(infraDir)) throw new CheckoutRequiredError(AGENT_STORES_NOT_COPIED);
   const legacy = legacyAgentStorePaths(infraDir);
   const staging = join(paths.directory, `.stores-copy-${randomBytes(6).toString("hex")}`);
   mkdirSync(join(staging, "community"), { recursive: true, mode: 0o700 });
