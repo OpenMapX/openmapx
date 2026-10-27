@@ -172,6 +172,8 @@ it("reports the service files: overrides, the import to come, a host render's re
     { name: "docker-martin-1", sources: [join(directory, "config", "martin.yaml")] },
   ]);
   const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  // log.info: stdout, which Run diagnostics shows as information.
+  const infos = vi.spyOn(console, "log").mockImplementation(() => {});
   const check = async () => {
     const program = new Command();
     registerCheckCommand(program);
@@ -205,20 +207,24 @@ it("reports the service files: overrides, the import to come, a host render's re
     writeFileSync(join(override, "martin.yaml"), "users: ['op:$2y$05$secret-hash']\n");
     chmodSync(join(override, "martin.yaml"), 0o644);
     errors.mockClear();
+    infos.mockClear();
 
     await check();
-    expect(lines()).toContainEqual(expect.stringContaining("The next render imports, once"));
+    // How things are, with nothing to do: information, on stdout, without ⚠.
+    const information = infos.mock.calls.flat().map(String);
+    expect(information).toContainEqual(expect.stringMatching(/^The next render imports, once/));
+    expect(information).toContainEqual(
+      "Service file overrides in use, in place of the release's files (infra/docker/overrides/services): martin/config/martin.yaml.",
+    );
+    expect(lines().join("\n")).not.toContain("The next render imports, once");
+    expect(lines().join("\n")).not.toContain("Service file overrides in use");
+    // Something to look at: a warning.
     expect(lines()).toContainEqual(
       expect.stringContaining(
-        "Service file overrides in use, in place of the release's files (infra/docker/overrides/services): martin/config/martin.yaml.",
+        "⚠ 1 container still mounts service files from the checkout: docker-martin-1.",
       ),
     );
-    expect(lines()).toContainEqual(
-      expect.stringContaining(
-        "1 container still mounts service files from the checkout: docker-martin-1.",
-      ),
-    );
-    expect(lines().join("\n")).not.toContain("secret-hash");
+    expect([...lines(), ...information].join("\n")).not.toContain("secret-hash");
 
     // Once the import ran: what a host render would refuse.
     services.importCheckoutServiceFiles({

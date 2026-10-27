@@ -37,7 +37,7 @@ import {
   probePrivacyBackupRuntime,
 } from "./privacy-backup-runtime";
 import { buildOpsAgentServer } from "./server";
-import { describeServiceFilesAtStart } from "./service-files-at-start";
+import { agentLogLine, describeServiceFilesAtStart } from "./service-files-at-start";
 import {
   afterValidatedServiceAuthority,
   resolveBootstrapEnabledServiceIds,
@@ -70,7 +70,7 @@ async function main(): Promise<void> {
   // The release's manifests and service files apply, with the operator's
   // overrides; the checkout's no longer do. Reported, never fatal at start.
   for (const line of describeServiceFilesAtStart(join(config.rootDir, "infra", "docker"))) {
-    process.stderr.write(`${line}\n`);
+    process.stderr.write(`${agentLogLine(line)}\n`);
   }
   await afterValidatedServiceAuthority(config.rootDir, async (releaseAuthority) => {
     const [apiToken, dataManagerToken] = await Promise.all([

@@ -7,6 +7,7 @@ import {
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import type { OpsRuntime, OpsTrustedClaim } from "./runtime";
+import { agentLogLine } from "./service-files-at-start";
 
 const FAILED = "Trusted configuration apply failed";
 const PLAN_FAILED = "Configuration hardlink plan unavailable";
@@ -154,7 +155,9 @@ async function commitGeneration(
           legacyTraefikDynamicMounted: legacyTraefik,
         });
         for (const problem of committed.stackFileProblems) process.stderr.write(`${problem}\n`);
-        for (const line of committed.serviceFileReport) process.stderr.write(`${line}\n`);
+        for (const line of committed.serviceFileReport) {
+          process.stderr.write(`${agentLogLine(line)}\n`);
+        }
         if (legacyTraefik === true) {
           process.stderr.write(`${coreServices.LEGACY_TRAEFIK_MOUNT_NOTICE}\n`);
         }

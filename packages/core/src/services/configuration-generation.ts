@@ -61,7 +61,7 @@ import {
 } from "./release-service-files";
 import { buildAppApiServiceEnv, expandServiceSelection } from "./selection";
 import { type CheckoutPosition, importCheckoutServiceFiles } from "./service-file-import";
-import { describeServiceFiles } from "./service-file-report";
+import { describeServiceFiles, type ServiceFileReportLine } from "./service-file-report";
 import {
   appliedServiceFilePath,
   collectServiceFileTrees,
@@ -157,8 +157,9 @@ export interface CommittedConfiguration {
   /**
    * The service files: the one-time import, the overrides in use, flagged and
    * ignored, unused checkout edits, containers still on the checkout's files.
+   * Each line has its level: render and the agent log it as such.
    */
-  serviceFileReport: string[];
+  serviceFileReport: ServiceFileReportLine[];
 }
 
 /** Evidence about THIS attempt, never inferred from a transport exception. */

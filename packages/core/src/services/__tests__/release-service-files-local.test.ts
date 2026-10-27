@@ -92,9 +92,12 @@ it("imports nothing under OPENMAPX_RELEASE=local, and mounts the checkout's edit
 
   vi.unstubAllEnvs();
   const released = await commit();
-  expect(released.serviceFileReport[0]).toContain(
-    "Imported 1 checkout service file that differs from every version a release shipped as overrides",
-  );
+  expect(released.serviceFileReport[0]).toEqual({
+    level: "info",
+    message: expect.stringContaining(
+      "Imported 1 checkout service file that differs from every version a release shipped as overrides",
+    ),
+  });
   expect(mountedMartin()).toBe(edited);
   expect(
     readFileSync(

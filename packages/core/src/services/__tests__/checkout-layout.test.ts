@@ -92,7 +92,14 @@ describe("the checkout, as the operations agent tells", () => {
         overrides: readServiceOverrides(infraDir, release),
         stale: [],
       }),
-    ).toEqual([expect.stringContaining("runs without the checkout, so it doesn't compare")]);
+    ).toEqual([
+      // The healthy state after the switch: information, not a warning.
+      {
+        level: "info",
+        message:
+          "The one-time import of your edits in the checkout's service files has run (infra/docker/state/ops-agent/overrides-import.json). This operations agent runs without the checkout, so it doesn't compare the checkout's service files with the release's; `pnpm openmapx check` on the host does.",
+      },
+    ]);
   });
 
   it("without it, stores never copied from it are refused, not recorded as empty", () => {

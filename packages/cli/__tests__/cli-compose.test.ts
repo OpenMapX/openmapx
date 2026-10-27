@@ -739,7 +739,19 @@ describe("renderComposeForRepo", () => {
       // An operator's edit in a checkout behind the release: imported once as
       // an override, then used.
       writeFileSync(join(f.config, "martin.yaml"), "listen_addresses: 0.0.0.0:3001\n");
+      // log.info writes to stdout, log.warn to stderr with ⚠.
+      const infos = vi.spyOn(console, "log").mockImplementation(() => {});
+      const warnings = vi.spyOn(console, "error").mockImplementation(() => {});
       await f.render();
+      // What the import did and the override it made: information.
+      const said = infos.mock.calls.flat().map(String);
+      expect(said).toContainEqual(expect.stringMatching(/^Imported 1 checkout service file/));
+      expect(said).toContainEqual(
+        "Service file overrides in use, in place of the release's files (infra/docker/overrides/services): martin/config/martin.yaml.",
+      );
+      expect(warnings.mock.calls.flat().join("\n")).not.toMatch(/Imported|overrides in use/);
+      infos.mockRestore();
+      warnings.mockRestore();
       expect(
         readFileSync(join(f.overrides, "services", "martin", "config", "martin.yaml"), "utf8"),
       ).toBe("listen_addresses: 0.0.0.0:3001\n");
