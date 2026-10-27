@@ -1053,6 +1053,8 @@
     "bikesSupported": "Bicycles allowed",
     "bikesNotSupported": "Bicycles not allowed",
     "wheelchairSupported": "Wheelchair accessible",
+    "wheelchairUnconfirmed": "Wheelchair accessibility not confirmed",
+    "wheelchairUnconfirmedLegs": "Wheelchair accessibility not confirmed for {count, plural, one {1 leg} other {# legs}}",
     "wheelchairNotSupported": "Not wheelchair accessible",
     "returnAnyStation": "Return at a station",
     "returnSameStation": "Return to the pickup station",
