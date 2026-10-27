@@ -152,7 +152,10 @@ export {
   assertRunningAsDeploymentUser,
   checkoutOwner,
   type DeploymentUser,
+  DeploymentUserError,
   ensureDeploymentUser,
+  missingDeploymentUserProblem,
+  readDeploymentUser,
   readDeploymentUserAssignments,
 } from "./deployment-user";
 export {

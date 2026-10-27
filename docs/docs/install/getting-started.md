@@ -55,7 +55,9 @@ Do not reuse the database username as its password.
 `UID` and `GID` name the deployment's user: the stack's own containers
 (`app-api`, `ops-agent`, `data-manager`, the MOTIS and Transitous services)
 run as `UID:GID` and own the files they write. Leave them unset: the first
-render writes them into `infra/docker/.env` from the checkout's owner. Set them
+render writes them into `infra/docker/.env` from the checkout's owner. Only a
+render on the host writes them; the operations agent and the admin panel read
+them and never change `.env`. Set them
 only to run the stack as another account, and run renders as that account; a
 render refuses to run as any other uid, and refuses a checkout root owns. A
 root-only Docker credentials directory will not be readable by that user;

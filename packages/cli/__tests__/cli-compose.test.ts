@@ -17,6 +17,7 @@ import {
   rmSync,
   statSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -25,6 +26,7 @@ import { readErasureJournal } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderComposeForRepo, rotateRedisPasswordForRepo } from "../src/commands/compose";
+import { runsInAgent } from "../src/lib/agent-integrations";
 import { legacyTraefikDynamicMounted } from "../src/lib/container-mounts";
 import { loadInfraEnv } from "../src/lib/infra-env";
 import { rotatePlatformSecretFile } from "../src/lib/platform-secret-files";
@@ -39,6 +41,11 @@ vi.mock("../src/lib/container-mounts", () => ({
 // The selected release's files come from its image; by default none is selected.
 vi.mock("../src/lib/release-service-files", () => ({
   selectedReleaseServiceFiles: vi.fn(async () => "none"),
+}));
+// The host CLI by default; a test switches to the operations agent's fixed CLI.
+vi.mock("../src/lib/agent-integrations", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/lib/agent-integrations")>()),
+  runsInAgent: vi.fn(() => false),
 }));
 
 /** A file's permission bits, read through a descriptor rather than a second lookup by path. */
@@ -173,6 +180,56 @@ describe("renderComposeForRepo", () => {
       renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] }),
     ).rejects.toThrow(/but the deployment's user .* is/);
     expect(coreServices.currentConfigurationGeneration(join(tmp, "infra", "docker"))).toBe(before);
+  });
+
+  it("in the operations agent's fixed CLI only reads the deployment's user, and refuses without it", async () => {
+    writeManifest("alpha", { id: "alpha", ...baseManifest });
+    const infraDir = join(tmp, "infra", "docker");
+    const env = join(infraDir, ".env");
+    const owner = statSync(tmp);
+    // Read through one descriptor rather than a second lookup by path.
+    const state = () => {
+      const descriptor = openSync(env, constants.O_RDONLY | constants.O_NOFOLLOW);
+      try {
+        const stats = fstatSync(descriptor, { bigint: true });
+        return {
+          bytes: readFileSync(descriptor, "utf8"),
+          ino: stats.ino,
+          mtimeNs: stats.mtimeNs,
+        };
+      } finally {
+        closeSync(descriptor);
+      }
+    };
+    // An old mtime, so a write in the same instant would still show.
+    const written = (contents: string) => {
+      writeFileSync(env, contents, { mode: 0o600 });
+      utimesSync(env, new Date("2026-01-01T00:00:00Z"), new Date("2026-01-01T00:00:00Z"));
+      return state();
+    };
+    vi.mocked(runsInAgent).mockReturnValue(true);
+    try {
+      for (const [contents, missing] of [
+        ["DOMAIN=example.com\n", "UID or GID"],
+        [`DOMAIN=example.com\nUID=${owner.uid}\n`, "GID"],
+      ] as const) {
+        const before = written(contents);
+        await expect(
+          renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] }),
+        ).rejects.toThrow(
+          `infra/docker/.env sets no ${missing}, and the operations agent does not write .env: run \`pnpm openmapx compose render\` on the host, as the checkout's owner, which writes UID and GID from that owner.`,
+        );
+        expect(state()).toEqual(before);
+        expect(coreServices.currentConfigurationGeneration(infraDir)).toBeNull();
+      }
+
+      const present = written(`DOMAIN=example.com\nUID=${owner.uid}\nGID=${owner.gid}\n`);
+      await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] });
+      expect(coreServices.currentConfigurationGeneration(infraDir)).not.toBeNull();
+      expect(state()).toEqual(present);
+    } finally {
+      vi.mocked(runsInAgent).mockReturnValue(false);
+    }
   });
 
   it("writes docker-compose.generated.yml from explicitly selected manifests", async () => {

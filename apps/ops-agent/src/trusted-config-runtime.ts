@@ -126,9 +126,9 @@ async function commitGeneration(
           allowMissingSelected = desired.source === "default";
         }
         // The generation's containers run as the deployment's user, which
-        // .env names or the checkout's owner supplies, as for every render.
+        // .env names; the agent reads it and refuses one without it.
         coreServices.assertRunningAsDeploymentUser(
-          coreServices.ensureDeploymentUser(options.infraDir),
+          coreServices.readDeploymentUser(options.infraDir),
           "The operations agent",
         );
         // This generation mounts the agent's state from its own directory;
@@ -185,12 +185,14 @@ async function commitGeneration(
 
 /**
  * The message of a failure the operator can fix (a service file or override,
- * or a one-time step only a render on the host can do), or null.
+ * a one-time step only a render on the host can do, or .env without the
+ * deployment's user), or null.
  */
 function operatorProblem(error: unknown): string | null {
   for (let cause = error; cause instanceof Error; cause = cause.cause) {
     if (cause instanceof coreServices.ServiceFileError) return cause.message;
     if (cause instanceof coreServices.CheckoutRequiredError) return cause.message;
+    if (cause instanceof coreServices.DeploymentUserError) return cause.message;
   }
   return null;
 }

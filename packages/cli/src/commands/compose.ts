@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { initializeErasureJournal } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
 import { type Command, Option } from "commander";
+import { runsInAgent } from "../lib/agent-integrations";
 import { checkoutPositionFromGit } from "../lib/checkout-position";
 import { containerBindMounts, legacyTraefikDynamicMounted } from "../lib/container-mounts";
 import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
@@ -206,15 +207,20 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   coreServices.assertDeploymentEnvironmentFile(join(paths.infraDir, ".env"));
   assertCliDeploymentSecrets();
   return withConfigurationGenerationWriter(paths.infraDir, async (writer) => {
-    // The deployment's user, which the generation's containers run as, from
-    // .env or, where it has none, from the checkout's owner. This render, the
-    // host's or the operations agent's, must run as that user.
-    const deploymentUser = coreServices.ensureDeploymentUser(paths.infraDir);
-    coreServices.assertRunningAsDeploymentUser(deploymentUser);
-    if (deploymentUser.derived.length > 0) {
-      log.info(
-        `Set the deployment's user in infra/docker/.env from the checkout's owner: UID=${deploymentUser.uid} GID=${deploymentUser.gid}`,
-      );
+    // The deployment's user, which the generation's containers run as. A host
+    // render takes it from .env or, where it has none, from the checkout's
+    // owner, and writes it there. The operations agent's fixed CLI only reads
+    // .env, and refuses one without it. Either must run as that user.
+    if (runsInAgent()) {
+      coreServices.assertRunningAsDeploymentUser(coreServices.readDeploymentUser(paths.infraDir));
+    } else {
+      const deploymentUser = coreServices.ensureDeploymentUser(paths.infraDir);
+      coreServices.assertRunningAsDeploymentUser(deploymentUser);
+      if (deploymentUser.derived.length > 0) {
+        log.info(
+          `Set the deployment's user in infra/docker/.env from the checkout's owner: UID=${deploymentUser.uid} GID=${deploymentUser.gid}`,
+        );
+      }
     }
     // Moves the agent's mounted state out of data-manager's data directory the
     // first time a generation mounts it from its new place.

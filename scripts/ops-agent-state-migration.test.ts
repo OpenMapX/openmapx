@@ -71,9 +71,12 @@ describe("an existing host's agent state", () => {
     const checkout = join(parent, "checkout");
     await run("git", ["clone", "-q", ROOT, checkout]);
     const infra = join(checkout, "infra", "docker");
+    // The deployment's user, which a host render writes from the checkout's
+    // owner; the bundled CLI is the agent's and only reads it.
+    const owner = statSync(checkout);
     writeFileSync(
       join(infra, ".env"),
-      `POSTGRES_PASSWORD=${secret()}\nBETTER_AUTH_SECRET=${secret()}\nDATA_MANAGER_AUTH_TOKEN=${secret()}\nOPENMAPX_HOST_DIR=${checkout}\n`,
+      `UID=${owner.uid}\nGID=${owner.gid}\nPOSTGRES_PASSWORD=${secret()}\nBETTER_AUTH_SECRET=${secret()}\nDATA_MANAGER_AUTH_TOKEN=${secret()}\nOPENMAPX_HOST_DIR=${checkout}\n`,
       { mode: 0o600 },
     );
 

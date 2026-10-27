@@ -1,14 +1,19 @@
 import {
   chmodSync,
+  closeSync,
+  constants,
   existsSync,
+  fstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readdirSync,
   readFileSync,
   rmSync,
   statSync,
   symlinkSync,
   unlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -99,6 +104,8 @@ function select(infraDir: string, roots: string[]): void {
   writeFileSync(path, JSON.stringify({ selected: roots }), { mode: 0o600 });
 }
 
+const deploymentUserEnv = `UID=${process.geteuid?.() ?? 0}\nGID=${process.getegid?.() ?? 0}\n`;
+
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "openmapx-trusted-runtime-"));
   roots.push(root);
@@ -106,6 +113,8 @@ function fixture() {
   mkdirSync(infraDir, { recursive: true });
   // The whole checkout is mounted, as this release's manifest has it.
   mkdirSync(join(root, "services"), { recursive: true });
+  // The deployment's user, which only a host render writes into .env.
+  writeFileSync(join(infraDir, ".env"), deploymentUserEnv, { mode: 0o600 });
   select(infraDir, ["alpha"]);
   const current = join(infraDir, services.CURRENT_CONFIGURATION);
   return {
@@ -1138,4 +1147,97 @@ describe("ops-agent trusted configuration runtime", () => {
       stderr.mockRestore();
     }
   });
+
+  it("never changes .env, and refuses a commit without UID or GID, naming the host render", async () => {
+    const paths = fixture();
+    const env = join(paths.infraDir, ".env");
+    const runtime = createUnavailableRuntime();
+    installTrustedConfigurationRuntime(runtime, {
+      services: [service("alpha")],
+      integrationSchemas: new Map([["routing", { enabled: { type: "boolean" } }]]),
+      infraDir: paths.infraDir,
+    });
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const apply = (revisionId: string) => {
+      const operation = {
+        expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+        kind: "stack.render" as const,
+        revisionId,
+      };
+      return dispatchOpsOperation(runtime, operation, {
+        signal: new AbortController().signal,
+        emitLog: vi.fn(),
+        claim: claim(operation),
+      });
+    };
+    const failure = (attemptedRevisionId: string) => {
+      const operation = { kind: "configuration.failure.inspect" as const, attemptedRevisionId };
+      return dispatchOpsOperation(runtime, operation, {
+        signal: new AbortController().signal,
+        emitLog: vi.fn(),
+        claim: {
+          fingerprint: opsOperationFingerprint(operation),
+          operation,
+          source: "registry",
+          capability: { revisionId: attemptedRevisionId, values: {} },
+        },
+      });
+    };
+    // An old mtime, so a write in the same instant would still show.
+    const written = (contents: string) => {
+      writeFileSync(env, contents, { mode: 0o600 });
+      utimesSync(env, new Date("2026-01-01T00:00:00Z"), new Date("2026-01-01T00:00:00Z"));
+      return envFileState(env);
+    };
+    try {
+      const present = written(`DOMAIN=maps.example.test\n${deploymentUserEnv}`);
+      const committed = `cfg1_${"a".repeat(43)}`;
+      await expect(apply(committed)).resolves.toMatchObject({ outcome: "committed" });
+      expect(envFileState(env)).toEqual(present);
+
+      for (const [contents, missing] of [
+        ["DOMAIN=maps.example.test\n# UID=1000\n", "UID or GID"],
+        [`DOMAIN=maps.example.test\nUID=${process.geteuid?.() ?? 0}\n`, "GID"],
+      ] as const) {
+        const before = written(contents);
+        const refused = `cfg1_${(missing === "GID" ? "g" : "r").repeat(43)}`;
+        await expect(apply(refused)).resolves.toMatchObject({
+          outcome: "not_committed",
+          reason: "failed",
+        });
+        const problem = `infra/docker/.env sets no ${missing}, and the operations agent does not write .env: run \`pnpm openmapx compose render\` on the host, as the checkout's owner, which writes UID and GID from that owner.`;
+        await expect(failure(refused)).resolves.toEqual({ attemptedRevisionId: refused, problem });
+        expect(stderr.mock.calls.flat().map(String)).toContainEqual(`${problem}\n`);
+        expect(envFileState(env)).toEqual(before);
+        expect(services.currentConfigurationGeneration(paths.infraDir)).toBe(committed);
+      }
+
+      // Nor is a missing one created.
+      rmSync(env);
+      const absent = `cfg1_${"m".repeat(43)}`;
+      await expect(apply(absent)).resolves.toMatchObject({ outcome: "not_committed" });
+      expect(existsSync(env)).toBe(false);
+    } finally {
+      stderr.mockRestore();
+    }
+  });
 });
+
+/**
+ * What a write to `.env` would change: its bytes, its inode, its mtime and its
+ * mode, read through one descriptor rather than a second lookup by path.
+ */
+function envFileState(path: string) {
+  const descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const stats = fstatSync(descriptor, { bigint: true });
+    return {
+      bytes: readFileSync(descriptor, "utf8"),
+      ino: stats.ino,
+      mtimeNs: stats.mtimeNs,
+      mode: stats.mode,
+    };
+  } finally {
+    closeSync(descriptor);
+  }
+}

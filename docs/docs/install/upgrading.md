@@ -158,9 +158,11 @@ Run it as the checkout's owner. Releases before this one ran the stack's own
 containers as uid 1000 unless `.env` said otherwise, and `app-api` always as
 uid 1000. Now they all run as the deployment's user, `UID:GID` in `.env`, and
 generated configuration has no fallback. Where `.env` sets neither, the first
-render writes them from the checkout's owner, as does the operations agent when
-a panel self-update starts it; explicit values are kept. A render refuses to
-run as another uid, or to take the user from a checkout root owns.
+render on the host writes them from the checkout's owner; explicit values are
+kept. The operations agent only reads them: until they are set, it reports
+this when it starts, and the admin panel's renders and configuration changes
+refuse, naming this render. A render refuses to run as another uid, or to take
+the user from a checkout root owns.
 
 Where the checkout's owner is uid 1000, nothing changes: the containers keep
 their user, and `app-api` keeps using the volumes it wrote. Elsewhere:

@@ -1,6 +1,18 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
@@ -25,10 +37,11 @@ import {
 /**
  * The deployment's user on a host whose operator is not uid 1000, from an
  * .env an earlier release left without UID or GID, through to a committed
- * trusted-configuration request: in the host update's order (render, then the
- * agent) and in the panel self-update's (the new agent first, then the
- * release apply's render). app-api publishes as the UID and GID Compose gives
- * it from .env.
+ * trusted-configuration request: in the host update's order (the host's
+ * render, then the agent) and in the panel self-update's (the new agent
+ * first). Only the host's render writes UID and GID; the agent and its fixed
+ * CLI read .env and never change it. app-api publishes as the UID and GID
+ * Compose gives it from .env.
  *
  * Runs only on Linux where `OPENMAPX_TEST_DEPLOYMENT_USER` names the uid the
  * test runs as, which must not be 1000 and must own the repository, e.g. in a
@@ -97,12 +110,47 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
       return { uid: Number(uid), gid: Number(gid) };
     }
 
-    async function cli(target: string, ...args: string[]) {
+    /** `pnpm openmapx` on the host: the CLI from source. */
+    async function hostCli(target: string, ...args: string[]) {
+      const cli = join(ROOT, "packages", "cli");
+      return run(
+        join(cli, "node_modules", ".bin", "tsx"),
+        ["--tsconfig", join(cli, "tsconfig.json"), join(cli, "src", "index.ts"), ...args],
+        {
+          cwd: target,
+          env: { PATH: process.env.PATH, HOME: process.env.HOME, OPENMAPX_ROOT_DIR: target },
+        },
+      );
+    }
+
+    /** The fixed CLI the agent runs, from its bundle. */
+    async function agentCli(target: string, ...args: string[]) {
       return run(process.execPath, [join(outdir, "cli.mjs"), ...args], {
         cwd: target,
         env: { PATH: process.env.PATH, HOME: process.env.HOME, OPENMAPX_ROOT_DIR: target },
       });
     }
+
+    /** What a write to .env would change, after giving it an old mtime. */
+    function envFileState(target: string, age = false) {
+      const env = join(target, "infra", "docker", ".env");
+      if (age) utimesSync(env, new Date("2026-01-01T00:00:00Z"), new Date("2026-01-01T00:00:00Z"));
+      // Read through one descriptor rather than a second lookup by path.
+      const descriptor = openSync(env, constants.O_RDONLY | constants.O_NOFOLLOW);
+      try {
+        const stats = fstatSync(descriptor, { bigint: true });
+        return {
+          bytes: readFileSync(descriptor, "utf8"),
+          ino: stats.ino,
+          mtimeNs: stats.mtimeNs,
+        };
+      } finally {
+        closeSync(descriptor);
+      }
+    }
+
+    const HOST_RENDER_NEEDED =
+      "infra/docker/.env sets no UID or GID, and the operations agent does not write .env: run `pnpm openmapx compose render` on the host";
 
     async function freePort(): Promise<number> {
       return new Promise((resolvePort, reject) => {
@@ -158,14 +206,14 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
     }
 
     /** A request app-api publishes as the UID and GID Compose passes it. */
-    async function expectCommitted(
+    async function submit(
       target: string,
       agent: { port: number; output: () => string },
       name: string,
+      user: { uid: number; gid: number },
     ) {
       const infra = join(target, "infra", "docker");
       const tokenFile = join(infra, "secrets", "ops-agent-api-token");
-      const user = deploymentUser(target);
       const operationKey = createDurableOpsKey("stack.render", name);
       const before = services.currentConfigurationGeneration(infra);
       const sealed = await publishTrustedConfigurationSnapshot({
@@ -195,8 +243,17 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
         ),
       );
       expect(consumed.submission.status, agent.output()).toBe("fulfilled");
-      const result =
-        consumed.submission.status === "fulfilled" ? consumed.submission.value : undefined;
+      return consumed.submission.status === "fulfilled" ? consumed.submission.value : undefined;
+    }
+
+    async function expectCommitted(
+      target: string,
+      agent: { port: number; output: () => string },
+      name: string,
+    ) {
+      const infra = join(target, "infra", "docker");
+      const before = services.currentConfigurationGeneration(infra);
+      const result = await submit(target, agent, name, deploymentUser(target));
       expect(result, `${JSON.stringify(result)}\n${agent.output()}`).toMatchObject({
         outcome: "committed",
       });
@@ -217,36 +274,50 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
       expect(compose).toMatch(/\$\{UID:\?/);
     }
 
-    it("is written by the host's render, before the agent starts", async () => {
+    it("is written by the host's render, before the agent starts, which only reads it", async () => {
       const target = await checkout();
-      const rendered = await cli(target, "compose", "render");
+      const rendered = await hostCli(target, "compose", "render");
       expect(rendered.stdout).toContain(
         `Set the deployment's user in infra/docker/.env from the checkout's owner: UID=${EXPECTED_UID}`,
       );
       expectDeploymentUser(target);
+      const written = envFileState(target, true);
       const agent = await startAgent(target);
+      expect(agent.output()).not.toContain("sets no UID");
       await expectCommitted(target, agent, "host-update");
+      // The agent's fixed CLI renders with it too, and leaves .env as it was.
+      await agentCli(target, "compose", "render");
+      expect(envFileState(target)).toEqual(written);
     }, 180_000);
 
-    it("is written by the new agent after a panel self-update, before its first render", async () => {
+    it("is never written by the new agent after a panel self-update: it refuses until the host's render", async () => {
       const target = await checkout();
       // The generation an earlier release rendered, and its .env without UID/GID.
-      await cli(target, "compose", "render");
+      await hostCli(target, "compose", "render");
       writeFileSync(join(target, "infra", "docker", ".env"), envWithoutUser(target), {
         mode: 0o600,
       });
-      // The helper recreates the agent; it starts before anything renders.
+      const unset = envFileState(target, true);
+      const infra = join(target, "infra", "docker");
+      const before = services.currentConfigurationGeneration(infra);
+      // The helper recreates the agent; it starts before anything renders, and
+      // stays up to say what is missing.
       const agent = await startAgent(target);
-      expect(agent.output()).toContain(
-        `Set the deployment's user in infra/docker/.env from the checkout's owner: UID=${EXPECTED_UID}`,
-      );
-      expect(deploymentUser(target).uid).toBe(EXPECTED_UID);
-      await expectCommitted(target, agent, "self-update");
-      // The release apply's render, with this release's code.
-      const rendered = await cli(target, "compose", "render");
-      expect(rendered.stdout).toContain("Rendered");
+      expect(agent.output()).toContain(HOST_RENDER_NEEDED);
+      expect(envFileState(target)).toEqual(unset);
+      // The admin panel's apply and the agent's fixed CLI render both refuse.
+      const refused = await submit(target, agent, "self-update", {
+        uid: EXPECTED_UID,
+        gid: statSync(target).gid,
+      });
+      expect(refused, agent.output()).toMatchObject({ outcome: "not_committed" });
+      await expect(agentCli(target, "compose", "render")).rejects.toThrow(HOST_RENDER_NEEDED);
+      expect(envFileState(target)).toEqual(unset);
+      expect(services.currentConfigurationGeneration(infra)).toBe(before);
+      // The host's render writes them; the running agent then commits.
+      await hostCli(target, "compose", "render");
       expectDeploymentUser(target);
-      await expectCommitted(target, agent, "self-update-after-render");
+      await expectCommitted(target, agent, "after-host-render");
     }, 180_000);
   },
 );
