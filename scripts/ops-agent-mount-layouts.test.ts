@@ -62,6 +62,8 @@ const containers: string[] = [];
 const OVERRIDE_MARK = "# openmapx-ci: an operator's override";
 
 const RUNTIME_DIRECTORIES = ["state", "data", "secrets", "backups"] as const;
+/** The stack's network, which `docker compose up` of the generation creates. */
+const COMPOSE_NETWORK = `${services.STACK_PROJECT}_openmapx`;
 
 async function docker(...args: string[]): Promise<string> {
   return (await run("docker", args, { maxBuffer: 16 * 1024 * 1024 })).stdout;
@@ -87,6 +89,7 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
   () => {
     afterAll(async () => {
       for (const id of containers.splice(0)) await docker("rm", "--force", id).catch(() => "");
+      await docker("network", "rm", COMPOSE_NETWORK).catch(() => "");
       for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
     });
 
@@ -94,29 +97,10 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
     const uid = process.geteuid?.() ?? 0;
     const gid = process.getegid?.() ?? 0;
 
-    /** A host: a checkout, its .env and a render on the host. */
-    async function host(): Promise<string> {
-      const parent = mkdtempSync(join(tmpdir(), "openmapx-mount-layouts-"));
-      roots.push(parent);
-      const root = join(parent, "checkout");
-      await run("git", ["clone", "-q", "--no-local", ROOT, root]);
-      const socketGroup = statSync("/var/run/docker.sock").gid;
-      writeFileSync(
-        join(root, "infra", "docker", ".env"),
-        [
-          `UID=${uid}`,
-          `GID=${gid}`,
-          `DOCKER_GID=${socketGroup}`,
-          `POSTGRES_PASSWORD=${secret()}`,
-          `BETTER_AUTH_SECRET=${secret()}`,
-          `DATA_MANAGER_AUTH_TOKEN=${secret()}`,
-          `OPENMAPX_HOST_DIR=${root}`,
-          "",
-        ].join("\n"),
-        { mode: 0o600 },
-      );
+    /** `pnpm openmapx compose render` on the host: the CLI from source. */
+    async function hostRender(root: string): Promise<string> {
       const cli = join(ROOT, "packages", "cli");
-      await run(
+      const { stdout, stderr } = await run(
         join(cli, "node_modules", ".bin", "tsx"),
         [
           "--tsconfig",
@@ -130,6 +114,39 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
           env: { PATH: process.env.PATH, HOME: process.env.HOME, OPENMAPX_ROOT_DIR: root },
         },
       );
+      return `${stdout}${stderr}`;
+    }
+
+    /** A host: a checkout, its .env and a render on the host. */
+    async function host(): Promise<string> {
+      const parent = mkdtempSync(join(tmpdir(), "openmapx-mount-layouts-"));
+      roots.push(parent);
+      const root = join(parent, "checkout");
+      await run("git", ["clone", "-q", "--no-local", ROOT, root]);
+      const socketGroup = statSync("/var/run/docker.sock").gid;
+      const dockerConfig = join(parent, "docker-config");
+      mkdirSync(dockerConfig, { mode: 0o700 });
+      writeFileSync(
+        join(root, "infra", "docker", ".env"),
+        [
+          `UID=${uid}`,
+          `GID=${gid}`,
+          `DOCKER_GID=${socketGroup}`,
+          `POSTGRES_PASSWORD=${secret()}`,
+          `BETTER_AUTH_SECRET=${secret()}`,
+          `DATA_MANAGER_AUTH_TOKEN=${secret()}`,
+          `OPENMAPX_HOST_DIR=${root}`,
+          `OPENMAPX_DOCKER_CONFIG_DIR=${dockerConfig}`,
+          "",
+        ].join("\n"),
+        { mode: 0o600 },
+      );
+      // Before the one-time import and the agent's first start, the agent
+      // keeps the whole checkout.
+      expect(await hostRender(root)).toContain(
+        "The operations agent keeps the whole checkout mounted.",
+      );
+      expect(services.generationAgentMountLayout(join(root, "infra", "docker"))).toBe("checkout");
       return root;
     }
 
@@ -150,6 +167,79 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
 
     async function startAgent(root: string, layout: "checkout" | "narrow") {
       const infra = join(root, "infra", "docker");
+      const { id, baseUrl } = layout === "narrow" ? await composeAgent(root) : await runAgent(root);
+      containers.push(id);
+      const logs = async () => {
+        const { stdout, stderr } = await run("docker", ["logs", id]).catch((error) => error);
+        return `${stdout ?? ""}${stderr ?? ""}`;
+      };
+      const deadline = Date.now() + 90_000;
+      for (;;) {
+        const healthy = await fetch(`${baseUrl}/health`)
+          .then((response) => response.ok)
+          .catch(() => false);
+        if (healthy) break;
+        const state = (await docker("inspect", "--format", "{{.State.Status}}", id)).trim();
+        if (state !== "running") throw new Error(`The agent exited: ${await logs()}`);
+        if (Date.now() > deadline)
+          throw new Error(`The agent never became healthy: ${await logs()}`);
+        await new Promise((done) => setTimeout(done, 250));
+      }
+      const tokenFile = join(infra, "secrets", "ops-agent-api-token");
+      return {
+        id,
+        logs,
+        client: new OpsClient({ baseUrl, tokenFile }),
+        token: readFileSync(tokenFile, "utf8").trim(),
+        exec: (...args: string[]) =>
+          run("docker", ["exec", id, ...args], { maxBuffer: 16 * 1024 * 1024 }).catch(
+            (error: { stdout?: string; stderr?: string; code?: number }) => ({
+              stdout: error.stdout ?? "",
+              stderr: error.stderr ?? "",
+              failed: error.code ?? 1,
+            }),
+          ),
+        stop: () => docker("rm", "--force", id),
+      };
+    }
+    type Agent = Awaited<ReturnType<typeof startAgent>>;
+
+    /**
+     * The agent as this release's manifest has it, from the generation the
+     * host render wrote, exactly as `services update ops-agent` creates it.
+     * Reached at its address on the stack's network.
+     */
+    async function composeAgent(root: string): Promise<{ id: string; baseUrl: string }> {
+      const infra = join(root, "infra", "docker");
+      const compose = [
+        "compose",
+        "--env-file",
+        join(infra, ".env"),
+        "-f",
+        join(infra, services.CURRENT_CONFIGURATION, "docker-compose.generated.yml"),
+      ];
+      await docker("tag", IMAGE, "ghcr.io/openmapx/ops-agent:main");
+      await docker(...compose, "up", "--detach", "--no-deps", "ops-agent");
+      const id = (await docker(...compose, "ps", "--all", "--quiet", "ops-agent")).trim();
+      const address = (
+        await docker(
+          "inspect",
+          "--format",
+          "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}",
+          id,
+        )
+      )
+        .trim()
+        .split(" ")[0];
+      return { id, baseUrl: `http://${address}:4300` };
+    }
+
+    /**
+     * An agent created with the whole checkout, as an earlier release's
+     * generation, or a panel update from one, leaves it.
+     */
+    async function runAgent(root: string): Promise<{ id: string; baseUrl: string }> {
+      const infra = join(root, "infra", "docker");
       const id = (
         await docker(
           "run",
@@ -162,7 +252,7 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
           "127.0.0.1::4300",
           "--mount",
           "type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock",
-          ...layoutMounts(layout, root).flatMap((mount) => [
+          ...layoutMounts("checkout", root).flatMap((mount) => [
             "--mount",
             `type=bind,source=${mount.source},target=${mount.target}${mount.readOnly ? ",readonly" : ""}`,
           ]),
@@ -183,42 +273,9 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
           IMAGE,
         )
       ).trim();
-      containers.push(id);
-      const logs = async () => {
-        const { stdout, stderr } = await run("docker", ["logs", id]).catch((error) => error);
-        return `${stdout ?? ""}${stderr ?? ""}`;
-      };
       const port = Number((await docker("port", id, "4300/tcp")).trim().split(":").at(-1));
-      const deadline = Date.now() + 60_000;
-      for (;;) {
-        const healthy = await fetch(`http://127.0.0.1:${port}/health`)
-          .then((response) => response.ok)
-          .catch(() => false);
-        if (healthy) break;
-        const state = (await docker("inspect", "--format", "{{.State.Status}}", id)).trim();
-        if (state !== "running") throw new Error(`The agent exited: ${await logs()}`);
-        if (Date.now() > deadline)
-          throw new Error(`The agent never became healthy: ${await logs()}`);
-        await new Promise((done) => setTimeout(done, 250));
-      }
-      const tokenFile = join(infra, "secrets", "ops-agent-api-token");
-      return {
-        id,
-        logs,
-        client: new OpsClient({ baseUrl: `http://127.0.0.1:${port}`, tokenFile }),
-        token: readFileSync(tokenFile, "utf8").trim(),
-        exec: (...args: string[]) =>
-          run("docker", ["exec", id, ...args], { maxBuffer: 16 * 1024 * 1024 }).catch(
-            (error: { stdout?: string; stderr?: string; code?: number }) => ({
-              stdout: error.stdout ?? "",
-              stderr: error.stderr ?? "",
-              failed: error.code ?? 1,
-            }),
-          ),
-        stop: () => docker("rm", "--force", id),
-      };
+      return { id, baseUrl: `http://127.0.0.1:${port}` };
     }
-    type Agent = Awaited<ReturnType<typeof startAgent>>;
 
     async function operate<K extends OpsOperationKind>(
       agent: Agent,
@@ -286,6 +343,13 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
         await commit(root, first, "import");
         await first.stop();
         expect(services.serviceFilesImported(infra)).toBe(true);
+        // The agent's own render keeps the layout it runs with.
+        expect(services.generationAgentMountLayout(infra)).toBe("checkout");
+        if (layout === "narrow") {
+          // Now that nothing is missing, a render on the host switches it.
+          expect(await hostRender(root)).not.toContain("keeps the whole checkout");
+          expect(services.generationAgentMountLayout(infra)).toBe("narrow");
+        }
 
         const shipped = readFileSync(join(ROOT, "services/traefik/config/dynamic/middlewares.yml"));
         const override = join(infra, "overrides/services/traefik/config/dynamic/middlewares.yml");
@@ -322,6 +386,8 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
         // A configuration change through the admin panel's path, with the
         // override in place of the release's file.
         await commit(root, agent, layout);
+        // The agent's commit keeps the layout it runs with, either way.
+        expect(services.generationAgentMountLayout(infra)).toBe(layout);
         expect(
           readFileSync(
             join(services.agentStatePaths(infra).directory, "traefik/dynamic/middlewares.yml"),

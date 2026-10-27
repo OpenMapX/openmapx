@@ -1,6 +1,7 @@
 import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
 import kleur from "kleur";
+import { refuseAgentSwitchOrExit } from "../lib/agent-layout";
 import { dockerComposeStream } from "../lib/docker";
 import {
   applyGeneratedHardlinks,
@@ -410,6 +411,7 @@ export function registerServicesCommands(program: Command): void {
           log.dim("Release pinning disabled (OPENMAPX_RELEASE=local); using manifest image tags.");
         }
       }
+      await refuseAgentSwitchOrExit(allIds);
       const code = await dockerComposeStream(["up", "-d", ...allIds]);
       process.exit(code);
     });
@@ -502,6 +504,8 @@ export function registerServicesCommands(program: Command): void {
         log.warn("Some images could not be pulled (service may be locally built). Continuing.");
       }
 
+      // With its dependencies, the agent may be recreated too.
+      await refuseAgentSwitchOrExit(options.deps === false ? allIds : "all");
       const code = await dockerComposeStream([
         "up",
         "-d",

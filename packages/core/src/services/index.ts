@@ -1,4 +1,9 @@
 export {
+  type AgentMountLayout,
+  generationAgentMountLayout,
+  runningAgentMountLayout,
+} from "./agent-mounts";
+export {
   type AgentStatePaths,
   agentStatePaths,
   legacyAgentStatePaths,
@@ -283,6 +288,7 @@ export {
 export {
   type LegacyReleaseStateMigration,
   type LegacyReleaseStateMigrationOptions,
+  legacyReleaseStatePending,
   migrateLegacyReleaseState,
   releaseSelectionHold,
   supersedeLegacyReleaseOverlay,

@@ -429,6 +429,28 @@ function legacyOverlayRelease(path: string): string | null {
 }
 
 /**
+ * Why an earlier release's release state in `infra/docker` is not yet the
+ * agent's, or null when nothing of it is left to carry over: the migration
+ * every render runs is still due, or the selection it left is held. An agent
+ * without the checkout only reads `infra/docker`, so this must be settled
+ * before one runs.
+ */
+export function legacyReleaseStatePending(
+  infraDir: string,
+  options: ReleaseStateOptions = {},
+): string | null {
+  const legacy = legacyReleaseStatePaths(infraDir);
+  const paths = releaseStatePaths(infraDir);
+  if (exists(legacy.store) || exists(legacy.overlay)) {
+    const state = migrationState(join(paths.directory, MIGRATION_RECORD), options);
+    if (state === "started" || (state === undefined && !storeHasManifests(paths.store))) {
+      return `The earlier release's release state in infra/docker has not been carried into the agent's (${join(paths.directory, MIGRATION_RECORD)} is not finished): let the previous agent finish its release update, then render again.`;
+    }
+  }
+  return releaseSelectionHold(infraDir, options);
+}
+
+/**
  * Why no release may be selected automatically, or null. An earlier release
  * selected one in `infra/docker`, and the migration did not bring that
  * selection into the agent's release state: resolving a release now would

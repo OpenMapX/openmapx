@@ -10,9 +10,10 @@ Transitous and Elasticsearch) run as the deployment's user, `UID:GID` from
 as uid 1000, now runs as that user too, so a host whose operator is not uid
 1000 can use the admin panel's configuration changes and its own secrets.
 
-Every render, the host's `pnpm openmapx compose render` and the operations
-agent's, writes `UID` and `GID` into `.env` from the checkout's owner when they
-are missing; explicit values are kept. A render refuses to run as a uid other
+A render on the host, `pnpm openmapx compose render`, writes `UID` and `GID`
+into `.env` from the checkout's owner when they are missing; explicit values
+are kept. The operations agent only reads them (see the note on the agent
+reading `.env`). A render refuses to run as a uid other
 than `UID`, and to take the user from a checkout root owns. `pnpm openmapx
 check` and **Run diagnostics** report when `.env`, the checkout's owner, the
 running containers or the paths they write disagree.

@@ -23,7 +23,7 @@ both.
 
 ## Required action
 
-Before this release's agent starts, `.env` must set `UID` and `GID`. This
-release is installed with a host update, whose render writes them. If the
-agent's log or **Run diagnostics** reports them missing, run
-`pnpm openmapx compose render` on the host as the checkout's owner.
+`.env` must set `UID` and `GID`. A host update writes them in its render. After
+a panel update the agent reads whatever `.env` holds: if its log or **Run
+diagnostics** reports them missing, run `pnpm openmapx compose render` on the
+host as the checkout's owner.

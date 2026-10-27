@@ -23,6 +23,7 @@ import {
   type TrustedConfigurationPayload,
   trustedConfigurationPayloadSchema,
 } from "../ops/trusted-config";
+import { type AgentMountLayout, runningAgentMountLayout } from "./agent-mounts";
 import { ensureTraefikDynamicDirectory } from "./agent-state";
 import {
   GENERATED_SECRETS_DIRNAME,
@@ -138,6 +139,12 @@ export interface CommitConfigurationOptions {
    * are reported. Omitted (Docker can't tell), no tree is removed.
    */
   containerBindMounts?: readonly ContainerBindMounts[];
+  /**
+   * How the generation mounts the operations agent, asked once the one-time
+   * import has run: only a render on the host may choose the narrow layout.
+   * Omitted, it keeps the layout this process has (see agent-mounts.ts).
+   */
+  agentMountLayout?: () => AgentMountLayout;
 }
 
 export interface CommittedConfiguration {
@@ -964,7 +971,9 @@ export type RenderConfigurationOptions = Pick<
  * every apply render through here. The release's service files, with the
  * operator's overrides in their place.
  */
-export function renderConfiguration(options: RenderConfigurationOptions) {
+export function renderConfiguration(
+  options: RenderConfigurationOptions & { agentMountLayout?: AgentMountLayout },
+) {
   const { infraDir, input } = options;
   const resolved = resolveInput(
     options.services,
@@ -977,6 +986,7 @@ export function renderConfiguration(options: RenderConfigurationOptions) {
   const serviceFiles = resolveServiceFiles(options.services, release, overrideOverlay(overrides));
   const context: RenderContext = {
     domain: input.domain,
+    agentMountLayout: options.agentMountLayout ?? runningAgentMountLayout(infraDir),
     composeOutDir: join(infraDir, CURRENT_CONFIGURATION),
     infraDir,
     allServices: resolved.allServices,
@@ -1043,6 +1053,7 @@ async function commitOwnedConfigurationGeneration(
   const { resolved, context, rendered, serviceFiles, overrides } = renderConfiguration({
     ...options,
     releaseServiceFiles: release,
+    agentMountLayout: options.agentMountLayout?.(),
   });
   const generations = join(infraDir, CONFIGURATION_GENERATIONS);
   await initializeOwnedConfigurationGenerations(infraDir);

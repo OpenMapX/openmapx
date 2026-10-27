@@ -342,7 +342,11 @@
   ],
   "mounts": [
     "ops-agent|@docker-socket|/var/run/docker.sock|false",
-    "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — ops-agent renders and applies trusted local stack configuration}|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}|false",
+    "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — ops-agent renders and applies trusted local stack configuration}/infra/docker|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker|true",
+    "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/backups|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/backups|false",
+    "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/data|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/data|false",
+    "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/secrets|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/secrets|false",
+    "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/state|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/state|false",
     "ops-agent|${OPENMAPX_DOCKER_CONFIG_DIR:-/root/.docker}|/home/node/.docker|true"
   ],
   "providers": []
