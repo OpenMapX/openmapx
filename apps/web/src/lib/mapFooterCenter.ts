@@ -37,11 +37,14 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-const getSnapshot = () => covered;
+export function getMapFooterCenterCovered(): boolean {
+  return covered;
+}
+
 const getServerSnapshot = () => false;
 
 export function useMapFooterCenterCovered(): boolean {
-  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  return useSyncExternalStore(subscribe, getMapFooterCenterCovered, getServerSnapshot);
 }
 
 /**

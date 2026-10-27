@@ -152,7 +152,10 @@ describe("LegendHost", () => {
     act(() => publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 274));
     renderHost();
 
-    expect(bottomRule()).toContain("bottom:240px");
+    // Phones ride the sheet; wider screens, which have no sheet, stay flush.
+    expect(bottomRule()).toMatch(
+      /min-width:0px\)\{[^}]*\{bottom:240px;.*min-width:600px\)\{[^}]*\{bottom:var\(--omx-safe-bottom\);/,
+    );
   });
 
   it("stands on the footer riding a phone sheet instead of covering its credits", () => {
