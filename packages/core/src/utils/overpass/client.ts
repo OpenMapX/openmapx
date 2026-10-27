@@ -77,7 +77,7 @@ function overpassErrorPageText(body: string): string | null {
     .map((match) =>
       (match[1] ?? "")
         .replace(/<[^>]*>/g, "")
-        .replace(/&(lt|gt|quot|apos|amp|#\d+);/g, (_entity, name: string) => {
+        .replace(/&(lt|gt|quot|apos|amp|#\d+);/g, (entity: string, name: string) => {
           const named: Record<string, string> = {
             lt: "<",
             gt: ">",
@@ -85,7 +85,10 @@ function overpassErrorPageText(body: string): string | null {
             apos: "'",
             amp: "&",
           };
-          return named[name] ?? String.fromCodePoint(Number(name.slice(1)));
+          if (named[name] !== undefined) return named[name];
+          // A number past the last code point stays as written.
+          const code = Number(name.slice(1));
+          return code <= 0x10ffff ? String.fromCodePoint(code) : entity;
         })
         .replace(/\s+/g, " ")
         .trim(),

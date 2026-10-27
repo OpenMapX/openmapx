@@ -156,6 +156,24 @@ describe("an answer that is Overpass's error page, not JSON", () => {
       "Overpass API answered with a body that is neither JSON nor an error page",
     );
   });
+
+  it("decodes a numeric entity only when it is a code point, and keeps any other as written", async () => {
+    const refused = answer(
+      errorPage("line 1: parse error: Unknown type &#110;od near &#99999999; and &#1114112;"),
+    );
+    await expect(refused).rejects.not.toBeInstanceOf(RangeError);
+    await expect(
+      answer(
+        errorPage("line 1: parse error: Unknown type &#110;od near &#99999999; and &#1114112;"),
+      ),
+    ).rejects.toThrow(
+      "Overpass API error: line 1: parse error: Unknown type nod near &#99999999; and &#1114112;",
+    );
+    // The last code point itself is one.
+    await expect(answer(errorPage("parse error: &#1114111;"))).rejects.toThrow(
+      `Overpass API error: parse error: ${String.fromCodePoint(0x10ffff)}`,
+    );
+  });
 });
 
 describe("a query that ran out of its limits", () => {
