@@ -12,8 +12,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** A real response, which the client reads as text before parsing it as JSON. */
 function mockOk(data: unknown) {
-  return { ok: true, json: async () => data } as Response;
+  return new Response(JSON.stringify(data), { status: 200 });
 }
 
 function mockNotOk() {
