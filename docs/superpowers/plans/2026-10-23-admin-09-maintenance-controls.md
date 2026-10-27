@@ -72,6 +72,8 @@ lines and256KiB, including a bounded incomplete line and truncation indicator.
 
 ## Task M3: Pull-only staging and release pin clearing
 
+Consume the [approved conditioned pull contract](../specs/2026-10-27-admin-coordinator-lifecycle-design.md) installed by01.2: fresh service.pull requires exact expectedConfigurationRevisionId, optional candidateId has only its fixed verified purpose, and successful image/source metadata comes from the actual producer. Preserve original normal submission/admission/lookup and legacy observation rules; do not reintroduce service-ID-only fresh pulls, caller image/path/source assertions or cached-image continuation after failure. This task still owns pull-only UI/staging and release pin clearing; no task/migration reallocation.
+
 **Files:** Create focused `apps/api/src/routes/admin-release-controls.ts`,
 `apps/api/src/services/admin-release-controls.ts` and tests. Modify service-admin
 contracts, core ops contract/policy, `apps/ops-agent/src/administrative-runtime.ts`,

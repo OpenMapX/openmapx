@@ -2,6 +2,10 @@
 
 Status: APPROVED after the independent R1 written report found READY (0 Critical / 0 Important). The provider failed final delivery after writing its complete report; this accepts the report artifact as design readiness only. Allocation remains Task01.2; no new program task, graph edge, principal, typed operation, migration or capacity increase. Implement inside existing [Task01.2](../plans/2026-10-23-admin-01-service-control.md); product/runtime acceptance remains required.
 
+## Approved coordinator lifecycle specialization
+
+The [approved DM Apply/Update disposition](2026-10-27-admin-coordinator-lifecycle-design.md) specializes the prerequisite sequence for its fixed API lifecycle intents: observe an already-ready coordinator without an unnecessary Start; if needed, the old-revision non-recreate helper settles BEFORE the Update pull and before maintenance ownership. Its logical guard may require readiness even for empty hardlink plans; empty-plan render-only/require-running still has zero lifecycle. Pull uses an immutable pre-sealed submission, actual normal admission/source resolution, original clocks and no reseal. This overrides conflicting generic ordering only for that closed specialization; no Start/pull is added to the frozen graph.
+
 ## Conflict and selected disposition
 
 Protocol5.4 freezes generation -> hardlinks -> recreate/handoff and holds the full target closure from ownership-only preparation through settlement. Protocol6 requires ensure-running's nonempty hardlink plan to obtain readiness via a separate revision-checked settled `service.start` before the link owner's configuration writer. Starting that helper as an independent root after maintenance preparation conflicts with the retained target owner; running it during ownership-only prepare violates the no-effects contract. Adding a service.start effect to maintenance also fails to solve the initially stopped coordinator: its HTTP guard cannot prepare until it is reachable.

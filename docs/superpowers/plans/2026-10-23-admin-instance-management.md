@@ -15,6 +15,10 @@ and its binding supplement `docs/superpowers/specs/2026-10-23-admin-control-prot
 
 All Global Constraints and Product and security decisions in the specification are binding. User authorization includes autonomous decisions and execution through one PR with green CI; no additional approval or planning pause is required. Delegated work uses only Codex6.1-Sol or ClaudeOpus, preferablyCodex; Astra is prohibited by the latest user instruction. Local rendered verification, no screenshots attached to PR.
 
+## Approved Task01.2 coordinator Apply/Update workflows
+
+The [approved coordinator lifecycle disposition](../specs/2026-10-27-admin-coordinator-lifecycle-design.md), full R1 plus scoped R2 READY, closes the existing non-credential DM guard gap using fixed API-owned guarded render/link/recreate and a conditioned original pull prerequisite. Exact submission is frozen before sealing; actual normal ExecutionRef/result resolves only into its owner witness. Readiness precedes pull, no unguarded DM seed/default CLI, no new frozen graph/authority. Existing50-task scope/order and actual full runtime/source/CI qualification remain required.
+
 ## Approved Task01.2 outer settle request digest
 
 The [approved digest derivation](../specs/2026-10-26-admin-settle-request-digest-design.md), independently READY at R1, separates the existing outer request observation checksum from the agent-produced final-v2 evidence digest. Its exact portable receipt projection, first-admission owner/sequence CAS and retained winner/restart semantics add no schema, endpoint or authority. Existing Task01.2 product/runtime acceptance and50-task order remain unchanged.
