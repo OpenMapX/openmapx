@@ -2,6 +2,8 @@
 
 Status: APPROVED Revision3 after full R1 and scoped R2/R3 READY (0 Critical / 0 Important). Design readiness only; implementation, runtime and independent full source qualification remain required. Addendum to the approved coordinator lifecycle Revision2, inside existing Task01.2. No new root, graph edge, operation, principal, API purpose, key, store, collector or migration.
 
+The binding [staged ownership addendum](2026-10-27-admin-staged-coordinator-ownership-design.md) explicitly amends this revision's original-candidate-only and ordinary-current-cache-only source boundary for fresh requests after successful staging. Its DM-only authenticated historical source, fresh current-policy/candidate authority, own-generation Apply proof and last-source/phase-aware GC contract supersede those clauses; all other caps/source/graph boundaries remain.
+
 ## Defect and selected approach
 
 Task01.1's ordinary owned-services resolver checks the actual container image ID against the current local image ID of its trusted Compose reference. Pulling the same tag changes that reference from B to E while the original running container remains B. R2 correctly requires this OLD container to remain running before guard preparation. It cannot then acquire originalContainers through the unchanged ordinary resolver. Source inspection proves this contradiction independently of the Update observer timeout in293; that timeout alone does not diagnose its runtime cause.
@@ -64,7 +66,7 @@ Before maintenance admission, require actual OLD DM snapshot to equal the retain
 
 Use this same fixed baseline verification wherever this original owner must observe its OLD runtime: preparation rechecks/recovery, UNUSED and precise-contained inspection, or before the exact authorized frozen DM recreate. The actual registry claimer may use it for that recreate ONLY after the existing nominal owned-maintenance-step/decision verifier proves this exact original owner/step. It cannot turn generic service.update/recreate/start or an available workflow into permission. After actual recreation, applied inspection uses the UNCHANGED ordinary ownership path and actual NEW E plus full original config/hash/mount/secret/readiness checks. Never let the baseline OLD B satisfy an applied NEW-E final. A missing/replaced OLD source before recreation remains fenced; independently created NEW container is not silently adopted.
 
-Audit current API source/recovery/readiness and registry callers so none falls back to ordinary post-pull ownership to reconstruct OLD facts or mints a second root/helper. Pure host-source/pin checks remain read-only and must match the original witness; this addendum does not disable them. Public status/navigation ownership remains ordinary, including its temporary unverified result while the tag changed; only this fixed workflow can consume the retained source.
+Audit current API source/recovery/readiness and registry callers so none falls back to ordinary post-pull ownership to reconstruct OLD facts or mints a second root/helper. Pure host-source/pin checks remain read-only and must match the original witness; this addendum does not disable them. Without the installed authenticated staged source, ordinary ownership still denies an unproved OLD image after tag drift. With the binding staged ownership addendum, the literal resolver may verify the same DM identity from actual successful signed observations for fresh current-policy requests; this is read-only provenance, never expired forward authority.
 
 ## Implementation order and causal checks
 

@@ -21,6 +21,8 @@ The [approved coordinator lifecycle disposition](../specs/2026-10-27-admin-coord
 
 The [approved pre-pull ownership addendum](../specs/2026-10-27-admin-coordinator-prepull-ownership-design.md), full R1 plus scoped R2/R3 READY, closes the same-tag OLD-runtime source gap. Exact actual resolver capture, first signed admission and version2 copied owner witness preserve ordinary ownership while verifying OLD B and applied NEW E separately. Full raw authority and composite policy revisions remain distinct. It stays inside Task01.2;50-task scope/order and actual source/runtime/CI gates remain unchanged.
 
+The [approved staged ownership addendum](../specs/2026-10-27-admin-staged-coordinator-ownership-design.md), full R1 plus scoped R2 READY, closes fresh retry/Apply after successful image staging and expired candidate cleanup. DM-only authenticated historical provenance is separated from fresh current authority; owner-bound Apply proof and phase-aware last-source retention use existing bounded records and GC. It is an explicit narrow source-boundary amendment inside Task01.2;50-task scope/order and actual full source/runtime/CI qualification remain required.
+
 ## Approved Task01.2 outer settle request digest
 
 The [approved digest derivation](../specs/2026-10-26-admin-settle-request-digest-design.md), independently READY at R1, separates the existing outer request observation checksum from the agent-produced final-v2 evidence digest. Its exact portable receipt projection, first-admission owner/sequence CAS and retained winner/restart semantics add no schema, endpoint or authority. Existing Task01.2 product/runtime acceptance and50-task order remain unchanged.
