@@ -25,6 +25,10 @@ The [approved staged ownership addendum](../specs/2026-10-27-admin-staged-coordi
 
 The [approved staged configuration interlock](../specs/2026-10-27-admin-staged-configuration-interlock-design.md), R1 READY, selects explicit pre-write refusal over unrelated-generation lineage carry. Pending staged DM is resolved through guarded Apply/Update before ordinary publication, with actual pre-save/host-writer checks and existing managed-root serialization. Plan09M3 still MUST finish real DM pull-only staging; temporary unavailability is not completed coverage. Existing50-task order and full actual/source/CI qualification remain unchanged.
 
+## Approved release-source and legacy handoff allocation
+
+The [approved release/handoff allocation](../specs/2026-10-27-admin-release-handoff-allocation-design.md), independently READY at R1, closes the current419 allocation gap without adding authority.01.2 implements the real pre-write source predicate and temporary fail-closed legacy release/helper/recovery boundary;01.4 shows truthful unavailable capability.08.3 MUST restore supported guarded release application/replacement/recovery through the actual helper in this SAME final PR. Existing inspection/evidence remains reachable, no false rollback/record deletion, no release-lock across writer-taking CLI, and no unreviewed new-image graph expansion. Full02.4 data update and09 staging remain their existing tasks. All50 tasks/order and final runtime/CI gates remain unchanged; temporary refusal is not completed release parity.
+
 ## Approved Task01.2 outer settle request digest
 
 The [approved digest derivation](../specs/2026-10-26-admin-settle-request-digest-design.md), independently READY at R1, separates the existing outer request observation checksum from the agent-produced final-v2 evidence digest. Its exact portable receipt projection, first-admission owner/sequence CAS and retained winner/restart semantics add no schema, endpoint or authority. Existing Task01.2 product/runtime acceptance and50-task order remain unchanged.
