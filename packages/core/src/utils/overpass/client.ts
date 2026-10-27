@@ -65,18 +65,29 @@ export class OverpassUnavailableError extends Error {
   }
 }
 
+/** `text` with its tags dropped, again until none is left: one pass can leave one (`<a<b>>`). */
+function withoutTags(text: string): string {
+  let previous: string;
+  let current = text;
+  do {
+    previous = current;
+    current = current.replace(/<[^<>]*>/g, "");
+  } while (current !== previous);
+  return current;
+}
+
 /**
  * The error text of the HTML page Overpass sends instead of the requested
  * JSON when it can't run a query, with HTTP 200: each
  * `<strong …>Error</strong>: …` paragraph, tags dropped and entities decoded.
- * Null when the body is no such page.
+ * Null when the body is no such page. The text is for an error message,
+ * never HTML.
  */
 function overpassErrorPageText(body: string): string | null {
   if (!/<html[\s>]/i.test(body)) return null;
   const errors = [...body.matchAll(/<strong[^>]*>\s*Error\s*<\/strong>\s*:?([\s\S]*?)<\/p>/gi)]
     .map((match) =>
-      (match[1] ?? "")
-        .replace(/<[^>]*>/g, "")
+      withoutTags(match[1] ?? "")
         .replace(/&(lt|gt|quot|apos|amp|#\d+);/g, (entity: string, name: string) => {
           const named: Record<string, string> = {
             lt: "<",

@@ -169,6 +169,10 @@ describe("an answer that is Overpass's error page, not JSON", () => {
     ).rejects.toThrow(
       "Overpass API error: line 1: parse error: Unknown type nod near &#99999999; and &#1114112;",
     );
+    // Tags inside tags are dropped too, however deep.
+    await expect(answer(errorPage("runtime error: <b<i>>dis</i>patcher</b>"))).rejects.toThrow(
+      "Overpass API unavailable: runtime error: dispatcher",
+    );
     // The last code point itself is one.
     await expect(answer(errorPage("parse error: &#1114111;"))).rejects.toThrow(
       `Overpass API error: parse error: ${String.fromCodePoint(0x10ffff)}`,
