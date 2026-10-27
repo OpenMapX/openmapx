@@ -204,11 +204,14 @@ container from the applied generation, verifies the new agent and exits.
 
 The agent works under two mount layouts, both at the same host paths, because
 Compose's bind sources must resolve the same inside and outside it. Its
-manifest mounts the whole checkout today. The other layout mounts only
-`infra/docker` read-only (for `.env`, through the directory so an editor's
-atomic save is seen, and the overrides) and `infra/docker/state`, `data`,
-`secrets` and `backups` read-write. Everything the agent needs comes from its
-image and its state. It tells the layouts apart by one test, whether the
+manifest mounts only `infra/docker` read-only (for `.env`, through the
+directory so an editor's atomic save is seen, and the overrides) and
+`infra/docker/state`, `data`, `secrets` and `backups` read-write. Everything
+the agent needs comes from its image and its state. Until a render on the
+host has found nothing missing for that, the renderer gives the agent the
+whole checkout in their place, the layout of earlier releases; only a host
+render moves it, and every render by the agent keeps the layout it runs with
+(`packages/core/src/services/agent-mounts.ts`). It tells the layouts apart by one test, whether the
 checkout's `services` directory is there, and logs which it has when it
 starts. Without the checkout, a one-time step only a checkout allows (the
 import of service file edits, the copy of the stores and of the Transitous

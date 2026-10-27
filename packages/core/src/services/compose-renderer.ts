@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { dump as yamlDump } from "js-yaml";
+import { type AgentMountLayout, agentBindMounts } from "./agent-mounts";
 import { configSchemaKeys, serviceConfigEnvPrefix } from "./config-resolver";
 import { resolveConsumesDependencies } from "./consumes-dependencies";
 import { STACK_PROJECT } from "./deployment";
@@ -158,6 +159,11 @@ function hardlinkTargetDir(consumerId: string, c: ServiceConsumes): string {
 
 export interface RenderContext {
   domain?: string;
+  /**
+   * How the operations agent's container mounts the checkout's path (see
+   * agent-mounts.ts). Absent, its manifest's mounts render as declared.
+   */
+  agentMountLayout?: AgentMountLayout;
   /**
    * Per-consumer-entry mount paths keyed by the same `<type>` / `<type>/<instance>`
    * key shape used in the producer index. The renderer wires this up
@@ -671,7 +677,7 @@ export function renderServiceSnippet(
     }
   }
   const exists = ctx.existsSync ?? existsSync;
-  for (const bm of m.bindMounts ?? []) {
+  for (const bm of agentBindMounts(service, ctx.agentMountLayout)) {
     const resolved = resolveBindSource(
       bm,
       service,

@@ -79,8 +79,28 @@
     },
     { "source": "@docker-socket", "target": "/var/run/docker.sock", "readOnly": false },
     {
-      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — ops-agent renders and applies trusted local stack configuration}",
-      "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}",
+      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — ops-agent renders and applies trusted local stack configuration}/infra/docker",
+      "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker",
+      "readOnly": true
+    },
+    {
+      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/state",
+      "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/state",
+      "readOnly": false
+    },
+    {
+      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/data",
+      "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/data",
+      "readOnly": false
+    },
+    {
+      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/secrets",
+      "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/secrets",
+      "readOnly": false
+    },
+    {
+      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/backups",
+      "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/backups",
       "readOnly": false
     },
     {

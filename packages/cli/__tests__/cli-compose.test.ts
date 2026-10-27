@@ -182,6 +182,45 @@ describe("renderComposeForRepo", () => {
     expect(coreServices.currentConfigurationGeneration(join(tmp, "infra", "docker"))).toBe(before);
   });
 
+  it("on the host moves the operations agent to its narrow mounts once nothing is missing, and says what is", async () => {
+    writeManifest(
+      "ops-agent",
+      JSON.parse(readFileSync(join(REPO_ROOT, "services/ops-agent/service.json"), "utf8")),
+    );
+    const infraDir = join(tmp, "infra", "docker");
+    // log.warn writes to stderr.
+    const warnings = vi.spyOn(console, "error").mockImplementation(() => {});
+    const render = () =>
+      renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["ops-agent"] });
+    await render();
+    // Without the import, the retired earlier lock and an applied generation.
+    expect(coreServices.generationAgentMountLayout(infraDir)).toBe("checkout");
+    const said = warnings.mock.calls.flat().join("\n");
+    expect(said).toContain("The operations agent keeps the whole checkout mounted.");
+    expect(said).toMatch(/- The one-time import of your edits .*overrides-import\.json is missing/);
+    expect(said).toMatch(/- Writers still take the earlier releases' configuration lock/);
+
+    writeFileSync(
+      join(infraDir, "state/ops-agent/overrides-import.json"),
+      `${JSON.stringify({ version: 1, importedAt: "2026-10-26T00:00:00Z", imported: [] })}\n`,
+      { mode: 0o600 },
+    );
+    coreServices.retireLegacyConfigurationWriter(infraDir);
+    warnings.mockClear();
+    await render();
+    expect(coreServices.generationAgentMountLayout(infraDir)).toBe("narrow");
+    expect(warnings.mock.calls.flat().join("\n")).not.toContain("keeps the whole checkout");
+
+    // The agent's own render, with the whole checkout mounted, keeps it.
+    vi.mocked(runsInAgent).mockReturnValue(true);
+    try {
+      await render();
+      expect(coreServices.generationAgentMountLayout(infraDir)).toBe("checkout");
+    } finally {
+      vi.mocked(runsInAgent).mockReturnValue(false);
+    }
+  });
+
   it("in the operations agent's fixed CLI only reads the deployment's user, and refuses without it", async () => {
     writeManifest("alpha", { id: "alpha", ...baseManifest });
     const infraDir = join(tmp, "infra", "docker");
