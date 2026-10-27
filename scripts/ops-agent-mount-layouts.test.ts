@@ -206,8 +206,10 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
 
     /**
      * The agent as this release's manifest has it, from the generation the
-     * host render wrote, exactly as `services update ops-agent` creates it.
-     * Reached at its address on the stack's network.
+     * host render wrote: Compose creates it from that service's definition,
+     * its mounts, user, groups, environment and secrets, as
+     * `services update ops-agent` does. The one addition is a loopback port,
+     * since the ops client only talks to `ops-agent` or loopback.
      */
     async function composeAgent(root: string): Promise<{ id: string; baseUrl: string }> {
       const infra = join(root, "infra", "docker");
@@ -219,19 +221,22 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
         join(infra, services.CURRENT_CONFIGURATION, "docker-compose.generated.yml"),
       ];
       await docker("tag", IMAGE, "ghcr.io/openmapx/ops-agent:main");
-      await docker(...compose, "up", "--detach", "--no-deps", "ops-agent");
-      const id = (await docker(...compose, "ps", "--all", "--quiet", "ops-agent")).trim();
-      const address = (
+      const id = (
         await docker(
-          "inspect",
-          "--format",
-          "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}",
-          id,
+          ...compose,
+          "run",
+          "--detach",
+          "--no-deps",
+          "--publish",
+          "127.0.0.1::4300",
+          "ops-agent",
         )
       )
         .trim()
-        .split(" ")[0];
-      return { id, baseUrl: `http://${address}:4300` };
+        .split("\n")
+        .at(-1) as string;
+      const port = Number((await docker("port", id, "4300/tcp")).trim().split(":").at(-1));
+      return { id, baseUrl: `http://127.0.0.1:${port}` };
     }
 
     /**
