@@ -86,6 +86,7 @@ describe("required database test gate", () => {
         "types",
         "test-node",
         "test-linux-user",
+        "test-agent-mounts",
         "test-web",
         "mobile",
         "database",

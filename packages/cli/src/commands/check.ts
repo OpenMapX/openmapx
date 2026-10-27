@@ -337,15 +337,21 @@ export function deploymentUserProblems(input: {
   } catch (error) {
     return [(error as Error).message];
   }
-  const owner = coreServices.checkoutOwner(input.infraDir);
+  // An operations agent without the checkout has no owner to compare: what
+  // holds the checkout's place there is a directory Docker made.
+  const owner = coreServices.checkoutMountedAt(input.infraDir)
+    ? coreServices.checkoutOwner(input.infraDir)
+    : null;
   if (assigned.uid === undefined || assigned.gid === undefined) {
     problems.push(
-      `infra/docker/.env sets no ${assigned.uid === undefined ? "UID" : "GID"}: the next render writes UID and GID from the checkout's owner (uid ${owner.uid}, gid ${owner.gid}). Run \`pnpm openmapx compose render\`.`,
+      owner
+        ? `infra/docker/.env sets no ${assigned.uid === undefined ? "UID" : "GID"}: the next render writes UID and GID from the checkout's owner (uid ${owner.uid}, gid ${owner.gid}). Run \`pnpm openmapx compose render\`.`
+        : `infra/docker/.env sets no ${assigned.uid === undefined ? "UID" : "GID"}: run \`pnpm openmapx compose render\` on the host, as the checkout's owner, which writes UID and GID from that owner.`,
     );
     return problems;
   }
   const { uid, gid } = assigned as { uid: number; gid: number };
-  if (uid !== owner.uid) {
+  if (owner && uid !== owner.uid) {
     problems.push(
       `UID in infra/docker/.env is ${uid}, but the checkout belongs to uid ${owner.uid}: the stack's containers would not own the files they share with the checkout.`,
     );

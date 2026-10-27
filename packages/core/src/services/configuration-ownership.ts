@@ -2,6 +2,11 @@ import { lstatSync, mkdirSync, rmdirSync, type Stats } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { atomicWrite } from "../release-files";
+import { CheckoutRequiredError, checkoutMountedAt } from "./checkout-layout";
+
+/** Why a writer in an agent without the checkout stops while the earlier releases' lock is still taken. */
+const LEGACY_WRITER_NOT_RETIRED =
+  "Writers still take the earlier releases' configuration lock in infra/docker (infra/docker/state/ops-agent/legacy-configuration-writer-retired.json is missing), which this operations agent, running without the checkout, can't create. The agent retires it when it starts with no handoff helper running; restart it once the helper has exited.";
 
 /** The writer lock, in the agent's state: `state/ops-agent/configuration/.writer`. */
 const CONFIGURATION_DIRECTORY = ["state", "ops-agent", "configuration"] as const;
@@ -141,9 +146,20 @@ export async function acquireConfigurationOwnership(
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   assertOwnDirectory(state);
   assertOwnDirectory(directory);
-  const releaseLegacy = legacyConfigurationWriterActive(infraDir)
-    ? await acquireLockDirectory(join(infraDir, LEGACY_LOCK_NAME), signal)
-    : null;
+  let releaseLegacy: (() => void) | null = null;
+  if (legacyConfigurationWriterActive(infraDir)) {
+    try {
+      releaseLegacy = await acquireLockDirectory(join(infraDir, LEGACY_LOCK_NAME), signal);
+    } catch (error) {
+      // That lock is in infra/docker itself, which an agent without the
+      // checkout only reads.
+      const code = (error as NodeJS.ErrnoException).code;
+      if ((code === "EROFS" || code === "EACCES") && !checkoutMountedAt(infraDir)) {
+        throw new CheckoutRequiredError(LEGACY_WRITER_NOT_RETIRED, { cause: error });
+      }
+      throw error;
+    }
+  }
   let release: () => void;
   try {
     release = await acquireLockDirectory(join(directory, LOCK_NAME), signal);

@@ -942,7 +942,9 @@ function writeStackFiles(
   );
   // A Traefik not recreated since an earlier release still reads them there.
   const legacy =
-    legacyTraefikDynamicMounted === false ? null : writeLegacyTraefikRoutes(infraDir, routes);
+    legacyTraefikDynamicMounted === false
+      ? null
+      : writeLegacyTraefikRoutes(infraDir, routes, legacyTraefikDynamicMounted);
   if (legacy) problems.push(legacy);
   return problems;
 }

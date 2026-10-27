@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { atomicWrite, fsyncDirectory } from "@openmapx/core/release-files";
+import { services as coreServices } from "@openmapx/core/server";
 import {
   type CommandRunner,
   DEFAULT_TRANSITOUS_REPO_URL,
@@ -165,6 +166,13 @@ export function ensureTransitousApiKeysFile(rootDir?: string): EnsureTransitousA
       throw new Error(`Transitous API keys at ${path} can't be used: ${current.reason}`);
     }
     return { path, created: null };
+  }
+  // An operations agent without the checkout can't see the earlier keys, and
+  // an empty file would stand in for them.
+  if (!coreServices.checkoutMounted(paths.root)) {
+    throw new coreServices.CheckoutRequiredError(
+      `The Transitous API keys were never copied from the checkout into ${path}, and this operations agent runs without the checkout: run \`pnpm openmapx compose render\` on the host, as the checkout's owner, which copies them.`,
+    );
   }
 
   const legacy = legacyTransitousApiKeysPath(paths.root);

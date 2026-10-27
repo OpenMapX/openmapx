@@ -363,7 +363,22 @@ describe("agent handoff helper container", () => {
     groups: ["999"],
     envNames: ["PATH", "HOSTNAME", "DOCKER_CONFIG", "OPENMAPX_ROOT_DIR"],
     dockerSocketSource: "/var/run/docker.sock",
-    rootSource: "/srv/openmapx",
+    rootMounts: [{ source: "/srv/openmapx", target: "/srv/openmapx", readOnly: false }],
+  };
+  const narrow: AgentContainerFacts = {
+    ...facts,
+    rootMounts: [
+      {
+        source: "/srv/openmapx/infra/docker",
+        target: "/srv/openmapx/infra/docker",
+        readOnly: true,
+      },
+      ...["state", "data", "secrets", "backups"].map((name) => ({
+        source: `/srv/openmapx/infra/docker/${name}`,
+        target: `/srv/openmapx/infra/docker/${name}`,
+        readOnly: false,
+      })),
+    ],
   };
 
   it("runs the agent image with only the socket and checkout, no network and no privileges", () => {
@@ -403,36 +418,139 @@ describe("agent handoff helper container", () => {
     ]);
   });
 
+  it("gives the helper an agent's narrow mounts as they are, read-only where the agent's are", () => {
+    const args = agentHandoffRunArgs(narrow, "/srv/openmapx", "handoff-1");
+    const mounts = args.flatMap((arg, index) => (args[index - 1] === "--mount" ? [arg] : []));
+    expect(mounts).toEqual([
+      "type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock",
+      "type=bind,source=/srv/openmapx/infra/docker,target=/srv/openmapx/infra/docker,readonly",
+      "type=bind,source=/srv/openmapx/infra/docker/state,target=/srv/openmapx/infra/docker/state",
+      "type=bind,source=/srv/openmapx/infra/docker/data,target=/srv/openmapx/infra/docker/data",
+      "type=bind,source=/srv/openmapx/infra/docker/secrets,target=/srv/openmapx/infra/docker/secrets",
+      "type=bind,source=/srv/openmapx/infra/docker/backups,target=/srv/openmapx/infra/docker/backups",
+    ]);
+    expect(mounts.join("\n")).not.toContain("target=/srv/openmapx,");
+  });
+
   it("rejects mount paths that would change the mount specification", () => {
     expect(() => agentHandoffRunArgs(facts, "/srv/open,mapx", "handoff-1")).toThrow();
     expect(() => agentHandoffRunArgs(facts, "/srv/openmapx", "../handoff")).toThrow();
+    for (const mount of [
+      { source: "/srv/open,mapx", target: "/srv/openmapx", readOnly: false },
+      { source: "/srv/openmapx", target: "/elsewhere", readOnly: false },
+    ]) {
+      expect(() =>
+        agentHandoffRunArgs({ ...facts, rootMounts: [mount] }, "/srv/openmapx", "handoff-1"),
+      ).toThrow("Agent handoff rejected");
+    }
+    expect(() =>
+      agentHandoffRunArgs({ ...facts, rootMounts: [] }, "/srv/openmapx", "handoff-1"),
+    ).toThrow("Agent handoff rejected");
   });
 
-  it("reads the agent's identity and the host sources of its mounts", async () => {
-    const runDocker = vi.fn(async (args: readonly string[]) => {
+  /** `docker container inspect` of an agent with these mounts. */
+  const inspecting = (mounts: unknown[]) =>
+    vi.fn(async (args: readonly string[]) => {
       const format = args[3];
       if (format === "{{.Image}}") return oldImageId;
       if (format === "{{.Config.User}}") return "1000:1000";
       if (format === "{{json .HostConfig.GroupAdd}}") return '["999"]';
       if (format?.includes(".Config.Env")) return "OPENMAPX_ROOT_DIR\nPATH\n";
-      return JSON.stringify([
-        { Source: "/run/docker.sock", Destination: "/var/run/docker.sock" },
-        { Source: "/srv/openmapx", Destination: "/srv/openmapx" },
-      ]);
+      return JSON.stringify(mounts);
     });
-    const result = await inspectAgentContainer(
-      runDocker,
+  const socket = {
+    Type: "bind",
+    Source: "/run/docker.sock",
+    Destination: "/var/run/docker.sock",
+    RW: true,
+  };
+  const inspect = (mounts: unknown[]) =>
+    inspectAgentContainer(
+      inspecting(mounts),
       containerId,
       "/srv/openmapx",
       new AbortController().signal,
     );
-    expect(result).toEqual({
+
+  it("reads the agent's identity and the host sources of its mounts", async () => {
+    await expect(
+      inspect([
+        socket,
+        { Type: "bind", Source: "/srv/openmapx", Destination: "/srv/openmapx", RW: true },
+        { Type: "bind", Source: "/root/.docker", Destination: "/home/node/.docker", RW: false },
+      ]),
+    ).resolves.toEqual({
       imageId: oldImageId,
       user: "1000:1000",
       groups: ["999"],
       envNames: ["OPENMAPX_ROOT_DIR", "PATH"],
       dockerSocketSource: "/run/docker.sock",
-      rootSource: "/srv/openmapx",
+      rootMounts: [{ source: "/srv/openmapx", target: "/srv/openmapx", readOnly: false }],
+    });
+  });
+
+  it("reads an agent's narrow mounts, outermost first, and nothing outside the checkout's path", async () => {
+    const result = await inspect([
+      socket,
+      ...["backups", "state", "secrets", "data"].map((name) => ({
+        Type: "bind",
+        Source: `/srv/openmapx/infra/docker/${name}`,
+        Destination: `/srv/openmapx/infra/docker/${name}`,
+        RW: true,
+      })),
+      {
+        Type: "bind",
+        Source: "/srv/openmapx/infra/docker",
+        Destination: "/srv/openmapx/infra/docker",
+        RW: false,
+      },
+      {
+        Type: "bind",
+        Source: "/srv/openmapx/infra/docker/state/ops-agent/trusted-config",
+        Destination: "/var/lib/openmapx/trusted-config",
+        RW: true,
+      },
+    ]);
+    expect(result.rootMounts[0]).toEqual({
+      source: "/srv/openmapx/infra/docker",
+      target: "/srv/openmapx/infra/docker",
+      readOnly: true,
+    });
+    expect(result.rootMounts.map((mount) => mount.target).sort()).toEqual(
+      ["", "/backups", "/data", "/secrets", "/state"].map(
+        (name) => `/srv/openmapx/infra/docker${name}`,
+      ),
+    );
+  });
+
+  it("rejects an agent whose mounts give the helper no writable state or no .env", async () => {
+    const infra = {
+      Type: "bind",
+      Source: "/srv/openmapx/infra/docker",
+      Destination: "/srv/openmapx/infra/docker",
+      RW: false,
+    };
+    const state = {
+      Type: "bind",
+      Source: "/srv/openmapx/infra/docker/state",
+      Destination: "/srv/openmapx/infra/docker/state",
+      RW: true,
+    };
+    for (const mounts of [
+      [socket],
+      [socket, infra],
+      [socket, state],
+      [socket, infra, { ...state, RW: false }],
+      [socket, infra, { ...state, Type: "volume" }],
+      [socket, { ...infra, Source: "/srv/open,mapx" }, state],
+    ]) {
+      await expect(inspect(mounts)).rejects.toThrow("Operations agent container rejected");
+    }
+    await expect(inspect([socket, infra, state])).resolves.toMatchObject({
+      rootMounts: [
+        { target: "/srv/openmapx/infra/docker", readOnly: true },
+        { target: "/srv/openmapx/infra/docker/state", readOnly: false },
+      ],
     });
   });
 });

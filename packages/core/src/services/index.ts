@@ -5,6 +5,7 @@ export {
   prepareAgentStateDirectories,
 } from "./agent-state";
 export {
+  AGENT_STORES_NOT_COPIED,
   type AgentStoreCopyReport,
   type AgentStoresMigration,
   agentStoresLeftBehind,
@@ -34,6 +35,12 @@ export {
   checkoutDifferencesFromRelease,
   describeCheckoutDifferences,
 } from "./checkout-differences";
+export {
+  CheckoutRequiredError,
+  checkoutMounted,
+  checkoutMountedAt,
+  describeMountLayout,
+} from "./checkout-layout";
 export { communityServiceManifestProblems } from "./community-manifest";
 export {
   COMMUNITY_RECORD_VERSION,

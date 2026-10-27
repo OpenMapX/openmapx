@@ -63,6 +63,9 @@ async function main(): Promise<void> {
   // which data-manager can read. OPS_PRIVACY_BACKUP_SCRATCH_ROOT stays set for
   // agents of earlier releases.
   janitorPrivacyBackupScratch(config.rootDir);
+  // With the whole checkout, as this release's manifest mounts it, or only
+  // infra/docker with its runtime directories: the agent works either way.
+  process.stderr.write(`${services.describeMountLayout(config.rootDir)}\n`);
   // The release's manifests and service files apply, with the operator's
   // overrides; the checkout's no longer do. Reported, never fatal at start.
   for (const line of describeServiceFilesAtStart(join(config.rootDir, "infra", "docker"))) {
@@ -136,7 +139,12 @@ async function main(): Promise<void> {
     // its record, before anything is installed there. After a panel
     // self-update this runs before app-api is recreated with the new mount;
     // until then app-api keeps reading the earlier copies, which stay.
-    if (!services.readAgentStoresMigration(paths.infraDir)) {
+    // Without the checkout there is nothing to copy them from: said here, and
+    // every render and commit refuses until a host render has copied them.
+    const storesCopied = services.readAgentStoresMigration(paths.infraDir) !== null;
+    if (!storesCopied && !services.checkoutMounted(config.rootDir)) {
+      process.stderr.write(`${services.AGENT_STORES_NOT_COPIED}\n`);
+    } else if (!storesCopied) {
       const legacy = services.legacyAgentStorePaths(paths.infraDir);
       await new CommunityRepositoryStore({
         rootDir: config.rootDir,

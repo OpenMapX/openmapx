@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { checkoutMountedAt } from "./checkout-layout";
 import {
   type ContainerBindMounts,
   containersOnCheckoutServiceFiles,
@@ -41,7 +42,15 @@ export function describeServiceFiles(options: {
     ...describeServiceFileImport(options.imported ?? null),
     ...describeServiceOverrides(overrides, options.stale),
   ];
-  if (release.origin === "release" && serviceFilesImported(infraDir)) {
+  if (
+    release.origin === "release" &&
+    serviceFilesImported(infraDir) &&
+    !checkoutMountedAt(infraDir)
+  ) {
+    lines.push(
+      "The one-time import of your edits in the checkout's service files has run (infra/docker/state/ops-agent/overrides-import.json). This operations agent runs without the checkout, so it doesn't compare the checkout's service files with the release's; `pnpm openmapx check` on the host does.",
+    );
+  } else if (release.origin === "release" && serviceFilesImported(infraDir)) {
     lines.push(
       ...describeUnusedCheckoutEdits(
         unusedCheckoutEdits({

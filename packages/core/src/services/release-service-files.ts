@@ -9,10 +9,11 @@ import {
   readFileSync,
   type Stats,
 } from "node:fs";
-import { posix } from "node:path";
+import { posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import z from "zod/v4";
 import { readRegularFileBytes } from "./built-in-service-source";
+import { CheckoutRequiredError, checkoutMounted } from "./checkout-layout";
 import { embeddedBuiltInServiceManifests } from "./embedded-built-in-services";
 import { embeddedBuiltInServiceFiles } from "./embedded-service-files";
 import { RELEASE_SELECTOR_ENV } from "./release-manifest";
@@ -296,12 +297,29 @@ export function renderedEmbeddedReleaseServiceFiles(): ReleaseServiceFiles | nul
   return readEmbeddedReleaseServiceFiles();
 }
 
-/** The service files this process renders: its release's when bundled, otherwise the checkout's. */
+/**
+ * The service files this process renders: its release's when bundled,
+ * otherwise the checkout's. An operations agent without the checkout that is
+ * told to use the checkout's (`OPENMAPX_RELEASE=local`) refuses, rather than
+ * render every one of them as missing.
+ */
 export function releaseServiceFiles(
   services: readonly LoadedService[],
   uid: number = process.geteuid?.() ?? 0,
 ): ReleaseServiceFiles {
-  return renderedEmbeddedReleaseServiceFiles() ?? readCheckoutServiceFiles(services, uid);
+  const embedded = renderedEmbeddedReleaseServiceFiles();
+  if (embedded) return embedded;
+  // Only the bundle has files of its own to use instead.
+  for (const service of readEmbeddedReleaseServiceFiles() ? services : []) {
+    if (!service.isBuiltIn) continue;
+    const root = resolve(service.directory, "..", "..");
+    if (!checkoutMounted(root)) {
+      throw new CheckoutRequiredError(
+        `${RELEASE_SELECTOR_ENV}=local renders the checkout's own service files, and this operations agent runs without the checkout at ${root}: select a release instead, or run the render on the host.`,
+      );
+    }
+  }
+  return readCheckoutServiceFiles(services, uid);
 }
 
 const indexSchema = z.strictObject({

@@ -213,6 +213,25 @@ describe("generateTransitousApiKeys", () => {
 });
 
 describe("ensureTransitousApiKeysFile", () => {
+  it("in an operations agent without the checkout keeps a copied file, and never starts an empty one", () => {
+    // The agent names its root; nothing there marks a checkout.
+    vi.stubEnv("OPENMAPX_ROOT_DIR", tmp);
+    try {
+      rmSync(join(tmp, "services"), { recursive: true });
+      expect(() => ensureTransitousApiKeysFile(tmp)).toThrow(
+        /never copied from the checkout .* runs without the checkout: run `pnpm openmapx compose render` on the host/,
+      );
+      expect(existsSync(keysPath())).toBe(false);
+      mkdirSync(join(tmp, "services"));
+      ensureTransitousApiKeysFile(tmp);
+      rmSync(join(tmp, "services"), { recursive: true });
+      expect(ensureTransitousApiKeysFile(tmp)).toEqual({ path: keysPath(), created: null });
+    } finally {
+      vi.unstubAllEnvs();
+      mkdirSync(join(tmp, "services"), { recursive: true });
+    }
+  });
+
   it("creates a private directory holding only an empty keys file", () => {
     const result = ensureTransitousApiKeysFile(tmp);
 

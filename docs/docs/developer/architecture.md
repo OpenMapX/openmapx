@@ -198,8 +198,23 @@ read-only `transitousPin.inspect` operation. The proposal and every change stay
 fixed CLI render come from the agent's own image, not from the host checkout.
 A process cannot recreate its own container, so
 to update itself the agent starts a short-lived helper container from its own
-image. The helper has only the socket and checkout mounts, no network and no
-capabilities. It replaces the agent container, verifies the new agent and exits. Traefik consumes generated configuration rather
+image. The helper has only the socket and the agent's own mounts at the
+checkout's path, no network and no capabilities. It replaces the agent
+container from the applied generation, verifies the new agent and exits.
+
+The agent works under two mount layouts, both at the same host paths, because
+Compose's bind sources must resolve the same inside and outside it. Its
+manifest mounts the whole checkout today. The other layout mounts only
+`infra/docker` read-only (for `.env`, through the directory so an editor's
+atomic save is seen, and the overrides) and `infra/docker/state`, `data`,
+`secrets` and `backups` read-write. Everything the agent needs comes from its
+image and its state. It tells the layouts apart by one test, whether the
+checkout's `services` directory is there, and logs which it has when it
+starts. Without the checkout, a one-time step only a checkout allows (the
+import of service file edits, the copy of the stores and of the Transitous
+API keys) is refused or waits, and says that `pnpm openmapx compose render`
+on the host does it. It is never recorded as done. CI runs the agent's image
+under both layouts (`test (ops-agent image, both mount layouts)`). Traefik consumes generated configuration rather
 than discovering containers through the Docker socket, so there is no duplicate
 host-control path outside the broker.
 

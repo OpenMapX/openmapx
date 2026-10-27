@@ -66,6 +66,8 @@ function earlierRelease() {
   const root = mkdtempSync(join(tmpdir(), "openmapx-agent-stores-"));
   roots.push(root);
   chmodSync(root, 0o755);
+  // The whole checkout is mounted, as this release's manifest has it.
+  mkdirSync(join(root, "services"));
   const infraDir = join(root, "infra", "docker");
   mkdirSync(services.agentStatePaths(infraDir).directory, { recursive: true, mode: 0o700 });
   const legacy = services.legacyAgentStorePaths(infraDir);

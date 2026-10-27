@@ -104,6 +104,8 @@ function fixture() {
   roots.push(root);
   const infraDir = join(root, "infra", "docker");
   mkdirSync(infraDir, { recursive: true });
+  // The whole checkout is mounted, as this release's manifest has it.
+  mkdirSync(join(root, "services"), { recursive: true });
   select(infraDir, ["alpha"]);
   const current = join(infraDir, services.CURRENT_CONFIGURATION);
   return {

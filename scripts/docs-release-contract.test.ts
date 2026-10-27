@@ -177,6 +177,7 @@ esac
         "types",
         "test-node",
         "test-linux-user",
+        "test-agent-mounts",
         "test-web",
         "mobile",
         "database",

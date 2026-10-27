@@ -37,6 +37,8 @@ const scratch: string[] = [];
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "openmapx-api-agent-stores-"));
   chmodSync(root, 0o755);
+  // The copy runs from a checkout, which the agent has mounted whole.
+  mkdirSync(join(root, "services"));
   mkdirSync(services.agentStatePaths(join(root, "infra", "docker")).directory, {
     recursive: true,
     mode: 0o700,
