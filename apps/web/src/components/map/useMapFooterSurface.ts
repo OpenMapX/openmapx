@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useState } from "react";
-import { publishMapFooterCenterCovered } from "@/lib/mapFooterCenter";
+import { MAP_FOOTER_OBSTRUCTION_ID, publishMapFooterCenterCovered } from "@/lib/mapFooterCenter";
 import {
   getMapObstructionInsets,
   publishMapObstruction,
@@ -77,7 +77,7 @@ export function useMapFooterSurface(footer: HTMLElement | null, mobile: boolean)
       if (docked) publishMapFooterCenterCovered(false);
       if (footer)
         publishMapObstruction(
-          "map-footer",
+          MAP_FOOTER_OBSTRUCTION_ID,
           "bottom",
           window.innerHeight - footer.getBoundingClientRect().top,
         );

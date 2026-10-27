@@ -25,8 +25,9 @@ import { attributedRasterRequestTransform } from "@/integration-api/overlay/rast
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { loadMaptilerStyle, loadOpenMapXStyle, type MapStyleVariant } from "@/lib/map";
 import { initializeMapClickModes } from "@/lib/mapClickModes";
+import { MAP_FOOTER_OBSTRUCTION_ID } from "@/lib/mapFooterCenter";
 import { loadMapLibreRuntime, type MapLibreRuntime } from "@/lib/maplibreRuntime";
-import { useMapObstructionInsets } from "@/lib/mapObstructions";
+import { useMapObstructionExtent, useMapObstructionInsets } from "@/lib/mapObstructions";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { useMobilePanelClearance, useWindowHeight, useWindowWidth } from "@/lib/mobilePanelHeight";
@@ -111,8 +112,11 @@ export function MapCanvas() {
   const viewportHeight = useWindowHeight();
   const viewportWidth = useWindowWidth();
   const sheetClearance = useMobilePanelClearance(viewportHeight);
+  // The live footer and sheet edges rather than `insets.bottom`, which holds a
+  // moving sheet's last settled height and would leave the scale behind it.
+  const footerExtent = useMapObstructionExtent(MAP_FOOTER_OBSTRUCTION_ID);
   const scaleLeft = 12;
-  const scaleBottom = Math.max(102, insets.bottom + 12, sheetClearance + 12);
+  const scaleBottom = Math.max(102, footerExtent + 12, sheetClearance + 12);
   const scaleVisible =
     (viewportHeight === 0 || viewportHeight - insets.top - scaleBottom >= 24) &&
     (viewportWidth === 0 || viewportWidth - scaleLeft - 12 >= 100);
@@ -455,7 +459,6 @@ export function MapCanvas() {
             color: "text.primary",
             borderColor: "currentColor",
             fontSize: 10,
-            transition: "margin-bottom 0.25s ease",
           },
         }}
       />

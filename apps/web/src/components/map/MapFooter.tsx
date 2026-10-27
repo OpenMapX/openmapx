@@ -14,7 +14,11 @@ import { AttributionDetails } from "@/components/ui/AttributionDetails";
 import { AttributionNotices } from "@/components/ui/AttributionNotices";
 import { useMapAttributionPresentation } from "@/integration-api/overlay/mapAttributionStore";
 import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
-import { coversFooterCenter, publishMapFooterCenterCovered } from "@/lib/mapFooterCenter";
+import {
+  coversFooterCenter,
+  MAP_FOOTER_OBSTRUCTION_ID,
+  publishMapFooterCenterCovered,
+} from "@/lib/mapFooterCenter";
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { CREDITS_SX } from "./MapCredits";
 import { useMapFooterSurface } from "./useMapFooterSurface";
@@ -61,7 +65,7 @@ export function MapFooter() {
     docked,
     mapBudget,
   } = useMapFooterSurface(footerEl, mobile);
-  useMeasuredMapObstruction("map-footer", "bottom", footerEl);
+  useMeasuredMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", footerEl);
   const linksRef = useRef<HTMLDivElement>(null);
   const creditsRef = useRef<HTMLDivElement>(null);
   const mandatoryRef = useRef<HTMLSpanElement>(null);
