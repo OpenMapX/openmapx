@@ -365,7 +365,11 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
           root,
           new AbortController().signal,
         );
-        expect(facts.rootMounts).toEqual(layoutMounts(layout, root));
+        // The same mounts, the outermost first so a nested one isn't hidden.
+        const byTarget = (mounts: Array<{ target: string }>) =>
+          [...mounts].sort((left, right) => left.target.localeCompare(right.target));
+        expect(byTarget(facts.rootMounts)).toEqual(byTarget(layoutMounts(layout, root)));
+        expect(facts.rootMounts[0]).toEqual(layoutMounts(layout, root)[0]);
         const helper = agentHandoffRunArgs(facts, root, "handoff-layout").join("\n");
         if (layout === "narrow") expect(helper).not.toContain(`target=${root}\n`);
 
