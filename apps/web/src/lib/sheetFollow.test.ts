@@ -79,6 +79,45 @@ describe("planAboveFooter", () => {
   });
 });
 
+describe("follower positions against the per-frame formulas they replace", () => {
+  /** Where the compositor puts a follower once the sheet shows `visible` px. */
+  function animated(
+    plan: ReturnType<typeof planSheetFollow>,
+    track: SheetFollowTrack,
+    visible: number,
+  ) {
+    const scrollTop = track.scrollStart + visible;
+    const risen = Math.min(Math.max(scrollTop - plan.start, 0), Math.max(0, plan.end - plan.start));
+    return plan.base + (plan.travel > 0 ? risen : 0);
+  }
+
+  it("matches every follower for any visible height, keyboard lift, floor, cap and footer height", () => {
+    for (const lift of [0, 20])
+      for (const floor of [0, 30])
+        for (const cap of [300, 440])
+          for (const height of [0, 34, 97]) {
+            const track = { scrollStart: 4, cap, lift, floor };
+            const footer = { docked: false, height };
+            for (let visible = 0; visible <= 800; visible += 7) {
+              const f = Math.min(visible, cap);
+              const footerBottom = Math.max(floor, lift + f);
+              const footerTop = footerBottom + height;
+              const expectations: [number, ReturnType<typeof planSheetFollow>][] = [
+                [footerBottom, planSheetFollow(track, { offset: lift, min: floor })],
+                [footerTop, planAboveFooter(track, footer, 0, 0)],
+                [f, planSheetFollow(track, { offset: 0, min: 0 })],
+                [Math.max(102, footerTop + 12, f + 12), planAboveFooter(track, footer, 12, 102)],
+                [Math.max(26, footerTop + 8, f + 8), planAboveFooter(track, footer, 8, 26)],
+                [f + 12, planSheetFollow(track, { offset: 12 })],
+                [Math.min(f + 12, 212), planSheetFollow(track, { offset: 12, max: 212 })],
+              ];
+              for (const [expected, plan] of expectations)
+                expect(animated(plan, track, visible)).toBe(expected);
+            }
+          }
+  });
+});
+
 describe("sheetFollowSx", () => {
   it("drives the shared keyframes from the sheet timeline over the planned range", () => {
     expect(sheetFollowSx({ base: 12, start: 4, end: 444, travel: 440 })).toEqual({
@@ -148,6 +187,22 @@ describe("useSheetFollowTrack", () => {
 
     unmount();
     expect(navigation.style.getPropertyValue("scroll-timeline")).toBe("");
+  });
+
+  it("moves the footer's floor as the visual viewport pans over the keyboard", () => {
+    const viewport = Object.assign(new EventTarget(), { offsetTop: 0, height: 844 });
+    vi.stubGlobal("visualViewport", viewport);
+    const { result } = renderHook(() => useSheetFollowTrack());
+    sheet("detail", 11);
+    expect(result.current?.floor).toBe(0);
+
+    // The keyboard takes 300px and the page pans 100px: nothing resizes.
+    act(() => {
+      viewport.height = 544;
+      viewport.offsetTop = 100;
+      viewport.dispatchEvent(new Event("scroll"));
+    });
+    expect(result.current?.floor).toBe(200);
   });
 
   it("leaves followers on the published heights where the browser cannot run the follow", () => {

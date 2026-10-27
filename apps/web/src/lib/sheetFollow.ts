@@ -136,13 +136,17 @@ function startDriver(): () => void {
   const unsubscribe = subscribeMobileFooterSurfaces(refresh);
   mobile.addEventListener("change", refresh);
   window.addEventListener("resize", refresh);
+  // A panning visual viewport (iOS with the keyboard up) moves the footer's
+  // floor without resizing anything.
   vv?.addEventListener("resize", refresh);
+  vv?.addEventListener("scroll", refresh);
   refresh();
   return () => {
     unsubscribe();
     mobile.removeEventListener("change", refresh);
     window.removeEventListener("resize", refresh);
     vv?.removeEventListener("resize", refresh);
+    vv?.removeEventListener("scroll", refresh);
     claimTimeline(null);
     track = null;
   };

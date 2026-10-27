@@ -96,17 +96,21 @@ export function useMapFooterSurface(
       }
       publishMapFooterCenterCovered(centerCovered());
       publishMapFooterBox({ docked, height: footerHeight });
-      // Not the footer's rendered box: while it follows the sheet by a
-      // scroll-driven animation (lib/sheetFollow), a scroll listener reads
-      // that box as of the previous frame, and a sheet hiding leaves the last
-      // such reading in place. On the map over a sheet the top is known
-      // exactly; otherwise the untransformed layout position is current.
-      if (footer)
-        publishMapObstruction(
-          MAP_FOOTER_OBSTRUCTION_ID,
-          "bottom",
-          surface && !docked ? bottom + footerHeight : window.innerHeight - layoutTop(footer),
-        );
+      // The only publisher of the footer's extent. On the map it must not be
+      // the footer's rendered box: while the footer follows the sheet by a
+      // scroll-driven animation (lib/sheetFollow), a scroll listener reads that
+      // box as of the previous frame, and a sheet hiding leaves the last such
+      // reading in place. Over a sheet the top is known exactly; without one
+      // the untransformed layout box is current. Docked, the footer scrolls
+      // with the sheet natively and never animates, so its box is.
+      if (footer) {
+        const footerTop = docked
+          ? footer.getBoundingClientRect().top
+          : surface
+            ? mapBottom - footerHeight
+            : layoutTop(footer);
+        publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", window.innerHeight - footerTop);
+      }
       setPlacement((previous) =>
         previous.docked === docked && previous.mapBudget === mapBudget
           ? previous
@@ -119,6 +123,8 @@ export function useMapFooterSurface(
     const unsubscribeObstructions = subscribeMapObstructions(update);
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
     if (footer) observer?.observe(footer);
+    // The footer's sidebar shift is a `left` transition; re-measure where it lands.
+    footer?.addEventListener("transitionend", update);
     window.addEventListener("resize", update);
     window.visualViewport?.addEventListener("resize", update);
     window.visualViewport?.addEventListener("scroll", update);
@@ -126,11 +132,13 @@ export function useMapFooterSurface(
       unsubscribe();
       unsubscribeObstructions();
       observer?.disconnect();
+      footer?.removeEventListener("transitionend", update);
       window.removeEventListener("resize", update);
       window.visualViewport?.removeEventListener("resize", update);
       window.visualViewport?.removeEventListener("scroll", update);
       owner?.removeAttribute("data-map-footer-owned");
       owner?.style.removeProperty("--omx-footer-keyboard-avoidance");
+      publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", null);
     };
   }, [container, home, footer, mobile, centerCovered]);
   return { container, setHome, ...placement };
