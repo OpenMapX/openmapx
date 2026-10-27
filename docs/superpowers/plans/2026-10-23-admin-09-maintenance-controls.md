@@ -72,6 +72,8 @@ lines and256KiB, including a bounded incomplete line and truncation indicator.
 
 ## Task M3: Pull-only staging and release pin clearing
 
+The [staged configuration interlock](../specs/2026-10-27-admin-staged-configuration-interlock-design.md) makes current bare DM pull unavailable until THIS task installs an actual purpose-bound pull-only producer. Complete that scope: share the existing API administrative writer and fixed authenticated OLD-baseline source/capture, normal submission/containment/API copy and source-lifetime discipline; do not fake coordinator-Update private intent or bypass the reciprocal target-lease check. Pull-only still performs no generation/start/recreate. Release source mutations must honor the staged prerequisite before writes, with explicit guarded DM repair first. Restore truthful installed capabilities only after the real workflow exists and add actual pure-stage/failed/unknown/expiry/fresh-retry/current-source coverage. No extra task/migration or silent permanent refusal.
+
 Consume the [approved conditioned pull contract](../specs/2026-10-27-admin-coordinator-lifecycle-design.md) installed by01.2: fresh service.pull requires exact expectedConfigurationRevisionId, optional candidateId has only its fixed verified purpose, and successful image/source metadata comes from the actual producer. Preserve original normal submission/admission/lookup and legacy observation rules; do not reintroduce service-ID-only fresh pulls, caller image/path/source assertions or cached-image continuation after failure. This task still owns pull-only UI/staging and release pin clearing; no task/migration reallocation.
 
 **Files:** Create focused `apps/api/src/routes/admin-release-controls.ts`,

@@ -2,6 +2,8 @@
 
 Status: APPROVED Revision2 after full R1 plus scoped R2 READY (0 Critical / 0 Important), both findings addressed. Design readiness only; actual implementation, source, runtime and CI qualification remain required. Finite Task01.2 correction to lifecycle Revision2 TTL/new-request rule and pre-pull ownership Revision3. No new operation, forward edge, principal, key, durable store, journal, collector or migration.
 
+The binding [configuration interlock](2026-10-27-admin-staged-configuration-interlock-design.md) prevents an unrelated ordinary generation from orphaning this strict source: while staged DM provenance is needed, resolve it through explicit guarded DM Apply/Update before managed configuration publication. Its pre-save/host-writer gates, source-preserving refusal/normal not-started cleanup and managed staging serialization add no generation-lineage carry or expired authority.
+
 ## Decision and source boundary
 
 333/335 expose a genuine gap: successful pull changes cache B->E, then the sealed candidate expires and is correctly deleted without maintenance. The OLD B container/config remain. A fresh explicit Update is promised its own checked pull, but R3's ordinary capture cannot own B against cache E; Apply similarly lacks the original candidate/owner. Never reuse/renew/reseal the expired candidate or its parent/grants. This is a historical read-only provenance problem, not authority continuation.
