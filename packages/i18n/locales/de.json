@@ -1053,6 +1053,8 @@
     "bikesSupported": "Fahrradmitnahme möglich",
     "bikesNotSupported": "Keine Fahrradmitnahme",
     "wheelchairSupported": "Barrierefrei",
+    "wheelchairUnconfirmed": "Rollstuhlgerechte Nutzung nicht bestätigt",
+    "wheelchairUnconfirmedLegs": "Rollstuhlgerechte Nutzung für {count, plural, one {1 Abschnitt} other {# Abschnitte}} nicht bestätigt",
     "wheelchairNotSupported": "Nicht barrierefrei",
     "returnAnyStation": "Rückgabe an einer Station",
     "returnSameStation": "Rückgabe an der Abholstation",

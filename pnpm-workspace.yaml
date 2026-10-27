@@ -33,6 +33,9 @@ blockExoticSubdeps: true
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
 minimumReleaseAgeIgnoreMissingTime: false
+# Install this exact security patch immediately; retain the age gate elsewhere.
+minimumReleaseAgeExclude:
+  - "node-forge@1.4.2"
 trustPolicy: no-downgrade
 
 # TypeScript 7 has no compiler API yet; keep this workspace's direct compiler
@@ -43,6 +46,7 @@ updateConfig:
 
 overrides:
   "@hey-api/client-fetch": "workspace:*"
+  "node-forge@1": "^1.4.2" # CVE-2026-85393; includes the PEM Buffer regression fix.
   "protobufjs": ">=7.5.5"
   "uuid": ">=14.0.0"
   # Include sharp 0.35.5's librsvg fix (GHSA-wq5f-xc86-pv6w) as well as

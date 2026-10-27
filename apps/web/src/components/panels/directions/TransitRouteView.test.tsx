@@ -1,5 +1,12 @@
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitForElementToBeRemoved,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TransitItineraryCard } from "./TransitRouteView";
@@ -30,6 +37,10 @@ vi.mock("next-intl", () => ({
     if (namespace === "directions" && key === "wheelchairRestrictedLegs") {
       const count = Number(values?.count ?? 0);
       return `${count} ${count === 1 ? "leg" : "legs"} not wheelchair accessible`;
+    }
+    if (namespace === "directions" && key === "wheelchairUnconfirmedLegs") {
+      const count = Number(values?.count ?? 0);
+      return `Wheelchair accessibility not confirmed for ${count} ${count === 1 ? "leg" : "legs"}`;
     }
     if (namespace === "navigation" && key === "towards")
       return `towards ${String(values?.headsign)}`;
@@ -212,6 +223,63 @@ describe("TransitItineraryCard", () => {
     expect(markup).toContain("1 leg not wheelchair accessible");
     expect(markup).not.toContain("Wheelchair accessible");
   });
+
+  it("presents MOTIS negatives as a focusable uncertainty icon without visible warning text", () => {
+    const { container } = render(
+      <TransitItineraryCard
+        itinerary={{
+          ...itineraryWith([{ ...railLeg, wheelchairAccessible: false }]),
+          instance: "mo",
+        }}
+        active={false}
+        onSelect={() => {}}
+        onDetails={() => {}}
+      />,
+    );
+    const indicator = screen.getByRole("button", {
+      name: "Wheelchair accessibility not confirmed for 1 leg",
+    });
+    expect(indicator.tabIndex).toBe(0);
+    expect(indicator.textContent).toBe("");
+    expect(container.textContent).not.toContain("not wheelchair accessible");
+    expect(indicator.parentElement?.textContent).toContain("250 m walk");
+  });
+
+  it.each(["{Enter}", " "])(
+    "opens accessibility on focus, %s and tap without selecting the itinerary",
+    async (key) => {
+      const onSelect = vi.fn();
+      render(
+        <TransitItineraryCard
+          itinerary={{
+            ...itineraryWith([{ ...railLeg, wheelchairAccessible: false }]),
+            instance: "ms",
+          }}
+          active={false}
+          onSelect={onSelect}
+          onDetails={() => {}}
+        />,
+      );
+      const indicator = screen.getByRole("button", {
+        name: "Wheelchair accessibility not confirmed for 1 leg",
+      });
+      await userEvent.tab();
+      expect(document.activeElement).toBe(indicator);
+      expect((await screen.findByRole("tooltip")).textContent).toContain("not confirmed");
+      await userEvent.keyboard("{Escape}");
+      await waitForElementToBeRemoved(() => screen.queryByRole("tooltip"));
+      await userEvent.keyboard(key);
+      expect((await screen.findByRole("tooltip")).textContent).toContain("not confirmed");
+      expect(onSelect).not.toHaveBeenCalled();
+      await userEvent.keyboard("{Escape}");
+      await waitForElementToBeRemoved(() => screen.queryByRole("tooltip"));
+      fireEvent.click(indicator);
+      expect((await screen.findByRole("tooltip")).textContent).toContain("not confirmed");
+      expect(onSelect).not.toHaveBeenCalled();
+      await userEvent.click(document.body);
+      await waitForElementToBeRemoved(() => screen.queryByRole("tooltip"));
+    },
+  );
 
   it("does not infer cancellation from a severe alert or unknown accessibility", () => {
     const markup = renderToStaticMarkup(
