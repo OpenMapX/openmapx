@@ -239,6 +239,7 @@ import { useMapStore, useNavigationStore, useSettingsStore } from "@openmapx/cor
 import * as maplibre from "maplibre-gl";
 import * as mapContext from "@/integration-api/map/MapContext";
 import * as mapStyle from "@/lib/map";
+import { MAP_FOOTER_OBSTRUCTION_ID } from "@/lib/mapFooterCenter";
 import { publishMapObstruction } from "@/lib/mapObstructions";
 import { MapCanvas } from "./MapCanvas";
 
@@ -404,6 +405,31 @@ describe("MapCanvas", () => {
       act(() => publishMapObstruction("scale-test-left", "left", null));
       act(() => publishMapObstruction("scale-test-right", "right", null));
       Object.defineProperty(window, "innerWidth", { configurable: true, value: previousWidth });
+    }
+  });
+
+  it("keeps the scale on the live footer rather than a sheet's settled extent", async () => {
+    maplibreTest.reset();
+    mapStyleTest.reset();
+    vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
+    const view = render(<MapCanvas />);
+    try {
+      await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
+      const scale = view.container.querySelector<HTMLElement>(".maplibregl-ctrl-scale");
+      act(() => {
+        publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 300);
+        publishMapObstruction("scale-test-sheet", "bottom", 500);
+      });
+      expect(getComputedStyle(scale as HTMLElement).marginBottom).toBe("312px");
+      act(() => publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 200));
+      expect(getComputedStyle(scale as HTMLElement).marginBottom).toBe("212px");
+      expect(getComputedStyle(scale as HTMLElement).transition).toBe("");
+    } finally {
+      view.unmount();
+      act(() => {
+        publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", null);
+        publishMapObstruction("scale-test-sheet", "bottom", null);
+      });
     }
   });
 

@@ -2,6 +2,13 @@
 
 import { useSyncExternalStore } from "react";
 
+/**
+ * The map footer's bottom-edge obstruction. Chrome that stands on the footer
+ * reads this registration directly (`useMapObstructionExtent`): the footer
+ * republishes it in the same frame it follows a moving sheet.
+ */
+export const MAP_FOOTER_OBSTRUCTION_ID = "map-footer";
+
 /** Width of the legend show/hide tab centred on the map's bottom edge. */
 export const LEGEND_TOGGLE_WIDTH = 54;
 
@@ -30,11 +37,14 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-const getSnapshot = () => covered;
+export function getMapFooterCenterCovered(): boolean {
+  return covered;
+}
+
 const getServerSnapshot = () => false;
 
 export function useMapFooterCenterCovered(): boolean {
-  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  return useSyncExternalStore(subscribe, getMapFooterCenterCovered, getServerSnapshot);
 }
 
 /**

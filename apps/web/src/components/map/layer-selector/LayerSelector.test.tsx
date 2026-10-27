@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode, Ref } from "react";
 import { useImperativeHandle } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LAYER_SELECTOR_OPEN_EVENT } from "@/components/command-palette/constants";
+import { MAP_FOOTER_OBSTRUCTION_ID } from "@/lib/mapFooterCenter";
 import { publishMapObstruction } from "@/lib/mapObstructions";
+import { publishMobilePanelHeight } from "@/lib/mobilePanelHeight";
 
 const mockState = {
   desktopDock: true,
@@ -88,30 +90,54 @@ beforeEach(() => {
   mockPopoverAction.updatePosition.mockClear();
 });
 
-afterEach(() => publishMapObstruction("map-footer", "bottom", null));
+afterEach(() => {
+  publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", null);
+  publishMapObstruction("layer-test-sheet", "bottom", null);
+  publishMobilePanelHeight("layer-test-sheet", null);
+});
 
-function dockBottom(label: string): string {
+function dock(label: string): HTMLElement {
   let element = screen.getByLabelText(label).parentElement;
   while (element && getComputedStyle(element).position !== "absolute") {
     element = element.parentElement;
   }
   if (!element) throw new Error("Layer dock was not positioned");
-  return getComputedStyle(element).bottom;
+  return element;
+}
+
+function dockBottom(label: string): string {
+  return getComputedStyle(dock(label)).bottom;
 }
 
 describe("LayerSelector desktop dock", () => {
   it("clears a wrapped footer on mobile without moving the ordinary desktop dock", () => {
     mockState.desktopDock = false;
-    publishMapObstruction("map-footer", "bottom", 34);
+    publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 34);
     const { rerender } = render(<LayerSelector />);
 
     expect(dockBottom("openLayerMenu")).toBe("42px");
 
     mockState.desktopDock = true;
-    publishMapObstruction("map-footer", "bottom", 17);
+    publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 17);
     rerender(<LayerSelector />);
 
     expect(dockBottom("openLayers")).toBe("26px");
+  });
+
+  it("rides the live footer and sheet edges rather than a sheet's settled extent", () => {
+    mockState.desktopDock = false;
+    publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 300);
+    publishMapObstruction("layer-test-sheet", "bottom", 500);
+    render(<LayerSelector />);
+    expect(dockBottom("openLayerMenu")).toBe("308px");
+
+    act(() => publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 200));
+    expect(dockBottom("openLayerMenu")).toBe("208px");
+
+    // A sheet past its follow cap has taken the footer inside it.
+    act(() => publishMobilePanelHeight("layer-test-sheet", 400));
+    expect(dockBottom("openLayerMenu")).toBe("408px");
+    expect(getComputedStyle(dock("openLayerMenu")).transition).toBe("opacity 0.18s ease");
   });
 
   it("collapses the quick selector when the full map-details panel opens", async () => {

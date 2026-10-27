@@ -14,7 +14,11 @@ import { AttributionDetails } from "@/components/ui/AttributionDetails";
 import { AttributionNotices } from "@/components/ui/AttributionNotices";
 import { useMapAttributionPresentation } from "@/integration-api/overlay/mapAttributionStore";
 import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
-import { coversFooterCenter, publishMapFooterCenterCovered } from "@/lib/mapFooterCenter";
+import {
+  coversFooterCenter,
+  MAP_FOOTER_OBSTRUCTION_ID,
+  publishMapFooterCenterCovered,
+} from "@/lib/mapFooterCenter";
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { CREDITS_SX } from "./MapCredits";
 import { useMapFooterSurface } from "./useMapFooterSurface";
@@ -55,15 +59,25 @@ export function MapFooter() {
     containerRef.current = element;
     setFooterEl(element);
   }, []);
+  const linksRef = useRef<HTMLDivElement>(null);
+  const creditsRef = useRef<HTMLDivElement>(null);
+  // Read live, docking included: a footer docked into a sheet leaves the map
+  // edge clear, whatever its own content does.
+  const centerCovered = useCallback(() => {
+    const container = containerRef.current;
+    const links = linksRef.current;
+    if (!container || !links || container.closest('[data-map-footer-surface="sheet"]'))
+      return false;
+    const credits = creditsRef.current?.getBoundingClientRect();
+    const l = links.getBoundingClientRect();
+    return coversFooterCenter(container.getBoundingClientRect(), credits ? [l, credits] : [l]);
+  }, []);
   const {
     container: portalContainer,
     setHome,
-    docked,
     mapBudget,
-  } = useMapFooterSurface(footerEl, mobile);
-  useMeasuredMapObstruction("map-footer", "bottom", footerEl);
-  const linksRef = useRef<HTMLDivElement>(null);
-  const creditsRef = useRef<HTMLDivElement>(null);
+  } = useMapFooterSurface(footerEl, mobile, centerCovered);
+  useMeasuredMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", footerEl);
   const mandatoryRef = useRef<HTMLSpanElement>(null);
   const [tall, setTall] = useState(false);
   const [merged, setMerged] = useState(false);
@@ -77,11 +91,9 @@ export function MapFooter() {
       const creditsEl = creditsRef.current;
       const height = mandatoryRef.current?.getBoundingClientRect().height ?? 0;
       setTall(height > Math.max(1, mapBudget) * 0.25);
+      publishMapFooterCenterCovered(centerCovered());
       const l = links.getBoundingClientRect();
       const c = creditsEl?.getBoundingClientRect();
-      publishMapFooterCenterCovered(
-        !docked && coversFooterCenter(container.getBoundingClientRect(), c ? [l, c] : [l]),
-      );
       if (!c) {
         setMerged(false);
         return;
@@ -96,11 +108,9 @@ export function MapFooter() {
     observer?.observe(container);
     observer?.observe(links);
     if (creditsRef.current) observer?.observe(creditsRef.current);
-    return () => {
-      observer?.disconnect();
-      publishMapFooterCenterCovered(false);
-    };
-  }, [creditsHtml, mapBudget, docked]);
+    return () => observer?.disconnect();
+  }, [creditsHtml, mapBudget, centerCovered]);
+  useEffect(() => () => publishMapFooterCenterCovered(false), []);
 
   // Typography/colors come from the shared credits style so the footer and the
   // embedded maps' `<MapCredits>` can't drift apart. In merged mode the

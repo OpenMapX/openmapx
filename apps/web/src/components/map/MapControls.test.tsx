@@ -260,6 +260,16 @@ describe("MapControls align to streets", () => {
   });
 });
 
+describe("MapControls sheet following", () => {
+  it("moves with the sheet's published height instead of easing after it", () => {
+    compute.mockReturnValue({ status: "ok", bearing: 30 });
+    render(<MapControls />);
+    const stack = document.querySelector<HTMLElement>("[data-map-controls-columns]");
+    expect(stack).not.toBeNull();
+    expect(getComputedStyle(stack as HTMLElement).transition).toBe("");
+  });
+});
+
 describe("MapControls zoom buttons on touch screens", () => {
   // jsdom doesn't evaluate media queries, so these read the emitted rule and
   // stand in for the browser's computed style.

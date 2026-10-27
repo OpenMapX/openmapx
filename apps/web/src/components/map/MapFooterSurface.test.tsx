@@ -6,6 +6,7 @@ import { useDetailChrome } from "@/components/panels/DetailShell";
 import { PLACE_DETENTS } from "@/components/panels/sheet/detents";
 import { MobileBottomSheet } from "@/components/panels/sheet/MobileBottomSheet";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
+import { getMapFooterCenterCovered } from "@/lib/mapFooterCenter";
 import { getMapObstructionInsets } from "@/lib/mapObstructions";
 import { MapFooter } from "./MapFooter";
 
@@ -19,6 +20,14 @@ class Observer {
 globalThis.ResizeObserver = Observer as unknown as typeof ResizeObserver;
 globalThis.IntersectionObserver = Observer as unknown as typeof IntersectionObserver;
 
+const nativeRect = HTMLElement.prototype.getBoundingClientRect;
+function layoutRect(this: HTMLElement): DOMRect {
+  if (this.tagName === "FOOTER") return new DOMRect(0, 747, 390, 97);
+  if (this.tagName === "BOTTOM-SHEET")
+    return new DOMRect(0, 51 - (Number.parseFloat(this.style.bottom) || 0), 390, 793);
+  return nativeRect.call(this);
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
   Object.defineProperty(window, "innerHeight", { value: 844, configurable: true });
@@ -28,15 +37,7 @@ beforeEach(() => {
     addEventListener() {},
     removeEventListener() {},
   }));
-  const original = HTMLElement.prototype.getBoundingClientRect;
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
-    this: HTMLElement,
-  ) {
-    if (this.tagName === "FOOTER") return new DOMRect(0, 747, 390, 97);
-    if (this.tagName === "BOTTOM-SHEET")
-      return new DOMRect(0, 51 - (Number.parseFloat(this.style.bottom) || 0), 390, 793);
-    return original.call(this);
-  });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(layoutRect);
   useMapAttributionStore.setState({
     byLayer: {
       base: [
@@ -99,6 +100,41 @@ it("hands the same focused footer into the real sheet slot before the 97px credi
   expect(host.contains(footer)).toBe(false);
   expect(document.activeElement).toBe(button);
   expect(container.querySelectorAll("footer")).toHaveLength(1);
+});
+
+it("reports credits under the legend tab in the same scroll event that takes the footer out of the sheet", async () => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    // Legal links wrapped across the whole phone width, under the centred tab.
+    if (this.querySelector(':scope > a[href="/imprint"]')) return new DOMRect(0, 747, 390, 40);
+    return layoutRect.call(this);
+  });
+  const { container } = render(
+    <>
+      <MapFooter />
+      <MobileBottomSheet id="detail" zIndex={11} detents={PLACE_DETENTS}>
+        <p>Detail</p>
+      </MobileBottomSheet>
+    </>,
+  );
+  const host = container.querySelector("bottom-sheet") as HTMLElement;
+  await prepare(container);
+  move(host, 180);
+  expect(getMapFooterCenterCovered()).toBe(true);
+  move(host, 793);
+  expect(getMapFooterCenterCovered()).toBe(false);
+
+  Object.defineProperty(host, "scrollTop", { value: 439, configurable: true });
+  let duringScroll: boolean | undefined;
+  act(() => {
+    host.dispatchEvent(new Event("scroll"));
+    // Read before React renders the new placement.
+    duringScroll = getMapFooterCenterCovered();
+    vi.advanceTimersByTime(20);
+  });
+  expect(host.contains(container.querySelector("footer"))).toBe(false);
+  expect(duringScroll).toBe(true);
 });
 
 async function prepare(container: HTMLElement) {

@@ -164,7 +164,9 @@ export function MapControls() {
           alignItems: "center",
           gap: 1,
           zIndex: 10,
-          transition: "bottom 0.25s ease",
+          // No `bottom` transition: the sheet republishes its height on every
+          // frame it moves, and an eased transition restarted per frame would
+          // trail the sheet by a few hundred pixels instead of riding on it.
           "@media (pointer: coarse)": {
             "& .MuiIconButton-root": { width: 44, height: 44 },
           },

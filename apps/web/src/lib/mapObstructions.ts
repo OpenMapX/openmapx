@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 export type MapEdge = "top" | "bottom" | "left" | "right";
 
@@ -15,6 +15,9 @@ const ZERO_INSETS: MapInsets = { top: 0, bottom: 0, left: 0, right: 0 };
 
 const entries = new Map<string, { edge: MapEdge; px: number }>();
 const listeners = new Set<() => void>();
+// Notified on every registration change, not only when an edge's maximum
+// moves, so a per-entry read never misses a change the maximum hides.
+const extentListeners = new Set<() => void>();
 let cached: MapInsets = ZERO_INSETS;
 
 function sameInsets(a: MapInsets, b: MapInsets): boolean {
@@ -44,7 +47,9 @@ export function publishMapObstruction(id: string, edge: MapEdge, px: number | nu
     if (current && current.edge === edge && current.px === px) return;
     entries.set(id, { edge, px });
   }
-  if (!recompute()) return;
+  const insetsChanged = recompute();
+  for (const listener of extentListeners) listener();
+  if (!insetsChanged) return;
   for (const listener of listeners) listener();
 }
 
@@ -53,6 +58,27 @@ export function subscribeMapObstructions(listener: () => void): () => void {
   return () => {
     listeners.delete(listener);
   };
+}
+
+function subscribeMapObstructionExtents(listener: () => void): () => void {
+  extentListeners.add(listener);
+  return () => {
+    extentListeners.delete(listener);
+  };
+}
+
+const getServerExtent = () => 0;
+
+/**
+ * The extent one registration currently publishes, or 0 while it publishes
+ * none. For chrome anchored to one particular piece of chrome rather than to
+ * everything along the edge: a moving bottom sheet's own registration only
+ * updates once the sheet settles (it frames the camera), so the per-edge
+ * maximum trails a sheet that the anchor itself follows every frame.
+ */
+export function useMapObstructionExtent(id: string): number {
+  const getSnapshot = useCallback(() => entries.get(id)?.px ?? 0, [id]);
+  return useSyncExternalStore(subscribeMapObstructionExtents, getSnapshot, getServerExtent);
 }
 
 /** The largest registered extent per edge. */

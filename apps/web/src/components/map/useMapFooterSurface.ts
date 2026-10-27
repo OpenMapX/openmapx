@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useState } from "react";
-import { publishMapFooterCenterCovered } from "@/lib/mapFooterCenter";
+import { MAP_FOOTER_OBSTRUCTION_ID, publishMapFooterCenterCovered } from "@/lib/mapFooterCenter";
 import {
   getMapObstructionInsets,
   publishMapObstruction,
@@ -9,8 +9,17 @@ import {
 } from "@/lib/mapObstructions";
 import { subscribeMobileFooterSurfaces, topMobileFooterSurface } from "@/lib/mobileFooterSurface";
 
-/** One portal target for the controller's whole lifetime. Only its physical parent changes. */
-export function useMapFooterSurface(footer: HTMLElement | null, mobile: boolean) {
+/**
+ * One portal target for the controller's whole lifetime. Only its physical parent changes.
+ * `centerCovered` reports whether footer content runs under the legend tab; it
+ * is republished with every move, so a footer leaving the sheet is not left
+ * reporting the "clear" state it had inside it until React next renders.
+ */
+export function useMapFooterSurface(
+  footer: HTMLElement | null,
+  mobile: boolean,
+  centerCovered: () => boolean,
+) {
   const [home, setHome] = useState<HTMLDivElement | null>(null);
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const [placement, setPlacement] = useState({ docked: false, mapBudget: 0 });
@@ -74,10 +83,10 @@ export function useMapFooterSurface(footer: HTMLElement | null, mobile: boolean)
         if (restore && focused.isConnected && document.activeElement !== focused)
           focused.focus({ preventScroll: true });
       }
-      if (docked) publishMapFooterCenterCovered(false);
+      publishMapFooterCenterCovered(centerCovered());
       if (footer)
         publishMapObstruction(
-          "map-footer",
+          MAP_FOOTER_OBSTRUCTION_ID,
           "bottom",
           window.innerHeight - footer.getBoundingClientRect().top,
         );
@@ -106,6 +115,6 @@ export function useMapFooterSurface(footer: HTMLElement | null, mobile: boolean)
       owner?.removeAttribute("data-map-footer-owned");
       owner?.style.removeProperty("--omx-footer-keyboard-avoidance");
     };
-  }, [container, home, footer, mobile]);
+  }, [container, home, footer, mobile, centerCovered]);
   return { container, setHome, ...placement };
 }
