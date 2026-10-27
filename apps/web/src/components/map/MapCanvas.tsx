@@ -25,7 +25,7 @@ import { attributedRasterRequestTransform } from "@/integration-api/overlay/rast
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { loadMaptilerStyle, loadOpenMapXStyle, type MapStyleVariant } from "@/lib/map";
 import { initializeMapClickModes } from "@/lib/mapClickModes";
-import { MAP_FOOTER_OBSTRUCTION_ID } from "@/lib/mapFooterCenter";
+import { MAP_FOOTER_OBSTRUCTION_ID, useMapFooterBox } from "@/lib/mapFooterCenter";
 import { loadMapLibreRuntime, type MapLibreRuntime } from "@/lib/maplibreRuntime";
 import { useMapObstructionExtent, useMapObstructionInsets } from "@/lib/mapObstructions";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
@@ -39,6 +39,7 @@ import {
   selectOnlineFirstOpenMapXStyle,
   setOfflinePackageActive,
 } from "@/lib/offlineAreas";
+import { planAboveFooter, sheetFollowSx, useSheetFollowTrack } from "@/lib/sheetFollow";
 import { localizeMapLabels } from "./localizeTextField";
 
 /** The main map uses its camera-aware 3D layer instead of basemap extrusions. */
@@ -117,6 +118,11 @@ export function MapCanvas() {
   const footerExtent = useMapObstructionExtent(MAP_FOOTER_OBSTRUCTION_ID);
   const scaleLeft = 12;
   const scaleBottom = Math.max(102, footerExtent + 12, sheetClearance + 12);
+  // While a sheet drives the follow, the scale rides the footer (or, with the
+  // footer docked, the sheet edge) on the compositor (see lib/sheetFollow).
+  const followTrack = useSheetFollowTrack();
+  const footerBox = useMapFooterBox();
+  const scaleFollow = followTrack ? planAboveFooter(followTrack, footerBox, 12, 102) : null;
   const scaleVisible =
     (viewportHeight === 0 || viewportHeight - insets.top - scaleBottom >= 24) &&
     (viewportWidth === 0 || viewportWidth - scaleLeft - 12 >= 100);
@@ -453,7 +459,8 @@ export function MapCanvas() {
           "& .maplibregl-ctrl-bottom-left > .maplibregl-ctrl-scale": {
             display: scaleVisible ? "block" : "none",
             marginLeft: `${scaleLeft}px`,
-            marginBottom: `${scaleBottom}px`,
+            marginBottom: `${scaleFollow ? scaleFollow.base : scaleBottom}px`,
+            ...sheetFollowSx(scaleFollow),
             pointerEvents: "none",
             bgcolor: "background.paper",
             color: "text.primary",

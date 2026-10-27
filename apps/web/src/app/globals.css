@@ -33,6 +33,23 @@
   --omx-safe-right: env(safe-area-inset-right, 0px);
 }
 
+/* Map chrome that rides the mobile bottom sheet follows the sheet's scroll
+ * position on the compositor (see lib/sheetFollow.ts): the driving sheet's
+ * host names this timeline, the scope makes it visible page-wide, and each
+ * follower supplies its own range and travel. */
+:root {
+  timeline-scope: --omx-sheet-follow;
+}
+
+@keyframes omx-sheet-follow {
+  from {
+    translate: 0 0;
+  }
+  to {
+    translate: 0 calc(-1 * var(--omx-sheet-follow-travel, 0px));
+  }
+}
+
 .omx-route-map-pill {
   display: inline-flex;
   align-items: center;

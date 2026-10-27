@@ -1,13 +1,24 @@
 "use client";
 
 import { useLayoutEffect, useState } from "react";
-import { MAP_FOOTER_OBSTRUCTION_ID, publishMapFooterCenterCovered } from "@/lib/mapFooterCenter";
+import {
+  MAP_FOOTER_OBSTRUCTION_ID,
+  publishMapFooterBox,
+  publishMapFooterCenterCovered,
+} from "@/lib/mapFooterCenter";
 import {
   getMapObstructionInsets,
   publishMapObstruction,
   subscribeMapObstructions,
 } from "@/lib/mapObstructions";
 import { subscribeMobileFooterSurfaces, topMobileFooterSurface } from "@/lib/mobileFooterSurface";
+
+/** Viewport top of `element`'s layout box, ignoring its own transforms and animations. */
+function layoutTop(element: HTMLElement): number {
+  const parent = element.offsetParent;
+  if (!parent) return element.getBoundingClientRect().top;
+  return parent.getBoundingClientRect().top + element.offsetTop;
+}
 
 /**
  * One portal target for the controller's whole lifetime. Only its physical parent changes.
@@ -50,10 +61,10 @@ export function useMapFooterSurface(
       const mapBudget = Math.max(0, mapBottom - top);
       // One pixel tolerates the engine's fractional snap-marker boundary. The
       // hypothetical rectangle is independent of the current physical parent.
+      const footerHeight = footer?.getBoundingClientRect().height ?? 0;
       const docked =
         !!surface &&
-        (mapBottom > surface.bottom - surface.visibleHeight + 1 ||
-          (footer?.getBoundingClientRect().height ?? 0) > mapBudget + 1);
+        (mapBottom > surface.bottom - surface.visibleHeight + 1 || footerHeight > mapBudget + 1);
       const nextOwner = docked ? surface.host : null;
       if (owner !== nextOwner) {
         owner?.removeAttribute("data-map-footer-owned");
@@ -84,11 +95,17 @@ export function useMapFooterSurface(
           focused.focus({ preventScroll: true });
       }
       publishMapFooterCenterCovered(centerCovered());
+      publishMapFooterBox({ docked, height: footerHeight });
+      // Not the footer's rendered box: while it follows the sheet by a
+      // scroll-driven animation (lib/sheetFollow), a scroll listener reads
+      // that box as of the previous frame, and a sheet hiding leaves the last
+      // such reading in place. On the map over a sheet the top is known
+      // exactly; otherwise the untransformed layout position is current.
       if (footer)
         publishMapObstruction(
           MAP_FOOTER_OBSTRUCTION_ID,
           "bottom",
-          window.innerHeight - footer.getBoundingClientRect().top,
+          surface && !docked ? bottom + footerHeight : window.innerHeight - layoutTop(footer),
         );
       setPlacement((previous) =>
         previous.docked === docked && previous.mapBudget === mapBudget

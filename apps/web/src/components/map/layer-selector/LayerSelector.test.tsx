@@ -6,7 +6,7 @@ import type { ReactNode, Ref } from "react";
 import { useImperativeHandle } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LAYER_SELECTOR_OPEN_EVENT } from "@/components/command-palette/constants";
-import { MAP_FOOTER_OBSTRUCTION_ID } from "@/lib/mapFooterCenter";
+import { MAP_FOOTER_OBSTRUCTION_ID, publishMapFooterBox } from "@/lib/mapFooterCenter";
 import { publishMapObstruction } from "@/lib/mapObstructions";
 import { publishMobilePanelHeight } from "@/lib/mobilePanelHeight";
 
@@ -23,6 +23,13 @@ const mockPopoverAction = { updatePosition: vi.fn() };
 
 vi.mock("next-intl", () => ({
   useTranslations: () => (k: string) => k,
+}));
+const follow = vi.hoisted(() => ({
+  track: null as import("@/lib/sheetFollow").SheetFollowTrack | null,
+}));
+vi.mock("@/lib/sheetFollow", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/sheetFollow")>()),
+  useSheetFollowTrack: () => follow.track,
 }));
 vi.mock("@mui/material/useMediaQuery", () => ({
   default: () => mockState.desktopDock,
@@ -138,6 +145,27 @@ describe("LayerSelector desktop dock", () => {
     act(() => publishMobilePanelHeight("layer-test-sheet", 400));
     expect(dockBottom("openLayerMenu")).toBe("408px");
     expect(getComputedStyle(dock("openLayerMenu")).transition).toBe("opacity 0.18s ease");
+  });
+
+  it("rides the footer on a driving sheet's timeline, then the sheet edge once the footer docks", () => {
+    mockState.desktopDock = false;
+    follow.track = { scrollStart: 4, cap: 440, lift: 0, floor: 0 };
+    try {
+      act(() => publishMapFooterBox({ docked: false, height: 34 }));
+      render(<LayerSelector />);
+      let style = getComputedStyle(dock("openLayerMenu"));
+      expect(style.bottom).toBe("42px");
+      expect(style.getPropertyValue("animation-range")).toBe("4px 444px");
+
+      // Docked, it stands 8px above the sheet edge but never below its 26px floor.
+      act(() => publishMapFooterBox({ docked: true, height: 34 }));
+      style = getComputedStyle(dock("openLayerMenu"));
+      expect(style.bottom).toBe("26px");
+      expect(style.getPropertyValue("animation-range")).toBe("22px 444px");
+    } finally {
+      follow.track = null;
+      act(() => publishMapFooterBox({ docked: false, height: 0 }));
+    }
   });
 
   it("collapses the quick selector when the full map-details panel opens", async () => {

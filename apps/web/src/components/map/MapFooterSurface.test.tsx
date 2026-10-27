@@ -324,11 +324,15 @@ it("publishes a position-only handoff immediately and keeps attribution when det
   await prepare(container);
   const host = container.querySelector("bottom-sheet") as HTMLElement;
   const footer = container.querySelector("footer") as HTMLElement;
-  vi.spyOn(footer, "getBoundingClientRect").mockImplementation(
-    () => new DOMRect(0, host.contains(footer) ? 747 : 307, 390, 97),
-  );
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (this === footer) return new DOMRect(0, host.contains(footer) ? 747 : 307, 390, 97);
+    return layoutRect.call(this);
+  });
+  // On the map the footer stands on the 180px sheet edge: 180 + its 97px.
   move(host, 180);
-  expect(getMapObstructionInsets().bottom).toBe(537);
+  expect(getMapObstructionInsets().bottom).toBe(277);
   move(host, 793);
   expect(getMapObstructionInsets().bottom).toBe(97);
   expect(screen.getByRole("button", { name: "Directions" })).toBeInTheDocument();
@@ -337,5 +341,5 @@ it("publishes a position-only handoff immediately and keeps attribution when det
   expect(host.contains(footer)).toBe(true);
   expect(container.querySelectorAll("footer")).toHaveLength(1);
   move(host, 180);
-  expect(getMapObstructionInsets().bottom).toBe(537);
+  expect(getMapObstructionInsets().bottom).toBe(277);
 });

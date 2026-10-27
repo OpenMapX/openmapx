@@ -31,6 +31,14 @@ vi.mock("@/integration-api/map/MapContext", () => ({
   useMapOptional: () => ({ mapRef, mapReady: true, styleVersion: 0 }),
 }));
 
+const follow = vi.hoisted(() => ({
+  track: null as import("@/lib/sheetFollow").SheetFollowTrack | null,
+}));
+vi.mock("@/lib/sheetFollow", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/sheetFollow")>()),
+  useSheetFollowTrack: () => follow.track,
+}));
+
 const compute = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/streetGrid", async () => ({
   ...(await vi.importActual<typeof import("@/lib/streetGrid")>("@/lib/streetGrid")),
@@ -267,6 +275,22 @@ describe("MapControls sheet following", () => {
     const stack = document.querySelector<HTMLElement>("[data-map-controls-columns]");
     expect(stack).not.toBeNull();
     expect(getComputedStyle(stack as HTMLElement).transition).toBe("");
+  });
+
+  it("rides a driving sheet's top edge on the compositor, 12px above it", () => {
+    follow.track = { scrollStart: 4, cap: 440, lift: 0, floor: 0 };
+    try {
+      compute.mockReturnValue({ status: "ok", bearing: 30 });
+      render(<MapControls />);
+      const style = getComputedStyle(
+        document.querySelector<HTMLElement>("[data-map-controls-columns]") as HTMLElement,
+      );
+      expect(style.bottom).toBe("calc(12px + var(--omx-safe-bottom))");
+      expect(style.animationName).toBe("omx-sheet-follow");
+      expect(style.getPropertyValue("animation-range")).toBe("4px 444px");
+    } finally {
+      follow.track = null;
+    }
   });
 });
 
