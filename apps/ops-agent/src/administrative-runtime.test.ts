@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { OpsOperation } from "@openmapx/core/ops";
+import type { OpsOperation, ServiceBatchResult } from "@openmapx/core/ops";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { testExecution } from "./__fixtures__/execution";
 import {
@@ -23,7 +23,7 @@ import {
   loadConfiguredResourceAuthority,
   pruneBackupRetention,
 } from "./administrative-runtime";
-import { createUnavailableRuntime, dispatchOpsOperation } from "./runtime";
+import { createUnavailableRuntime, dispatchOpsOperation, OpsExecutionFailure } from "./runtime";
 
 const temporaryRoots: string[] = [];
 const privacyReleaseValidation = {
@@ -49,6 +49,7 @@ function context(kind: string) {
     execution: testExecution(),
     signal: new AbortController().signal,
     emitLog: vi.fn(),
+    checkpointServiceBatch: vi.fn(async (_result: ServiceBatchResult) => {}),
     claim: {
       fingerprint: "f".repeat(64),
       operation: { kind } as never,
@@ -396,7 +397,7 @@ describe("administrative data runtime", () => {
     ).toThrow("Resource authority configuration rejected");
   });
 
-  it("maps every typed variant to fixed agent-owned CLI arguments", async () => {
+  it("requires owned data workflows and maps only the remaining legacy CLI leaves", async () => {
     const rootDir = temporaryRoot();
     const calls: string[][] = [];
     const runtime = createUnavailableRuntime();
@@ -423,20 +424,26 @@ describe("administrative data runtime", () => {
       { kind: "data.overtureConflate", regionId: "europe/germany", restart: true },
       { kind: "data.searchIndexBuild", regionId: "europe/germany" },
     ];
+    const owned = new Set([
+      "data.downloadOsm",
+      "data.downloadFonts",
+      "data.update",
+      "data.convertOverpass",
+      "data.overtureSync",
+      "data.overtureConflate",
+      "data.searchIndexBuild",
+    ]);
     for (const operation of operations) {
-      await dispatchOpsOperation(runtime, operation, context(operation.kind));
+      if (owned.has(operation.kind))
+        await expect(
+          dispatchOpsOperation(runtime, operation, context(operation.kind)),
+        ).rejects.toThrow("Host update required");
+      else await dispatchOpsOperation(runtime, operation, context(operation.kind));
     }
     expect(calls).toEqual([
-      ["data", "download", "osm", "europe/germany"],
-      ["data", "download", "fonts"],
-      ["data", "update", "europe/germany", "--countries", "DE,AT", "--fail-fast"],
-      ["data", "convert", "overpass", "europe/germany"],
       ["data", "link"],
       ["data", "clean", "osm"],
       ["data", "generate-api-keys"],
-      ["data", "overture-sync", "europe/germany"],
-      ["data", "overture-conflate", "europe/germany", "--restart"],
-      ["data", "search-index", "build", "europe/germany"],
     ]);
     expect(calls.flat()).not.toContain("transitous-fixed-v1");
   });
@@ -524,9 +531,16 @@ describe("administrative build runtime", () => {
         { kind: "services.buildAll", regionId: "europe/germany" },
         context("services.buildAll"),
       ),
-    ).resolves.toEqual({
-      completedServiceIds: ["nominatim"],
-      failedServiceIds: ["valhalla"],
+    ).rejects.toMatchObject({
+      name: "OpsExecutionFailure",
+      failureResult: {
+        serviceBatch: {
+          outcome: "partial",
+          completedServiceIds: ["nominatim"],
+          failedServiceIds: ["valhalla"],
+          skippedServiceIds: [],
+        },
+      },
     });
     expect(calls).toEqual([
       ["services", "build", "nominatim", "--region", "europe/germany"],
@@ -551,7 +565,17 @@ describe("administrative build runtime", () => {
         { kind: "services.buildAll", failFast: true },
         context("services.buildAll"),
       ),
-    ).rejects.toThrow("injected build failure");
+    ).rejects.toMatchObject({
+      name: "OpsExecutionFailure",
+      failureResult: {
+        serviceBatch: {
+          outcome: "failed",
+          completedServiceIds: [],
+          failedServiceIds: ["nominatim"],
+          skippedServiceIds: ["valhalla"],
+        },
+      },
+    });
     expect(calls).toHaveLength(1);
     for (const serviceId of ["redis", "disabled", "community", "unknown"]) {
       await expect(
@@ -570,7 +594,113 @@ describe("administrative build runtime", () => {
     });
     await expect(
       dispatchOpsOperation(empty, { kind: "services.buildAll" }, context("services.buildAll")),
-    ).resolves.toEqual({ completedServiceIds: [], failedServiceIds: [] });
+    ).rejects.toMatchObject({
+      failureResult: {
+        serviceBatch: {
+          outcome: "failed",
+          completedServiceIds: [],
+          failedServiceIds: [],
+          skippedServiceIds: [],
+        },
+      },
+    });
+  });
+  it.each(["continue", "fail-fast", "all-failed", "unknown", "cancel"] as const)(
+    "retains ordered batch evidence and stops uncertain work: %s",
+    async (mode) => {
+      const calls: string[] = [];
+      const controller = new AbortController();
+      const runtime = createUnavailableRuntime();
+      createAdministrativeRuntime(runtime, {
+        rootDir: temporaryRoot(),
+        loadBuildAuthority: async () =>
+          ["gamma", "beta", "alpha"].map((serviceId) => ({
+            serviceId,
+            enabled: true,
+            isBuiltIn: true,
+            buildCommand: serviceId,
+          })),
+        runFixedCli: async (args) => {
+          const id = args[2]!;
+          calls.push(id);
+          if (mode === "all-failed") throw Error("build failed");
+          if (id === "beta") {
+            if (mode === "unknown") throw new OpsExecutionFailure("recovery_required", {});
+            if (mode === "cancel") {
+              controller.abort();
+              throw new DOMException("Aborted", "AbortError");
+            }
+            throw Error("build failed");
+          }
+        },
+      });
+      const ctx = { ...context("services.buildAll"), signal: controller.signal };
+      const failure = await dispatchOpsOperation(
+        runtime,
+        { kind: "services.buildAll", ...(mode === "fail-fast" ? { failFast: true } : {}) },
+        ctx,
+      ).catch((error) => error);
+      expect(failure).toBeInstanceOf(OpsExecutionFailure);
+      expect(failure.failureResult.serviceBatch).toEqual({
+        outcome: mode === "all-failed" ? "failed" : "partial",
+        completedServiceIds:
+          mode === "all-failed" ? [] : mode === "continue" ? ["alpha", "gamma"] : ["alpha"],
+        failedServiceIds:
+          mode === "all-failed"
+            ? ["alpha", "beta", "gamma"]
+            : mode === "unknown" || mode === "cancel"
+              ? []
+              : ["beta"],
+        skippedServiceIds:
+          mode === "unknown" || mode === "cancel"
+            ? ["gamma"]
+            : mode === "fail-fast"
+              ? ["gamma"]
+              : [],
+      });
+      expect(calls).toEqual(
+        mode === "continue" || mode === "all-failed"
+          ? ["alpha", "beta", "gamma"]
+          : ["alpha", "beta"],
+      );
+      expect(ctx.checkpointServiceBatch).toHaveBeenCalledTimes(calls.length);
+      expect(ctx.checkpointServiceBatch.mock.calls.at(-1)?.[0]).toEqual(
+        failure.failureResult.serviceBatch,
+      );
+    },
+  );
+
+  it("does not start another build when its completed prefix cannot be journaled", async () => {
+    const runtime = createUnavailableRuntime();
+    const calls: string[] = [];
+    createAdministrativeRuntime(runtime, {
+      rootDir: temporaryRoot(),
+      loadBuildAuthority: async () =>
+        ["alpha", "beta"].map((serviceId) => ({
+          serviceId,
+          enabled: true,
+          isBuiltIn: true,
+          buildCommand: serviceId,
+        })),
+      runFixedCli: async (args) => {
+        calls.push(args[2]!);
+      },
+    });
+    const ctx = context("services.buildAll");
+    ctx.checkpointServiceBatch.mockRejectedValueOnce(Error("journal unavailable"));
+    await expect(
+      dispatchOpsOperation(runtime, { kind: "services.buildAll" }, ctx),
+    ).rejects.toMatchObject({
+      errorClass: "recovery_required",
+      failureResult: {
+        serviceBatch: {
+          completedServiceIds: ["alpha"],
+          failedServiceIds: [],
+          skippedServiceIds: ["beta"],
+        },
+      },
+    });
+    expect(calls).toEqual(["alpha"]);
   });
 });
 

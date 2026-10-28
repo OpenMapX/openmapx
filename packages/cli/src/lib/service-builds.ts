@@ -1,5 +1,11 @@
 import { statSync } from "node:fs";
 import { basename } from "node:path";
+import {
+  compareServiceBuildOrder,
+  createServiceBatchResult,
+  SERVICE_BUILD_ORDER,
+  type ServiceBatchResult,
+} from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import {
   BUILD_ARTIFACTS,
@@ -40,7 +46,7 @@ type LoadedService = coreServices.LoadedService;
 
 const SERVICE_BUILD_COMMAND_RE = /^openmapx\s+services\s+build\s+([a-z0-9-]+)$/;
 
-export const SERVICE_BUILD_ORDER = ["osrm", "otp", "motis", "pelias", "tileserver"] as const;
+export { SERVICE_BUILD_ORDER };
 
 export interface ServiceBuildContext {
   rootDir: string;
@@ -84,6 +90,18 @@ export interface ServiceBuildExecutionResult {
   plannedIds: string[];
   completedIds: string[];
   failures: ServiceBuildFailure[];
+  serviceBatch: ServiceBatchResult;
+}
+
+export class ServiceBuildExecutionError extends Error {
+  constructor(
+    message: string,
+    readonly result: ServiceBuildExecutionResult,
+    cause?: unknown,
+  ) {
+    super(message, { cause });
+    this.name = "ServiceBuildExecutionError";
+  }
 }
 
 export interface PlanServiceBuildsOptions {
@@ -265,12 +283,7 @@ function dedupe(ids: string[]): string[] {
 }
 
 function compareBuildOrder(a: string, b: string): number {
-  const aIndex = SERVICE_BUILD_ORDER.indexOf(a as (typeof SERVICE_BUILD_ORDER)[number]);
-  const bIndex = SERVICE_BUILD_ORDER.indexOf(b as (typeof SERVICE_BUILD_ORDER)[number]);
-  const aRank = aIndex === -1 ? Number.POSITIVE_INFINITY : aIndex;
-  const bRank = bIndex === -1 ? Number.POSITIVE_INFINITY : bIndex;
-  if (aRank !== bRank) return aRank - bRank;
-  return a.localeCompare(b);
+  return compareServiceBuildOrder(a, b);
 }
 
 function validateBuildCommand(service: LoadedService): string {
@@ -348,11 +361,23 @@ export async function buildServices(
   const plannedIds = plan.map((item) => item.id);
   const completedIds: string[] = [];
   const failures: ServiceBuildFailure[] = [];
+  const result = (skipped: string[]): ServiceBuildExecutionResult => ({
+    plannedIds: [...plannedIds],
+    completedIds: [...completedIds],
+    failures: [...failures],
+    serviceBatch: createServiceBatchResult(
+      plannedIds,
+      completedIds,
+      failures.map(({ id }) => id),
+      skipped,
+    ),
+  });
 
   if (plan.length === 0) {
     log.warn("No buildable services matched the request.");
-    return { plannedIds, completedIds, failures };
+    throw new ServiceBuildExecutionError("No buildable services matched the request", result([]));
   }
+  result(plannedIds); // Validate the whole admitted plan before any handler runs.
 
   log.info(`Build plan: ${plannedIds.join(", ")}`);
 
@@ -365,43 +390,71 @@ export async function buildServices(
     );
   }
 
-  for (const item of plan) {
-    assertCliExecutionAvailable();
+  for (const [index, item] of plan.entries()) {
+    let attempted = false;
     log.dim(`Manifest command → ${item.buildCommand}`);
     try {
+      assertCliExecutionAvailable();
       const resolvedRegion = resolveBuildRegion(item.id, opts.region);
       if (resolvedRegion.sourceEnv) {
         log.dim(
           `${item.id}: using region "${resolvedRegion.value}" from $${resolvedRegion.sourceEnv}`,
         );
       }
-      const result = await item.handler({
+      attempted = true;
+      const built = await item.handler({
         rootDir,
         region: resolvedRegion.value,
         registry,
         service: item.service,
         motisImport: opts.motisImport,
       });
-      for (const warning of result.warnings ?? []) {
+      for (const warning of built.warnings ?? []) {
         log.warn(`${item.id}: ${warning}`);
       }
-      if (result.artifact) {
-        await recordBuild(rootDir, item.id, resolvedRegion.value, result.artifact);
+      if (built.artifact) {
+        await recordBuild(rootDir, item.id, resolvedRegion.value, built.artifact);
       }
-      log.ok(result.summary);
+      log.ok(built.summary);
       completedIds.push(item.id);
     } catch (error) {
+      let interrupted =
+        error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError");
+      if (
+        error &&
+        typeof error === "object" &&
+        (("timedOut" in error && error.timedOut === true) ||
+          ("isCanceled" in error && error.isCanceled === true) ||
+          ("signal" in error && typeof error.signal === "string") ||
+          ("errorClass" in error && error.errorClass !== "runtime"))
+      )
+        interrupted = true;
+      try {
+        assertCliExecutionAvailable();
+      } catch {
+        interrupted = true;
+      }
+      if (interrupted)
+        throw new ServiceBuildExecutionError(
+          "Build execution interrupted",
+          result(plannedIds.slice(index + (attempted ? 1 : 0))),
+          error,
+        );
       const failure = {
         id: item.id,
         message: (error as Error).message,
       };
       failures.push(failure);
-      if (!opts.continueOnError) {
-        throw new Error(`${item.id} build failed: ${failure.message}`);
+      if (!(opts.continueOnError ?? opts.mode === "all")) {
+        throw new ServiceBuildExecutionError(
+          `${item.id} build failed: ${failure.message}`,
+          result(plannedIds.slice(index + 1)),
+          error,
+        );
       }
       log.err(`${item.id} build failed: ${failure.message}`);
     }
   }
 
-  return { plannedIds, completedIds, failures };
+  return result([]);
 }

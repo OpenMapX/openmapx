@@ -422,6 +422,91 @@ describe("admin job handlers", () => {
       expect(runAdminOperationMock).toHaveBeenCalledTimes(1);
     });
 
+    it.each(["continue", "fail-fast", "all-failed", "unknown", "cancel"] as const)(
+      "checkpoints exact batch results before failure: %s",
+      async (mode) => {
+        const { ApiOpsError, OpsObservationPending } = await import("../ops-client");
+        const { AdminJobFailure } = await import("../admin-job-failure");
+        const controller = new AbortController();
+        const pending = new OpsObservationPending(
+          { kind: "service.build", operationKey: "opk1_abcdefghijklmnop" },
+          "transport",
+        );
+        runAdminOperationMock.mockClear();
+        runAdminOperationMock.mockImplementationOnce(async () => {
+          if (mode === "all-failed") throw new ApiOpsError("runtime");
+          return { completed: true };
+        });
+        runAdminOperationMock.mockImplementationOnce(async () => {
+          if (mode === "unknown") throw pending;
+          if (mode === "cancel") {
+            controller.abort();
+            throw new DOMException("Aborted", "AbortError");
+          }
+          throw new ApiOpsError("runtime");
+        });
+        if (mode === "continue" || mode === "all-failed")
+          runAdminOperationMock.mockImplementationOnce(async () => {
+            if (mode === "all-failed") throw new ApiOpsError("runtime");
+            return { completed: true };
+          });
+        const checkpoints: Record<string, unknown>[] = [];
+        const ctx = {
+          jobId: "batch",
+          payload: {
+            action: "build",
+            serviceIds: ["valhalla", "osrm", "app-api"],
+            ...(mode === "fail-fast" ? {} : { continueOnError: true }),
+          },
+          signal: controller.signal,
+          log: vi.fn(),
+          setProgress: vi.fn(),
+          checkpointResult: { retained: true } as Record<string, unknown>,
+          checkpoint: async (value: Record<string, unknown>) => {
+            checkpoints.push(structuredClone(value));
+            ctx.checkpointResult = value;
+          },
+        };
+        const failure = await handleServiceBulkJob(ctx).catch((error) => error);
+        if (mode === "unknown") expect(failure).toBe(pending);
+        else if (mode === "cancel") expect(failure.name).toBe("AbortError");
+        else expect(failure).toBeInstanceOf(AdminJobFailure);
+        const batch = {
+          outcome: mode === "all-failed" ? "failed" : "partial",
+          completedServiceIds:
+            mode === "all-failed"
+              ? []
+              : mode === "continue"
+                ? ["valhalla", "app-api"]
+                : ["valhalla"],
+          failedServiceIds:
+            mode === "all-failed"
+              ? ["valhalla", "osrm", "app-api"]
+              : mode === "unknown" || mode === "cancel"
+                ? []
+                : ["osrm"],
+          skippedServiceIds:
+            mode === "unknown" || mode === "cancel"
+              ? ["app-api"]
+              : mode === "fail-fast"
+                ? ["app-api"]
+                : [],
+        };
+        expect(checkpoints[0]).toMatchObject({
+          retained: true,
+          serviceBatch: { completedServiceIds: mode === "all-failed" ? [] : ["valhalla"] },
+        });
+        expect(checkpoints.at(-1)).toMatchObject({ retained: true, serviceBatch: batch });
+        if (mode !== "unknown" && mode !== "cancel")
+          expect(failure.result.serviceBatch).toEqual(batch);
+        expect(runAdminOperationMock.mock.calls.map((call) => call[1].serviceId)).toEqual(
+          mode === "continue" || mode === "all-failed"
+            ? ["valhalla", "osrm", "app-api"]
+            : ["valhalla", "osrm"],
+        );
+      },
+    );
+
     it("submits one typed lifecycle operation per exact service ID", async () => {
       runAdminOperationMock.mockClear();
       const ctx = {
@@ -450,6 +535,10 @@ describe("admin job handlers", () => {
 
     it("uses the bounded build-all variant and typed region options", async () => {
       runAdminOperationMock.mockClear();
+      runAdminOperationMock.mockResolvedValueOnce({
+        completedServiceIds: ["osrm"],
+        failedServiceIds: [],
+      });
       const ctx = {
         jobId: "job",
         payload: {

@@ -823,6 +823,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         }
       }
       const candidate: JobRecord = { ...job, ...updates, state, updatedAt };
+      if (state === "succeeded" && job.operation.kind === "services.buildAll")
+        delete candidate.failureResult;
       if (authority && ["succeeded", "failed", "timed_out"].includes(state)) {
         if (candidate.terminalAt === undefined) throw Error("Missing terminal time");
         candidate.terminalAt = retainControlTerminalCommitment(
@@ -846,6 +848,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       )
         retainControlPreparedTerminal(authority);
       Object.assign(job, updates);
+      if (state === "succeeded" && job.operation.kind === "services.buildAll")
+        delete job.failureResult;
       job.updatedAt = updatedAt;
       job.state = state;
       if (lease && ["succeeded", "failed", "timed_out"].includes(state)) {
@@ -954,6 +958,25 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             other.state === "running" ||
             other.state === "termination_pending"),
       ).length,
+    ...(job.operation.kind === "services.buildAll"
+      ? {
+          checkpointServiceBatch: async (
+            serviceBatch: import("@openmapx/core/ops").ServiceBatchResult,
+          ) => {
+            const evidence = opsFailureResultSchema.parse({ ...job.failureResult, serviceBatch });
+            if (
+              Buffer.byteLength(JSON.stringify(evidence)) >
+              OPS_KIND_POLICIES[job.operation.kind].maxResultBytes
+            )
+              throw Error("Service batch evidence exceeds budget");
+            await withAdmissionLock(async () => {
+              job.failureResult = evidence;
+              job.updatedAt = now().toISOString();
+              await journal.replace([...jobsById.values()].map(persisted));
+            });
+          },
+        }
+      : {}),
     emitLog: (stream, message) => {
       const boundedMessage = truncateUtf8(
         safeProcessDiagnostic(message),

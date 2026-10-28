@@ -39,6 +39,8 @@ import {
   verifyControlEffectSettlement,
 } from "@openmapx/core/build-artifacts";
 import {
+  compareServiceBuildOrder,
+  createServiceBatchResult,
   type ExecutionRef,
   executionRefSchema,
   OPS_MAX_BACKUP_ID_LENGTH,
@@ -1757,7 +1759,7 @@ export function createAdministrativeRuntime(
           typeof service.buildCommand === "string" &&
           service.buildCommand.length > 0,
       )
-      .sort((left, right) => left.serviceId.localeCompare(right.serviceId));
+      .sort((left, right) => compareServiceBuildOrder(left.serviceId, right.serviceId));
   };
   runtime["service.build"] = async (operation, context) => {
     const buildable = await loadBuildable();
@@ -1768,18 +1770,57 @@ export function createAdministrativeRuntime(
     return { completed: true };
   };
   runtime["services.buildAll"] = async (operation, context) => {
+    const plan = await loadBuildable();
+    const serviceIds = plan.map((service) => service.serviceId);
     const completedServiceIds: string[] = [];
     const failedServiceIds: string[] = [];
-    for (const service of await loadBuildable()) {
-      if (context.signal.aborted) throw new DOMException("Aborted", "AbortError");
+    const batch = (skipped: string[]) =>
+      createServiceBatchResult(serviceIds, completedServiceIds, failedServiceIds, skipped);
+    if (plan.length === 0) throw new OpsExecutionFailure("runtime", { serviceBatch: batch([]) });
+    for (const [index, service] of plan.entries()) {
+      let attempted = false;
+      let stop: OpsExecutionFailure | undefined;
       try {
+        context.signal.throwIfAborted();
+        attempted = true;
         await runFixedCli(buildArgs(service.serviceId, operation.regionId), context);
         completedServiceIds.push(service.serviceId);
       } catch (error) {
-        failedServiceIds.push(service.serviceId);
-        if (operation.failFast) throw error;
+        if (
+          context.signal.aborted ||
+          (error instanceof Error && error.name === "AbortError") ||
+          (error instanceof OpsExecutionFailure && error.errorClass !== "runtime")
+        ) {
+          stop = new OpsExecutionFailure(
+            error instanceof OpsExecutionFailure
+              ? error.errorClass
+              : Date.now() >= context.execution.deadlineAt
+                ? "timeout"
+                : "recovery_required",
+            {
+              ...(error instanceof OpsExecutionFailure ? error.failureResult : {}),
+              serviceBatch: batch(serviceIds.slice(index + (attempted ? 1 : 0))),
+            },
+          );
+        } else {
+          failedServiceIds.push(service.serviceId);
+          if (operation.failFast)
+            stop = new OpsExecutionFailure("runtime", {
+              ...(error instanceof OpsExecutionFailure ? error.failureResult : {}),
+              serviceBatch: batch(serviceIds.slice(index + 1)),
+            });
+        }
       }
+      const serviceBatch = stop?.failureResult.serviceBatch ?? batch(serviceIds.slice(index + 1));
+      try {
+        await context.checkpointServiceBatch?.(serviceBatch);
+      } catch {
+        throw new OpsExecutionFailure("recovery_required", { serviceBatch });
+      }
+      if (stop) throw stop;
     }
+    if (failedServiceIds.length > 0)
+      throw new OpsExecutionFailure("runtime", { serviceBatch: batch([]) });
     return { completedServiceIds, failedServiceIds };
   };
   runtime["backup.list"] = async () => inspectBackupInventory(options.rootDir);

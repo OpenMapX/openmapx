@@ -30,9 +30,51 @@ export const serviceBatchResultSchema = z
   })
   .refine((x) => {
     const all = [...x.completedServiceIds, ...x.failedServiceIds, ...x.skippedServiceIds];
-    return all.length <= 256 && new Set(all).size === all.length;
+    return (
+      all.length <= 256 &&
+      new Set(all).size === all.length &&
+      (x.outcome === "success"
+        ? x.completedServiceIds.length > 0 &&
+          x.failedServiceIds.length === 0 &&
+          x.skippedServiceIds.length === 0
+        : x.outcome === "partial"
+          ? x.completedServiceIds.length > 0
+          : x.completedServiceIds.length === 0)
+    );
   });
 export type ServiceBatchResult = z.infer<typeof serviceBatchResultSchema>;
+
+export const SERVICE_BUILD_ORDER = ["osrm", "otp", "motis", "pelias", "tileserver"] as const;
+export function compareServiceBuildOrder(a: string, b: string): number {
+  const rank = (id: string) => {
+    const index = SERVICE_BUILD_ORDER.indexOf(id as (typeof SERVICE_BUILD_ORDER)[number]);
+    return index < 0 ? Infinity : index;
+  };
+  return rank(a) === rank(b) ? a.localeCompare(b) : rank(a) - rank(b);
+}
+
+/** An attempted unknown item is omitted, never mislabeled failed or skipped. */
+export function createServiceBatchResult(
+  serviceIds: readonly string[],
+  completedServiceIds: readonly string[],
+  failedServiceIds: readonly string[],
+  skippedServiceIds: readonly string[],
+): ServiceBatchResult {
+  const admitted = new Set(ids.parse(serviceIds));
+  const all = [...completedServiceIds, ...failedServiceIds, ...skippedServiceIds];
+  if (all.some((id) => !admitted.has(id))) throw Error("Unadmitted service batch target");
+  return serviceBatchResultSchema.parse({
+    outcome:
+      completedServiceIds.length === 0
+        ? "failed"
+        : completedServiceIds.length === admitted.size
+          ? "success"
+          : "partial",
+    completedServiceIds,
+    failedServiceIds,
+    skippedServiceIds,
+  });
+}
 const revision = z
   .string()
   .regex(/^cfg1_[A-Za-z0-9_-]{43}$/)

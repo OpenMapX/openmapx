@@ -14,6 +14,7 @@ import {
   type OpsOperationKind,
   type OpsResultFor,
   parseOpsResult,
+  type ServiceBatchResult,
 } from "@openmapx/core/ops";
 
 export class OpsExecutionFailure extends Error {
@@ -67,6 +68,8 @@ export interface OpsExecutionContext {
   claim: OpsTrustedClaim;
   /** Unfinished operations other than this one; replacing the agent would end them. */
   otherActiveOperations?(): number;
+  /** Persist progress before a batch can start its next effect. */
+  checkpointServiceBatch?(result: ServiceBatchResult): Promise<void>;
 }
 
 export interface OpsTrustedClaim {

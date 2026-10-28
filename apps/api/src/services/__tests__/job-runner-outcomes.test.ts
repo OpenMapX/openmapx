@@ -71,8 +71,14 @@ it("merges AdminJobFailure evidence into DB/SSE without publishing ownership or 
   unsubscribe();
   expect(store.writes.at(-1)?.values).toMatchObject({
     status: "failed",
-    result: { phase: "build", _execution: execution, ...result },
   });
+  const patch = new PgDialect().sqlToQuery(store.writes.at(-1)?.values.result as SQL);
+  expect(JSON.parse(patch.params[0] as string)).toEqual({
+    phase: "build",
+    _execution: execution,
+    ...result,
+  });
+  expect(patch.sql).toContain("- 'observation'");
   expect(events.at(-1)).toMatchObject({
     type: "status",
     status: "failed",
@@ -117,10 +123,13 @@ it("does not announce an old owner's completion when PostgreSQL rejects its CAS"
   await run("test.stale");
   stop();
   expect(events.some((event) => event.status === "success")).toBe(false);
-  const late = new PgDialect().sqlToQuery(store.writes.at(-1)?.values.result as SQL);
-  expect(JSON.parse(late.params[0] as string)).toEqual({
+  const patches = store.writes.map((write) =>
+    JSON.parse(new PgDialect().sqlToQuery(write.values.result as SQL).params[0] as string),
+  );
+  expect(patches.find((patch) => patch._settled)).toEqual({
     _settled: { status: "success", result: { completed: true } },
   });
+  expect(patches.at(-1)).toMatchObject({ observation: { state: "receipt_delivery" } });
   for (const write of store.writes) {
     const query = new PgDialect().sqlToQuery(write.where as SQL);
     expect(query.sql).toContain("->'_execution'");
