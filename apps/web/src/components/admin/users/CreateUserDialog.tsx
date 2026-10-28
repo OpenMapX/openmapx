@@ -13,9 +13,8 @@ import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
-import { authClient } from "@openmapx/core";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useAccountAction } from "@/lib/admin/accountAdmin";
 import { useAdminToast } from "../shared/AdminToast";
 
 interface CreateUserDialogProps {
@@ -24,7 +23,6 @@ interface CreateUserDialogProps {
 }
 
 export function CreateUserDialog({ open, onClose }: CreateUserDialogProps) {
-  const qc = useQueryClient();
   const showToast = useAdminToast();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -32,17 +30,9 @@ export function CreateUserDialog({ open, onClose }: CreateUserDialogProps) {
   const [role, setRole] = useState<"user" | "admin">("user");
   const [sendWelcome, setSendWelcome] = useState(true);
 
-  const create = useMutation({
-    mutationFn: () =>
-      authClient.admin.createUser({
-        name,
-        email,
-        password,
-        role,
-        data: { sendWelcomeEmail: sendWelcome },
-      }),
+  const create = useAccountAction("create", {
+    viewKey: String(open),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["admin", "users"] });
       showToast("User created successfully");
       onClose();
       setName("");
@@ -50,13 +40,17 @@ export function CreateUserDialog({ open, onClose }: CreateUserDialogProps) {
       setPassword("");
       setRole("user");
     },
-    onError: (err) => showToast((err as Error).message || "Failed to create user", "error"),
+    onError: (error) => showToast(error.message, "error"),
   });
+  const close = () => {
+    create.invalidateOwner();
+    onClose();
+  };
 
   const valid = name.trim() && email.trim() && password.length >= 8;
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+    <Dialog open={open} onClose={close} maxWidth="xs" fullWidth>
       <DialogTitle>Create User</DialogTitle>
       <DialogContent>
         <Stack
@@ -66,6 +60,7 @@ export function CreateUserDialog({ open, onClose }: CreateUserDialogProps) {
           }}
         >
           <TextField
+            disabled={create.isPending}
             label="Full Name"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -74,6 +69,7 @@ export function CreateUserDialog({ open, onClose }: CreateUserDialogProps) {
             autoFocus
           />
           <TextField
+            disabled={create.isPending}
             label="Email"
             type="email"
             value={email}
@@ -82,6 +78,7 @@ export function CreateUserDialog({ open, onClose }: CreateUserDialogProps) {
             fullWidth
           />
           <TextField
+            disabled={create.isPending}
             label="Password"
             type="password"
             value={password}
@@ -93,6 +90,7 @@ export function CreateUserDialog({ open, onClose }: CreateUserDialogProps) {
           <FormControl size="small" fullWidth>
             <InputLabel>Role</InputLabel>
             <Select
+              disabled={create.isPending}
               value={role}
               label="Role"
               onChange={(e) => setRole(e.target.value as "user" | "admin")}
@@ -104,11 +102,13 @@ export function CreateUserDialog({ open, onClose }: CreateUserDialogProps) {
           <FormControlLabel
             control={
               <Checkbox
+                disabled={create.isPending}
                 checked={sendWelcome}
                 onChange={(e) => setSendWelcome(e.target.checked)}
                 size="small"
               />
             }
+            disabled={create.isPending}
             label="Send welcome email"
           />
           {create.error && (
@@ -117,13 +117,23 @@ export function CreateUserDialog({ open, onClose }: CreateUserDialogProps) {
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} disabled={create.isPending}>
+        <Button onClick={close} disabled={create.isPending}>
           Cancel
         </Button>
         <Button
           variant="contained"
           disabled={!valid || create.isPending}
-          onClick={() => create.mutate()}
+          onClick={() =>
+            create.mutate((client) =>
+              client.create({
+                name,
+                email,
+                password,
+                role,
+                data: { sendWelcomeEmail: sendWelcome },
+              }),
+            )
+          }
         >
           Create
         </Button>

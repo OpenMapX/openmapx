@@ -10,6 +10,7 @@ import PersonSearchIcon from "@mui/icons-material/PersonSearch";
 import SecurityIcon from "@mui/icons-material/Security";
 import SupervisorAccountIcon from "@mui/icons-material/SupervisorAccount";
 import VerifiedIcon from "@mui/icons-material/Verified";
+import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
@@ -32,11 +33,12 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { authClient, getInitials, proxyImageUrl, setPrivacyAdminRole } from "@openmapx/core";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { getInitials, proxyImageUrl } from "@openmapx/core";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useAccountAction, useAccountAdmin } from "@/lib/admin/accountAdmin";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
@@ -76,25 +78,21 @@ function UserRoleSelect({
   role?: string | null;
   isSelf: boolean;
 }) {
-  const qc = useQueryClient();
   const showToast = useAdminToast();
-  const mutation = useMutation({
-    mutationFn: async (newRole: string) => {
-      if (newRole === "privacy_admin" || (role === "privacy_admin" && newRole === "user")) {
-        return setPrivacyAdminRole(userId, newRole as "privacy_admin" | "user");
-      }
-      return authClient.admin.setRole({ userId, role: newRole as "admin" | "user" });
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "users"] }),
-    onError: () => showToast("Failed to change user role", "error"),
+  const mutation = useAccountAction(userId, {
+    onError: (error) => showToast(error.message, "error"),
   });
 
   return (
     <FormControl size="small" sx={{ minWidth: 90 }}>
       <Select
+        inputProps={{ "aria-label": "Role" }}
         value={role ?? "user"}
         disabled={isSelf || mutation.isPending}
-        onChange={(e) => mutation.mutate(e.target.value)}
+        onChange={(e) => {
+          const next = e.target.value;
+          mutation.mutate((client) => client.changeRole(userId, next, role ?? "user"));
+        }}
         variant="standard"
         disableUnderline
         sx={{ fontSize: 13 }}
@@ -112,60 +110,41 @@ function ActionsMenu({
   isSelf,
   isLastAdmin,
   onBan,
+  impersonate,
+  impersonating,
 }: {
   user: AdminUser;
   isSelf: boolean;
   isLastAdmin: boolean;
   onBan: (user: AdminUser) => void;
+  impersonate: (id: string) => void;
+  impersonating: boolean;
 }) {
   const [anchor, setAnchor] = useState<null | HTMLElement>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const router = useRouter();
-  const qc = useQueryClient();
   const showToast = useAdminToast();
 
-  const impersonate = useMutation({
-    mutationFn: () => authClient.admin.impersonateUser({ userId: user.id }),
+  const unban = useAccountAction(user.id, {
     onSuccess: () => {
       setAnchor(null);
-      router.push("/");
-      router.refresh();
-    },
-    onError: () => showToast("Failed to impersonate user", "error"),
-  });
-
-  const unban = useMutation({
-    mutationFn: () => authClient.admin.unbanUser({ userId: user.id }),
-    onSuccess: () => {
-      setAnchor(null);
-      void qc.invalidateQueries({ queryKey: ["admin", "users"] });
       showToast(`${user.name} unbanned`);
     },
-    onError: () => showToast("Failed to unban user", "error"),
+    onError: (error) => showToast(error.message, "error"),
   });
-
-  const resetPassword = useMutation({
-    mutationFn: () =>
-      authClient.requestPasswordReset({
-        email: user.email,
-        redirectTo: window.location.origin,
-      }),
+  const resetPassword = useAccountAction(user.id, {
     onSuccess: () => {
       setAnchor(null);
-      showToast(`Password reset email sent to ${user.email}`);
+      showToast(`Password reset requested for ${user.name}`);
     },
-    onError: () => showToast("Failed to send password reset email", "error"),
+    onError: (error) => showToast(error.message, "error"),
   });
-
-  const deleteUser = useMutation({
-    mutationFn: () => authClient.admin.removeUser({ userId: user.id }),
+  const deleteUser = useAccountAction(user.id, {
     onSuccess: () => {
       setConfirmDelete(false);
       setAnchor(null);
-      void qc.invalidateQueries({ queryKey: ["admin", "users"] });
       showToast(`${user.name} deleted`);
     },
-    onError: () => showToast("Failed to delete user", "error"),
+    onError: (error) => showToast(error.message, "error"),
   });
 
   return (
@@ -191,7 +170,7 @@ function ActionsMenu({
           <ListItemText>View</ListItemText>
         </MenuItem>
         {!isSelf && (
-          <MenuItem onClick={() => impersonate.mutate()} disabled={impersonate.isPending}>
+          <MenuItem onClick={() => impersonate(user.id)} disabled={impersonating}>
             <ListItemIcon>
               <SupervisorAccountIcon fontSize="small" />
             </ListItemIcon>
@@ -199,7 +178,10 @@ function ActionsMenu({
           </MenuItem>
         )}
         {user.banned ? (
-          <MenuItem onClick={() => unban.mutate()} disabled={unban.isPending}>
+          <MenuItem
+            onClick={() => unban.mutate((client) => client.unban(user.id))}
+            disabled={unban.isPending}
+          >
             <ListItemIcon>
               <CheckCircleIcon fontSize="small" />
             </ListItemIcon>
@@ -220,7 +202,14 @@ function ActionsMenu({
             </MenuItem>
           )
         )}
-        <MenuItem onClick={() => resetPassword.mutate()} disabled={resetPassword.isPending}>
+        <MenuItem
+          onClick={() =>
+            resetPassword.mutate((client) =>
+              client.resetPassword(user.email, window.location.origin),
+            )
+          }
+          disabled={resetPassword.isPending}
+        >
           <ListItemIcon>
             <LockResetIcon fontSize="small" />
           </ListItemIcon>
@@ -248,7 +237,7 @@ function ActionsMenu({
         confirmLabel="Delete"
         confirmColor="error"
         loading={deleteUser.isPending}
-        onConfirm={() => deleteUser.mutate()}
+        onConfirm={() => deleteUser.mutate((client) => client.remove(user.id))}
         onCancel={() => setConfirmDelete(false)}
       />
     </>
@@ -262,13 +251,20 @@ export function UserList() {
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [createOpen, setCreateOpen] = useState(false);
+  const [impersonationTarget, setImpersonationTarget] = useState("");
   const [banTarget, setBanTarget] = useState<AdminUser | null>(null);
 
-  const { data: session } = authClient.useSession();
-  const currentUserId = session?.user?.id;
+  const account = useAccountAdmin();
+  const currentUserId = account.actorId;
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["admin", "users", { search, filter, page, rowsPerPage, sortField, sortDir }],
+  const {
+    data,
+    isLoading,
+    error: readError,
+  } = useQuery({
+    queryKey: account.keys.list({ search, filter, page, rowsPerPage, sortField, sortDir }),
+    enabled: Boolean(account.actorId),
+    retry: false,
     queryFn: async () => {
       const filterMap: Record<FilterTab, Record<string, string>> = {
         all: {},
@@ -277,20 +273,18 @@ export function UserList() {
         admins: { filterField: "role", filterValue: "admin", filterOperator: "eq" },
       };
 
-      const result = await authClient.admin.listUsers({
-        query: {
-          ...(search
-            ? { searchValue: search, searchField: "email", searchOperator: "contains" }
-            : {}),
-          ...filterMap[filter],
-          limit: rowsPerPage,
-          offset,
-          sortBy: sortField,
-          sortDirection: sortDir,
-        },
+      const result = await account.client.list({
+        ...(search
+          ? { searchValue: search, searchField: "email", searchOperator: "contains" }
+          : {}),
+        ...filterMap[filter],
+        limit: rowsPerPage,
+        offset,
+        sortBy: sortField,
+        sortDirection: sortDir,
       });
 
-      return result.data;
+      return result;
     },
   });
 
@@ -298,17 +292,14 @@ export function UserList() {
   const total: number = (data as { total?: number } | null)?.total ?? users.length;
 
   // Fetch total admin count across all pages for last-admin protection
-  const { data: adminData } = useQuery({
-    queryKey: ["admin", "users", "admin-count"],
-    queryFn: async () => {
-      const res = await authClient.admin.listUsers({
-        query: { filterField: "role", filterValue: "admin", filterOperator: "eq", limit: 1 },
-      });
-      return (res.data as { total?: number } | null)?.total ?? res.data?.users?.length ?? 0;
-    },
-    staleTime: 30_000,
+  const { data: adminData, error: countError } = useQuery({
+    queryKey: account.keys.count,
+    enabled: Boolean(account.actorId),
+    retry: false,
+    queryFn: () => account.client.count(),
+    staleTime: 30000,
   });
-  const adminCount = adminData ?? 0;
+  const adminCount = adminData;
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -347,6 +338,14 @@ export function UserList() {
           </Button>
         }
       />
+      {readError && (
+        <Alert severity="error">
+          Could not load accounts. {data ? "Showing the last confirmed list." : ""}
+        </Alert>
+      )}
+      {countError && !readError && (
+        <Alert severity="warning">Administrator count is temporarily unavailable.</Alert>
+      )}
       <AdminTableSurface
         toolbar={
           <TableToolbar>
@@ -419,7 +418,10 @@ export function UserList() {
             ) : (
               <TableBody>
                 {users.length === 0 ? (
-                  <TableEmptyState colSpan={8} message="No users found" />
+                  <TableEmptyState
+                    colSpan={8}
+                    message={readError ? "Unable to load accounts" : "No users found"}
+                  />
                 ) : (
                   users.map((user) => {
                     const isSelf = user.id === currentUserId;
@@ -511,6 +513,8 @@ export function UserList() {
                             isSelf={isSelf}
                             isLastAdmin={isLastAdmin}
                             onBan={setBanTarget}
+                            impersonate={setImpersonationTarget}
+                            impersonating={Boolean(impersonationTarget)}
                           />
                         </TableCell>
                       </TableRow>
@@ -522,8 +526,50 @@ export function UserList() {
           </Table>
         </TableContainer>
       </AdminTableSurface>
-      <CreateUserDialog open={createOpen} onClose={() => setCreateOpen(false)} />
-      {banTarget && <BanUserDialog user={banTarget} onClose={() => setBanTarget(null)} />}
+      {impersonationTarget && (
+        <ImpersonationAction
+          key={impersonationTarget}
+          targetId={impersonationTarget}
+          onDone={() => setImpersonationTarget("")}
+        />
+      )}
+      <CreateUserDialog
+        key={`${account.apiUrl}:${account.actorId}`}
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+      />
+      {banTarget && (
+        <BanUserDialog
+          key={`${account.apiUrl}:${account.actorId}:${banTarget.id}`}
+          user={banTarget}
+          onClose={() => setBanTarget(null)}
+        />
+      )}
     </Stack>
   );
+}
+
+function ImpersonationAction({ targetId, onDone }: { targetId: string; onDone: () => void }) {
+  const router = useRouter(),
+    showToast = useAdminToast();
+  const action = useAccountAction(targetId, {
+    impersonation: true,
+    onSuccess: () => {
+      router.push("/");
+      router.refresh();
+      onDone();
+    },
+    onError: (error) => {
+      showToast(error.message, "error");
+      onDone();
+    },
+  });
+  const started = useRef(false);
+  useEffect(() => {
+    if (!started.current) {
+      started.current = true;
+      action.mutate((client) => client.impersonate(targetId));
+    }
+  }, [action, targetId]);
+  return null;
 }
