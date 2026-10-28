@@ -466,6 +466,38 @@ describe("GET /admin/services/:id/logs", () => {
 });
 
 describe("POST /admin/services/:id/action", () => {
+  it.each(["app-api", "traefik"])("queues the dedicated %s restart workflow", async (id) => {
+    mockRegistryGet.mockReturnValueOnce({ ...MOCK_SERVICE_RUNNING, id });
+    mockExecuteAndWait.mockResolvedValueOnce({
+      services: [
+        { serviceId: id, actions: { restart: { available: true, workflow: "core-restart" } } },
+      ],
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: `/admin/services/${id}/action`,
+      payload: { action: "restart" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
+      "service.core-restart",
+      { service: id },
+      fakeSession.user.id,
+    );
+  });
+
+  it("does not queue an unavailable core restart", async () => {
+    mockRegistryGet.mockReturnValueOnce({ ...MOCK_SERVICE_RUNNING, id: "app-api" });
+    mockExecuteAndWait.mockResolvedValueOnce({ services: [] });
+    const response = await app.inject({
+      method: "POST",
+      url: "/admin/services/app-api/action",
+      payload: { action: "restart" },
+    });
+    expect(response.statusCode).toBe(503);
+    expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
+  });
+
   it("enqueues action, writes audit log, and returns jobId", async () => {
     mockRegistryGet.mockReturnValueOnce(MOCK_SERVICE_RUNNING);
     mockGetAdminSession.mockReturnValue(fakeSession);

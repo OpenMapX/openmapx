@@ -37,8 +37,14 @@ export function decideServiceAction(
       ? { available: true, execution: "direct", reason: null, workflow: null }
       : denied("not_owned");
   if (controlPlane.has(service.serviceId)) {
-    if (action === "restart" && service.serviceId !== "ops-agent")
-      return denied("unavailable", "workflow", "core-restart");
+    if (action === "restart" && service.serviceId !== "ops-agent") {
+      if (!service.isBuiltIn || !authority.enabledServiceIds.has(service.serviceId))
+        return denied("disabled", "workflow", "core-restart");
+      if (!snapshot) return denied("not_owned", "workflow", "core-restart");
+      if (!["running", "restarting", "paused"].includes(snapshot.state))
+        return denied("not_running", "workflow", "core-restart");
+      return { available: true, execution: "workflow", reason: null, workflow: "core-restart" };
+    }
     return denied("control_plane");
   }
   if (dependencies.has(service.serviceId)) return denied("host_only", "host");

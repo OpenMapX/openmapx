@@ -1734,6 +1734,7 @@ function configurationPreEffectState(authority: VerifiedExecutionAuthority) {
     opsOperationFingerprint(operation) !== state.execution.operationFingerprint ||
     !(
       operation.kind === "service.update" ||
+      operation.kind === "coreService.restart" ||
       operation.kind === "stack.start" ||
       (operation.kind === "service.start" && operation.serviceId !== "data-manager") ||
       (operation.kind === "service.pull" &&

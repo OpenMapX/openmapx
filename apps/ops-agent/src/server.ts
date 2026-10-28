@@ -1234,6 +1234,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           // The fixed DM pull runtime performs its source/target-index checks
           // under writer -> release lock, then begins immediately before Docker.
           if (
+            job.operation.kind !== "coreService.restart" &&
             !(
               job.operation.kind === "service.pull" &&
               job.operation.serviceId === "data-manager" &&
@@ -2467,6 +2468,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 [
                   "configurationMaintenance.prepare",
                   "stack.start",
+                  "coreService.restart",
                   "service.start",
                   "service.recreate",
                   "service.recreateIsolated",
@@ -2485,6 +2487,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                     [
                       "stack.start",
                       "service.start",
+                      "coreService.restart",
                       "service.recreate",
                       "service.recreateIsolated",
                     ].includes(job.operation.kind)

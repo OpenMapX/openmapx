@@ -107,6 +107,7 @@ export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
   "service.start",
   "service.stop",
   "service.restart",
+  "service.core-restart",
   "service.apply",
   "compose.render",
   "configuration.apply",

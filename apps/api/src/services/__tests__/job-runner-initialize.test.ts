@@ -66,8 +66,12 @@ describe("job runner restart initialization", () => {
       "service.start",
       "service.stop",
       "service.restart",
+      "service.core-restart",
       "service.apply",
       "compose.render",
+      "configuration.apply",
+      "compose.start",
+      "integration.config.import",
       "system.diagnostics",
       "system.update",
     ]);

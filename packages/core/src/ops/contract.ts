@@ -71,6 +71,7 @@ export const OPS_OPERATION_KINDS = [
   "service.start",
   "service.stop",
   "service.restart",
+  "coreService.restart",
   "service.recreate",
   "service.recreateIsolated",
   "service.pull",
@@ -196,6 +197,7 @@ export const OPS_KIND_POLICIES = {
   "service.start": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "service.stop": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "service.restart": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
+  "coreService.restart": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "service.recreate": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "service.recreateIsolated": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "service.pull": asyncEffect("api", 15 * 60_000),
@@ -390,6 +392,11 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   }),
   serviceOperation("service.stop"),
   serviceOperation("service.restart"),
+  z.strictObject({
+    kind: z.literal("coreService.restart"),
+    serviceId: z.enum(["app-api", "traefik"]),
+    expectedConfigurationRevisionId: configurationGenerationRevisionSchema,
+  }),
   serviceRecreateOperationSchema,
   serviceRecreateIsolatedOperationSchema,
   servicePullOperationSchema,
@@ -697,6 +704,7 @@ export async function authorizeOpsResources(
   if ("serviceId" in operation) {
     if (
       (NEVER_MANAGE.has(operation.serviceId) &&
+        operation.kind !== "coreService.restart" &&
         operation.kind !== "service.logs" &&
         operation.kind !== "service.logs.follow") ||
       !(await allowed(policy.allowService?.(operation.kind, operation.serviceId)))
@@ -1024,6 +1032,10 @@ export const OPS_RESULT_SCHEMAS = {
   "service.start": changed,
   "service.stop": changed,
   "service.restart": changed,
+  "coreService.restart": z.strictObject({
+    changed: z.literal(true),
+    serviceId: z.enum(["app-api", "traefik"]),
+  }),
   "service.recreate": changed,
   "service.recreateIsolated": changed,
   "service.pull": servicePullResultSchema,

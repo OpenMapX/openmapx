@@ -119,6 +119,11 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   },
   "service.stop": { kind: "service.stop", serviceId: "motis" },
   "service.restart": { kind: "service.restart", serviceId: "motis" },
+  "coreService.restart": {
+    kind: "coreService.restart",
+    serviceId: "app-api",
+    expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+  },
   "service.recreate": {
     kind: "service.recreate",
     serviceId: "motis",

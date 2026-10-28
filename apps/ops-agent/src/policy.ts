@@ -59,6 +59,7 @@ export function serviceActionForOperation(kind: OpsOperationKind): ServiceAction
     case "service.stop":
       return "stop";
     case "service.restart":
+    case "coreService.restart":
       return "restart";
     case "service.recreate":
     case "service.recreateIsolated":
@@ -119,7 +120,7 @@ export function createRegistryResourcePolicy(options: {
         isBuiltIn: true,
         buildable: true,
       };
-      return decideServiceAction(
+      const decision = decideServiceAction(
         {
           revisionId: "registry-v1",
           services: [service],
@@ -127,7 +128,13 @@ export function createRegistryResourcePolicy(options: {
         },
         snapshot,
         action,
-      ).available;
+      );
+      return (
+        decision.available &&
+        (kind === "coreService.restart"
+          ? decision.workflow === "core-restart"
+          : decision.execution === "direct")
+      );
     },
     allowBackup: options.resourceAuthority?.allowBackup ?? (() => false),
     allowPreparedRun: () => false,
@@ -365,6 +372,7 @@ export function createRegistryResourceClaimer(options: {
             !registeredServiceIds.has(operation.serviceId) ||
             (!decision.available && !checkedCoordinatorUpdate) ||
             (decision.execution !== "direct" &&
+              !(operation.kind === "coreService.restart" && decision.workflow === "core-restart") &&
               !isOwnedMaintenanceRecreateAdmission(
                 owner?.maintenanceStep,
                 operation,

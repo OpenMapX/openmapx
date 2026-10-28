@@ -187,9 +187,27 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         return { error: `Service "${id}" not found` };
       }
       const adminSession = getAdminSession(req);
-
+      const coreRestart = action === "restart" && (id === "app-api" || id === "traefik");
+      if (coreRestart) {
+        try {
+          const inventory = await executeAndWait(
+            createApiOpsClient(),
+            { kind: "services.inspect" },
+            createDurableOpsKey("admin.core-restart.inspect", `${adminSession.user.id}:${id}`),
+            { signal: AbortSignal.timeout(15_000) },
+          );
+          const decision = inventory.services.find((s) => s.serviceId === id)?.actions.restart;
+          if (!decision?.available || decision.workflow !== "core-restart") {
+            reply.status(503);
+            return { error: "Core service restart is not available" };
+          }
+        } catch {
+          reply.status(503);
+          return { error: "Core service restart is not available" };
+        }
+      }
       const jobId = await jobRunner.enqueue(
-        `service.${action}`,
+        coreRestart ? "service.core-restart" : `service.${action}`,
         { service: id },
         adminSession.user.id,
       );

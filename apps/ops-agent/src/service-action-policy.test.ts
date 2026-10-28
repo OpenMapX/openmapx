@@ -20,6 +20,33 @@ const snapshot: OwnedServiceSnapshot = {
   },
 };
 describe("shared service action decisions", () => {
+  it.each(["app-api", "traefik"])(
+    "offers only the dedicated restart workflow for owned enabled %s",
+    (serviceId) => {
+      const current = { ...snapshot, serviceId };
+      const selected = {
+        ...authority,
+        services: [{ serviceId, isBuiltIn: true, buildable: false }],
+        enabledServiceIds: new Set([serviceId]),
+      };
+      expect(decideServiceAction(selected, current, "restart")).toEqual({
+        available: true,
+        execution: "workflow",
+        reason: null,
+        workflow: "core-restart",
+      });
+      expect(
+        decideServiceAction({ ...selected, enabledServiceIds: new Set() }, current, "restart")
+          .available,
+      ).toBe(false);
+      expect(decideServiceAction(selected, undefined, "restart").available).toBe(false);
+      expect(
+        decideServiceAction(selected, { ...current, state: "stopped" }, "restart").available,
+      ).toBe(false);
+      for (const action of ["start", "stop", "apply", "update"] as const)
+        expect(decideServiceAction(selected, current, action).available).toBe(false);
+    },
+  );
   it("keeps every available direct decision consistent with its portable schema", () => {
     for (const action of SERVICE_ACTIONS)
       expect(

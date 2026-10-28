@@ -21,6 +21,7 @@ import {
   assertOwnedMaintenanceRecreateRuntime,
   assertStagedCoordinatorReleaseWrite,
 } from "./configuration-maintenance-store";
+import { installCoreServiceRuntime } from "./core-service-runtime";
 import {
   createDockerRuntime,
   type DockerRuntimeOptions,
@@ -206,6 +207,13 @@ export async function createProductionOpsRuntime(
     rootDir: options.rootDir,
     infraDir: options.stack.infraDir,
     runFixedCli,
+  });
+  installCoreServiceRuntime(runtime, {
+    infraDir: options.stack.infraDir,
+    ownedServices: owned,
+    loadAuthority: async () =>
+      serviceActionAuthority(await options.loadAuthority(), options.stack.infraDir),
+    execFile: options.docker?.execFile,
   });
   installServicePullRuntime(runtime, {
     infraDir: options.stack.infraDir,

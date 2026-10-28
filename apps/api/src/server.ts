@@ -685,6 +685,10 @@ jobRunner.register("service.restart", async (ctx) => {
   await serviceRestart(service, ctx);
   return { service, action: "restart" };
 });
+jobRunner.register("service.core-restart", async (ctx) => {
+  const { runCoreServiceMaintenance } = await import("./services/core-service-maintenance");
+  return runCoreServiceMaintenance(ctx);
+});
 
 jobRunner.register("service.apply", async (ctx) => {
   const service = ctx.payload.service as string;

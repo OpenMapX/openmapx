@@ -630,7 +630,7 @@ describe("assembled production service authority", () => {
     expect(host.calls.some((args) => args.includes("restart"))).toBe(false);
   });
 
-  it("keeps core workflows unavailable and dependency lifecycle host-only while permitting verified core logs", async () => {
+  it("requires core selection and keeps dependency lifecycle host-only while permitting verified core logs", async () => {
     const host = await fixture();
     host.row.Labels["com.docker.compose.service"] = "ops-agent";
     host.row.ConfigImage = "example/ops-agent:1";
@@ -643,7 +643,7 @@ describe("assembled production service authority", () => {
       expect(result.services.find((s) => s.serviceId === id)?.actions.restart).toMatchObject({
         available: false,
         execution: "workflow",
-        reason: "unavailable",
+        reason: "disabled",
         workflow: "core-restart",
       });
     for (const id of ["redis", "postgis"])

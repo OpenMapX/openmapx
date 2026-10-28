@@ -751,6 +751,7 @@ export async function resumeAdminJobObservation(
     [
       "service.stop",
       "service.restart",
+      "service.core-restart",
       "backup.operation",
       "data.operation",
       "system.diagnostics",

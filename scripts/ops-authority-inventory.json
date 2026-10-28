@@ -46,6 +46,7 @@
       "configurationMaintenance.prepare",
       "configurationMaintenance.settle",
       "controlRetention.acknowledge",
+      "coreService.restart",
       "data.clean",
       "data.convertOverpass",
       "data.downloadFonts",
@@ -195,14 +196,18 @@
     {
       "id": "api.admin-cli.bulk-service",
       "callSiteIds": [],
-      "semanticSources": ["apps/api/src/services/admin-job-handlers.ts#BulkServiceAction"],
+      "semanticSources": [
+        "apps/api/src/services/admin-job-handlers.ts#BulkServiceAction",
+        "apps/ops-agent/src/core-service-runtime.ts"
+      ],
       "typedKinds": [
         "service.start",
         "service.stop",
         "service.restart",
         "service.update",
         "service.build",
-        "services.buildAll"
+        "services.buildAll",
+        "coreService.restart"
       ]
     },
     {
