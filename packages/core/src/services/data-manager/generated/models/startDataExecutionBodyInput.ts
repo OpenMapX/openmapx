@@ -30,6 +30,34 @@ export type StartDataExecutionBodyInput =
        * @items.pattern ^[A-Za-z]{2,3}$
        */
       countries: string[];
+      sourceMutation?:
+        | {
+            action: "add";
+            /** @pattern ^[a-f0-9]{64}$ */
+            expectedSourceRevision: string;
+            source: {
+              /** @minLength 1 */
+              region: string;
+              /** @minLength 1 */
+              name: string;
+              url: string;
+              license: {
+                spdxIdentifier?: string;
+                url?: string;
+                /** @minLength 1 */
+                attribution: string;
+                publisher?: string;
+                publisherUrl?: string;
+              };
+            };
+          }
+        | {
+            action: "enable" | "disable" | "remove";
+            /** @minLength 1 */
+            sourceId: string;
+            /** @pattern ^[a-f0-9]{64}$ */
+            expectedSourceRevision: string;
+          };
     }
   | {
       kind: "overture-pull";

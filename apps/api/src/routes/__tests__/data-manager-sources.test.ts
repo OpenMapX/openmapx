@@ -72,6 +72,7 @@ describe("transit source proxy", () => {
       url: "/data-manager/transit/sources",
       headers: { authorization: "Bearer service-token" },
       payload: {
+        expectedSourceRevision: "a".repeat(64),
         region: "de",
         name: "demo",
         url: "https://example.test/demo.zip",
@@ -89,6 +90,56 @@ describe("transit source proxy", () => {
     );
   });
 
+  it("forwards Disable as its own encoded mutation with the original revision and identity", async () => {
+    fetchMock.mockImplementation(async (url, init) => {
+      expect(String(url)).toBe(
+        "https://data-manager.test:4000/transit/sources/operator%3Ade%3Alocal/disable",
+      );
+      expect(JSON.parse(init.body)).toEqual({
+        expectedSourceRevision: "a".repeat(64),
+        idempotencyKey: "source-disable-fixture",
+        triggeredBy: "service-token",
+      });
+      return Response.json(
+        { jobId: "disable-job", sourceId: "operator:de:local", status: "started" },
+        { status: 202 },
+      );
+    });
+    const result = await app.inject({
+      method: "POST",
+      url: "/data-manager/transit/sources/operator%3Ade%3Alocal/disable",
+      headers: { authorization: "Bearer service-token" },
+      payload: { expectedSourceRevision: "a".repeat(64), idempotencyKey: "source-disable-fixture" },
+    });
+    expect(result.statusCode, result.body).toBe(202);
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "transit.source.disable",
+        details: { jobId: "disable-job" },
+      }),
+    );
+  });
+  it("preserves unavailable-action codes without a successful removal audit", async () => {
+    fetchMock.mockResolvedValue(
+      Response.json(
+        {
+          ok: false,
+          error: "Catalog sources cannot be removed",
+          code: "source_action_not_allowed",
+        },
+        { status: 409 },
+      ),
+    );
+    const result = await app.inject({
+      method: "DELETE",
+      url: "/data-manager/transit/sources/catalog%3Ade%3Alocal",
+      headers: { authorization: "Bearer service-token" },
+      payload: { expectedSourceRevision: "a".repeat(64) },
+    });
+    expect(result.statusCode, result.body).toBe(409);
+    expect(result.json()).toMatchObject({ code: "source_action_not_allowed" });
+    expect(audit).not.toHaveBeenCalled();
+  });
   it("propagates a conflict without writing a successful-mutation audit", async () => {
     fetchMock.mockResolvedValue(
       new Response(
@@ -103,7 +154,7 @@ describe("transit source proxy", () => {
       method: "DELETE",
       url: "/data-manager/transit/sources/catalog%3Ade%3Avbb",
       headers: { authorization: "Bearer service-token" },
-      payload: {},
+      payload: { expectedSourceRevision: "a".repeat(64) },
     });
     expect(response.statusCode).toBe(409);
     expect(audit).not.toHaveBeenCalled();

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
@@ -53,6 +54,7 @@ export class TransitSourceError extends Error {
   constructor(
     message: string,
     readonly statusCode: 400 | 404 | 409 = 400,
+    readonly code?: "source_action_not_allowed",
   ) {
     super(message);
   }
@@ -122,6 +124,21 @@ function desiredSources(
 ): DesiredSource[] {
   const feeds = rawCatalog(catalogDir);
   applyFeedOverlay(feeds, overlay);
+  const quarantined = new Set(overlay.quarantine.map((entry) => entry.sourceId));
+  // Project retained quarantined operators in isolation: their very reason
+  // for quarantine may be a collision with the pinned catalog. They remain
+  // visible for removal without ever being materialized into that catalog.
+  const retained: FeedFile[] = [];
+  applyFeedOverlay(retained, {
+    version: 3,
+    sources: overlay.sources.filter(
+      (source) =>
+        source.spec === "gtfs" && quarantined.has(operatorSourceId(source.region, source.name)),
+    ),
+    patches: [],
+    quarantine: [],
+  });
+  feeds.push(...retained);
   const atlasSpecIndex = buildTransitlandAtlasSpecIndex(catalogDir);
   const scope = (countries ?? []).map((country) => country.toLowerCase());
   const sources: DesiredSource[] = feeds.flatMap((feed) => {
@@ -142,7 +159,7 @@ function desiredSources(
           origin: entry.origin,
           originUrl: entry.originUrl,
           license: structuredClone(entry.license ?? {}),
-          requested: entry.requested,
+          requested: entry.requested && !quarantined.has(entry.sourceId),
         },
       ];
     });
@@ -178,6 +195,35 @@ function stableStringify(value: unknown): string {
   return JSON.stringify(value) ?? "null";
 }
 
+export function transitSourceRevision(options: {
+  catalogDir: string;
+  overlayPath: string;
+}): string {
+  return createHash("sha256")
+    .update(
+      stableStringify({
+        catalog: rawCatalog(options.catalogDir),
+        overlay: readOverlay(options.overlayPath),
+      }),
+    )
+    .digest("hex");
+}
+function guardedOverlayPersistence(
+  options: { catalogDir: string; overlayPath: string; expectedSourceRevision?: string },
+  candidate: FeedOverlay,
+): () => void {
+  const revision = transitSourceRevision(options);
+  if (options.expectedSourceRevision && options.expectedSourceRevision !== revision)
+    throw new TransitSourceError("Desired transit sources changed. Refresh before applying.", 409);
+  return () => {
+    if (transitSourceRevision(options) !== revision)
+      throw new TransitSourceError(
+        "Desired transit sources changed. Refresh before applying.",
+        409,
+      );
+    persistOverlay(options.overlayPath, candidate);
+  };
+}
 function equivalentDesiredActive(
   desired: DesiredSource,
   active: TransitSourceManifestRecord,
@@ -203,12 +249,18 @@ export function listTransitSources(options: {
   feedStates?: TransitFeedStateEvidence[];
   query?: TransitSourceListQuery;
 }): TransitSourceListResult {
-  const desired = desiredSources(
-    options.catalogDir,
-    readOverlay(options.overlayPath),
-    options.countries,
+  const overlay = readOverlay(options.overlayPath),
+    sourceRevision = transitSourceRevision(options),
+    active = activeEvidence(options.dataDir);
+  const scope = (options.countries ?? []).map((country) => country.toLowerCase());
+  const desired = desiredSources(options.catalogDir, overlay).filter(
+    (source) =>
+      source.origin === "operator" ||
+      scope.length === 0 ||
+      scope.includes(countryOfRegion(source.region)) ||
+      active.sources.has(source.id) ||
+      overlay.patches.some((patch) => patch.sourceId === source.id),
   );
-  const active = activeEvidence(options.dataDir);
   const byId = new Map<string, DesiredSource | undefined>(
     desired.map((source) => [source.id, source]),
   );
@@ -252,6 +304,24 @@ export function listTransitSources(options: {
       ...(base.originUrl ? { originUrl: base.originUrl } : {}),
       license: transitLicenseSchema.parse(base.license ?? {}),
       requested,
+      sourceRevision,
+      desiredState: !desiredSource ? "removed" : requested ? "enabled" : "disabled",
+      actions: {
+        enable:
+          !!desiredSource &&
+          !requested &&
+          (scope.length === 0 || scope.includes(countryOfRegion(base.region))) &&
+          !overlay.quarantine.some((entry) => entry.sourceId === id),
+        disable: !!desiredSource && requested,
+        remove: desiredSource?.origin === "operator",
+        reason: !desiredSource
+          ? "Source metadata is no longer retained."
+          : overlay.quarantine.some((entry) => entry.sourceId === id)
+            ? "Source is quarantined."
+            : scope.length > 0 && !scope.includes(countryOfRegion(base.region))
+              ? "Outside configured country scope."
+              : null,
+      },
       active: isActive,
       ...(isActive && active.epoch ? { activeEpoch: active.epoch } : {}),
       ...(activeSource
@@ -287,7 +357,7 @@ export function listTransitSources(options: {
   const total = rows.length;
   const limit = Math.min(Math.max(Math.floor(query.limit ?? 100), 1), 500);
   const offset = Math.max(Math.floor(query.offset ?? 0), 0);
-  return { sources: rows.slice(offset, offset + limit), total, limit, offset };
+  return { sourceRevision, sources: rows.slice(offset, offset + limit), total, limit, offset };
 }
 
 function validateOverlayAgainstCatalog(catalogDir: string, overlay: FeedOverlay): void {
@@ -304,6 +374,7 @@ export function prepareAddTransitSource(options: {
   overlayPath: string;
   source: FeedOverlayGtfsSource;
   countries?: string[];
+  expectedSourceRevision?: string;
 }): { sourceId: string; persist: () => void } {
   if (options.countries?.length) {
     const scope = options.countries.map((country) => country.toLowerCase());
@@ -315,6 +386,7 @@ export function prepareAddTransitSource(options: {
       );
     }
   }
+  const initialRevision = transitSourceRevision(options);
   const current = readOverlay(options.overlayPath);
   const candidate = parseFeedOverlay({
     ...current,
@@ -322,7 +394,13 @@ export function prepareAddTransitSource(options: {
   });
   validateOverlayAgainstCatalog(options.catalogDir, candidate);
   const sourceId = operatorSourceId(options.source.region.toLowerCase(), options.source.name);
-  return { sourceId, persist: () => persistOverlay(options.overlayPath, candidate) };
+  return {
+    sourceId,
+    persist: guardedOverlayPersistence(
+      { ...options, expectedSourceRevision: options.expectedSourceRevision ?? initialRevision },
+      candidate,
+    ),
+  };
 }
 
 export function prepareRemoveTransitSource(options: {
@@ -330,77 +408,123 @@ export function prepareRemoveTransitSource(options: {
   overlayPath: string;
   sourceId: string;
   countries?: string[];
+  expectedSourceRevision?: string;
 }): { sourceId: string; persist: () => void } {
+  const initialRevision = transitSourceRevision(options);
   const current = readOverlay(options.overlayPath);
-  let candidate: FeedOverlay;
-  if (options.sourceId.startsWith("operator:")) {
-    const sources = current.sources.filter(
-      (source) =>
-        source.spec !== "gtfs" || operatorSourceId(source.region, source.name) !== options.sourceId,
+  if (!options.sourceId.startsWith("operator:")) {
+    throw new TransitSourceError(
+      "Pinned catalog sources can be disabled, but cannot be removed",
+      409,
+      "source_action_not_allowed",
     );
-    if (sources.length === current.sources.length) {
-      throw new TransitSourceError(`Operator source ${options.sourceId} not found`, 404);
-    }
-    candidate = { ...current, sources };
-  } else if (options.sourceId.startsWith("catalog:")) {
-    const known = desiredSources(options.catalogDir, current, options.countries).some(
-      (source) => source.origin === "catalog" && source.id === options.sourceId,
-    );
-    if (!known) {
-      throw new TransitSourceError(
-        `Catalog source ${options.sourceId} not found in the configured scope`,
-        404,
-      );
-    }
-    candidate = {
-      ...current,
-      patches: [
-        ...current.patches.filter((patch) => patch.sourceId !== options.sourceId),
-        { sourceId: options.sourceId, skip: true },
-      ],
-    };
-  } else {
-    throw new TransitSourceError(`Unsupported transit source identity ${options.sourceId}`);
   }
+  const sources = current.sources.filter(
+    (source) =>
+      source.spec !== "gtfs" || operatorSourceId(source.region, source.name) !== options.sourceId,
+  );
+  if (sources.length === current.sources.length)
+    throw new TransitSourceError(`Operator source ${options.sourceId} not found`, 404);
+  const candidate: FeedOverlay = {
+    ...current,
+    sources,
+    patches: current.patches.filter((patch) => patch.sourceId !== options.sourceId),
+    quarantine: current.quarantine.filter((entry) => entry.sourceId !== options.sourceId),
+  };
   const validated = parseFeedOverlay(candidate);
   return {
     sourceId: options.sourceId,
-    persist: () => persistOverlay(options.overlayPath, validated),
+    persist: guardedOverlayPersistence(
+      { ...options, expectedSourceRevision: options.expectedSourceRevision ?? initialRevision },
+      validated,
+    ),
   };
 }
 
+export function prepareSetTransitSourceEnabled(options: {
+  catalogDir: string;
+  overlayPath: string;
+  sourceId: string;
+  enabled: boolean;
+  countries?: string[];
+  expectedSourceRevision?: string;
+}): { sourceId: string; persist: () => void } {
+  const initialRevision = transitSourceRevision(options);
+  const current = readOverlay(options.overlayPath);
+  // Look outside the configured scope for deactivation. A retained source must
+  // remain removable/disableable after an operator narrows the deployment.
+  const known = desiredSources(options.catalogDir, current).find(
+    (source) => source.id === options.sourceId,
+  );
+  if (!known) throw new TransitSourceError(`Transit source ${options.sourceId} not found`, 404);
+  if (options.enabled && current.quarantine.some((entry) => entry.sourceId === options.sourceId))
+    throw new TransitSourceError(
+      "Source is quarantined; repair it before enabling",
+      409,
+      "source_action_not_allowed",
+    );
+  if (
+    options.enabled &&
+    options.countries?.length &&
+    !options.countries
+      .map((country) => country.toLowerCase())
+      .includes(countryOfRegion(known.region))
+  )
+    throw new TransitSourceError(
+      "Source is outside the configured country scope",
+      409,
+      "source_action_not_allowed",
+    );
+  const candidate = parseFeedOverlay({
+    ...current,
+    patches: [
+      ...current.patches.filter((patch) => patch.sourceId !== options.sourceId),
+      { sourceId: options.sourceId, skip: !options.enabled },
+    ],
+  });
+  validateOverlayAgainstCatalog(options.catalogDir, candidate);
+  return {
+    sourceId: options.sourceId,
+    persist: guardedOverlayPersistence(
+      { ...options, expectedSourceRevision: options.expectedSourceRevision ?? initialRevision },
+      candidate,
+    ),
+  };
+}
 export function prepareEnableTransitSource(options: {
   catalogDir: string;
   overlayPath: string;
   sourceId: string;
   countries?: string[];
+  expectedSourceRevision?: string;
 }): { sourceId: string; persist: () => void } {
-  if (!options.sourceId.startsWith("catalog:")) {
-    throw new TransitSourceError("Only pinned catalog sources can be re-enabled");
-  }
-  const current = readOverlay(options.overlayPath);
-  const known = desiredSources(options.catalogDir, current, options.countries).some(
-    (source) => source.origin === "catalog" && source.id === options.sourceId,
-  );
-  if (!known) {
-    throw new TransitSourceError(
-      `Catalog source ${options.sourceId} not found in the configured scope`,
-      404,
-    );
-  }
-  const candidate = parseFeedOverlay({
-    ...current,
-    patches: [
-      ...current.patches.filter((patch) => patch.sourceId !== options.sourceId),
-      { sourceId: options.sourceId, skip: false },
-    ],
-  });
-  return {
-    sourceId: options.sourceId,
-    persist: () => persistOverlay(options.overlayPath, candidate),
-  };
+  return prepareSetTransitSourceEnabled({ ...options, enabled: true });
 }
 
+/** Called by the fixed durable transit-sync dispatcher after original target admission. */
+export function prepareTransitSourceMutation(
+  options: { catalogDir: string; overlayPath: string; countries?: string[] },
+  input: import("@openmapx/core/data-manager-contracts").TransitDesiredSourceMutation,
+) {
+  if (input.action === "add")
+    return prepareAddTransitSource({
+      ...options,
+      expectedSourceRevision: input.expectedSourceRevision,
+      source: { ...input.source, spec: "gtfs", type: "http", origin: "operator" },
+    });
+  if (input.action === "remove")
+    return prepareRemoveTransitSource({
+      ...options,
+      sourceId: input.sourceId,
+      expectedSourceRevision: input.expectedSourceRevision,
+    });
+  return prepareSetTransitSourceEnabled({
+    ...options,
+    sourceId: input.sourceId,
+    enabled: input.action === "enable",
+    expectedSourceRevision: input.expectedSourceRevision,
+  });
+}
 export function listPinnedTransitCatalog(
   catalogDir: string,
   countries?: string[],

@@ -192,7 +192,11 @@ metadata tracked by the data-manager:
   candidate: the prior healthy MOTIS dataset stays live until the complete
   candidate passes validation and promotion.
 
-Catalog sources can be disabled and later re-enabled. An operator source is
+Catalog and operator sources can be disabled and later re-enabled. Disable
+retains the saved URL, attribution and license. The separate, confirmed Remove
+action is available only for operator sources and deletes their saved metadata;
+enabling cannot restore a removed source. Catalog entries can be disabled but
+cannot be removed from their pinned catalog. An operator source is
 defined by a region, a safe display name, its HTTPS URL, attribution text, and
 either an SPDX license identifier or license URL. Adding, disabling, enabling,
 or manually syncing a source queues an asynchronous job; the row links to the

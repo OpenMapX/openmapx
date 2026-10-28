@@ -26,6 +26,14 @@ export const transitCatalogSourceSchema = z
   .omit({ origin: true, requested: true });
 export const transitSourceRowSchema = z.strictObject({
   ...sourceShape,
+  sourceRevision: z.string().regex(/^[a-f0-9]{64}$/),
+  desiredState: z.enum(["enabled", "disabled", "removed"]),
+  actions: z.strictObject({
+    enable: z.boolean(),
+    disable: z.boolean(),
+    remove: z.boolean(),
+    reason: z.string().nullable(),
+  }),
   active: z.boolean(),
   activeEpoch: z.string().optional(),
   artifact: z
@@ -43,6 +51,7 @@ export const transitSourceRowSchema = z.strictObject({
   lifecycle: transitSourceLifecycleSchema,
 });
 export const transitSourceListSchema = z.strictObject({
+  sourceRevision: z.string().regex(/^[a-f0-9]{64}$/),
   sources: z.array(transitSourceRowSchema),
   total: countSchema,
   limit: countSchema,
@@ -84,8 +93,13 @@ const mutationShape = {
   idempotencyKey: z.string().max(200).optional(),
   triggeredBy: z.string().max(200).optional(),
 };
-export const transitMutationRequestSchema = z.strictObject(mutationShape).optional();
+const expectedSourceRevision = z.string().regex(/^[a-f0-9]{64}$/);
+export const transitMutationRequestSchema = z.strictObject({
+  ...mutationShape,
+  expectedSourceRevision,
+});
 export const addTransitSourceRequestSchema = z.strictObject({
+  expectedSourceRevision,
   ...mutationShape,
   region: z.string().min(1),
   name: z.string().min(1),
@@ -98,10 +112,32 @@ export const addTransitSourceRequestSchema = z.strictObject({
     publisherUrl: z.string().optional(),
   }),
 });
+export const transitDesiredSourceMutationSchema = z.discriminatedUnion("action", [
+  z.strictObject({
+    action: z.literal("add"),
+    expectedSourceRevision: expectedSourceRevision,
+    source: addTransitSourceRequestSchema.omit({
+      idempotencyKey: true,
+      triggeredBy: true,
+      expectedSourceRevision: true,
+    }),
+  }),
+  z.strictObject({
+    action: z.enum(["enable", "disable", "remove"]),
+    sourceId: z.string().min(1),
+    expectedSourceRevision: expectedSourceRevision,
+  }),
+]);
+export type TransitDesiredSourceMutation = z.infer<typeof transitDesiredSourceMutationSchema>;
 export const transitSourceMutationResultSchema = z.strictObject({
   jobId: z.string(),
   sourceId: z.string(),
   status: z.literal("started"),
+});
+export const transitSourceActionErrorSchema = z.strictObject({
+  ok: z.literal(false),
+  error: z.string(),
+  code: z.literal("source_action_not_allowed"),
 });
 export const transitConflictSchema = z.strictObject({
   ok: z.literal(false),

@@ -4,6 +4,7 @@ import { processDiagnosticsSchema } from "../../../ops/job-evidence";
 import { hardlinkApplySummarySchema } from "../../../ops/service-results";
 import { regionSchema } from "./common";
 import { hardlinkEntrySchema } from "./datasets";
+import { transitDesiredSourceMutationSchema } from "./transit";
 
 export const dataOperationKeySchema = z.string().regex(/^opk1_[A-Za-z0-9_-]{16,64}$/);
 export const dataFingerprintSchema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -17,7 +18,11 @@ const ordinaryInputs = [
   regional("download-osm"),
   z.strictObject({ kind: z.literal("download-fonts") }),
   regional("convert-overpass"),
-  z.strictObject({ kind: z.literal("transit-sync"), countries }),
+  z.strictObject({
+    kind: z.literal("transit-sync"),
+    countries,
+    sourceMutation: transitDesiredSourceMutationSchema.optional(),
+  }),
   regional("overture-pull"),
   regional("overture-ingest"),
   regional("overture-extract"),
@@ -52,6 +57,17 @@ export const dataExecutionInputSchema = z.union([
 export type DataExecutionInput = z.output<typeof dataExecutionInputSchema>;
 export function normalizeDataExecutionInput(value: unknown): DataExecutionInput {
   const input = dataExecutionInputSchema.parse(value);
+  if (
+    input.kind === "transit-sync" &&
+    input.sourceMutation &&
+    new TextEncoder().encode(JSON.stringify(input.sourceMutation)).byteLength > 16 * 1024
+  )
+    throw Object.assign(
+      new Error(
+        "Transit source metadata is too large (maximum 16 KiB). Use a license URL and shorter attribution.",
+      ),
+      { statusCode: 413 },
+    );
   return input.kind === "transit-sync"
     ? {
         ...input,

@@ -9,6 +9,7 @@ import {
   prepareAddTransitSource,
   prepareEnableTransitSource,
   prepareRemoveTransitSource,
+  prepareSetTransitSourceEnabled,
 } from "../src/transit-sources.js";
 
 let tmp: string | undefined;
@@ -142,8 +143,9 @@ describe("transit source lifecycle", () => {
   it("persists catalog disable/re-enable and operator removal as v3 state", () => {
     const fx = fixture();
     prepareAddTransitSource({ ...fx, source: operatorSource() }).persist();
-    prepareRemoveTransitSource({
+    prepareSetTransitSourceEnabled({
       ...fx,
+      enabled: false,
       sourceId: "catalog:de:active-feed",
     }).persist();
     expect(listTransitSources({ ...fx }).sources).toContainEqual(
@@ -244,6 +246,6 @@ describe("transit source lifecycle", () => {
     ).toThrow(/country scope/);
     expect(() =>
       prepareEnableTransitSource({ ...fx, countries: ["de"], sourceId: "catalog:fr:fr-feed" }),
-    ).toThrow(/not found in the configured scope/);
+    ).toThrow(/outside the configured country scope/);
   });
 });

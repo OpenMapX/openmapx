@@ -94,6 +94,17 @@ import type {
   ConvertOverpass500,
   ConvertOverpass503,
   ConvertOverpassBody,
+  DisableTransitSource202,
+  DisableTransitSource400,
+  DisableTransitSource401,
+  DisableTransitSource404,
+  DisableTransitSource409,
+  DisableTransitSource413,
+  DisableTransitSource415,
+  DisableTransitSource429,
+  DisableTransitSource500,
+  DisableTransitSource503,
+  DisableTransitSourceBody,
   DiscardAmbientPlaces200,
   DiscardAmbientPlaces400,
   DiscardAmbientPlaces401,
@@ -529,6 +540,7 @@ import {
   cancelDataExecutionRequest,
   conflateOvertureRequest,
   convertOverpassRequest,
+  disableTransitSourceRequest,
   discardAmbientPlacesRequest,
   downloadFontsRequest,
   downloadOsmRequest,
@@ -3675,6 +3687,116 @@ export const enableTransitSource = async (
       method: "POST",
       headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
       body: JSON.stringify(enableTransitSourceBody),
+    },
+  );
+};
+
+export type disableTransitSourceResponse202 = {
+  data: DisableTransitSource202;
+  status: 202;
+};
+
+export type disableTransitSourceResponse400 = {
+  data: DisableTransitSource400;
+  status: 400;
+};
+
+export type disableTransitSourceResponse401 = {
+  data: DisableTransitSource401;
+  status: 401;
+};
+
+export type disableTransitSourceResponse404 = {
+  data: DisableTransitSource404;
+  status: 404;
+};
+
+export type disableTransitSourceResponse409 = {
+  data: DisableTransitSource409;
+  status: 409;
+};
+
+export type disableTransitSourceResponse413 = {
+  data: DisableTransitSource413;
+  status: 413;
+};
+
+export type disableTransitSourceResponse415 = {
+  data: DisableTransitSource415;
+  status: 415;
+};
+
+export type disableTransitSourceResponse429 = {
+  data: DisableTransitSource429;
+  status: 429;
+};
+
+export type disableTransitSourceResponse500 = {
+  data: DisableTransitSource500;
+  status: 500;
+};
+
+export type disableTransitSourceResponse503 = {
+  data: DisableTransitSource503;
+  status: 503;
+};
+
+export type disableTransitSourceResponseSuccess = disableTransitSourceResponse202 & {
+  headers: Headers;
+};
+export type disableTransitSourceResponseError = (
+  | disableTransitSourceResponse400
+  | disableTransitSourceResponse401
+  | disableTransitSourceResponse404
+  | disableTransitSourceResponse409
+  | disableTransitSourceResponse413
+  | disableTransitSourceResponse415
+  | disableTransitSourceResponse429
+  | disableTransitSourceResponse500
+  | disableTransitSourceResponse503
+) & {
+  headers: Headers;
+};
+
+export type disableTransitSourceResponse =
+  | disableTransitSourceResponseSuccess
+  | disableTransitSourceResponseError;
+
+export const getDisableTransitSourceUrl = (sourceId: string) => {
+  return `/transit/sources/${encodeURIComponent(String(sourceId))}/disable`;
+};
+
+export const disableTransitSource = async (
+  sourceId: string,
+  disableTransitSourceBody: DisableTransitSourceBody,
+  options?: Parameters<typeof disableTransitSourceRequest>[1],
+): Promise<disableTransitSourceResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return disableTransitSourceRequest<disableTransitSourceResponse>(
+    getDisableTransitSourceUrl(sourceId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      body: JSON.stringify(disableTransitSourceBody),
     },
   );
 };

@@ -3,6 +3,8 @@
 import type { GetTransitSources200SourcesItem } from "./getTransitSources200SourcesItem";
 
 export type GetTransitSources200 = {
+  /** @pattern ^[a-f0-9]{64}$ */
+  sourceRevision: string;
   sources: GetTransitSources200SourcesItem[];
   /** @minimum 0 */
   total: number;

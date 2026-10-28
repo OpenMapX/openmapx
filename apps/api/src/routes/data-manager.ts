@@ -382,6 +382,31 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
       return reply.code(result.status).send(result.data);
     },
   );
+  registerDataManagerAdminRoute(
+    app,
+    "postApiDataManagerTransitSourcesSourceIdDisable",
+    async (req, reply) => {
+      const auth = await authenticateDataManager(req);
+      const triggeredBy = auth.kind === "session" ? `user:${auth.userId}` : "service-token";
+      const result = await dm.disableTransitSource(
+        req.params.sourceId,
+        { ...req.body, triggeredBy },
+        dataManagerOptions(),
+      );
+      if (result.status === 202) {
+        const body = result.data;
+        await writeAuditLog({
+          actorId: auth.kind === "session" ? auth.userId : null,
+          targetId: req.params.sourceId,
+          targetType: "transit-source",
+          action: "transit.source.disable",
+          details: { jobId: body.jobId ?? null },
+          request: req,
+        });
+      }
+      return reply.code(result.status).send(result.data);
+    },
+  );
 
   registerDataManagerAdminRoute(app, "postApiDataManagerTransitSync", async (req, reply) => {
     const auth = await authenticateDataManager(req);

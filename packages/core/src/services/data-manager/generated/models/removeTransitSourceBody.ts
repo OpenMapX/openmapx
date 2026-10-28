@@ -6,4 +6,6 @@ export type RemoveTransitSourceBody = {
   idempotencyKey?: string;
   /** @maxLength 200 */
   triggeredBy?: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  expectedSourceRevision: string;
 };

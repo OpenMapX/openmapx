@@ -18,6 +18,7 @@ import {
   transitConflictSchema,
   transitMutationRequestSchema,
   transitScopeRejectedSchema,
+  transitSourceActionErrorSchema,
   transitSourceListSchema,
   transitSourceMutationResultSchema,
   transitSourcesQuerySchema,
@@ -52,10 +53,9 @@ const service = "service" as const;
 const admin = "admin" as const;
 const idParams = z.strictObject({ id: z.string().min(1) });
 const sourceParams = z.strictObject({ sourceId: z.string().min(1) });
-export const adminSourceMutationRequestSchema = transitMutationRequestSchema
-  .unwrap()
-  .omit({ triggeredBy: true })
-  .optional();
+export const adminSourceMutationRequestSchema = transitMutationRequestSchema.omit({
+  triggeredBy: true,
+});
 export const adminAddTransitSourceRequestSchema = addTransitSourceRequestSchema.omit({
   triggeredBy: true,
 });
@@ -70,7 +70,7 @@ const mutationResponses = {
   ...common,
   202: json(transitSourceMutationResultSchema),
   404: json(httpErrorSchema),
-  409: json(z.union([httpErrorSchema, transitConflictSchema])),
+  409: json(z.union([httpErrorSchema, transitConflictSchema, transitSourceActionErrorSchema])),
 };
 const ambientAccepted = {
   ...common,
@@ -158,6 +158,13 @@ export const dataManagerAdminOperations = {
   postApiDataManagerTransitSourcesSourceIdEnable: {
     method: "POST",
     path: "/api/data-manager/transit/sources/:sourceId/enable",
+    auth: service,
+    request: { params: sourceParams, body: adminSourceMutationRequestSchema },
+    responses: mutationResponses,
+  },
+  postApiDataManagerTransitSourcesSourceIdDisable: {
+    method: "POST",
+    path: "/api/data-manager/transit/sources/:sourceId/disable",
     auth: service,
     request: { params: sourceParams, body: adminSourceMutationRequestSchema },
     responses: mutationResponses,

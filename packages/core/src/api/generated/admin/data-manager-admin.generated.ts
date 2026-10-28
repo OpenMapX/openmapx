@@ -223,6 +223,17 @@ import type {
   PostApiDataManagerTransitSources429,
   PostApiDataManagerTransitSources500,
   PostApiDataManagerTransitSourcesBody,
+  PostApiDataManagerTransitSourcesSourceIdDisable202,
+  PostApiDataManagerTransitSourcesSourceIdDisable400,
+  PostApiDataManagerTransitSourcesSourceIdDisable401,
+  PostApiDataManagerTransitSourcesSourceIdDisable403,
+  PostApiDataManagerTransitSourcesSourceIdDisable404,
+  PostApiDataManagerTransitSourcesSourceIdDisable409,
+  PostApiDataManagerTransitSourcesSourceIdDisable413,
+  PostApiDataManagerTransitSourcesSourceIdDisable415,
+  PostApiDataManagerTransitSourcesSourceIdDisable429,
+  PostApiDataManagerTransitSourcesSourceIdDisable500,
+  PostApiDataManagerTransitSourcesSourceIdDisableBody,
   PostApiDataManagerTransitSourcesSourceIdEnable202,
   PostApiDataManagerTransitSourcesSourceIdEnable400,
   PostApiDataManagerTransitSourcesSourceIdEnable401,
@@ -270,6 +281,7 @@ import {
   postApiDataManagerTransitBumpTransitousRefRequest,
   postApiDataManagerTransitRestartMotisRequest,
   postApiDataManagerTransitSourcesRequest,
+  postApiDataManagerTransitSourcesSourceIdDisableRequest,
   postApiDataManagerTransitSourcesSourceIdEnableRequest,
   postApiDataManagerTransitSyncRequest,
 } from "./operation-bindings.generated";
@@ -2318,6 +2330,117 @@ export const deleteApiDataManagerTransitSourcesSourceId = async (
       method: "DELETE",
       headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
       body: JSON.stringify(deleteApiDataManagerTransitSourcesSourceIdBody),
+    },
+  );
+};
+
+export type postApiDataManagerTransitSourcesSourceIdDisableResponse202 = {
+  data: PostApiDataManagerTransitSourcesSourceIdDisable202;
+  status: 202;
+};
+
+export type postApiDataManagerTransitSourcesSourceIdDisableResponse400 = {
+  data: PostApiDataManagerTransitSourcesSourceIdDisable400;
+  status: 400;
+};
+
+export type postApiDataManagerTransitSourcesSourceIdDisableResponse401 = {
+  data: PostApiDataManagerTransitSourcesSourceIdDisable401;
+  status: 401;
+};
+
+export type postApiDataManagerTransitSourcesSourceIdDisableResponse403 = {
+  data: PostApiDataManagerTransitSourcesSourceIdDisable403;
+  status: 403;
+};
+
+export type postApiDataManagerTransitSourcesSourceIdDisableResponse404 = {
+  data: PostApiDataManagerTransitSourcesSourceIdDisable404;
+  status: 404;
+};
+
+export type postApiDataManagerTransitSourcesSourceIdDisableResponse409 = {
+  data: PostApiDataManagerTransitSourcesSourceIdDisable409;
+  status: 409;
+};
+
+export type postApiDataManagerTransitSourcesSourceIdDisableResponse413 = {
+  data: PostApiDataManagerTransitSourcesSourceIdDisable413;
+  status: 413;
+};
+
+export type postApiDataManagerTransitSourcesSourceIdDisableResponse415 = {
+  data: PostApiDataManagerTransitSourcesSourceIdDisable415;
+  status: 415;
+};
+
+export type postApiDataManagerTransitSourcesSourceIdDisableResponse429 = {
+  data: PostApiDataManagerTransitSourcesSourceIdDisable429;
+  status: 429;
+};
+
+export type postApiDataManagerTransitSourcesSourceIdDisableResponse500 = {
+  data: PostApiDataManagerTransitSourcesSourceIdDisable500;
+  status: 500;
+};
+
+export type postApiDataManagerTransitSourcesSourceIdDisableResponseSuccess =
+  postApiDataManagerTransitSourcesSourceIdDisableResponse202 & {
+    headers: Headers;
+  };
+export type postApiDataManagerTransitSourcesSourceIdDisableResponseError = (
+  | postApiDataManagerTransitSourcesSourceIdDisableResponse400
+  | postApiDataManagerTransitSourcesSourceIdDisableResponse401
+  | postApiDataManagerTransitSourcesSourceIdDisableResponse403
+  | postApiDataManagerTransitSourcesSourceIdDisableResponse404
+  | postApiDataManagerTransitSourcesSourceIdDisableResponse409
+  | postApiDataManagerTransitSourcesSourceIdDisableResponse413
+  | postApiDataManagerTransitSourcesSourceIdDisableResponse415
+  | postApiDataManagerTransitSourcesSourceIdDisableResponse429
+  | postApiDataManagerTransitSourcesSourceIdDisableResponse500
+) & {
+  headers: Headers;
+};
+
+export type postApiDataManagerTransitSourcesSourceIdDisableResponse =
+  | postApiDataManagerTransitSourcesSourceIdDisableResponseSuccess
+  | postApiDataManagerTransitSourcesSourceIdDisableResponseError;
+
+export const getPostApiDataManagerTransitSourcesSourceIdDisableUrl = (sourceId: string) => {
+  return `/api/data-manager/transit/sources/${encodeURIComponent(String(sourceId))}/disable`;
+};
+
+export const postApiDataManagerTransitSourcesSourceIdDisable = async (
+  sourceId: string,
+  postApiDataManagerTransitSourcesSourceIdDisableBody: PostApiDataManagerTransitSourcesSourceIdDisableBody,
+  options?: Parameters<typeof postApiDataManagerTransitSourcesSourceIdDisableRequest>[1],
+): Promise<postApiDataManagerTransitSourcesSourceIdDisableResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return postApiDataManagerTransitSourcesSourceIdDisableRequest<postApiDataManagerTransitSourcesSourceIdDisableResponse>(
+    getPostApiDataManagerTransitSourcesSourceIdDisableUrl(sourceId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      body: JSON.stringify(postApiDataManagerTransitSourcesSourceIdDisableBody),
     },
   );
 };

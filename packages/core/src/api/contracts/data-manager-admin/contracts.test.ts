@@ -9,10 +9,10 @@ import {
 } from "./index";
 
 describe("application data-manager administration contracts", () => {
-  it("describes all 25 actual BFF operations with the real session-only distinctions", () => {
-    expect(Object.keys(dataManagerAdminOperations)).toHaveLength(25);
+  it("describes all 26 actual BFF operations with the real session-only distinctions", () => {
+    expect(Object.keys(dataManagerAdminOperations)).toHaveLength(26);
     const operations = Object.values(dataManagerAdminOperations);
-    expect(new Set(operations.map(({ method, path }) => `${method} ${path}`)).size).toBe(25);
+    expect(new Set(operations.map(({ method, path }) => `${method} ${path}`)).size).toBe(26);
     expect(operations.filter(({ auth }) => auth === "admin")).toHaveLength(11);
     expect(operations.every(({ path }) => path.startsWith("/api/"))).toBe(true);
     expect(dataManagerAdminOperations.getApiDataManagerTransitState.auth).toBe("service");

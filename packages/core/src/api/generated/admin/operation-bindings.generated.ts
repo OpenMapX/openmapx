@@ -539,6 +539,15 @@ export async function postApiDataManagerTransitSourcesRequest<T>(
 ): Promise<T> {
   return postApiDataManagerTransitSourcesBound<T>(url, options);
 }
+const postApiDataManagerTransitSourcesSourceIdDisableBound = bindAdminOperation(
+  "postApiDataManagerTransitSourcesSourceIdDisable",
+);
+export async function postApiDataManagerTransitSourcesSourceIdDisableRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return postApiDataManagerTransitSourcesSourceIdDisableBound<T>(url, options);
+}
 const postApiDataManagerTransitSourcesSourceIdEnableBound = bindAdminOperation(
   "postApiDataManagerTransitSourcesSourceIdEnable",
 );

@@ -3,6 +3,9 @@ import { sourceStateLabel, type TransitSource } from "./TransitSourcesSection";
 
 function source(overrides: Partial<TransitSource>): TransitSource {
   return {
+    sourceRevision: "a".repeat(64),
+    desiredState: "enabled",
+    actions: { enable: false, disable: true, remove: false, reason: null },
     id: "de-test",
     region: "de",
     name: "Test",

@@ -47,6 +47,7 @@ import type { SingleFlightController } from "../transitous/single-flight.js";
 import { dataExecutionDiagnostic } from "./diagnostics.js";
 import { runOwnedDataOpsOperation } from "./ops-children.js";
 import type { DataExecutionContext } from "./runtime.js";
+import { publishOwnedTransitSourceMutation } from "./source-mutation.js";
 import {
   DataPublicationUnknown,
   publishDataChange,
@@ -158,6 +159,12 @@ export function createDataExecutionDispatcher(deps: {
           jobChildLogger({ job: "transit-sync", jobId: context.execution.executionId }),
         );
         try {
+          await publishOwnedTransitSourceMutation(
+            input,
+            context,
+            deps.operationsPolicy,
+            deps.dataDir,
+          );
           const ctx = await publishDataChange(() =>
             buildJobContext({
               dataDir: deps.dataDir,

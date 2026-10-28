@@ -855,7 +855,7 @@ describe("integration administration browser behavior", () => {
     expect(screen.getByLabelText("Token")).toHaveValue("");
     expect(screen.getByRole("button", { name: "Save Credential" })).toBeDisabled();
     await userEvent.click(screen.getByRole("button", { name: "Done" }));
-    expect(close).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledTimes(1);
   });
   it("retains the original revision and idempotency key for an unchanged rejected credential draft", async () => {
     const calls = transport(() =>

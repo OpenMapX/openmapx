@@ -41,6 +41,7 @@
     "services/data-manager/src/jobs/execution/store-postgres.test.ts",
     "services/data-manager/src/jobs/execution/legacy-admission-postgres.test.ts",
     "services/data-manager/src/jobs/execution/runtime.test.ts",
+    "services/data-manager/src/jobs/execution/source-mutation-postgres.test.ts",
     "services/data-manager/src/jobs/execution/fixed-cli.test.ts",
     "services/data-manager/src/jobs/execution/full-update.test.ts",
     "services/data-manager/src/jobs/execution/runner-cancellation.test.ts",

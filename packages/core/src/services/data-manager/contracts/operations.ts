@@ -34,7 +34,7 @@ const sourceParams = z.strictObject({ sourceId: z.string().min(1) });
 const sourceMutationErrors = {
   ...dataMutationErrors,
   404: json(httpErrorSchema),
-  409: json(z.union([httpErrorSchema, t.transitConflictSchema])),
+  409: json(z.union([httpErrorSchema, t.transitConflictSchema, t.transitSourceActionErrorSchema])),
 };
 const offlineErrors = {
   ...dataMutationErrors,
@@ -374,6 +374,13 @@ export const dataManagerOperations = {
   enableTransitSource: {
     method: "POST",
     path: "/transit/sources/:sourceId/enable",
+    auth: service,
+    request: { params: sourceParams, body: t.transitMutationRequestSchema },
+    responses: { ...sourceMutationErrors, 202: json(t.transitSourceMutationResultSchema) },
+  },
+  disableTransitSource: {
+    method: "POST",
+    path: "/transit/sources/:sourceId/disable",
     auth: service,
     request: { params: sourceParams, body: t.transitMutationRequestSchema },
     responses: { ...sourceMutationErrors, 202: json(t.transitSourceMutationResultSchema) },

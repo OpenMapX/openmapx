@@ -1,3 +1,5 @@
+import { transitSourceRevision } from "../src/transit-sources.js";
+
 vi.mock("../src/jobs/execution/legacy-mutation.js", () => ({
   beginLegacyCatalogPreflight: async () => {},
   rejectLegacyMissingCatalog: async () => {},
@@ -16,7 +18,7 @@ vi.mock("../src/jobs/persistence.js", async () => ({
   finalizeJobRow: vi.fn(async () => {}),
 }));
 
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SafeDownloadOptions } from "@openmapx/core/utils/safe-download";
@@ -422,6 +424,10 @@ describe("data-manager API", () => {
       payload: {
         region: "de",
         name: "operator-feed",
+        expectedSourceRevision: transitSourceRevision({
+          catalogDir: join(dataDir, ".transitous-catalog"),
+          overlayPath: join(dataDir, "overrides/feeds-overlay.json"),
+        }),
         url: "https://operator.example/feed.zip",
         license: { spdxIdentifier: "CC-BY-4.0", attribution: "Operator" },
       },
@@ -430,6 +436,37 @@ describe("data-manager API", () => {
     expect(existsSync(overlayPath)).toBe(false);
   });
 
+  it("rejects oversized source metadata before reserving a job or admitting work", async () => {
+    const dataDir = createDataDir();
+    sourceCatalog(dataDir);
+    const singleFlight: SingleFlightController = {
+        tryStartSync: vi.fn(),
+        reserveOwned: vi.fn(() => true),
+        markSyncFinished: vi.fn(),
+        getInflight: () => null,
+      },
+      admitLocal = vi.fn();
+    const app = createTestApp();
+    registerApi(app, { dataDir, singleFlight, executionReceiver: receiverFixture({ admitLocal }) });
+    const response = await app.inject({
+      method: "POST",
+      url: "/transit/sources",
+      payload: {
+        region: "de",
+        name: "bounded",
+        url: "https://operator.example/feed.zip",
+        license: { spdxIdentifier: "CC0-1.0", attribution: "ü".repeat(8192) },
+        expectedSourceRevision: transitSourceRevision({
+          catalogDir: join(dataDir, ".transitous-catalog"),
+          overlayPath: join(dataDir, "overrides/feeds-overlay.json"),
+        }),
+      },
+    });
+    expect(response.statusCode, response.body).toBe(413);
+    expect(singleFlight.tryStartSync).not.toHaveBeenCalled();
+    expect(admitLocal).not.toHaveBeenCalled();
+    expect(existsSync(join(dataDir, "overrides/feeds-overlay.json"))).toBe(false);
+  });
   it("returns a reserved visible job before launching an accepted source mutation", async () => {
     const dataDir = createDataDir();
     sourceCatalog(dataDir);
@@ -455,6 +492,10 @@ describe("data-manager API", () => {
       payload: {
         region: "de",
         name: "operator-feed",
+        expectedSourceRevision: transitSourceRevision({
+          catalogDir: join(dataDir, ".transitous-catalog"),
+          overlayPath: join(dataDir, "overrides/feeds-overlay.json"),
+        }),
         url: "https://operator.example/feed.zip",
         license: { spdxIdentifier: "CC-BY-4.0", attribution: "Operator" },
       },
@@ -466,10 +507,17 @@ describe("data-manager API", () => {
       status: "started",
     });
     expect(events).toEqual(["job-inserted", "durable-admitted"]);
-    const overlay = JSON.parse(
-      readFileSync(join(dataDir, "overrides", "feeds-overlay.json"), "utf-8"),
-    ) as { version: number };
-    expect(overlay.version).toBe(3);
+    expect(existsSync(join(dataDir, "overrides/feeds-overlay.json"))).toBe(false);
+    expect(admitLocal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "transit-sync",
+        sourceMutation: expect.objectContaining({
+          action: "add",
+          source: expect.objectContaining({ name: "operator-feed" }),
+        }),
+      }),
+      expect.objectContaining({ sourceJobId: "job-visible" }),
+    );
   });
 
   it.each([

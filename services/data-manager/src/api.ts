@@ -10,6 +10,8 @@ import {
   type DataExecutionInput,
   type DataExecutionStatus,
   isDataExecutionTerminal,
+  normalizeDataExecutionInput,
+  type TransitDesiredSourceMutation,
 } from "@openmapx/core/data-manager-contracts";
 import { feedState } from "@openmapx/db-schema";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -80,6 +82,7 @@ import {
   prepareAddTransitSource,
   prepareEnableTransitSource,
   prepareRemoveTransitSource,
+  prepareSetTransitSourceEnabled,
   type TransitFeedStateEvidence,
   TransitSourceError,
 } from "./transit-sources.js";
@@ -495,8 +498,8 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     triggeredBy: string;
     idempotencyKey?: string;
     sourceId: string;
-    action: "add" | "remove" | "enable";
-    persist: () => void;
+    action: "add" | "remove" | "enable" | "disable";
+    mutation: TransitDesiredSourceMutation;
   }): Promise<
     { ok: true; jobId: string } | { ok: false; status: number; body: Record<string, unknown> }
   > {
@@ -506,6 +509,11 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         status: 503,
         body: { ok: false, error: "Durable data receiver is unavailable" },
       };
+    const input = normalizeDataExecutionInput({
+      kind: "transit-sync",
+      countries: operationsPolicy.countries,
+      sourceMutation: options.mutation,
+    });
     const start = await singleFlight.tryStartSync({
       trigger: "api",
       triggeredBy: options.triggeredBy,
@@ -529,26 +537,14 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         },
       };
     }
-    try {
-      // The synchronous single-flight reservation and visible job row exist
-      // before the atomic desired-state rename.
-      options.persist();
-    } catch (error) {
-      await finalizeJobRow(start.jobId, "error");
-      singleFlight.markSyncFinished();
-      return {
-        ok: false,
-        status: 500,
-        body: { ok: false, error: (error as Error).message, jobId: start.jobId },
-      };
-    }
+    // Desired state is written only by the fixed dispatcher under this sync's
+    // original admitted target authority, never by the HTTP observer.
     singleFlight.markSyncFinished(start.jobId);
     try {
-      const admitted = await opts.executionReceiver.admitLocal(
-        { kind: "transit-sync", countries: operationsPolicy.countries },
-        { sourceJobId: start.jobId },
-      );
-      await finalizeJobRow(start.jobId, "ok");
+      const admitted = await opts.executionReceiver.admitLocal(input, {
+        sourceJobId: start.jobId,
+        triggeredBy: options.triggeredBy,
+      });
       return { ok: true, jobId: admitted.id };
     } catch (error) {
       await finalizeJobRow(start.jobId, "error");
@@ -653,6 +649,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         catalogDir,
         overlayPath,
         countries: operationsPolicy.countries,
+        expectedSourceRevision: req.body.expectedSourceRevision,
         source: {
           spec: "gtfs",
           type: "http",
@@ -665,14 +662,27 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       });
     } catch (error) {
       const status = error instanceof TransitSourceError ? error.statusCode : 400;
-      return reply.code(status).send({ ok: false, error: (error as Error).message });
+      return reply.code(status).send({
+        ok: false,
+        error: (error as Error).message,
+        ...(error instanceof TransitSourceError && error.code ? { code: error.code } : {}),
+      });
     }
     const result = await reserveSourceMutation({
       triggeredBy: req.body.triggeredBy ?? "api",
       idempotencyKey: req.body.idempotencyKey,
       sourceId: mutation.sourceId,
       action: "add",
-      persist: mutation.persist,
+      mutation: {
+        action: "add",
+        expectedSourceRevision: req.body.expectedSourceRevision,
+        source: {
+          region: req.body.region,
+          name: req.body.name,
+          url: req.body.url,
+          license: req.body.license,
+        },
+      },
     });
     if (!result.ok) return reply.code(result.status).send(result.body);
     return reply
@@ -687,18 +697,27 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         catalogDir,
         overlayPath,
         countries: operationsPolicy.countries,
+        expectedSourceRevision: req.body.expectedSourceRevision,
         sourceId: req.params.sourceId,
       });
     } catch (error) {
       const status = error instanceof TransitSourceError ? error.statusCode : 400;
-      return reply.code(status).send({ ok: false, error: (error as Error).message });
+      return reply.code(status).send({
+        ok: false,
+        error: (error as Error).message,
+        ...(error instanceof TransitSourceError && error.code ? { code: error.code } : {}),
+      });
     }
     const result = await reserveSourceMutation({
       triggeredBy: req.body?.triggeredBy ?? "api",
       idempotencyKey: req.body?.idempotencyKey,
       sourceId: mutation.sourceId,
       action: "remove",
-      persist: mutation.persist,
+      mutation: {
+        action: "remove",
+        sourceId: mutation.sourceId,
+        expectedSourceRevision: req.body.expectedSourceRevision,
+      },
     });
     if (!result.ok) return reply.code(result.status).send(result.body);
     return reply
@@ -713,18 +732,63 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         catalogDir,
         overlayPath,
         countries: operationsPolicy.countries,
+        expectedSourceRevision: req.body.expectedSourceRevision,
         sourceId: req.params.sourceId,
       });
     } catch (error) {
       const status = error instanceof TransitSourceError ? error.statusCode : 400;
-      return reply.code(status).send({ ok: false, error: (error as Error).message });
+      return reply.code(status).send({
+        ok: false,
+        error: (error as Error).message,
+        ...(error instanceof TransitSourceError && error.code ? { code: error.code } : {}),
+      });
     }
     const result = await reserveSourceMutation({
       triggeredBy: req.body?.triggeredBy ?? "api",
       idempotencyKey: req.body?.idempotencyKey,
       sourceId: mutation.sourceId,
       action: "enable",
-      persist: mutation.persist,
+      mutation: {
+        action: "enable",
+        sourceId: mutation.sourceId,
+        expectedSourceRevision: req.body.expectedSourceRevision,
+      },
+    });
+    if (!result.ok) return reply.code(result.status).send(result.body);
+    return reply
+      .code(202)
+      .send({ jobId: result.jobId, sourceId: mutation.sourceId, status: "started" });
+  });
+
+  registerDataManagerRoute(app, "disableTransitSource", async (req, reply) => {
+    let mutation: ReturnType<typeof prepareSetTransitSourceEnabled>;
+    try {
+      mutation = prepareSetTransitSourceEnabled({
+        catalogDir,
+        overlayPath,
+        countries: operationsPolicy.countries,
+        expectedSourceRevision: req.body.expectedSourceRevision,
+        sourceId: req.params.sourceId,
+        enabled: false,
+      });
+    } catch (error) {
+      const status = error instanceof TransitSourceError ? error.statusCode : 400;
+      return reply.code(status).send({
+        ok: false,
+        error: (error as Error).message,
+        ...(error instanceof TransitSourceError && error.code ? { code: error.code } : {}),
+      });
+    }
+    const result = await reserveSourceMutation({
+      triggeredBy: req.body?.triggeredBy ?? "api",
+      idempotencyKey: req.body?.idempotencyKey,
+      sourceId: mutation.sourceId,
+      action: "disable",
+      mutation: {
+        action: "disable",
+        sourceId: mutation.sourceId,
+        expectedSourceRevision: req.body.expectedSourceRevision,
+      },
     });
     if (!result.ok) return reply.code(result.status).send(result.body);
     return reply

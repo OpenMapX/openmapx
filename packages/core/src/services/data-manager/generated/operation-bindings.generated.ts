@@ -65,6 +65,13 @@ export async function convertOverpassRequest<T>(
 ): Promise<T> {
   return convertOverpassBound<T>(url, options);
 }
+const disableTransitSourceBound = bindDataManagerOperation("disableTransitSource");
+export async function disableTransitSourceRequest<T>(
+  url: string,
+  options?: DataManagerRequestOptions,
+): Promise<T> {
+  return disableTransitSourceBound<T>(url, options);
+}
 const discardAmbientPlacesBound = bindDataManagerOperation("discardAmbientPlaces");
 export async function discardAmbientPlacesRequest<T>(
   url: string,

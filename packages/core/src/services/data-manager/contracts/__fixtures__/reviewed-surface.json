@@ -1,7 +1,7 @@
 {
-  "revision": "815a24294c283fc829f3a372a1ae21618442cca0",
-  "explicitOperations": 48,
-  "note": "Static inventory. Expands two literal ambient actions and imported relay constant. Excludes Fastify automatic HEAD aliases; binary HEAD routes explicitly included. No route handler was invoked.",
+  "revision": "d721c425dded1da76ea26b80937b741307f939ce",
+  "explicitOperations": 57,
+  "note": "Static inventory. Expands two literal ambient actions and imported relay constant. Excludes Fastify automatic HEAD aliases; binary HEAD routes explicitly included. No route handler was invoked. Updated by explicit review for the eight previously installed durable execution/fence routes and the new reversible source-disable route; baseline revision precedes the latter.",
   "operations": [
     {
       "method": "POST",
@@ -194,6 +194,42 @@
     {
       "method": "POST",
       "path": "/transit/sync"
+    },
+    {
+      "method": "POST",
+      "path": "/executions"
+    },
+    {
+      "method": "GET",
+      "path": "/executions/:id"
+    },
+    {
+      "method": "GET",
+      "path": "/executions/by-key/:operationKey"
+    },
+    {
+      "method": "POST",
+      "path": "/executions/:id/cancel"
+    },
+    {
+      "method": "POST",
+      "path": "/executions/configuration-maintenance/prepare"
+    },
+    {
+      "method": "GET",
+      "path": "/executions/configuration-maintenance/:maintenanceId"
+    },
+    {
+      "method": "POST",
+      "path": "/executions/configuration-maintenance/:maintenanceId/settle"
+    },
+    {
+      "method": "POST",
+      "path": "/executions/generation-hardlinks"
+    },
+    {
+      "method": "POST",
+      "path": "/transit/sources/:sourceId/disable"
     }
   ]
 }

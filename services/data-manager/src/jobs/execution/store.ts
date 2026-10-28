@@ -709,7 +709,21 @@ export function createPostgresDataExecutionStore(
       const result = await sql.begin(async (tx) => {
         const current = await find(tx, "id", id, true);
         if (!current || current.version !== version) return null;
-        return update(tx, current, status, current.children, terminalAt);
+        const saved = await update(tx, current, status, current.children, terminalAt);
+        if (saved && current.input.kind === "transit-sync" && current.input.sourceMutation) {
+          // The original source reservation is a linked observer, not a second
+          // worker. Settle it atomically with the actual contained sync result.
+          const linked = canonicalJson({
+            id: current.status.id,
+            operationKey: current.execution.operationKey,
+            fingerprint: current.execution.fingerprint,
+          });
+          await tx`UPDATE data_manager.jobs SET status=${status.status},finished_at=${new Date(terminalAt).toISOString()}::text::timestamptz
+            WHERE execution_version IS NULL AND finished_at IS NULL
+              AND kind=${`transit-source-${current.input.sourceMutation.action}`}
+              AND metadata->'durableExecution'=${linked}::text::jsonb`;
+        }
+        return saved;
       });
       if (result) await options.controlJournal.publishTerminal(result.execution);
       return result;
