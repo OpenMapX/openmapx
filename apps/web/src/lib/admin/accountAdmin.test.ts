@@ -40,6 +40,14 @@ vi.mock("@openmapx/core", async () => ({
   },
   setPrivacyAdminRole: state.methods.privacy,
 }));
+vi.mock("@openmapx/core/api-admin-sdk", async () => ({
+  ...(await vi.importActual<typeof import("@openmapx/core/api-admin-sdk")>(
+    "@openmapx/core/api-admin-sdk",
+  )),
+  createAdminAccount: state.methods.createUser,
+  changeAdminAccountRole: state.methods.setRole,
+  sendAdminAccountPasswordReset: state.methods.reset,
+}));
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: state.apiUrl }),
 }));
@@ -75,6 +83,7 @@ it.each<[string, (c: ReturnType<typeof createAccountAdminClient>) => Promise<unk
         email: "a@example.test",
         password: "synthetic-password",
         role: "user",
+        sendInvitation: true,
       }),
   ],
   ["name", (c: ReturnType<typeof createAccountAdminClient>) => c.updateName("a", "Synthetic")],
@@ -86,7 +95,13 @@ it.each<[string, (c: ReturnType<typeof createAccountAdminClient>) => Promise<unk
   [
     "reset",
     (c: ReturnType<typeof createAccountAdminClient>) =>
-      c.resetPassword("a@example.test", "http://ui.test"),
+      c.recover(
+        "reset-password",
+        "a",
+        { confirmed: true },
+        { challengeId: "11111111-1111-4111-8111-111111111111" },
+        crypto.randomUUID(),
+      ),
   ],
   ["revoke", (c: ReturnType<typeof createAccountAdminClient>) => c.revoke("synthetic-token")],
   ["revoke all", (c: ReturnType<typeof createAccountAdminClient>) => c.revokeAll("a")],
@@ -107,14 +122,18 @@ it("captures origin and canonical role expectation for every write", async () =>
   state.apiUrl = "http://api-b.test";
   await expect(client.changeRole("a", "admin", "user")).rejects.toThrow();
   expect(state.methods.setRole).toHaveBeenCalledWith(
-    expect.objectContaining({
-      role: "admin",
-      fetchOptions: expect.objectContaining({
-        baseURL: "http://api-a.test/api/auth",
-        headers: expect.objectContaining({ "x-openmapx-expected-role": "user" }),
-      }),
-    }),
+    "a",
+    { role: "admin", expectedRole: "user" },
+    { "idempotency-key": expect.any(String) },
+    { client: expect.any(Object) },
   );
+  const options = state.methods.setRole.mock.calls[0]?.[3] as
+    | { client: { connectionTarget: (path: string) => unknown } }
+    | undefined;
+  expect(options?.client.connectionTarget("/api/admin/accounts")).toEqual({
+    url: "http://api-a.test/api/admin/accounts",
+    withCredentials: true,
+  });
   expect(state.methods.updateUser).not.toHaveBeenCalled();
 });
 it.each(["target", "actor", "origin", "unmount"])(

@@ -41,6 +41,14 @@ vi.mock("@openmapx/core", async () => ({
     },
   },
 }));
+vi.mock("@openmapx/core/api-admin-sdk", async () => ({
+  ...(await vi.importActual<typeof import("@openmapx/core/api-admin-sdk")>(
+    "@openmapx/core/api-admin-sdk",
+  )),
+  createAdminAccount: mocks.create,
+  changeAdminAccountRole: mocks.role,
+  getAdminAccountDelivery: vi.fn(async () => ({ status: 200, data: { latest: null } })),
+}));
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://admin-a.test" }),
 }));
@@ -69,7 +77,8 @@ beforeEach(() => {
     "impersonate",
   ] as const)
     mocks[key].mockResolvedValue({
-      data: null,
+      status: 403,
+      data: { error: "FORBIDDEN" },
       error: { code: "FORBIDDEN", message: "synthetic private error" },
     });
   mocks.list.mockResolvedValue({
@@ -77,7 +86,8 @@ beforeEach(() => {
     error: { code: "SERVICE_UNAVAILABLE", message: "synthetic provider diagnostic" },
   });
   mocks.create.mockResolvedValue({
-    data: null,
+    status: 400,
+    data: { error: "INVALID_PASSWORD" },
     error: { code: "INVALID_PASSWORD", message: "synthetic provider diagnostic" },
   });
   mocks.ban.mockResolvedValue({
@@ -203,13 +213,10 @@ it.each(["list", "detail"])(
     if (view === "detail") fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
     await waitFor(() => expect(mocks.role).toHaveBeenCalledTimes(1));
     expect(mocks.role).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: subject.id,
-        role: "admin",
-        fetchOptions: expect.objectContaining({
-          headers: expect.objectContaining({ "x-openmapx-expected-role": "user" }),
-        }),
-      }),
+      subject.id,
+      { role: "admin", expectedRole: "user" },
+      { "idempotency-key": expect.any(String) },
+      expect.objectContaining({ client: expect.any(Object) }),
     );
     expect(mocks.update).not.toHaveBeenCalled();
     if (view === "list")
@@ -244,8 +251,29 @@ it("a closed and reopened create dialog keeps new inputs when the old request co
   view.rerender(child(false));
   view.rerender(child(true));
   fireEvent.change(screen.getByLabelText("Full Name"), { target: { value: "Second" } });
-  await act(async () => resolve({ data: { user: subject }, error: null }));
+  await act(async () =>
+    resolve({
+      status: 200,
+      data: {
+        userId: subject.id,
+        created: true,
+        verificationDelivery: "queued",
+        passwordSetupDelivery: "queued",
+      },
+    }),
+  );
   expect(screen.getByLabelText("Full Name")).toHaveValue("Second");
   expect(close).not.toHaveBeenCalled();
   expect(mocks.toast).not.toHaveBeenCalled();
+});
+
+it("offers the privacy role for an existing administrator through the same canonical writer", async () => {
+  mocks.list.mockResolvedValue({
+    data: { users: [{ ...subject, role: "admin" }], total: 2 },
+    error: null,
+  });
+  mount(<UserDetail userId={subject.id} />);
+  await screen.findByText(subject.email);
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Role" }));
+  expect(screen.getByRole("option", { name: "Privacy admin" })).toBeInTheDocument();
 });

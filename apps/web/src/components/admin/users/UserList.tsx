@@ -99,7 +99,7 @@ function UserRoleSelect({
       >
         <MenuItem value="user">User</MenuItem>
         <MenuItem value="admin">Admin</MenuItem>
-        {role !== "admin" && <MenuItem value="privacy_admin">Privacy admin</MenuItem>}
+        <MenuItem value="privacy_admin">Privacy admin</MenuItem>
       </Select>
     </FormControl>
   );
@@ -128,13 +128,6 @@ function ActionsMenu({
     onSuccess: () => {
       setAnchor(null);
       showToast(`${user.name} unbanned`);
-    },
-    onError: (error) => showToast(error.message, "error"),
-  });
-  const resetPassword = useAccountAction(user.id, {
-    onSuccess: () => {
-      setAnchor(null);
-      showToast(`Password reset requested for ${user.name}`);
     },
     onError: (error) => showToast(error.message, "error"),
   });
@@ -203,17 +196,14 @@ function ActionsMenu({
           )
         )}
         <MenuItem
-          onClick={() =>
-            resetPassword.mutate((client) =>
-              client.resetPassword(user.email, window.location.origin),
-            )
-          }
-          disabled={resetPassword.isPending}
+          component={Link}
+          href={`/admin/users/${user.id}#account-recovery`}
+          onClick={() => setAnchor(null)}
         >
           <ListItemIcon>
             <LockResetIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText>Send Password Reset</ListItemText>
+          <ListItemText>Account recovery…</ListItemText>
         </MenuItem>
         {!isSelf && !isLastAdmin && (
           <MenuItem

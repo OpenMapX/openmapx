@@ -39,6 +39,7 @@ import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 import { useClientPagination } from "../shared/tableHooks";
+import { AccountRecoveryActions } from "./AccountRecoveryActions";
 import { BanUserDialog } from "./BanUserDialog";
 
 interface AdminUser {
@@ -154,7 +155,7 @@ function ProfileTab({
           >
             <MenuItem value="user">User</MenuItem>
             <MenuItem value="admin">Admin</MenuItem>
-            {user.role !== "admin" && <MenuItem value="privacy_admin">Privacy admin</MenuItem>}
+            <MenuItem value="privacy_admin">Privacy admin</MenuItem>
           </Select>
         </FormControl>
         {dirty && (
@@ -223,6 +224,8 @@ function ProfileTab({
           )}
         </Stack>
       </Box>
+      <Divider />
+      <AccountRecoveryActions user={user} />
       <Divider />
       <Stack
         direction="row"

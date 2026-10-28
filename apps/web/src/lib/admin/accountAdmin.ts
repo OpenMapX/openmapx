@@ -1,11 +1,27 @@
 "use client";
-import { authClient, createApiClient, setPrivacyAdminRole } from "@openmapx/core";
+import { authClient, createApiClient } from "@openmapx/core";
+import * as accountSdk from "@openmapx/core/api-admin-sdk";
+import {
+  type AdminReauthProofRef,
+  type AuthPolicySettings,
+  accountDeliverySchema,
+  accountProvisioningResultSchema,
+  accountRoleChangeSchema,
+  assistedAccountPasswordSchema,
+  assistedAccountVerifySchema,
+  authPolicyViewSchema,
+} from "@openmapx/core/api-contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLayoutEffect, useMemo, useRef } from "react";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { browserAdminApiBase } from "./browserAdminApiBase";
 
 const messages: Record<string, string> = {
+  ACCOUNT_MAIL_RATE_LIMITED: "Too many mail requests. Wait an hour before requesting another.",
+  ACCOUNT_EMAIL_CHANGED: "This account's email changed. Refresh and confirm its current address.",
+  ACCOUNT_ACTION_CONFLICT: "This request changed. Refresh before trying again.",
+  REAUTHENTICATION_REQUIRED: "Confirm a fresh administrator sign-in for this action.",
+  AUTH_POLICY_CONFLICT: "The active policy changed. Reload before applying your changes.",
   LAST_ADMIN_REQUIRED: "At least one active administrator must remain.",
   ROLE_VERSION_CONFLICT: "This account changed. Refresh before changing its role.",
   INVALID_PASSWORD: "The password does not meet the instance policy.",
@@ -40,10 +56,20 @@ export function accountError(error: unknown) {
       (error as { payload?: { code?: unknown } } | null)?.payload?.code,
   );
 }
+export type AccountRecoveryAction =
+  | "invitation"
+  | "verification-email"
+  | "verify"
+  | "reset-password"
+  | "password";
+function accountResponse(result: { status: number; data: unknown }) {
+  if (result.status !== 200 || !result.data)
+    throw new AccountAdminError((result.data as { error?: unknown } | null)?.error);
+  return result.data;
+}
 /** Capture the actual auth methods and origin once; an in-flight request never follows a replacement client. */
 export function createAccountAdminClient(apiUrl: string) {
   const admin = authClient.admin,
-    reset = authClient.requestPasswordReset,
     baseURL = browserAdminApiBase(apiUrl),
     client = createApiClient({ baseUrl: baseURL, credentials: "include" });
   const fetchOptions = (headers?: Record<string, string>) => ({
@@ -77,8 +103,75 @@ export function createAccountAdminClient(apiUrl: string) {
         await admin.listUserSessions({ userId, fetchOptions: fetchOptions() }),
       ).sessions;
     },
-    async create(input: Parameters<typeof admin.createUser>[0]) {
-      return unwrapAuthResult(await admin.createUser({ ...input, fetchOptions: writes() }));
+    async create(
+      input: Parameters<typeof accountSdk.createAdminAccount>[0],
+      key = crypto.randomUUID(),
+    ) {
+      return accountProvisioningResultSchema.parse(
+        accountResponse(
+          await accountSdk.createAdminAccount(input, { "idempotency-key": key }, { client }),
+        ),
+      );
+    },
+    async delivery(userId: string) {
+      return accountDeliverySchema.parse(
+        accountResponse(await accountSdk.getAdminAccountDelivery(userId, { client })),
+      );
+    },
+    async policy() {
+      return authPolicyViewSchema.parse(
+        accountResponse(await accountSdk.getAdminAuthPolicy({ client })),
+      );
+    },
+    async applyPolicy(settings: AuthPolicySettings, expectedRevision: string, key: string) {
+      accountResponse(
+        await accountSdk.applyAdminAuthPolicy(
+          { settings, expectedRevision, confirmed: true, idempotencyKey: key },
+          { client },
+        ),
+      );
+    },
+    async recover(
+      action: AccountRecoveryAction,
+      userId: string,
+      body: unknown,
+      proof: AdminReauthProofRef,
+      key: string,
+    ) {
+      const headers = { "idempotency-key": key, "x-openmapx-reauth-challenge": proof.challengeId };
+      const response =
+        action === "verify"
+          ? await accountSdk.verifyAdminAccount(
+              userId,
+              assistedAccountVerifySchema.parse(body),
+              headers,
+              { client },
+            )
+          : action === "password"
+            ? await accountSdk.setAdminAccountPassword(
+                userId,
+                assistedAccountPasswordSchema.parse(body),
+                headers,
+                { client },
+              )
+            : action === "reset-password"
+              ? await accountSdk.sendAdminAccountPasswordReset(
+                  userId,
+                  { confirmed: true },
+                  headers,
+                  { client },
+                )
+              : action === "verification-email"
+                ? await accountSdk.sendAdminAccountVerificationEmail(
+                    userId,
+                    { confirmed: true },
+                    headers,
+                    { client },
+                  )
+                : await accountSdk.inviteAdminAccount(userId, { confirmed: true }, headers, {
+                    client,
+                  });
+      return accountProvisioningResultSchema.parse(accountResponse(response));
     },
     async updateName(userId: string, name: string) {
       return unwrapAuthResult(
@@ -86,16 +179,14 @@ export function createAccountAdminClient(apiUrl: string) {
       );
     },
     async changeRole(userId: string, role: string, expectedRole: string) {
-      if (!["user", "admin", "privacy_admin"].includes(role))
-        throw new AccountAdminError("INVALID_ROLE");
-      if (role === "privacy_admin" || (expectedRole === "privacy_admin" && role === "user"))
-        return setPrivacyAdminRole(userId, role as "privacy_admin" | "user", { client });
-      return unwrapAuthResult(
-        await admin.setRole({
+      const body = accountRoleChangeSchema.parse({ role, expectedRole });
+      return accountResponse(
+        await accountSdk.changeAdminAccountRole(
           userId,
-          role: role as "user" | "admin",
-          fetchOptions: writes({ "x-openmapx-expected-role": expectedRole }),
-        }),
+          body,
+          { "idempotency-key": crypto.randomUUID() },
+          { client },
+        ),
       );
     },
     async ban(userId: string, banReason?: string) {
@@ -109,9 +200,6 @@ export function createAccountAdminClient(apiUrl: string) {
     },
     async impersonate(userId: string) {
       return unwrapAuthResult(await admin.impersonateUser({ userId, fetchOptions: writes() }));
-    },
-    async resetPassword(email: string, redirectTo: string) {
-      return unwrapAuthResult(await reset({ email, redirectTo, fetchOptions: writes() }));
     },
     async revoke(sessionToken: string) {
       return unwrapAuthResult(
@@ -143,6 +231,8 @@ export function useAccountAdmin() {
       count: [...root, "count"],
       detail: (id: string) => [...root, "detail", id],
       sessions: (id: string) => [...root, "sessions", id],
+      delivery: (id: string) => [...root, "delivery", id],
+      policy: [...root, "policy"],
     },
   };
 }
@@ -194,6 +284,8 @@ export function useAccountAction<T = unknown>(
         void qc.invalidateQueries({ queryKey: [...root, "count"] });
         void qc.invalidateQueries({ queryKey: [...root, "detail", request.targetId] });
         void qc.invalidateQueries({ queryKey: [...root, "sessions", request.targetId] });
+        void qc.invalidateQueries({ queryKey: [...root, "delivery", request.targetId] });
+        void qc.invalidateQueries({ queryKey: [...root, "policy"] });
         if (owns(request.token)) {
           void qc.invalidateQueries({ queryKey: ["admin", "users"] });
           void qc.invalidateQueries({ queryKey: ["admin", "user", request.targetId] });

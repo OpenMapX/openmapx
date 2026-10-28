@@ -21,12 +21,14 @@ edited there directly.
 
 Every account has a small, fixed set of fields: a name, an email, a verified
 flag, an optional avatar, a **role**, and moderation state (banned, ban reason,
-ban expiry). There are exactly two roles:
+ban expiry). The three roles are:
 
 - **`user`** — the default. Can use the app and manage their own account, but
   never sees `/admin`.
 - **`admin`** — everything a user can do, plus the full operations surface.
-  There are no finer-grained permissions; admin is all-or-nothing.
+  This role manages instance configuration and accounts.
+- **`privacy_admin`** — access to the dedicated privacy case workflow; it does
+  not grant general instance or account administration.
 
 The role is the single gate in front of the [admin panel](./admin-panel.md). In
 the browser the `/admin` route checks it before rendering, and on the API every
@@ -76,11 +78,11 @@ when the web app is down — which is exactly when you tend to need them.
 
 :::note[Why the CLI works without logging in]
 
-The CLI reaches admin endpoints over the host's loopback interface, which is
-treated as trusted. In production you gate that with a token; the mechanics and
-the safer multi-tenant setup are covered in
-[Admin panel → The local admin escape hatch](./admin-panel.md). Set it up before
-exposing the API.
+These bootstrap user commands run through the host's generated Compose
+configuration and database container. Protect host access. Other CLI operations
+can use the local admin API escape hatch described in
+[Admin panel](./admin-panel.md); that path cannot substitute for the fresh
+account-session confirmation required by assisted recovery.
 
 :::
 
@@ -119,9 +121,33 @@ updated timestamps, verification and two-factor state, and any ban reason.
 
 ### Reset a password
 
-From a user's row menu, **Send Password Reset** emails them a reset link — the
-account owner sets the new password, so you never see or handle it. (This needs
-a working email provider.)
+Open **Users → Create User** to provision an account. You may supply an initial
+password or leave it empty to send a one-use setup link. The welcome checkbox
+requests separate verification and password-setup emails; setup is required if
+no initial password was supplied. Passwords are never included in the message.
+Creating or resetting an account does not mark its email verified.
+
+The created account remains visible if mail fails. **Latest administrative mail
+request** distinguishes queued, accepted by the mail service, failed and unknown
+handoffs. Acceptance does not prove delivery. Interrupted sends remain unknown
+and are never automatically resent; check with the recipient before making an
+explicit new request. Use **View account and recovery actions** rather than
+creating the same account again.
+
+Open **Account recovery** from a user's row or profile for an invitation,
+verification email, password-reset link, assisted verification or temporary
+password. Review the selected account, confirm the action, and complete a fresh
+administrator sign-in with its configured second factor. After returning from
+sign-in, reopen the original action and review it before confirming. Passwords
+are deliberately not carried across that navigation. Assisted verification
+requires the current email and a recorded reason; use it only after verifying
+identity outside this flow. Password replacement revokes existing sessions and
+reset links while preserving the verification flag. Mail actions are limited
+to three per target and twenty per administrator per hour.
+
+Setup links expire, are one-use, and are replaced by an explicit new setup
+invitation. A separate verification email proves ownership of the email address.
+A working email provider is required for both; see **Settings → Email**.
 
 ### Sessions
 
@@ -130,8 +156,9 @@ agent, and creation and expiry times. **Revoke** ends one session; **Revoke All
 Sessions** signs the user out everywhere at once. Reach for this when an account
 may be compromised, or to force a re-login after a role or password change.
 
-How long sessions last is set globally by **Session Duration** under **Settings
-→ Authentication** — seven days by default — measured from the last activity.
+New sessions have an absolute lifetime set by **Settings → Authentication
+policy** — seven days by default. Activity does not extend that deadline.
+Existing sessions keep their original expiry after a policy change.
 
 ### Ban and unban
 
@@ -175,7 +202,7 @@ The default. New users register with an email and password, and — when
 verification is required — confirm their address before they can sign in.
 Password reset runs over a one-time code sent by email, and so does changing an
 account's email. Whether verification is enforced and the minimum password
-length are set under **Settings → Authentication**.
+length are set under **Settings → Authentication policy**.
 
 This path depends on a configured email provider for verification and reset
 messages. See **Settings → Email** and
@@ -210,11 +237,27 @@ linked accounts from their own account settings, not from the admin panel.
 
 ### Two-factor authentication
 
-When enabled under **Settings → Authentication**, users can add a second factor
+When new enrollment is allowed under **Settings → Authentication policy**, users can add a second factor
 to their account: a TOTP authenticator app, with backup codes for recovery.
 Email one-time codes are also available. Two-factor is opt-in per user — the
 setting controls whether anyone can enroll, not a blanket requirement — and the
 user list flags accounts that have it turned on.
+
+## Effective authentication policy
+
+The policy panel shows the active values, their ownership source, activation
+version and revision. Before explicit version-1 activation, safe defaults stay
+active: email verification required, 168-hour sessions, new 2FA enrollment
+allowed and an eight-character password minimum. Existing legacy settings are
+shown as a separate draft. Loading that draft only edits the form; **Activate
+authentication policy** applies all four reviewed values atomically.
+
+Session lifetime accepts 1–8760 whole hours and password minimum accepts 8–128
+characters. Passwords have a maximum of 128 characters. Turning off new 2FA
+enrollment leaves existing second factors and sign-in challenges in place.
+`AUTH_EMAIL_VERIFICATION`, when active, owns the verification setting and locks
+that field in the panel. A conflicting or failed apply preserves the active
+policy; reload before retrying a changed revision.
 
 ## Where to go next
 
