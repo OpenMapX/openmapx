@@ -257,7 +257,11 @@ export function dedupeRoadConditionEvents(events: RoadConditionEvent[]): RoadCon
  * - one lies along the other (at least 80 %, 60 % with agreeing headlines,
  *   of its length within {@link COVER_METERS}) and, unless one is a point,
  *   the smaller covers at least 30 % of the larger: a ramp or a short section
- *   inside a long corridor record of the same works is another element of it.
+ *   inside a long corridor record of the same works is another element of it;
+ * - a point, which covers nothing, also has an agreeing headline and lies on
+ *   no other named road;
+ * - at most one of them states effects (two that do are compared by the first
+ *   pass's semantic key).
  *
  * On the labelled pairs this folds 99 of 140 duplicates and 91 of 192 records
  * covering part of another, against 3 of 1,109 pairs describing different
@@ -403,6 +407,9 @@ function crossSourceSurvivor(
   sb: Shape,
 ): RoadConditionEvent | undefined {
   if (a.source === b.source || !kindsAgree(a.kind, b.kind)) return undefined;
+  // Two records stating effects are one measure only when the effects agree,
+  // which the semantic key of the first pass decides.
+  if (a.effects.length > 0 && b.effects.length > 0) return undefined;
   const evidenceA = hasRestrictionEvidence(a);
   const evidenceB = hasRestrictionEvidence(b);
   if (evidenceA && evidenceB) return undefined;
@@ -432,8 +439,8 @@ function crossSourceSurvivor(
   const along = sameDays ? 0.8 : 0.6;
   if (Math.max(aInB, bInA) < along) return undefined;
   if (!point && Math.min(aInB, bInA) < 0.3) return undefined;
-  // A point near a line or another point may be on a crossing road.
-  if (point && roadsConflict(a, b)) return undefined;
+  // A point near a line or another point may be another report, or on a crossing road.
+  if (point && (!headlineSimilar(a.headline, b.headline) || roadsConflict(a, b))) return undefined;
   if (evidenceA) return a;
   if (evidenceB) return b;
   if (aInB !== bInA) return aInB > bInA ? b : a;
