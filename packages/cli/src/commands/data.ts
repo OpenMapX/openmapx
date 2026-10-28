@@ -8,7 +8,7 @@ import {
   exportBuildBundle,
   importBuildBundle,
 } from "../lib/build-artifacts";
-import { cliControlContext, completeCliCommand } from "../lib/control-context";
+import { completeCliCommand } from "../lib/control-context";
 import { runCliDataStep } from "../lib/data-execution";
 import {
   applyDataCleanup,
@@ -17,6 +17,7 @@ import {
   pruneDataManagerStateForCleanup,
 } from "../lib/data-local";
 import { dataManagerUrl } from "../lib/data-manager-url";
+import { runCliDataUpdate } from "../lib/data-update-command";
 import { runningComposeServices } from "../lib/docker";
 import {
   OPENMAPX_REGION_ENV,
@@ -322,41 +323,17 @@ export function registerDataCommands(program: Command): void {
     .option("--fail-fast", "Stop build-all after the first build failure")
     .action(
       async (region: string | undefined, options: { countries?: string; failFast?: boolean }) => {
-        if (cliControlContext())
-          throw Error("Managed Full Update requires the reviewed build/link workflow upgrade");
-        const transport = createCliTransport();
-        let resolvedRegion: string;
         try {
-          resolvedRegion = await runOsmDownload(transport, region);
-          await runTransitSync(transport, { countries: options.countries });
-          await runFontDownload(transport);
-        } catch (err) {
-          log.err(`update failed: ${(err as Error).message}`);
-          if (!(err as Error).message.startsWith("region required")) {
-            dataManagerHint();
-          }
-          completeCliCommand(1);
-        }
-
-        try {
-          const buildResult = await buildServices({
-            mode: "all",
-            region: resolvedRegion,
-            continueOnError: options.failFast !== true,
+          const receipt = await runCliDataUpdate({
+            region,
+            countries: resolveTransitousCountries(options.countries).values,
+            failFast: options.failFast === true,
+            transport: createCliTransport(),
           });
-
-          await renderAndApplyHardlinks();
-
-          if (buildResult.failures.length > 0) {
-            log.err(
-              `update completed with ${buildResult.failures.length} build failure${buildResult.failures.length === 1 ? "" : "s"}`,
-            );
-            completeCliCommand(1);
-          }
-
-          log.ok("Update complete");
-        } catch (err) {
-          log.err(`update failed: ${(err as Error).message}`);
+          if (receipt.phase === "complete") log.ok("Update complete");
+          else log.info("Source data complete; preparing graph builds");
+        } catch (error) {
+          log.err(`update failed: ${(error as Error).message}`);
           completeCliCommand(1);
         }
       },

@@ -1,9 +1,12 @@
+import { dataWorkflowReceiptSchema } from "../ops/job-evidence";
 import {
   type ControlChildPhase,
   type ControlRecipient,
   childPhaseKinds,
   controlChildOperationKey,
 } from "./control-child-records";
+import { dataUpdatePlanSchema } from "./data-update-records";
+import { dataUpdateSourcesDigest } from "./data-update-sources";
 
 export {
   type ControlChildPhase,
@@ -60,7 +63,7 @@ import {
   randomUUID,
 } from "node:crypto";
 import { existsSync, fsyncSync, mkdirSync, realpathSync } from "node:fs";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { z } from "zod";
 import type { PreparedConfigurationRecord } from "../ops/configuration-preparation";
 import {
@@ -90,6 +93,7 @@ import { canonicalJson, opsOperationFingerprint } from "../ops/fingerprint";
 import { servicePullResultSchema } from "../ops/service-operation-records";
 import { verifiedParentOrigins, verifiedParents } from "../ops/verified-parent-internal";
 import {
+  currentConfigurationGeneration,
   type OriginalConfigurationGenerationNonCommit,
   originalConfigurationGenerationNonCommitSource,
 } from "../services/configuration-generation";
@@ -105,6 +109,7 @@ import {
   initializeControlChildReservations,
   inspectControlChildPublication,
   lookupControlChildPhase,
+  lookupControlChildPhaseAttempt,
   prepareControlChildPublication,
   resolveControlChildPlan,
   validateControlChildReservations,
@@ -1877,6 +1882,37 @@ export function restoreConfigurationPreEffectTerminal(
   throw Error("Original pre-effect terminal unavailable");
 }
 /** Fixed executor adapters supply their parsed result or exact fixed-command exit; arbitrary text is never proof. */
+/** Original indexed progress is business evidence only. A success producer must
+ * additionally prove its actual children/target tree before committing. */
+function readDataWorkflowProgress(authority: VerifiedExecutionAuthority) {
+  const s = executionAuthorityState(authority);
+  if (s.kind !== "data.update" || !s.origin) throw Error("Original Full Update owner required");
+  const name = `data-workflow-${s.execution.operationKey}.json`,
+    raw = readPrivateRecord(s.installation, "observations", name, 65536);
+  verifyFamilyOwnedRecord(
+    s.installation,
+    s.origin,
+    { scope: "private", namespace: "observations", container: "", name },
+    canonicalJson(raw),
+  );
+  const body = verifyControl(
+    s.installation.installation.publicKey,
+    "openmapx-admin-data-workflow-v1",
+    raw,
+    z.strictObject({
+      version: z.literal(1),
+      operationKey: z.string(),
+      fingerprint: z.string(),
+      receipt: dataWorkflowReceiptSchema,
+    }),
+  );
+  if (
+    body.operationKey !== s.execution.operationKey ||
+    body.fingerprint !== s.execution.fingerprint
+  )
+    throw Error("Full Update checkpoint identity changed");
+  return body.receipt;
+}
 export function retainControlEffectReceipt(
   authority: VerifiedExecutionAuthority,
   effect: {
@@ -1894,6 +1930,21 @@ export function retainControlEffectReceipt(
       publication: ChildSettlement["publication"] = "unknown";
     if (receipt.kind === "ops-result") {
       receipt.result = parseBoundedOpsResult(s.kind as OpsOperationKind, receipt.result);
+      if (s.kind === "data.update") {
+        const actual = readDataWorkflowProgress(authority),
+          result = receipt.result as { dataWorkflow?: unknown };
+        if (
+          actual.phase !== "complete" ||
+          actual.children.length !== 3 ||
+          actual.children.some((c) => c.status !== "succeeded") ||
+          actual.failedBuildIds.length ||
+          actual.skippedBuildIds.length ||
+          !actual.revisionId ||
+          canonicalJson(actual) !== canonicalJson(result.dataWorkflow)
+        )
+          throw Error("Actual completed Full Update workflow required");
+        verifyDataUpdateCompletionSource(authority, actual);
+      }
       const result = receipt.result as { outcome?: string };
       if (!result.outcome || ["applied", "unchanged", "committed"].includes(result.outcome)) {
         outcome = "committed";
@@ -1935,7 +1986,9 @@ export function retainControlEffectReceipt(
       readFixedCliSpawnIntent(s.installation.installation, s.execution, receipt.args);
       readPrivateRecord(s.installation, "spawn-started", `${s.installation.fixedChildId}.json`);
       for (const slot of s.reservations.filter(
-        (item) => item.recipient === "data-manager" && item.phase === "data-step",
+        (item) =>
+          item.recipient === "data-manager" &&
+          ["data-step", "osm", "transit", "fonts"].includes(item.phase),
       )) {
         const binding = lookupControlChildPhase(authority, slot);
         if (
@@ -1944,6 +1997,24 @@ export function retainControlEffectReceipt(
             .status !== "ok"
         )
           throw Error("Actual backend data containment required before fixed command success");
+      }
+      if (s.kind === "data.update") {
+        for (const slot of s.reservations.filter((value) => value.phase === "hardlinks")) {
+          const bound = lookupControlChildPhase(authority, slot);
+          if (
+            !bound ||
+            verifyDataControlTerminalWitness(s.installation.installation, bound.execution).status
+              .status !== "ok"
+          )
+            throw Error("Actual Full Update hardlink containment required");
+        }
+        const workflow = readDataWorkflowProgress(authority),
+          spawn = readFixedCliSpawnIntent(s.installation.installation, s.execution, receipt.args);
+        const expected =
+          spawn.dataUpdatePlan?.dataReservation.execution.operationKey === s.execution.operationKey
+            ? "build"
+            : "complete";
+        if (workflow.phase !== expected) throw Error("Original Full Update checkpoint required");
       }
       outcome = "committed";
       publication = "committed";
@@ -4566,6 +4637,8 @@ export function retainFixedCliSpawnIntent(
     args: readonly string[];
     plan?: readonly ControlPlannedChild[];
     reservations?: readonly ControlChildReservation[];
+    dataUpdatePlan?: import("./data-update-records").DataUpdatePlan;
+    dataWorkflowInitial?: import("../ops/job-evidence").DataWorkflowReceipt;
   },
 ): void {
   const s = executionAuthorityState(authority);
@@ -4595,6 +4668,12 @@ export function retainFixedCliSpawnIntent(
     {
       execution: input.execution,
       operation,
+      ...(input.dataUpdatePlan
+        ? { dataUpdatePlan: dataUpdatePlanSchema.parse(input.dataUpdatePlan) }
+        : {}),
+      ...(input.dataWorkflowInitial
+        ? { dataWorkflowInitial: dataWorkflowReceiptSchema.parse(input.dataWorkflowInitial) }
+        : {}),
       args: input.args,
       serviceIds: plan.serviceIds,
       admittedAt: Date.now(),
@@ -4696,6 +4775,8 @@ export function readFixedCliSpawnIntent(
       reservations: z.array(controlChildReservationSchema).max(64).optional(),
       execution: executionRefSchema,
       operation: opsOperationSchema,
+      dataUpdatePlan: dataUpdatePlanSchema.optional(),
+      dataWorkflowInitial: dataWorkflowReceiptSchema.optional(),
       args: z.array(z.string().max(4096)).max(64),
       serviceIds: targetSchema,
       admittedAt: z.number().int().nonnegative().safe(),
@@ -5003,5 +5084,175 @@ export function verifyControlPreparedTerminal(
       throw Error("Foreign terminal preparation");
   } finally {
     d.close();
+  }
+}
+
+/** Target acquisition observes only its original data-phase owner and all three
+ * signed, physically settled DM children. No progress object is authority. */
+export async function verifyDataUpdatePrerequisites(authority: VerifiedExecutionAuthority) {
+  const s = executionAuthorityState(authority);
+  if (s.kind !== "data.update" || s.installation.fixedChildId || !s.origin)
+    throw Error("Original Full Update root required");
+  const name = `data-update-plan-${s.execution.operationKey}.json`,
+    raw = readPrivateRecord(s.installation, "observations", name, 128 * 1024);
+  verifyFamilyOwnedRecord(
+    s.installation,
+    s.origin,
+    { scope: "private", namespace: "observations", container: "", name },
+    canonicalJson(raw),
+  );
+  const plan = verifyControl(
+      s.installation.installation.publicKey,
+      "openmapx-data-update-plan-v1",
+      raw,
+      dataUpdatePlanSchema,
+    ),
+    infraDir = dirname(s.installation.dataRoot);
+  if (
+    controlDigest(plan.parent) !== controlDigest(s.execution) ||
+    opsOperationFingerprint(plan.operation) !== s.execution.operationFingerprint ||
+    currentConfigurationGeneration(infraDir) !== plan.revisionId ||
+    dataUpdateSourcesDigest(infraDir) !== plan.sourcesDigest
+  )
+    throw Error("Original Full Update sources changed");
+  let childInstallation: ControlInstallation | undefined;
+  try {
+    let dataAuthority = authority;
+    if (s.execution.executor === "ops-agent") {
+      const attempt = lookupControlChildPhaseAttempt(authority, {
+        phase: "data-workflow",
+        ordinal: 0,
+      });
+      if (!attempt) throw Error("Full Update data phase not admitted");
+      childInstallation = openFixedChildInstallation({
+        infraDir,
+        assertion: attempt.assertion,
+        container: existsSync("/run/secrets/openmapx-control-verifiers"),
+      });
+      dataAuthority = restoreAdmittedControlExecution(childInstallation, attempt.execution);
+      const settlement = childSettlementState(
+        verifyControlEffectSettlement(childInstallation, attempt.execution),
+      ).evidence;
+      if (settlement.outcome !== "committed" || settlement.publication !== "committed")
+        throw Error("Full Update data phase unsettled");
+    }
+    const dataState = executionAuthorityState(dataAuthority),
+      receipt = readDataWorkflowProgress(dataAuthority);
+    if (
+      receipt.phase !== "build" ||
+      receipt.children.length !== 3 ||
+      receipt.children.some((c) => c.status !== "succeeded")
+    )
+      throw Error("Full Update data checkpoint missing");
+    for (const [index, slot] of plan.dataChildren.entries()) {
+      const bound = lookupControlChildPhase(dataAuthority, slot);
+      if (!bound) throw Error("Full Update prerequisite missing");
+      const child = receipt.children[index],
+        witness = verifyDataControlTerminalWitness(
+          dataState.installation.installation,
+          bound.execution,
+        );
+      if (
+        !child ||
+        child.operationKey !== bound.execution.operationKey ||
+        child.jobId !== bound.execution.executionId ||
+        child.fingerprint !== bound.execution.fingerprint ||
+        child.deadlineAt !== bound.execution.deadlineAt ||
+        witness.status.status !== "ok" ||
+        witness.status.publication !== "committed"
+      )
+        throw Error("Full Update prerequisite did not complete");
+    }
+    return receipt;
+  } finally {
+    if (childInstallation) closeControlInstallation(childInstallation);
+  }
+}
+
+/** A signed progress file cannot mint success. Rejoin the actual original CLI
+ * exit sources and DM settlements, and the exact generation they published. */
+function verifyDataUpdateCompletionSource(
+  authority: VerifiedExecutionAuthority,
+  receipt: import("../ops/job-evidence").DataWorkflowReceipt,
+) {
+  const s = executionAuthorityState(authority);
+  if (s.installation.fixedChildId || !s.origin) throw Error("Original Full Update root required");
+  const name = `data-update-plan-${s.execution.operationKey}.json`,
+    raw = readPrivateRecord(s.installation, "observations", name, 128 * 1024);
+  verifyFamilyOwnedRecord(
+    s.installation,
+    s.origin,
+    { scope: "private", namespace: "observations", container: "", name },
+    canonicalJson(raw),
+  );
+  const plan = verifyControl(
+      s.installation.installation.publicKey,
+      "openmapx-data-update-plan-v1",
+      raw,
+      dataUpdatePlanSchema,
+    ),
+    infraDir = dirname(s.installation.dataRoot);
+  if (
+    controlDigest(plan.parent) !== controlDigest(s.execution) ||
+    opsOperationFingerprint(plan.operation) !== s.execution.operationFingerprint ||
+    receipt.revisionId !== plan.finalRevisionId ||
+    currentConfigurationGeneration(infraDir) !== plan.finalRevisionId ||
+    dataUpdateSourcesDigest(infraDir) !== plan.sourcesDigest
+  )
+    throw Error("Original Full Update completion sources changed");
+  const checkData = (dataAuthority: VerifiedExecutionAuthority) => {
+    const dataState = executionAuthorityState(dataAuthority);
+    for (const [index, slot] of plan.dataChildren.entries()) {
+      const bound = lookupControlChildPhase(dataAuthority, slot),
+        child = receipt.children[index];
+      if (
+        !bound ||
+        !child ||
+        child.operationKey !== bound.execution.operationKey ||
+        child.jobId !== bound.execution.executionId ||
+        child.fingerprint !== bound.execution.fingerprint ||
+        child.deadlineAt !== bound.execution.deadlineAt ||
+        verifyDataControlTerminalWitness(dataState.installation.installation, bound.execution)
+          .status.status !== "ok"
+      )
+        throw Error("Actual Full Update data completion required");
+    }
+  };
+  if (s.execution.executor === "ops-agent") {
+    for (const slot of [plan.dataReservation, plan.finalizationReservation]) {
+      const attempt = lookupControlChildPhaseAttempt(authority, slot);
+      if (!attempt) throw Error("Full Update fixed phase missing");
+      const child = openFixedChildInstallation({
+        infraDir,
+        assertion: attempt.assertion,
+        container: existsSync("/run/secrets/openmapx-control-verifiers"),
+      });
+      try {
+        readFixedCliSpawnIntent(child, attempt.execution, fixedCliArguments(plan.operation));
+        const childAuthority = restoreAdmittedControlExecution(child, attempt.execution),
+          effect = childSettlementState(
+            verifyControlEffectSettlement(child, attempt.execution),
+          ).evidence;
+        if (effect.outcome !== "committed" || effect.publication !== "committed")
+          throw Error("Full Update fixed phase unsettled");
+        const progress = readDataWorkflowProgress(childAuthority);
+        if (slot.phase === "data-workflow") checkData(childAuthority);
+        else if (canonicalJson(progress) !== canonicalJson(receipt))
+          throw Error("Original Full Update final receipt changed");
+      } finally {
+        closeControlInstallation(child);
+      }
+    }
+  } else {
+    checkData(authority);
+    for (const slot of plan.finalizationChildren) {
+      const bound = lookupControlChildPhase(authority, slot);
+      if (
+        !bound ||
+        verifyDataControlTerminalWitness(s.installation.installation, bound.execution).status
+          .status !== "ok"
+      )
+        throw Error("Actual Full Update hardlink completion required");
+    }
   }
 }

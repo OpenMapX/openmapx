@@ -1,3 +1,4 @@
+export { openAdminDataWorkflow } from "./admin-data-workflow";
 export {
   type CapabilityCheck,
   type CapabilityKind,

@@ -11,6 +11,7 @@ export type ControlChildPhase =
   | "data-link"
   | "data-clean"
   | "data-workflow"
+  | "data-finalization"
   | "hardlinks"
   | "stop-primary"
   | "stop-staging"
@@ -37,6 +38,7 @@ export const childPhaseKinds: Readonly<Record<ControlChildPhase, readonly string
   build: ["service.build", "services.buildAll"],
   "data-link": ["data.link", "configuration.hardlinks.apply"],
   "data-clean": ["data.clean"],
+  "data-finalization": ["data.update"],
   "data-workflow": [
     "data.update",
     "data.downloadOsm",

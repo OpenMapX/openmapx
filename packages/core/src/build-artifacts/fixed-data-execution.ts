@@ -216,8 +216,8 @@ export function retainCliDataAttempt(
   if (
     !slot ||
     !binding ||
-    !isFixedSingleDataCommand(s.kind) ||
-    slot.phase !== "data-step" ||
+    !(isFixedSingleDataCommand(s.kind) || s.kind === "data.update") ||
+    !["data-step", "osm", "transit", "fonts"].includes(slot.phase) ||
     slot.kind !== attempt.input.kind ||
     slot.operationFingerprint !== fixedDataBodyFingerprint(attempt.input) ||
     attempt.operationFingerprint !== slot.operationFingerprint ||
@@ -267,12 +267,18 @@ export function verifyCliDataTerminal(
   return verifyDataControlTerminalWitness(s.installation.installation, binding.execution, status);
 }
 
-export function cliDataReservation(authority: VerifiedExecutionAuthority) {
+export function cliDataReservation(
+  authority: VerifiedExecutionAuthority,
+  phase: "data-step" | "osm" | "transit" | "fonts" = "data-step",
+) {
   const s = executionAuthorityState(authority),
     slots = s.reservations.filter(
-      (slot) => slot.recipient === "data-manager" && slot.phase === "data-step",
+      (slot) => slot.recipient === "data-manager" && slot.phase === phase,
     );
-  if (!isFixedSingleDataCommand(s.kind) || slots.length !== 1)
+  if (
+    !(isFixedSingleDataCommand(s.kind) || (s.kind === "data.update" && phase !== "data-step")) ||
+    slots.length !== 1
+  )
     throw Error("Matching data command reservation required");
   return {
     ...slots[0]!,

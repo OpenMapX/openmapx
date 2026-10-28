@@ -2,9 +2,20 @@ import { controlChildOperationKey } from "@openmapx/core/build-artifacts";
 import { afterEach, expect, it, vi } from "vitest";
 import type { JobContext } from "../job-runner";
 
-const fixture = vi.hoisted(() => ({ rows: [] as Record<string, unknown>[] }));
+const fixture = vi.hoisted(() => ({
+  rows: [] as Record<string, unknown>[],
+  batches: [] as Record<string, unknown>[][],
+}));
 vi.mock("../../db", () => ({
-  db: { select: () => ({ from: () => ({ where: () => ({ limit: async () => fixture.rows }) }) }) },
+  db: {
+    select: () => ({
+      from: () => ({
+        where: () => ({
+          limit: async () => (fixture.batches.length ? fixture.batches.shift()! : fixture.rows),
+        }),
+      }),
+    }),
+  },
 }));
 
 import { cancelDataManagerActivityJob } from "../activity-jobs";
@@ -46,6 +57,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   fixture.rows = [];
+  fixture.batches = [];
 });
 it("keeps an interrupted unknown durable Activity execution explicitly cancelable", async () => {
   vi.stubEnv("DATA_MANAGER_URL", "https://synthetic-dm.test");
@@ -205,4 +217,68 @@ it("keeps malformed or unknown backend terminal metadata behind the finalization
       ],
     }),
   ).toBe(true);
+});
+
+it("discovers and cancels Full Update's original nested generation leaf", async () => {
+  vi.stubEnv("DATA_MANAGER_URL", "https://synthetic-dm.test");
+  const cliKey = controlChildOperationKey(key, "data-finalization", 1),
+    dataKey = controlChildOperationKey(cliKey, "hardlinks", 0),
+    owned = { ...child(1), operationKey: dataKey, kind: "generation-hardlinks" },
+    ctx = context({ _cancelRequestedAt: new Date().toISOString() });
+  fixture.batches = [
+    [],
+    [],
+    [],
+    [
+      {
+        id: owned.id,
+        kind: owned.kind,
+        status: "running",
+        operationKey: dataKey,
+        executionFingerprint: owned.fingerprint,
+        admittedAt: at,
+        deadlineAt: deadline,
+        executionVersion: 2,
+        executionParent: {
+          issuer: "host-cli",
+          execution: { executor: "host-cli", operationKey: cliKey },
+        },
+        executionState: {
+          cancellationRequestedAt: null,
+          progress: null,
+          diagnostics: { tail: [], truncated: false },
+          publication: "not_started",
+        },
+      },
+    ],
+  ];
+  let canceled = false;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_url: string, options?: RequestInit) => {
+      if (options?.method === "POST") canceled = true;
+      return Response.json({
+        id: owned.id,
+        operationKey: dataKey,
+        fingerprint: owned.fingerprint,
+        admittedAt: at,
+        deadlineAt: deadline,
+        kind: owned.kind,
+        status: canceled ? "canceled" : "running",
+        cancellationRequestedAt: canceled ? new Date().toISOString() : null,
+        progress: null,
+        diagnostics: { tail: [], truncated: false },
+        publication: "not_started",
+      });
+    }),
+  );
+  expect(
+    await cancelAdminDataChildren(
+      ctx.checkpointResult,
+      [{ kind: "data.update", operationKey: key }],
+      { context: ctx, sleep: async () => {} },
+    ),
+  ).toBe("contained");
+  expect(canceled).toBe(true);
+  expect(fixture.batches).toHaveLength(0);
 });

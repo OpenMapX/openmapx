@@ -34,6 +34,7 @@
     "services/data-manager/src/jobs/execution/legacy-admission-postgres.test.ts",
     "services/data-manager/src/jobs/execution/runtime.test.ts",
     "services/data-manager/src/jobs/execution/fixed-cli.test.ts",
+    "services/data-manager/src/jobs/execution/full-update.test.ts",
     "services/data-manager/src/jobs/execution/runner-cancellation.test.ts",
     "services/data-manager/src/jobs/execution/hardlinks.test.ts",
     "services/data-manager/src/jobs/execution/ops-children.test.ts",

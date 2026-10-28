@@ -2,6 +2,7 @@ import { createHash, randomBytes as nodeRandomBytes, timingSafeEqual } from "nod
 import {
   acknowledgeControlRetention,
   acquireArtifactTargetLease,
+  assertArtifactTargetLeaseExecution,
   assertArtifactTargetLeaseForward,
   assertFreshControlRoot,
   beginControlEffect,
@@ -37,6 +38,7 @@ import {
   retainControlPreparedTerminal,
   retainControlTerminalCommitment,
   retainControlTerminalStatus,
+  retainDataUpdatePlan,
   retainedControlAdoptionAssertion,
   retainFixedServiceLifecyclePlan,
   retainFixedSingleDataPlan,
@@ -125,6 +127,7 @@ import {
   installCoordinatorStagedOwnershipSource,
   prepareCoordinatorStagedRetention,
 } from "./coordinator-staged-ownership";
+import { prepareDataUpdateAdmission } from "./data-workflow-runtime";
 import {
   type DawarichSubjectExportRouteOptions,
   registerDawarichSubjectExportRoute,
@@ -562,6 +565,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       : {}),
     ...(job.diagnostics ? { diagnostics: job.diagnostics } : {}),
     ...(job.failureResult ? { failureResult: job.failureResult } : {}),
+    ...(job.progressResult ? { progressResult: job.progressResult } : {}),
     role: job.role,
     operation: job.operation,
     operationId: job.operationId,
@@ -822,7 +826,16 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           if (lease.mode === "owner" && unstartedConfiguration) releaseUnstartedRoot = true;
         }
       }
+      if (["failed", "timed_out"].includes(state) && job.progressResult)
+        updates = {
+          ...updates,
+          failureResult: opsFailureResultSchema.parse({
+            ...job.progressResult,
+            ...updates.failureResult,
+          }),
+        };
       const candidate: JobRecord = { ...job, ...updates, state, updatedAt };
+      if (["succeeded", "failed", "timed_out"].includes(state)) delete candidate.progressResult;
       if (state === "succeeded" && job.operation.kind === "services.buildAll")
         delete candidate.failureResult;
       if (authority && ["succeeded", "failed", "timed_out"].includes(state)) {
@@ -848,6 +861,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       )
         retainControlPreparedTerminal(authority);
       Object.assign(job, updates);
+      if (["succeeded", "failed", "timed_out"].includes(state)) delete job.progressResult;
       if (state === "succeeded" && job.operation.kind === "services.buildAll")
         delete job.failureResult;
       job.updatedAt = updatedAt;
@@ -929,6 +943,28 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     artifactLease: borrowedLeaseFor(job.operationId),
     ownedTargetLease: ownedLeaseFor(job.operationId),
     controlAuthority: controlAuthorities.get(job.operationId),
+    ...(job.operation.kind === "data.update"
+      ? {
+          ownDataFinalizationLease(
+            lease: import("@openmapx/core/build-artifacts").ArtifactTargetLease,
+          ) {
+            if (controlLeases.has(job.operationId))
+              throw Error("Original Full Update lease already retained");
+            assertArtifactTargetLeaseExecution(lease, executionFor(job));
+            controlLeases.set(job.operationId, lease);
+          },
+          async checkpointDataWorkflow(
+            dataWorkflow: import("@openmapx/core/ops").DataWorkflowReceipt,
+          ) {
+            const evidence = opsFailureResultSchema.parse({ ...job.progressResult, dataWorkflow });
+            await withAdmissionLock(async () => {
+              job.progressResult = evidence;
+              job.updatedAt = now().toISOString();
+              await journal.replace([...jobsById.values()].map(persisted));
+            });
+          },
+        }
+      : {}),
     ...(maintenanceControls.has(job.operationId)
       ? { configurationMaintenanceControl: maintenanceControls.get(job.operationId) }
       : {}),
@@ -963,14 +999,14 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           checkpointServiceBatch: async (
             serviceBatch: import("@openmapx/core/ops").ServiceBatchResult,
           ) => {
-            const evidence = opsFailureResultSchema.parse({ ...job.failureResult, serviceBatch });
+            const evidence = opsFailureResultSchema.parse({ ...job.progressResult, serviceBatch });
             if (
               Buffer.byteLength(JSON.stringify(evidence)) >
               OPS_KIND_POLICIES[job.operation.kind].maxResultBytes
             )
               throw Error("Service batch evidence exceeds budget");
             await withAdmissionLock(async () => {
-              job.failureResult = evidence;
+              job.progressResult = evidence;
               job.updatedAt = now().toISOString();
               await journal.replace([...jobsById.values()].map(persisted));
             });
@@ -2425,6 +2461,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                     process.env.OPENMAPX_REGION,
                   )
                 : undefined;
+              const dataUpdatePlan =
+                job.operation.kind === "data.update"
+                  ? prepareDataUpdateAdmission(runtime, executionFor(job), job.operation, targets)
+                  : undefined;
               const hardlinksPlan =
                 job.operation.kind === "configuration.hardlinks.apply"
                   ? prepareConfigurationHardlinksAdmission(
@@ -2452,6 +2492,14 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 parent: job.parent,
                 serviceIds: targets,
                 ...(fixedDataPlan ? { reservations: [fixedDataPlan.rootReservation] } : {}),
+                ...(dataUpdatePlan
+                  ? {
+                      reservations: [
+                        dataUpdatePlan.dataReservation,
+                        dataUpdatePlan.finalizationReservation,
+                      ],
+                    }
+                  : {}),
                 ...(hardlinksPlan
                   ? { reservations: hardlinksPlan.reservation ? [hardlinksPlan.reservation] : [] }
                   : {}),
@@ -2460,6 +2508,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 ...(coordinatorBaseline ? { coordinatorPullBaseline: coordinatorBaseline } : {}),
               });
               if (fixedDataPlan) retainFixedSingleDataPlan(authority, fixedDataPlan);
+              if (dataUpdatePlan) retainDataUpdatePlan(authority, dataUpdatePlan);
               if (hardlinksPlan) retainGenerationHardlinksOwnerPlan(authority, hardlinksPlan);
               if (lifecyclePlan) retainFixedServiceLifecyclePlan(authority, lifecyclePlan);
               requireControlJournalRetention(authority);

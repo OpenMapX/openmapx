@@ -13,6 +13,7 @@ import {
   currentRevision,
   writeBuildRecord,
 } from "./build-artifacts";
+import { assertCliControlForward } from "./control-context";
 import { runningComposeServices } from "./docker";
 import { resolveBuildRegion } from "./env-defaults";
 import { assertCliExecutionAvailable } from "./execution-deadline";
@@ -230,8 +231,10 @@ async function recordBuild(
   artifact: ServiceBuildArtifact,
 ): Promise<void> {
   assertCliExecutionAvailable();
+  assertCliControlForward();
   const revision = await currentRevision(rootDir);
   assertCliExecutionAvailable();
+  assertCliControlForward();
   writeBuildRecord(
     {
       schemaVersion: 1,
@@ -395,6 +398,7 @@ export async function buildServices(
     log.dim(`Manifest command → ${item.buildCommand}`);
     try {
       assertCliExecutionAvailable();
+      assertCliControlForward();
       const resolvedRegion = resolveBuildRegion(item.id, opts.region);
       if (resolvedRegion.sourceEnv) {
         log.dim(
@@ -431,6 +435,7 @@ export async function buildServices(
         interrupted = true;
       try {
         assertCliExecutionAvailable();
+        assertCliControlForward();
       } catch {
         interrupted = true;
       }

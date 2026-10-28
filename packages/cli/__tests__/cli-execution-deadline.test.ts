@@ -93,8 +93,11 @@ it("fix1 nested default build runner spends the stored remaining budget across p
       withCliExecutionDeadline(["services", "build", "osrm"], () =>
         buildOsrmGraph({ rootDir: root, image: "synthetic/image:1" }),
       ),
-    ).rejects.toThrow();
-    expect(readFileSync(marker, "utf8").trim().split("\n").length).toBeLessThanOrEqual(2);
+    ).rejects.toThrow(/Execution deadline elapsed|timed out|aborted/i);
+    const startedPhases = existsSync(marker)
+      ? readFileSync(marker, "utf8").trim().split("\n").length
+      : 0;
+    expect(startedPhases).toBeLessThanOrEqual(2);
     expect(readFileSync(join(root, "infra/docker/data/osrm-graph/region.osrm"), "utf8")).toBe(
       "previous-live",
     );
@@ -144,6 +147,43 @@ it("fix1 unsigned metadata can only clamp policy and cannot authorize a remote m
     ).rejects.toThrow();
   } finally {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
+  }
+});
+it("passes the retained generation execution to its guarded receiver while legacy link stays closed", async () => {
+  const { vi } = await import("vitest"),
+    { withCliExecutionDeadline, constrainCliDataManagerTransport } = await import(
+      "../src/lib/execution-deadline"
+    );
+  vi.stubEnv("OPENMAPX_CLI_DEADLINE_AT", String(Date.now() + 60000));
+  const { createDataManagerTransport } = await import("@openmapx/core/data-manager-sdk");
+  const request = vi.fn<typeof globalThis.fetch>(
+    async () =>
+      new Response(JSON.stringify({ error: "Signed generation authority required" }), {
+        status: 403,
+        headers: { "content-type": "application/json" },
+      }),
+  );
+  try {
+    await withCliExecutionDeadline(["data", "update"], async () => {
+      const transport = constrainCliDataManagerTransport(
+        createDataManagerTransport({
+          baseUrl: "http://127.0.0.1:1",
+          authToken: "synthetic",
+          fetch: request,
+        }),
+      );
+      await transport.request(
+        "startGenerationHardlinksExecution",
+        "/executions/generation-hardlinks",
+        { method: "POST" },
+      );
+      expect(request).toHaveBeenCalledOnce();
+      expect(() => transport.request("link", "/link", { method: "POST" })).toThrow(
+        "deadline-aware receiver",
+      );
+    });
+  } finally {
     vi.unstubAllEnvs();
   }
 });

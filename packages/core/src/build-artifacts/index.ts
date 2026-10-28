@@ -149,6 +149,14 @@ export {
   dataTerminalReceiptDigest,
 } from "./data-execution-journal";
 export {
+  assertDataUpdateSources,
+  planDataUpdate,
+  readDataUpdatePlan,
+  retainDataUpdatePlan,
+  verifyDataUpdatePrerequisites,
+} from "./data-update";
+export { type DataUpdatePlan, dataUpdatePlanSchema } from "./data-update-records";
+export {
   commitFeedProxyValidationFailure,
   feedProxyValidationCompletionDigest,
   inspectFeedProxyValidationFailure,

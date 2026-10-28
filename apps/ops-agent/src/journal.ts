@@ -57,6 +57,8 @@ export interface PersistedOpsJob {
   parent?: RetainedExecutionAdmission["parent"];
   diagnostics?: ProcessDiagnostics;
   failureResult?: OpsFailureResult;
+  /** Private checkpoint, never a terminal outcome or authority. */
+  progressResult?: OpsFailureResult;
   role: OpsRole;
   operation: OpsOperation;
   operationId: string;
@@ -141,6 +143,7 @@ function parseJob(value: unknown): RetainedOpsJob {
       "parent",
       "diagnostics",
       "failureResult",
+      "progressResult",
       "role",
       "operation",
       "operationId",
@@ -222,6 +225,23 @@ function parseJob(value: unknown): RetainedOpsJob {
   )
     throw new Error("invalid");
   if (raw.diagnostics !== undefined) processDiagnosticsSchema.parse(raw.diagnostics);
+  if (raw.progressResult !== undefined) {
+    const progress = opsFailureResultSchema.parse(raw.progressResult);
+    const allowed =
+      operation.kind === "data.update"
+        ? "dataWorkflow"
+        : operation.kind === "services.buildAll"
+          ? "serviceBatch"
+          : null;
+    if (
+      raw.executionVersion !== 2 ||
+      !allowed ||
+      !["queued", "running", "termination_pending"].includes(raw.state as string) ||
+      Object.keys(progress).some((key) => key !== allowed) ||
+      Buffer.byteLength(JSON.stringify(progress)) > OPS_KIND_POLICIES[operation.kind].maxResultBytes
+    )
+      throw Error("invalid");
+  }
   if (raw.failureResult !== undefined) {
     if (!["failed", "timed_out"].includes(raw.state as string)) throw new Error("invalid");
     const result = opsFailureResultSchema.parse(raw.failureResult);
@@ -259,6 +279,7 @@ function parseJob(value: unknown): RetainedOpsJob {
   ) {
     throw new Error("invalid");
   }
+  if (raw.progressResult === undefined) delete raw.progressResult;
   return raw as unknown as RetainedOpsJob;
 }
 
@@ -485,6 +506,8 @@ export async function openOpsJobJournal(
                         entry.terminationRequestedAt ?? new Date(entry.deadlineAt).toISOString(),
                     }
                   : {}),
+                ...(entry.progressResult ? { failureResult: entry.progressResult } : {}),
+                progressResult: undefined,
                 state: "failed" as const,
                 updatedAt: timestamp,
                 terminalAt: timestamp,

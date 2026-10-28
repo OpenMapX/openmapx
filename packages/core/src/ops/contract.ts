@@ -11,6 +11,7 @@ import {
   stackRenderOperationSchema,
   vaultApplyOperationSchema,
 } from "./configuration-operation-records";
+import { dataWorkflowReceiptSchema } from "./job-evidence";
 
 export { configurationGenerationRevisionSchema } from "./configuration-operation-records";
 
@@ -1242,7 +1243,7 @@ export const OPS_RESULT_SCHEMAS = {
   }),
   "data.downloadOsm": data,
   "data.downloadFonts": data,
-  "data.update": data,
+  "data.update": data.extend({ dataWorkflow: dataWorkflowReceiptSchema.optional() }),
   "data.convertOverpass": data,
   "data.link": data,
   "data.clean": data,

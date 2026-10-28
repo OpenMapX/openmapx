@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   adoptArtifactTargetLease,
   assertArtifactTargetLeaseForward,
+  assertControlExecutionForward,
   type BorrowedArtifactTargetLease,
   beginFixedCliExecution,
   bindBorrowedControlExecution,
@@ -14,6 +15,7 @@ import {
   readFixedCliSpawnIntent,
   retainAdmittedControlExecution,
   retainControlEffectReceipt,
+  retainDataUpdatePlan,
   settleArtifactTargetLeaseChild,
   type VerifiedExecutionAuthority,
   verifiedParentForArtifactDelegation,
@@ -28,6 +30,8 @@ const contexts = new AsyncLocalStorage<{
   authority: VerifiedExecutionAuthority;
   installation: ControlInstallation;
   lease?: BorrowedArtifactTargetLease;
+  dataWorkflowInitial?: import("@openmapx/core/ops").DataWorkflowReceipt;
+  dataUpdatePlan?: import("@openmapx/core/build-artifacts").DataUpdatePlan;
 }>();
 class FixedCliCommandExit extends Error {
   constructor(readonly code: number) {
@@ -103,13 +107,25 @@ export async function withCliControlContext<T>(
       plan: intent.plan,
       ...(intent.reservations ? { reservations: intent.reservations } : {}),
     });
+    if (intent.dataUpdatePlan) retainDataUpdatePlan(authority, intent.dataUpdatePlan);
     beginFixedCliExecution(installation, execution);
     if (lease) bindBorrowedControlExecution(lease, authority);
     if (lease) assertArtifactTargetLeaseForward(lease);
     try {
       let result: T;
       try {
-        result = await contexts.run({ authority, lease, installation }, run);
+        result = await contexts.run(
+          {
+            authority,
+            lease,
+            installation,
+            ...(intent.dataUpdatePlan ? { dataUpdatePlan: intent.dataUpdatePlan } : {}),
+            ...(intent.dataWorkflowInitial
+              ? { dataWorkflowInitial: intent.dataWorkflowInitial }
+              : {}),
+          },
+          run,
+        );
       } catch (e) {
         if (e instanceof FixedCliCommandExit && e.code === 0) result = undefined as T;
         else throw e;
@@ -153,4 +169,13 @@ export function withHostDataControlContext<T>(
 ): Promise<T> {
   if (contexts.getStore()) throw Error("Existing CLI control context");
   return contexts.run({ installation, authority }, run);
+}
+
+/** Restriction at actual host mutation boundaries; observation remains usable
+ * after cancellation and cannot acquire authority through this helper. */
+export function assertCliControlForward(): void {
+  const context = contexts.getStore();
+  if (!context) return;
+  assertControlExecutionForward(context.authority);
+  if (context.lease) assertArtifactTargetLeaseForward(context.lease);
 }

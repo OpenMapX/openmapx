@@ -70,6 +70,8 @@ export interface OpsExecutionContext {
   otherActiveOperations?(): number;
   /** Persist progress before a batch can start its next effect. */
   checkpointServiceBatch?(result: ServiceBatchResult): Promise<void>;
+  checkpointDataWorkflow?(result: import("@openmapx/core/ops").DataWorkflowReceipt): Promise<void>;
+  ownDataFinalizationLease?(lease: ArtifactTargetLease): void;
 }
 
 export interface OpsTrustedClaim {

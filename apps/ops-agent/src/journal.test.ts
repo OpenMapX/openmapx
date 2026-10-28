@@ -417,3 +417,56 @@ it("reloads strict v2 failed evidence and rejects it on a successful record", as
     ]),
   ).rejects.toThrow();
 });
+it("retains Full Update progress while running, then keeps it as interrupted evidence without granting completion", async () => {
+  const { normalizeExecutionAdmission } = await import("@openmapx/core/ops");
+  const operation = { kind: "data.update" as const, regionId: "europe/germany" },
+    operationKey = "opk1_workflowProgress123",
+    operationFingerprint = opsOperationFingerprint(operation),
+    admittedAt = Date.parse("2026-10-28T10:00:00.000Z");
+  const normalized = normalizeExecutionAdmission({
+    kind: operation.kind,
+    operationKey,
+    operationFingerprint,
+    admittedAt,
+    requestedDeadlineAt: admittedAt + 60000,
+  });
+  const progressResult = {
+    dataWorkflow: {
+      version: 1 as const,
+      phase: "transit" as const,
+      children: [],
+      completedBuildIds: [],
+      failedBuildIds: [],
+      skippedBuildIds: [],
+    },
+  };
+  const record = {
+    ...job({
+      operation,
+      operationKey,
+      operationFingerprint,
+      resourceId: "europe/germany",
+      ...normalized,
+      requestedDeadlineAt: admittedAt + 60000,
+      executionVersion: 2,
+      requestVersion: 2,
+      deploymentBudgetMs: 24 * 3600000,
+      state: "running",
+      submittedAt: new Date(admittedAt).toISOString(),
+      updatedAt: new Date(admittedAt).toISOString(),
+    }),
+    progressResult,
+  };
+  const path = join(root(), "journal/jobs-v1.json"),
+    journal = await openOpsJobJournal(path);
+  await journal.replace([record]);
+  expect(journal.records()[0]).toMatchObject({ state: "running", progressResult });
+  const reopened = await openOpsJobJournal(path, { now: () => new Date(admittedAt + 1000) });
+  expect(reopened.records()[0]).toMatchObject({
+    state: "failed",
+    errorClass: "recovery_required",
+    failureResult: progressResult,
+  });
+  expect(reopened.records()[0]).not.toHaveProperty("progressResult");
+  expect(reopened.records()[0]).not.toHaveProperty("result");
+});

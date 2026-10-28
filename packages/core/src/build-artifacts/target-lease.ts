@@ -98,6 +98,7 @@ import {
   verifyControlPreparedTerminal,
   verifyControlRecoveryAuthority,
   verifyDataControlTerminalWitness,
+  verifyDataUpdatePrerequisites,
   withControlDelegationPublication,
   withControlMaintenanceDecisionPublication,
   withControlMaintenanceInitialization,
@@ -1006,6 +1007,7 @@ export async function acquireArtifactTargetLease(options: {
     Date.now() >= authority.execution.deadlineAt
   )
     throw Error("Target closure or execution deadline mismatch");
+  if (authority.kind === "data.update") await verifyDataUpdatePrerequisites(options.owner);
   assertControlExecutionForward(options.owner);
   options.signal?.throwIfAborted();
   try {
@@ -1275,7 +1277,7 @@ export function verifyFiniteControlEdge(
   if (
     role === "ops-agent" &&
     recipient === "fixed-cli" &&
-    ["lifecycle", "build", "data-link", "data-clean"].includes(phase) &&
+    ["lifecycle", "build", "data-link", "data-clean", "data-finalization"].includes(phase) &&
     childPhaseKinds[phase].includes(kind)
   )
     return phase === "data-clean" ? [] : ["hardlinks"];
@@ -1291,6 +1293,7 @@ export function verifyFiniteControlEdge(
       "services.buildAll",
       "data.link",
       "configuration.hardlinks.apply",
+      "data.update",
     ].includes(kind)
   )
     return [];

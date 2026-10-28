@@ -41,6 +41,7 @@ import {
   executionAuthorityState,
   readPrivateRecord,
   type VerifiedExecutionAuthority,
+  verifyDataControlTerminalWitness,
   writePrivateRecord,
 } from "./control-authority";
 import { controlDigest, signControl, verifyControl } from "./control-records";
@@ -104,7 +105,9 @@ function validateOwner(
     planDigest: controlDigest(plan.plan),
   };
   if (
-    !["configuration.hardlinks.apply", "service.start", "service.update"].includes(s.kind) ||
+    !["configuration.hardlinks.apply", "service.start", "service.update", "data.update"].includes(
+      s.kind,
+    ) ||
     controlDigest(plan.parent) !== controlDigest(s.execution) ||
     (plan.reservation
       ? plan.reservation.operationFingerprint !== controlDigest(input) ||
@@ -198,7 +201,7 @@ export async function executeOwnedGenerationHardlinks(options: {
   if (!prior) {
     const issued = await issueControlChildPhase(authority, {
       phase: "hardlinks",
-      ordinal: 0,
+      ordinal: plan.reservation.ordinal,
       childPublicKey: controlRolePublicKey(s.installation.installation, "data-manager"),
       lease,
     });
@@ -246,10 +249,15 @@ export async function executeOwnedGenerationHardlinks(options: {
   const until = Math.min(Date.now() + 5000, authority.execution.deadlineAt + 30000);
   do {
     try {
+      // The fixed DM publisher verifies physical settlement before signing this
+      // witness. Observe it without taking the lease writer; polling that writer
+      // here can itself make the publisher fail its nonblocking guard.
+      verifyDataControlTerminalWitness(s.installation.installation, bound.execution, status);
       const settlement = inspectArtifactTargetLeaseChildSettlement(lease, bound.execution);
       contained = settlement?.outcome === "committed" && settlement.publication === "committed";
     } catch {
-      /* Public terminal publication can precede the final borrowed-node receipt. */
+      /* SQL terminal and borrowed-node settlement precede the final shared
+       * contained-terminal witness. Both actual sources must be visible. */
     }
     if (contained || Date.now() >= until) break;
     await new Promise((resolve) => setTimeout(resolve, 50));

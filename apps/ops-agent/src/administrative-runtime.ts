@@ -1,4 +1,5 @@
 import { loadConfiguredResourceAuthority } from "./configured-resource-authority";
+import { installDataWorkflowRuntime } from "./data-workflow-runtime";
 
 export {
   type ConfiguredResourceAuthority,
@@ -1929,11 +1930,8 @@ export function createAdministrativeRuntime(
     await runMatchingDataCommand(operation, context);
     return { completed: true };
   };
-  // Full Update build/link finalization is the reviewed Task02.4 owner. Until
-  // then reject before any download rather than report partial workflow success.
-  runtime["data.update"] = async () => {
-    throw new OpsHostUpdateRequiredError();
-  };
+  // Full Update owns its target-free data phase and one guarded finalization phase.
+  installDataWorkflowRuntime(runtime, { rootDir: options.rootDir, runFixedCli });
   runtime["data.convertOverpass"] = async (operation, context) => {
     await runMatchingDataCommand(operation, context);
     return { completed: true, ...(operation.regionId ? { resourceId: operation.regionId } : {}) };

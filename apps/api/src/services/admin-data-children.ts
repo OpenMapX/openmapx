@@ -61,7 +61,9 @@ export async function cancelAdminDataChildren(
   );
   if (!known.success) throw new JobObservationPending("invalid_identity");
   const children = known.data;
-  const candidates = roots.filter((root) => isFixedSingleDataCommand(root.kind));
+  const candidates = roots.filter(
+    (root) => isFixedSingleDataCommand(root.kind) || root.kind === "data.update",
+  );
   if (!children.length && !candidates.length) return "none";
   if (!options.context) return "pending";
   const persist = async () => {
@@ -74,67 +76,87 @@ export async function cancelAdminDataChildren(
   // DM receiver wrote this parent binding; an absent row remains unknown to its
   // agent-root reconciliation and never authorizes another POST.
   for (const root of candidates) {
-    const cliKey = controlChildOperationKey(root.operationKey, "data-workflow", 0),
-      key = controlChildOperationKey(cliKey, "data-step", 0);
-    const rows = await db
-      .select()
-      .from(dataManagerJobs)
-      .where(eq(dataManagerJobs.operationKey, key))
-      .limit(2);
-    if (rows.length > 1) throw new JobObservationPending("invalid_identity");
-    const row = rows[0];
-    if (!row) continue;
-    const parent = z
-      .object({
-        issuer: z.literal("host-cli"),
-        execution: z.object({ executor: z.literal("host-cli"), operationKey: z.literal(cliKey) }),
-      })
-      .safeParse(row.executionParent);
-    if (row.executionVersion !== 2 || !parent.success)
-      throw new JobObservationPending("invalid_identity");
-    const state = dataExecutionStatusSchema.parse({
-      id: String(row.id),
-      kind: row.kind,
-      status: row.status,
-      operationKey: row.operationKey,
-      fingerprint: row.executionFingerprint,
-      admittedAt: Number(row.admittedAt),
-      deadlineAt: Number(row.deadlineAt),
-      ...z
+    const dataCliKey = controlChildOperationKey(root.operationKey, "data-workflow", 0),
+      finalizationCliKey = controlChildOperationKey(root.operationKey, "data-finalization", 1);
+    const addresses =
+      root.kind === "data.update"
+        ? [
+            ...(["osm", "transit", "fonts"] as const).map((phase, ordinal) => ({
+              parentKey: dataCliKey,
+              operationKey: controlChildOperationKey(dataCliKey, phase, ordinal),
+            })),
+            {
+              parentKey: finalizationCliKey,
+              operationKey: controlChildOperationKey(finalizationCliKey, "hardlinks", 0),
+            },
+          ]
+        : [
+            {
+              parentKey: dataCliKey,
+              operationKey: controlChildOperationKey(dataCliKey, "data-step", 0),
+            },
+          ];
+    for (const { parentKey: cliKey, operationKey: key } of addresses) {
+      const rows = await db
+        .select()
+        .from(dataManagerJobs)
+        .where(eq(dataManagerJobs.operationKey, key))
+        .limit(2);
+      if (rows.length > 1) throw new JobObservationPending("invalid_identity");
+      const row = rows[0];
+      if (!row) continue;
+      const parent = z
         .object({
-          cancellationRequestedAt: z.string().nullable(),
-          progress: z.number().nullable(),
-          diagnostics: z.unknown(),
-          publication: z.string(),
-          result: z.unknown().optional(),
+          issuer: z.literal("host-cli"),
+          execution: z.object({ executor: z.literal("host-cli"), operationKey: z.literal(cliKey) }),
         })
-        .parse(row.executionState),
-    });
-    const child = childSchema.parse({
-        id: state.id,
-        operationKey: key,
-        fingerprint: state.fingerprint,
-        parentAgentOperationKey: root.operationKey,
-        kind: state.kind,
-        admittedAt: state.admittedAt,
-        deadlineAt: state.deadlineAt,
-        cancellationRequestedAt: null,
-        state: isDataExecutionTerminal(state) ? "terminal" : "observing",
-        status: state.status,
-        publication: state.publication,
-      }),
-      old = children.find((item) => item.operationKey === key);
-    if (old) {
-      if (
-        old.id !== child.id ||
-        old.fingerprint !== child.fingerprint ||
-        old.kind !== child.kind ||
-        old.admittedAt !== child.admittedAt ||
-        old.deadlineAt !== child.deadlineAt ||
-        old.parentAgentOperationKey !== root.operationKey
-      )
+        .safeParse(row.executionParent);
+      if (row.executionVersion !== 2 || !parent.success)
         throw new JobObservationPending("invalid_identity");
-    } else children.push(child);
+      const state = dataExecutionStatusSchema.parse({
+        id: String(row.id),
+        kind: row.kind,
+        status: row.status,
+        operationKey: row.operationKey,
+        fingerprint: row.executionFingerprint,
+        admittedAt: Number(row.admittedAt),
+        deadlineAt: Number(row.deadlineAt),
+        ...z
+          .object({
+            cancellationRequestedAt: z.string().nullable(),
+            progress: z.number().nullable(),
+            diagnostics: z.unknown(),
+            publication: z.string(),
+            result: z.unknown().optional(),
+          })
+          .parse(row.executionState),
+      });
+      const child = childSchema.parse({
+          id: state.id,
+          operationKey: key,
+          fingerprint: state.fingerprint,
+          parentAgentOperationKey: root.operationKey,
+          kind: state.kind,
+          admittedAt: state.admittedAt,
+          deadlineAt: state.deadlineAt,
+          cancellationRequestedAt: null,
+          state: isDataExecutionTerminal(state) ? "terminal" : "observing",
+          status: state.status,
+          publication: state.publication,
+        }),
+        old = children.find((item) => item.operationKey === key);
+      if (old) {
+        if (
+          old.id !== child.id ||
+          old.fingerprint !== child.fingerprint ||
+          old.kind !== child.kind ||
+          old.admittedAt !== child.admittedAt ||
+          old.deadlineAt !== child.deadlineAt ||
+          old.parentAgentOperationKey !== root.operationKey
+        )
+          throw new JobObservationPending("invalid_identity");
+      } else children.push(child);
+    }
   }
   childrenSchema.parse(children);
   if (!children.length) return "none";

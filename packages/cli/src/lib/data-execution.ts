@@ -41,11 +41,13 @@ import {
   opsOperationFingerprint,
 } from "@openmapx/core/ops";
 import { cliControlContext, withHostDataControlContext } from "./control-context";
+import { cliAcquisitionOptions } from "./execution-deadline";
 import { repoPaths } from "./paths";
 export async function executeDurableDataStep(
   input: DataExecutionInput,
   options: {
     operationKey: string;
+    phase?: "data-step" | "osm" | "transit" | "fonts";
     transport: DataManagerTransport;
     signal?: AbortSignal;
     requestedDeadlineAt: number;
@@ -58,7 +60,7 @@ export async function executeDurableDataStep(
   const context = cliControlContext();
   if (!context) throw Error("Retained data command owner required");
   const normalized = ordinaryDataExecutionInputSchema.parse(normalizeDataExecutionInput(input)),
-    slot = cliDataReservation(context.authority),
+    slot = cliDataReservation(context.authority, options.phase),
     bound = await bindControlChildPhase(context.authority, slot);
   if (
     options.operationKey !== slot.execution.operationKey ||
@@ -87,7 +89,7 @@ export async function executeDurableDataStep(
     status: DataExecutionStatus | undefined;
   if (!attempt) {
     attempt = {
-      phase: "data-step",
+      phase: options.phase ?? "data-step",
       operationKey: slot.execution.operationKey,
       input: normalized,
       operationFingerprint: slot.operationFingerprint,
@@ -197,32 +199,40 @@ function operationFor(input: DataExecutionInput): OpsOperation {
       throw Error("No existing single-command edge for this data input");
   }
 }
-async function runOwned(input: DataExecutionInput, transport: DataManagerTransport) {
+export async function runOwnedDataStep(
+  input: DataExecutionInput,
+  transport: DataManagerTransport,
+  phase: "data-step" | "osm" | "transit" | "fonts" = "data-step",
+  onProgress: (status: DataExecutionStatus) => Promise<void> = async () => {},
+) {
   const context = cliControlContext();
   if (!context) throw Error("Data command owner required");
-  const slot = cliDataReservation(context.authority),
+  const slot = cliDataReservation(context.authority, phase),
     bound = await bindControlChildPhase(context.authority, slot);
   const prior = readCliDataAttempt(context.authority, slot.execution.operationKey);
   let assertion: string | undefined;
   if (!prior) {
     const issued = await issueControlChildPhase(context.authority, {
-      phase: "data-step",
-      ordinal: 0,
+      phase,
+      ordinal: slot.ordinal,
       childPublicKey: controlRolePublicKey(context.installation, "data-manager"),
     });
     assertion = issued.assertion;
     consumeControlChildDispatch(issued.dispatchTicket);
   }
   const result = await executeDurableDataStep(input, {
+    phase,
+    signal: cliAcquisitionOptions().signal,
     operationKey: slot.execution.operationKey,
     requestedDeadlineAt: bound.execution.deadlineAt,
     parentAssertion: assertion,
     transport,
     observerDeadlineAt: context.authority.execution.deadlineAt,
     checkpointAttempt: async (attempt) => retainCliDataAttempt(context.authority, attempt),
-    checkpoint: async () => {},
+    checkpoint: onProgress,
   });
-  if (result.status !== "ok") throw Error(`Data execution ${result.id} finished ${result.status}`);
+  if (phase === "data-step" && result.status !== "ok")
+    throw Error(`Data execution ${result.id} finished ${result.status}`);
   return result;
 }
 /** Host commands use their own dated, retained coordinator. Managed fixed CLI
@@ -232,7 +242,7 @@ export async function runCliDataStep(
   transport: DataManagerTransport,
 ): Promise<DataExecutionStatus> {
   const input = normalizeDataExecutionInput(value);
-  if (cliControlContext()) return runOwned(input, transport);
+  if (cliControlContext()) return runOwnedDataStep(input, transport);
   const operation = operationFor(input),
     admittedAt = Date.now(),
     requestedDeadlineAt = admittedAt + opsExecutionBudget(operation.kind).processMs,
@@ -288,7 +298,7 @@ export async function runCliDataStep(
       ],
     });
     const result = await withHostDataControlContext(installation, authority, () =>
-      runOwned(input, transport),
+      runOwnedDataStep(input, transport),
     );
     retainControlEffectReceipt(authority, {
       outcome: "committed",
