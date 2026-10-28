@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import {
+  apiJobChildAttemptSchema,
   canonicalJson,
   createControlRootOperationKey,
   type OpsOperation,
@@ -8,23 +9,12 @@ import {
   opsOperationFingerprint,
   readOpsTokenFile,
 } from "@openmapx/core/ops";
-import { z } from "zod";
 import type { JobContext } from "./job-runner";
 import { createDurableOpsKey } from "./ops-client";
 
-export const apiJobChildAttemptSchema = z.strictObject({
-  version: z.literal(1),
-  apiJobId: z.uuid(),
-  apiOwnerVersion: z.number().int().positive().safe(),
-  parentOperationKey: z.string().regex(/^opk1_[A-Za-z0-9_-]{16,64}$/),
-  parentFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
-  parentDeadlineAt: z.number().int().nonnegative().safe(),
-  childOperationKey: z.string().regex(/^opk1_[A-Za-z0-9_-]{16,64}$/),
-  childOperationFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
-  requestedDeadlineAt: z.number().int().nonnegative().safe(),
-  attemptId: z.uuid(),
-});
-export type ApiJobChildAttempt = z.infer<typeof apiJobChildAttemptSchema>;
+export { type ApiJobChildAttempt, apiJobChildAttemptSchema } from "@openmapx/core/ops";
+
+import type { ApiJobChildAttempt } from "@openmapx/core/ops";
 
 function parentJobBudget(ctx: JobContext, kind: OpsOperationKind): number {
   if (ctx.jobType === "system.update") return opsExecutionBudget("system.update").processMs;

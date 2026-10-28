@@ -67,12 +67,17 @@ it.each(["legacy", "expired"])(
     const token = Buffer.alloc(32, 1).toString("base64url");
     const retained = {
       role: "api" as const,
-      operation: { kind: "service.pull" as const, serviceId: "redis" },
+      operation: {
+        kind: "service.pull" as const,
+        serviceId: "redis",
+        expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+      },
       operationId: "job1_0123456789abcdef",
       operationKey: "opk1_0123456789abcdef",
       fingerprint: (await import("@openmapx/core/ops")).opsOperationFingerprint({
         kind: "service.pull",
         serviceId: "redis",
+        expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
       }),
       resourceId: "redis",
       state: "succeeded" as const,

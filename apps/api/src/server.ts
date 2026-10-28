@@ -688,8 +688,8 @@ jobRunner.register("service.restart", async (ctx) => {
 
 jobRunner.register("service.apply", async (ctx) => {
   const service = ctx.payload.service as string;
-  await serviceApply(service, ctx);
-  return { service, action: "apply" };
+  const result = await serviceApply(service, ctx);
+  return { service, action: "apply", ...result };
 });
 
 jobRunner.register("data.operation", handleDataOperationJob);

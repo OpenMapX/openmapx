@@ -9,6 +9,24 @@ export class AdminJobFailure extends Error {
   }
 }
 
+/** A fixed observed prerequisite, never publication or cleanup authority. */
+export class ConfigurationPrerequisiteFailure extends AdminJobFailure {
+  readonly statusCode = 409;
+  constructor() {
+    super("Apply or update Data Manager before changing instance configuration.", {
+      errorCode: "configuration_prerequisite",
+      configuration: {
+        outcome: "not_committed",
+        reason: "conflict",
+        cleanupFailed: false,
+        publisherCleanupFailed: false,
+        registryUpdateFailed: false,
+      },
+    });
+    this.name = "ConfigurationPrerequisiteFailure";
+  }
+}
+
 /** Internal admission bodies, ownership and proofs never cross the activity boundary. */
 export function publicAdminJobResult<T>(result: T): T {
   if (!result || typeof result !== "object" || Array.isArray(result)) return result;

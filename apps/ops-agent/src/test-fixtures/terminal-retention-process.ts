@@ -19,9 +19,12 @@ import {
   sealTrustedConfigurationSnapshot,
 } from "@openmapx/core/ops";
 import { AnchoredDirectory } from "../../../../packages/core/src/build-artifacts/filesystem";
+import { configurationSource } from "../__fixtures__/configuration-source";
 import { openOpsJobJournal, type PersistedOpsJob } from "../journal";
 import { createRegistryResourceClaimer } from "../policy";
+import { createUnavailableRuntime } from "../runtime";
 import { buildOpsAgentServer } from "../server";
+import { installTrustedConfigurationRuntime } from "../trusted-config-runtime";
 import {
   createFileTrustedOpsDataSource,
   initializeTrustedSnapshotDirectory,
@@ -45,6 +48,27 @@ let operation: OpsOperation = input.borrowed
   : { kind: "backup.delete", backupId: "daily" };
 let resourceClaimer: ReturnType<typeof createRegistryResourceClaimer> | undefined;
 if (input.outcome === "configuration") {
+  const sourceRuntime = createUnavailableRuntime();
+  installTrustedConfigurationRuntime(sourceRuntime, {
+    infraDir: input.root,
+    env: {},
+    integrationSchemas: new Map(),
+    services: [
+      {
+        manifest: {
+          id: "motis",
+          name: "motis",
+          version: "1.0.0",
+          quality: "built-in",
+          container: { image: "example/motis", tag: "1" },
+        },
+        directory: join(input.root, "services/motis"),
+        enabled: true,
+        isBuiltIn: true,
+      },
+    ],
+  });
+  const source = await configurationSource(sourceRuntime, input.root);
   const directory = join(input.root, "trusted-config");
   mkdirSync(directory, { mode: 0o700 });
   const policy = {
@@ -60,6 +84,7 @@ if (input.outcome === "configuration") {
     issuedAtMs: Date.now(),
     nonce: "nonce_0123456789abcdef",
     operationForRevision: (revisionId) => ({
+      ...source,
       kind: "stack.render",
       revisionId,
       expectedCurrentRevisionId: null,
@@ -72,11 +97,7 @@ if (input.outcome === "configuration") {
       serviceSecrets: [],
     },
   });
-  operation = {
-    kind: "stack.render",
-    revisionId: snapshot.revisionId,
-    expectedCurrentRevisionId: null,
-  };
+  operation = snapshot.operation;
   writeFileSync(join(directory, `${snapshot.revisionId}.json`), snapshot.bytes, { mode: 0o600 });
   resourceClaimer = createRegistryResourceClaimer({
     serviceIds: ["motis"],

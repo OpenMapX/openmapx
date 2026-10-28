@@ -1,11 +1,22 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
+import {
+  adminIntegrationConfigImportedSchema,
+  adminIntegrationImportFailureSchema,
+} from "@openmapx/core/api-contracts";
+import { canonicalJson, hardlinkApplySummarySchema, readOpsTokenFile } from "@openmapx/core/ops";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob } from "../db/schema";
 import { dbActorId } from "../utils/actor";
 import { checkpointOwnedAdminJob } from "./admin-job-checkpoint";
-import { AdminJobFailure, JobObservationPending, publicAdminJobResult } from "./admin-job-failure";
+import {
+  AdminJobFailure,
+  ConfigurationPrerequisiteFailure,
+  JobObservationPending,
+  publicAdminJobResult,
+} from "./admin-job-failure";
 import { cancelAdminJobOperations, resumeAdminJobObservation } from "./admin-job-ops";
+import { readProjection } from "./admin-job-projection";
 import {
   adminJobObservationDue,
   claimAdminJob,
@@ -22,9 +33,14 @@ import {
   readJobExecution,
   renewAdminJobClaim,
 } from "./admin-job-state";
+import { coordinatorLifecycleOperationKey } from "./coordinator-lifecycle";
 import { type JobStatusEvent, jobEventBus, TERMINAL_JOB_STATUSES } from "./job-events";
 import { ApiOpsError, OpsObservationPending } from "./ops-client";
 import { appApiRestartCheckpoint } from "./system-update-state";
+import {
+  completeTrustedConfigurationApply,
+  parseTrustedConfigurationApplyOutcome,
+} from "./trusted-config-outcome";
 
 type AppApiReplacementOutcome = "applied" | "rolled-back" | "failed";
 interface AppApiRuntimeInfo {
@@ -93,10 +109,64 @@ export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
   "service.restart",
   "service.apply",
   "compose.render",
+  "configuration.apply",
+  "compose.start",
+  "integration.config.import",
   "system.diagnostics",
   "system.update",
 ] as const;
 
+/** Routing only, never admission authority. The selected fixed producer must
+ * still authenticate the original private packet, owned row/nonce, source and
+ * every retained attempt before it can deliver an original continuation. */
+function hasRetainedImmediateConfiguration(job: {
+  id: string;
+  type: string;
+  payload: unknown;
+  result: unknown;
+}): boolean {
+  const result = job.result as Record<string, unknown> | null,
+    payload = job.payload as Record<string, unknown> | null;
+  return (
+    ["service.apply", "configuration.apply", "integration.config.import"].includes(job.type) &&
+    result?._immediateJobId === job.id &&
+    typeof result._immediateActorId === "string" &&
+    typeof result._immediateIntentDigest === "string" &&
+    /^[a-f0-9]{64}$/.test(result._immediateIntentDigest) &&
+    typeof payload?.operationKey === "string" &&
+    /^opk1_[A-Za-z0-9_-]{16,64}$/.test(payload.operationKey) &&
+    !!result._configurationCandidate
+  );
+}
+/** Routing only. The fixed producer reauthenticates the original MAC packet,
+ * actual owned row/payload and saved decision before any next phase. */
+function hasRetainedQueuedCoordinator(job: {
+  id: string;
+  type: string;
+  payload: unknown;
+  result: unknown;
+}) {
+  const payload = job.payload as Record<string, unknown> | null,
+    candidate = (job.result as { _configurationCandidate?: { operationKey?: unknown } } | null)
+      ?._configurationCandidate;
+  if (!payload) return false;
+  const batch = (job.result as Record<string, unknown> | null)?._serviceUpdateBatch;
+  if (job.type === "service.bulk" && payload.action === "update" && batch) return true; // Routing only; the fixed handler validates the actual owned batch/ACK chain.
+  if (!candidate) return false;
+  const ordinal =
+    job.type === "service.apply" &&
+    payload.service === "data-manager" &&
+    Object.keys(payload).every((k) => k === "service")
+      ? null
+      : job.type === "service.bulk" &&
+          payload.action === "update" &&
+          Array.isArray(payload.serviceIds)
+        ? payload.serviceIds.indexOf("data-manager")
+        : -1;
+  return (
+    ordinal !== -1 && candidate.operationKey === coordinatorLifecycleOperationKey(job.id, ordinal)
+  );
+}
 class JobPersistenceUnavailable extends Error {}
 
 class AdminJobRunner {
@@ -125,6 +195,342 @@ class AdminJobRunner {
     });
     setTimeout(() => void this.pump(), 0);
     return id;
+  }
+
+  private async immediate<T>(
+    options: {
+      type: "configuration.apply" | "service.apply" | "compose.start" | "integration.config.import";
+      actorId?: string;
+      operationKey: string;
+      intent: unknown;
+      signal?: AbortSignal;
+    },
+    run: (
+      ctx: JobContext,
+    ) => Promise<{ value: T; result: Record<string, unknown>; failed?: boolean }>,
+    restore: (result: Record<string, unknown>) => T,
+  ): Promise<T> {
+    const token = await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? "");
+    const intentDigest = createHmac("sha256", token)
+      .update("openmapx-immediate-configuration-intent-v1\0")
+      .update(canonicalJson(options.intent))
+      .digest("hex");
+    const actorId = options.actorId ?? "internal";
+    const find = (connection: Pick<typeof db, "select">) =>
+      connection
+        .select()
+        .from(adminJob)
+        .where(
+          and(
+            sql`${adminJob.payload}->>'operationKey' = ${options.operationKey}`,
+            sql`${adminJob.result}->>'_immediateActorId' = ${actorId}`,
+          ),
+        )
+        .limit(2);
+    const prior = await find(db);
+    const retained = prior.length
+      ? prior
+      : await db.transaction(async (tx) => {
+          const [lock] = await tx.execute<{ held: boolean }>(
+            sql`SELECT pg_try_advisory_xact_lock(${0x4f4d58},1) AS held`,
+          );
+          if (lock?.held !== true) throw new JobObservationPending("recovery_required");
+          const current = await find(tx);
+          if (current.length) return current;
+          const id = randomUUID(),
+            execution = { owner: randomUUID(), version: 1 };
+          const [created] = await tx
+            .insert(adminJob)
+            .values({
+              id,
+              type: options.type,
+              status: "running",
+              startedAt: new Date(),
+              payload: { operationKey: options.operationKey },
+              createdBy: dbActorId(options.actorId),
+              result: {
+                _execution: execution,
+                _observationLeaseUntil: new Date(Date.now() + 60000).toISOString(),
+                _immediateJobId: id,
+                _immediateActorId: actorId,
+                _immediateIntentDigest: intentDigest,
+              },
+            })
+            .returning();
+          if (!created)
+            throw new JobPersistenceUnavailable("Immediate administrative job unavailable");
+          return [{ ...created, _fresh: true }];
+        });
+    if (retained.length !== 1) throw new JobObservationPending("recovery_required");
+    let job = retained[0]!,
+      checkpoint = (job.result ?? {}) as Record<string, unknown>,
+      recovering = false;
+    if (job.type !== options.type || checkpoint._immediateIntentDigest !== intentDigest)
+      throw new AdminJobFailure("Retained configuration intent conflicts", {
+        errorCode: "conflict",
+      });
+    if (!(job as { _fresh?: boolean })._fresh) {
+      if (["success", "failed"].includes(job.status)) return restore(checkpoint);
+      if (
+        !["running", "cancel_pending"].includes(job.status) ||
+        !checkpoint._configurationCandidate ||
+        !["service.apply", "configuration.apply", "integration.config.import"].includes(
+          options.type,
+        )
+      )
+        throw new JobObservationPending("recovery_required");
+      const claimed = await claimAdminJob(job, {}, true);
+      if (!claimed) throw new JobObservationPending("recovery_required");
+      job = claimed;
+      checkpoint = (claimed.result ?? {}) as Record<string, unknown>;
+      recovering = true;
+    }
+    const execution = readJobExecution(checkpoint)!;
+    const controller = new AbortController(),
+      signal = options.signal
+        ? AbortSignal.any([controller.signal, options.signal])
+        : controller.signal;
+    this.active.set(job.id, controller);
+    let value: T | undefined, failure: unknown;
+    const heartbeat = setInterval(() => {
+      void renewAdminJobClaim(job.id, execution).catch((error) => controller.abort(error));
+    }, 10000);
+    heartbeat.unref();
+    try {
+      await this.executeJob(
+        job.id,
+        options.type,
+        { operationKey: options.operationKey },
+        checkpoint,
+        signal,
+        false,
+        async (ctx) => {
+          if (recovering) {
+            return this.resumeImmediateConfiguration(ctx);
+          }
+          try {
+            const result = await run(ctx);
+            value = result.value;
+            if (result.failed)
+              throw new AdminJobFailure("Administrative effect failed", result.result);
+            return result.result;
+          } catch (error) {
+            failure = error;
+            throw error;
+          }
+        },
+      );
+      const [settled] = await db.select().from(adminJob).where(eq(adminJob.id, job.id));
+      if (!settled || !["success", "failed"].includes(settled.status))
+        throw new JobObservationPending("recovery_required");
+      if (failure && !(value !== undefined && failure instanceof AdminJobFailure)) throw failure;
+      return value ?? restore((settled.result ?? {}) as Record<string, unknown>);
+    } finally {
+      clearInterval(heartbeat);
+      this.active.delete(job.id);
+      this.logSeq.delete(job.id);
+    }
+  }
+
+  /** The same fixed original producer serves a repeated request and startup
+   * reconciliation. No registered callback, new intent or latest desired state
+   * is used; all authority is reconstructed by its nominal private reader. */
+  private async resumeImmediateConfiguration(ctx: JobContext): Promise<Record<string, unknown>> {
+    if (
+      !hasRetainedImmediateConfiguration({
+        id: ctx.jobId,
+        type: ctx.jobType ?? "",
+        payload: ctx.payload,
+        result: ctx.checkpointResult,
+      })
+    )
+      throw new JobObservationPending("recovery_required");
+    const actorId = ctx.checkpointResult!._immediateActorId as string,
+      operationKey = ctx.payload.operationKey as string,
+      { withAdministrativeConfigurationJob, withAdministrativeConfigurationWriter } = await import(
+        "./administrative-configuration-writer"
+      ),
+      { resumeRetainedConfigurationCandidate, retainedConfigurationIntegrationIds } = await import(
+        "./prospective-configuration"
+      ),
+      integrationIds = await retainedConfigurationIntegrationIds(ctx, actorId, operationKey),
+      result = await withAdministrativeConfigurationJob(ctx, () =>
+        withAdministrativeConfigurationWriter(
+          { actorId, operationKey, integrationIds, signal: ctx.signal },
+          () => resumeRetainedConfigurationCandidate(),
+        ),
+      );
+    const [canceled] = await db
+      .select()
+      .from(adminJob)
+      .where(jobOwnership(ctx.jobId, ctx.execution, ["canceled"]));
+    if (canceled) {
+      // The fixed producer already published its actual canceled/nonissuance
+      // completion under this nonce. Observe it; generic settlement must not
+      // overwrite that terminal source with success or failure.
+      this.announce(ctx.jobId, "canceled", {
+        result: publicAdminJobResult(canceled.result as Record<string, unknown> | null),
+        finishedAt: canceled.finishedAt?.toISOString(),
+      });
+      throw new JobOwnershipLost();
+    }
+    if (
+      !completeTrustedConfigurationApply(
+        parseTrustedConfigurationApplyOutcome(result.configuration),
+      )
+    )
+      throw new AdminJobFailure("Original configuration did not apply", result);
+    return result;
+  }
+
+  /** Desired values remain transient or in the guarded private candidate, never job payload/result. */
+  applyImmediateConfiguration(
+    options: import("./trusted-config-operations").ApplyTrustedConfigurationOptions,
+  ) {
+    return this.immediate(
+      {
+        type: options.followUp === "service-apply" ? "service.apply" : "configuration.apply",
+        actorId: options.actorId,
+        operationKey: options.operationKey,
+        signal: options.signal,
+        intent: {
+          kind: options.kind,
+          serviceId: options.serviceId,
+          integrationId: options.integrationId,
+          selectedRoots: options.selectedRoots,
+          overlay: options.overlay,
+          coordinatorMode: options.coordinatorMode,
+          snapshot: options.snapshot,
+          followUp: options.followUp,
+          ...(Object.hasOwn(options, "expectedCurrentRevisionId")
+            ? { expectedCurrentRevisionId: options.expectedCurrentRevisionId }
+            : {}),
+        },
+      },
+      async (ctx) => {
+        const { applyTrustedConfigurationWithEvidence } = await import(
+          "./trusted-configuration-producer"
+        );
+        const value = await applyTrustedConfigurationWithEvidence({
+          ...options,
+          ctx,
+          signal: ctx.signal,
+        });
+        return {
+          value: { ...value, jobId: ctx.jobId },
+          result: { configuration: value.outcome },
+          failed: value.outcome.outcome !== "committed" || value.outcome.followUp !== "complete",
+        };
+      },
+      (result) => {
+        if (result.errorCode === "configuration_prerequisite")
+          throw new ConfigurationPrerequisiteFailure();
+        let outcome = parseTrustedConfigurationApplyOutcome(result.configuration);
+        let integrationReload:
+          | import("./trusted-config-operations").CapturedIntegrationReloadResult
+          | undefined;
+        if (options.kind === "integrationConfig.apply" && outcome.outcome === "committed") {
+          const retained = result.integrationReload as
+            | { state?: string; revisionId?: string; result?: unknown }
+            | undefined;
+          if (retained?.state === "failed") outcome = { ...outcome, followUp: "failed" };
+          else if (retained?.state === "complete" && retained.revisionId === outcome.revisionId) {
+            const parsed = adminIntegrationConfigImportedSchema
+              .pick({ message: true, reloaded: true, enabled: true })
+              .parse(retained.result);
+            integrationReload = parsed;
+          } else throw new JobObservationPending("recovery_required");
+        }
+        if (options.followUp && outcome.outcome === "committed") {
+          const retained = result.serviceCredential as
+            | { serviceId?: string; revisionId?: string; followUp?: string }
+            | undefined;
+          if (
+            !retained ||
+            retained.serviceId !== options.serviceId ||
+            retained.revisionId !== outcome.revisionId ||
+            !["complete", "failed"].includes(retained.followUp ?? "")
+          )
+            throw new JobObservationPending("recovery_required");
+          if (retained.followUp === "failed") outcome = { ...outcome, followUp: "failed" };
+        }
+        return {
+          outcome,
+          ...(integrationReload ? { integrationReload } : {}),
+          ...(typeof result._immediateJobId === "string" ? { jobId: result._immediateJobId } : {}),
+        };
+      },
+    );
+  }
+
+  startImmediateCompose(options: { actorId: string; operationKey: string; signal?: AbortSignal }) {
+    return this.immediate(
+      {
+        ...options,
+        type: "compose.start",
+        intent: { action: "compose.start", coordinatorMode: "ensure-running" },
+      },
+      async (ctx) => {
+        const { prepareServiceGeneration } = await import("./service-preparation");
+        const { executeAdminJobOperation } = await import("./admin-job-ops");
+        const prepared = await prepareServiceGeneration(ctx, "compose-start", {
+          coordinatorMode: "ensure-running",
+        });
+        let ok = true;
+        try {
+          await executeAdminJobOperation(
+            ctx,
+            { kind: "stack.start", expectedConfigurationRevisionId: prepared.revisionId },
+            "admin-job.compose.start",
+          );
+        } catch (error) {
+          if (error instanceof JobObservationPending || error instanceof OpsObservationPending)
+            throw error;
+          ok = false;
+        }
+        const value = { ok, stdout: "", hardlinks: prepared.hardlinks };
+        return { value, result: { compose: value }, failed: !ok };
+      },
+      (result) => {
+        const value = result.compose as
+          | { ok?: boolean; stdout?: string; hardlinks?: unknown }
+          | undefined;
+        if (typeof value?.ok !== "boolean" || typeof value.stdout !== "string")
+          throw new JobObservationPending("recovery_required");
+        return {
+          ok: value.ok,
+          stdout: value.stdout,
+          hardlinks: hardlinkApplySummarySchema.parse(value.hardlinks),
+        };
+      },
+    );
+  }
+
+  importImmediateIntegrationConfiguration(options: {
+    body: unknown;
+    actorId: string;
+    operationKey: string;
+    signal?: AbortSignal;
+  }) {
+    return this.immediate(
+      { ...options, type: "integration.config.import", intent: options.body },
+      async (ctx) => {
+        const { runLegacyIntegrationImport } = await import(
+          "./configuration-migration/legacy-integration-import"
+        );
+        const value = await runLegacyIntegrationImport(ctx, options);
+        return { value, result: { integrationImport: value }, failed: !value.ok };
+      },
+      (result) => {
+        // Only exact public, non-secret import evidence is retained/restored.
+        if (result.errorCode === "configuration_prerequisite")
+          throw new ConfigurationPrerequisiteFailure();
+        const success = adminIntegrationConfigImportedSchema.safeParse(result.integrationImport);
+        return success.success
+          ? success.data
+          : adminIntegrationImportFailureSchema.parse(result.integrationImport);
+      },
+    );
   }
 
   /** Publish a status transition so live viewers see it without polling. */
@@ -367,7 +773,9 @@ class AdminJobRunner {
     observe = false,
     observationSignal?: AbortSignal,
   ): Promise<void> {
-    const controller = new AbortController();
+    const controller = new AbortController(),
+      retainedConfiguration =
+        observe && (hasRetainedImmediateConfiguration(job) || hasRetainedQueuedCoordinator(job));
     this.active.set(job.id, controller);
     this.logSeq.set(job.id, 0);
 
@@ -386,7 +794,7 @@ class AdminJobRunner {
         heartbeat.unref?.();
       }
     };
-    if (!observe) {
+    if (!observe || retainedConfiguration) {
       heartbeat = setTimeout(() => void renew(), 10_000);
       heartbeat.unref?.();
     }
@@ -398,7 +806,7 @@ class AdminJobRunner {
       observe
         ? AbortSignal.any([
             controller.signal,
-            AbortSignal.timeout(3_000),
+            AbortSignal.timeout(retainedConfiguration ? 120_000 : 3_000),
             ...(observationSignal ? [observationSignal] : []),
           ])
         : controller.signal,
@@ -426,6 +834,7 @@ class AdminJobRunner {
     checkpointResult: Record<string, unknown> | null,
     signal: AbortSignal,
     observe = false,
+    immediateHandler?: JobHandler,
   ): Promise<void> {
     const retirement = new AbortController();
     signal = AbortSignal.any([signal, retirement.signal]);
@@ -434,7 +843,20 @@ class AdminJobRunner {
       retirement.abort(error);
       throw error;
     };
-    const handler = observe ? resumeAdminJobObservation : this.handlers.get(type);
+    const retainedImmediate =
+        observe &&
+        hasRetainedImmediateConfiguration({ id: jobId, type, payload, result: checkpointResult }),
+      retainedQueuedCoordinator =
+        observe &&
+        hasRetainedQueuedCoordinator({ id: jobId, type, payload, result: checkpointResult }),
+      retainedConfiguration = retainedImmediate || retainedQueuedCoordinator,
+      handler = retainedImmediate
+        ? (ctx: JobContext) => this.resumeImmediateConfiguration(ctx)
+        : retainedQueuedCoordinator
+          ? this.handlers.get(type)
+          : observe
+            ? resumeAdminJobObservation
+            : (immediateHandler ?? this.handlers.get(type));
     const execution = readJobExecution(checkpointResult);
     let checkpointTail = Promise.resolve();
     let checkpointBaseline = structuredClone((checkpointResult ?? {}) as Record<string, unknown>);
@@ -442,7 +864,7 @@ class AdminJobRunner {
       jobId,
       jobType: type,
       execution,
-      observationOnly: observe,
+      observationOnly: observe && !retainedConfiguration,
       payload,
       signal,
       checkpointResult,
@@ -688,8 +1110,20 @@ class AdminJobRunner {
             },
           });
           if (outcome === "pending") {
-            await pending("transport");
-            return;
+            const original = current.result as Record<string, unknown> | null;
+            if (
+              !retainedConfiguration ||
+              Object.keys(readProjection(original).operations).length !== 0 ||
+              original?._dataExecutions !== undefined
+            ) {
+              await pending("transport");
+              return;
+            }
+            // Routing only: before any child admission the generic canceller
+            // has no terminal to observe. The fixed producer must authenticate
+            // its private candidate and locked nonissuance state before cleanup
+            // or canceled publication. The cancel marker still blocks forward
+            // admission; neither an empty projection nor this status grants it.
           }
           if (outcome === "canceled") {
             const finishedAt = new Date();

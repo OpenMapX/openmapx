@@ -34,6 +34,10 @@ class FixedCliCommandExit extends Error {
     super(`Fixed CLI command exited with code ${code}`);
   }
 }
+/** Exit classification only; it conveys no containment or execution proof. */
+export function fixedCliCommandExitCode(error: unknown): number | undefined {
+  return error instanceof FixedCliCommandExit ? error.code : undefined;
+}
 /** Managed commands unwind through durable child settlement before the process exits. */
 export function completeCliCommand(code = 0): never {
   if (contexts.getStore()) throw new FixedCliCommandExit(code);

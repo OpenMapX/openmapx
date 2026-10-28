@@ -1,19 +1,14 @@
 import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
 import kleur from "kleur";
-import { completeCliCommand } from "../lib/control-context";
+import { cliControlContext, completeCliCommand } from "../lib/control-context";
 import { dockerComposeStream } from "../lib/docker";
 import { applyGeneratedHardlinks } from "../lib/hardlinks";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import { expandPresets, UnknownPresetError } from "../lib/presets";
-import {
-  ensureReleaseOverlay,
-  releaseStatusLines,
-  touchesReleasePinnedServices,
-  unpinnedReleaseWarning,
-} from "../lib/release";
 import { buildServices } from "../lib/service-builds";
+import { runCliServiceLifecycle, ServiceLifecycleCommandError } from "../lib/service-lifecycle";
 import {
   applyServiceSelection,
   disableSelectedServices,
@@ -376,46 +371,37 @@ export function registerServicesCommands(program: Command): void {
       "--preset <names>",
       "Comma/space-separated preset names (app, routing, transit, pelias, nominatim, photon, overpass, tiles, martin, proxy, dev)",
     )
-    .action(async (ids: string[], options: { preset?: string }) => {
-      const allIds = mergeIdsWithPresets(ids, options.preset);
-      if (allIds.length === 0) {
-        log.err("No services selected. Pass <ids...> or --preset.");
-        completeCliCommand(1);
-      }
-      try {
-        // Don't pass `services: allIds` — that would narrow the persisted
-        // compose YAML to just the start target list and drop every other
-        // enabled service. Render the full enabled selection (env /
-        // service-selection.json) and then `up -d` only the requested
-        // subset. Same rationale as the `update` branch below.
-        const rendered = await renderComposeForRepo({
-          domain: process.env.DOMAIN ?? "localhost",
-        });
-        for (const warning of rendered.selectionWarnings) log.warn(warning);
-        const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
-        log.ok(
-          `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
-        );
-      } catch (err) {
-        log.err(`prepare/start failed: ${(err as Error).message}`);
-        completeCliCommand(1);
-      }
-      if (touchesReleasePinnedServices(allIds)) {
-        const overlay = await ensureReleaseOverlay();
-        if (overlay.status === "resolved") {
-          log.ok(`Atomic release selection ${overlay.release} → ${overlay.path}`);
-        } else if (overlay.status === "present") {
-          for (const line of releaseStatusLines(overlay.path)) log.dim(line);
-        } else if (overlay.status === "unpinned") {
-          log.err(unpinnedReleaseWarning(overlay.reason));
+    .option(
+      "--expected-configuration-revision <revision>",
+      "Require this applied configuration generation",
+    )
+    .action(
+      async (
+        ids: string[],
+        options: { preset?: string; expectedConfigurationRevision?: string },
+      ) => {
+        const allIds = mergeIdsWithPresets(ids, options.preset);
+        if (allIds.length === 0) {
+          log.err("No services selected. Pass <ids...> or --preset.");
           completeCliCommand(1);
-        } else if (overlay.status === "disabled") {
-          log.dim("Release pinning disabled (OPENMAPX_RELEASE=local); using manifest image tags.");
         }
-      }
-      const code = await dockerComposeStream(["up", "-d", ...allIds]);
-      completeCliCommand(code);
-    });
+        try {
+          await runCliServiceLifecycle({
+            action: "start",
+            serviceIds: allIds,
+            expectedConfigurationRevisionId: options.expectedConfigurationRevision,
+          });
+        } catch (error) {
+          log.err(
+            cliControlContext()
+              ? "Service Start failed; inspect the original operation status."
+              : `prepare/start failed: ${(error as Error).message}`,
+          );
+          completeCliCommand(error instanceof ServiceLifecycleCommandError ? error.exitCode : 1);
+        }
+        completeCliCommand(0);
+      },
+    );
 
   services
     .command("stop [ids...]")
@@ -454,66 +440,39 @@ export function registerServicesCommands(program: Command): void {
     )
     .option("--preset <names>", "Comma/space-separated preset names")
     .option("--no-deps", "Replace only selected services without starting their dependencies")
-    .action(async (ids: string[], options: { preset?: string; deps?: boolean }) => {
-      const allIds = mergeIdsWithPresets(ids, options.preset);
-      if (allIds.length === 0) {
-        log.err("No services selected. Pass <ids...> or --preset.");
-        completeCliCommand(1);
-      }
-      try {
-        // Render the operator's selection (env / service-selection.json), NOT
-        // one scoped to allIds: that would apply a generation holding only
-        // the update targets and drop every other enabled service.
-        const rendered = await renderComposeForRepo({
-          domain: process.env.DOMAIN ?? "localhost",
-        });
-        for (const warning of rendered.selectionWarnings) log.warn(warning);
-        const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
-        log.ok(
-          `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
-        );
-      } catch (err) {
-        log.err(`prepare/update failed: ${(err as Error).message}`);
-        completeCliCommand(1);
-      }
-
-      let releasePinned = false;
-      if (touchesReleasePinnedServices(allIds)) {
-        // Retain existing release pins, or resolve a complete release once.
-        const overlay = await ensureReleaseOverlay();
-        releasePinned = overlay.status === "present" || overlay.status === "resolved";
-        if (overlay.status === "resolved") {
-          log.ok(`Atomic release selection ${overlay.release} → ${overlay.path}`);
-        } else if (overlay.status === "present") {
-          for (const line of releaseStatusLines(overlay.path)) log.dim(line);
-        } else if (overlay.status === "unpinned") {
-          log.err(unpinnedReleaseWarning(overlay.reason));
+    .option(
+      "--expected-configuration-revision <revision>",
+      "Require this applied configuration generation",
+    )
+    .action(
+      async (
+        ids: string[],
+        options: { preset?: string; deps?: boolean; expectedConfigurationRevision?: string },
+      ) => {
+        const allIds = mergeIdsWithPresets(ids, options.preset);
+        if (allIds.length === 0) {
+          log.err("No services selected. Pass <ids...> or --preset.");
           completeCliCommand(1);
-        } else if (overlay.status === "disabled") {
-          log.warn(
-            "Release pinning is disabled (OPENMAPX_RELEASE=local); this update uses the manifest image tags instead of a digest-pinned release.",
+        }
+
+        try {
+          await runCliServiceLifecycle({
+            action: "update",
+            serviceIds: allIds,
+            noDeps: options.deps === false,
+            expectedConfigurationRevisionId: options.expectedConfigurationRevision,
+          });
+        } catch (error) {
+          log.err(
+            cliControlContext()
+              ? "Service Update failed; inspect the original operation status."
+              : `prepare/update failed: ${(error as Error).message}`,
           );
+          completeCliCommand(error instanceof ServiceLifecycleCommandError ? error.exitCode : 1);
         }
-      }
-
-      const pullCode = await dockerComposeStream(["pull", ...allIds]);
-      if (pullCode !== 0) {
-        if (releasePinned) {
-          log.err("Could not pull the pinned release images; refusing to recreate services.");
-          completeCliCommand(pullCode);
-        }
-        log.warn("Some images could not be pulled (service may be locally built). Continuing.");
-      }
-
-      const code = await dockerComposeStream([
-        "up",
-        "-d",
-        "--force-recreate",
-        ...(options.deps === false ? ["--no-deps"] : []),
-        ...allIds,
-      ]);
-      completeCliCommand(code);
-    });
+        completeCliCommand(0);
+      },
+    );
 
   services
     .command("status [id]")

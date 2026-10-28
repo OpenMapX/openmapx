@@ -126,7 +126,7 @@ export const adminServiceCredentialManagedSchema = z.strictObject({
   error: z.string(),
 });
 export const adminServiceActionSchema = z.strictObject({
-  action: z.enum(["start", "stop", "restart"]),
+  action: z.enum(["start", "stop", "restart", "apply"]),
 });
 const build = z.strictObject({
   action: z.literal("build"),
@@ -137,8 +137,14 @@ const build = z.strictObject({
 });
 export const adminServicesBulkActionSchema = z.union([
   z.strictObject({
-    action: z.enum(["start", "stop", "restart", "update"]),
+    action: z.enum(["start", "stop", "restart"]),
     serviceIds: adminServiceIdListSchema.min(1),
+    continueOnError: z.boolean().optional(),
+  }),
+  z.strictObject({
+    action: z.literal("update"),
+    serviceIds: adminServiceIdListSchema.min(1),
+    noDeps: z.boolean().optional(),
     continueOnError: z.boolean().optional(),
   }),
   build.refine(

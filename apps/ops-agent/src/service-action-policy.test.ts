@@ -27,8 +27,9 @@ describe("shared service action decisions", () => {
           .success,
       ).toBe(true);
     expect(decideServiceAction(authority, snapshot, "update")).toMatchObject({
-      available: false,
-      reason: "unavailable",
+      available: true,
+      execution: "direct",
+      reason: null,
     });
   });
   it("retains logs after stop, requires proven ownership for cleanup and refuses unknown registry IDs", () => {

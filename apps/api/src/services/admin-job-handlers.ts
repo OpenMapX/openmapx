@@ -6,6 +6,12 @@ import { getAdminOperation, parseAdminOperationInput } from "./admin-operation-c
 import { assertKnownServiceIds, assertRegion } from "./admin-operation-input";
 import type { JobContext } from "./job-runner";
 import { OpsObservationPending } from "./ops-client";
+import {
+  applyCoordinatorService,
+  prepareServiceGeneration,
+  publishServiceGeneration,
+  updatePreparedService,
+} from "./service-preparation";
 
 type BackupOperation = "create" | "restore" | "delete";
 type BulkServiceAction = "start" | "stop" | "restart" | "update" | "build";
@@ -120,6 +126,7 @@ export async function handleServiceBulkJob(ctx: JobContext): Promise<Record<stri
     all?: boolean;
     region?: string;
     continueOnError?: boolean;
+    noDeps?: boolean;
   };
 
   const action = payload.action;
@@ -184,16 +191,56 @@ export async function handleServiceBulkJob(ctx: JobContext): Promise<Record<stri
       throw new Error(`Bulk action "${action}" requires one or more services`);
     }
     const completedServiceIds: string[] = [];
+    let revisionId =
+      action === "start"
+        ? (await prepareServiceGeneration(ctx, "bulk-start", { coordinatorMode: "ensure-running" }))
+            .revisionId
+        : undefined;
+    let ordinarySeedPublished = false;
+    if (action === "update") {
+      const { prepareServiceUpdateBatch } = await import("./service-update-batch");
+      revisionId = (await prepareServiceUpdateBatch(ctx)).initialRevisionId;
+    }
     const kind = `service.${action}` as
       | "service.start"
       | "service.stop"
       | "service.restart"
       | "service.update";
     for (const [index, serviceId] of serviceIds.entries()) {
-      await executeAdminJobOperation(ctx, { kind, serviceId }, `admin-job.service.${action}`, {
-        durableIdentity: serviceId,
-      });
+      if (kind === "service.start") {
+        await executeAdminJobOperation(
+          ctx,
+          { kind, serviceId, expectedConfigurationRevisionId: revisionId! },
+          `admin-job.service.${action}`,
+          { durableIdentity: serviceId },
+        );
+      } else if (kind === "service.update") {
+        if (serviceId !== "data-manager" && !ordinarySeedPublished) {
+          revisionId = (
+            await publishServiceGeneration(ctx, "bulk-update", {
+              coordinatorMode: "ensure-running",
+              expectedCurrentRevisionId: revisionId!,
+            })
+          ).revisionId;
+          ordinarySeedPublished = true;
+        }
+        const updated =
+          serviceId === "data-manager"
+            ? await applyCoordinatorService(ctx, index, revisionId!)
+            : await updatePreparedService(ctx, serviceId, revisionId!, payload.noDeps === true);
+        revisionId = updated.revisionId;
+      } else
+        await executeAdminJobOperation(ctx, { kind, serviceId }, `admin-job.service.${action}`, {
+          durableIdentity: serviceId,
+        });
       completedServiceIds.push(serviceId);
+      if (action === "update")
+        await ctx.checkpoint({
+          ...ctx.checkpointResult,
+          action,
+          completedServiceIds: [...completedServiceIds],
+          failedServiceIds: [],
+        });
       await ctx.setProgress(Math.round(((index + 1) / serviceIds.length) * 100));
     }
     return { action, completedServiceIds, failedServiceIds: [] };

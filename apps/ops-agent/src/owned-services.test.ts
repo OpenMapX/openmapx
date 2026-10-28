@@ -47,7 +47,11 @@ describe("owned service cleanup", () => {
       "service.build",
     ] as const)
       await expect(
-        host.claimer.claim({ kind, serviceId: "motis" }, "a".repeat(64), signal()),
+        host.claimer.claim(
+          { kind, serviceId: "motis", expectedConfigurationRevisionId: host.initial.revisionId },
+          "a".repeat(64),
+          signal(),
+        ),
       ).resolves.toBeNull();
   });
 

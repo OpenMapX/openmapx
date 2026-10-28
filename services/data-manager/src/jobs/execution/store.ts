@@ -4,6 +4,7 @@ import {
   type DataExecutionControlJournal,
   retainedControlParent,
   retainedDataDatabaseTimestamp,
+  type VerifiedPreparedGenerationAdmission,
 } from "@openmapx/core/build-artifacts";
 import {
   type DataExecutionIdentity,
@@ -73,6 +74,7 @@ export interface DataExecutionRecord {
   finishedAt: number | null;
 }
 export interface DataExecutionAdmissionOptions {
+  preparedGeneration?: VerifiedPreparedGenerationAdmission;
   operationKey: string;
   requestedDeadlineAt?: number;
   parent?: VerifiedParentExecution;
@@ -473,12 +475,32 @@ export function createPostgresDataExecutionStore(
         )
           throw new DataExecutionConflict("A fresh dated data execution root is required");
       }
-      return withDataAdmissionTransaction(sql, async (tx) => {
+      const admitTransaction = async <T>(
+        run: (tx: postgres.TransactionSql) => Promise<T>,
+      ): Promise<T> => {
+        if (!admission.preparedGeneration) return withDataAdmissionTransaction(sql, run);
+        if (input.kind !== "generation-hardlinks" || !options.configurationFence)
+          throw new DataConfigurationMaintenanceBusy();
+        const result = await sql.begin(async (tx) => {
+          const held =
+            await tx`SELECT pg_try_advisory_xact_lock(${DATA_ADMISSION_LOCK[0]},${DATA_ADMISSION_LOCK[1]}) AS held`;
+          if (held[0]?.held !== true) throw new DataConfigurationMaintenanceBusy();
+          await options.configurationFence!.assertPreparedGenerationAdmission(
+            tx,
+            admission.preparedGeneration!,
+            input,
+            admission,
+          );
+          return { value: await run(tx) };
+        });
+        return result.value;
+      };
+      return admitTransaction(async (tx) => {
         if (legacyKey) {
           const original = await findLegacyTransit(tx, legacyKey);
           if (original) return matchLegacy(original);
         }
-        await options.configurationFence?.assertAdmission(tx);
+        if (!admission.preparedGeneration) await options.configurationFence?.assertAdmission(tx);
         const retained = await find(tx, "operation_key", admission.operationKey);
         if (retained) return match(retained);
         if (options.controlJournal) {

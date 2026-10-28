@@ -3,12 +3,22 @@
 
 export type RunAdminServicesBulkActionBody =
   | {
-      action: "start" | "stop" | "restart" | "update";
+      action: "start" | "stop" | "restart";
       /**
        * @minItems 1
        * @items.minLength 1
        */
       serviceIds: string[];
+      continueOnError?: boolean;
+    }
+  | {
+      action: "update";
+      /**
+       * @minItems 1
+       * @items.minLength 1
+       */
+      serviceIds: string[];
+      noDeps?: boolean;
       continueOnError?: boolean;
     }
   | {

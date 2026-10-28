@@ -40,10 +40,12 @@ const ERROR_CLASSES = new Set<OpsErrorClass>([
   "timeout",
   "busy",
   "conflict",
+  "configuration_prerequisite",
   "not_found",
   "not_wired",
   "recovery_required",
   "host_update_required",
+  "control_upgrade_required",
   "runtime",
 ]);
 

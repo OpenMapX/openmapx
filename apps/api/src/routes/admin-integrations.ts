@@ -3,23 +3,18 @@ import { integrationEnvVarName } from "@openmapx/integration-framework";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
 import { integrationConfig } from "../db/schema";
+import { getAllIntegrations, getIntegration, resolveConfigWithSources } from "../integration-host";
 import {
-  getAllIntegrations,
-  getIntegration,
-  reloadIntegrations,
-  resolveConfigWithSources,
-} from "../integration-host";
+  createDirectAdminOpsKey,
+  DIRECT_OPS_IDEMPOTENCY_HEADER,
+  parseDirectOpsIdempotency,
+} from "../services/direct-ops-idempotency";
 import { getTimeline } from "../services/health-history";
 import {
   exportIntegrationConfigs,
   IntegrationImportValidationError,
   prepareIntegrationImport,
-  runIntegrationImport,
 } from "../services/integration-config-import";
-import {
-  persistIntegrationConfigPatch,
-  persistIntegrationImport,
-} from "../services/integration-config-store";
 import {
   computeCredentialStatus,
   getIntegrationDisplayName,
@@ -30,15 +25,11 @@ import {
   getCachedHealthStatus,
 } from "../services/integration-health";
 import { jobRunner } from "../services/job-runner";
-import { createDurableOpsKey } from "../services/ops-client";
 import { isSecretsConfigured } from "../services/secrets";
 import {
   applyTrustedConfiguration,
-  applyTrustedConfigurationSnapshot,
-  applyTrustedConfigurationWithEvidence,
   integrationSchemas,
 } from "../services/trusted-config-operations";
-import { isProvenConfigurationNonCommit } from "../services/trusted-config-outcome";
 import { writeAuditLog } from "../utils/audit-log";
 import { maskSecretConfigValues } from "../utils/mask-config.js";
 import { healthCheckSweepLimit } from "../utils/rate-limit";
@@ -50,27 +41,28 @@ async function persistAndApplyIntegrationConfig(options: {
   integrationId: string;
   config: Record<string, unknown>;
   actorId: string;
-  requestId: string;
-}): Promise<void> {
-  const saved = await persistIntegrationConfigPatch({
+  operationKey: string;
+}): Promise<import("../services/trusted-config-operations").CapturedIntegrationReloadResult> {
+  const applied = await applyTrustedConfiguration({
+    kind: "integrationConfig.apply",
     integrationId: options.integrationId,
-    config: adminIntegrationJsonObjectSchema.parse(options.config),
+    actorId: options.actorId,
+    operationKey: options.operationKey,
+    overlay: {
+      purpose: "integration-config",
+      coordinatorMode: "ensure-running",
+      changes: [
+        {
+          kind: "integration-config",
+          integrationId: options.integrationId,
+          set: adminIntegrationJsonObjectSchema.parse(options.config),
+          unset: [],
+        },
+      ],
+    },
   });
-  try {
-    await applyTrustedConfiguration({
-      kind: "integrationConfig.apply",
-      integrationId: options.integrationId,
-      operationKey: createDurableOpsKey(
-        "admin-route.integration-config.apply",
-        `${options.actorId}\0${options.requestId}`,
-      ),
-    });
-  } catch (error) {
-    if (!isProvenConfigurationNonCommit(error)) throw error;
-    // The same conditional row ownership protects imports from an older edit's recovery.
-    await saved.restore();
-    throw error;
-  }
+  if (!applied.integrationReload) throw Error("Captured integration reload unavailable");
+  return applied.integrationReload;
 }
 
 export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void> {
@@ -262,11 +254,14 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
       return reply.status(400).send({ error: "No valid fields to update" });
     }
 
-    await persistAndApplyIntegrationConfig({
+    const reloadResult = await persistAndApplyIntegrationConfig({
       integrationId: integration.id,
       config: updates,
       actorId: adminSession.user.id,
-      requestId: String(request.id),
+      operationKey: createDirectAdminOpsKey(
+        adminSession.user.id,
+        parseDirectOpsIdempotency(request.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+      ),
     });
 
     await writeAuditLog({
@@ -279,7 +274,6 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
     });
 
     // Reload to apply new config
-    const reloadResult = await reloadIntegrations();
     return { ok: true, updated: Object.keys(updates), ...reloadResult };
   });
 
@@ -290,11 +284,14 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
 
     const adminSession = getAdminSession(request);
 
-    await persistAndApplyIntegrationConfig({
+    const reloadResult = await persistAndApplyIntegrationConfig({
       integrationId: integration.id,
       config: { enabled: true },
       actorId: adminSession.user.id,
-      requestId: String(request.id),
+      operationKey: createDirectAdminOpsKey(
+        adminSession.user.id,
+        parseDirectOpsIdempotency(request.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+      ),
     });
 
     await writeAuditLog({
@@ -305,7 +302,6 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
       request,
     });
 
-    const reloadResult = await reloadIntegrations();
     return { ok: true, ...reloadResult };
   });
 
@@ -316,11 +312,14 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
 
     const adminSession = getAdminSession(request);
 
-    await persistAndApplyIntegrationConfig({
+    const reloadResult = await persistAndApplyIntegrationConfig({
       integrationId: integration.id,
       config: { enabled: false },
       actorId: adminSession.user.id,
-      requestId: String(request.id),
+      operationKey: createDirectAdminOpsKey(
+        adminSession.user.id,
+        parseDirectOpsIdempotency(request.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+      ),
     });
 
     await writeAuditLog({
@@ -331,7 +330,6 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
       request,
     });
 
-    const reloadResult = await reloadIntegrations();
     return { ok: true, ...reloadResult };
   });
 
@@ -413,23 +411,14 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
             : ["Invalid integration import"],
       });
     }
-    const operationKey = createDurableOpsKey(
-      "admin-route.integration-import",
-      `${adminSession.user.id}\0${request.id}`,
+    const operationKey = createDirectAdminOpsKey(
+      adminSession.user.id,
+      parseDirectOpsIdempotency(request.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
     );
-    const result = await runIntegrationImport(entries, schemas, {
-      persist: persistIntegrationImport,
-      apply: () => applyTrustedConfigurationWithEvidence({ kind: "stack.render", operationKey }),
-      compensate: (payload, expectedCurrentRevisionId) =>
-        applyTrustedConfigurationSnapshot({
-          payload,
-          expectedCurrentRevisionId,
-          operationKey: createDurableOpsKey(
-            "admin-route.integration-import.recovery",
-            operationKey,
-          ),
-        }),
-      reload: reloadIntegrations,
+    const result = await jobRunner.importImmediateIntegrationConfiguration({
+      body: { integrations: entries },
+      actorId: adminSession.user.id,
+      operationKey,
     });
     if (!result.ok) return reply.status(409).send(result);
     await writeAuditLog({

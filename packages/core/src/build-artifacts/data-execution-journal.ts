@@ -2,8 +2,8 @@
  * can mint a completion or repair an absent original terminal commitment. */
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { canonicalJson } from "../ops/canonical-json";
 import { type ExecutionRef, executionRefSchema } from "../ops/execution-ref";
-import { canonicalJson } from "../ops/fingerprint";
 import {
   type DataExecutionResult,
   type DataExecutionStatus,
@@ -59,6 +59,7 @@ import {
   restoreGenerationHardlinksLeaseForSettlement,
   type TargetLeaseAuthority,
   verifyRetainedArtifactTargetRootRelease,
+  verifyRetainedGenerationHardlinksSettlement,
 } from "./target-lease";
 
 export interface DataExecutionJournalDatabase {
@@ -1075,7 +1076,9 @@ export function createDataExecutionControlJournal(
     },
     async publishContainedTerminal(execution: ExecutionRef) {
       const { value, authority, proof } = await verifyStored(execution);
-      verifyRetainedArtifactTargetRootRelease(authority);
+      if (value.status.kind === "generation-hardlinks")
+        verifyRetainedGenerationHardlinksSettlement(authority);
+      else verifyRetainedArtifactTargetRootRelease(authority);
       publishDataControlTerminalWitness(authority, value.status, proof.terminalAt);
     },
     repairTerminal: async (execution: ExecutionRef) => {

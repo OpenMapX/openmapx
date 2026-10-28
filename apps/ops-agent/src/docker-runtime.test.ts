@@ -11,7 +11,8 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import type { OpsOperation } from "@openmapx/core/ops";
-import { describe, expect, it, vi } from "vitest";
+import { services } from "@openmapx/core/server";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { testExecution } from "./__fixtures__/execution";
 import {
   createDockerRuntime,
@@ -20,6 +21,48 @@ import {
   runContainedStreamingProcess,
 } from "./docker-runtime";
 import { dispatchOpsOperation } from "./runtime";
+
+const preparedRoots: string[] = [];
+afterEach(() => {
+  for (const root of preparedRoots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+async function preparedStack() {
+  const root = mkdtempSync(join(tmpdir(), "omx-docker-prepared-")),
+    infraDir = join(root, "infra/docker");
+  preparedRoots.push(root);
+  mkdirSync(infraDir, { recursive: true });
+  const loaded: services.LoadedService[] = ["motis", "postgis", "redis"].map((id) => ({
+    manifest: {
+      id,
+      name: id,
+      version: "1.0.0",
+      quality: "built-in",
+      container: { image: `example/${id}`, tag: "1" },
+    },
+    directory: join(root, "services", id),
+    enabled: true,
+    isBuiltIn: true,
+  }));
+  const generation = await services.commitConfigurationGeneration({
+    infraDir,
+    services: loaded,
+    input: {
+      domain: "fixture.invalid",
+      selectedRoots: loaded.map((s) => s.manifest.id),
+      serviceConfigs: [],
+      integrationConfigs: [],
+      serviceSecrets: [],
+    },
+  });
+  return {
+    revisionId: generation.revisionId,
+    stack: {
+      infraDir,
+      composePath: services.currentConfigurationFile(infraDir, services.GENERATED_COMPOSE_FILE),
+      composeReleasePath: join(infraDir, "docker-compose.release.yml"),
+    },
+  };
+}
 
 const ownedSnapshot = (serviceId = "redis") => ({
   serviceId,
@@ -819,23 +862,45 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
   );
 
   it.each([
-    { kind: "stack.start" },
-    { kind: "service.start", serviceId: "postgis" },
+    { kind: "stack.start", expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}` },
+    {
+      kind: "service.start",
+      serviceId: "postgis",
+      expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+    },
     { kind: "service.stop", serviceId: "motis" },
     { kind: "service.restart", serviceId: "postgis" },
-    { kind: "service.recreate", serviceId: "postgis" },
-    { kind: "service.recreateIsolated", serviceId: "postgis" },
+    {
+      kind: "service.recreate",
+      serviceId: "postgis",
+      expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+    },
+    {
+      kind: "service.recreateIsolated",
+      serviceId: "postgis",
+      expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+    },
     { kind: "service.remove", serviceId: "postgis" },
   ] satisfies OpsOperation[])("allows the built-in shutdown grace for $kind", async (operation) => {
+    const prepared = await preparedStack();
+    const bound: OpsOperation =
+      operation.kind === "stack.start"
+        ? { kind: operation.kind, expectedConfigurationRevisionId: prepared.revisionId }
+        : operation.kind === "service.start" ||
+            operation.kind === "service.recreate" ||
+            operation.kind === "service.recreateIsolated"
+          ? {
+              kind: operation.kind,
+              serviceId: operation.serviceId,
+              expectedConfigurationRevisionId: prepared.revisionId,
+            }
+          : operation;
     const runtime = createDockerRuntime({
-      stack: {
-        infraDir: "/trusted",
-        composePath: "/trusted/compose.yml",
-        composeReleasePath: "/trusted/release.yml",
-      },
+      stack: prepared.stack,
       fileExists: () => false,
       ownedServices,
-      execFile: async (_file, _args, options) => {
+      execFile: async (file, args, options) => {
+        if (args.includes("config")) return runContainedProcess(file, args, options);
         expect(options.timeout).toBe(600_000);
         expect(options.signal.aborted).toBe(false);
         return { stdout: "", stderr: "" };
@@ -844,7 +909,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     await expect(
       dispatchOpsOperation(
         runtime,
-        operation,
+        bound,
         context("serviceId" in operation ? operation.serviceId : "redis"),
       ),
     ).resolves.toEqual({
@@ -856,7 +921,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     [{ kind: "docker.status" }, 5_000],
     [{ kind: "stack.status" }, 120_000],
     [{ kind: "service.logs", serviceId: "postgis", tail: 10 }, 120_000],
-    [{ kind: "service.pull", serviceId: "postgis" }, 600_000],
+    [{ kind: "service.restart", serviceId: "postgis" }, 600_000],
   ] satisfies [OpsOperation, number][])(
     "preserves the execution budget for %j",
     async (operation, timeout) => {
@@ -882,19 +947,19 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
   );
 
   it("terminates aggregate recreation work exactly at the whole-command deadline", async () => {
+    const prepared = await preparedStack(),
+      entered = Promise.withResolvers<void>();
     vi.useFakeTimers();
     const completed: number[] = [];
     let terminated = false;
     const runtime = createDockerRuntime({
-      stack: {
-        infraDir: "/trusted",
-        composePath: "/trusted/compose.yml",
-        composeReleasePath: "/trusted/release.yml",
-      },
+      stack: prepared.stack,
       fileExists: () => false,
       ownedServices,
-      execFile: (_file, _args, options) =>
-        new Promise((resolve, reject) => {
+      execFile: async (file, args, options) => {
+        if (args.includes("config")) return runContainedProcess(file, args, options);
+        return new Promise((resolve, reject) => {
+          entered.resolve();
           const deadline = setTimeout(() => {
             terminated = true;
             for (const timer of steps) clearTimeout(timer);
@@ -909,15 +974,21 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
               }
             }, delay),
           );
-        }),
+        });
+      },
     });
     try {
       const result = dispatchOpsOperation(
         runtime,
-        { kind: "service.recreate", serviceId: "postgis" },
+        {
+          kind: "service.recreate",
+          serviceId: "postgis",
+          expectedConfigurationRevisionId: prepared.revisionId,
+        },
         context(),
       );
       const rejected = expect(result).rejects.toThrow("Contained process failed");
+      await entered.promise;
       await vi.advanceTimersByTimeAsync(599_999);
       expect(completed).toEqual([300_000]);
       expect(terminated).toBe(false);
@@ -932,42 +1003,45 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
   });
 
   it("maps lifecycle effects to fixed Compose argv without accepting caller argv or paths", async () => {
+    const prepared = await preparedStack();
+    writeFileSync(prepared.stack.composeReleasePath, "services: {}\n");
+    writeFileSync(join(prepared.stack.infraDir, ".env"), "");
     const calls: Array<{ file: string; args: readonly string[] }> = [];
     const runtime = createDockerRuntime({
-      stack: {
-        infraDir: "/stack",
-        composePath: "/stack/.trusted-config-current/docker-compose.generated.yml",
-        composeReleasePath: "/stack/docker-compose.release.yml",
-      },
+      stack: prepared.stack,
       fileExists: () => true,
-      execFile: async (file, args) => {
+      execFile: async (file, args, options) => {
         calls.push({ file, args });
+        if (args.includes("config")) return runContainedProcess(file, args, options);
         return { stdout: "ok\n", stderr: "" };
       },
     });
 
     await dispatchOpsOperation(
       runtime,
-      { kind: "service.recreate", serviceId: "motis" },
+      {
+        kind: "service.recreate",
+        serviceId: "motis",
+        expectedConfigurationRevisionId: prepared.revisionId,
+      },
       context(),
     );
     await dispatchOpsOperation(
       runtime,
-      { kind: "service.recreateIsolated", serviceId: "motis" },
+      {
+        kind: "service.recreateIsolated",
+        serviceId: "motis",
+        expectedConfigurationRevisionId: prepared.revisionId,
+      },
       context(),
     );
-    const stack = [
-      "compose",
-      "--env-file",
-      "/stack/.env",
-      "-f",
-      "/stack/.trusted-config-current/docker-compose.generated.yml",
-      "-f",
-      "/stack/docker-compose.release.yml",
-    ];
-    expect(calls).toEqual([
+    const stack = services.stackComposeArgs(prepared.stack, () => true);
+    expect(calls.filter((call) => call.args.includes("up"))).toEqual([
       { file: "docker", args: [...stack, "up", "-d", "--force-recreate", "motis"] },
       { file: "docker", args: [...stack, "up", "-d", "--force-recreate", "--no-deps", "motis"] },
+    ]);
+    expect(calls.filter((call) => call.args.includes("config"))).toEqual([
+      { file: "docker", args: [...stack, "config", "--format", "json"] },
     ]);
   });
 
@@ -1529,7 +1603,13 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     await expect(
       dispatchOpsOperation(
         runtime,
-        { expectedCurrentRevisionId: null, kind: "stack.render", revisionId: "revision_1" },
+        {
+          expectedCurrentRevisionId: null,
+          expectedSourceRevision: "00000000-0000-4000-8000-000000000000",
+          coordinatorMode: "require-running",
+          kind: "stack.render",
+          revisionId: `cfg1_${"a".repeat(43)}`,
+        },
         context(),
       ),
     ).rejects.toMatchObject({
@@ -1539,7 +1619,15 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       dispatchOpsOperation(runtime, { kind: "stack.stop" }, context()),
     ).rejects.toMatchObject({ name: "OpsNotWiredError" });
     await expect(
-      dispatchOpsOperation(runtime, { kind: "service.update", serviceId: "app-api" }, context()),
+      dispatchOpsOperation(
+        runtime,
+        {
+          kind: "service.update",
+          serviceId: "app-api",
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+        },
+        context(),
+      ),
     ).rejects.toMatchObject({ name: "OpsNotWiredError" });
   });
 
@@ -1963,7 +2051,7 @@ it("streams the actual default fixed Docker human output without the JSON collec
   });
   const completion = dispatchOpsOperation(
     runtime,
-    { kind: "service.pull", serviceId: "redis" },
+    { kind: "service.restart", serviceId: "redis" },
     {
       ...context(),
       emitLog: (_s, line) => {

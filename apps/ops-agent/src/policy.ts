@@ -5,13 +5,22 @@ import {
   type OpsOperationKind,
   type OpsResourcePolicy,
 } from "@openmapx/core/ops";
-import type { OwnedServiceResolver } from "./owned-services";
+import {
+  inspectOwnedMaintenanceRecreateAdmission,
+  isOwnedMaintenanceRecreateAdmission,
+} from "./configuration-maintenance-store";
+import {
+  attachCoordinatorPullOwnershipCapture,
+  captureCoordinatorPullOwnership,
+  type OwnedServiceResolver,
+} from "./owned-services";
 import type { OpsTrustedClaim } from "./runtime";
 import { decideServiceAction } from "./service-action-policy";
 
 export interface OpsClaimOwner {
   role: "api" | "data-manager";
   operationKey: string;
+  maintenanceStep?: unknown;
 }
 
 export interface OpsResourceClaimer {
@@ -72,7 +81,12 @@ export function serviceActionForOperation(kind: OpsOperationKind): ServiceAction
 export function createRegistryResourcePolicy(options: {
   serviceIds: Iterable<string>;
   ownedServices?: OwnedServiceResolver;
-  serviceMetadata?: readonly { serviceId: string; isBuiltIn: boolean; buildable: boolean }[];
+  serviceMetadata?: readonly {
+    serviceId: string;
+    isBuiltIn: boolean;
+    buildable: boolean;
+    creationDependencies?: readonly string[];
+  }[];
   enabledServiceIds?: () => ReadonlySet<string>;
   integrationIds: Iterable<string>;
   trustedData: TrustedOpsDataSource;
@@ -247,11 +261,17 @@ export function createPolicyResourceClaimer(policy: OpsResourcePolicy): OpsResou
 export function createRegistryResourceClaimer(options: {
   serviceIds: Iterable<string>;
   ownedServices?: OwnedServiceResolver;
-  serviceMetadata?: readonly { serviceId: string; isBuiltIn: boolean; buildable: boolean }[];
+  serviceMetadata?: readonly {
+    serviceId: string;
+    isBuiltIn: boolean;
+    buildable: boolean;
+    creationDependencies?: readonly string[];
+  }[];
   enabledServiceIds?: () => ReadonlySet<string>;
   integrationIds: Iterable<string>;
   trustedData: TrustedOpsDataSource;
   registryRevision?: string;
+  configurationAuthorityRevision?: string;
   resourceAuthority?: Pick<
     OpsResourcePolicy,
     | "allowBackup"
@@ -269,25 +289,87 @@ export function createRegistryResourceClaimer(options: {
     claim: async (operation, fingerprint, signal, owner) => {
       if (signal.aborted) throw signal.reason;
       if (!requiresTrustedSource(operation)) {
+        if (
+          operation.kind === "stack.start" &&
+          (options.enabledServiceIds?.() ?? registeredServiceIds).has("data-manager")
+        )
+          return null;
         const action = serviceActionForOperation(operation.kind);
         if ("serviceId" in operation && action && options.ownedServices) {
-          const snapshot = (await options.ownedServices.inspectOwnedServices(signal)).find(
-            (s) => s.serviceId === operation.serviceId,
-          );
+          const snapshots =
+            operation.serviceId === "data-manager" &&
+            isOwnedMaintenanceRecreateAdmission(
+              owner?.maintenanceStep,
+              operation,
+              owner?.operationKey ?? "",
+            )
+              ? await inspectOwnedMaintenanceRecreateAdmission(
+                  owner?.maintenanceStep,
+                  operation,
+                  owner?.operationKey ?? "",
+                  signal,
+                )
+              : await options.ownedServices.inspectOwnedServices(signal);
+          const snapshot = snapshots.find((s) => s.serviceId === operation.serviceId);
           const service = options.serviceMetadata?.find(
             (s) => s.serviceId === operation.serviceId,
           ) ?? { serviceId: operation.serviceId, isBuiltIn: true, buildable: true };
+          const decision = decideServiceAction(
+            {
+              revisionId: options.registryRevision ?? "registry-v1",
+              services: [service],
+              enabledServiceIds: options.enabledServiceIds?.() ?? registeredServiceIds,
+            },
+            snapshot,
+            action,
+          );
+          let coordinatorCapture:
+            | Awaited<ReturnType<typeof captureCoordinatorPullOwnership>>
+            | undefined;
           if (
-            !registeredServiceIds.has(operation.serviceId) ||
-            !decideServiceAction(
+            operation.kind === "service.pull" &&
+            operation.serviceId === "data-manager" &&
+            operation.candidateId
+          ) {
+            if (!options.configurationAuthorityRevision || !options.registryRevision) return null;
+            try {
+              coordinatorCapture = await captureCoordinatorPullOwnership(
+                options.ownedServices,
+                operation,
+                fingerprint,
+                {
+                  configurationAuthorityRevision: options.configurationAuthorityRevision,
+                  policyRevision: options.registryRevision,
+                },
+                signal,
+              );
+            } catch {
+              return null;
+            }
+          }
+          // Only the literal opaque capture admits the existing internal Update
+          // submission to its mandatory first-server MAC/parent join. Bare pull
+          // remains unavailable and cannot obtain this private claim association.
+          const checkedCoordinatorUpdate =
+            coordinatorCapture !== undefined &&
+            decideServiceAction(
               {
                 revisionId: options.registryRevision ?? "registry-v1",
                 services: [service],
                 enabledServiceIds: options.enabledServiceIds?.() ?? registeredServiceIds,
               },
               snapshot,
-              action,
-            ).available
+              "update",
+            ).workflow === "coordinator-update";
+          if (
+            !registeredServiceIds.has(operation.serviceId) ||
+            (!decision.available && !checkedCoordinatorUpdate) ||
+            (decision.execution !== "direct" &&
+              !isOwnedMaintenanceRecreateAdmission(
+                owner?.maintenanceStep,
+                operation,
+                owner?.operationKey ?? "",
+              ))
           )
             return null;
           if (
@@ -299,10 +381,12 @@ export function createRegistryResourceClaimer(options: {
             return null;
           signal.throwIfAborted();
           // The admission is bound to the immutable ID and full verified provenance.
-          return immutableClaim(operation, fingerprint, "registry", {
+          const claim = immutableClaim(operation, fingerprint, "registry", {
             revisionId: options.registryRevision ?? "registry-v1",
             values: snapshot ? { ownedService: JSON.stringify(snapshot) } : {},
           });
+          if (coordinatorCapture) attachCoordinatorPullOwnershipCapture(claim, coordinatorCapture);
+          return claim;
         }
         return (await authorizeOpsResources(operation, policy))
           ? immutableClaim(
@@ -359,9 +443,12 @@ export function createProductionRegistryResourceClaimer<
 >(options: {
   services: Iterable<Service>;
   ownedServices?: OwnedServiceResolver;
-  serviceMetadata?: (
-    services: readonly Service[],
-  ) => readonly { serviceId: string; isBuiltIn: boolean; buildable: boolean }[];
+  serviceMetadata?: (services: readonly Service[]) => readonly {
+    serviceId: string;
+    isBuiltIn: boolean;
+    buildable: boolean;
+    creationDependencies?: readonly string[];
+  }[];
   integrationIds: Iterable<string>;
   trustedData: TrustedOpsDataSource;
   resourceAuthority?: Pick<
@@ -377,6 +464,7 @@ export function createProductionRegistryResourceClaimer<
   enabledServiceIds?: (services: readonly Service[]) => ReadonlySet<string>;
   loadAuthority?: () => Promise<{
     revisionId: string;
+    configurationAuthorityRevision?: string;
     services: readonly Service[];
     integrationIds: readonly string[];
   }>;
@@ -447,6 +535,7 @@ export function createProductionRegistryResourceClaimer<
         integrationIds: authority.integrationIds,
         trustedData,
         registryRevision: authority.revisionId,
+        configurationAuthorityRevision: authority.configurationAuthorityRevision,
         resourceAuthority: options.resourceAuthority,
       }).claim(operation, fingerprint, signal, owner);
     },

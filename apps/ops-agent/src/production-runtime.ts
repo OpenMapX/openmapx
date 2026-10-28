@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, lstatSync } from "node:fs";
 import { join } from "node:path";
 import { type OpsOperation, SERVICE_ACTIONS, type ServiceActionDecision } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
@@ -9,10 +9,18 @@ import {
   createDefaultReleaseEffects,
   type FixedCliRunner,
 } from "./administrative-runtime";
+import { isTerminalHandoff, readAgentHandoff } from "./agent-handoff";
 import {
   type CommunityRepositoryStore,
   installCommunityRepositoryRuntime,
 } from "./community-repositories";
+import type { ConfigurationCandidateSource } from "./configuration-candidate-source";
+import { installConfigurationHardlinksRuntime } from "./configuration-hardlinks-runtime";
+import { registerConfigurationMaintenanceSource } from "./configuration-maintenance-runtime";
+import {
+  assertOwnedMaintenanceRecreateRuntime,
+  assertStagedCoordinatorReleaseWrite,
+} from "./configuration-maintenance-store";
 import {
   createDockerRuntime,
   type DockerRuntimeOptions,
@@ -21,8 +29,18 @@ import {
 import { ServiceLifecycleExclusion } from "./lifecycle-exclusion";
 import { createOwnedServiceResolver, type OwnedServiceResolver } from "./owned-services";
 import { serviceActionForOperation } from "./policy";
-import type { OpsExecutionContext, OpsRuntime } from "./runtime";
+import {
+  type OpsExecutionContext,
+  OpsExecutionFailure,
+  OpsNotWiredError,
+  type OpsRuntime,
+} from "./runtime";
 import { decideServiceAction, type ServiceAuthority } from "./service-action-policy";
+import { installServiceLifecycleRuntime } from "./service-lifecycle-runtime";
+import {
+  assertAdmittedCoordinatorPullRuntime,
+  installServicePullRuntime,
+} from "./service-pull-runtime";
 import { resolveBootstrapEnabledServiceIds } from "./startup-authority";
 import { createTransitousLockRuntime } from "./transitous-lock-runtime";
 import {
@@ -38,9 +56,80 @@ export interface ProductionOpsRuntimeOptions {
   communityRepositories: CommunityRepositoryStore;
   docker?: Pick<DockerRuntimeOptions, "execFile" | "followLogs" | "fileExists">;
   runFixedCli?: FixedCliRunner;
+  candidateSource?: ConfigurationCandidateSource;
 }
 const resolvers = new WeakMap<OpsRuntime, OwnedServiceResolver>();
 const releaseAdapters = new WeakMap<OpsRuntime, AdministrativeReleaseEffects>();
+
+/** The legacy engine remains an internal building block for08.3. Production
+ * never runs its mutation/recovery branches without that guarded installer. */
+function installReleaseCapabilityBoundary(
+  runtime: OpsRuntime,
+  rootDir: string,
+  infraDir: string,
+  legacy: AdministrativeReleaseEffects,
+): AdministrativeReleaseEffects {
+  const directory = join(infraDir, ".ops-agent-releases");
+  const withSource = async <T>(signal: AbortSignal, action: () => Promise<T>): Promise<T> => {
+    try {
+      return await services.withConfigurationGenerationWriter(
+        infraDir,
+        async () => {
+          const lock = await services.acquireReleaseStoreLock(directory);
+          try {
+            await assertStagedCoordinatorReleaseWrite(runtime, signal);
+          } finally {
+            lock.release();
+          }
+          return action();
+        },
+        signal,
+      );
+    } catch (error) {
+      if (
+        error instanceof services.ConfigurationGenerationError &&
+        (error.cause instanceof OpsExecutionFailure ||
+          error.cause instanceof services.ReleaseChannelDisabledError)
+      )
+        throw error.cause;
+      throw error;
+    }
+  };
+  const unavailable = async (signal: AbortSignal): Promise<never> => {
+    // The successful observation grants no continuation authority. No legacy
+    // transaction, helper launch, backup or image pull follows this check.
+    await withSource(signal, async () => undefined);
+    throw new OpsNotWiredError();
+  };
+  return {
+    ...legacy,
+    initialize: async () => {
+      // Inspection bypasses the legacy cached initializer, which may replay
+      // fixed CLI under the release lock or mutate handoff evidence.
+      await legacy.inspect();
+      let transaction = false;
+      try {
+        lstatSync(join(directory, "transaction.json"));
+        transaction = true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      const handoff = readAgentHandoff(rootDir);
+      if (transaction || (handoff && !isTerminalHandoff(handoff.phase)))
+        throw new OpsExecutionFailure("recovery_required", {});
+    },
+    resolve: (context) => withSource(context.signal, () => legacy.resolve(context)),
+    inspectSystem: async (context) => ({
+      ...(await legacy.inspectSystem(context)),
+      // Docker/Compose readiness alone cannot advertise the absent guarded
+      // release installer as runnable maintenance.
+      maintenanceReady: false,
+    }),
+    pull: (_releaseId, context) => unavailable(context.signal),
+    apply: (_releaseId, _serviceIds, context) => unavailable(context.signal),
+    updateAgent: (_request, context) => unavailable(context.signal),
+  };
+}
 export function productionReleaseEffects(runtime: OpsRuntime): AdministrativeReleaseEffects {
   const effects = releaseAdapters.get(runtime);
   if (!effects) throw new Error("Production release adapter missing");
@@ -68,6 +157,9 @@ export function serviceActionAuthority(
       serviceId: service.manifest.id,
       isBuiltIn: service.isBuiltIn,
       buildable: !!service.manifest.buildCommand,
+      creationDependencies: services.serviceCreationDependencyIds(authority.services, [
+        service.manifest.id,
+      ]),
     })),
   };
 }
@@ -97,10 +189,37 @@ export async function createProductionOpsRuntime(
     loadAuthority: options.loadAuthority,
     infraDir: options.stack.infraDir,
     ownedServices: owned,
+    candidateSource: options.candidateSource,
   });
   installCommunityRepositoryRuntime(runtime, options.communityRepositories, owned, lifecycle);
+  installConfigurationHardlinksRuntime(runtime, { infraDir: options.stack.infraDir });
+  registerConfigurationMaintenanceSource(runtime, {
+    infraDir: options.stack.infraDir,
+    candidateSource: options.candidateSource,
+    stack: options.stack,
+    execFile: options.docker?.execFile ?? runContainedProcess,
+    loadAuthority: options.loadAuthority,
+    ownedServices: owned,
+  });
   const runFixedCli = options.runFixedCli ?? createDefaultFixedCli(options.rootDir);
-  const releaseEffects = createDefaultReleaseEffects(options.rootDir, runFixedCli);
+  installServiceLifecycleRuntime(runtime, {
+    rootDir: options.rootDir,
+    infraDir: options.stack.infraDir,
+    runFixedCli,
+  });
+  installServicePullRuntime(runtime, {
+    infraDir: options.stack.infraDir,
+    candidateSource: options.candidateSource,
+    loadAuthority: options.loadAuthority,
+    ownedServices: owned,
+    execFile: options.docker?.execFile,
+  });
+  const releaseEffects = installReleaseCapabilityBoundary(
+    runtime,
+    options.rootDir,
+    options.stack.infraDir,
+    createDefaultReleaseEffects(options.rootDir, runFixedCli),
+  );
   createTransitousLockRuntime(runtime, { rootDir: options.rootDir });
   createAdministrativeRuntime(runtime, {
     rootDir: options.rootDir,
@@ -117,6 +236,12 @@ export async function createProductionOpsRuntime(
       }));
     },
   });
+  // system.update's legacy handler performs backup/pull before apply. Refuse
+  // that entire branch through the same actual source boundary before effects.
+  runtime["system.update"] = async (_operation, context) => {
+    await releaseEffects.apply(_operation.releaseId, ["app-api"], context);
+    throw new OpsNotWiredError();
+  };
   runtime["services.inspect"] = async (_operation, context) => {
     const authority = serviceActionAuthority(await options.loadAuthority(), options.stack.infraDir);
     const snapshots = await owned.inspectOwnedServices(context.signal);
@@ -160,7 +285,13 @@ export async function createProductionOpsRuntime(
         await options.loadAuthority(),
         options.stack.infraDir,
       );
-      const snapshot = (await owned.inspectOwnedServices(context.signal)).find(
+      const frozen =
+        operation.serviceId === "data-manager" &&
+        (operation.kind === "service.recreate" || operation.kind === "service.recreateIsolated") &&
+        operation.maintenanceId
+          ? await assertOwnedMaintenanceRecreateRuntime(runtime, operation, context)
+          : undefined;
+      const snapshot = (frozen ?? (await owned.inspectOwnedServices(context.signal))).find(
         (s) => s.serviceId === operation.serviceId,
       );
       const encoded = context.claim.capability.values.ownedService;
@@ -179,8 +310,18 @@ export async function createProductionOpsRuntime(
         snapshot,
         action,
       );
-      if (!decision.available || decision.execution !== "direct")
-        throw new Error("Service action denied");
+      if (
+        decision.available &&
+        decision.execution === "workflow" &&
+        operation.serviceId === "data-manager" &&
+        (operation.kind === "service.recreate" || operation.kind === "service.recreateIsolated")
+      )
+        await assertOwnedMaintenanceRecreateRuntime(runtime, operation, context);
+      else if (!decision.available || decision.execution !== "direct") {
+        if (operation.kind === "service.pull" && operation.serviceId === "data-manager")
+          await assertAdmittedCoordinatorPullRuntime(runtime, operation, context);
+        else throw new Error("Service action denied");
+      }
       return handler(operation, context);
     };
     const guarded = async (
@@ -193,6 +334,7 @@ export async function createProductionOpsRuntime(
           "service.restart",
           "service.recreate",
           "service.recreateIsolated",
+          "service.update",
         ].includes(kind)
       )
         return execute(operation, context);
@@ -200,11 +342,11 @@ export async function createProductionOpsRuntime(
       // dependencies. Conservatively exclude every registered service for those
       // commands; this local boundary does not acquire or replace root authority.
       const ids =
-        kind === "service.start" || kind === "service.recreate"
+        kind === "service.start" || kind === "service.recreate" || kind === "service.update"
           ? (await options.loadAuthority()).services.map((service) => service.manifest.id).sort()
           : [operation.serviceId];
       return lifecycle.creating(ids, context.signal, async (begin) => {
-        if (kind === "service.start" || kind === "service.recreate") {
+        if (kind === "service.start" || kind === "service.recreate" || kind === "service.update") {
           const current = (await options.loadAuthority()).services
             .map((service) => service.manifest.id)
             .sort();

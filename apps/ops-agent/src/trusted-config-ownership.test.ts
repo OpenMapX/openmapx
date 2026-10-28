@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,14 +9,20 @@ import {
   provisionControlInstallation,
 } from "@openmapx/core/build-artifacts";
 import {
-  createControlRootOperationKey,
   type OpsOperation,
   opsOperationFingerprint,
   opsOperationSchema,
   sealTrustedConfigurationSnapshot,
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  issueApiJobChildAssertion,
+  prepareApiJobChildAttempt,
+  prepareApiJobRoot,
+} from "../../api/src/services/admin-job-parent";
+import type { JobContext } from "../../api/src/services/job-runner";
+import { configurationSource } from "./__fixtures__/configuration-source";
 import { testExecution } from "./__fixtures__/execution";
 import type { PersistedOpsJob } from "./journal";
 import { createRegistryResourceClaimer } from "./policy";
@@ -30,6 +36,7 @@ import { createFileTrustedOpsDataSource } from "./trusted-config-source";
 
 const roots: string[] = [];
 afterEach(() => {
+  vi.unstubAllEnvs();
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 async function bounded<T>(promise: Promise<T>): Promise<T> {
@@ -81,6 +88,7 @@ function fixture() {
       ...hooks,
     });
     const operation = {
+      ...(await configurationSource(runtime, infraDir)),
       expectedCurrentRevisionId: coreServices.currentConfigurationGeneration(infraDir),
       kind: "stack.render",
       revisionId: revision(letter),
@@ -147,6 +155,7 @@ describe("trusted configuration ownership and outcomes", () => {
           env: {},
         });
         const operation = {
+          ...(await configurationSource(runtime, f.infraDir)),
           kind,
           revisionId: revision("c"),
           expectedCurrentRevisionId: capturedRevision,
@@ -313,6 +322,7 @@ describe("trusted configuration ownership and outcomes", () => {
       env: {},
     });
     const claimed = {
+      ...(await configurationSource(runtime, f.infraDir)),
       kind: "stack.render" as const,
       revisionId: revision("a"),
       expectedCurrentRevisionId: null,
@@ -344,6 +354,8 @@ describe("trusted configuration ownership and outcomes", () => {
   });
   it("binds strict expected-current metadata into operation identity", () => {
     const base = {
+      expectedSourceRevision: "00000000-0000-4000-8000-000000000000",
+      coordinatorMode: "require-running" as const,
       expectedCurrentRevisionId: null,
       kind: "stack.render" as const,
       revisionId: revision("a"),
@@ -374,11 +386,29 @@ describe("authenticated conditional configuration admission", () => {
         role: "ops-agent",
         serviceIds: ["alpha"],
       });
-      const requestedDeadlineAt = Date.now() + 60_000;
-      const operationKey = createControlRootOperationKey({
-        notAfter: requestedDeadlineAt,
-        nonce: randomBytes(16),
+      // Portable API-producer fixture. This is not a PostgreSQL ownership proof;
+      // the current PG suite covers the actual durable job/checkpoint boundary.
+      const parentContext: JobContext = {
+        jobId: randomUUID(),
+        execution: { owner: randomUUID(), version: 1 },
+        payload: {},
+        signal: new AbortController().signal,
+        log: async () => {},
+        setProgress: async () => {},
+        checkpoint: async (value) => {
+          parentContext.checkpointResult = value;
+        },
+      };
+      const prepared = prepareApiJobRoot(parentContext, "stack.render", "ownership.render"),
+        { operationKey, requestedDeadlineAt } = prepared;
+      const sourceRuntime = createUnavailableRuntime();
+      installTrustedConfigurationRuntime(sourceRuntime, {
+        infraDir: f.infraDir,
+        services: f.services,
+        integrationSchemas: new Map(),
+        env: {},
       });
+      const source = await configurationSource(sourceRuntime, f.infraDir);
       const queue = join(f.root, "queue");
       mkdirSync(queue, { mode: 0o700 });
       mkdirSync(join(queue, ".claimed"), { mode: 0o700 });
@@ -388,6 +418,7 @@ describe("authenticated conditional configuration admission", () => {
         nonce: "nonce_conditional1234567",
         operationKey,
         operationForRevision: (revisionId) => ({
+          ...source,
           kind: "stack.render",
           revisionId,
           expectedCurrentRevisionId: null,
@@ -399,6 +430,17 @@ describe("authenticated conditional configuration admission", () => {
           serviceSecrets: [],
         },
       });
+      const tokenPath = join(f.root, "api-token");
+      writeFileSync(tokenPath, token, { mode: 0o600 });
+      vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenPath);
+      const attempt = prepareApiJobChildAttempt(
+        parentContext,
+        sealed.operation,
+        operationKey,
+        prepared,
+      )!;
+      await parentContext.checkpoint({ _parentExecution: prepared.parent, attempt });
+      const parentAssertion = await issueApiJobChildAssertion(attempt);
       writeFileSync(join(queue, `${sealed.revisionId}.json`), sealed.bytes, { mode: 0o600 });
       const fileSource = createFileTrustedOpsDataSource({
         directory: queue,
@@ -496,11 +538,11 @@ describe("authenticated conditional configuration admission", () => {
         runtime,
       });
       let counter = 0;
-      const submit = (operation: OpsOperation, key = operationKey) =>
+      const submit = (operation: OpsOperation, key = operationKey, assertion = parentAssertion) =>
         app.inject({
           method: "POST",
           url: "/v1/operations",
-          headers: { authorization: `Bearer ${token}` },
+          headers: { authorization: `Bearer ${token}`, "x-openmapx-parent-execution": assertion },
           payload: {
             version: 2,
             execution: { requestedDeadlineAt },
@@ -611,10 +653,25 @@ describe("authenticated conditional configuration admission", () => {
         expect(replay.json().result).toMatchObject({ operationId: id, state: "succeeded" });
         expect(executions).toBe(1);
         expect(f.label()).toBe("b");
-        const changed = await submit({
+        const changedBody = {
           ...sealed.operation,
           expectedCurrentRevisionId: `cfg1_${"b".repeat(43)}`,
-        } as OpsOperation);
+        } as OpsOperation;
+        const changedAttempt = prepareApiJobChildAttempt(
+          parentContext,
+          changedBody,
+          operationKey,
+          prepared,
+        )!;
+        await parentContext.checkpoint({
+          _parentExecution: prepared.parent,
+          attempt: changedAttempt,
+        });
+        const changed = await submit(
+          changedBody,
+          operationKey,
+          await issueApiJobChildAssertion(changedAttempt),
+        );
         expect(changed.statusCode).toBe(409);
       } finally {
         returnClaim.resolve();

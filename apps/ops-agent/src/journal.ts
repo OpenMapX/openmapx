@@ -1,9 +1,13 @@
-import { randomBytes } from "node:crypto";
-import { constants } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { constants, realpathSync } from "node:fs";
 import { mkdir, open, opendir, rename, unlink } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { type ControlAdoption, controlAdoptionSchema } from "@openmapx/core/build-artifacts";
 import {
+  canonicalJson,
+  type HistoricalServicePullOperation,
+  historicalServicePullOperationSchema,
+  historicalServicePullResultSchema,
   OPS_KIND_POLICIES,
   OPS_PUBLIC_ERROR_MESSAGES,
   type OpsErrorClass,
@@ -19,6 +23,7 @@ import {
   parseBoundedOpsResult,
   processDiagnosticsSchema,
   type RetainedExecutionAdmission,
+  validateRetainedConfigurationMaintenanceRecoveryControl,
   validateRetainedExecutionAdmission,
 } from "@openmapx/core/ops";
 
@@ -71,7 +76,34 @@ export interface PersistedOpsJob {
 
 export interface OpsJobJournal {
   records(): readonly PersistedOpsJob[];
+  /** Historical pulls are an immutable observation view, never worker input. */
+  historicalPullRecords?(): readonly HistoricalPullJob[];
   replace(records: readonly PersistedOpsJob[]): Promise<void>;
+}
+const productionJournalIndexes = new WeakMap<
+  OpsJobJournal,
+  {
+    path: string;
+    read(): readonly PersistedOpsJob[];
+  }
+>();
+/** A bounded locator view of this actual journal, never source authority. */
+export function readProductionCoordinatorJournalIndex(journal: OpsJobJournal, dataRoot: string) {
+  const owned = productionJournalIndexes.get(journal);
+  if (!owned || owned.path !== join(realpathSync(dataRoot), "ops-agent", "jobs-v1.json"))
+    throw Error("Actual fixed ops-agent journal required");
+  const records = owned.read();
+  if (records.length > OPS_JOB_JOURNAL_MAX_ENTRIES) throw Error("Ops journal index limit");
+  return records;
+}
+export interface HistoricalPullJob extends Omit<PersistedOpsJob, "operation"> {
+  operation: HistoricalServicePullOperation;
+}
+type RetainedOpsJob = PersistedOpsJob | HistoricalPullJob;
+function historical(job: RetainedOpsJob): job is HistoricalPullJob {
+  return (
+    job.operation.kind === "service.pull" && !("expectedConfigurationRevisionId" in job.operation)
+  );
 }
 
 export interface OpenOpsJobJournalOptions {
@@ -93,7 +125,7 @@ function iso(value: unknown): value is string {
   );
 }
 
-function parseJob(value: unknown): PersistedOpsJob {
+function parseJob(value: unknown): RetainedOpsJob {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid");
   const raw = value as Record<string, unknown>;
   if (
@@ -146,19 +178,33 @@ function parseJob(value: unknown): PersistedOpsJob {
     controlAdoptionSchema.parse(raw.controlAdoption);
     if (raw.executionVersion !== 2) throw Error("invalid control adoption");
   }
-  const operation = opsOperationSchema.parse(raw.operation);
+  const legacy = historicalServicePullOperationSchema.safeParse(raw.operation),
+    operation = legacy.success ? legacy.data : opsOperationSchema.parse(raw.operation),
+    bodyFingerprint = legacy.success
+      ? createHash("sha256").update(canonicalJson(operation)).digest("hex")
+      : opsOperationFingerprint(opsOperationSchema.parse(operation));
   if (
-    opsOperationFingerprint(operation) !==
-      (raw.executionVersion === 2 ? raw.operationFingerprint : raw.fingerprint) ||
-    opsResourceId(operation) !== raw.resourceId
+    bodyFingerprint !== (raw.executionVersion === 2 ? raw.operationFingerprint : raw.fingerprint) ||
+    (legacy.success
+      ? legacy.data.serviceId
+      : opsResourceId(opsOperationSchema.parse(operation))) !== raw.resourceId
   ) {
     throw new Error("invalid");
   }
   if (raw.executionVersion === 2) {
-    validateRetainedExecutionAdmission(
-      operation.kind,
-      raw as unknown as RetainedExecutionAdmission,
-    );
+    if (
+      operation.kind === "configurationMaintenance.settle" ||
+      (operation.kind === "configurationMaintenance.decide" && operation.decision === "abandon")
+    )
+      validateRetainedConfigurationMaintenanceRecoveryControl(
+        operation,
+        raw as unknown as RetainedExecutionAdmission,
+      );
+    else
+      validateRetainedExecutionAdmission(
+        operation.kind,
+        raw as unknown as RetainedExecutionAdmission,
+      );
     if (raw.requestVersion !== undefined && raw.requestVersion !== 1 && raw.requestVersion !== 2)
       throw new Error("invalid request version");
     if (raw.admittedAt !== Date.parse(raw.submittedAt as string)) throw new Error("invalid");
@@ -188,9 +234,23 @@ function parseJob(value: unknown): PersistedOpsJob {
   if (state === "succeeded") {
     if (raw.result === undefined || raw.errorClass !== undefined || raw.terminalAt === undefined)
       throw new Error("invalid");
-    parseBoundedOpsResult(operation.kind, raw.result);
+    if (legacy.success) historicalServicePullResultSchema.parse(raw.result);
+    else parseBoundedOpsResult(operation.kind, raw.result);
   } else if (state === "failed" || state === "timed_out") {
-    if (raw.result !== undefined || raw.errorClass === undefined || raw.terminalAt === undefined)
+    // This finite metadata control can retain an accepted intent without any
+    // conclusive completion. Startup rejoins it to the authenticated private
+    // owner before lookup; parsing this projection grants no completion/ACK.
+    const unresolvedSettle =
+      raw.executionVersion === 2 &&
+      operation.kind === "configurationMaintenance.settle" &&
+      state === "failed" &&
+      raw.errorClass === "recovery_required" &&
+      raw.failureResult === undefined;
+    if (
+      raw.result !== undefined ||
+      raw.errorClass === undefined ||
+      (raw.terminalAt === undefined && !unresolvedSettle)
+    )
       throw new Error("invalid");
   } else if (
     raw.result !== undefined ||
@@ -199,10 +259,10 @@ function parseJob(value: unknown): PersistedOpsJob {
   ) {
     throw new Error("invalid");
   }
-  return raw as unknown as PersistedOpsJob;
+  return raw as unknown as RetainedOpsJob;
 }
 
-function parseFile(bytes: Uint8Array, maxEntries: number): PersistedOpsJob[] {
+function parseFile(bytes: Uint8Array, maxEntries: number): RetainedOpsJob[] {
   const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   const decoded = JSON.parse(text) as unknown;
   if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) throw new Error("invalid");
@@ -292,7 +352,7 @@ async function safeRead(path: string, maxBytes: number): Promise<Uint8Array | un
  * Reads the persisted journal without recovering or rewriting it, for a
  * process that must not take ownership of the journal.
  */
-export async function readOpsJobJournalSnapshot(path: string): Promise<PersistedOpsJob[]> {
+export async function readOpsJobJournalSnapshot(path: string): Promise<RetainedOpsJob[]> {
   if (basename(path) !== "jobs-v1.json") throw new Error("Ops job journal is unavailable");
   const bytes = await safeRead(path, OPS_JOB_JOURNAL_MAX_BYTES);
   if (!bytes) return [];
@@ -324,7 +384,7 @@ export async function openOpsJobJournal(
     throw new Error("Invalid ops job journal limits");
   }
   const now = options.now ?? (() => new Date());
-  let current: PersistedOpsJob[] = [];
+  let current: RetainedOpsJob[] = [];
   try {
     await prepareJournalDirectory(path);
     const bytes = await safeRead(path, maxBytes);
@@ -335,8 +395,11 @@ export async function openOpsJobJournal(
   let chain = Promise.resolve();
 
   const writeSnapshot = async (records: readonly PersistedOpsJob[]): Promise<void> => {
-    if (records.length > maxEntries) throw new Error("Ops job journal capacity exceeded");
-    const validated = records.map(parseJob);
+    const observed = current.filter(historical),
+      fresh = records.map(parseJob);
+    if (fresh.some(historical)) throw Error("Historical pull cannot enter the worker journal");
+    const validated = [...observed, ...fresh];
+    if (validated.length > maxEntries) throw new Error("Ops job journal capacity exceeded");
     for (const record of validated) {
       const retained = current.find(
         (prior) =>
@@ -392,7 +455,11 @@ export async function openOpsJobJournal(
   };
 
   const journal: OpsJobJournal = {
-    records: () => current.map((entry) => structuredClone(entry)),
+    records: () =>
+      current
+        .filter((entry): entry is PersistedOpsJob => !historical(entry))
+        .map((entry) => structuredClone(entry)),
+    historicalPullRecords: () => current.filter(historical).map((entry) => structuredClone(entry)),
     replace: (records) => {
       const snapshot = records.map((entry) => structuredClone(entry));
       const next = chain.then(() => writeSnapshot(snapshot));
@@ -401,14 +468,14 @@ export async function openOpsJobJournal(
     },
   };
 
-  const interrupted = current.some((entry) =>
-    ["queued", "running", "termination_pending"].includes(entry.state),
-  );
+  const interrupted = journal
+    .records()
+    .some((entry) => ["queued", "running", "termination_pending"].includes(entry.state));
   try {
     if (interrupted) {
       const timestamp = now().toISOString();
       await journal.replace(
-        current.map((entry) =>
+        journal.records().map((entry) =>
           ["queued", "running", "termination_pending"].includes(entry.state)
             ? {
                 ...entry,
@@ -427,10 +494,17 @@ export async function openOpsJobJournal(
         ),
       );
     } else {
-      await journal.replace(current);
+      await journal.replace(journal.records());
     }
   } catch {
     throw new Error("Ops job journal is unavailable");
   }
+  productionJournalIndexes.set(journal, {
+    path: join(realpathSync(dirname(path)), basename(resolve(path))),
+    read: () =>
+      current
+        .filter((entry): entry is PersistedOpsJob => !historical(entry))
+        .map((entry) => structuredClone(entry)),
+  });
   return journal;
 }

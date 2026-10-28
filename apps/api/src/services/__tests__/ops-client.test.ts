@@ -18,6 +18,15 @@ import {
   waitForOpsResult,
 } from "../ops-client.js";
 
+// Typed transport fixture only; not an ownership or image-source proof.
+const pullResult = {
+  changed: true as const,
+  revisionId: `cfg1_${"a".repeat(43)}`,
+  imageReference: "example/redis:1",
+  imageId: `sha256:${"b".repeat(64)}`,
+  releaseSelectionDigest: null,
+};
+
 function fakeClient(overrides: Partial<Record<keyof ApiOpsClient, unknown>> = {}): ApiOpsClient {
   return {
     execute: vi.fn(),
@@ -182,7 +191,7 @@ describe("bounded async ops helpers", () => {
       state: "succeeded",
       submittedAt: "2026-08-23T10:00:00.000Z",
       updatedAt: "2026-08-23T10:00:01.000Z",
-      result: { changed: true },
+      result: pullResult,
     });
     const lookup = vi.fn().mockResolvedValue({
       version: 1,
@@ -197,19 +206,31 @@ describe("bounded async ops helpers", () => {
     await expect(
       executeAndWait(
         fakeClient({ execute, status, lookup }),
-        { kind: "service.pull", serviceId: "redis" },
+        {
+          kind: "service.pull",
+          serviceId: "redis",
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+        },
         operationKey,
         { parentAssertion: "retained-test-parent" },
       ),
-    ).resolves.toEqual({ changed: true });
+    ).resolves.toEqual(pullResult);
     expect(execute).toHaveBeenCalledTimes(1);
     expect(execute).toHaveBeenNthCalledWith(
       1,
-      { kind: "service.pull", serviceId: "redis" },
+      {
+        kind: "service.pull",
+        serviceId: "redis",
+        expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+      },
       expect.objectContaining({ operationKey }),
     );
     expect(lookup).toHaveBeenCalledWith(
-      { kind: "service.pull", serviceId: "redis" },
+      {
+        kind: "service.pull",
+        serviceId: "redis",
+        expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+      },
       operationKey,
       expect.anything(),
     );
@@ -232,7 +253,7 @@ describe("bounded async ops helpers", () => {
       state: "succeeded" as const,
       submittedAt: "2026-08-23T10:00:00.000Z",
       updatedAt: "2026-08-23T10:00:01.000Z",
-      result: { changed: true },
+      result: pullResult,
     };
     const transient = vi
       .fn()
@@ -242,7 +263,7 @@ describe("bounded async ops helpers", () => {
       waitForOpsResult(fakeClient({ status: transient }), admission.kind, admission, {
         sleep: async () => undefined,
       }),
-    ).resolves.toEqual({ changed: true });
+    ).resolves.toEqual(pullResult);
     expect(transient).toHaveBeenCalledTimes(2);
 
     const denied = vi.fn().mockRejectedValue(new ApiOpsError("authorization"));
@@ -563,6 +584,8 @@ describe("bounded async ops helpers", () => {
 describe("configuration outcome evidence", () => {
   const operation = {
     expectedCurrentRevisionId: null,
+    expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+    coordinatorMode: "ensure-running" as const,
     kind: "stack.render" as const,
     revisionId: `cfg1_${"a".repeat(43)}`,
   };
@@ -660,7 +683,7 @@ describe("independent observation deadlines", () => {
         submittedAt: new Date(0).toISOString(),
         updatedAt: new Date(now).toISOString(),
         state: ++polls === 1 ? "running" : "succeeded",
-        ...(polls === 1 ? {} : { result: { changed: true } }),
+        ...(polls === 1 ? {} : { result: { completed: true } }),
       }),
     });
     await expect(
@@ -670,7 +693,7 @@ describe("independent observation deadlines", () => {
           now = 31 * 60_000;
         },
       }),
-    ).resolves.toEqual({ changed: true });
+    ).resolves.toEqual({ completed: true });
     expect(client.cancel).not.toHaveBeenCalled();
     expect(client.execute).not.toHaveBeenCalled();
   });

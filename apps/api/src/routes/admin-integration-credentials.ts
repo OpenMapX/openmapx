@@ -1,11 +1,17 @@
 import type { FastifyInstance } from "fastify";
-import { getAllIntegrations, getIntegration, reloadIntegrations } from "../integration-host";
+import { getAllIntegrations, getIntegration } from "../integration-host";
+import {
+  createDirectAdminOpsKey,
+  DIRECT_OPS_IDEMPOTENCY_HEADER,
+  parseDirectOpsIdempotency,
+} from "../services/direct-ops-idempotency";
 import {
   computeCredentialStatus,
   getIntegrationDisplayName,
 } from "../services/integration-credential-status";
 import { executeIntegrationHealthCheck } from "../services/integration-health";
-import { deleteSecret, isSecretsConfigured, listSecrets, setSecret } from "../services/secrets";
+import { isSecretsConfigured, listSecrets } from "../services/secrets";
+import { applyTrustedConfiguration } from "../services/trusted-config-operations";
 import { writeAuditLog } from "../utils/audit-log";
 import { getAdminSession } from "../utils/require-admin";
 import { getSecretFields } from "../utils/validate-config-body";
@@ -79,7 +85,20 @@ export async function adminIntegrationCredentialsRoute(app: FastifyInstance): Pr
       });
     }
 
-    await setSecret(integrationId, key, value, adminSession.user.id);
+    const applied = await applyTrustedConfiguration({
+      kind: "integrationConfig.apply",
+      integrationId,
+      actorId: adminSession.user.id,
+      operationKey: createDirectAdminOpsKey(
+        adminSession.user.id,
+        parseDirectOpsIdempotency(request.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+      ),
+      overlay: {
+        purpose: "integration-secret",
+        coordinatorMode: "ensure-running",
+        changes: [{ kind: "integration-secret", integrationId, key, action: "set", value }],
+      },
+    });
 
     await writeAuditLog({
       actorId: adminSession.user.id,
@@ -94,7 +113,8 @@ export async function adminIntegrationCredentialsRoute(app: FastifyInstance): Pr
     // integration captures its resolved config (incl. vault secrets) once at
     // `setup(ctx)` load time, so without this a freshly-set key never reaches
     // the provider until the next restart. Mirrors the config-PATCH endpoint.
-    const reloadResult = await reloadIntegrations();
+    const reloadResult = applied.integrationReload;
+    if (!reloadResult) throw Error("Captured integration reload unavailable");
     return { ok: true, ...reloadResult };
   });
 
@@ -106,7 +126,20 @@ export async function adminIntegrationCredentialsRoute(app: FastifyInstance): Pr
 
     const adminSession = getAdminSession(request);
 
-    await deleteSecret(integrationId, key);
+    const applied = await applyTrustedConfiguration({
+      kind: "integrationConfig.apply",
+      integrationId,
+      actorId: adminSession.user.id,
+      operationKey: createDirectAdminOpsKey(
+        adminSession.user.id,
+        parseDirectOpsIdempotency(request.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+      ),
+      overlay: {
+        purpose: "integration-secret",
+        coordinatorMode: "ensure-running",
+        changes: [{ kind: "integration-secret", integrationId, key, action: "delete" }],
+      },
+    });
 
     await writeAuditLog({
       actorId: adminSession.user.id,
@@ -119,7 +152,8 @@ export async function adminIntegrationCredentialsRoute(app: FastifyInstance): Pr
 
     // Reload so the running integration drops the removed secret (see the
     // set-secret handler above).
-    const reloadResult = await reloadIntegrations();
+    const reloadResult = applied.integrationReload;
+    if (!reloadResult) throw Error("Captured integration reload unavailable");
     return { ok: true, ...reloadResult };
   });
 

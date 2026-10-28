@@ -24,6 +24,10 @@ import { services as coreServices } from "@openmapx/core/server";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { serviceConfig } from "../db/schema";
+import {
+  type AdministrativeConfigurationReadContext,
+  assertAdministrativeConfigurationRead,
+} from "./administrative-configuration-context";
 
 const { configSchemaKeys, resolveServiceConfigFromEnv } = coreServices;
 
@@ -172,4 +176,62 @@ export async function resolveAllServiceConfigs(
       entries.filter(({ fromEnv }) => fromEnv.length > 0).map(({ id, fromEnv }) => [id, fromEnv]),
     ),
   };
+}
+
+/** Authoritative producer variant. Failed acquisition never becomes absence. */
+export async function resolveServiceConfigWithSourcesStrict(
+  manifest: ResolveServiceConfigInput,
+  context: AdministrativeConfigurationReadContext,
+): Promise<Record<string, ConfigValueWithSource>> {
+  assertAdministrativeConfigurationRead(context);
+  const rows = context.serviceRows.filter((row) => row.serviceId === manifest.id);
+  if (rows.length > 1) throw new Error("Configuration acquisition unavailable");
+  const known = new Set(configSchemaKeys(manifest.configSchema).map((field) => field.key));
+  const config = rows[0]?.config ?? {};
+  if (
+    !config ||
+    typeof config !== "object" ||
+    Array.isArray(config) ||
+    Object.keys(config).some((key) => !known.has(key))
+  )
+    throw new Error("Configuration acquisition unavailable");
+  const envLayer = resolveServiceConfigFromEnv(
+    {
+      id: manifest.id,
+      configSchema: manifest.configSchema,
+      container: manifest.containerEnv ? { environment: manifest.containerEnv } : undefined,
+    },
+    context.env,
+  );
+  const result: Record<string, ConfigValueWithSource> = {};
+  for (const [key, entry] of Object.entries(envLayer))
+    if (entry.source === "default") result[key] = entry;
+  for (const [key, value] of Object.entries(config)) result[key] = { value, source: "database" };
+  for (const [key, entry] of Object.entries(envLayer))
+    if (entry.source === "env") result[key] = entry;
+  return result;
+}
+
+export async function resolveAllServiceConfigsStrict(
+  manifests: ResolveServiceConfigInput[],
+  context: AdministrativeConfigurationReadContext,
+): Promise<ResolvedServiceConfigs> {
+  assertAdministrativeConfigurationRead(context);
+  const ids = new Set(manifests.map((manifest) => manifest.id));
+  if (context.serviceRows.some((row) => !ids.has(row.serviceId)))
+    throw new Error("Configuration acquisition unavailable");
+  const values = new Map<string, Record<string, unknown>>();
+  const envKeys = new Map<string, string[]>();
+  for (const manifest of manifests) {
+    const resolved = await resolveServiceConfigWithSourcesStrict(manifest, context);
+    const flat: Record<string, unknown> = {};
+    const fromEnv: string[] = [];
+    for (const [key, entry] of Object.entries(resolved)) {
+      if (entry.source === "env" && key !== manifest.proxyHostConfigKey) fromEnv.push(key);
+      else if (entry.source !== "default") flat[key] = entry.value;
+    }
+    values.set(manifest.id, flat);
+    if (fromEnv.length) envKeys.set(manifest.id, fromEnv);
+  }
+  return { values, envKeys };
 }

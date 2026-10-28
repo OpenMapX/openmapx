@@ -60,6 +60,8 @@ function seedReadySnapshot(
     operationKey: "opk1_0123456789abcdef",
     operationForRevision: (revisionId) => ({
       expectedCurrentRevisionId: null,
+      expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+      coordinatorMode: "ensure-running",
       kind: "stack.render",
       revisionId,
     }),
@@ -86,6 +88,8 @@ describe("trusted configuration snapshot publisher", () => {
       operationKey: "opk1_0123456789abcdef",
       operationForRevision: (revisionId) => ({
         expectedCurrentRevisionId: null,
+        expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+        coordinatorMode: "ensure-running",
         kind: "stack.render",
         revisionId,
       }),
@@ -104,11 +108,15 @@ describe("trusted configuration snapshot publisher", () => {
     expect(published.mode).toBe(0o600);
     expect(published.operation).toEqual({
       expectedCurrentRevisionId: null,
+      expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+      coordinatorMode: "ensure-running",
       kind: "stack.render",
       revisionId: published.revisionId,
     });
     expect(Object.keys(published.operation).sort()).toEqual([
+      "coordinatorMode",
       "expectedCurrentRevisionId",
+      "expectedSourceRevision",
       "kind",
       "revisionId",
     ]);
@@ -131,6 +139,8 @@ describe("trusted configuration snapshot publisher", () => {
           operationKey: "opk1_0123456789abcdef",
           operationForRevision: (revisionId) => ({
             expectedCurrentRevisionId: null,
+            expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+            coordinatorMode: "ensure-running",
             kind: "stack.render",
             revisionId,
           }),
@@ -159,6 +169,8 @@ describe("trusted configuration snapshot publisher", () => {
       operationKey: "opk1_0123456789abcdef",
       operationForRevision: (revisionId) => ({
         expectedCurrentRevisionId: null,
+        expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+        coordinatorMode: "ensure-running",
         kind: "stack.render",
         revisionId,
       }),
@@ -190,6 +202,8 @@ describe("trusted configuration snapshot publisher", () => {
         operationKey: "opk1_0123456789abcdef",
         operationForRevision: (revisionId) => ({
           expectedCurrentRevisionId: null,
+          expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+          coordinatorMode: "ensure-running",
           kind: "stack.render",
           revisionId,
         }),
@@ -222,6 +236,8 @@ describe("trusted configuration snapshot publisher", () => {
         operationKey: "opk1_0123456789abcdef",
         operationForRevision: (revisionId) => ({
           expectedCurrentRevisionId: null,
+          expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+          coordinatorMode: "ensure-running",
           kind: "stack.render",
           revisionId,
         }),
@@ -256,6 +272,8 @@ describe("trusted configuration snapshot publisher", () => {
         operationKey: "opk1_0123456789abcdef",
         operationForRevision: (revisionId) => ({
           expectedCurrentRevisionId: null,
+          expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+          coordinatorMode: "ensure-running",
           kind: "stack.render",
           revisionId,
         }),
@@ -315,6 +333,8 @@ describe("trusted configuration snapshot publisher", () => {
         operationKey: "opk1_0123456789abcdef",
         operationForRevision: (revisionId) => ({
           expectedCurrentRevisionId: null,
+          expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+          coordinatorMode: "ensure-running",
           kind: "stack.render",
           revisionId,
         }),
@@ -371,6 +391,8 @@ describe("trusted configuration snapshot publisher", () => {
         operationKey: "opk1_0123456789abcdef",
         operationForRevision: (revisionId) => ({
           expectedCurrentRevisionId: null,
+          expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+          coordinatorMode: "ensure-running",
           kind: "stack.render",
           revisionId,
         }),
@@ -419,6 +441,8 @@ describe("trusted configuration snapshot publisher", () => {
         operationKey: "opk1_0123456789abcdef",
         operationForRevision: (revisionId) => ({
           expectedCurrentRevisionId: null,
+          expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+          coordinatorMode: "ensure-running",
           kind: "stack.render",
           revisionId,
         }),
@@ -460,6 +484,8 @@ describe("trusted configuration snapshot publisher", () => {
         operationKey: "opk1_0123456789abcdef",
         operationForRevision: (revisionId) => ({
           expectedCurrentRevisionId: null,
+          expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+          coordinatorMode: "ensure-running",
           kind: "stack.render",
           revisionId,
         }),
@@ -498,6 +524,8 @@ describe("trusted configuration snapshot publisher", () => {
       operationKey: "opk1_0123456789abcdef",
       operationForRevision: (revisionId) => ({
         expectedCurrentRevisionId: null,
+        expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+        coordinatorMode: "ensure-running",
         kind: "stack.render",
         revisionId,
       }),
@@ -541,6 +569,8 @@ describe("trusted configuration snapshot publisher", () => {
         operationKey: "opk1_0123456789abcdef",
         operationForRevision: (revisionId) => ({
           expectedCurrentRevisionId: null,
+          expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+          coordinatorMode: "ensure-running",
           kind: "stack.render",
           revisionId,
         }),
@@ -579,6 +609,8 @@ describe("trusted configuration snapshot publisher", () => {
       operationKey: "opk1_0123456789abcdef",
       operationForRevision: (revisionId) => ({
         expectedCurrentRevisionId: null,
+        expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+        coordinatorMode: "ensure-running",
         kind: "stack.render",
         revisionId,
       }),
@@ -612,6 +644,8 @@ describe("trusted configuration snapshot publisher", () => {
         operationKey: "opk1_0123456789abcdef",
         operationForRevision: (revisionId) => ({
           expectedCurrentRevisionId: null,
+          expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+          coordinatorMode: "ensure-running",
           kind: "stack.render",
           revisionId,
         }),

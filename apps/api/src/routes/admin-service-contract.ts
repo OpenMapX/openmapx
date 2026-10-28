@@ -1,4 +1,5 @@
 import { serviceAdminOperations } from "@openmapx/core/api-contracts";
+import { ConfigurationPrerequisiteFailure } from "../services/admin-job-failure";
 import { createAdminRouteRegistrar } from "./admin-contract";
 
 const register = createAdminRouteRegistrar(serviceAdminOperations, {
@@ -15,7 +16,9 @@ export const registerServiceAdminRoute: typeof register = (app, operation, handl
     async (request, reply) => {
       try {
         return await handler(request, reply);
-      } catch {
+      } catch (error) {
+        if (error instanceof ConfigurationPrerequisiteFailure)
+          return reply.code(409).send({ error: error.message });
         return reply.code(500).send({ error: "Service administration failed" });
       }
     },

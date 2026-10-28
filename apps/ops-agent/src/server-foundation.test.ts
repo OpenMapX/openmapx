@@ -73,7 +73,11 @@ describe("ops-agent async foundation", () => {
       dispatch,
     });
     const operationKey = "opk1_stableTransportRetry";
-    const operation = { kind: "service.pull", serviceId: "redis" } as const;
+    const operation = {
+      kind: "service.pull",
+      serviceId: "redis",
+      expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+    } as const;
     const admitted = await app.inject({
       method: "POST",
       url: "/v1/operations",
@@ -98,7 +102,11 @@ describe("ops-agent async foundation", () => {
       url: "/v1/operations",
       headers: auth(),
       payload: request(
-        { kind: "service.pull", serviceId: "motis" },
+        {
+          kind: "service.pull",
+          serviceId: "motis",
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+        },
         "ops1_conflictRequest000",
         operationKey,
       ),
@@ -157,6 +165,7 @@ describe("ops-agent async foundation", () => {
         "x-ops-operation-fingerprint": opsOperationFingerprint({
           kind: "service.pull",
           serviceId: "motis",
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
         }),
       },
     });
@@ -668,7 +677,11 @@ describe("ops-agent async foundation", () => {
       dispatch: async () => ({ changed: true }),
     });
     const firstPayload = request(
-      { kind: "service.pull", serviceId: "redis" },
+      {
+        kind: "service.pull",
+        serviceId: "redis",
+        expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+      },
       "ops1_retainedFirst0000",
       "opk1_retainedFirst0000",
     );

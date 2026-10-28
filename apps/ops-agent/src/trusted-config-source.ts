@@ -17,7 +17,9 @@ import { join } from "node:path";
 import type { OpsJobState, OpsOperation } from "@openmapx/core/ops";
 import {
   acquireTrustedConfigurationQueueLock,
+  inspectPreparedConfigurationRecord,
   inspectTrustedConfigurationSnapshot,
+  isTrustedConfigurationApplyOperation,
   OPS_TRUSTED_CONFIG_MAX_BYTES,
   OPS_TRUSTED_CONFIG_QUEUE_LOCK_NAME,
   openTrustedConfigurationSnapshot,
@@ -108,7 +110,7 @@ function journalRevisionIds(policy: TrustedSnapshotDirectoryPolicy): {
   for (const record of records) {
     const isTerminal = ["succeeded", "failed", "timed_out"].includes(record.state);
     if (isTerminal !== (record.terminalAt !== undefined)) throw new Error(DIRECTORY_REJECTED);
-    if (!("revisionId" in record.operation)) continue;
+    if (!isTrustedConfigurationApplyOperation(record.operation)) continue;
     if (!/^cfg1_[A-Za-z0-9_-]{43}$/.test(record.operation.revisionId)) {
       throw new Error(DIRECTORY_REJECTED);
     }
@@ -184,6 +186,7 @@ function validateQueueFile(
   path: string,
   policy: TrustedSnapshotDirectoryPolicy,
   expectedLinks = 1,
+  maxBytes = OPS_TRUSTED_CONFIG_MAX_BYTES,
 ): QueueFileIdentity {
   const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
@@ -197,7 +200,7 @@ function validateQueueFile(
       !policy.allowedUids.includes(stats.uid) ||
       stats.gid !== policy.expectedGid ||
       (stats.mode & 0o777) !== SNAPSHOT_MODE ||
-      stats.size > OPS_TRUSTED_CONFIG_MAX_BYTES
+      stats.size > maxBytes
     ) {
       throw new Error(DIRECTORY_REJECTED);
     }
@@ -224,6 +227,7 @@ function validateQueue(
 ): QueueCleanupPlan[] {
   const cleanup = new Map<string, QueueCleanupEntry>();
   const revisions = new Set<string>();
+  const retainedRevisions = new Set<string>();
   const nowMs = policy.nowMs ?? Date.now();
   let entries = 0;
   let bytes = 0;
@@ -293,6 +297,7 @@ function validateQueue(
   }
   for (const name of directoryNames) {
     if (name === ".claimed") continue;
+    if (name === ".candidates") continue;
     if (name === OPS_TRUSTED_CONFIG_QUEUE_LOCK_NAME) continue;
     if (!SNAPSHOT_NAME.test(name) && !TEMPORARY_NAME.test(name) && !ABORT_NAME.test(name)) {
       throw new Error(DIRECTORY_REJECTED);
@@ -341,6 +346,7 @@ function validateQueue(
       else {
         retainedEntries += 1;
         retainedBytes += metadata.size;
+        retainedRevisions.add(revisionId);
       }
     }
   }
@@ -366,7 +372,36 @@ function validateQueue(
     else {
       retainedEntries += 1;
       retainedBytes += metadata.size;
+      retainedRevisions.add(revisionId);
     }
+  }
+  if (directoryNames.includes(".candidates")) {
+    const directoryPath = join(directory, ".candidates");
+    const candidateDirectoryIdentity = captureQueueDirectory(directoryPath, policy);
+    const names = readdirSync(directoryPath);
+    if (names.length > 128) throw new Error(DIRECTORY_REJECTED);
+    const candidateRevisions = new Set<string>();
+    for (const name of names) {
+      if (!/^opk1_[A-Za-z0-9_-]{16,64}\.json$/.test(name)) throw new Error(DIRECTORY_REJECTED);
+      const metadata = validateQueueFile(join(directoryPath, name), policy, 1, 768 * 1024);
+      const inspected = inspectPreparedConfigurationRecord(metadata.bytes, policy.token);
+      if (
+        `${inspected.record.operationKey}.json` !== name ||
+        candidateRevisions.has(inspected.snapshot.revisionId)
+      )
+        throw new Error(DIRECTORY_REJECTED);
+      candidateRevisions.add(inspected.snapshot.revisionId);
+      entries++;
+      bytes += metadata.size;
+      if (retainedRevisions.has(inspected.snapshot.revisionId))
+        retainedBytes += metadata.size - inspected.sealed.length;
+      else {
+        retainedEntries++;
+        retainedBytes += metadata.size;
+        retainedRevisions.add(inspected.snapshot.revisionId);
+      }
+    }
+    captureQueueDirectory(directoryPath, policy, candidateDirectoryIdentity);
   }
   if (
     entries > MAX_SCAN_ENTRIES ||
@@ -549,7 +584,7 @@ async function syncDirectory(path: string): Promise<void> {
 }
 
 function revisionFor(operation: Parameters<TrustedOpsDataSource["claim"]>[0]): string | null {
-  if (!("revisionId" in operation) || typeof operation.revisionId !== "string") return null;
+  if (!isTrustedConfigurationApplyOperation(operation)) return null;
   return /^cfg1_[A-Za-z0-9_-]{43}$/.test(operation.revisionId) ? operation.revisionId : null;
 }
 

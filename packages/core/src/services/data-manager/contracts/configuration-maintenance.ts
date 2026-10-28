@@ -30,7 +30,8 @@ export const dataConfigurationFenceReceiptSchema = z.strictObject({
   sequence: dataEpochSchema,
   state: z.enum(["prepared", "settled", "recovery_required"]),
 });
-export const dataConfigurationFenceSettleSchema = z.strictObject({
+/** Historical persisted receipts only. Fresh mutation never parses this variant. */
+export const legacyDataConfigurationFenceSettleSchema = z.strictObject({
   maintenanceId: z.uuid(),
   candidateId: z.uuid(),
   planDigest: dataFingerprintSchema,
@@ -39,6 +40,16 @@ export const dataConfigurationFenceSettleSchema = z.strictObject({
   outcome: z.enum(["unused", "applied", "contained"]),
   ownerReceiptDigest: dataFingerprintSchema,
 });
+export const dataConfigurationFenceSettleSchema = z.strictObject({
+  version: z.literal(2),
+  maintenanceId: z.uuid(),
+  candidateId: z.uuid(),
+  planDigest: dataFingerprintSchema,
+  settlementId: dataFingerprintSchema,
+});
+export type LegacyDataConfigurationFenceSettle = z.infer<
+  typeof legacyDataConfigurationFenceSettleSchema
+>;
 export type DataConfigurationFencePrepare = z.infer<typeof dataConfigurationFencePrepareSchema>;
 export type DataConfigurationFenceReceipt = z.infer<typeof dataConfigurationFenceReceiptSchema>;
 export type DataConfigurationFenceSettle = z.infer<typeof dataConfigurationFenceSettleSchema>;

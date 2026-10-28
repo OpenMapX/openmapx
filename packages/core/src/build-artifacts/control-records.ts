@@ -1,9 +1,10 @@
 /** Signed record primitives; contains no admission or retirement constructors. */
 import { createHash, createPublicKey, type KeyObject, sign, verify } from "node:crypto";
 import { z } from "zod";
+import { canonicalJson } from "../ops/canonical-json";
 import { type ControlExecutionOrigin, parseControlRootOperationKey } from "../ops/control-root-key";
 import type { ControlIssuer, ExecutionRef } from "../ops/execution-identity";
-import { canonicalJson } from "../ops/fingerprint";
+import type { ControlRetentionPreparationContext } from "./coordinator-pull-records";
 import type { AnchoredDirectory } from "./filesystem";
 
 declare const installationBrand: unique symbol;
@@ -23,7 +24,10 @@ export interface InstallationState {
   dataRoot: string;
   registeredTargets: ReadonlySet<string>;
   retentionJournal?: {
-    prepare?(executions: readonly { execution: ExecutionRef; digest?: string }[]): Promise<void>;
+    prepare?(
+      executions: readonly { execution: ExecutionRef; digest?: string }[],
+      context?: ControlRetentionPreparationContext,
+    ): Promise<void>;
     contained(execution: ExecutionRef, digest: string | undefined): boolean;
     retire(
       executions: readonly { execution: ExecutionRef; digest: string; terminalAt?: number }[],

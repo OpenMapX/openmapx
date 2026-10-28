@@ -26,6 +26,7 @@ export {
   serviceConfigEnvPrefix,
 } from "./config-resolver";
 export {
+  assertConfigurationGenerationWriter,
   type CommitConfigurationOptions,
   type CommittedConfiguration,
   ConfigurationGenerationError,
@@ -33,6 +34,7 @@ export {
   type ConfigurationInput,
   commitConfigurationGeneration,
   configurationGenerationComposeFile,
+  configurationGenerationWriterCommit,
   currentConfigurationGeneration,
   initializeConfigurationGenerations,
   inspectAppliedConfiguration,
@@ -47,6 +49,11 @@ export {
   assertTrustedConfigurationSchema,
   validateTrustedConfigurationValues,
 } from "./configuration-schema";
+export { coordinatorPullReferenceIdentity } from "./coordinator-pull-reference";
+export {
+  composeCreationDependencyIds,
+  serviceCreationDependencyIds,
+} from "./creation-dependencies";
 export type {
   DataManagerCoverageEvidencePage,
   NotablePlacesBuildResult,
@@ -105,6 +112,11 @@ export {
   type ReleaseServiceAuthorityCaptureHooks,
   validateReleaseServiceAuthority,
 } from "./release-authority-inventory";
+export {
+  configurationImageReference,
+  readServiceReleaseImageSelection,
+  validateExistingReleaseSelection,
+} from "./release-image-selection";
 export {
   canonicalReleaseManifest,
   DEFAULT_RELEASE_MANIFEST_REPOSITORY,
@@ -170,6 +182,7 @@ export {
   parseServiceIdList,
   SERVICE_SELECTION_ENV,
 } from "./selection";
+export * from "./service-lifecycle-receipt";
 export {
   renderTraefikDynamicConfiguration,
   renderTraefikDynamicYaml,

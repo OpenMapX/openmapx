@@ -1,4 +1,18 @@
 import {
+  type ControlChildPhase,
+  type ControlRecipient,
+  childPhaseKinds,
+  controlChildOperationKey,
+} from "./control-child-records";
+
+export {
+  type ControlChildPhase,
+  type ControlRecipient,
+  childPhaseKinds,
+  controlChildOperationKey,
+} from "./control-child-records";
+
+import {
   type ControlInstallation,
   controlDigest,
   controlOriginSchema,
@@ -12,8 +26,16 @@ import {
   validateOriginRecord,
   verifyControl,
 } from "./control-records";
-// biome-ignore lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
-import { verifyRetainedArtifactTargetRootRelease } from "./target-lease";
+// biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
+import {
+  closeArtifactTargetLeaseHandle,
+  inspectArtifactTargetLeaseChildSettlement,
+  restoreArtifactTargetLeaseForSettlement,
+  verifyRetainedArtifactTargetRootRelease,
+  verifyRetainedGenerationHardlinksSettlement,
+} from "./target-lease";
+
+// biome-ignore-end lint/suspicious/noImportCycles: Same exact deferred guard import.
 
 export {
   type ControlInstallation,
@@ -31,7 +53,6 @@ export {
 } from "./control-records";
 
 import {
-  createHash,
   createPrivateKey,
   createPublicKey,
   generateKeyPairSync,
@@ -41,10 +62,12 @@ import {
 import { existsSync, fsyncSync, mkdirSync, realpathSync } from "node:fs";
 import { join, relative } from "node:path";
 import { z } from "zod";
+import type { PreparedConfigurationRecord } from "../ops/configuration-preparation";
 import {
   type OpsJobStatus,
   type OpsOperationKind,
   opsOperationSchema,
+  opsResourceId,
   parseBoundedOpsResult,
   parseOpsJobStatus,
 } from "../ops/contract";
@@ -53,6 +76,7 @@ import {
   verifyApiRetentionProof,
 } from "../ops/control-retention-receipt";
 import { type ControlExecutionOrigin, parseControlRootOperationKey } from "../ops/control-root-key";
+import { coordinatorPullSubmissionDigest } from "../ops/coordinator-lifecycle-records";
 import {
   type ControlIssuer,
   type ExecutionRef,
@@ -60,11 +84,20 @@ import {
   executionRefSchema,
   opsExecutionMaximumMs,
   type RetainedParentExecution,
+  retainedParentExecutionSchema,
 } from "../ops/execution-identity";
 import { canonicalJson, opsOperationFingerprint } from "../ops/fingerprint";
+import { servicePullResultSchema } from "../ops/service-operation-records";
 import { verifiedParentOrigins, verifiedParents } from "../ops/verified-parent-internal";
+import {
+  type OriginalConfigurationGenerationNonCommit,
+  originalConfigurationGenerationNonCommitSource,
+} from "../services/configuration-generation";
 import { dataConfigurationFenceReceiptSchema } from "../services/data-manager/contracts/configuration-maintenance";
-import { dataExecutionStatusSchema } from "../services/data-manager/contracts/executions";
+import {
+  dataExecutionStatusSchema,
+  startGenerationHardlinksExecutionSchema,
+} from "../services/data-manager/contracts/executions";
 // biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
 import {
   type ControlChildReservation,
@@ -76,21 +109,50 @@ import {
   resolveControlChildPlan,
   validateControlChildReservations,
 } from "./child-phase";
+import {
+  configurationNoGuardIntentSchema,
+  configurationSettlementDomains,
+  settlementRecordDigest,
+} from "./configuration-fence-settlement-records";
+import {
+  configurationMaintenanceForwardDomain,
+  configurationMaintenanceForwardGraphSchema,
+  configurationMaintenanceForwardSchema,
+} from "./configuration-maintenance-forward-records";
+import {
+  assertConfigurationMaintenanceDecisionSource,
+  configurationMaintenanceDecisionCommitmentDomain,
+  configurationMaintenanceDecisionCommitmentPayloadSchema,
+  configurationMaintenanceOwnerRecordSchema,
+} from "./configuration-maintenance-owner-records";
 // biome-ignore-end lint/suspicious/noImportCycles: Live protocol dependency described above.
 import { CONTROL_RETENTION_LIMITS, writeRetainedRecord } from "./control-retention";
+import {
+  type ControlRetentionPreparationContext,
+  type CoordinatorPullBaseline,
+  coordinatorPullBaselineSchema,
+  coordinatorPullObservationDomain,
+  coordinatorPullWitnessPayloadSchema,
+  coordinatorPullWitnessSchema,
+  stagedCoordinatorObservationDomain,
+  stagedCoordinatorObservationPayloadSchema,
+  stagedCoordinatorSourceSchema,
+} from "./coordinator-pull-records";
 // biome-ignore-start lint/suspicious/noImportCycles: Fixed proof verification uses this module's original nominal authority and effect writer after initialization.
 import {
   inspectFeedProxyValidationFailure,
   publishFeedProxyCanonicalTerminal,
   recordFeedProxyReloadAttempted,
-} from "./feed-proxy-validation";
+} from "./data-execution-candidate";
 // biome-ignore-end lint/suspicious/noImportCycles: Fixed live proof dependency described above.
 import { AnchoredDirectory, identity } from "./filesystem";
+import { buildFixedConfigurationMaintenancePlan } from "./fixed-configuration-maintenance";
 import {
   assertOriginClockForward,
   bootstrapRetentionClock,
   readRetentionClock,
 } from "./retention-clock";
+// biome-ignore-start lint/suspicious/noImportCycles: Authority records and terminal repair share this sole per-origin index. Runtime calls must consume the same nominal owner, never a second authority map or callback.
 import {
   acknowledgeRetentionDependency,
   assertFamilyCanonicalCompatibility,
@@ -101,40 +163,15 @@ import {
   hasRetentionEvidence,
   markFamilyTerminal,
   publishFamilyCanonicalTerminal,
+  readActiveStagedCoordinatorApiCopy,
   reconcileRetentionFamilies,
   registerFamilyExecution,
   requireFamilyJournal,
   retentionApiDependency,
+  verifyFamilyOwnedRecord,
 } from "./retention-family";
+// biome-ignore-end lint/suspicious/noImportCycles: Exact deferred original-owner/index guard join.
 export const CONTROL_ROLES = ["ops-agent", "data-manager", "host-cli"] as const;
-export type ControlRecipient = "fixed-cli" | "data-manager" | "ops-agent" | "configuration-helper";
-export type ControlChildPhase =
-  | "lifecycle"
-  | "build"
-  | "data-link"
-  | "data-clean"
-  | "data-workflow"
-  | "hardlinks"
-  | "stop-primary"
-  | "stop-staging"
-  | "restart-staging"
-  | "promote-primary"
-  | "recover-primary"
-  | "proxy-stage"
-  | "proxy-commit"
-  | "proxy-restore"
-  | "paired-pin-commit"
-  | "configuration-fence"
-  | "configuration-fence-settle"
-  | "configuration-commit"
-  | "maintenance-hardlinks"
-  | "maintenance-recreate"
-  | "maintenance-handoff"
-  | "osm"
-  | "transit"
-  | "fonts"
-  | "data-step"
-  | "configuration-handoff";
 declare const authorityBrand: unique symbol,
   peerBrand: unique symbol,
   settlementBrand: unique symbol,
@@ -383,72 +420,6 @@ export function closeControlInstallation(installation: ControlInstallation) {
   const s = installationState(installation);
   s.privateRoot.close();
   installations.delete(installation);
-}
-export const childPhaseKinds: Readonly<Record<ControlChildPhase, readonly string[]>> = {
-  lifecycle: ["service.start", "system.update"],
-  build: ["service.build", "services.buildAll"],
-  "data-link": ["data.link", "configuration.hardlinks.apply"],
-  "data-clean": ["data.clean"],
-  "data-workflow": [
-    "data.update",
-    "data.downloadOsm",
-    "data.downloadFonts",
-    "data.convertOverpass",
-    "data.overtureSync",
-    "data.overtureConflate",
-    "data.searchIndexBuild",
-    "data.notablePlacesBuild",
-  ],
-  hardlinks: ["generation-hardlinks"],
-  "stop-primary": ["motis.primary.stop"],
-  "stop-staging": ["motis.staging.stop"],
-  "restart-staging": ["motis.staging.restart"],
-  "promote-primary": ["motis.primary.promote"],
-  "recover-primary": ["motis.primary.restart"],
-  "proxy-stage": ["feedProxy.validateAndReload"],
-  "proxy-commit": ["feedProxy.validateAndReload"],
-  "proxy-restore": ["feedProxy.validateAndReload"],
-  "paired-pin-commit": ["transitousLock.approve"],
-  "configuration-fence": ["configuration-maintenance.prepare"],
-  "configuration-fence-settle": ["configuration-maintenance.settle"],
-  "configuration-commit": [
-    "stack.render",
-    "serviceSelection.apply",
-    "serviceConfig.apply",
-    "integrationConfig.apply",
-    "vault.apply",
-  ],
-  "maintenance-hardlinks": ["configuration.hardlinks.apply"],
-  "maintenance-recreate": ["service.recreate", "service.recreateIsolated"],
-  "maintenance-handoff": ["configurationHandoff.prepare"],
-  osm: ["download-osm"],
-  transit: ["transit-sync"],
-  fonts: ["download-fonts"],
-  "data-step": [
-    "download-osm",
-    "download-fonts",
-    "convert-overpass",
-    "overture-sync",
-    "overture-conflate",
-    "search-index-build",
-    "notable-places-build",
-  ],
-  "configuration-handoff": ["configuration-helper"],
-};
-export function controlChildOperationKey(
-  parentKey: string,
-  phase: ControlChildPhase,
-  ordinal: number,
-): string {
-  if (
-    !/^opk1_[A-Za-z0-9_-]{16,64}$/.test(parentKey) ||
-    !Number.isSafeInteger(ordinal) ||
-    ordinal < 0 ||
-    ordinal > 63 ||
-    !Object.hasOwn(childPhaseKinds, phase)
-  )
-    throw Error("Invalid fixed phase key");
-  return `opk1_${createHash("sha256").update(`openmapx-control-child-v1\0${parentKey}\0${phase}\0${ordinal}`).digest("base64url").slice(0, 32)}`;
 }
 export interface ControlPlannedChild {
   phase: ControlChildPhase;
@@ -885,7 +856,15 @@ export function repairControlJournalTerminal(
       proof.publication === "not_started" &&
       proof.receipt.kind === "feed-proxy-validation-failure" &&
       inspectFeedProxyValidationFailure(authority, proof.receipt.commitmentDigest) !== null;
-    if (!succeeded && !failedWithoutEffect && !validationFailed)
+    const generationNotCommitted =
+      terminal.state === "succeeded" &&
+      proof.outcome === "contained" &&
+      proof.publication === "not_started" &&
+      proof.receipt.kind === "configuration-generation-not-committed" &&
+      canonicalJson(proof.receipt.result) === canonicalJson(terminal.result) &&
+      canonicalJson(inspectConfigurationGenerationNonCommit(installation, execution)) ===
+        canonicalJson(proof.receipt);
+    if (!succeeded && !failedWithoutEffect && !validationFailed && !generationNotCommitted)
       throw Error("Terminal worker containment is not proved");
     const committed = verifyAndSealTerminalCommitment(s, terminal, terminalAt);
     if (s.kind === "feedProxy.validateAndReload")
@@ -1026,6 +1005,7 @@ export function retainAdmittedControlExecution(
     serviceIds: readonly string[];
     plan?: readonly ControlPlannedChild[];
     reservations?: readonly ControlChildReservation[];
+    coordinatorPullBaseline?: CoordinatorPullBaseline;
   },
 ): VerifiedExecutionAuthority {
   const state = installationState(installation);
@@ -1085,6 +1065,24 @@ export function retainAdmittedControlExecution(
       })
   )
     throw Error("Immutable execution identity mismatch");
+  const coordinatorPull =
+    parsed.success && parsed.data.kind === "service.pull" && parsed.data.candidateId
+      ? parsed.data
+      : undefined;
+  if (coordinatorPull || input.coordinatorPullBaseline) {
+    const baseline = coordinatorPullBaselineSchema.parse(input.coordinatorPullBaseline);
+    if (
+      !coordinatorPull ||
+      coordinatorPull.serviceId !== "data-manager" ||
+      installation.role !== "ops-agent" ||
+      state.fixedChildId ||
+      input.parent?.issuer !== "api" ||
+      input.parent.apiJobId === undefined ||
+      baseline.candidateId !== coordinatorPull.candidateId ||
+      baseline.configurationRevisionId !== coordinatorPull.expectedConfigurationRevisionId
+    )
+      throw Error("Original coordinator pull baseline required");
+  }
   const plan = z
     .array(plannedChildSchema)
     .max(64)
@@ -1212,7 +1210,14 @@ export function retainAdmittedControlExecution(
   });
   if (Buffer.byteLength(canonicalJson(receipt)) > 65536)
     throw Error("Execution authority receipt capacity");
-  registerFamilyExecution(state, origin, execution, controlDigest(receipt), input.parent);
+  registerFamilyExecution(
+    state,
+    origin,
+    execution,
+    controlDigest(receipt),
+    input.parent,
+    !!input.coordinatorPullBaseline,
+  );
   const name = `${execution.operationKey}.json`;
   let newlyAdmitted = false;
   try {
@@ -1503,9 +1508,29 @@ const settlementSchema = z.strictObject({
 });
 const effectObservationSchema = z.discriminatedUnion("kind", [
   z.strictObject({
+    kind: z.literal("configuration-generation-not-committed"),
+    revisionId: z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/),
+    expectedCurrentRevisionId: z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/),
+    result: z.strictObject({
+      outcome: z.literal("not_committed"),
+      reason: z.enum(["conflict", "busy", "failed"]),
+      currentRevisionId: z
+        .string()
+        .regex(/^cfg1_[A-Za-z0-9_-]{43}$/)
+        .nullable()
+        .optional(),
+      cleanupFailed: z.literal(false),
+    }),
+  }),
+  z.strictObject({
+    kind: z.literal("configuration-no-guard"),
+    issuerFreezeProofDigest: digest,
+    issuerUnusedConfirmationDigest: digest,
+  }),
+  z.strictObject({
     kind: z.literal("data-configuration-fence-refused"),
     maintenanceId: uuid,
-    reason: z.literal("busy"),
+    reason: z.enum(["busy", "capacity"]),
   }),
   z.strictObject({
     kind: z.literal("data-configuration-fence"),
@@ -1529,6 +1554,123 @@ const effectObservationSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("not-started") }),
   z.strictObject({ kind: z.literal("unresolved") }),
 ]);
+/** Fixed writer producer only. A DTO, caller error or parsed result cannot
+ * substitute for the actual completed native writer observation. */
+export function retainConfigurationGenerationNonCommit(
+  authority: VerifiedExecutionAuthority,
+  observation: OriginalConfigurationGenerationNonCommit,
+): void {
+  const state = executionAuthorityState(authority),
+    actual = originalConfigurationGenerationNonCommitSource(observation),
+    admitted = readPrivateRecord(
+      state.installation,
+      "executions",
+      `${state.execution.operationKey}.json`,
+      65536,
+    ) as { payload: { operation: unknown } },
+    operation = opsOperationSchema.parse(admitted.payload.operation);
+  if (
+    state.installation.fixedChildId ||
+    state.installation.installation.role !== "ops-agent" ||
+    ![
+      "stack.render",
+      "serviceSelection.apply",
+      "serviceConfig.apply",
+      "integrationConfig.apply",
+      "vault.apply",
+    ].includes(state.kind) ||
+    !("revisionId" in operation) ||
+    !("expectedCurrentRevisionId" in operation) ||
+    state.execution.operationKey !== actual.operationKey ||
+    operation.revisionId !== actual.revisionId ||
+    operation.expectedCurrentRevisionId !== actual.expectedCurrentRevisionId ||
+    actual.installationId !== state.installation.installation.installationId ||
+    controlDigest(admitted) !== state.receiptDigest
+  )
+    throw Error("Original writer/execution noncommit binding required");
+  withPrivateEffectWriter(state, () => {
+    const receipt = effectObservationSchema.parse({
+        kind: "configuration-generation-not-committed",
+        revisionId: actual.revisionId,
+        expectedCurrentRevisionId: actual.expectedCurrentRevisionId,
+        result: actual.result,
+      }),
+      payload = {
+        identity: state.execution,
+        outcome: "contained" as const,
+        publication: "not_started" as const,
+        terminalReceiptDigest: controlDigest(receipt),
+        receipt,
+      },
+      name = `${state.execution.operationKey}.json`;
+    const prior = readPrivateRecord(state.installation, "effects", name, 65536);
+    if (prior !== null) {
+      const retained = verifyControl(
+        state.installation.installation.publicKey,
+        "openmapx-control-settlement-v1",
+        prior,
+        settlementSchema.extend({ receipt: effectObservationSchema }),
+      );
+      if (canonicalJson(retained) !== canonicalJson(payload))
+        throw Error("Original writer noncommit source changed");
+      return;
+    }
+    settleExecutionLifecycle(state);
+    writePrivateRecord(
+      state.installation,
+      "effects",
+      name,
+      signControl(state.installation.privateKey, "openmapx-control-settlement-v1", payload),
+      false,
+      state.origin,
+    );
+    if (state.origin)
+      markFamilyTerminal(
+        state.installation,
+        state.origin,
+        state.execution,
+        true,
+        controlDigest(payload),
+      );
+  });
+}
+/** Actual private source, not a caller outcome flag. */
+export function inspectConfigurationGenerationNonCommit(
+  installation: ControlInstallation,
+  execution: ExecutionRef,
+) {
+  const local = installationState(installation),
+    authority = restoreAdmittedControlExecution(installation, execution),
+    state = executionAuthorityState(authority),
+    raw = readPrivateRecord(local, "effects", `${execution.operationKey}.json`, 65536),
+    effect = verifyControl(
+      installation.publicKey,
+      "openmapx-control-settlement-v1",
+      raw,
+      settlementSchema.extend({ receipt: effectObservationSchema }),
+    );
+  if (
+    effect.receipt.kind !== "configuration-generation-not-committed" ||
+    effect.outcome !== "contained" ||
+    effect.publication !== "not_started" ||
+    !state.origin ||
+    canonicalJson(effect.identity) !== canonicalJson(execution) ||
+    effect.terminalReceiptDigest !== controlDigest(effect.receipt)
+  )
+    throw Error("Actual original generation noncommit required");
+  verifyFamilyOwnedRecord(
+    local,
+    state.origin,
+    {
+      scope: "private",
+      namespace: "effects",
+      container: "",
+      name: `${execution.operationKey}.json`,
+    },
+    canonicalJson(raw),
+  );
+  return effect.receipt;
+}
 export function withPrivateEffectWriter<T>(s: AuthorityState, write: () => T): T {
   const guards = s.installation.privateRoot.directory("effect-writers", true, true);
   try {
@@ -1572,6 +1714,166 @@ export function beginControlEffect(authority: VerifiedExecutionAuthority): void 
       );
     }),
   );
+}
+function configurationPreEffectState(authority: VerifiedExecutionAuthority) {
+  const state = executionAuthorityState(authority),
+    raw = readPrivateRecord(
+      state.installation,
+      "executions",
+      `${state.execution.operationKey}.json`,
+      65536,
+    ),
+    operation = opsOperationSchema.parse(
+      (raw as { payload: { operation: unknown } }).payload.operation,
+    );
+  if (
+    !state.origin ||
+    state.installation.fixedChildId ||
+    state.installation.installation.role !== "ops-agent" ||
+    controlDigest(raw) !== state.receiptDigest ||
+    opsOperationFingerprint(operation) !== state.execution.operationFingerprint ||
+    !(
+      operation.kind === "service.update" ||
+      operation.kind === "stack.start" ||
+      (operation.kind === "service.start" && operation.serviceId !== "data-manager") ||
+      (operation.kind === "service.pull" &&
+        operation.serviceId === "data-manager" &&
+        operation.candidateId)
+    )
+  )
+    throw Error("Fixed managed configuration pre-effect source required");
+  verifyFamilyOwnedRecord(
+    state.installation,
+    state.origin,
+    {
+      scope: "private",
+      namespace: "executions",
+      container: "",
+      name: `${state.execution.operationKey}.json`,
+    },
+    canonicalJson(raw),
+  );
+  return state;
+}
+/** Existing not-started evidence, only after the original lifecycle is frozen
+ * and every exact/reserved child remains unissued and unbound. */
+export function retainConfigurationPreEffectRefusal(authority: VerifiedExecutionAuthority): void {
+  const state = configurationPreEffectState(authority);
+  if (
+    cancelControlExecution(authority).length ||
+    state.reservations.some((slot) => {
+      const retained = inspectControlChildPublication(authority, slot);
+      return retained.binding !== null || retained.publication.state !== "unissued";
+    })
+  )
+    throw Error("Issued or bound managed configuration must remain fenced");
+  retainControlEffectReceipt(authority, {
+    outcome: "failed_without_effect",
+    publication: "not_started",
+    receipt: { kind: "not-started" },
+  });
+}
+/** The transition/restart observer consumes the actual indexed signed effect;
+ * an error class or caller status never qualifies nonissuance. */
+export function inspectConfigurationPreEffectRefusal(authority: VerifiedExecutionAuthority): void {
+  const state = configurationPreEffectState(authority),
+    name = `${state.execution.operationKey}.json`,
+    raw = readPrivateRecord(state.installation, "effects", name, 65536),
+    effect = verifyControl(
+      state.installation.installation.publicKey,
+      "openmapx-control-settlement-v1",
+      raw,
+      settlementSchema.extend({ receipt: effectObservationSchema }),
+    );
+  if (
+    !state.origin ||
+    effect.receipt.kind !== "not-started" ||
+    effect.outcome !== "failed_without_effect" ||
+    effect.publication !== "not_started" ||
+    controlDigest(effect.identity) !== controlDigest(state.execution) ||
+    effect.terminalReceiptDigest !== controlDigest(effect.receipt)
+  )
+    throw Error("Actual unstarted managed configuration receipt required");
+  verifyFamilyOwnedRecord(
+    state.installation,
+    state.origin,
+    { scope: "private", namespace: "effects", container: "", name },
+    canonicalJson(raw),
+  );
+  if (
+    cancelControlExecution(authority).length ||
+    state.reservations.some((slot) => {
+      const retained = inspectControlChildPublication(authority, slot);
+      return retained.binding !== null || retained.publication.state !== "unissued";
+    })
+  )
+    throw Error("Unstarted managed configuration child source changed");
+}
+/** Recover only the exact failure ALREADY fixed by the original signed
+ * terminal commitment. The interrupted journal is a locator, never authority;
+ * neither a new error/time nor an uncommitted failure can pass this comparison. */
+export function restoreConfigurationPreEffectTerminal(
+  installation: ControlInstallation,
+  execution: ExecutionRef,
+  observed: OpsJobStatus,
+): { status: OpsJobStatus; terminalAt: number } {
+  const authority = restoreAdmittedControlExecution(installation, execution);
+  inspectConfigurationPreEffectRefusal(authority);
+  const state = configurationPreEffectState(authority),
+    proof = readTerminalCommitment(state),
+    proofName = terminalCommitmentName(state.execution),
+    rawProof = readPrivateRecord(state.installation, "observations", proofName, 4096);
+  if (
+    !state.origin ||
+    controlDigest((rawProof as { payload: unknown }).payload) !== controlDigest(proof)
+  )
+    throw Error("Original pre-effect terminal changed");
+  verifyFamilyOwnedRecord(
+    state.installation,
+    state.origin,
+    { scope: "private", namespace: "observations", container: "", name: proofName },
+    canonicalJson(rawProof),
+  );
+  const rawAdmission = readPrivateRecord(
+    state.installation,
+    "executions",
+    `${execution.operationKey}.json`,
+    65536,
+  );
+  if (controlDigest(rawAdmission) !== state.receiptDigest)
+    throw Error("Original pre-effect admission changed");
+  const admitted = z
+    .object({ admittedAt: z.number().int().nonnegative().safe(), operation: opsOperationSchema })
+    .passthrough()
+    .parse((rawAdmission as { payload: unknown }).payload);
+  if ("revisionId" in admitted.operation || proof.terminalAt < admitted.admittedAt)
+    throw Error("Immutable original pre-effect tuple required");
+  // Startup may have added an expiry cancellation projection. Only the
+  // original signed whole-tuple digest decides whether it was present.
+  for (const terminationRequestedAt of new Set([undefined, observed.terminationRequestedAt])) {
+    const status = parseOpsJobStatus({
+      version: 2,
+      admittedAt: admitted.admittedAt,
+      deadlineAt: execution.deadlineAt,
+      fingerprint: execution.fingerprint,
+      operationId: execution.executionId,
+      operationKey: execution.operationKey,
+      kind: admitted.operation.kind,
+      resourceId: opsResourceId(admitted.operation),
+      state: "failed",
+      submittedAt: new Date(admitted.admittedAt).toISOString(),
+      updatedAt: new Date(proof.terminalAt).toISOString(),
+      errorClass:
+        admitted.operation.kind === "service.pull" ? "busy" : "configuration_prerequisite",
+      failureResult: {},
+      ...(terminationRequestedAt === undefined ? {} : { terminationRequestedAt }),
+    });
+    if (controlTerminalReceiptDigest(status) === proof.terminalDigest) {
+      terminalIdentity(state, status);
+      return { status, terminalAt: proof.terminalAt };
+    }
+  }
+  throw Error("Original pre-effect terminal unavailable");
 }
 /** Fixed executor adapters supply their parsed result or exact fixed-command exit; arbitrary text is never proof. */
 export function retainControlEffectReceipt(
@@ -1644,6 +1946,67 @@ export function retainControlEffectReceipt(
       }
       outcome = "committed";
       publication = "committed";
+    } else if (receipt.kind === "configuration-no-guard") {
+      if (
+        s.kind !== "configurationMaintenance.prepare" ||
+        s.installation.fixedChildId ||
+        !s.origin ||
+        s.installation.installation.role !== "ops-agent"
+      )
+        throw Error("Original frozen maintenance effect source required");
+      const admitted = readPrivateRecord(
+          s.installation,
+          "executions",
+          `${s.execution.operationKey}.json`,
+          65536,
+        ) as { payload?: { operation?: { maintenanceId?: string } } },
+        name = `${uuid.parse(admitted.payload?.operation?.maintenanceId)}.json`,
+        raw = readPrivateRecord(s.installation, "configuration-maintenance", name),
+        owner = verifyControl(
+          s.installation.installation.publicKey,
+          "openmapx-configuration-maintenance-owner-v2",
+          raw,
+          z
+            .object({
+              admissionDigest: digest,
+              issuance: z.enum(["closing_without_guard", "closed_without_guard"]),
+              noGuard: configurationNoGuardIntentSchema,
+              guardSource: z.null(),
+              final: z.null(),
+              inspection: z.null(),
+              receipt: z
+                .object({ dmFence: z.null(), generation: z.literal("not_started") })
+                .passthrough(),
+            })
+            .passthrough(),
+        );
+      verifyFamilyOwnedRecord(
+        s.installation,
+        s.origin,
+        { scope: "private", namespace: "configuration-maintenance", name, container: "" },
+        canonicalJson(raw),
+      );
+      const confirmation = owner.noGuard.issuerUnused.confirmation;
+      if (
+        owner.admissionDigest !== s.receiptDigest ||
+        !confirmation ||
+        receipt.issuerFreezeProofDigest !== owner.noGuard.noGuardEvidence.issuerFreezeProofDigest ||
+        receipt.issuerUnusedConfirmationDigest !==
+          settlementRecordDigest(
+            configurationSettlementDomains.unusedConfirmation,
+            confirmation.payload,
+          )
+      )
+        throw Error("Actual frozen issuer UNUSED confirmation required");
+      verifyControl(
+        s.installation.installation.publicKey,
+        configurationSettlementDomains.unusedConfirmation,
+        confirmation,
+        configurationNoGuardIntentSchema.shape.issuerUnused.shape.confirmation.unwrap().shape
+          .payload,
+      );
+      outcome = "failed_without_effect";
+      publication = "not_started";
     } else if (receipt.kind === "not-started") {
       try {
         if (
@@ -1734,6 +2097,1229 @@ export function verifyControlEffectSettlement(
   const { receipt: _privateReceipt, ...publicEvidence } = evidence;
   settlements.set(verified, { state: s, evidence: publicEvidence });
   return verified;
+}
+/** Fixed read-only source check for maintenance's pre-root ordinary DM Start.
+ * It reads this role's actual original admission, canonical terminal, effect
+ * result and released target tree. Candidate metadata alone proves nothing. */
+export function verifyMaintenanceCoordinatorPrerequisite(
+  installation: ControlInstallation,
+  record: PreparedConfigurationRecord,
+) {
+  const local = installationState(installation),
+    fixed = record.coordinatorPrerequisite;
+  if (
+    installation.role !== "ops-agent" ||
+    local.fixedChildId ||
+    !record.maintenanceId ||
+    !fixed ||
+    fixed.operation.kind !== "service.start" ||
+    fixed.operation.serviceId !== "data-manager" ||
+    fixed.root.operationKey === record.prepareOperationKey ||
+    fixed.root.parent.operationKey !== record.parentOperationKey ||
+    fixed.root.parent.fingerprint !== record.parentFingerprint ||
+    fixed.root.parent.deadlineAt !== record.parentDeadlineAt
+  )
+    throw Error("Original maintenance coordinator prerequisite required");
+  const raw = readPrivateRecord(local, "executions", `${fixed.root.operationKey}.json`, 65536);
+  const admitted = verifyControl(
+    installation.publicKey,
+    originRecordDomain("openmapx-control-execution", raw),
+    raw,
+    z
+      .object({
+        execution: executionRefSchema,
+        kind: z.literal("service.start"),
+        operation: opsOperationSchema,
+        admittedAt: z.number().int().nonnegative().safe(),
+        requestedDeadlineAt: z.number().int().nonnegative().safe(),
+        parent: retainedParentExecutionSchema.refine((parent) => parent.issuer === "api"),
+      })
+      .passthrough(),
+  );
+  if (
+    admitted.execution.operationKey !== fixed.root.operationKey ||
+    admitted.requestedDeadlineAt !== fixed.root.requestedDeadlineAt ||
+    admitted.execution.deadlineAt > admitted.requestedDeadlineAt ||
+    admitted.execution.deadlineAt <= admitted.admittedAt ||
+    admitted.execution.operationFingerprint !== opsOperationFingerprint(fixed.operation) ||
+    admitted.execution.fingerprint !==
+      executionFingerprint({
+        kind: "service.start",
+        operationFingerprint: opsOperationFingerprint(fixed.operation),
+        deadlineAt: admitted.execution.deadlineAt,
+        parent: admitted.parent,
+      }) ||
+    canonicalJson(admitted.operation) !== canonicalJson(fixed.operation) ||
+    admitted.parent.apiJobId !== record.apiJobId ||
+    admitted.parent.operationKey !== record.parentOperationKey ||
+    admitted.parent.fingerprint !== record.parentFingerprint ||
+    admitted.parent.deadlineAt !== record.parentDeadlineAt
+  )
+    throw Error("Original coordinator admission changed");
+  const authority = restoreAdmittedControlExecution(installation, admitted.execution),
+    owner = executionAuthorityState(authority),
+    canonical = readTerminalCommitment(owner),
+    settled = verifyControlEffectSettlement(installation, admitted.execution),
+    effect = verifyControl(
+      installation.publicKey,
+      "openmapx-control-settlement-v1",
+      readPrivateRecord(local, "effects", `${fixed.root.operationKey}.json`, 65536),
+      settlementSchema.extend({ receipt: effectObservationSchema }),
+    );
+  if (
+    !owner.origin ||
+    canonical.phase !== "canonical" ||
+    effect.outcome !== "committed" ||
+    effect.publication !== "committed" ||
+    effect.receipt.kind !== "ops-result" ||
+    (parseBoundedOpsResult("service.start", effect.receipt.result) as { changed: boolean })
+      .changed !== true
+  )
+    throw Error("Conclusive successful coordinator prerequisite required");
+  assertFamilyCanonicalCompatibility(
+    local,
+    owner.origin,
+    admitted.execution,
+    canonical.terminalDigest,
+    canonical.terminalAt,
+  );
+  verifyRetainedArtifactTargetRootRelease(authority);
+  return Object.freeze({
+    execution: Object.freeze(admitted.execution),
+    terminalDigest: canonical.terminalDigest,
+    terminalAt: canonical.terminalAt,
+    effectSettlementDigest: controlDigest(childSettlementState(settled).evidence),
+  });
+}
+
+declare const stagedCoordinatorBrand: unique symbol;
+export type VerifiedStagedCoordinatorOwnership = Readonly<{ [stagedCoordinatorBrand]: true }>;
+const stagedCoordinatorProofs = new WeakMap<
+  VerifiedStagedCoordinatorOwnership,
+  {
+    installation: ControlInstallation;
+    origin: ControlExecutionOrigin;
+    source: z.infer<typeof stagedCoordinatorSourceSchema>;
+    status: OpsJobStatus;
+  }
+>();
+export function verifiedStagedCoordinatorOwnershipState(proof: VerifiedStagedCoordinatorOwnership) {
+  const value = stagedCoordinatorProofs.get(proof);
+  if (!value) throw Error("Actual staged coordinator ownership required");
+  return {
+    installationId: value.installation.installationId,
+    origin: structuredClone(value.origin),
+    source: structuredClone(value.source),
+  };
+}
+/** Journal tuples locate source bytes only. This verifies the actual first
+ * signed admission, immutable canonical/effect settlement and role-signed API
+ * copy without requiring or renewing an expired API candidate or its grants. */
+export function readVerifiedStagedCoordinatorOwnership(
+  installation: ControlInstallation,
+  execution: ExecutionRef,
+  input: OpsJobStatus,
+  context?: ControlRetentionPreparationContext,
+): VerifiedStagedCoordinatorOwnership {
+  const local = installationState(installation);
+  if (installation.role !== "ops-agent" || local.fixedChildId)
+    throw Error("Production ops-agent staged source required");
+  const raw = readPrivateRecord(local, "executions", `${execution.operationKey}.json`, 65536),
+    admitted = verifyControl(
+      installation.publicKey,
+      originRecordDomain("openmapx-control-execution", raw),
+      raw,
+      z
+        .object({
+          version: z.literal(2),
+          installationId: uuid,
+          origin: controlOriginSchema,
+          kind: z.literal("service.pull"),
+          execution: executionRefSchema,
+          operation: opsOperationSchema,
+          admittedAt: z.number().int().nonnegative().safe(),
+          requestedDeadlineAt: z.number().int().nonnegative().safe(),
+          parent: retainedParentExecutionSchema,
+          coordinatorPullBaseline: coordinatorPullBaselineSchema,
+        })
+        .passthrough(),
+    ),
+    baseline = admitted.coordinatorPullBaseline,
+    operation = admitted.operation,
+    parent = admitted.parent;
+  if (
+    admitted.installationId !== installation.installationId ||
+    canonicalJson(admitted.execution) !== canonicalJson(execution) ||
+    execution.executor !== "ops-agent" ||
+    execution.principal !== "api" ||
+    operation.kind !== "service.pull" ||
+    operation.serviceId !== "data-manager" ||
+    !operation.candidateId ||
+    operation.candidateId !== baseline.candidateId ||
+    operation.expectedConfigurationRevisionId !== baseline.configurationRevisionId ||
+    execution.operationFingerprint !== opsOperationFingerprint(operation) ||
+    parent.issuer !== "api" ||
+    execution.deadlineAt > admitted.requestedDeadlineAt ||
+    execution.deadlineAt <= admitted.admittedAt ||
+    execution.fingerprint !==
+      executionFingerprint({
+        kind: "service.pull",
+        operationFingerprint: execution.operationFingerprint,
+        deadlineAt: execution.deadlineAt,
+        parent,
+      })
+  )
+    throw Error("Original staged coordinator admission changed");
+  const authority = restoreAdmittedControlExecution(installation, execution),
+    state = executionAuthorityState(authority),
+    canonical = readTerminalCommitment(state),
+    terminal = terminalIdentity(state, input),
+    settlement = verifyControlEffectSettlement(installation, execution),
+    effectRecord = readPrivateRecord(local, "effects", `${execution.operationKey}.json`, 65536),
+    effect = verifyControl(
+      installation.publicKey,
+      "openmapx-control-settlement-v1",
+      effectRecord,
+      settlementSchema.extend({ receipt: effectObservationSchema }),
+    );
+  if (
+    !state.origin ||
+    canonicalJson(state.origin) !== canonicalJson(admitted.origin) ||
+    canonical.phase !== "canonical" ||
+    terminal.terminal.state !== "succeeded" ||
+    canonical.terminalDigest !== terminal.digest ||
+    effect.outcome !== "committed" ||
+    effect.publication !== "committed" ||
+    effect.receipt.kind !== "ops-result" ||
+    canonicalJson(terminal.terminal.result) !== canonicalJson(effect.receipt.result)
+  )
+    throw Error("Actual successful contained staged coordinator source required");
+  const result = servicePullResultSchema.parse(effect.receipt.result);
+  if (
+    result.revisionId !== baseline.configurationRevisionId ||
+    result.imageReference !== baseline.configImageReference
+  )
+    throw Error("Original staged coordinator result changed");
+  const canonicalRecord = readPrivateRecord(
+    local,
+    "observations",
+    terminalCommitmentName(execution),
+    4096,
+  );
+  for (const record of [
+    { namespace: "executions", name: `${execution.operationKey}.json`, raw },
+    { namespace: "effects", name: `${execution.operationKey}.json`, raw: effectRecord },
+    { namespace: "observations", name: terminalCommitmentName(execution), raw: canonicalRecord },
+  ])
+    verifyFamilyOwnedRecord(
+      local,
+      state.origin,
+      { scope: "private", namespace: record.namespace, container: "", name: record.name },
+      canonicalJson(record.raw),
+    );
+  assertFamilyCanonicalCompatibility(
+    local,
+    state.origin,
+    execution,
+    canonical.terminalDigest,
+    canonical.terminalAt,
+  );
+  const copy = readActiveStagedCoordinatorApiCopy(
+      local,
+      state.origin,
+      execution,
+      canonical.terminalDigest,
+      parent,
+      context,
+    ),
+    source = stagedCoordinatorSourceSchema.parse({
+      execution,
+      admittedAt: admitted.admittedAt,
+      baseline,
+      admissionDigest: controlDigest(raw),
+      canonicalDigest: canonical.terminalDigest,
+      effectDigest: controlDigest(childSettlementState(settlement).evidence),
+      apiCopyDigest: copy.apiCopyDigest,
+    }),
+    proof = Object.freeze({}) as VerifiedStagedCoordinatorOwnership;
+  stagedCoordinatorProofs.set(proof, {
+    installation,
+    origin: state.origin,
+    source: structuredClone(source),
+    status: structuredClone(input),
+  });
+  return proof;
+}
+declare const stagedOwnerBaselineBrand: unique symbol;
+export type VerifiedStagedCoordinatorOwnerBaseline = Readonly<{ [stagedOwnerBaselineBrand]: true }>;
+const stagedOwnerBaselines = new WeakMap<
+  VerifiedStagedCoordinatorOwnerBaseline,
+  {
+    baseline: CoordinatorPullBaseline;
+    expectedCurrentRevisionId: string;
+    currentAuthorityRevision: string;
+  }
+>();
+export function verifiedStagedCoordinatorOwnerBaselineState(
+  proof: VerifiedStagedCoordinatorOwnerBaseline,
+) {
+  const value = stagedOwnerBaselines.get(proof);
+  if (!value) throw Error("Actual staged original-owner provenance required");
+  return structuredClone(value);
+}
+/** A separately bound historical observation, never this owner's pull or a
+ * caller-selected current generation. All postcommit exceptions verify the
+ * original actual canonical/effect/physical child under the same decision. */
+export function ownedStagedCoordinatorBaseline(
+  authority: VerifiedExecutionAuthority,
+): VerifiedStagedCoordinatorOwnerBaseline {
+  const state = executionAuthorityState(authority);
+  if (
+    state.kind !== "configurationMaintenance.prepare" ||
+    !state.origin ||
+    state.installation.fixedChildId ||
+    state.installation.installation.role !== "ops-agent"
+  )
+    throw Error("Original staged maintenance owner required");
+  const admitted = readPrivateRecord(
+    state.installation,
+    "executions",
+    `${state.execution.operationKey}.json`,
+    65536,
+  ) as { payload?: { operation?: { maintenanceId?: string } } };
+  const name = `${uuid.parse(admitted.payload?.operation?.maintenanceId)}.json`,
+    raw = readPrivateRecord(state.installation, "configuration-maintenance", name);
+  const owner = verifyControl(
+    state.installation.installation.publicKey,
+    "openmapx-configuration-maintenance-owner-v2",
+    raw,
+    configurationMaintenanceOwnerRecordSchema,
+  );
+  verifyFamilyOwnedRecord(
+    state.installation,
+    state.origin,
+    { scope: "private", namespace: "configuration-maintenance", container: "", name },
+    canonicalJson(raw),
+  );
+  const observation = verifyControl(
+      state.installation.installation.publicKey,
+      stagedCoordinatorObservationDomain,
+      owner.stagedCoordinatorProvenance,
+      stagedCoordinatorObservationPayloadSchema,
+    ),
+    baseline = observation.source.baseline;
+  if (
+    owner.coordinatorPull ||
+    owner.plan.coordinatorImage?.action !== "apply" ||
+    observation.installationId !== state.installation.installation.installationId ||
+    owner.admissionDigest !== state.receiptDigest ||
+    controlDigest(admitted) !== state.receiptDigest ||
+    canonicalJson(owner.plan.prepare) !== canonicalJson(state.execution) ||
+    canonicalJson(owner.origin) !== canonicalJson(state.origin) ||
+    canonicalJson(observation.ownerPrepare) !== canonicalJson(state.execution) ||
+    observation.candidateId !== owner.plan.operation.candidateId ||
+    observation.planDigest !== owner.plan.planDigest ||
+    baseline.configurationRevisionId !== owner.plan.operation.expectedCurrentRevisionId ||
+    canonicalJson(owner.originalContainers.find((c) => c.serviceId === "data-manager")) !==
+      canonicalJson(baseline.container)
+  )
+    throw Error("Original staged owner/source binding changed");
+  let expectedCurrentRevisionId = baseline.configurationRevisionId;
+  if (owner.receipt.generation === "committed") {
+    const generation = owner.apiControls.steps.find((value) => value.ordinal === 0);
+    if (
+      !generation?.canonical ||
+      !generation.receiptDelivery ||
+      owner.receipt.appliedRevisionId !== owner.plan.operation.revisionId
+    )
+      throw Error("Original staged owner generation required");
+    const child = verifyConfigurationMaintenanceChildTerminal(
+        authority,
+        0,
+        generation.canonical.status,
+        generation.canonical.terminalAt,
+      ),
+      verified = configurationMaintenanceChildState(child, authority),
+      lease = restoreArtifactTargetLeaseForSettlement(authority);
+    try {
+      const physical = inspectArtifactTargetLeaseChildSettlement(lease, generation.execution);
+      if (!physical || canonicalJson(physical) !== canonicalJson(verified.settlement))
+        throw Error("Actual staged generation settlement required");
+    } finally {
+      closeArtifactTargetLeaseHandle(lease);
+    }
+    expectedCurrentRevisionId = owner.plan.operation.revisionId;
+  } else if (
+    owner.receipt.generation !== "not_started" &&
+    owner.receipt.generation !== "not_committed"
+  )
+    throw Error("Unknown staged owner generation");
+  const proof = Object.freeze({}) as VerifiedStagedCoordinatorOwnerBaseline;
+  stagedOwnerBaselines.set(proof, {
+    baseline: structuredClone(baseline),
+    expectedCurrentRevisionId,
+    currentAuthorityRevision: owner.plan.sourceAuthorityRevision,
+  });
+  return proof;
+}
+declare const coordinatorBaselineBrand: unique symbol;
+export type VerifiedCoordinatorPullBaseline = Readonly<{ [coordinatorBaselineBrand]: true }>;
+const baselineProofs = new WeakMap<
+  VerifiedCoordinatorPullBaseline,
+  Readonly<
+    z.infer<typeof coordinatorPullWitnessPayloadSchema> & { expectedCurrentRevisionId: string }
+  >
+>();
+const observedBaselineProofs = new WeakMap<object, VerifiedCoordinatorPullBaseline>();
+export function verifiedCoordinatorPullBaselineState(proof: VerifiedCoordinatorPullBaseline) {
+  const value = baselineProofs.get(proof);
+  if (!value) throw Error("Verified original coordinator baseline required");
+  // Return a copy so a consumer cannot mutate the authenticated private observation.
+  return structuredClone(value);
+}
+export function observedCoordinatorPullBaseline(witness: object): VerifiedCoordinatorPullBaseline {
+  const proof = observedBaselineProofs.get(witness);
+  if (!proof) throw Error("Actual original pull observation required");
+  return proof;
+}
+/** Recovery derives only from the exact indexed signed owner, after the initial
+ * successful source copy. It does not depend on a retired normal pull family. */
+export function ownedCoordinatorPullBaseline(
+  authority: VerifiedExecutionAuthority,
+): VerifiedCoordinatorPullBaseline {
+  const state = executionAuthorityState(authority);
+  if (
+    state.kind !== "configurationMaintenance.prepare" ||
+    state.installation.fixedChildId ||
+    state.installation.installation.role !== "ops-agent" ||
+    !state.origin
+  )
+    throw Error("Original maintenance owner required");
+  const admitted = readPrivateRecord(
+    state.installation,
+    "executions",
+    `${state.execution.operationKey}.json`,
+    65536,
+  ) as { payload?: { operation?: { maintenanceId?: string } } };
+  const name = `${uuid.parse(admitted.payload?.operation?.maintenanceId)}.json`,
+    raw = readPrivateRecord(state.installation, "configuration-maintenance", name);
+  const owner = verifyControl(
+    state.installation.installation.publicKey,
+    "openmapx-configuration-maintenance-owner-v2",
+    raw,
+    configurationMaintenanceOwnerRecordSchema,
+  );
+  verifyFamilyOwnedRecord(
+    state.installation,
+    state.origin,
+    { scope: "private", namespace: "configuration-maintenance", container: "", name },
+    canonicalJson(raw),
+  );
+  const witness = verifyControl(
+    state.installation.installation.publicKey,
+    coordinatorPullObservationDomain,
+    owner.coordinatorPull,
+    coordinatorPullWitnessPayloadSchema,
+  );
+  if (
+    owner.admissionDigest !== state.receiptDigest ||
+    controlDigest(admitted) !== state.receiptDigest ||
+    canonicalJson(owner.plan.prepare) !== canonicalJson(state.execution) ||
+    canonicalJson(owner.origin) !== canonicalJson(state.origin) ||
+    canonicalJson(witness.maintenancePrepare) !== canonicalJson(state.execution) ||
+    witness.installationId !== state.installation.installation.installationId ||
+    witness.candidateId !== owner.plan.operation.candidateId ||
+    witness.maintenanceId !== owner.plan.operation.maintenanceId ||
+    witness.baseline.candidateId !== witness.candidateId ||
+    witness.baseline.sourceRevision !== witness.sourceRevision ||
+    witness.baseline.configurationAuthorityRevision !== owner.plan.sourceAuthorityRevision ||
+    witness.baseline.submissionDigest !== witness.submissionDigest ||
+    canonicalJson(owner.originalContainers.find((c) => c.serviceId === "data-manager")) !==
+      canonicalJson(witness.baseline.container) ||
+    owner.plan.coordinatorImage?.imageId !== witness.imageId
+  )
+    throw Error("Original coordinator owner source changed");
+  const proof = Object.freeze({}) as VerifiedCoordinatorPullBaseline;
+  baselineProofs.set(
+    proof,
+    Object.freeze({
+      ...structuredClone(witness),
+      expectedCurrentRevisionId:
+        owner.receipt.generation === "committed"
+          ? owner.plan.operation.revisionId
+          : witness.baseline.configurationRevisionId,
+    }),
+  );
+  return proof;
+}
+/** Fixed source of this one pre-sealed normal pull. Its real signed admission
+ * owns the assigned execution ID and effective deadline; neither is predicted. */
+export function verifyCoordinatorPullAdmissionSource(
+  installation: ControlInstallation,
+  record: PreparedConfigurationRecord,
+) {
+  const state = installationState(installation),
+    fixed = record.privateCoordinatorLifecycle;
+  if (
+    installation.role !== "ops-agent" ||
+    state.fixedChildId ||
+    fixed?.action !== "update" ||
+    record.apiFollowUp !== "coordinator-update" ||
+    !record.maintenanceId ||
+    fixed.pull.operation.candidateId !== record.candidateId
+  )
+    throw Error("Original coordinator pull source required");
+  const submission = fixed.pull,
+    raw = readPrivateRecord(state, "executions", `${submission.operationKey}.json`, 65536),
+    admitted = verifyControl(
+      installation.publicKey,
+      originRecordDomain("openmapx-control-execution", raw),
+      raw,
+      z
+        .object({
+          version: z.literal(2),
+          installationId: uuid,
+          origin: controlOriginSchema,
+          kind: z.literal("service.pull"),
+          execution: executionRefSchema,
+          operation: opsOperationSchema,
+          admittedAt: z.number().int().nonnegative().safe(),
+          requestedDeadlineAt: z.number().int().nonnegative().safe(),
+          parent: retainedParentExecutionSchema,
+          coordinatorPullBaseline: coordinatorPullBaselineSchema,
+        })
+        .passthrough(),
+    ),
+    parent = admitted.parent,
+    attempt = submission.attempt,
+    execution = admitted.execution;
+  if (
+    admitted.installationId !== installation.installationId ||
+    admitted.coordinatorPullBaseline.candidateId !== record.candidateId ||
+    admitted.coordinatorPullBaseline.sourceRevision !== record.expectedSourceRevision ||
+    admitted.coordinatorPullBaseline.configurationRevisionId !==
+      submission.operation.expectedConfigurationRevisionId ||
+    admitted.coordinatorPullBaseline.submissionDigest !==
+      coordinatorPullSubmissionDigest(submission) ||
+    parent.issuer !== "api" ||
+    execution.executor !== "ops-agent" ||
+    execution.principal !== "api" ||
+    execution.operationKey !== submission.operationKey ||
+    execution.operationFingerprint !== submission.operationFingerprint ||
+    canonicalJson(admitted.operation) !== canonicalJson(submission.operation) ||
+    admitted.requestedDeadlineAt !== submission.requestedDeadlineAt ||
+    execution.deadlineAt > admitted.requestedDeadlineAt ||
+    execution.deadlineAt <= admitted.admittedAt ||
+    execution.fingerprint !==
+      executionFingerprint({
+        kind: "service.pull",
+        operationFingerprint: submission.operationFingerprint,
+        deadlineAt: execution.deadlineAt,
+        parent,
+      }) ||
+    parent.apiJobId !== record.apiJobId ||
+    parent.apiJobId !== attempt.apiJobId ||
+    parent.apiOwnerVersion !== attempt.apiOwnerVersion ||
+    parent.attemptId !== attempt.attemptId ||
+    parent.operationKey !== record.parentOperationKey ||
+    parent.operationKey !== attempt.parentOperationKey ||
+    parent.fingerprint !== record.parentFingerprint ||
+    parent.fingerprint !== attempt.parentFingerprint ||
+    parent.deadlineAt !== record.parentDeadlineAt ||
+    parent.deadlineAt !== attempt.parentDeadlineAt
+  )
+    throw Error("Original coordinator normal admission changed");
+  restoreAdmittedControlExecution(installation, execution);
+  return admitted;
+}
+
+/** Only a real immutable canonical terminal + contained effect can mint this
+ * copied observation. The structural public status alone supplies no proof. */
+export function observeCoordinatorPullForMaintenance(
+  installation: ControlInstallation,
+  record: PreparedConfigurationRecord,
+  maintenancePrepare: ExecutionRef,
+  status: OpsJobStatus,
+) {
+  const admitted = verifyCoordinatorPullAdmissionSource(installation, record),
+    authority = restoreAdmittedControlExecution(installation, admitted.execution),
+    state = executionAuthorityState(authority),
+    canonical = readTerminalCommitment(state),
+    terminal = terminalIdentity(state, status),
+    settlement = verifyControlEffectSettlement(installation, admitted.execution),
+    effect = verifyControl(
+      installation.publicKey,
+      "openmapx-control-settlement-v1",
+      readPrivateRecord(
+        state.installation,
+        "effects",
+        `${admitted.execution.operationKey}.json`,
+        65536,
+      ),
+      settlementSchema.extend({ receipt: effectObservationSchema }),
+    );
+  if (
+    !state.origin ||
+    canonical.phase !== "canonical" ||
+    terminal.terminal.state !== "succeeded" ||
+    canonical.terminalDigest !== terminal.digest ||
+    effect.outcome !== "committed" ||
+    effect.publication !== "committed" ||
+    effect.receipt.kind !== "ops-result" ||
+    canonicalJson(terminal.terminal.result) !== canonicalJson(effect.receipt.result)
+  )
+    throw Error("Actual successful contained coordinator pull required");
+  assertFamilyCanonicalCompatibility(
+    state.installation,
+    state.origin,
+    admitted.execution,
+    canonical.terminalDigest,
+    canonical.terminalAt,
+  );
+  const { changed: _changed, ...result } = servicePullResultSchema.parse(effect.receipt.result),
+    fixed = record.privateCoordinatorLifecycle!;
+  if (
+    fixed.action !== "update" ||
+    result.revisionId !== fixed.pull.operation.expectedConfigurationRevisionId
+  )
+    throw Error("Original coordinator pull revision changed");
+  const witness = coordinatorPullWitnessSchema.parse(
+    signControl(
+      state.installation.privateKey,
+      coordinatorPullObservationDomain,
+      coordinatorPullWitnessPayloadSchema.parse({
+        version: 2,
+        installationId: installation.installationId,
+        maintenanceId: record.maintenanceId,
+        candidateId: record.candidateId,
+        maintenancePrepare,
+        pull: admitted.execution,
+        submissionDigest: coordinatorPullSubmissionDigest(fixed.pull),
+        operationFingerprint: admitted.execution.operationFingerprint,
+        apiParentDigest: controlDigest(admitted.parent),
+        sourceRevision: record.expectedSourceRevision,
+        ...result,
+        terminalReceiptDigest: terminal.digest,
+        effectReceiptDigest: controlDigest(childSettlementState(settlement).evidence),
+        baseline: admitted.coordinatorPullBaseline,
+        baselineAdmissionDigest: controlDigest(
+          readPrivateRecord(
+            state.installation,
+            "executions",
+            `${admitted.execution.operationKey}.json`,
+            65536,
+          ),
+        ),
+        verifiedAt: Date.now(),
+      }),
+    ),
+  );
+  const proof = Object.freeze({}) as VerifiedCoordinatorPullBaseline;
+  baselineProofs.set(
+    proof,
+    Object.freeze({
+      ...structuredClone(witness.payload),
+      expectedCurrentRevisionId: admitted.coordinatorPullBaseline.configurationRevisionId,
+    }),
+  );
+  observedBaselineProofs.set(witness, proof);
+  return witness;
+}
+/** Copies actual retained source packets into the original indexed family.
+ * The initial empty projection is allocated before the DM guard. No caller
+ * supplies a decision, generation result, signature or authority digest. */
+export function publishConfigurationMaintenanceForwardWitness(
+  authority: VerifiedExecutionAuthority,
+): void {
+  const root = executionAuthorityState(authority);
+  if (
+    root.kind !== "configurationMaintenance.prepare" ||
+    !root.origin ||
+    root.installation.installation.role !== "ops-agent" ||
+    root.installation.fixedChildId
+  )
+    throw Error("Original maintenance forward publisher required");
+  const raw = readPrivateRecord(
+      root.installation,
+      "executions",
+      `${root.execution.operationKey}.json`,
+      65536,
+    ) as { payload?: { operation?: { maintenanceId?: string } } },
+    name = `${uuid.parse(raw.payload?.operation?.maintenanceId)}.json`,
+    ownerRaw = readPrivateRecord(root.installation, "configuration-maintenance", name),
+    owner = verifyControl(
+      root.installation.installation.publicKey,
+      "openmapx-configuration-maintenance-owner-v2",
+      ownerRaw,
+      configurationMaintenanceOwnerRecordSchema,
+    );
+  verifyFamilyOwnedRecord(
+    root.installation,
+    root.origin,
+    { scope: "private", namespace: "configuration-maintenance", container: "", name },
+    canonicalJson(ownerRaw),
+  );
+  assertConfigurationMaintenanceDecisionSource(owner);
+  if (
+    owner.admissionDigest !== root.receiptDigest ||
+    controlDigest(raw) !== root.receiptDigest ||
+    canonicalJson(owner.plan.prepare) !== canonicalJson(root.execution) ||
+    canonicalJson(owner.origin) !== canonicalJson(root.origin)
+  )
+    throw Error("Original maintenance forward source changed");
+  const receipt = owner.receipt,
+    graph = configurationMaintenanceForwardGraphSchema.parse({
+      version: 1,
+      binding: receipt.binding,
+      prepare: receipt.prepare,
+      apiJobId: receipt.apiJobId,
+      parentOperationKey: receipt.parentOperationKey,
+      parentFingerprint: receipt.parentFingerprint,
+      parentDeadlineAt: receipt.parentDeadlineAt,
+      planDigest: receipt.planDigest,
+      serviceIds: receipt.serviceIds,
+      steps: receipt.steps,
+    });
+  const decision = owner.apiControls.decide?.receiptDelivery
+    ? owner.apiControls.decide.commitment
+    : null;
+  if (decision)
+    verifyControl(
+      root.installation.installation.publicKey,
+      configurationMaintenanceDecisionCommitmentDomain,
+      decision,
+      configurationMaintenanceDecisionCommitmentPayloadSchema,
+    );
+  const source = owner.apiControls.steps.find((value) => value.ordinal === 0);
+  let generation = null;
+  if (source?.canonical && source.receiptDelivery && decision) {
+    verifyConfigurationMaintenanceChildTerminal(
+      authority,
+      0,
+      source.canonical.status,
+      source.canonical.terminalAt,
+    );
+    generation = {
+      admission: readPrivateRecord(
+        root.installation,
+        "executions",
+        `${source.execution.operationKey}.json`,
+        65536,
+      ),
+      terminal: readPrivateRecord(
+        root.installation,
+        "observations",
+        `terminal-${source.execution.operationKey}.json`,
+        8192,
+      ),
+      effect: readPrivateRecord(
+        root.installation,
+        "effects",
+        `${source.execution.operationKey}.json`,
+        65536,
+      ),
+      status: source.canonical.status,
+    };
+  }
+  const packet = signControl(
+      root.installation.privateKey,
+      configurationMaintenanceForwardDomain,
+      configurationMaintenanceForwardSchema.parse({
+        version: 1,
+        graph,
+        rootAdmission: raw,
+        decision,
+        generation,
+      }),
+    ),
+    bytes = canonicalJson(packet);
+  if (Buffer.byteLength(bytes) > 65536)
+    throw Error("Configuration maintenance forward witness capacity");
+  const directory = executionWitnessDirectory(root.installation, "ops-agent", true);
+  try {
+    writeExecutionShared(
+      root.installation,
+      root.execution,
+      directory.role,
+      `${root.execution.operationKey}.configuration-maintenance.json`,
+      bytes,
+    );
+  } finally {
+    directory.close();
+  }
+}
+/** DM reads ONLY shared original signed packets and its pinned role keys.
+ * This does not inspect the sibling agent's private directory. The actual
+ * verified transport parent and anchored depth-two grant must match the
+ * exact original root graph, continue decision and committed generation. */
+export function verifyConfigurationMaintenanceGenerationWitness(
+  installation: ControlInstallation,
+  value: unknown,
+  parent: import("../ops/execution-identity").VerifiedParentExecution,
+  grant: ReturnType<typeof import("./target-lease").inspectArtifactDelegation>,
+  expected: {
+    maintenanceId: string;
+    candidateId: string;
+    ownerPrepare: ExecutionRef;
+    revisionId: string;
+    hardlinkPlanDigest: string;
+    coordinatorMode: "ensure-running" | "require-running";
+    serviceIds: readonly string[];
+    rootCertificateDigest: string;
+  },
+) {
+  const local = installationState(installation),
+    request = startGenerationHardlinksExecutionSchema.parse(value);
+  if (
+    installation.role !== "data-manager" ||
+    local.fixedChildId ||
+    !verifiedParents.has(parent) ||
+    parent.issuer !== "ops-agent" ||
+    !parent.execution ||
+    canonicalJson(parent.execution) !== canonicalJson(grant.parent) ||
+    canonicalJson(grant.owner) !== canonicalJson(expected.ownerPrepare) ||
+    grant.ownerCertificateDigest !== expected.rootCertificateDigest
+  )
+    throw Error("Actual original maintenance middle parent required");
+  const directory = executionWitnessDirectory(local, "ops-agent");
+  try {
+    const packet = verifyControl(
+        local.publicKeys["ops-agent"],
+        configurationMaintenanceForwardDomain,
+        JSON.parse(
+          directory.role
+            .read(`${expected.ownerPrepare.operationKey}.configuration-maintenance.json`, 65536)
+            .toString("utf8"),
+        ),
+        configurationMaintenanceForwardSchema,
+      ),
+      graph = packet.graph;
+    const admissionSchema = z
+      .object({
+        version: z.literal(2),
+        installationId: uuid,
+        origin: controlOriginSchema,
+        execution: executionRefSchema,
+        kind: z.string(),
+        operation: opsOperationSchema,
+        parent: retainedParentExecutionSchema,
+        admittedAt: z.number().int().nonnegative().safe(),
+        requestedDeadlineAt: z.number().int().positive().safe(),
+        serviceIds: targetSchema,
+        plan: z.array(z.unknown()),
+        reservations: z.array(z.lazy(() => controlChildReservationSchema)).optional(),
+      })
+      .passthrough();
+    const root = verifyControl(
+        local.publicKeys["ops-agent"],
+        "openmapx-control-execution-v2",
+        packet.rootAdmission,
+        admissionSchema,
+      ),
+      original = readControlExecutionWitness(
+        local,
+        expected.ownerPrepare,
+        local.publicKeys["ops-agent"],
+      ),
+      operation = root.operation,
+      first = graph.steps[0];
+    if (
+      !packet.decision ||
+      !packet.generation ||
+      operation.kind !== "configurationMaintenance.prepare" ||
+      !first ||
+      root.installationId !== installation.installationId ||
+      root.kind !== operation.kind ||
+      root.parent.issuer !== "api" ||
+      original.authorityDigest !== controlDigest(packet.rootAdmission) ||
+      canonicalJson(root.origin) !== canonicalJson(original.origin) ||
+      canonicalJson(root.execution) !== canonicalJson(expected.ownerPrepare) ||
+      canonicalJson(graph.prepare) !== canonicalJson(root.execution) ||
+      opsOperationFingerprint(operation) !== root.execution.operationFingerprint ||
+      root.execution.fingerprint !==
+        executionFingerprint({
+          kind: operation.kind,
+          operationFingerprint: root.execution.operationFingerprint,
+          deadlineAt: root.execution.deadlineAt,
+          parent: root.parent,
+        }) ||
+      root.parent.apiJobId !== graph.apiJobId ||
+      root.parent.operationKey !== graph.parentOperationKey ||
+      root.parent.fingerprint !== graph.parentFingerprint ||
+      root.parent.deadlineAt !== graph.parentDeadlineAt ||
+      operation.maintenanceId !== expected.maintenanceId ||
+      operation.candidateId !== expected.candidateId ||
+      operation.revisionId !== expected.revisionId ||
+      operation.coordinatorMode !== expected.coordinatorMode ||
+      request.input.planDigest !== expected.hardlinkPlanDigest ||
+      request.input.revisionId !== expected.revisionId ||
+      request.input.coordinatorMode !== expected.coordinatorMode ||
+      canonicalJson(root.serviceIds) !== canonicalJson(expected.serviceIds) ||
+      canonicalJson(graph.serviceIds) !== canonicalJson(root.serviceIds)
+    )
+      throw Error("Original maintenance forward graph identity conflict");
+    const { kind: _kind, ...binding } = operation;
+    if (canonicalJson(binding) !== canonicalJson(graph.binding))
+      throw Error("Original maintenance graph binding conflict");
+    // Private candidate digests/source metadata are deliberately NOT shared.
+    // These placeholders do not enter the graph digest or reservations.
+    const rebuilt = buildFixedConfigurationMaintenancePlan({
+      installationId: installation.installationId,
+      prepare: root.execution,
+      operation,
+      apiParent: root.parent,
+      apply: first.operation as Parameters<
+        typeof buildFixedConfigurationMaintenancePlan
+      >[0]["apply"],
+      candidateRecordDigest: "0".repeat(64),
+      sourceAuthorityRevision: "not-shared",
+      previewDigest: "0".repeat(64),
+      hardlinkPlan: request.plan,
+      serviceIds: root.serviceIds,
+      recreateServiceIds: graph.steps.flatMap((step) =>
+        step.operation.kind === "service.recreate" ||
+        step.operation.kind === "service.recreateIsolated"
+          ? [step.operation.serviceId]
+          : [],
+      ),
+    });
+    const middle = rebuilt.steps.find((step) => step.phase === "maintenance-hardlinks"),
+      middleReservation = rebuilt.reservations.find(
+        (step) => step.phase === "maintenance-hardlinks",
+      );
+    if (
+      !middle ||
+      !middleReservation ||
+      !rebuilt.nestedHardlinks ||
+      graph.planDigest !== rebuilt.planDigest ||
+      canonicalJson(graph.steps) !== canonicalJson(rebuilt.steps) ||
+      canonicalJson(root.reservations) !== canonicalJson(rebuilt.reservations) ||
+      parent.execution.operationKey !== middle.operationKey ||
+      parent.execution.operationFingerprint !== middle.operationFingerprint ||
+      parent.execution.deadlineAt > root.execution.deadlineAt ||
+      parent.fingerprint !== parent.execution.fingerprint ||
+      parent.execution.fingerprint !==
+        executionFingerprint({
+          kind: middle.operation.kind,
+          operationFingerprint: middle.operationFingerprint,
+          deadlineAt: parent.execution.deadlineAt,
+          parent: retainedControlParent(root.execution),
+        }) ||
+      grant.phase !== "hardlinks" ||
+      grant.kind !== "generation-hardlinks" ||
+      grant.recipient !== "data-manager" ||
+      canonicalJson(grant.execution) !==
+        canonicalJson({
+          ...rebuilt.nestedHardlinks.execution,
+          deadlineAt: grant.execution.deadlineAt,
+          operationFingerprint: rebuilt.nestedHardlinks.operationFingerprint,
+          fingerprint: grant.execution.fingerprint,
+        }) ||
+      grant.execution.operationKey !== request.operationKey ||
+      grant.execution.operationFingerprint !== controlDigest(request.input) ||
+      grant.execution.deadlineAt !== request.requestedDeadlineAt ||
+      grant.execution.deadlineAt > parent.deadlineAt ||
+      grant.execution.fingerprint !==
+        executionFingerprint({
+          kind: "generation-hardlinks",
+          operationFingerprint: controlDigest(request.input),
+          deadlineAt: grant.execution.deadlineAt,
+          parent,
+        }) ||
+      canonicalJson(grant.serviceIds) !== canonicalJson(root.serviceIds)
+    )
+      throw Error("Original frozen middle/sole leaf conflict");
+    const decision = verifyControl(
+        local.publicKeys["ops-agent"],
+        configurationMaintenanceDecisionCommitmentDomain,
+        packet.decision,
+        configurationMaintenanceDecisionCommitmentPayloadSchema,
+      ),
+      identity = decision.identity;
+    if (
+      identity.installationId !== installation.installationId ||
+      canonicalJson(identity.origin) !== canonicalJson(root.origin) ||
+      canonicalJson(identity.ownerPrepare) !== canonicalJson(root.execution) ||
+      identity.admissionDigest !== controlDigest(packet.rootAdmission) ||
+      identity.rootCertificateDigest !== expected.rootCertificateDigest ||
+      identity.maintenanceId !== expected.maintenanceId ||
+      identity.candidateId !== expected.candidateId ||
+      identity.planDigest !== graph.planDigest ||
+      identity.settlementId !== rebuilt.dmSettle.settlementId ||
+      decision.operation.decision !== "continue" ||
+      decision.operation.maintenanceId !== expected.maintenanceId ||
+      decision.operation.candidateId !== expected.candidateId ||
+      decision.operation.planDigest !== graph.planDigest ||
+      decision.operation.prepareOperationKey !== root.execution.operationKey ||
+      decision.operation.prepareFingerprint !== root.execution.operationFingerprint ||
+      decision.apiParent.apiJobId !== graph.apiJobId ||
+      decision.apiParent.operationKey !== graph.parentOperationKey ||
+      decision.apiParent.fingerprint !== graph.parentFingerprint ||
+      decision.apiParent.deadlineAt !== graph.parentDeadlineAt ||
+      decision.execution.operationFingerprint !== opsOperationFingerprint(decision.operation) ||
+      decision.execution.fingerprint !==
+        executionFingerprint({
+          kind: decision.operation.kind,
+          operationFingerprint: decision.execution.operationFingerprint,
+          deadlineAt: decision.execution.deadlineAt,
+          parent: decision.apiParent,
+        }) ||
+      decision.acceptedAt >= decision.execution.deadlineAt ||
+      decision.result.decision?.decision !== "continue" ||
+      decision.result.decision.decisionId !== decision.operation.decisionId ||
+      decision.result.state !== "authorized" ||
+      decision.result.dmFence?.state !== "prepared"
+    )
+      throw Error("Actual original continue commitment required");
+    const generation = packet.generation,
+      admitted = verifyControl(
+        local.publicKeys["ops-agent"],
+        "openmapx-control-execution-v2",
+        generation.admission,
+        admissionSchema,
+      ),
+      childWitness = readControlExecutionWitness(
+        local,
+        admitted.execution,
+        local.publicKeys["ops-agent"],
+      ),
+      terminal = verifyControl(
+        local.publicKeys["ops-agent"],
+        "openmapx-control-terminal-v1",
+        generation.terminal,
+        terminalCommitmentSchema,
+      ),
+      effect = verifyControl(
+        local.publicKeys["ops-agent"],
+        "openmapx-control-settlement-v1",
+        generation.effect,
+        settlementSchema.extend({ receipt: effectObservationSchema }),
+      ),
+      status = generation.status;
+    if (
+      childWitness.authorityDigest !== controlDigest(generation.admission) ||
+      admitted.installationId !== installation.installationId ||
+      canonicalJson(admitted.origin) !== canonicalJson(root.origin) ||
+      canonicalJson(admitted.operation) !== canonicalJson(first.operation) ||
+      canonicalJson(admitted.parent) !== canonicalJson(retainedControlParent(root.execution)) ||
+      admitted.execution.operationKey !== first.operationKey ||
+      admitted.execution.operationFingerprint !== first.operationFingerprint ||
+      admitted.execution.deadlineAt > root.execution.deadlineAt ||
+      admitted.execution.fingerprint !==
+        executionFingerprint({
+          kind: first.operation.kind,
+          operationFingerprint: first.operationFingerprint,
+          deadlineAt: admitted.execution.deadlineAt,
+          parent: admitted.parent,
+        }) ||
+      terminal.phase !== "canonical" ||
+      terminal.installationId !== installation.installationId ||
+      canonicalJson(terminal.origin) !== canonicalJson(root.origin) ||
+      canonicalJson(terminal.execution) !== canonicalJson(admitted.execution) ||
+      terminal.admissionDigest !== controlDigest(generation.admission) ||
+      terminal.terminalDigest !== controlTerminalReceiptDigest(status) ||
+      canonicalJson(effect.identity) !== canonicalJson(admitted.execution) ||
+      effect.outcome !== "committed" ||
+      effect.publication !== "committed" ||
+      effect.terminalReceiptDigest !== controlDigest(effect.receipt) ||
+      effect.receipt.kind !== "ops-result" ||
+      canonicalJson(parseBoundedOpsResult(first.operation.kind, effect.receipt.result)) !==
+        canonicalJson(status.result) ||
+      status.state !== "succeeded" ||
+      status.kind !== first.operation.kind ||
+      status.operationId !== admitted.execution.executionId ||
+      status.operationKey !== admitted.execution.operationKey ||
+      status.fingerprint !== admitted.execution.fingerprint ||
+      status.deadlineAt !== admitted.execution.deadlineAt ||
+      (status.result as { outcome?: string; revisionId?: string })?.outcome !== "committed" ||
+      (status.result as { revisionId?: string })?.revisionId !== expected.revisionId
+    )
+      throw Error("Actual original committed generation required");
+    return Object.freeze({
+      witnessDigest: controlDigest(packet),
+      decisionId: decision.operation.decisionId,
+      generation: Object.freeze(admitted.execution),
+    });
+  } finally {
+    directory.close();
+  }
+}
+declare const maintenanceChildBrand: unique symbol;
+export type VerifiedConfigurationMaintenanceChild = Readonly<{ [maintenanceChildBrand]: true }>;
+const maintenanceChildren = new WeakMap<
+  VerifiedConfigurationMaintenanceChild,
+  {
+    rootDigest: string;
+    ordinal: number;
+    execution: ExecutionRef;
+    status: OpsJobStatus;
+    terminalDigest: string;
+    terminalAt: number;
+    effectSettlementDigest: string;
+    settlement: ChildSettlement;
+  }
+>();
+/** The status is only a canonical preimage. The actual original admission,
+ * fixed phase, private effect, private canonical tuple/time and family index
+ * must ALL agree; a public status/result/digest cannot create this proof. */
+export function verifyConfigurationMaintenanceChildTerminal(
+  authority: VerifiedExecutionAuthority,
+  ordinal: number,
+  input: OpsJobStatus,
+  terminalAt: number,
+): VerifiedConfigurationMaintenanceChild {
+  const root = executionAuthorityState(authority);
+  if (
+    root.kind !== "configurationMaintenance.prepare" ||
+    !root.origin ||
+    root.installation.installation.role !== "ops-agent" ||
+    root.installation.fixedChildId
+  )
+    throw Error("Original maintenance child source required");
+  const admitted = readPrivateRecord(
+      root.installation,
+      "executions",
+      `${root.execution.operationKey}.json`,
+      65536,
+    ) as { payload?: { operation?: { maintenanceId?: string } } },
+    name = `${uuid.parse(admitted.payload?.operation?.maintenanceId)}.json`,
+    raw = readPrivateRecord(root.installation, "configuration-maintenance", name),
+    owner = verifyControl(
+      root.installation.installation.publicKey,
+      "openmapx-configuration-maintenance-owner-v2",
+      raw,
+      configurationMaintenanceOwnerRecordSchema,
+    );
+  verifyFamilyOwnedRecord(
+    root.installation,
+    root.origin,
+    { scope: "private", namespace: "configuration-maintenance", container: "", name },
+    canonicalJson(raw),
+  );
+  assertConfigurationMaintenanceDecisionSource(owner);
+  const step = owner.plan.steps[ordinal],
+    source = owner.apiControls.steps.find((value) => value.ordinal === ordinal),
+    slot = root.reservations.find((value) => value.ordinal === ordinal),
+    child = slot && lookupControlChildPhase(authority, slot);
+  if (
+    !step ||
+    !source?.grant ||
+    !child ||
+    canonicalJson(owner.plan.prepare) !== canonicalJson(root.execution) ||
+    owner.admissionDigest !== root.receiptDigest ||
+    canonicalJson(source.execution) !== canonicalJson(child.execution)
+  )
+    throw Error("Original frozen maintenance child required");
+  const childAuthority = restoreAdmittedControlExecution(
+      root.installation.installation,
+      child.execution,
+    ),
+    state = executionAuthorityState(childAuthority),
+    admission = readPrivateRecord(
+      root.installation,
+      "executions",
+      `${child.execution.operationKey}.json`,
+      65536,
+    ) as { payload?: { operation?: unknown; parent?: unknown } },
+    canonical = readTerminalCommitment(state),
+    status = parseOpsJobStatus(input),
+    settlement = childSettlementState(
+      verifyControlEffectSettlement(root.installation.installation, child.execution),
+    ).evidence,
+    effect = verifyControl(
+      root.installation.installation.publicKey,
+      "openmapx-control-settlement-v1",
+      readPrivateRecord(
+        root.installation,
+        "effects",
+        `${child.execution.operationKey}.json`,
+        65536,
+      ),
+      settlementSchema.extend({ receipt: effectObservationSchema }),
+    );
+  const nonCommit =
+      step.phase === "configuration-commit" &&
+      effect.receipt.kind === "configuration-generation-not-committed" &&
+      settlement.outcome === "contained" &&
+      settlement.publication === "not_started" &&
+      canonicalJson(
+        inspectConfigurationGenerationNonCommit(root.installation.installation, child.execution)
+          .result,
+      ) === canonicalJson(status.result),
+    committed =
+      settlement.outcome === "committed" &&
+      settlement.publication === "committed" &&
+      effect.receipt.kind === "ops-result" &&
+      canonicalJson(parseBoundedOpsResult(step.operation.kind, effect.receipt.result)) ===
+        canonicalJson(status.result);
+  if (
+    canonical.phase !== "canonical" ||
+    canonical.terminalAt !== terminalAt ||
+    canonical.terminalDigest !== controlTerminalReceiptDigest(status) ||
+    status.state !== "succeeded" ||
+    status.kind !== step.operation.kind ||
+    status.operationId !== child.execution.executionId ||
+    status.operationKey !== child.execution.operationKey ||
+    status.fingerprint !== child.execution.fingerprint ||
+    status.deadlineAt !== child.execution.deadlineAt ||
+    canonicalJson(admission.payload?.operation) !== canonicalJson(step.operation) ||
+    canonicalJson(admission.payload?.parent) !==
+      canonicalJson(retainedControlParent(root.execution)) ||
+    !(committed || nonCommit)
+  )
+    throw Error("Actual committed maintenance child canonical/effect source required");
+  if (
+    step.phase === "configuration-commit" &&
+    !nonCommit &&
+    (!(status.result && typeof status.result === "object") ||
+      (status.result as { outcome?: string }).outcome !== "committed" ||
+      (status.result as { revisionId?: string }).revisionId !== owner.plan.operation.revisionId)
+  )
+    throw Error("Original candidate generation commit required");
+  assertFamilyCanonicalCompatibility(
+    root.installation,
+    root.origin,
+    child.execution,
+    canonical.terminalDigest,
+    canonical.terminalAt,
+  );
+  const { diagnostics: _diagnostics, ...safe } = status,
+    value = Object.freeze({}) as VerifiedConfigurationMaintenanceChild;
+  const freezeSource = <T>(data: T): T => {
+    if (data && typeof data === "object" && !Object.isFrozen(data)) {
+      for (const child of Object.values(data)) freezeSource(child);
+      Object.freeze(data);
+    }
+    return data;
+  };
+  maintenanceChildren.set(
+    value,
+    freezeSource({
+      rootDigest: root.receiptDigest,
+      ordinal,
+      execution: child.execution,
+      status: safe,
+      terminalDigest: canonical.terminalDigest,
+      terminalAt: canonical.terminalAt,
+      effectSettlementDigest: controlDigest(settlement),
+      settlement,
+    }),
+  );
+  return value;
+}
+export function configurationMaintenanceChildState(
+  value: VerifiedConfigurationMaintenanceChild,
+  authority: VerifiedExecutionAuthority,
+) {
+  const source = maintenanceChildren.get(value),
+    root = executionAuthorityState(authority);
+  if (
+    !source ||
+    source.rootDigest !== root.receiptDigest ||
+    root.kind !== "configurationMaintenance.prepare"
+  )
+    throw Error("Actual original maintenance child proof required");
+  return source;
 }
 const recovery = new WeakMap<object, { authority: AuthorityState; evidence: ChildSettlement }>();
 export function verifyControlRecoveryAuthority(
@@ -1855,7 +3441,8 @@ export function publishDataControlTerminalWitness(
   const s = executionAuthorityState(authority);
   if (s.installation.installation.role !== "data-manager" || s.installation.fixedChildId)
     throw Error("Original data journal required");
-  verifyRetainedArtifactTargetRootRelease(authority);
+  if (s.kind === "generation-hardlinks") verifyRetainedGenerationHardlinksSettlement(authority);
+  else verifyRetainedArtifactTargetRootRelease(authority);
   const expected = controlDigest({ version: 1, status: dataExecutionStatusSchema.parse(status) });
   const original = verifyControl(
     s.installation.installation.publicKey,
@@ -2172,6 +3759,97 @@ function withControlExecutionForward<T>(authority: VerifiedExecutionAuthority, r
 /** Internal publication scope. All filesystem writes complete before guards
  * release; callers may not await HTTP/DB or acquire a lease from this scope. */
 const publicationScopes = new WeakMap<VerifiedExecutionAuthority, AnchoredDirectory>();
+/** Original maintenance recovery publication only. It serializes with every
+ * ordinary grant, including after cancellation/expiry, and grants no dispatch. */
+export function withControlMaintenanceNoGuardPublication<T>(
+  authority: VerifiedExecutionAuthority,
+  run: () => T,
+): T {
+  return withMaintenanceRecoveryPublication(authority, run);
+}
+function withMaintenanceRecoveryPublication<T>(
+  authority: VerifiedExecutionAuthority,
+  run: () => T,
+): T {
+  const s = executionAuthorityState(authority);
+  if (
+    s.kind !== "configurationMaintenance.prepare" ||
+    !s.origin ||
+    s.installation.fixedChildId ||
+    s.installation.installation.role !== "ops-agent" ||
+    s.origin.rootKey !== s.execution.operationKey
+  )
+    throw Error("Original maintenance issuance freeze required");
+  const own = () =>
+    withExecutionWriter(s.installation, s.execution, (directory) => {
+      readLifecycle(s.installation, directory, s.execution, s.installation.installation.publicKey);
+      return run();
+    });
+  const assertion = retainedParentAssertion(s);
+  return assertion ? withParentLifecycles(s.installation, assertion, () => own()) : own();
+}
+/** Purpose-only metadata serialization for the original logical guard control.
+ * This creates no forward authority, child binding or dispatch ticket. The
+ * fixed producer still consumes its restored actual final proof. */
+export function withControlMaintenanceSettlementPublication<T>(
+  authority: VerifiedExecutionAuthority,
+  run: () => T,
+): T {
+  return withMaintenanceRecoveryPublication(authority, () => {
+    const state = executionAuthorityState(authority),
+      admitted = readPrivateRecord(
+        state.installation,
+        "executions",
+        `${state.execution.operationKey}.json`,
+        65536,
+      ) as { payload?: { operation?: { maintenanceId?: string } } },
+      raw = readPrivateRecord(
+        state.installation,
+        "configuration-maintenance",
+        `${uuid.parse(admitted.payload?.operation?.maintenanceId)}.json`,
+      ),
+      owner = verifyControl(
+        state.installation.installation.publicKey,
+        "openmapx-configuration-maintenance-owner-v2",
+        raw,
+        configurationMaintenanceOwnerRecordSchema,
+      );
+    verifyFamilyOwnedRecord(
+      state.installation,
+      state.origin!,
+      {
+        scope: "private",
+        namespace: "configuration-maintenance",
+        container: "",
+        name: `${owner.plan.operation.maintenanceId}.json`,
+      },
+      canonicalJson(raw),
+    );
+    if (
+      !owner.final ||
+      !owner.inspection ||
+      owner.noGuard ||
+      owner.admissionDigest !== state.receiptDigest ||
+      canonicalJson(owner.plan.prepare) !== canonicalJson(state.execution)
+    )
+      throw Error("Original final-only settlement publication required");
+    return run();
+  });
+}
+/** Initial private owner publication precedes the first ordinary grant. */
+export function withControlMaintenanceInitialization<T>(
+  authority: VerifiedExecutionAuthority,
+  run: () => T,
+): T {
+  const s = executionAuthorityState(authority);
+  if (
+    s.kind !== "configurationMaintenance.prepare" ||
+    s.installation.fixedChildId ||
+    s.installation.installation.role !== "ops-agent"
+  )
+    throw Error("Original maintenance initialization required");
+  return withControlExecutionForward(authority, run);
+}
 export function assertControlPublicationScope(
   authority: VerifiedExecutionAuthority,
 ): AnchoredDirectory {
@@ -2195,6 +3873,62 @@ export function withControlDelegationPublication<T>(
         s.execution,
         s.installation.installation.publicKey,
       );
+      if (s.kind === "configurationMaintenance.prepare") {
+        const admission = readPrivateRecord(
+            s.installation,
+            "executions",
+            `${s.execution.operationKey}.json`,
+            65536,
+          ) as { payload?: { operation?: { maintenanceId?: string } } },
+          raw = readPrivateRecord(
+            s.installation,
+            "configuration-maintenance",
+            `${uuid.parse(admission.payload?.operation?.maintenanceId)}.json`,
+          ),
+          owner = verifyControl(
+            s.installation.installation.publicKey,
+            "openmapx-configuration-maintenance-owner-v2",
+            raw,
+            configurationMaintenanceOwnerRecordSchema,
+          );
+        verifyFamilyOwnedRecord(
+          s.installation,
+          s.origin!,
+          {
+            scope: "private",
+            namespace: "configuration-maintenance",
+            container: "",
+            name: `${admission.payload!.operation!.maintenanceId}.json`,
+          },
+          canonicalJson(raw),
+        );
+        if (
+          owner.admissionDigest !== s.receiptDigest ||
+          owner.issuance !== "open" ||
+          canonicalJson(owner.plan.prepare) !== canonicalJson(s.execution) ||
+          canonicalJson(owner.origin) !== canonicalJson(s.origin) ||
+          canonicalJson(owner.plan.reservations) !== canonicalJson(s.reservations)
+        )
+          throw Error("Original maintenance issuer changed");
+        assertConfigurationMaintenanceDecisionSource(owner);
+        if (
+          [
+            "configuration-commit",
+            "maintenance-hardlinks",
+            "maintenance-recreate",
+            "maintenance-handoff",
+          ].includes(phase) &&
+          (canonicalJson(owner.receipt.prepare) !== canonicalJson(s.execution) ||
+            !["authorized", "applying"].includes(owner.receipt.state) ||
+            owner.receipt.decision?.decision !== "continue" ||
+            owner.receipt.dmFence?.state !== "prepared" ||
+            owner.apiControls.decide?.operation.decision !== "continue" ||
+            !owner.apiControls.decide.receiptDelivery)
+        )
+          throw new ControlExecutionFencedError(
+            "Original authorized configuration decision required",
+          );
+      }
       const prepared =
         (s.kind === "configurationMaintenance.prepare" &&
           [
@@ -2230,6 +3964,41 @@ export function withControlDelegationPublication<T>(
 }
 export function assertControlExecutionForward(authority: VerifiedExecutionAuthority): void {
   withControlExecutionForward(authority, () => {});
+}
+/** Only a prepared maintenance owner's finite metadata decision may use its
+ * terminal preparation here. This scope issues no grant/forward handle and
+ * does not alter ordinary execution normalization or terminal graph rules. */
+export function withControlMaintenanceDecisionPublication<T>(
+  authority: VerifiedExecutionAuthority,
+  run: () => T,
+): T {
+  const s = executionAuthorityState(authority);
+  if (s.kind !== "configurationMaintenance.prepare" || !s.origin)
+    throw Error("Original prepared maintenance decision owner required");
+  assertOriginClockForward(s.installation, s.origin);
+  const own = () =>
+    withExecutionWriter(s.installation, s.execution, (directory) => {
+      const current = readLifecycle(
+        s.installation,
+        directory,
+        s.execution,
+        s.installation.installation.publicKey,
+      );
+      if (current.phase !== "settled" || Date.now() >= s.execution.deadlineAt)
+        throw new ControlExecutionFencedError(
+          "Original prepared maintenance forward decision is fenced",
+        );
+      verifyControlPreparedTerminal(s.installation, s.execution);
+      return run();
+    });
+  const assertion = retainedParentAssertion(s);
+  return assertion
+    ? withParentLifecycles(s.installation, assertion, (forward) => {
+        if (!forward)
+          throw new ControlExecutionFencedError("Canceled ancestor prevents maintenance continue");
+        return own();
+      })
+    : own();
 }
 /** Only the protocol's frozen terminal preparation edges may outlive their local worker. */
 export function assertControlDelegationForward(
@@ -2858,7 +4627,22 @@ export function fixedCliArguments(operation: import("../ops/contract").OpsOperat
         ...(operation.regionId ? ["--region", operation.regionId] : []),
       ];
     case "service.start":
-      return ["services", "start", operation.serviceId];
+      return [
+        "services",
+        "start",
+        operation.serviceId,
+        "--expected-configuration-revision",
+        operation.expectedConfigurationRevisionId,
+      ];
+    case "service.update":
+      return [
+        "services",
+        "update",
+        operation.serviceId,
+        "--expected-configuration-revision",
+        operation.expectedConfigurationRevisionId,
+        ...(operation.noDeps ? ["--no-deps"] : []),
+      ];
     case "data.link":
       return ["data", "link"];
     case "data.clean":

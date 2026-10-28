@@ -22,6 +22,7 @@ interface OpsDependencies {
 interface AsyncOpsDependencies extends OpsDependencies {
   operationKey?: string;
   signal?: AbortSignal;
+  expectedConfigurationRevisionId?: string;
 }
 
 let sharedClient: ApiOpsClient | undefined;
@@ -86,23 +87,38 @@ export type DockerComposeAction =
 export const STACK_STOP_GUIDANCE =
   "Stack shutdown is unavailable from the web API because it would stop the operations agent. Run the documented host shutdown command instead.";
 
-function typedAction(serviceId: string, action: DockerComposeAction): OpsOperation | null {
-  if (!serviceId) return action === "start" ? { kind: "stack.start" } : null;
+function typedAction(
+  serviceId: string,
+  action: DockerComposeAction,
+  expectedConfigurationRevisionId?: string,
+): OpsOperation | null {
+  if (!serviceId)
+    return action === "start" && expectedConfigurationRevisionId
+      ? { kind: "stack.start", expectedConfigurationRevisionId }
+      : null;
   switch (action) {
     case "start":
-      return { kind: "service.start", serviceId };
+      return expectedConfigurationRevisionId
+        ? { kind: "service.start", serviceId, expectedConfigurationRevisionId }
+        : null;
     case "stop":
       return { kind: "service.stop", serviceId };
     case "restart":
       return { kind: "service.restart", serviceId };
     case "recreate":
-      return { kind: "service.recreate", serviceId };
+      return expectedConfigurationRevisionId
+        ? { kind: "service.recreate", serviceId, expectedConfigurationRevisionId }
+        : null;
     case "recreate-isolated":
-      return { kind: "service.recreateIsolated", serviceId };
+      return expectedConfigurationRevisionId
+        ? { kind: "service.recreateIsolated", serviceId, expectedConfigurationRevisionId }
+        : null;
     case "remove":
       return { kind: "service.remove", serviceId };
     case "pull":
-      return { kind: "service.pull", serviceId };
+      return expectedConfigurationRevisionId
+        ? { kind: "service.pull", serviceId, expectedConfigurationRevisionId }
+        : null;
   }
 }
 
@@ -114,7 +130,7 @@ export async function dockerComposeAction(
   if (!serviceId && action === "stop") {
     return { exitCode: 1, stdout: "", stderr: STACK_STOP_GUIDANCE };
   }
-  const operation = typedAction(serviceId, action);
+  const operation = typedAction(serviceId, action, options.expectedConfigurationRevisionId);
   if (!operation || !options.operationKey) {
     return {
       exitCode: 1,

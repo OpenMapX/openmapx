@@ -67,6 +67,8 @@ describe("reviewed durable admission boundary", () => {
     let finish!: () => void;
     let rollbacks = 0;
     const operation = {
+      expectedSourceRevision: "00000000-0000-4000-8000-000000000000",
+      coordinatorMode: "require-running" as const,
       expectedCurrentRevisionId: null,
       kind: "stack.render" as const,
       revisionId: `cfg1_${"t".repeat(43)}`,
@@ -118,6 +120,8 @@ describe("reviewed durable admission boundary", () => {
       let retained = true;
       let committed = false;
       const operation = {
+        expectedSourceRevision: "00000000-0000-4000-8000-000000000000",
+        coordinatorMode: "require-running" as const,
         expectedCurrentRevisionId: null,
         kind: "stack.render" as const,
         revisionId: `cfg1_${"r".repeat(43)}`,
@@ -188,7 +192,11 @@ describe("reviewed durable admission boundary", () => {
   );
 
   it("retains recovery-required tombstones beyond TTL and capacity to prevent silent rerun", async () => {
-    const operation = { kind: "service.pull", serviceId: "redis" } as const;
+    const operation = {
+      kind: "service.pull",
+      serviceId: "redis",
+      expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+    } as const;
     const tombstone = persisted(operation, {
       operationId: "job1_recoveryTombstone0",
       operationKey: "opk1_recoveryTombstone0",
@@ -313,7 +321,11 @@ describe("reviewed durable admission boundary", () => {
       now: () => new Date(baseTime),
       dispatch,
     });
-    const operation = { kind: "service.pull", serviceId: "redis" } as const;
+    const operation = {
+      kind: "service.pull",
+      serviceId: "redis",
+      expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+    } as const;
     const first = await app.inject({
       method: "POST",
       url: "/v1/operations",
@@ -349,7 +361,11 @@ describe("reviewed durable admission boundary", () => {
       now: () => new Date(baseTime),
       dispatch: async () => ({ changed: true }),
     });
-    const operation = { kind: "service.pull", serviceId: "redis" } as const;
+    const operation = {
+      kind: "service.pull",
+      serviceId: "redis",
+      expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+    } as const;
     const admitted = await app.inject({
       method: "POST",
       url: "/v1/operations",
@@ -427,7 +443,11 @@ describe("reviewed durable admission boundary", () => {
       url: "/v1/operations",
       headers: auth(),
       payload: request(
-        { kind: "service.pull", serviceId: "redis" },
+        {
+          kind: "service.pull",
+          serviceId: "redis",
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+        },
         "ops1_interleaveFirst00",
         "opk1_interleaveFirst00",
       ),
@@ -471,7 +491,11 @@ describe("reviewed durable admission boundary", () => {
       now: () => new Date(baseTime),
       dispatch,
     });
-    const operation = { kind: "service.pull", serviceId: "redis" } as const;
+    const operation = {
+      kind: "service.pull",
+      serviceId: "redis",
+      expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+    } as const;
     const [first, second] = await Promise.all([
       app.inject({
         method: "POST",
@@ -532,7 +556,11 @@ describe("reviewed durable admission boundary", () => {
       "failed",
       "timed_out",
     ] as const;
-    const operation = { kind: "service.pull", serviceId: "redis" } as const;
+    const operation = {
+      kind: "service.pull",
+      serviceId: "redis",
+      expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+    } as const;
     const records = states.map((state, index) =>
       persisted(operation, {
         operationId: `job1_retainedState${index}0000`,
@@ -577,7 +605,11 @@ describe("reviewed durable admission boundary", () => {
     roots.push(root);
     const path = join(root, "journal", "jobs-v1.json");
     const before = await openOpsJobJournal(path);
-    const operation = { kind: "service.pull", serviceId: "redis" } as const;
+    const operation = {
+      kind: "service.pull",
+      serviceId: "redis",
+      expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+    } as const;
     await before.replace([persisted(operation)]);
     const journal = await openOpsJobJournal(path, {
       now: () => new Date(baseTime + 1_000),
@@ -629,7 +661,11 @@ describe("reviewed durable admission boundary", () => {
   it("fails closed after bounded collisions with a restored operation ID", async () => {
     const bytes = Buffer.alloc(18, 7);
     const collisionId = `job1_${bytes.toString("base64url")}`;
-    const operation = { kind: "service.pull", serviceId: "redis" } as const;
+    const operation = {
+      kind: "service.pull",
+      serviceId: "redis",
+      expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+    } as const;
     const existing = persisted(operation, {
       operationId: collisionId,
       state: "failed",

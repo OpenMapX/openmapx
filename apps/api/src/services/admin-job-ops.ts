@@ -1,34 +1,34 @@
+import {
+  type OpsProjection,
+  type ProjectedOperation,
+  readProjection,
+} from "./admin-job-projection";
+
+export { readProjection } from "./admin-job-projection";
+
 import { createHash, randomUUID } from "node:crypto";
 import {
-  apiRetentionProofSchema,
+  type CoordinatorPullSubmission,
   canonicalJson,
   configurationApplyResultSchema,
   controlTerminalReceiptDigest,
+  coordinatorPullSubmissionSchema,
   createControlRootOperationKey,
-  OPS_KIND_POLICIES,
-  type OpsFailureResult,
   type OpsJobStatus,
   type OpsOperation,
   type OpsOperationKind,
   type OpsResultFor,
   type OpsSubmitResult,
-  opsFailureResultSchema,
   opsKindRequiresControlAuthority,
-  opsOperationFingerprint,
   opsOperationSchema,
-  type ProcessDiagnostics,
-  parseControlRootOperationKey,
   parseOpsJobStatus,
-  processDiagnosticsSchema,
   readOpsTokenFile,
   signApiRetentionProof,
 } from "@openmapx/core/ops";
 import { cancelAdminDataChildren } from "./admin-data-children";
 import { AdminJobFailure, JobObservationPending } from "./admin-job-failure";
 import {
-  type ApiJobChildAttempt,
   type ApiPreparedRoot,
-  apiJobChildAttemptSchema,
   issueApiJobChildAssertion,
   prepareApiJobChildAttempt,
   prepareApiJobRoot,
@@ -38,6 +38,12 @@ import {
   JobOwnershipLost,
   JobStepAllocationConflict,
 } from "./admin-job-state";
+import { configurationMaintenanceProjectedStepOrigin } from "./configuration-maintenance-step-records";
+import {
+  assertCoordinatorPullIntent,
+  type CoordinatorLifecycleIntent,
+  claimCoordinatorPullDelivery,
+} from "./coordinator-lifecycle";
 import type { JobContext } from "./job-runner";
 import {
   type ApiOpsClient,
@@ -52,7 +58,6 @@ import {
 
 const ADMIN_EVENT_LIMIT = ADMIN_JOB_LOG_LIMITS.events;
 const ADMIN_EVENT_BYTE_LIMIT = ADMIN_JOB_LOG_LIMITS.bytes;
-const MAX_PROJECTED_OPERATIONS = 64;
 const CANCEL_POLL_ATTEMPTS = 8;
 const ADMISSION_REFUSALS = new Set([
   "authentication",
@@ -66,46 +71,6 @@ const ADMISSION_REFUSALS = new Set([
   "control_upgrade_required",
   "recovery_required",
 ]);
-const OPERATION_KEY = /^opk1_[A-Za-z0-9_-]{16,64}$/;
-const OPERATION_ID = /^job1_[A-Za-z0-9_-]{16,64}$/;
-
-interface ProjectedOperation {
-  kind: OpsOperationKind;
-  operationKey: string;
-  operationId?: string;
-  operation?: OpsOperation;
-  phase: "admitting" | "observing" | "terminal" | "refused";
-  attempt?: ApiJobChildAttempt;
-  fingerprint?: string;
-  deadlineAt?: number;
-  outcome?: "unknown";
-  result?: unknown;
-  failureResult?: OpsFailureResult;
-  diagnostics?: ProcessDiagnostics;
-  errorClass?: string;
-  mirrorStopped?: boolean;
-  cursor: number;
-  events: number;
-  bytes: number;
-  truncated: boolean;
-  terminal: boolean;
-  receiptDelivery?: {
-    state: "pending" | "confirmed";
-    terminalCopyId: string;
-    checkpointOwnerVersion: number;
-    terminalDigest: string;
-    terminalReceipt: OpsJobStatus;
-  };
-}
-
-interface OpsProjection {
-  version: 1 | 2 | 3;
-  steps: Record<string, { operationKey: string; requestedDeadlineAt: number }>;
-  eventTotal: number;
-  byteTotal: number;
-  truncated: boolean;
-  operations: Record<string, ProjectedOperation>;
-}
 
 export interface ExecuteAdminJobOperationOptions {
   client?: ApiOpsClient;
@@ -113,195 +78,6 @@ export interface ExecuteAdminJobOperationOptions {
   pollIntervalMs?: number;
   durableIdentity?: string;
   preparedRoot?: ApiPreparedRoot;
-}
-
-function boundedInteger(value: unknown, maximum: number): value is number {
-  return Number.isInteger(value) && (value as number) >= 0 && (value as number) <= maximum;
-}
-
-function emptyProjection(): OpsProjection {
-  return { version: 3, steps: {}, eventTotal: 0, byteTotal: 0, truncated: false, operations: {} };
-}
-
-export function readProjection(result: unknown): OpsProjection {
-  if (!result || typeof result !== "object" || Array.isArray(result)) return emptyProjection();
-  const candidate = (result as Record<string, unknown>).opsProjection;
-  if (candidate === undefined) return emptyProjection();
-  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
-    throw new JobObservationPending("invalid_identity");
-  }
-  const value = candidate as Record<string, unknown>;
-  if (
-    (value.version !== 1 && value.version !== 2 && value.version !== 3) ||
-    !boundedInteger(value.eventTotal, ADMIN_EVENT_LIMIT) ||
-    !boundedInteger(value.byteTotal, ADMIN_EVENT_BYTE_LIMIT) ||
-    typeof value.truncated !== "boolean" ||
-    !value.operations ||
-    typeof value.operations !== "object" ||
-    Array.isArray(value.operations)
-  ) {
-    throw new JobObservationPending("invalid_identity");
-  }
-  const entries = Object.entries(value.operations as Record<string, unknown>);
-  if (entries.length > MAX_PROJECTED_OPERATIONS)
-    throw new JobObservationPending("invalid_identity");
-  const operations: Record<string, ProjectedOperation> = {};
-  for (const [key, raw] of entries) {
-    if (!OPERATION_KEY.test(key) || !raw || typeof raw !== "object" || Array.isArray(raw)) {
-      throw new JobObservationPending("invalid_identity");
-    }
-    const operation = raw as Record<string, unknown>;
-    if (
-      operation.operationKey !== key ||
-      (operation.operationId !== undefined &&
-        (typeof operation.operationId !== "string" || !OPERATION_ID.test(operation.operationId))) ||
-      (value.version === 1 && operation.operationId === undefined) ||
-      typeof operation.kind !== "string" ||
-      !boundedInteger(operation.cursor, Number.MAX_SAFE_INTEGER) ||
-      !boundedInteger(operation.events, ADMIN_EVENT_LIMIT) ||
-      !boundedInteger(operation.bytes, ADMIN_EVENT_BYTE_LIMIT) ||
-      typeof operation.truncated !== "boolean" ||
-      typeof operation.terminal !== "boolean"
-    ) {
-      throw new JobObservationPending("invalid_identity");
-    }
-    if (!Object.hasOwn(OPS_KIND_POLICIES, operation.kind as string))
-      throw new JobObservationPending("invalid_identity");
-    if (
-      value.version !== 1 &&
-      !["admitting", "observing", "terminal", ...(value.version === 3 ? ["refused"] : [])].includes(
-        operation.phase as string,
-      )
-    )
-      throw new JobObservationPending("invalid_identity");
-    const checked =
-      operation.operation === undefined
-        ? undefined
-        : opsOperationSchema.safeParse(operation.operation);
-    if (checked && !checked.success) throw new JobObservationPending("invalid_identity");
-    const parsed = checked?.data;
-    if (
-      operation.fingerprint !== undefined &&
-      (typeof operation.fingerprint !== "string" || !/^[a-f0-9]{64}$/.test(operation.fingerprint))
-    )
-      throw new JobObservationPending("invalid_identity");
-    if (
-      operation.deadlineAt !== undefined &&
-      !boundedInteger(operation.deadlineAt, Number.MAX_SAFE_INTEGER)
-    )
-      throw new JobObservationPending("invalid_identity");
-    if (
-      operation.failureResult !== undefined &&
-      !opsFailureResultSchema.safeParse(operation.failureResult).success
-    )
-      throw new JobObservationPending("invalid_identity");
-    if (
-      operation.diagnostics !== undefined &&
-      !processDiagnosticsSchema.safeParse(operation.diagnostics).success
-    )
-      throw new JobObservationPending("invalid_identity");
-    if (operation.attempt !== undefined) {
-      const attempt = apiJobChildAttemptSchema.safeParse(operation.attempt);
-      if (
-        !attempt.success ||
-        !parsed ||
-        attempt.data.childOperationKey !== key ||
-        attempt.data.childOperationFingerprint !== opsOperationFingerprint(parsed)
-      )
-        throw new JobObservationPending("invalid_identity");
-    }
-    if (
-      operation.phase === "refused" &&
-      (!operation.terminal ||
-        !ADMISSION_REFUSALS.has(operation.errorClass as string) ||
-        operation.operationId !== undefined ||
-        operation.result !== undefined ||
-        operation.receiptDelivery !== undefined ||
-        operation.fingerprint !== undefined ||
-        operation.deadlineAt !== undefined)
-    )
-      throw new JobObservationPending("invalid_identity");
-    if (operation.receiptDelivery !== undefined) {
-      const d = operation.receiptDelivery as ProjectedOperation["receiptDelivery"];
-      try {
-        if (
-          value.version !== 3 ||
-          !operation.attempt ||
-          operation.terminal !== true ||
-          operation.phase !== "terminal" ||
-          !d ||
-          !["pending", "confirmed"].includes(d.state) ||
-          !apiRetentionProofSchema.shape.terminalCopyId.safeParse(d.terminalCopyId).success ||
-          !Number.isSafeInteger(d.checkpointOwnerVersion) ||
-          d.checkpointOwnerVersion < 1 ||
-          controlTerminalReceiptDigest(d.terminalReceipt) !== d.terminalDigest ||
-          d.terminalReceipt.operationId !== operation.operationId ||
-          d.terminalReceipt.kind !== operation.kind ||
-          d.terminalReceipt.operationKey !== key ||
-          canonicalJson(d.terminalReceipt.result ?? null) !==
-            canonicalJson(operation.result ?? null) ||
-          canonicalJson(d.terminalReceipt.failureResult ?? null) !==
-            canonicalJson(operation.failureResult ?? null) ||
-          (d.terminalReceipt.errorClass ?? null) !== (operation.errorClass ?? null) ||
-          d.terminalReceipt.fingerprint !== operation.fingerprint ||
-          d.terminalReceipt.deadlineAt !== operation.deadlineAt
-        )
-          throw Error();
-      } catch {
-        throw new JobObservationPending("recovery_required");
-      }
-    }
-    if (parsed && parsed.kind !== operation.kind)
-      throw new JobObservationPending("invalid_identity");
-    operations[key] = {
-      ...operation,
-      ...(parsed ? { operation: parsed } : {}),
-      phase:
-        value.version === 1 ? (operation.terminal ? "terminal" : "observing") : operation.phase,
-    } as ProjectedOperation;
-  }
-  const steps: OpsProjection["steps"] = {};
-  if (value.version === 3) {
-    if (
-      !value.steps ||
-      typeof value.steps !== "object" ||
-      Array.isArray(value.steps) ||
-      Object.keys(value.steps).length > 64
-    )
-      throw new JobObservationPending("invalid_identity");
-    for (const [address, raw] of Object.entries(value.steps)) {
-      const step = raw as { operationKey: string; requestedDeadlineAt: number };
-      if (
-        !OPERATION_KEY.test(address) ||
-        !step ||
-        Object.keys(step).length !== 2 ||
-        !operations[step.operationKey] ||
-        parseControlRootOperationKey(step.operationKey).notAfter !== step.requestedDeadlineAt ||
-        operations[step.operationKey]?.attempt?.requestedDeadlineAt !== step.requestedDeadlineAt
-      )
-        throw new JobObservationPending("invalid_identity");
-      steps[address] = step;
-    }
-  }
-  for (const mapping of Object.values(steps)) {
-    const entry = operations[mapping.operationKey];
-    if (!entry) throw new JobObservationPending("invalid_identity");
-    if (
-      entry.terminal &&
-      entry.phase !== "refused" &&
-      opsKindRequiresControlAuthority(entry.kind) &&
-      !entry.receiptDelivery
-    )
-      throw new JobObservationPending("recovery_required");
-  }
-  return {
-    version: value.version as 1 | 2 | 3,
-    steps,
-    eventTotal: value.eventTotal,
-    byteTotal: value.byteTotal,
-    truncated: value.truncated,
-    operations,
-  };
 }
 
 async function persistProjection(
@@ -331,6 +107,7 @@ export async function ensureAdminJobReceiptDelivery(
 ): Promise<void> {
   if (
     projected.phase === "refused" ||
+    projected.phase === "unissued" ||
     projection.version !== 3 ||
     !projected.attempt ||
     !Object.values(projection.steps).some((s) => s.operationKey === projected.operationKey) ||
@@ -381,10 +158,35 @@ export async function ensureAdminJobReceiptDelivery(
       fingerprint: fingerprint,
       terminalDigest: delivery.terminalDigest,
     });
+    const ownerControl =
+      projected.operation?.kind === "configurationMaintenance.decide" ||
+      projected.operation?.kind === "configurationMaintenance.settle"
+        ? projected.operation
+        : undefined;
+    if (
+      ["configurationMaintenance.decide", "configurationMaintenance.settle"].includes(
+        projected.kind,
+      ) &&
+      !ownerControl
+    )
+      throw new JobObservationPending("recovery_required");
+    const frozenOrigin =
+      projected.operation &&
+      "maintenanceId" in projected.operation &&
+      projected.operation.maintenanceId &&
+      !ownerControl &&
+      context.checkpointResult?._configurationMaintenanceSteps
+        ? configurationMaintenanceProjectedStepOrigin(
+            context.checkpointResult,
+            projected.operationKey,
+            projected.operation,
+            projected.attempt,
+          )
+        : undefined;
     const response = await client.execute(
       {
         kind: "controlRetention.acknowledge",
-        originRootKey: projected.operationKey,
+        originRootKey: ownerControl?.prepareOperationKey ?? frozenOrigin ?? projected.operationKey,
         operationKey: projected.operationKey,
         fingerprint: fingerprint,
         terminalDigest: delivery.terminalDigest,
@@ -429,6 +231,8 @@ export async function executeAdminJobOperation<K extends OpsOperationKind>(
   let projection = readProjection(context.checkpointResult);
   const retainedKey = projection.steps[stepAddress]?.operationKey ?? stepAddress;
   let restored = projection.operations[retainedKey];
+  if (restored?.phase === "prepared" || restored?.phase === "unissued")
+    throw new JobObservationPending("recovery_required");
   if (restored && restored.kind !== operation.kind)
     throw new JobObservationPending("invalid_identity");
   if (restored)
@@ -447,8 +251,12 @@ export async function executeAdminJobOperation<K extends OpsOperationKind>(
   if (
     root.operationKey !==
     createControlRootOperationKey({ notAfter: root.requestedDeadlineAt, nonce: expectedNonce })
-  )
-    throw new JobObservationPending("invalid_identity");
+  ) {
+    const { assertOwnedConfigurationMaintenanceStep } = await import(
+      "./configuration-maintenance-step"
+    );
+    await assertOwnedConfigurationMaintenanceStep(context, exactOperation, root.operationKey, root);
+  }
   const operationKey = root.operationKey,
     attempt = prepareApiJobChildAttempt(context, exactOperation, operationKey, root);
   if (!attempt) throw Error("Fresh managed operation requires a durable job attempt");
@@ -503,6 +311,89 @@ export async function executeAdminJobOperation<K extends OpsOperationKind>(
   return observeOperation(context, projection, admitted, client, options, true) as Promise<
     OpsResultFor<K>
   >;
+}
+
+/** Finite preallocation for the nominal coordinator Update only. No dispatch
+ * occurs; the original attempt is checkpointed before the candidate is sealed. */
+export async function reserveCoordinatorPullSubmission(
+  context: JobContext,
+  intent: CoordinatorLifecycleIntent,
+  expectedConfigurationRevisionId: string,
+  parent: ApiPreparedRoot["parent"],
+): Promise<CoordinatorPullSubmission> {
+  const fixed = await assertCoordinatorPullIntent(intent, context),
+    stepAddress = createDurableOpsKey(
+      "configuration.coordinator-pull",
+      `${context.jobId}:${fixed.originalOrdinal}`,
+    ),
+    operation = {
+      kind: "service.pull" as const,
+      serviceId: "data-manager" as const,
+      expectedConfigurationRevisionId,
+      candidateId: fixed.candidateId,
+    },
+    root = prepareApiJobRoot(
+      { ...context, checkpointResult: { ...context.checkpointResult, _parentExecution: parent } },
+      "service.pull",
+      stepAddress,
+    ),
+    attempt = prepareApiJobChildAttempt(context, operation, root.operationKey, root);
+  if (!attempt) throw Error("Original coordinator job owner required");
+  const submission = coordinatorPullSubmissionSchema.parse({
+      version: 1,
+      requestVersion: 2,
+      expectedExecutor: "ops-agent",
+      expectedPrincipal: "api",
+      stepAddress,
+      operation,
+      operationKey: root.operationKey,
+      operationFingerprint: attempt.childOperationFingerprint,
+      requestedDeadlineAt: attempt.requestedDeadlineAt,
+      attempt,
+    }),
+    entry: ProjectedOperation = {
+      kind: "service.pull",
+      operationKey: root.operationKey,
+      operation,
+      attempt,
+      phase: "prepared",
+      cursor: 0,
+      events: 0,
+      bytes: 0,
+      truncated: false,
+      terminal: false,
+    },
+    projection = readProjection(context.checkpointResult);
+  await persistProjection(
+    context,
+    {
+      ...projection,
+      version: 3,
+      steps: {
+        [stepAddress]: {
+          operationKey: root.operationKey,
+          requestedDeadlineAt: root.requestedDeadlineAt,
+        },
+      },
+      operations: { [root.operationKey]: entry },
+    },
+    root.operationKey,
+    stepAddress,
+    parent,
+  );
+  const retained = readProjection(context.checkpointResult).operations[root.operationKey];
+  if (!retained || canonicalJson(retained.attempt) !== canonicalJson(attempt))
+    throw new JobObservationPending("recovery_required");
+  return submission;
+}
+/** Only the fixed original MAC candidate/owned-row CAS may release a prepared
+ * normal pull for its first delivery, including after API owner reclaim. */
+export async function deliverCoordinatorPullSubmission(context: JobContext, candidateId: string) {
+  const original = await claimCoordinatorPullDelivery(context, candidateId),
+    projection = readProjection(context.checkpointResult),
+    entry = projection.operations[original.operationKey];
+  if (!entry) throw new JobObservationPending("recovery_required");
+  return observeOperation(context, projection, entry, createApiOpsClient(), {}, original.fresh);
 }
 
 export function prepareAdminJobOperationRoot(
@@ -749,6 +640,20 @@ async function observeOperation(
     return result;
   } catch (error) {
     if (error instanceof ApiOpsError) {
+      if (
+        projected.kind === "configurationMaintenance.settle" &&
+        terminalStatus?.errorClass === "recovery_required"
+      ) {
+        // The original accepted verification intent has NO private canonical
+        // completion. Preserve observation-only recovery; never copy/ACK it as
+        // a terminal outcome or admit another request/body/budget.
+        projected.outcome = "unknown";
+        projected.phase = "observing";
+        projected.terminal = false;
+        delete projected.errorClass;
+        delete projected.failureResult;
+        throw new JobObservationPending("recovery_required");
+      }
       if (!terminalStatus) {
         if (!projected.operationId && fresh && ADMISSION_REFUSALS.has(error.errorClass)) {
           projected.phase = "refused";
@@ -967,7 +872,7 @@ export async function cancelAdminJobOperations(
       ? AbortSignal.any([options.signal, AbortSignal.timeout(2_000)])
       : AbortSignal.timeout(2_000);
   for (const operation of pending) {
-    if (operation.phase === "refused") {
+    if (operation.phase === "refused" || operation.phase === "unissued") {
       outcomes.push("already_terminal");
       continue;
     }

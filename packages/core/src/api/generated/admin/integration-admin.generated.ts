@@ -15,31 +15,37 @@ import type {
   DeleteAdminIntegrationCredential401,
   DeleteAdminIntegrationCredential403,
   DeleteAdminIntegrationCredential404,
+  DeleteAdminIntegrationCredential409,
   DeleteAdminIntegrationCredential413,
   DeleteAdminIntegrationCredential415,
   DeleteAdminIntegrationCredential429,
   DeleteAdminIntegrationCredential500,
   DeleteAdminIntegrationCredentialBody,
+  DeleteAdminIntegrationCredentialHeaders,
   DisableAdminIntegration200,
   DisableAdminIntegration400,
   DisableAdminIntegration401,
   DisableAdminIntegration403,
   DisableAdminIntegration404,
+  DisableAdminIntegration409,
   DisableAdminIntegration413,
   DisableAdminIntegration415,
   DisableAdminIntegration429,
   DisableAdminIntegration500,
   DisableAdminIntegrationBody,
+  DisableAdminIntegrationHeaders,
   EnableAdminIntegration200,
   EnableAdminIntegration400,
   EnableAdminIntegration401,
   EnableAdminIntegration403,
   EnableAdminIntegration404,
+  EnableAdminIntegration409,
   EnableAdminIntegration413,
   EnableAdminIntegration415,
   EnableAdminIntegration429,
   EnableAdminIntegration500,
   EnableAdminIntegrationBody,
+  EnableAdminIntegrationHeaders,
   ExportAdminIntegrationConfigs200,
   ExportAdminIntegrationConfigs400,
   ExportAdminIntegrationConfigs401,
@@ -103,6 +109,7 @@ import type {
   ImportAdminIntegrationConfigs429,
   ImportAdminIntegrationConfigs500,
   ImportAdminIntegrationConfigsBody,
+  ImportAdminIntegrationConfigsHeaders,
   ListAdminCredentials200,
   ListAdminCredentials400,
   ListAdminCredentials401,
@@ -140,11 +147,13 @@ import type {
   PatchAdminIntegrationConfig401,
   PatchAdminIntegrationConfig403,
   PatchAdminIntegrationConfig404,
+  PatchAdminIntegrationConfig409,
   PatchAdminIntegrationConfig413,
   PatchAdminIntegrationConfig415,
   PatchAdminIntegrationConfig429,
   PatchAdminIntegrationConfig500,
   PatchAdminIntegrationConfigBody,
+  PatchAdminIntegrationConfigHeaders,
   ReloadAdminIntegration200,
   ReloadAdminIntegration400,
   ReloadAdminIntegration401,
@@ -188,12 +197,14 @@ import type {
   SetAdminIntegrationCredential401,
   SetAdminIntegrationCredential403,
   SetAdminIntegrationCredential404,
+  SetAdminIntegrationCredential409,
   SetAdminIntegrationCredential413,
   SetAdminIntegrationCredential415,
   SetAdminIntegrationCredential429,
   SetAdminIntegrationCredential500,
   SetAdminIntegrationCredential503,
   SetAdminIntegrationCredentialBody,
+  SetAdminIntegrationCredentialHeaders,
   TestAdminIntegrationCredentials200,
   TestAdminIntegrationCredentials400,
   TestAdminIntegrationCredentials401,
@@ -514,6 +525,11 @@ export type setAdminIntegrationCredentialResponse404 = {
   status: 404;
 };
 
+export type setAdminIntegrationCredentialResponse409 = {
+  data: SetAdminIntegrationCredential409;
+  status: 409;
+};
+
 export type setAdminIntegrationCredentialResponse413 = {
   data: SetAdminIntegrationCredential413;
   status: 413;
@@ -548,6 +564,7 @@ export type setAdminIntegrationCredentialResponseError = (
   | setAdminIntegrationCredentialResponse401
   | setAdminIntegrationCredentialResponse403
   | setAdminIntegrationCredentialResponse404
+  | setAdminIntegrationCredentialResponse409
   | setAdminIntegrationCredentialResponse413
   | setAdminIntegrationCredentialResponse415
   | setAdminIntegrationCredentialResponse429
@@ -569,6 +586,7 @@ export const setAdminIntegrationCredential = async (
   integrationId: string,
   key: string,
   setAdminIntegrationCredentialBody: SetAdminIntegrationCredentialBody,
+  headers: SetAdminIntegrationCredentialHeaders,
   options?: Parameters<typeof setAdminIntegrationCredentialRequest>[1],
 ): Promise<setAdminIntegrationCredentialResponse> => {
   const getHeaders = (
@@ -595,7 +613,7 @@ export const setAdminIntegrationCredential = async (
     {
       ...options,
       method: "PUT",
-      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
       body: JSON.stringify(setAdminIntegrationCredentialBody),
     },
   );
@@ -624,6 +642,11 @@ export type deleteAdminIntegrationCredentialResponse403 = {
 export type deleteAdminIntegrationCredentialResponse404 = {
   data: DeleteAdminIntegrationCredential404;
   status: 404;
+};
+
+export type deleteAdminIntegrationCredentialResponse409 = {
+  data: DeleteAdminIntegrationCredential409;
+  status: 409;
 };
 
 export type deleteAdminIntegrationCredentialResponse413 = {
@@ -655,6 +678,7 @@ export type deleteAdminIntegrationCredentialResponseError = (
   | deleteAdminIntegrationCredentialResponse401
   | deleteAdminIntegrationCredentialResponse403
   | deleteAdminIntegrationCredentialResponse404
+  | deleteAdminIntegrationCredentialResponse409
   | deleteAdminIntegrationCredentialResponse413
   | deleteAdminIntegrationCredentialResponse415
   | deleteAdminIntegrationCredentialResponse429
@@ -674,6 +698,7 @@ export const getDeleteAdminIntegrationCredentialUrl = (integrationId: string, ke
 export const deleteAdminIntegrationCredential = async (
   integrationId: string,
   key: string,
+  headers: DeleteAdminIntegrationCredentialHeaders,
   deleteAdminIntegrationCredentialBody?: DeleteAdminIntegrationCredentialBody,
   options?: Parameters<typeof deleteAdminIntegrationCredentialRequest>[1],
 ): Promise<deleteAdminIntegrationCredentialResponse> => {
@@ -701,7 +726,7 @@ export const deleteAdminIntegrationCredential = async (
     {
       ...options,
       method: "DELETE",
-      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
       body: JSON.stringify(deleteAdminIntegrationCredentialBody),
     },
   );
@@ -1103,6 +1128,7 @@ export const getImportAdminIntegrationConfigsUrl = () => {
 
 export const importAdminIntegrationConfigs = async (
   importAdminIntegrationConfigsBody: ImportAdminIntegrationConfigsBody,
+  headers: ImportAdminIntegrationConfigsHeaders,
   options?: Parameters<typeof importAdminIntegrationConfigsRequest>[1],
 ): Promise<importAdminIntegrationConfigsResponse> => {
   const getHeaders = (
@@ -1129,7 +1155,7 @@ export const importAdminIntegrationConfigs = async (
     {
       ...options,
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
       body: JSON.stringify(importAdminIntegrationConfigsBody),
     },
   );
@@ -1336,6 +1362,11 @@ export type patchAdminIntegrationConfigResponse404 = {
   status: 404;
 };
 
+export type patchAdminIntegrationConfigResponse409 = {
+  data: PatchAdminIntegrationConfig409;
+  status: 409;
+};
+
 export type patchAdminIntegrationConfigResponse413 = {
   data: PatchAdminIntegrationConfig413;
   status: 413;
@@ -1364,6 +1395,7 @@ export type patchAdminIntegrationConfigResponseError = (
   | patchAdminIntegrationConfigResponse401
   | patchAdminIntegrationConfigResponse403
   | patchAdminIntegrationConfigResponse404
+  | patchAdminIntegrationConfigResponse409
   | patchAdminIntegrationConfigResponse413
   | patchAdminIntegrationConfigResponse415
   | patchAdminIntegrationConfigResponse429
@@ -1383,6 +1415,7 @@ export const getPatchAdminIntegrationConfigUrl = (id: string) => {
 export const patchAdminIntegrationConfig = async (
   id: string,
   patchAdminIntegrationConfigBody: PatchAdminIntegrationConfigBody,
+  headers: PatchAdminIntegrationConfigHeaders,
   options?: Parameters<typeof patchAdminIntegrationConfigRequest>[1],
 ): Promise<patchAdminIntegrationConfigResponse> => {
   const getHeaders = (
@@ -1409,7 +1442,7 @@ export const patchAdminIntegrationConfig = async (
     {
       ...options,
       method: "PATCH",
-      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
       body: JSON.stringify(patchAdminIntegrationConfigBody),
     },
   );
@@ -1440,6 +1473,11 @@ export type disableAdminIntegrationResponse404 = {
   status: 404;
 };
 
+export type disableAdminIntegrationResponse409 = {
+  data: DisableAdminIntegration409;
+  status: 409;
+};
+
 export type disableAdminIntegrationResponse413 = {
   data: DisableAdminIntegration413;
   status: 413;
@@ -1468,6 +1506,7 @@ export type disableAdminIntegrationResponseError = (
   | disableAdminIntegrationResponse401
   | disableAdminIntegrationResponse403
   | disableAdminIntegrationResponse404
+  | disableAdminIntegrationResponse409
   | disableAdminIntegrationResponse413
   | disableAdminIntegrationResponse415
   | disableAdminIntegrationResponse429
@@ -1486,6 +1525,7 @@ export const getDisableAdminIntegrationUrl = (id: string) => {
 
 export const disableAdminIntegration = async (
   id: string,
+  headers: DisableAdminIntegrationHeaders,
   disableAdminIntegrationBody?: DisableAdminIntegrationBody,
   options?: Parameters<typeof disableAdminIntegrationRequest>[1],
 ): Promise<disableAdminIntegrationResponse> => {
@@ -1513,7 +1553,7 @@ export const disableAdminIntegration = async (
     {
       ...options,
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
       body: JSON.stringify(disableAdminIntegrationBody),
     },
   );
@@ -1544,6 +1584,11 @@ export type enableAdminIntegrationResponse404 = {
   status: 404;
 };
 
+export type enableAdminIntegrationResponse409 = {
+  data: EnableAdminIntegration409;
+  status: 409;
+};
+
 export type enableAdminIntegrationResponse413 = {
   data: EnableAdminIntegration413;
   status: 413;
@@ -1572,6 +1617,7 @@ export type enableAdminIntegrationResponseError = (
   | enableAdminIntegrationResponse401
   | enableAdminIntegrationResponse403
   | enableAdminIntegrationResponse404
+  | enableAdminIntegrationResponse409
   | enableAdminIntegrationResponse413
   | enableAdminIntegrationResponse415
   | enableAdminIntegrationResponse429
@@ -1590,6 +1636,7 @@ export const getEnableAdminIntegrationUrl = (id: string) => {
 
 export const enableAdminIntegration = async (
   id: string,
+  headers: EnableAdminIntegrationHeaders,
   enableAdminIntegrationBody?: EnableAdminIntegrationBody,
   options?: Parameters<typeof enableAdminIntegrationRequest>[1],
 ): Promise<enableAdminIntegrationResponse> => {
@@ -1617,7 +1664,7 @@ export const enableAdminIntegration = async (
     {
       ...options,
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
       body: JSON.stringify(enableAdminIntegrationBody),
     },
   );

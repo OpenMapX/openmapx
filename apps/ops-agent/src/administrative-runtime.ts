@@ -1,3 +1,10 @@
+import { loadConfiguredResourceAuthority } from "./configured-resource-authority";
+
+export {
+  type ConfiguredResourceAuthority,
+  loadConfiguredResourceAuthority,
+} from "./configured-resource-authority";
+
 import { createHash, randomUUID } from "node:crypto";
 import {
   accessSync,
@@ -66,6 +73,7 @@ import {
   type OpsExecutionContext,
   OpsExecutionFailure,
   OpsHostUpdateRequiredError,
+  OpsNotWiredError,
   type OpsRuntime,
 } from "./runtime";
 
@@ -230,53 +238,6 @@ interface DataAuthorityService {
 
 export function inspectRegionAuthority(regionId: string): boolean {
   return loadConfiguredResourceAuthority().regions.has(regionId);
-}
-
-const COUNTRY_ID = /^[A-Z]{2,3}$/;
-
-export interface ConfiguredResourceAuthority {
-  revisionId: string;
-  regions: ReadonlySet<string>;
-  countries: ReadonlySet<string>;
-}
-
-function exactConfiguredIds(
-  raw: string | undefined,
-  pattern: RegExp,
-  maximumLength: number,
-): string[] {
-  const values = (raw ?? "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
-  if (
-    values.length > 64 ||
-    values.some((value) => value.length > maximumLength || !pattern.test(value)) ||
-    new Set(values).size !== values.length
-  ) {
-    throw new Error("Resource authority configuration rejected");
-  }
-  return values.sort();
-}
-
-export function loadConfiguredResourceAuthority(
-  env: NodeJS.ProcessEnv = process.env,
-): ConfiguredResourceAuthority {
-  const regions = exactConfiguredIds(
-    env.OPENMAPX_ALLOWED_REGIONS ?? "europe/germany",
-    REGION_ID,
-    128,
-  );
-  const countries = exactConfiguredIds(env.OPENMAPX_ALLOWED_COUNTRIES ?? "DE", COUNTRY_ID, 3);
-  const digest = createHash("sha256")
-    .update("openmapx-resource-authority-v1\0")
-    .update(JSON.stringify({ regions, countries }))
-    .digest("hex");
-  return {
-    revisionId: `resources-${digest}`,
-    regions: new Set(regions),
-    countries: new Set(countries),
-  };
 }
 
 export function inspectDataTypeAuthority(
@@ -843,7 +804,14 @@ export function createAgentHandoffBindings(rootDir: string) {
   };
   return {
     stackArgs: bindings.stackArgs,
-    restoreOverlay: bindings.restoreOverlay,
+    // Task08.3 installs the guarded helper. A parent observation cannot
+    // authorize this detached process or its rollback after the parent exits.
+    assertAvailable: (): never => {
+      throw new OpsNotWiredError();
+    },
+    restoreOverlay: (_previousOverlay: string | null): never => {
+      throw new OpsNotWiredError();
+    },
     withStoreLock: bindings.withStoreLock,
     releasePins: (releaseId: string, digest: string) => {
       const manifest = loadStored(releaseId, digest);
@@ -852,11 +820,9 @@ export function createAgentHandoffBindings(rootDir: string) {
         helperImage: manifest.images["privacy-backup"],
       };
     },
-    writeOverlay: (releaseId: string, digest: string) =>
-      coreServices.writeReleaseComposeArtifacts(
-        loadStored(releaseId, digest),
-        bindings.repositoryPaths.composeReleasePath,
-      ),
+    writeOverlay: (_releaseId: string, _digest: string): never => {
+      throw new OpsNotWiredError();
+    },
   };
 }
 
@@ -1341,7 +1307,6 @@ export function createDefaultReleaseEffects(
     initialize,
     validateCandidate,
     resolve: async (context) => {
-      await initialize();
       manifestNames();
       const selection = coreServices.releaseSelection();
       if (selection.kind === "local") throw new coreServices.ReleaseChannelDisabledError();
@@ -1414,7 +1379,6 @@ export function createDefaultReleaseEffects(
       }
     },
     pull: async (releaseId, context) => {
-      await initialize();
       const manifest = loadManifest(releaseId);
       const names = [
         "api",
@@ -1438,11 +1402,9 @@ export function createDefaultReleaseEffects(
       }
     },
     inspect: async () => {
-      await initialize();
       return inspectRelease();
     },
     inspectSystem: async (context) => {
-      await initialize();
       const release = await inspectRelease();
       const manifest = release.availableReleaseId
         ? loadManifest(release.availableReleaseId)
@@ -1680,7 +1642,6 @@ export function createDefaultReleaseEffects(
       };
     },
     runtimeInspect: async () => {
-      await initialize();
       const state = readState();
       return {
         ...(state.releaseId ? { releaseId: state.releaseId } : {}),

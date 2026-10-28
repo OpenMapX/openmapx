@@ -11,6 +11,11 @@ export const hardlinkApplySummarySchema = z.strictObject({
   via: z.enum(["data-manager", "local", "none"]).optional(),
 });
 export type HardlinkApplySummary = z.infer<typeof hardlinkApplySummarySchema>;
+export type ServicePreparationResult = {
+  revisionId: string;
+  hardlinks: HardlinkApplySummary;
+  coordinatorMode: CoordinatorMode;
+};
 const serviceId = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
 const ids = z
   .array(serviceId)
@@ -94,7 +99,9 @@ export const serviceActionDecisionSchema = z
         "not_buildable",
       ])
       .nullable(),
-    workflow: z.enum(["core-restart", "system-update"]).nullable(),
+    workflow: z
+      .enum(["core-restart", "system-update", "coordinator-apply", "coordinator-update"])
+      .nullable(),
   })
   .refine((decision) =>
     decision.available

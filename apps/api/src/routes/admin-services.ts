@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import type { OpsResultFor } from "@openmapx/core/ops";
+import { type OpsResultFor, trustedConfigurationPayloadSchema } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import { isValidSecretKey } from "@openmapx/core/services/secret-key";
 import {
@@ -13,7 +13,6 @@ import {
   getServiceSelectionSummary,
   validateServiceSelectionForWrite,
 } from "../services/admin-cli";
-import { isDockerAvailable } from "../services/admin-ops";
 import {
   DAWARICH_CREDENTIAL_MANAGED_BY,
   DAWARICH_CREDENTIAL_MANAGED_CODE,
@@ -29,15 +28,9 @@ import { jobRunner } from "../services/job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "../services/ops-client";
 import { isSecretsConfigured } from "../services/secrets";
 import { resolveServiceConfigWithSources } from "../services/service-config-resolver";
-import { persistServiceConfigPatch } from "../services/service-config-writer";
 import { getServiceRegistry } from "../services/service-registry";
-import {
-  deleteServiceSecret,
-  listServiceSecrets,
-  setServiceSecret,
-} from "../services/service-secrets";
+import { listServiceSecrets } from "../services/service-secrets";
 import { applyTrustedConfiguration } from "../services/trusted-config-operations";
-import { isProvenConfigurationNonCommit } from "../services/trusted-config-outcome";
 import { writeAuditLog } from "../utils/audit-log";
 import { dockerComposeLogs, dockerComposePs } from "../utils/docker-compose";
 import { maskSecretConfigValues } from "../utils/mask-config.js";
@@ -175,9 +168,9 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const { id } = req.params;
       const { action } = req.body;
-      if (!["start", "stop", "restart"].includes(action)) {
+      if (!["start", "stop", "restart", "apply"].includes(action)) {
         reply.status(400);
-        return { error: "Invalid action — must be start | stop | restart" };
+        return { error: "Invalid action — must be start | stop | restart | apply" };
       }
       // Verify the id is a known service before enqueueing — prevents the job
       // runner from spawning a `docker compose start <unknown>` call (or worse,
@@ -246,13 +239,14 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         return { error: (err as Error).message };
       }
 
-      const operationKey = createDurableOpsKey(
-        "admin-route.selection.apply",
-        `${getAdminSession(req).user.id}\0${String(req.id)}`,
+      const operationKey = createDirectAdminOpsKey(
+        getAdminSession(req).user.id,
+        parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
       );
       const applied = await applyTrustedConfiguration({
         kind: "serviceSelection.apply",
         selectedRoots: validated.normalized,
+        actorId: getAdminSession(req).user.id,
         operationKey,
       });
       const summary = await getServiceSelectionSummary(registry, validated.normalized);
@@ -292,7 +286,9 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     const allowedKeys =
       action === "build"
         ? new Set(["action", "serviceIds", "all", "region", "continueOnError"])
-        : new Set(["action", "serviceIds", "continueOnError"]);
+        : action === "update"
+          ? new Set(["action", "serviceIds", "continueOnError", "noDeps"])
+          : new Set(["action", "serviceIds", "continueOnError"]);
     if (!hasOnlyBodyKeys(req.body, allowedKeys)) {
       reply.status(400);
       return { error: "Request contains unsupported fields" };
@@ -322,6 +318,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         all: ("all" in req.body ? req.body.all : undefined) === true,
         region,
         continueOnError: req.body?.continueOnError,
+        ...("noDeps" in req.body ? { noDeps: req.body.noDeps } : {}),
       },
       adminSession.user.id,
     );
@@ -392,31 +389,29 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         return { errors };
       }
       const adminSession = getAdminSession(req);
-      const saved = await persistServiceConfigPatch(req.params.id, config);
-      try {
-        await applyTrustedConfiguration({
-          kind: "serviceConfig.apply",
-          serviceId: req.params.id,
-          operationKey: createDurableOpsKey(
-            "admin-route.service-config.apply",
-            `${adminSession.user.id}\0${String(req.id)}`,
-          ),
-        });
-      } catch (error) {
-        if (!isProvenConfigurationNonCommit(error)) throw error;
-        try {
-          // False means a later writer owns the row. Either way the apply failed;
-          // do not promise restoration or turn this into a successful response.
-          await saved.restore();
-        } catch (restoreError) {
-          throw new AggregateError(
-            [error, restoreError],
-            "Service configuration apply and restoration failed",
-            { cause: error },
-          );
-        }
-        throw error;
-      }
+      await applyTrustedConfiguration({
+        kind: "serviceConfig.apply",
+        serviceId: req.params.id,
+        actorId: adminSession.user.id,
+        operationKey: createDirectAdminOpsKey(
+          adminSession.user.id,
+          parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+        ),
+        overlay: {
+          purpose: "service-config",
+          coordinatorMode: "ensure-running",
+          changes: [
+            {
+              kind: "service-config",
+              serviceId: req.params.id,
+              set: trustedConfigurationPayloadSchema.shape.serviceConfigs.element.shape.values.parse(
+                config,
+              ),
+              unset: [],
+            },
+          ],
+        },
+      });
       await writeAuditLog({
         actorId: adminSession.user.id,
         targetId: req.params.id,
@@ -441,21 +436,6 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   // replaces the service container (services bake env/secrets at create time — no live
   // reload). Requires Docker host-control; otherwise the caller gets
   // `needsRender` and must render + apply on the host.
-  async function applyServiceSecretChange(
-    serviceId: string,
-    userId: string,
-  ): Promise<{ ok: true; jobId?: string; needsRender?: boolean }> {
-    if (await isDockerAvailable()) {
-      const jobId = await jobRunner.enqueue(
-        "service.apply",
-        { service: serviceId, configurationKind: "vault" },
-        userId,
-      );
-      return { ok: true, jobId };
-    }
-    return { ok: true, needsRender: true };
-  }
-
   // GET /admin/services/:id/credentials — declared secret fields + per-field
   // status (vault | missing), setup guides, and who set each + when.
   registerServiceAdminRoute(app, "getAdminServiceCredentials", async (req, reply) => {
@@ -526,7 +506,29 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         return { error: "value must be a non-empty string" };
       }
       const adminSession = getAdminSession(req);
-      await setServiceSecret(svc.manifest.id, req.params.key, value, adminSession.user.id);
+      const applied = await applyTrustedConfiguration({
+        kind: "vault.apply",
+        serviceId: svc.manifest.id,
+        actorId: adminSession.user.id,
+        followUp: "service-apply",
+        operationKey: createDirectAdminOpsKey(
+          adminSession.user.id,
+          parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+        ),
+        overlay: {
+          purpose: "service-secret",
+          coordinatorMode: "ensure-running",
+          changes: [
+            {
+              kind: "service-secret",
+              serviceId: svc.manifest.id,
+              key: req.params.key,
+              action: "set",
+              value,
+            },
+          ],
+        },
+      });
       await writeAuditLog({
         actorId: adminSession.user.id,
         targetId: svc.manifest.id,
@@ -535,7 +537,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         details: { key: req.params.key },
         request: req,
       });
-      return applyServiceSecretChange(svc.manifest.id, adminSession.user.id);
+      return { ok: true as const, jobId: applied.jobId };
     },
     {
       beforeValidation: async (req, reply) => {
@@ -590,7 +592,28 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         }
       }
       const adminSession = getAdminSession(req);
-      await deleteServiceSecret(svc.manifest.id, req.params.key);
+      const applied = await applyTrustedConfiguration({
+        kind: "vault.apply",
+        serviceId: svc.manifest.id,
+        actorId: adminSession.user.id,
+        followUp: "service-apply",
+        operationKey: createDirectAdminOpsKey(
+          adminSession.user.id,
+          parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+        ),
+        overlay: {
+          purpose: "service-secret",
+          coordinatorMode: "ensure-running",
+          changes: [
+            {
+              kind: "service-secret",
+              serviceId: svc.manifest.id,
+              key: req.params.key,
+              action: "delete",
+            },
+          ],
+        },
+      });
       await writeAuditLog({
         actorId: adminSession.user.id,
         targetId: svc.manifest.id,
@@ -599,7 +622,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         details: { key: req.params.key },
         request: req,
       });
-      return applyServiceSecretChange(svc.manifest.id, adminSession.user.id);
+      return { ok: true as const, jobId: applied.jobId };
     },
     {
       beforeValidation: async (req, reply) => {

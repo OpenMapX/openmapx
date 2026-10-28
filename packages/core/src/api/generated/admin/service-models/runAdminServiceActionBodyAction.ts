@@ -8,4 +8,5 @@ export const RunAdminServiceActionBodyAction = {
   start: "start",
   stop: "stop",
   restart: "restart",
+  apply: "apply",
 } as const;

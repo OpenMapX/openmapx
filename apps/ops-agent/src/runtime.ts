@@ -49,6 +49,7 @@ export class OpsAgentBusyError extends Error {
 }
 
 export interface OpsExecutionContext {
+  readonly configurationMaintenanceControl?: import("./configuration-maintenance-store").ConfigurationMaintenanceControlOwner;
   readonly execution: ExecutionRef;
   readonly artifactLease?: BorrowedArtifactTargetLease;
   readonly ownedTargetLease?: ArtifactTargetLease;

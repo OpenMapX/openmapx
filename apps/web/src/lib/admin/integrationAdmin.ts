@@ -123,8 +123,18 @@ export function useIntegrationAdmin() {
       toggle: (id: string, enabled: boolean) =>
         integrationOrThrow(
           enabled
-            ? sdk.enableAdminIntegration(id, undefined, { client })
-            : sdk.disableAdminIntegration(id, undefined, { client }),
+            ? sdk.enableAdminIntegration(
+                id,
+                { "idempotency-key": crypto.randomUUID() },
+                undefined,
+                { client },
+              )
+            : sdk.disableAdminIntegration(
+                id,
+                { "idempotency-key": crypto.randomUUID() },
+                undefined,
+                { client },
+              ),
         ),
       healthSweep: () =>
         integrationOrThrow(sdk.runAdminIntegrationHealthChecks(undefined, { client })),
@@ -133,13 +143,30 @@ export function useIntegrationAdmin() {
           sdk.patchAdminIntegrationConfig(
             id,
             sdk.adminIntegrationConfigPatchSchema.parse(updates),
+            { "idempotency-key": crypto.randomUUID() },
             { client },
           ),
         ),
       setCredential: (id: string, key: string, value: string) =>
-        integrationOrThrow(sdk.setAdminIntegrationCredential(id, key, { value }, { client })),
+        integrationOrThrow(
+          sdk.setAdminIntegrationCredential(
+            id,
+            key,
+            { value },
+            { "idempotency-key": crypto.randomUUID() },
+            { client },
+          ),
+        ),
       deleteCredential: (id: string, key: string) =>
-        integrationOrThrow(sdk.deleteAdminIntegrationCredential(id, key, undefined, { client })),
+        integrationOrThrow(
+          sdk.deleteAdminIntegrationCredential(
+            id,
+            key,
+            { "idempotency-key": crypto.randomUUID() },
+            undefined,
+            { client },
+          ),
+        ),
       setBinding: (id: string, capability: string, serviceId: string | null) =>
         integrationOrThrow(
           serviceId === null
@@ -154,7 +181,11 @@ export function useIntegrationAdmin() {
           );
         try {
           return await integrationOrThrow(
-            sdk.importAdminIntegrationConfigs(parsed.data, { client }),
+            sdk.importAdminIntegrationConfigs(
+              parsed.data,
+              { "idempotency-key": crypto.randomUUID() },
+              { client },
+            ),
           );
         } finally {
           void invalidateIntegrationAdmin(qc, apiUrl);

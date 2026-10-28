@@ -174,6 +174,12 @@ async function main(): Promise<void> {
       loadAuthority: authorityLoader,
       communityRepositories,
       runFixedCli: administrativeCli,
+      candidateSource: {
+        directory: config.trustedConfigDirectory,
+        token: apiToken,
+        ownerUid: uid,
+        ownerGid: gid,
+      },
     });
     const releaseEffects = productionReleaseEffects(runtime);
     const retentionDays = Number(process.env.BACKUP_RETENTION_DAYS?.trim() || "30");
@@ -189,6 +195,7 @@ async function main(): Promise<void> {
       const resources = loadConfiguredResourceAuthority();
       return {
         revisionId: `${authority.revisionId.slice(0, 48)}-${resources.revisionId}`,
+        configurationAuthorityRevision: authority.revisionId,
         services: authority.services.map((service) => ({
           serviceId: service.manifest.id,
           enabled: service.enabled,
@@ -212,6 +219,10 @@ async function main(): Promise<void> {
               serviceId: service.serviceId,
               isBuiltIn: service.isBuiltIn,
               buildable: !!service.selectionAuthority.manifest.buildCommand,
+              creationDependencies: services.serviceCreationDependencyIds(
+                authorityServices.map((value) => value.selectionAuthority),
+                [service.serviceId],
+              ),
             })),
           enabledServiceIds: (authorityServices) => {
             const trusted = readTrustedEnabledServiceIds(
@@ -254,8 +265,9 @@ async function main(): Promise<void> {
             const handoff = readAgentHandoff(config.rootDir);
             return handoff !== null && !isTerminalHandoff(handoff.phase);
           } catch {
-            // An unreadable record fails release operations, not every operation.
-            return false;
+            // Unknown legacy replacement retains the existing mutation/drain
+            // boundary; inspection and health remain reachable.
+            return true;
           }
         },
         audit: (event) => process.stdout.write(`${JSON.stringify(event)}\n`),

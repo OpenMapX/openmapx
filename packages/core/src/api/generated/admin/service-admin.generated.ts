@@ -73,6 +73,7 @@ import type {
   DeleteAdminServiceCredential429,
   DeleteAdminServiceCredential500,
   DeleteAdminServiceCredentialBody,
+  DeleteAdminServiceCredentialHeaders,
   GetAdminComposePreview400,
   GetAdminComposePreview401,
   GetAdminComposePreview403,
@@ -272,20 +273,24 @@ import type {
   SetAdminServiceCredential429,
   SetAdminServiceCredential500,
   SetAdminServiceCredentialBody,
+  SetAdminServiceCredentialHeaders,
   SetAdminServiceSelection200,
   SetAdminServiceSelection400,
   SetAdminServiceSelection401,
   SetAdminServiceSelection403,
+  SetAdminServiceSelection409,
   SetAdminServiceSelection413,
   SetAdminServiceSelection415,
   SetAdminServiceSelection429,
   SetAdminServiceSelection500,
   SetAdminServiceSelection503,
   SetAdminServiceSelectionBody,
+  SetAdminServiceSelectionHeaders,
   StartAdminCompose200,
   StartAdminCompose400,
   StartAdminCompose401,
   StartAdminCompose403,
+  StartAdminCompose409,
   StartAdminCompose413,
   StartAdminCompose415,
   StartAdminCompose429,
@@ -318,11 +323,13 @@ import type {
   UpdateAdminServiceConfig401,
   UpdateAdminServiceConfig403,
   UpdateAdminServiceConfig404,
+  UpdateAdminServiceConfig409,
   UpdateAdminServiceConfig413,
   UpdateAdminServiceConfig415,
   UpdateAdminServiceConfig429,
   UpdateAdminServiceConfig500,
   UpdateAdminServiceConfigBody,
+  UpdateAdminServiceConfigHeaders,
 } from "./service-models";
 export type stopAdminComposeResponse400 = {
   data: StopAdminCompose400;
@@ -514,6 +521,11 @@ export type startAdminComposeResponse403 = {
   status: 403;
 };
 
+export type startAdminComposeResponse409 = {
+  data: StartAdminCompose409;
+  status: 409;
+};
+
 export type startAdminComposeResponse413 = {
   data: StartAdminCompose413;
   status: 413;
@@ -541,6 +553,7 @@ export type startAdminComposeResponseError = (
   | startAdminComposeResponse400
   | startAdminComposeResponse401
   | startAdminComposeResponse403
+  | startAdminComposeResponse409
   | startAdminComposeResponse413
   | startAdminComposeResponse415
   | startAdminComposeResponse429
@@ -2081,6 +2094,11 @@ export type setAdminServiceSelectionResponse403 = {
   status: 403;
 };
 
+export type setAdminServiceSelectionResponse409 = {
+  data: SetAdminServiceSelection409;
+  status: 409;
+};
+
 export type setAdminServiceSelectionResponse413 = {
   data: SetAdminServiceSelection413;
   status: 413;
@@ -2113,6 +2131,7 @@ export type setAdminServiceSelectionResponseError = (
   | setAdminServiceSelectionResponse400
   | setAdminServiceSelectionResponse401
   | setAdminServiceSelectionResponse403
+  | setAdminServiceSelectionResponse409
   | setAdminServiceSelectionResponse413
   | setAdminServiceSelectionResponse415
   | setAdminServiceSelectionResponse429
@@ -2132,6 +2151,7 @@ export const getSetAdminServiceSelectionUrl = () => {
 
 export const setAdminServiceSelection = async (
   setAdminServiceSelectionBody: SetAdminServiceSelectionBody,
+  headers: SetAdminServiceSelectionHeaders,
   options?: Parameters<typeof setAdminServiceSelectionRequest>[1],
 ): Promise<setAdminServiceSelectionResponse> => {
   const getHeaders = (
@@ -2158,7 +2178,7 @@ export const setAdminServiceSelection = async (
     {
       ...options,
       method: "PUT",
-      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
       body: JSON.stringify(setAdminServiceSelectionBody),
     },
   );
@@ -2464,6 +2484,11 @@ export type updateAdminServiceConfigResponse404 = {
   status: 404;
 };
 
+export type updateAdminServiceConfigResponse409 = {
+  data: UpdateAdminServiceConfig409;
+  status: 409;
+};
+
 export type updateAdminServiceConfigResponse413 = {
   data: UpdateAdminServiceConfig413;
   status: 413;
@@ -2492,6 +2517,7 @@ export type updateAdminServiceConfigResponseError = (
   | updateAdminServiceConfigResponse401
   | updateAdminServiceConfigResponse403
   | updateAdminServiceConfigResponse404
+  | updateAdminServiceConfigResponse409
   | updateAdminServiceConfigResponse413
   | updateAdminServiceConfigResponse415
   | updateAdminServiceConfigResponse429
@@ -2511,6 +2537,7 @@ export const getUpdateAdminServiceConfigUrl = (id: string) => {
 export const updateAdminServiceConfig = async (
   id: string,
   updateAdminServiceConfigBody: UpdateAdminServiceConfigBody,
+  headers: UpdateAdminServiceConfigHeaders,
   options?: Parameters<typeof updateAdminServiceConfigRequest>[1],
 ): Promise<updateAdminServiceConfigResponse> => {
   const getHeaders = (
@@ -2537,7 +2564,7 @@ export const updateAdminServiceConfig = async (
     {
       ...options,
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
       body: JSON.stringify(updateAdminServiceConfigBody),
     },
   );
@@ -2704,6 +2731,7 @@ export const setAdminServiceCredential = async (
   id: string,
   key: string,
   setAdminServiceCredentialBody: SetAdminServiceCredentialBody,
+  headers: SetAdminServiceCredentialHeaders,
   options?: Parameters<typeof setAdminServiceCredentialRequest>[1],
 ): Promise<setAdminServiceCredentialResponse> => {
   const getHeaders = (
@@ -2730,7 +2758,7 @@ export const setAdminServiceCredential = async (
     {
       ...options,
       method: "PUT",
-      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
       body: JSON.stringify(setAdminServiceCredentialBody),
     },
   );
@@ -2815,6 +2843,7 @@ export const getDeleteAdminServiceCredentialUrl = (id: string, key: string) => {
 export const deleteAdminServiceCredential = async (
   id: string,
   key: string,
+  headers: DeleteAdminServiceCredentialHeaders,
   deleteAdminServiceCredentialBody?: DeleteAdminServiceCredentialBody,
   options?: Parameters<typeof deleteAdminServiceCredentialRequest>[1],
 ): Promise<deleteAdminServiceCredentialResponse> => {
@@ -2842,7 +2871,7 @@ export const deleteAdminServiceCredential = async (
     {
       ...options,
       method: "DELETE",
-      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
       body: JSON.stringify(deleteAdminServiceCredentialBody),
     },
   );

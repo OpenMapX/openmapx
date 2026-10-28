@@ -129,10 +129,33 @@ describe.skipIf(
       await fence.startup();
       const receipt = await fence.prepare(input, ["x-openmapx-control-delegation", assertion]);
       expect(receipt).toMatchObject({ fenceId: child.executionId, state: "prepared", sequence: 0 });
+      expect(
+        existsSync(
+          join(
+            root,
+            "data/.admin-target-control/executions/data-manager",
+            `${child.operationKey}.data-terminal.json`,
+          ),
+        ),
+      ).toBe(true);
       const rows =
         await sql`SELECT status,finished_at,metadata FROM data_manager.jobs WHERE id=${child.executionId}`;
       expect(rows[0]?.status).toBe("ok");
       expect(rows[0]?.finished_at).toBeInstanceOf(Date);
+      const preparedSource = control.verifyPublishedDataConfigurationFencePrepared(lease, child);
+      expect(control.preparedDataConfigurationFenceState(preparedSource)).toMatchObject({
+        preparedReceipt: receipt,
+        preparedTerminalAt: (rows[0]!.finished_at as Date).getTime(),
+      });
+      expect(() =>
+        control.preparedDataConfigurationFenceState({} as typeof preparedSource),
+      ).toThrow();
+      expect(() =>
+        control.verifyPublishedDataConfigurationFencePrepared(lease, {
+          ...child,
+          executionId: randomUUID(),
+        }),
+      ).toThrow();
       const store = createPostgresDataExecutionStore(sql),
         deadline = Date.now() + 30000,
         key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) });
@@ -463,6 +486,40 @@ async function ownedFenceFixture() {
     },
   };
 }
+it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
+  "refuses settlement capacity authority from a valid ordinary prepare grant without the original published reservation preimage",
+  async () => {
+    const f = await ownedFenceFixture();
+    try {
+      const peer = control.verifyControlPeer(f.dm, {
+        rawHeaders: ["x-openmapx-control-delegation", f.assertion],
+        transportPrincipal: "shared-data-manager-bearer",
+        execution: f.child,
+        kind: "configuration-maintenance.prepare",
+      });
+      expect(() =>
+        control.verifyPublishedConfigurationSettlementReservation(f.dm, peer, f.input),
+      ).toThrow();
+      expect(() =>
+        control.publishedConfigurationSettlementReservationState({} as never, f.dm),
+      ).toThrow();
+      expect(await f.sql`SELECT id FROM data_manager.jobs WHERE id=${f.child.executionId}`).toEqual(
+        [],
+      );
+      expect(
+        existsSync(
+          join(
+            f.root,
+            "control-private/data-manager/configuration-maintenance",
+            `${f.input.maintenanceId}.json`,
+          ),
+        ),
+      ).toBe(false);
+    } finally {
+      await f.close();
+    }
+  },
+);
 it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
   "retains a half-written signed guard before insert and blocks a racing real admission on another connection",
   async () => {

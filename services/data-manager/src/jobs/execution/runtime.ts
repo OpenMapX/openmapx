@@ -18,6 +18,7 @@ import {
   settleArtifactTargetLeaseChild,
   type TargetLeaseAuthority,
   type VerifiedExecutionAuthority,
+  type VerifiedPreparedGenerationAdmission,
   verifyControlEffectSettlement,
 } from "@openmapx/core/build-artifacts";
 import {
@@ -65,6 +66,7 @@ export interface DataExecutionRuntime {
   admit(
     input: DataExecutionInput,
     options: {
+      preparedGeneration?: VerifiedPreparedGenerationAdmission;
       operationKey: string;
       requestedDeadlineAt?: number;
       parent?: VerifiedParentExecution;
@@ -404,7 +406,8 @@ export function createDataExecutionRuntime(deps: {
             await owner.assertOwnedProxyRecoverySettled(record.execution);
             await releaseArtifactTargetLease(lease);
             await owner.publishContainedTerminal(record.execution);
-          }
+          } else if (record.input.kind === "generation-hardlinks")
+            await owner.publishContainedTerminal(record.execution);
         }
       } catch {
         // An I/O/CAS/containment gap is not a terminal receipt or permission to
@@ -507,7 +510,8 @@ export function createDataExecutionRuntime(deps: {
               if (lease.mode === "owner") {
                 await releaseArtifactTargetLease(lease);
                 await owner.publishContainedTerminal(record.execution);
-              }
+              } else if (record.input.kind === "generation-hardlinks")
+                await owner.publishContainedTerminal(record.execution);
             } finally {
               closeArtifactTargetLeaseHandle(lease);
             }
@@ -562,7 +566,8 @@ export function createDataExecutionRuntime(deps: {
           if (recovered.lease.mode === "owner") {
             await releaseArtifactTargetLease(recovered.lease);
             await owner.publishContainedTerminal(record.execution);
-          }
+          } else if (record.input.kind === "generation-hardlinks")
+            await owner.publishContainedTerminal(record.execution);
         } catch {
           try {
             const latest = await store.inspect(record.status.id);

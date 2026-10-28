@@ -1,14 +1,14 @@
 /** Server-capable receipt digests and the existing fixed API token proof. */
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { type OpsJobStatus, parseBoundedOpsResult, parseOpsJobStatus } from "./contract";
-import { canonicalJson } from "./fingerprint";
+import { canonicalJson } from "./canonical-json";
+import { type OpsJobStatus, parseObservedOpsResult, parseOpsJobStatus } from "./contract";
 
 export function controlTerminalReceiptDigest(input: OpsJobStatus): string {
   const s = parseOpsJobStatus(input);
   if (s.version !== 2 || !["succeeded", "failed", "timed_out"].includes(s.state))
     throw Error("A version2 terminal receipt is required");
-  const result = s.result === undefined ? null : parseBoundedOpsResult(s.kind, s.result);
+  const result = s.result === undefined ? null : parseObservedOpsResult(s.kind, s.result);
   const fields = {
     version: 2,
     operationId: s.operationId,

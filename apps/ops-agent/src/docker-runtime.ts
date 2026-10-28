@@ -41,7 +41,6 @@ export function isContainedProcessFailure(error: unknown): boolean {
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const LIFECYCLE_TIMEOUT_MS = 10 * 60_000;
-const PULL_TIMEOUT_MS = 10 * 60_000;
 const MAX_OUTPUT_BYTES = 1024 * 1024;
 const KILL_GRACE_MS = 2_000;
 
@@ -422,7 +421,14 @@ function parseStackStatus(stdout: string): OpsResultFor<"stack.status"> {
         const state = ["running", "stopped", "created", "restarting", "paused"].includes(rawState)
           ? (rawState as "running" | "stopped" | "created" | "restarting" | "paused")
           : "unknown";
-        return { serviceId: String(item.Service ?? item.Name ?? "unknown"), state };
+        const rawHealth =
+          item.Health === undefined || item.Health === ""
+            ? "none"
+            : String(item.Health).toLowerCase();
+        const health = ["healthy", "unhealthy", "starting", "none"].includes(rawHealth)
+          ? (rawHealth as "healthy" | "unhealthy" | "starting" | "none")
+          : ("unknown" as const);
+        return { serviceId: String(item.Service ?? item.Name ?? "unknown"), state, health };
       }),
     };
   } catch {
@@ -538,10 +544,94 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     const result = await run([...composePrefix(), "ps", "--format", "json"], context.signal);
     return parseStackStatus(result.stdout);
   };
-  runtime["stack.start"] = (_operation, context) =>
-    changed([...composePrefix(), "up", "-d"], context, LIFECYCLE_TIMEOUT_MS);
+  const preparedCreation = async (
+    operation: { expectedConfigurationRevisionId: string; serviceId?: string },
+    context: OpsExecutionContext,
+    args: () => string[],
+  ) => {
+    if (context.artifactLease) assertArtifactTargetLeaseForward(context.artifactLease);
+    if (context.controlAuthority) assertControlExecutionForward(context.controlAuthority);
+    try {
+      return await services.withConfigurationGenerationWriter(
+        options.stack.infraDir,
+        async () => {
+          const currentRevisionId = services.currentConfigurationGeneration(options.stack.infraDir);
+          if (operation.expectedConfigurationRevisionId !== currentRevisionId)
+            throw new OpsExecutionFailure("conflict", {
+              serviceLifecycle: {
+                expectedRevisionId: operation.expectedConfigurationRevisionId,
+                seedRevisionId: operation.expectedConfigurationRevisionId,
+                finalRevisionId: null,
+                phase: "failed",
+                commit: "seed_committed",
+                followUp: "not_started",
+                failure: {
+                  reason: "revision_conflict",
+                  failedServiceIds: operation.serviceId ? [operation.serviceId] : [],
+                },
+              },
+            });
+          const store = join(options.stack.infraDir, ".ops-agent-releases");
+          await mkdir(store, { mode: 0o700, recursive: true });
+          const release = await services.acquireReleaseStoreLock(store);
+          try {
+            const command = args();
+            // Direct DM Start is fixed --no-recreate; guarded DM recreation is
+            // checked by the actual frozen-step verifier before this adapter.
+            // All implicit coordinator creation stays outside this generic path.
+            if (operation.serviceId !== "data-manager" && !command.includes("--no-deps")) {
+              const configuration = JSON.parse(
+                  (
+                    await run(
+                      [...composePrefix(), "config", "--format", "json"],
+                      context.signal,
+                      15000,
+                    )
+                  ).stdout,
+                ),
+                targets = operation.serviceId
+                  ? [operation.serviceId]
+                  : Object.keys(configuration.services ?? {});
+              if (
+                services
+                  .composeCreationDependencyIds(configuration, targets)
+                  .includes("data-manager")
+              )
+                throw Error("Coordinator maintenance required before service creation");
+            }
+            return await changed(command, context, LIFECYCLE_TIMEOUT_MS);
+          } finally {
+            release.release();
+          }
+        },
+        context.signal,
+      );
+    } catch (error) {
+      if (
+        error instanceof services.ConfigurationGenerationError &&
+        error.cause instanceof OpsExecutionFailure
+      )
+        throw error.cause;
+      if (
+        error instanceof services.ConfigurationGenerationError &&
+        error.result.outcome === "not_committed" &&
+        !error.result.cleanupFailed &&
+        isContainedProcessFailure(error.cause)
+      )
+        throw error.cause;
+      throw error;
+    }
+  };
+  runtime["stack.start"] = (operation, context) =>
+    preparedCreation(operation, context, () => [...composePrefix(), "up", "-d"]);
   runtime["service.start"] = (operation, context) =>
-    changed([...composePrefix(), "up", "-d", operation.serviceId], context, LIFECYCLE_TIMEOUT_MS);
+    preparedCreation(operation, context, () => [
+      ...composePrefix(),
+      "up",
+      "-d",
+      ...(operation.serviceId === "data-manager" ? ["--no-recreate"] : []),
+      operation.serviceId,
+    ]);
   runtime["service.stop"] = async (operation, context) => {
     const target = await ownedTarget(operation.serviceId, context, "stop");
     return changed(["stop", target.containerId], context, LIFECYCLE_TIMEOUT_MS);
@@ -549,19 +639,22 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   runtime["service.restart"] = (operation, context) =>
     changed([...composePrefix(), "restart", operation.serviceId], context, LIFECYCLE_TIMEOUT_MS);
   runtime["service.recreate"] = (operation, context) =>
-    changed(
-      [...composePrefix(), "up", "-d", "--force-recreate", operation.serviceId],
-      context,
-      LIFECYCLE_TIMEOUT_MS,
-    );
+    preparedCreation(operation, context, () => [
+      ...composePrefix(),
+      "up",
+      "-d",
+      "--force-recreate",
+      operation.serviceId,
+    ]);
   runtime["service.recreateIsolated"] = (operation, context) =>
-    changed(
-      [...composePrefix(), "up", "-d", "--force-recreate", "--no-deps", operation.serviceId],
-      context,
-      LIFECYCLE_TIMEOUT_MS,
-    );
-  runtime["service.pull"] = (operation, context) =>
-    changed([...composePrefix(), "pull", operation.serviceId], context, PULL_TIMEOUT_MS);
+    preparedCreation(operation, context, () => [
+      ...composePrefix(),
+      "up",
+      "-d",
+      "--force-recreate",
+      "--no-deps",
+      operation.serviceId,
+    ]);
   runtime["service.remove"] = (operation, context) =>
     changed([...composePrefix(), "rm", "-sf", operation.serviceId], context, LIFECYCLE_TIMEOUT_MS);
   runtime["service.logs"] = async (operation, context) => {

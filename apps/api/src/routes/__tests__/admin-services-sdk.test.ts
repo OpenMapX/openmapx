@@ -69,10 +69,12 @@ const registry = vi.fn(() => ({ list: () => [service], get: getService }));
 vi.mock("../../services/service-registry", () => ({ getServiceRegistry: () => registry() }));
 const enqueue = vi.fn().mockResolvedValue("job-accepted");
 const cancelJob = vi.fn();
+const composeStart = vi.fn();
 vi.mock("../../services/job-runner", () => ({
   jobRunner: {
     enqueue: (...args: unknown[]) => enqueue(...args),
     cancel: (...args: unknown[]) => cancelJob(...args),
+    startImmediateCompose: (...args: unknown[]) => composeStart(...args),
   },
 }));
 const apply = vi.fn().mockResolvedValue({ revisionId: "revision_1" });
@@ -279,12 +281,21 @@ vi.mock("../../services/ops-client", async (actual) => ({
 }));
 
 const sdk = await import("@openmapx/core/api-admin-sdk");
+const executeDefault = execute.getMockImplementation()!;
 const { adminServicesRoute } = await import("../admin-services");
 const { adminOperationsRoute } = await import("../admin-operations");
 const { adminDawarichRoute } = await import("../admin-dawarich");
 const { registerAdminComposeRoutes } = await import("../admin-compose");
 beforeEach(() => {
   vi.clearAllMocks();
+  apply
+    .mockReset()
+    .mockResolvedValue({ revisionId: `cfg1_${"a".repeat(43)}`, jobId: "job-accepted" });
+  execute.mockReset().mockImplementation(executeDefault);
+  composeStart
+    .mockReset()
+    .mockResolvedValue({ ok: true, stdout: "", hardlinks: serviceHardlinksFixture });
+  dockerAvailable.mockReset().mockResolvedValue(true);
   internalFailures.length = 0;
   restore.mockReset().mockResolvedValue(true);
   persist.mockReset().mockImplementation(async (...args: unknown[]) => {
@@ -344,7 +355,7 @@ async function wire(max = 1000) {
 
 describe("actual service producers through final exported SDK", () => {
   it.each([null, { count: 1 }])(
-    "preserves a newer request while an older noncommit fails (prior %j)",
+    "forwards overlapping intents without route-local desired writes or inverse compensation (prior %j)",
     async (prior) => {
       storedConfig = prior;
       let version = 0;
@@ -377,15 +388,40 @@ describe("actual service producers through final exported SDK", () => {
         });
       });
       const { options, close } = await wire();
-      const older = sdk.updateAdminServiceConfig("motis", { config: { count: 3 } }, options);
+      const older = sdk.updateAdminServiceConfig(
+        "motis",
+        { config: { count: 3 } },
+        { "idempotency-key": crypto.randomUUID() },
+        options,
+      );
       try {
         await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1), { timeout: 2000 });
         expect(
-          (await sdk.updateAdminServiceConfig("motis", { config: { count: 4 } }, options)).status,
+          (
+            await sdk.updateAdminServiceConfig(
+              "motis",
+              { config: { count: 4 } },
+              { "idempotency-key": crypto.randomUUID() },
+              options,
+            )
+          ).status,
         ).toBe(200);
         resume.resolve();
         expect((await older).status).toBe(500);
-        expect(storedConfig).toEqual({ count: 4 });
+        expect(storedConfig).toEqual(prior);
+        expect(persist).not.toHaveBeenCalled();
+        expect(restore).not.toHaveBeenCalled();
+        expect(apply).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            overlay: {
+              purpose: "service-config",
+              coordinatorMode: "ensure-running",
+              changes: [
+                { kind: "service-config", serviceId: "motis", set: { count: 4 }, unset: [] },
+              ],
+            },
+          }),
+        );
       } finally {
         resume.resolve();
         await older;
@@ -420,12 +456,13 @@ describe("actual service producers through final exported SDK", () => {
         const response = await sdk.updateAdminServiceConfig(
           "motis",
           { config: { count: 3 } },
+          { "idempotency-key": crypto.randomUUID() },
           options,
         );
         expect(response.status).toBe(500);
         expect(response.data).toEqual({ error: "Service administration failed" });
-        expect(persist).toHaveBeenCalledWith("motis", { count: 3 });
-        expect(restore).toHaveBeenCalledTimes(outcome === "not_committed" ? 1 : 0);
+        expect(persist).not.toHaveBeenCalled();
+        expect(restore).not.toHaveBeenCalled();
         expect(internalFailures).toEqual([failure]);
         expect(writeAuditLog).not.toHaveBeenCalled();
       } finally {
@@ -434,7 +471,7 @@ describe("actual service producers through final exported SDK", () => {
     },
   );
 
-  it("retains original apply failure internally when the inverse fails without leaking either error", async () => {
+  it("retains the original producer failure internally without a route-local inverse", async () => {
     const failure = new TrustedConfigurationApplyError({
       outcome: "not_committed",
       reason: "failed",
@@ -451,13 +488,13 @@ describe("actual service producers through final exported SDK", () => {
       const response = await sdk.updateAdminServiceConfig(
         "motis",
         { config: { count: 3 } },
+        { "idempotency-key": crypto.randomUUID() },
         options,
       );
       expect(response.status).toBe(500);
       expect(response.data).toEqual({ error: "Service administration failed" });
-      expect(internalFailures[0]).toBeInstanceOf(AggregateError);
-      expect((internalFailures[0] as AggregateError).cause).toBe(failure);
-      expect((internalFailures[0] as AggregateError).errors).toEqual([failure, inverseFailure]);
+      expect(internalFailures[0]).toBe(failure);
+      expect(restore).not.toHaveBeenCalled();
     } finally {
       await close();
     }
@@ -545,10 +582,35 @@ describe("actual service producers through final exported SDK", () => {
         () => sdk.listAdminServices(options),
         () => sdk.getAdminDeployment(options),
         () => sdk.getAdminServiceSelection(options),
-        () => sdk.setAdminServiceSelection({ selectedRoots: [] }, options),
-        () => sdk.updateAdminServiceConfig("motis", { config: { count: 3 } }, options),
-        () => sdk.setAdminServiceCredential("motis", "API_KEY", { value: " synthetic " }, options),
-        () => sdk.deleteAdminServiceCredential("motis", "API_KEY", undefined, options),
+        () =>
+          sdk.setAdminServiceSelection(
+            { selectedRoots: [] },
+            { "idempotency-key": crypto.randomUUID() },
+            options,
+          ),
+        () =>
+          sdk.updateAdminServiceConfig(
+            "motis",
+            { config: { count: 3 } },
+            { "idempotency-key": crypto.randomUUID() },
+            options,
+          ),
+        () =>
+          sdk.setAdminServiceCredential(
+            "motis",
+            "API_KEY",
+            { value: " synthetic " },
+            { "idempotency-key": crypto.randomUUID() },
+            options,
+          ),
+        () =>
+          sdk.deleteAdminServiceCredential(
+            "motis",
+            "API_KEY",
+            { "idempotency-key": crypto.randomUUID() },
+            undefined,
+            options,
+          ),
         () => sdk.runAdminServiceAction("motis", { action: "restart" }, options),
         () => sdk.runAdminServicesBulkAction({ action: "build", all: true }, options),
         () => sdk.createAdminServiceBackup(undefined, options),
@@ -594,8 +656,27 @@ describe("actual service producers through final exported SDK", () => {
         ),
       ).toMatchObject({ status: 200, data: undefined });
       expect(chunks.join("")).toBe("hello €\n");
-      expect(setSecret).toHaveBeenCalledWith("motis", "API_KEY", " synthetic ", session.user.id);
-      expect(enqueue).toHaveBeenCalledTimes(8);
+      expect(setSecret).not.toHaveBeenCalled();
+      expect(apply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "vault.apply",
+          followUp: "service-apply",
+          overlay: {
+            purpose: "service-secret",
+            coordinatorMode: "ensure-running",
+            changes: [
+              {
+                kind: "service-secret",
+                serviceId: "motis",
+                key: "API_KEY",
+                action: "set",
+                value: " synthetic ",
+              },
+            ],
+          },
+        }),
+      );
+      expect(enqueue).toHaveBeenCalledTimes(6);
       expect(cancelJob).not.toHaveBeenCalled();
       expect(opsCancel).not.toHaveBeenCalled();
     } finally {
@@ -758,16 +839,26 @@ it("rejects malformed mutation envelopes and members before persistence or host 
   }
 });
 
-it("retains structured domain failures and manual-render credential results through SDK validation", async () => {
+it("retains structured domain failures and retained credential jobs through SDK validation", async () => {
   const { options, close } = await wire();
   try {
     expect(
-      await sdk.updateAdminServiceConfig("motis", { config: { count: 0 } }, options),
+      await sdk.updateAdminServiceConfig(
+        "motis",
+        { config: { count: 0 } },
+        { "idempotency-key": crypto.randomUUID() },
+        options,
+      ),
     ).toMatchObject({ status: 400, data: { errors: [expect.any(String)] } });
     expect(merge).not.toHaveBeenCalled();
     expect(apply).not.toHaveBeenCalled();
     expect(
-      await sdk.updateAdminServiceConfig("motis", { config: { locked: "changed" } }, options),
+      await sdk.updateAdminServiceConfig(
+        "motis",
+        { config: { locked: "changed" } },
+        { "idempotency-key": crypto.randomUUID() },
+        options,
+      ),
     ).toMatchObject({ status: 400, data: { errors: [expect.any(String)] } });
     expect(merge).not.toHaveBeenCalled();
     expect(
@@ -780,15 +871,21 @@ it("retains structured domain failures and manual-render credential results thro
         issues: expect.arrayContaining([{ path: expect.any(String), message: expect.any(String) }]),
       },
     });
-    dockerAvailable.mockResolvedValueOnce(false);
     expect(
-      await sdk.setAdminServiceCredential("motis", "API_KEY", { value: "synthetic" }, options),
-    ).toMatchObject({ status: 200, data: { ok: true, needsRender: true } });
+      await sdk.setAdminServiceCredential(
+        "motis",
+        "API_KEY",
+        { value: "synthetic" },
+        { "idempotency-key": crypto.randomUUID() },
+        options,
+      ),
+    ).toMatchObject({ status: 200, data: { ok: true, jobId: "job-accepted" } });
     expect(
       await sdk.setAdminServiceCredential(
         "dawarich-app",
         "OIDC_CLIENT_SECRET",
         { value: "synthetic" },
+        { "idempotency-key": crypto.randomUUID() },
         options,
       ),
     ).toMatchObject({
@@ -1110,7 +1207,11 @@ it("keeps log pre-hijack JSON statuses/media, required single headers and bounde
 it("returns complete Compose HTTP200 failure and does not retry the host action", async () => {
   const { options, close } = await wire();
   try {
-    execute.mockRejectedValueOnce(Error("synthetic-host-failure"));
+    composeStart.mockResolvedValueOnce({
+      ok: false,
+      stdout: "",
+      hardlinks: serviceHardlinksFixture,
+    });
     expect(
       await sdk.startAdminCompose(
         { "idempotency-key": "compose-synthetic-intent-002" },
@@ -1121,7 +1222,7 @@ it("returns complete Compose HTTP200 failure and does not retry the host action"
       status: 200,
       data: { ok: false, stdout: "", hardlinks: serviceHardlinksFixture },
     });
-    expect(execute).toHaveBeenCalledTimes(1);
+    expect(composeStart).toHaveBeenCalledTimes(1);
     expect(opsCancel).not.toHaveBeenCalled();
   } finally {
     await close();
@@ -1165,7 +1266,13 @@ it("retains env-owned selection failures and explicit trimmed/deduplicated inten
     validateSelection.mockRejectedValueOnce(
       Error("OPENMAPX_SERVICES is set; unset it before editing selection"),
     );
-    expect(await sdk.setAdminServiceSelection({ selectedRoots: [] }, options)).toMatchObject({
+    expect(
+      await sdk.setAdminServiceSelection(
+        { selectedRoots: [] },
+        { "idempotency-key": crypto.randomUUID() },
+        options,
+      ),
+    ).toMatchObject({
       status: 400,
       data: { error: expect.stringContaining("OPENMAPX_SERVICES") },
     });
@@ -1173,6 +1280,7 @@ it("retains env-owned selection failures and explicit trimmed/deduplicated inten
     const response = await app.inject({
       method: "PUT",
       url: "/api/admin/services/selection",
+      headers: { "idempotency-key": crypto.randomUUID() },
       payload: { selectedRoots: [" motis ", "motis"] },
     });
     expect(response.statusCode).toBe(200);

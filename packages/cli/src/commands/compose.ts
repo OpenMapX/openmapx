@@ -51,6 +51,8 @@ export interface RenderRepoOptions {
   rootDir?: string;
   domain: string;
   services?: string[];
+  expectedCurrentRevisionId?: string | null;
+  revisionId?: string;
   redisAuthHooks?: RedisAuthReconciliationHooks;
 }
 
@@ -199,119 +201,128 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   assertCliDeploymentSecrets();
   if (!existsSync("/run/secrets/openmapx-control-verifiers"))
     await provisionControlInstallation(paths.infraDir);
-  return withConfigurationGenerationWriter(paths.infraDir, async (writer) => {
-    assertCliExecutionAvailable();
-    ensurePlatformPrivateDirectory(join(paths.infraDir, "data", "ops-agent", "trusted-config"));
-    const erasureDirectory = join(paths.infraDir, "data", "erasure");
-    ensurePlatformPrivateDirectory(erasureDirectory);
-    ensurePlatformPrivateDirectory(join(paths.infraDir, "data", "privacy-extraction"));
-    ensurePlatformPrivateDirectory(join(paths.infraDir, "backups"));
-    const redisPasswordPath = join(paths.infraDir, "secrets", "redis-password");
-    const redisAclPath = join(paths.infraDir, "secrets", "redis-acl.conf");
-    const opsAgentApiTokenPath = join(paths.infraDir, "secrets", "ops-agent-api-token");
-    const opsAgentDataManagerTokenPath = join(
-      paths.infraDir,
-      "secrets",
-      "ops-agent-data-manager-token",
-    );
-    const offlinePackagePrincipalKeyPath = join(
-      paths.infraDir,
-      "secrets",
-      "offline-package-principal-key",
-    );
-    const erasureJournalKeyPath = join(paths.infraDir, "secrets", "erasure-journal-key");
-    const subjectExportsMasterKeyPath = join(
-      paths.infraDir,
-      "secrets",
-      "subject-exports-master-key",
-    );
-    const privacyBackupCapabilityKeyPath = join(
-      paths.infraDir,
-      "secrets",
-      "privacy-backup-capability-key",
-    );
-    // Shared only between data-manager and the private Transitous runner: it
-    // signs the single-use capability tokens that authorize one upstream run.
-    const transitousRunnerCapabilityPath = join(
-      paths.infraDir,
-      "secrets",
-      "transitous-runner-capability",
-    );
-    ensurePlatformSecretFile(redisPasswordPath);
-    ensurePlatformSecretFile(offlinePackagePrincipalKeyPath);
-    const erasureJournalKey = Buffer.from(
-      ensurePlatformSecretFile(erasureJournalKeyPath),
-      "base64url",
-    );
-    initializeErasureJournal(join(erasureDirectory, "journal.jsonl"), erasureJournalKey);
-    ensurePlatformExportsKeyRingFile(subjectExportsMasterKeyPath);
-    // app-api and ops-agent refuse this key unless only their uid can read it.
-    ensurePlatformOwnerOnlySecretFile(privacyBackupCapabilityKeyPath);
-    ensurePlatformSecretFile(transitousRunnerCapabilityPath);
-    const opsAgentApiToken = ensurePlatformSecretFile(opsAgentApiTokenPath);
-    const opsAgentDataManagerToken = ensurePlatformSecretFile(opsAgentDataManagerTokenPath);
-    if (opsAgentApiToken === opsAgentDataManagerToken) {
-      throw new Error("Ops-agent API and data-manager tokens must be distinct");
-    }
-    reconcileRedisAuthFiles(redisPasswordPath, redisAclPath, opts.redisAuthHooks);
-    const registry = new ServiceRegistry({ rootDir: paths.root });
-    await registry.load();
-    const applied = applyServiceSelection(registry, {
-      rootDir: paths.root,
-      explicitIds: opts.services,
-    });
-    const services = registry.list();
-    const known = new Set(services.map((service) => service.manifest.id));
-    const integrationSchemas = loadIntegrationSchemas(paths.root);
-    // The database is the admin panel's: what it saved arrives through the
-    // generation it last applied. The env layer is this host's.
-    const saved = readAppliedConfiguration(paths.infraDir);
-    const savedConfigs = new Map(saved.serviceConfigs.map((entry) => [entry.serviceId, entry]));
-    const serviceConfigs = services.flatMap((service) => {
-      const { id } = service.manifest;
-      const proxyHostKey = service.manifest.exposure?.proxy?.host?.configKey;
-      const fromEnv = Object.entries(
-        resolveServiceConfigFromEnv(service.manifest, process.env),
-      ).filter(([, entry]) => entry.source === "env");
-      // An env value is a reference in the YAML, except the proxy host, which
-      // the routes need as a value.
-      const envKeys = fromEnv.map(([key]) => key).filter((key) => key !== proxyHostKey);
-      const values: coreServices.ConfigurationInput["serviceConfigs"][number]["values"] =
-        Object.fromEntries(
-          Object.entries(savedConfigs.get(id)?.values ?? {}).filter(
-            ([key]) => !envKeys.includes(key),
-          ),
-        );
-      for (const [key, entry] of fromEnv)
-        if (key === proxyHostKey) values[key] = String(entry.value);
-      if (Object.keys(values).length === 0 && envKeys.length === 0) return [];
-      return [{ serviceId: id, values, ...(envKeys.length > 0 ? { envKeys } : {}) }];
-    });
-    assertCliExecutionAvailable();
-    const committed = await writer.commit({
-      services,
-      integrationSchemas,
-      input: {
-        domain: opts.domain,
-        selectedRoots: applied.requestedIds,
-        serviceConfigs,
-        integrationConfigs: saved.integrationConfigs.filter((entry) =>
-          integrationSchemas.has(entry.integrationId),
-        ),
-        serviceSecrets: saved.serviceSecrets.filter((entry) => known.has(entry.serviceId)),
-      },
-      allowMissingSelected: applied.source === "default",
-    });
-    return {
-      servicesRendered: committed.enabledServiceIds.length,
-      composePath: paths.composePath,
-      revisionId: committed.revisionId,
-      requestedServiceIds: applied.requestedIds,
-      enabledServiceIds: committed.enabledServiceIds,
-      selectionWarnings: applied.selection.warnings,
-      renderWarnings: committed.warnings,
-    };
+  return withConfigurationGenerationWriter(paths.infraDir, (writer) =>
+    renderComposeWithWriter(opts, writer),
+  );
+}
+
+/** Inner lifecycle adapter; the caller already owns the one generation writer. */
+export async function renderComposeWithWriter(
+  opts: RenderRepoOptions,
+  writer: coreServices.ConfigurationGenerationWriter,
+): Promise<RenderRepoResult> {
+  coreServices.assertConfigurationGenerationWriter(writer);
+  const paths = repoPaths(opts.rootDir);
+  assertCliExecutionAvailable();
+  ensurePlatformPrivateDirectory(join(paths.infraDir, "data", "ops-agent", "trusted-config"));
+  const erasureDirectory = join(paths.infraDir, "data", "erasure");
+  ensurePlatformPrivateDirectory(erasureDirectory);
+  ensurePlatformPrivateDirectory(join(paths.infraDir, "data", "privacy-extraction"));
+  ensurePlatformPrivateDirectory(join(paths.infraDir, "backups"));
+  const redisPasswordPath = join(paths.infraDir, "secrets", "redis-password");
+  const redisAclPath = join(paths.infraDir, "secrets", "redis-acl.conf");
+  const opsAgentApiTokenPath = join(paths.infraDir, "secrets", "ops-agent-api-token");
+  const opsAgentDataManagerTokenPath = join(
+    paths.infraDir,
+    "secrets",
+    "ops-agent-data-manager-token",
+  );
+  const offlinePackagePrincipalKeyPath = join(
+    paths.infraDir,
+    "secrets",
+    "offline-package-principal-key",
+  );
+  const erasureJournalKeyPath = join(paths.infraDir, "secrets", "erasure-journal-key");
+  const subjectExportsMasterKeyPath = join(paths.infraDir, "secrets", "subject-exports-master-key");
+  const privacyBackupCapabilityKeyPath = join(
+    paths.infraDir,
+    "secrets",
+    "privacy-backup-capability-key",
+  );
+  // Shared only between data-manager and the private Transitous runner: it
+  // signs the single-use capability tokens that authorize one upstream run.
+  const transitousRunnerCapabilityPath = join(
+    paths.infraDir,
+    "secrets",
+    "transitous-runner-capability",
+  );
+  ensurePlatformSecretFile(redisPasswordPath);
+  ensurePlatformSecretFile(offlinePackagePrincipalKeyPath);
+  const erasureJournalKey = Buffer.from(
+    ensurePlatformSecretFile(erasureJournalKeyPath),
+    "base64url",
+  );
+  initializeErasureJournal(join(erasureDirectory, "journal.jsonl"), erasureJournalKey);
+  ensurePlatformExportsKeyRingFile(subjectExportsMasterKeyPath);
+  // app-api and ops-agent refuse this key unless only their uid can read it.
+  ensurePlatformOwnerOnlySecretFile(privacyBackupCapabilityKeyPath);
+  ensurePlatformSecretFile(transitousRunnerCapabilityPath);
+  const opsAgentApiToken = ensurePlatformSecretFile(opsAgentApiTokenPath);
+  const opsAgentDataManagerToken = ensurePlatformSecretFile(opsAgentDataManagerTokenPath);
+  if (opsAgentApiToken === opsAgentDataManagerToken) {
+    throw new Error("Ops-agent API and data-manager tokens must be distinct");
+  }
+  reconcileRedisAuthFiles(redisPasswordPath, redisAclPath, opts.redisAuthHooks);
+  const registry = new ServiceRegistry({ rootDir: paths.root });
+  await registry.load();
+  const applied = applyServiceSelection(registry, {
+    rootDir: paths.root,
+    explicitIds: opts.services,
   });
+  const services = registry.list();
+  const known = new Set(services.map((service) => service.manifest.id));
+  const integrationSchemas = loadIntegrationSchemas(paths.root);
+  // The database is the admin panel's: what it saved arrives through the
+  // generation it last applied. The env layer is this host's.
+  const saved = readAppliedConfiguration(paths.infraDir);
+  const savedConfigs = new Map(saved.serviceConfigs.map((entry) => [entry.serviceId, entry]));
+  const serviceConfigs = services.flatMap((service) => {
+    const { id } = service.manifest;
+    const proxyHostKey = service.manifest.exposure?.proxy?.host?.configKey;
+    const fromEnv = Object.entries(
+      resolveServiceConfigFromEnv(service.manifest, process.env),
+    ).filter(([, entry]) => entry.source === "env");
+    // An env value is a reference in the YAML, except the proxy host, which
+    // the routes need as a value.
+    const envKeys = fromEnv.map(([key]) => key).filter((key) => key !== proxyHostKey);
+    const values: coreServices.ConfigurationInput["serviceConfigs"][number]["values"] =
+      Object.fromEntries(
+        Object.entries(savedConfigs.get(id)?.values ?? {}).filter(
+          ([key]) => !envKeys.includes(key),
+        ),
+      );
+    for (const [key, entry] of fromEnv) if (key === proxyHostKey) values[key] = String(entry.value);
+    if (Object.keys(values).length === 0 && envKeys.length === 0) return [];
+    return [{ serviceId: id, values, ...(envKeys.length > 0 ? { envKeys } : {}) }];
+  });
+  assertCliExecutionAvailable();
+  const committed = await writer.commit({
+    services,
+    integrationSchemas,
+    input: {
+      domain: opts.domain,
+      selectedRoots: applied.requestedIds,
+      serviceConfigs,
+      integrationConfigs: saved.integrationConfigs.filter((entry) =>
+        integrationSchemas.has(entry.integrationId),
+      ),
+      serviceSecrets: saved.serviceSecrets.filter((entry) => known.has(entry.serviceId)),
+    },
+    allowMissingSelected: applied.source === "default",
+    ...(Object.hasOwn(opts, "expectedCurrentRevisionId")
+      ? { expectedCurrentRevisionId: opts.expectedCurrentRevisionId }
+      : {}),
+    ...(opts.revisionId ? { revisionId: opts.revisionId } : {}),
+  });
+  return {
+    servicesRendered: committed.enabledServiceIds.length,
+    composePath: paths.composePath,
+    revisionId: committed.revisionId,
+    requestedServiceIds: applied.requestedIds,
+    enabledServiceIds: committed.enabledServiceIds,
+    selectionWarnings: applied.selection.warnings,
+    renderWarnings: committed.warnings,
+  };
 }
 
 export function registerComposeCommands(program: Command): void {

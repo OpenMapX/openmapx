@@ -1,32 +1,15 @@
 import { dirname, join } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import {
-  createDataManagerTransport,
-  getStatus,
-  link,
-  unwrapDataManagerResponse,
-} from "@openmapx/core/data-manager-sdk";
-import type { HardlinkApplySummary } from "@openmapx/core/ops";
-
 import { repoPaths } from "@openmapx/core/server";
-import {
-  type DockerComposeAction,
-  dockerComposeAction,
-  dockerStatus,
-} from "../utils/docker-compose";
-import { JobObservationPending } from "./admin-job-failure";
+import { dockerStatus } from "../utils/docker-compose";
 import { executeAdminJobOperation } from "./admin-job-ops";
-import { JobOwnershipLost } from "./admin-job-state";
 import type { JobContext } from "./job-runner";
-import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-client";
+import { createDurableOpsKey } from "./ops-client";
+import { prepareServiceGeneration } from "./service-preparation";
 import { getServiceRegistry } from "./service-registry";
 import { applyTrustedConfiguration } from "./trusted-config-operations";
 
 export type { HardlinkApplySummary } from "@openmapx/core/ops";
-
-const DATA_MANAGER_STARTUP_TIMEOUT_MS = 60_000;
-const DATA_MANAGER_POLL_INTERVAL_MS = 2_000;
 
 // Path resolution for an API running on the host (`pnpm dev`), which can read
 // the deployment directly. The app-api container has no host checkout: its
@@ -91,160 +74,7 @@ export async function renderAndPersistCompose(options: {
   return { revisionId };
 }
 
-function dataManagerEnabled(): boolean {
-  try {
-    const svc = getServiceRegistry().get("data-manager");
-    return !!svc?.enabled;
-  } catch {
-    return false;
-  }
-}
-
-function dataManagerUrlCandidates(): string[] {
-  const out: string[] = [];
-  if (process.env.DATA_MANAGER_URL?.trim()) out.push(process.env.DATA_MANAGER_URL.trim());
-  // In docker-compose, app-api reaches data-manager over the service DNS name.
-  out.push("http://data-manager:4000");
-  // Keep localhost fallback for non-container local API runs.
-  out.push("http://localhost:4000");
-  return [...new Set(out)];
-}
-
-async function waitForDataManagerTransport(signal?: AbortSignal): Promise<{
-  transport: ReturnType<typeof createDataManagerTransport>;
-  url: string;
-}> {
-  const urls = dataManagerUrlCandidates();
-  const deadline = Date.now() + DATA_MANAGER_STARTUP_TIMEOUT_MS;
-  let lastErr: unknown;
-
-  while (Date.now() < deadline) {
-    for (const url of urls) {
-      signal?.throwIfAborted();
-      const transport = createDataManagerTransport({
-        baseUrl: url,
-        authToken: process.env.DATA_MANAGER_AUTH_TOKEN?.trim(),
-      });
-      try {
-        unwrapDataManagerResponse(await getStatus({ transport, signal }));
-        signal?.throwIfAborted();
-        return { transport, url };
-      } catch (err) {
-        signal?.throwIfAborted();
-        lastErr = err;
-      }
-    }
-    await delay(DATA_MANAGER_POLL_INTERVAL_MS, undefined, { signal });
-  }
-
-  const detail = (lastErr as Error | undefined)?.message ?? String(lastErr ?? "unknown error");
-  throw new Error(
-    `data-manager did not become reachable within ${DATA_MANAGER_STARTUP_TIMEOUT_MS / 1000}s (${urls.join(", ")}): ${detail}`,
-  );
-}
-
-/**
- * Link consumer data directories to their producers as the configuration
- * generation just applied describes. The plan lives in that generation on the
- * host, which only the operations agent can read; data-manager applies it,
- * because its mounts confine the links and prunes to the data root.
- */
-export async function applyGenerationHardlinks(opts: {
-  revisionId: string;
-  operationIdentity: string;
-  log?: (msg: string) => Promise<void> | void;
-  signal?: AbortSignal;
-  ctx?: JobContext;
-}): Promise<HardlinkApplySummary> {
-  const signal = opts.ctx?.signal ?? opts.signal;
-  signal?.throwIfAborted();
-  const attempts = opts.ctx?.checkpointResult?._hardlinkAttempts as
-    | Record<string, { revisionId: string; phase: string; result?: HardlinkApplySummary }>
-    | undefined;
-  const prior = attempts?.[opts.operationIdentity];
-  if (prior) {
-    if (prior.revisionId !== opts.revisionId || prior.phase !== "complete" || !prior.result)
-      throw new JobObservationPending("recovery_required");
-    return prior.result;
-  }
-  if (opts.ctx?.observationOnly) throw new JobObservationPending("recovery_required");
-  const { plan } = await executeAndWait(
-    createApiOpsClient(),
-    { kind: "configuration.hardlinks.inspect", revisionId: opts.revisionId },
-    createDurableOpsKey("admin-job.hardlinks.inspect", opts.operationIdentity),
-    { signal },
-  );
-  if (plan.length === 0) {
-    return { applied: true, linked: 0, skipped: 0, pruned: 0, entries: 0 };
-  }
-  if (!dataManagerEnabled()) {
-    throw new Error(
-      `Hardlink plan contains ${plan.length} entr${plan.length === 1 ? "y" : "ies"}, but service "data-manager" is disabled. Enable data-manager before starting services from Admin, or apply links via CLI first.`,
-    );
-  }
-
-  await opts.log?.("Ensuring data-manager is running for hardlink apply...");
-  signal?.throwIfAborted();
-  const coordinatorKey = createDurableOpsKey(
-    "admin-job.hardlinks.start",
-    `${opts.operationIdentity}:data-manager`,
-  );
-  if (opts.ctx) {
-    await executeAdminJobOperation(
-      opts.ctx,
-      { kind: "service.start", serviceId: "data-manager" },
-      "admin-job.hardlinks.start",
-      { operationKey: coordinatorKey },
-    );
-  } else {
-    const dmStart = await dockerComposeAction("data-manager", "start", {
-      operationKey: coordinatorKey,
-      signal,
-    });
-    if (dmStart.exitCode !== 0)
-      throw new Error(`docker compose up data-manager exited with ${dmStart.exitCode}`);
-  }
-
-  await opts.log?.(`Applying hardlink plan (${plan.length} entries, prune enabled)...`);
-  const { transport } = await waitForDataManagerTransport(signal);
-  signal?.throwIfAborted();
-  const checkpoint = async (phase: "attempted" | "complete", result?: HardlinkApplySummary) => {
-    if (!opts.ctx) return;
-    await opts.ctx.checkpoint({
-      ...opts.ctx.checkpointResult,
-      _hardlinkAttempts: {
-        ...(opts.ctx.checkpointResult?._hardlinkAttempts as Record<string, unknown>),
-        [opts.operationIdentity]: {
-          revisionId: opts.revisionId,
-          coordinatorKey,
-          phase,
-          ...(result ? { result } : {}),
-        },
-      },
-    });
-  };
-  // This records only the current caller's exact attempt, not a receiver lease
-  // or containment proof. Unknown remote work is never submitted again.
-  await checkpoint("attempted");
-  signal?.throwIfAborted();
-  try {
-    const result = unwrapDataManagerResponse(
-      await link({ plan, prune: true }, { transport, signal }),
-    );
-    const summary: HardlinkApplySummary = {
-      applied: true,
-      entries: plan.length,
-      via: "data-manager",
-      ...result,
-    };
-    await checkpoint("complete", summary);
-    return summary;
-  } catch (error) {
-    if (error instanceof JobOwnershipLost) throw error;
-    if (opts.ctx) throw new JobObservationPending("recovery_required");
-    throw error;
-  }
-}
+export { applyGenerationHardlinks } from "./service-preparation";
 
 // Service control (job handlers) — registry-authorized + routed through the
 // docker-compose helper that targets the generated compose file.
@@ -267,7 +97,7 @@ function assertKnownService(service: string, requireEnabled = true) {
 
 async function serviceComposeAction(
   service: string,
-  action: Exclude<DockerComposeAction, "recreate-isolated">,
+  action: "stop" | "restart",
   ctx: JobContext,
 ): Promise<{ exitCode: number }> {
   assertKnownService(service, action !== "stop");
@@ -292,61 +122,53 @@ async function serviceComposeAction(
 
 export async function serviceStart(service: string, ctx: JobContext): Promise<void> {
   assertKnownService(service);
-  await ctx.log(`Rendering compose for latest config...`);
-  const { revisionId } = await renderAndPersistCompose({
-    ctx,
-    operationKey: createDurableOpsKey("admin-job.config.render", `${ctx.jobId}:${service}`),
-    signal: ctx.signal,
+  const prepared = await prepareServiceGeneration(ctx, `start:${service}`, {
+    coordinatorMode: "ensure-running",
   });
-  const hardlinks = await applyGenerationHardlinks({
-    ctx,
-    revisionId,
-    operationIdentity: `${ctx.jobId}:${service}`,
-    log: (m) => ctx.log(m),
-    signal: ctx.signal,
+  await ctx.checkpoint({
+    ...ctx.checkpointResult,
+    _completion: {
+      operationKey: createDurableOpsKey("admin-job.service.start", `${ctx.jobId}:${service}`),
+      result: { service, action: "start" },
+    },
   });
-  await ctx.log(
-    `Hardlinks applied (${hardlinks.linked} linked, ${hardlinks.skipped} already linked, ${hardlinks.pruned} pruned)`,
+  await executeAdminJobOperation(
+    ctx,
+    {
+      kind: "service.start",
+      serviceId: service,
+      expectedConfigurationRevisionId: prepared.revisionId,
+    },
+    "admin-job.service.start",
+    { durableIdentity: service },
   );
-  await ctx.log(`Starting ${service}...`);
-  const r = await serviceComposeAction(service, "start", ctx);
-  if (r.exitCode !== 0) throw new Error(`docker compose up exited with ${r.exitCode}`);
-  await ctx.log(`${service} started.`);
 }
 
-export async function serviceApply(service: string, ctx: JobContext): Promise<void> {
+export async function serviceApply(service: string, ctx: JobContext) {
   assertKnownService(service);
-  await ctx.log(`Rendering compose for latest config + secrets...`);
-  const configurationKind = ctx.payload.configurationKind;
-  const { revisionId } =
-    configurationKind === "vault"
-      ? await applyTrustedConfiguration({
-          ctx,
-          kind: "vault.apply",
-          serviceId: service,
-          operationKey: createDurableOpsKey("admin-job.vault.apply", `${ctx.jobId}:${service}`),
-          signal: ctx.signal,
-        })
-      : await renderAndPersistCompose({
-          ctx,
-          operationKey: createDurableOpsKey("admin-job.config.apply", `${ctx.jobId}:${service}`),
-          signal: ctx.signal,
-        });
-  const hardlinks = await applyGenerationHardlinks({
-    ctx,
-    revisionId,
-    operationIdentity: `${ctx.jobId}:${service}`,
-    log: (m) => ctx.log(m),
-    signal: ctx.signal,
+  if (service === "data-manager")
+    return (await import("./service-preparation")).applyCoordinatorService(ctx, null);
+  const prepared = await prepareServiceGeneration(ctx, `apply:${service}`, {
+    coordinatorMode: "ensure-running",
   });
-  await ctx.log(
-    `Hardlinks applied (${hardlinks.linked} linked, ${hardlinks.skipped} already linked, ${hardlinks.pruned} pruned)`,
+  await ctx.checkpoint({
+    ...ctx.checkpointResult,
+    _completion: {
+      operationKey: createDurableOpsKey("admin-job.service.recreate", `${ctx.jobId}:${service}`),
+      result: { service, action: "recreate" },
+    },
+  });
+  await executeAdminJobOperation(
+    ctx,
+    {
+      kind: "service.recreate",
+      serviceId: service,
+      expectedConfigurationRevisionId: prepared.revisionId,
+    },
+    "admin-job.service.recreate",
+    { durableIdentity: service },
   );
-  await ctx.log(`Applying rendered configuration to ${service}...`);
-  const r = await serviceComposeAction(service, "recreate", ctx);
-  if (r.exitCode !== 0)
-    throw new Error(`docker compose up --force-recreate exited with ${r.exitCode}`);
-  await ctx.log(`${service} configuration applied.`);
+  return { changed: true as const, revisionId: prepared.revisionId };
 }
 
 export async function serviceStop(service: string, ctx: JobContext): Promise<void> {

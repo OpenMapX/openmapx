@@ -157,6 +157,10 @@ describe("overlapping configuration writers", () => {
       await coreServices.commitConfigurationGeneration({
         infraDir: infra,
         services: registry.list(),
+        // This pruning fixture has no containers. Supply the complete empty
+        // inventory; omitted evidence correctly preserves conservative bases.
+        ownedServiceGenerations: [],
+        observedServiceContainerIds: [],
         input: {
           domain: "fixture.example.test",
           selectedRoots: ["alpha"],

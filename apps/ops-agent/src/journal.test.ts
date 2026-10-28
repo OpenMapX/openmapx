@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -11,7 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { opsOperationFingerprint } from "@openmapx/core/ops";
+import { canonicalJson, opsOperationFingerprint } from "@openmapx/core/ops";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   OPS_JOB_JOURNAL_MAX_BYTES,
@@ -19,6 +20,7 @@ import {
   openOpsJobJournal,
   type PersistedOpsJob,
 } from "./journal";
+import { buildOpsAgentServer } from "./server";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -32,7 +34,11 @@ function root(): string {
 }
 
 function job(overrides: Partial<PersistedOpsJob> = {}): PersistedOpsJob {
-  const operation = overrides.operation ?? { kind: "service.pull", serviceId: "redis" };
+  const operation = overrides.operation ?? {
+    kind: "service.pull",
+    serviceId: "redis",
+    expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+  };
   return {
     role: "api",
     operation,
@@ -48,6 +54,73 @@ function job(overrides: Partial<PersistedOpsJob> = {}): PersistedOpsJob {
 }
 
 describe("durable ops job journal", () => {
+  it("keeps an original historical pull journal as byte-identical observation without dispatchable work", async () => {
+    const path = join(root(), "journal", "jobs-v1.json");
+    await openOpsJobJournal(path);
+    const operation = { kind: "service.pull", serviceId: "redis" },
+      record = {
+        role: "api",
+        operation,
+        operationId: "job1_legacyPullObservation0",
+        operationKey: "opk1_legacyPullObservation0",
+        fingerprint: createHash("sha256").update(canonicalJson(operation)).digest("hex"),
+        resourceId: "redis",
+        state: "succeeded",
+        submittedAt: "2026-08-23T18:00:00.000Z",
+        updatedAt: "2026-08-23T18:00:01.000Z",
+        terminalAt: "2026-08-23T18:00:01.000Z",
+        result: { changed: true },
+      },
+      encoded = JSON.stringify(record);
+    writeFileSync(path, JSON.stringify({ version: 2, jobs: [record] }), { mode: 0o600 });
+    const journal = await openOpsJobJournal(path);
+    expect(journal.records()).toHaveLength(0);
+    expect(JSON.stringify(journal.historicalPullRecords?.()[0])).toBe(encoded);
+    const token = Buffer.alloc(32, 3).toString("base64url"),
+      app = buildOpsAgentServer({
+        tokens: { api: token, "data-manager": Buffer.alloc(32, 4).toString("base64url") },
+        journal,
+      });
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/operations/${record.operationId}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().result).toEqual({
+        version: 1,
+        operationId: record.operationId,
+        operationKey: record.operationKey,
+        kind: "service.pull",
+        resourceId: "redis",
+        state: record.state,
+        submittedAt: record.submittedAt,
+        updatedAt: record.updatedAt,
+        result: record.result,
+      });
+      const now = Date.now(),
+        rejected = await app.inject({
+          method: "POST",
+          url: "/v1/operations",
+          headers: { authorization: `Bearer ${token}` },
+          payload: {
+            version: 1,
+            requestId: "ops1_legacyPullRejected00",
+            operationKey: record.operationKey,
+            issuedAt: new Date(now).toISOString(),
+            expiresAt: new Date(now + 20000).toISOString(),
+            operation,
+          },
+        });
+      expect(rejected.statusCode).toBe(400);
+      expect(journal.records()).toHaveLength(0);
+    } finally {
+      await app.close();
+    }
+    await journal.replace([]);
+    expect(JSON.stringify(JSON.parse(readFileSync(path, "utf8")).jobs[0])).toBe(encoded);
+  });
   it("durably probes a missing journal before open succeeds", async () => {
     const path = join(root(), "journal", "jobs-v1.json");
     await openOpsJobJournal(path);
@@ -143,14 +216,23 @@ describe("durable ops job journal", () => {
     await restored.replace([
       job({
         state: "succeeded",
-        result: { changed: true },
+        result: {
+          changed: true,
+          revisionId: `cfg1_${"a".repeat(43)}`,
+          imageReference: "redis:8",
+          imageId: `sha256:${"b".repeat(64)}`,
+          releaseSelectionDigest: null,
+        },
         updatedAt: "2026-08-23T18:03:00.000Z",
         terminalAt: "2026-08-23T18:03:00.000Z",
       }),
     ]);
     const terminal = await openOpsJobJournal(path);
     expect(terminal.records()).toEqual([
-      expect.objectContaining({ state: "succeeded", result: { changed: true } }),
+      expect.objectContaining({
+        state: "succeeded",
+        result: expect.objectContaining({ changed: true, imageReference: "redis:8" }),
+      }),
     ]);
   });
 

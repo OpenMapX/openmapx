@@ -69,8 +69,13 @@ export function createDataExecutionReceiver(deps: {
         });
       if (!verified || !controlHeaders(rawHeaders).delegation)
         throw Object.assign(Error("Signed borrowed generation leaf required"), { statusCode: 403 });
-      await configurationFence.assertGenerationAdmission(request, rawHeaders);
+      const preparedGeneration = await configurationFence.assertGenerationAdmission(
+        request,
+        rawHeaders,
+        verified.parent,
+      );
       return runtime.admit(request.input, {
+        ...(preparedGeneration ? { preparedGeneration } : {}),
         operationKey: request.operationKey,
         requestedDeadlineAt: request.requestedDeadlineAt,
         parent: verified.parent,

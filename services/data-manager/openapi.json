@@ -4642,6 +4642,12 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "version": {
+                    "type": "number",
+                    "enum": [
+                      2
+                    ]
+                  },
                   "maintenanceId": {
                     "type": "string",
                     "format": "uuid",
@@ -4656,37 +4662,17 @@
                     "type": "string",
                     "pattern": "^[a-f0-9]{64}$"
                   },
-                  "decisionId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "expectedSequence": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 9007199254740991
-                  },
-                  "outcome": {
-                    "type": "string",
-                    "enum": [
-                      "unused",
-                      "applied",
-                      "contained"
-                    ]
-                  },
-                  "ownerReceiptDigest": {
+                  "settlementId": {
                     "type": "string",
                     "pattern": "^[a-f0-9]{64}$"
                   }
                 },
                 "required": [
+                  "version",
                   "maintenanceId",
                   "candidateId",
                   "planDigest",
-                  "decisionId",
-                  "expectedSequence",
-                  "outcome",
-                  "ownerReceiptDigest"
+                  "settlementId"
                 ],
                 "additionalProperties": false
               }

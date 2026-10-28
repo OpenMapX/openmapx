@@ -1,15 +1,15 @@
 import { repoPaths, services } from "@openmapx/core/server";
 import type { FastifyInstance } from "fastify";
-import { applyGenerationHardlinks, renderAndPersistCompose } from "../services/admin-ops";
 import { readDesiredSelection } from "../services/desired-selection";
 import {
   createDirectAdminOpsKey,
   DIRECT_OPS_IDEMPOTENCY_HEADER,
   parseDirectOpsIdempotency,
 } from "../services/direct-ops-idempotency";
+import { jobRunner } from "../services/job-runner";
 import { getServiceRegistry } from "../services/service-registry";
 import { buildConfigurationInput, integrationSchemas } from "../services/trusted-config-operations";
-import { dockerComposeAction, STACK_STOP_GUIDANCE } from "../utils/docker-compose";
+import { STACK_STOP_GUIDANCE } from "../utils/docker-compose";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { declareRouteAuth } from "../utils/route-auth";
 import { registerServiceAdminRoute } from "./admin-service-contract";
@@ -54,15 +54,7 @@ export async function registerAdminComposeRoutes(
         req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER],
       );
       const operationKey = createDirectAdminOpsKey(adminSession.user.id, idempotencyValue);
-      const { revisionId } = await renderAndPersistCompose({ operationKey });
-      const hardlinks = await applyGenerationHardlinks({
-        revisionId,
-        operationIdentity: operationKey,
-      });
-      const r = await dockerComposeAction("", "start", {
-        operationKey,
-      });
-      return { ok: r.exitCode === 0, stdout: r.stdout, hardlinks };
+      return jobRunner.startImmediateCompose({ actorId: adminSession.user.id, operationKey });
     },
     {
       beforeValidation: async (request, reply) => {

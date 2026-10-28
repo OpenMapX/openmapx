@@ -128,20 +128,7 @@ export async function ensureReleaseOverlay(
 ): Promise<ReleaseOverlayState> {
   const path = opts.path ?? repoPaths().composeReleasePath;
   if (existsSync(path)) {
-    const selected = readSelection(path);
-    const channel = releaseChannel();
-    const prefix =
-      channel.kind === "enabled" ? channel.imagePrefix : selected?.images.api?.split("/api@")[0];
-    if (
-      !selected?.release ||
-      !prefix ||
-      !coreServices.RELEASE_IMAGE_NAMES.every((name) =>
-        selected.images[name]?.startsWith(`${prefix}/${name}@`),
-      )
-    )
-      throw new Error(
-        "Existing release overlay is malformed or belongs to another configured repository; explicitly reselect or clear it",
-      );
+    coreServices.validateExistingReleaseSelection(readFileSync(path, "utf8"));
     return { status: "present", path };
   }
   // An operator running local images opts out once instead of paying a
@@ -200,22 +187,32 @@ export async function selectRelease(
   } = {},
 ): Promise<{ path: string; release: string }> {
   const path = opts.path ?? repoPaths().composeReleasePath;
-  const previous = readSelection(path);
-  const manifest = await (opts.resolve ?? resolveReleaseManifest)();
-  const report = opts.report ?? (() => undefined);
-  report(
-    `Previous release: ${previous ? (previous.release ?? "unknown (legacy or modified overlay)") : "none"}`,
-  );
-  report(`Candidate release: ${manifest.release}`);
-  for (const name of coreServices.RELEASE_IMAGE_NAMES) {
-    const before = previous?.images[name]?.split("@")[1];
-    const after = manifest.images[name].split("@")[1];
+  const store = join(dirname(path), ".ops-agent-releases");
+  mkdirSync(store, { mode: 0o700, recursive: true });
+  const directory = lstatSync(store);
+  if (!directory.isDirectory() || directory.isSymbolicLink())
+    throw new Error("Release selection directory is unsafe");
+  const lock = await coreServices.acquireReleaseStoreLock(store, {}, { failIfBusy: true });
+  try {
+    const previous = readSelection(path);
+    const manifest = await (opts.resolve ?? resolveReleaseManifest)();
+    const report = opts.report ?? (() => undefined);
     report(
-      `${name}: ${before ? (before === after ? "reused" : "changed") : "previous digest unknown"} (${before ?? "unknown"} → ${after})`,
+      `Previous release: ${previous ? (previous.release ?? "unknown (legacy or modified overlay)") : "none"}`,
     );
+    report(`Candidate release: ${manifest.release}`);
+    for (const name of coreServices.RELEASE_IMAGE_NAMES) {
+      const before = previous?.images[name]?.split("@")[1];
+      const after = manifest.images[name].split("@")[1];
+      report(
+        `${name}: ${before ? (before === after ? "reused" : "changed") : "previous digest unknown"} (${before ?? "unknown"} → ${after})`,
+      );
+    }
+    writeReleaseOverlay(manifest, path);
+    return { path, release: manifest.release };
+  } finally {
+    lock.release();
   }
-  writeReleaseOverlay(manifest, path);
-  return { path, release: manifest.release };
 }
 
 /** Clear only local Compose selection; preserve evidence still mounted by running services. */

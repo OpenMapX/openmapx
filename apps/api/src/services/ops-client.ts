@@ -23,7 +23,9 @@ import {
   opsKindRequiresControlAuthority,
   PRIVACY_BACKUP_TAR_MEDIA_TYPE,
   type PrivacyBackupSubjectExportRequest,
+  parseOpsResult,
   privacyBackupSubjectExportRequestSchema,
+  type TrustedConfigurationApplyOperation,
 } from "@openmapx/core/ops";
 import {
   DAWARICH_TAR_MEDIA_TYPE,
@@ -46,7 +48,9 @@ export class ApiOpsError extends Error {
     readonly failureResult?: OpsFailureResult,
   ) {
     super(
-      errorClass === "host_update_required" || errorClass === "control_upgrade_required"
+      errorClass === "host_update_required" ||
+        errorClass === "control_upgrade_required" ||
+        errorClass === "configuration_prerequisite"
         ? OPS_PUBLIC_ERROR_MESSAGES[errorClass]
         : "Operations request failed",
     );
@@ -393,7 +397,7 @@ export async function waitForOpsResult<K extends OpsOperationKind>(
       )
         pending("invalid_identity");
       await options.onStatus?.(status);
-      if (status.state === "succeeded") return status.result;
+      if (status.state === "succeeded") return parseOpsResult(kind, status.result);
       if (status.state === "failed" || status.state === "timed_out") {
         if (status.errorClass === "recovery_required") pending("recovery_required");
         throw new ApiOpsError(status.errorClass, status.failureResult);
@@ -647,7 +651,7 @@ export async function submitOpsOperationWithRecovery<K extends OpsOperationKind>
 /** A failed transport/status is never evidence that a configuration did not commit. */
 export async function executeTrustedConfigurationAndWait(
   client: ApiOpsClient,
-  operation: Extract<OpsOperation, { revisionId: string }>,
+  operation: TrustedConfigurationApplyOperation,
   operationKey: string,
   options: WaitForOpsResultOptions = {},
 ): Promise<ConfigurationApplyResult | { outcome: "unknown"; reason: "transport_or_result" }> {

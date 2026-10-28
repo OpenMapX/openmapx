@@ -8,6 +8,7 @@ import { controlTerminalReceiptDigest } from "../ops/control-retention-receipt";
 import { createControlRootOperationKey } from "../ops/control-root-key";
 import { executionFingerprint } from "../ops/execution-identity";
 import { opsOperationFingerprint } from "../ops/fingerprint";
+import { observeConfigurationSources } from "./configuration-source-witness";
 import * as c from "./control-authority";
 import { advanceRetentionClock } from "./retention-clock";
 import { markFamilyTerminal, publishFamilyCanonicalTerminal } from "./retention-family";
@@ -138,6 +139,14 @@ it("allows only prepared configuration refinement and freezes its canonical tupl
     kind: "stack.render" as const,
     revisionId: `cfg1_${"a".repeat(43)}`,
     expectedCurrentRevisionId: null,
+    expectedSourceRevision: observeConfigurationSources({
+      installation,
+      infraDir: root,
+      services: [],
+      authorityRevision: "retention-unit",
+      env: {},
+    }).sourceRevision,
+    coordinatorMode: "require-running" as const,
   };
   const admittedAt = Date.now(),
     deadlineAt = admittedAt + 60000,

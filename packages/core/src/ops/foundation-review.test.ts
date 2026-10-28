@@ -43,14 +43,37 @@ describe("reviewed ops foundation contract", () => {
   it("covers every discovered API authority effect with an owner and execution budget", () => {
     for (const kind of requiredKinds) expect(OPS_OPERATION_KINDS).toContain(kind);
     expect(Object.keys(OPS_KIND_POLICIES).sort()).toEqual([...OPS_OPERATION_KINDS].sort());
-    for (const policy of Object.values(OPS_KIND_POLICIES)) {
+    // Exact existing long-running owners, plus the approved ownership-only
+    // maintenance hour. Every other kind retains the original 30 minute cap.
+    const extendedBudgets: Record<string, number> = {
+      "configurationMaintenance.prepare": 3600_000,
+      "service.build": 12 * 3600_000,
+      "services.buildAll": 24 * 3600_000,
+      "system.update": 48 * 3600_000,
+      "data.downloadOsm": 24 * 3600_000,
+      "data.downloadFonts": 24 * 3600_000,
+      "data.update": 24 * 3600_000,
+      "data.convertOverpass": 24 * 3600_000,
+      "data.overtureSync": 24 * 3600_000,
+      "data.overtureConflate": 24 * 3600_000,
+      "data.searchIndexBuild": 24 * 3600_000,
+      "data.notablePlacesBuild": 24 * 3600_000,
+    };
+    for (const [kind, timeoutMs] of Object.entries(extendedBudgets))
+      expect(OPS_KIND_POLICIES[kind as keyof typeof OPS_KIND_POLICIES].timeoutMs).toBe(timeoutMs);
+    for (const [kind, policy] of Object.entries(OPS_KIND_POLICIES)) {
       expect(policy.role === "api" || policy.role === "data-manager").toBe(true);
       expect(policy.execution === "sync" || policy.execution === "async").toBe(true);
       expect(policy.timeoutMs).toBeGreaterThan(0);
-      expect(policy.timeoutMs).toBeLessThanOrEqual(30 * 60_000);
+      expect(policy.timeoutMs).toBeLessThanOrEqual(extendedBudgets[kind] ?? 30 * 60_000);
       expect(policy.maxResultBytes).toBeGreaterThan(0);
       expect(policy.maxResultBytes).toBeLessThanOrEqual(1024 * 1024);
     }
+    expect(OPS_KIND_POLICIES["configurationMaintenance.prepare"]).toMatchObject({
+      role: "api",
+      execution: "async",
+      timeoutMs: 60 * 60_000,
+    });
     for (const kind of [
       "service.logs.follow",
       "service.pull",

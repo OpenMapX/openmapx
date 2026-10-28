@@ -44,7 +44,11 @@ describe("operation-specific authority policy", () => {
       "service.build",
     ] as const) {
       await expect(
-        claimer.claim({ kind, serviceId: "worker" }, "b".repeat(64), signal),
+        claimer.claim(
+          { kind, serviceId: "worker", expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}` },
+          "b".repeat(64),
+          signal,
+        ),
       ).resolves.toBeNull();
     }
     await expect(
@@ -245,7 +249,15 @@ describe("operation-specific authority policy", () => {
     });
     const signal = new AbortController().signal;
     await expect(
-      claimer.claim({ kind: "service.start", serviceId: "community-live" }, "a".repeat(64), signal),
+      claimer.claim(
+        {
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+          kind: "service.start",
+          serviceId: "community-live",
+        },
+        "a".repeat(64),
+        signal,
+      ),
     ).resolves.toBeNull();
 
     authority = {
@@ -258,10 +270,20 @@ describe("operation-specific authority policy", () => {
     };
     enabled = new Set(["worker", "community-live"]);
     await expect(
-      claimer.claim({ kind: "service.start", serviceId: "community-live" }, "b".repeat(64), signal),
+      claimer.claim(
+        {
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+          kind: "service.start",
+          serviceId: "community-live",
+        },
+        "b".repeat(64),
+        signal,
+      ),
     ).resolves.not.toBeNull();
     const configClaim = await claimer.claim(
       {
+        expectedSourceRevision: "00000000-0000-4000-8000-000000000000",
+        coordinatorMode: "require-running" as const,
         expectedCurrentRevisionId: null,
         kind: "integrationConfig.apply",
         integrationId: "integration-live",
@@ -282,11 +304,21 @@ describe("operation-specific authority policy", () => {
     };
     enabled = new Set(["worker"]);
     await expect(
-      claimer.claim({ kind: "service.start", serviceId: "community-live" }, "d".repeat(64), signal),
+      claimer.claim(
+        {
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+          kind: "service.start",
+          serviceId: "community-live",
+        },
+        "d".repeat(64),
+        signal,
+      ),
     ).resolves.toBeNull();
     await expect(
       claimer.claim(
         {
+          expectedSourceRevision: "00000000-0000-4000-8000-000000000000",
+          coordinatorMode: "require-running" as const,
           expectedCurrentRevisionId: null,
           kind: "integrationConfig.apply",
           integrationId: "integration-live",
@@ -327,6 +359,8 @@ describe("operation-specific authority policy", () => {
     await expect(
       claimer.claim(
         {
+          expectedSourceRevision: "00000000-0000-4000-8000-000000000000",
+          coordinatorMode: "require-running" as const,
           expectedCurrentRevisionId: null,
           kind: "stack.render",
           revisionId: `cfg1_${"r".repeat(43)}`,
@@ -356,7 +390,13 @@ describe("operation-specific authority policy", () => {
       enabledServiceIds: () => enabled,
     });
     const signal = new AbortController().signal;
-    const operations: OpsOperation[] = [{ kind: "service.start", serviceId: "worker" }];
+    const operations: OpsOperation[] = [
+      {
+        expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+        kind: "service.start",
+        serviceId: "worker",
+      },
+    ];
     for (const operation of operations) {
       await expect(claimer.claim(operation, "a".repeat(64), signal)).resolves.not.toBeNull();
       for (const serviceId of [
@@ -373,10 +413,26 @@ describe("operation-specific authority policy", () => {
     }
     enabled = new Set(["motis"]);
     await expect(
-      claimer.claim({ kind: "service.start", serviceId: "motis" }, "c".repeat(64), signal),
+      claimer.claim(
+        {
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+          kind: "service.start",
+          serviceId: "motis",
+        },
+        "c".repeat(64),
+        signal,
+      ),
     ).resolves.not.toBeNull();
     await expect(
-      claimer.claim({ kind: "service.start", serviceId: "worker" }, "d".repeat(64), signal),
+      claimer.claim(
+        {
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+          kind: "service.start",
+          serviceId: "worker",
+        },
+        "d".repeat(64),
+        signal,
+      ),
     ).resolves.toBeNull();
     // A reconstructed claimer reads the same recovered generation-owned set.
     const restarted = createProductionRegistryResourceClaimer({
@@ -389,7 +445,15 @@ describe("operation-specific authority policy", () => {
       enabledServiceIds: () => enabled,
     });
     await expect(
-      restarted.claim({ kind: "service.start", serviceId: "motis" }, "e".repeat(64), signal),
+      restarted.claim(
+        {
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+          kind: "service.start",
+          serviceId: "motis",
+        },
+        "e".repeat(64),
+        signal,
+      ),
     ).resolves.not.toBeNull();
   });
 
@@ -400,7 +464,14 @@ describe("operation-specific authority policy", () => {
       trustedData: denyAllTrustedOpsData,
     });
     await expect(
-      authorizeOpsResources({ kind: "service.start", serviceId: "worker" }, policy),
+      authorizeOpsResources(
+        {
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+          kind: "service.start",
+          serviceId: "worker",
+        },
+        policy,
+      ),
     ).resolves.toBe(true);
     for (const serviceId of ["ops-agent", "traefik", "app-api"]) {
       await expect(
@@ -464,6 +535,8 @@ describe("operation-specific authority policy", () => {
     const signal = new AbortController().signal;
     const forbidden: OpsOperation[] = [
       {
+        expectedSourceRevision: "00000000-0000-4000-8000-000000000000",
+        coordinatorMode: "require-running" as const,
         expectedCurrentRevisionId: null,
         kind: "serviceConfig.apply",
         serviceId: "ops-agent",
@@ -475,6 +548,8 @@ describe("operation-specific authority policy", () => {
         serviceIds: ["worker", "traefik"],
       },
       {
+        expectedSourceRevision: "00000000-0000-4000-8000-000000000000",
+        coordinatorMode: "require-running" as const,
         expectedCurrentRevisionId: null,
         kind: "integrationConfig.apply",
         integrationId: "unregistered-integration",

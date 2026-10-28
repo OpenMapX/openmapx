@@ -1,8 +1,8 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { canonicalJson } from "./canonical-json";
 import { OPS_KIND_POLICIES, type OpsOperationKind } from "./contract";
 import { executionRefSchema } from "./execution-ref";
-import { canonicalJson } from "./fingerprint";
 
 export { type ControlIssuer, type ExecutionRef, executionRefSchema } from "./execution-ref";
 
@@ -66,6 +66,7 @@ const futureBudgets: Readonly<Record<string, number>> = {
   "search-index-build": 24 * 3600_000,
   "notable-places-build": 24 * 3600_000,
   "generation-hardlinks": 10 * 60_000,
+  "configuration-maintenance.prepare": 60_000,
   "transit-maintenance": 120_000,
 };
 /** Future policies are budgets only; they register no executable operations. */
@@ -155,6 +156,14 @@ const apiAssertionSchema = z.strictObject({
   attemptId: z.uuid(),
 });
 /** Fixed API bearer/HMAC edge only. Role-signed parent/lease verification belongs to 06.1. */
+const apiParentAssertions = new WeakMap<object, Readonly<z.infer<typeof apiAssertionSchema>>>();
+/** Source observation only: a parsed/restored parent cannot substitute for the
+ * exact live API HMAC/body binding verified on this request. */
+export function verifiedApiJobParentBinding(parent: VerifiedParentExecution | undefined) {
+  const actual = parent && apiParentAssertions.get(parent);
+  if (!actual) throw Error("Actual verified API job parent binding required");
+  return actual;
+}
 export function verifyApiJobParentExecution(
   assertion: string,
   token: string,
@@ -191,6 +200,7 @@ export function verifyApiJobParentExecution(
     assertionDigest: createHash("sha256").update(assertion).digest("hex"),
   });
   verifiedParents.add(parent);
+  apiParentAssertions.set(parent, Object.freeze(fields));
   return parent as VerifiedParentExecution;
 }
 

@@ -42,6 +42,26 @@ class ProtocolTestClient extends OpsClient {
 }
 
 describe("ops client", () => {
+  it.each(Object.entries(OPS_PUBLIC_ERROR_MESSAGES))(
+    "preserves the existing canonical %s refusal class",
+    async (errorClass, message) => {
+      const client = new ProtocolTestClient({
+        baseUrl: "http://127.0.0.1:3002",
+        tokenFile: tokenFile(),
+        fetch: async (_url, init) =>
+          new Response(
+            JSON.stringify({
+              version: 1,
+              requestId: JSON.parse(String(init?.body)).requestId,
+              ok: false,
+              error: { class: errorClass, message },
+            }),
+            { status: 409 },
+          ),
+      });
+      await expect(client.execute({ kind: "docker.status" })).rejects.toMatchObject({ errorClass });
+    },
+  );
   it("derives synchronous transport timeouts from the per-kind execution budget", () => {
     expect(opsRequestTimeoutMs("docker.status")).toBe(15_000);
     expect(opsRequestTimeoutMs("service.logs")).toBe(15_000);
@@ -291,14 +311,32 @@ describe("ops client", () => {
       fetch,
     });
 
-    await expect(client.execute({ kind: "service.pull", serviceId: "redis" })).rejects.toThrow(
-      "Async operation key is required",
-    );
+    await expect(
+      client.execute({
+        kind: "service.pull",
+        serviceId: "redis",
+        expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+      }),
+    ).rejects.toThrow("Async operation key is required");
     expect(fetch).not.toHaveBeenCalled();
 
     const operationKey = client.createOperationKey();
-    await client.execute({ kind: "service.pull", serviceId: "redis" }, { operationKey });
-    await client.execute({ kind: "service.pull", serviceId: "redis" }, { operationKey });
+    await client.execute(
+      {
+        kind: "service.pull",
+        serviceId: "redis",
+        expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+      },
+      { operationKey },
+    );
+    await client.execute(
+      {
+        kind: "service.pull",
+        serviceId: "redis",
+        expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+      },
+      { operationKey },
+    );
     expect(requests.map((request) => request.operationKey)).toEqual([operationKey, operationKey]);
   });
 
@@ -427,7 +465,11 @@ describe("ops client", () => {
     });
     const admissionAbort = new AbortController();
     const admission = client.execute(
-      { kind: "service.pull", serviceId: "redis" },
+      {
+        kind: "service.pull",
+        serviceId: "redis",
+        expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+      },
       { operationKey: "opk1_signalAdmission000", signal: admissionAbort.signal },
     );
     await vi.waitFor(() => expect(signals).toHaveLength(1));
@@ -486,7 +528,11 @@ describe("ops client", () => {
     for (const [stateIndex, state] of states.entries()) {
       await expect(
         client.execute(
-          { kind: "service.pull", serviceId: "redis" },
+          {
+            kind: "service.pull",
+            serviceId: "redis",
+            expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+          },
           { operationKey: `opk1_retainedClient${stateIndex}00` },
         ),
       ).resolves.toMatchObject({ state });

@@ -16,6 +16,24 @@ import { configurationProjectionFingerprint } from "./fingerprint";
 
 const issuedAt = "2026-08-23T18:00:00.000Z";
 const expiresAt = "2026-08-23T18:00:20.000Z";
+const maintenanceBinding = {
+  maintenanceId: "11111111-1111-4111-8111-111111111111",
+  candidateId: "22222222-2222-4222-8222-222222222222",
+  applyOperationKey: "opk1_originalApply000001",
+  applyOperationFingerprint: "a".repeat(64),
+  expectedCurrentRevisionId: null,
+  revisionId: `cfg1_${"b".repeat(43)}`,
+  expectedSourceRevision: "33333333-3333-4333-8333-333333333333",
+  coordinatorMode: "ensure-running" as const,
+  followUp: "render-only" as const,
+};
+const maintenanceIdentity = {
+  maintenanceId: maintenanceBinding.maintenanceId,
+  candidateId: maintenanceBinding.candidateId,
+  prepareOperationKey: "opk1_originalPrepare0001",
+  prepareFingerprint: "c".repeat(64),
+  planDigest: "d".repeat(64),
+};
 
 function request(operation: unknown, extra: Record<string, unknown> = {}) {
   return {
@@ -42,25 +60,86 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   "stack.status": { kind: "stack.status" },
   "services.inspect": { kind: "services.inspect" },
   "configuration.inspect": { kind: "configuration.inspect" },
+  "configuration.sources.inspect": { kind: "configuration.sources.inspect" },
+  "configurationMaintenance.prepare": {
+    kind: "configurationMaintenance.prepare",
+    ...maintenanceBinding,
+  },
+  "configurationMaintenance.inspect": {
+    kind: "configurationMaintenance.inspect",
+    maintenanceId: maintenanceBinding.maintenanceId,
+    candidateId: maintenanceBinding.candidateId,
+  },
+  "configurationMaintenance.decide": {
+    kind: "configurationMaintenance.decide",
+    ...maintenanceIdentity,
+    decisionId: "44444444-4444-4444-8444-444444444444",
+    decision: "abandon",
+    expectedSequence: 1,
+    checkpointVersion: 1,
+    checkpointDigest: "e".repeat(64),
+  },
+  "configurationMaintenance.settle": {
+    kind: "configurationMaintenance.settle",
+    ...maintenanceIdentity,
+    decisionId: "44444444-4444-4444-8444-444444444444",
+    expectedSequence: 2,
+    evidenceDigest: "f".repeat(64),
+  },
+  "configuration.hardlinks.preview": {
+    kind: "configuration.hardlinks.preview",
+    candidateId: maintenanceBinding.candidateId,
+    revisionId: maintenanceBinding.revisionId,
+    expectedCurrentRevisionId: null,
+    expectedSourceRevision: maintenanceBinding.expectedSourceRevision,
+    coordinatorMode: "ensure-running",
+  },
+  "configuration.hardlinks.apply": {
+    kind: "configuration.hardlinks.apply",
+    revisionId: maintenanceBinding.revisionId,
+    coordinatorMode: "ensure-running",
+  },
   "configuration.hardlinks.inspect": {
     kind: "configuration.hardlinks.inspect",
     revisionId: `cfg1_${"a".repeat(43)}`,
   },
   "stack.render": {
     expectedCurrentRevisionId: null,
+    expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+    coordinatorMode: "ensure-running",
     kind: "stack.render",
     revisionId: "config_20260823",
   },
-  "stack.start": { kind: "stack.start" },
+  "stack.start": { kind: "stack.start", expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}` },
   "stack.stop": { kind: "stack.stop" },
-  "service.start": { kind: "service.start", serviceId: "motis" },
+  "service.start": {
+    kind: "service.start",
+    serviceId: "motis",
+    expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+  },
   "service.stop": { kind: "service.stop", serviceId: "motis" },
   "service.restart": { kind: "service.restart", serviceId: "motis" },
-  "service.recreate": { kind: "service.recreate", serviceId: "motis" },
-  "service.recreateIsolated": { kind: "service.recreateIsolated", serviceId: "motis" },
-  "service.pull": { kind: "service.pull", serviceId: "motis" },
+  "service.recreate": {
+    kind: "service.recreate",
+    serviceId: "motis",
+    expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+  },
+  "service.recreateIsolated": {
+    kind: "service.recreateIsolated",
+    serviceId: "motis",
+    expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+  },
+  "service.pull": {
+    kind: "service.pull",
+    serviceId: "motis",
+    expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+  },
   "service.remove": { kind: "service.remove", serviceId: "motis" },
-  "service.update": { kind: "service.update", serviceId: "motis" },
+  "service.update": {
+    kind: "service.update",
+    serviceId: "motis",
+    expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+  },
   "service.build": { kind: "service.build", serviceId: "motis", regionId: "europe/germany" },
   "services.buildAll": { kind: "services.buildAll", failFast: true },
   "service.logs": { kind: "service.logs", serviceId: "motis", tail: 200 },
@@ -136,24 +215,32 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   "communityServices.inspect": { kind: "communityServices.inspect" },
   "serviceSelection.apply": {
     expectedCurrentRevisionId: null,
+    expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+    coordinatorMode: "ensure-running",
     kind: "serviceSelection.apply",
     revisionId: "selection_20260823",
   },
   "serviceSelection.inspect": { kind: "serviceSelection.inspect" },
   "serviceConfig.apply": {
     expectedCurrentRevisionId: null,
+    expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+    coordinatorMode: "ensure-running",
     kind: "serviceConfig.apply",
     serviceId: "motis",
     revisionId: "config_20260823",
   },
   "integrationConfig.apply": {
     expectedCurrentRevisionId: null,
+    expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+    coordinatorMode: "ensure-running",
     kind: "integrationConfig.apply",
     integrationId: "routing",
     revisionId: "config_20260823",
   },
   "vault.apply": {
     expectedCurrentRevisionId: null,
+    expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+    coordinatorMode: "ensure-running",
     kind: "vault.apply",
     serviceId: "motis",
     revisionId: "vault_20260823",
@@ -269,6 +356,7 @@ describe("ops contract", () => {
       // Take the role from the policy table rather than re-deriving it from a
       // kind prefix: a prefix list silently omits every kind added later.
       const role: OpsRole = OPS_KIND_POLICIES[operation.kind].role;
+      expect(() => parseOpsRequest(request(operation), { role }), operation.kind).not.toThrow();
       expect(parseOpsRequest(request(operation), { role }).operation).toEqual(operation);
     }
   });

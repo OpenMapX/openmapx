@@ -56,6 +56,43 @@ afterEach(() => {
 });
 
 describe("integration query boundaries and reload observation", () => {
+  it.each(["patch", "set", "delete", "enable", "disable", "import"] as const)(
+    "sends the generated %s body and retained header in their actual positions",
+    async (kind) => {
+      const requests = fakeFetch(() =>
+        Response.json({ error: "Request rejected" }, { status: 400 }),
+      );
+      const qc = client(),
+        { result } = renderHookWithQuery(useIntegrationAdmin, { queryClient: qc });
+      await act(async () => {
+        const run = {
+          patch: () => result.current.patchConfig("demo", { endpoint: "synthetic" }),
+          set: () => result.current.setCredential("demo", "TOKEN", "synthetic-private"),
+          delete: () => result.current.deleteCredential("demo", "TOKEN"),
+          enable: () => result.current.toggle("demo", true),
+          disable: () => result.current.toggle("demo", false),
+          import: () =>
+            result.current.importConfigs({
+              integrations: [{ integrationId: "demo", config: { endpoint: "synthetic" } }],
+            }),
+        };
+        await expect(run[kind]()).rejects.toThrow();
+      });
+      expect(requests).toHaveLength(1);
+      const init = requests[0]!.init;
+      expect(new Headers(init.headers).get("idempotency-key")).toMatch(
+        /^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/,
+      );
+      if (["patch", "set", "import"].includes(kind))
+        expect(JSON.parse(String(init.body))).toEqual(
+          kind === "patch"
+            ? { endpoint: "synthetic" }
+            : kind === "set"
+              ? { value: "synthetic-private" }
+              : { integrations: [{ integrationId: "demo", config: { endpoint: "synthetic" } }] },
+        );
+    },
+  );
   it("keeps full raw manifest and canonical config values without response casts", async () => {
     const manifest = {
       id: "demo",

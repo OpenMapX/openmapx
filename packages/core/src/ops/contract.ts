@@ -1,10 +1,43 @@
+import {
+  configurationGenerationRevisionSchema,
+  configurationHardlinksApplyOperationSchema,
+  integrationConfigApplyOperationSchema,
+  serviceConfigApplyOperationSchema,
+  serviceIdSchema,
+  serviceRecreateIsolatedOperationSchema,
+  serviceRecreateOperationSchema,
+  serviceSelectionApplyOperationSchema,
+  stableIdSchema,
+  stackRenderOperationSchema,
+  vaultApplyOperationSchema,
+} from "./configuration-operation-records";
+
+export { configurationGenerationRevisionSchema } from "./configuration-operation-records";
+
 import z from "zod/v4";
 import {
   pairedPinApprovalInputSchema,
   pairedPinApprovalResultSchema,
 } from "./catalog-pin-approval";
+import {
+  configurationMaintenanceDecisionSchema,
+  configurationMaintenancePrepareSchema,
+  configurationMaintenanceReceiptSchema,
+  configurationMaintenanceSettleSchema,
+} from "./configuration-maintenance";
+import {
+  configurationHardlinksPreviewSchema,
+  configurationSourcesInspectionSchema,
+  coordinatorModeSchema,
+} from "./configuration-preparation-records";
 import { opsFailureResultSchema, processDiagnosticsSchema } from "./job-evidence";
-import { serviceActionsSchema } from "./service-results";
+import {
+  type HistoricalServicePullResult,
+  historicalServicePullResultSchema,
+  servicePullOperationSchema,
+  servicePullResultSchema,
+} from "./service-operation-records";
+import { hardlinkApplySummarySchema, serviceActionsSchema } from "./service-results";
 
 export const OPS_PROTOCOL_VERSION = 2 as const;
 export const OPS_MAX_LOG_TAIL = 1_000;
@@ -26,6 +59,13 @@ export const OPS_OPERATION_KINDS = [
   "stack.render",
   "configuration.inspect",
   "configuration.hardlinks.inspect",
+  "configuration.sources.inspect",
+  "configuration.hardlinks.preview",
+  "configuration.hardlinks.apply",
+  "configurationMaintenance.prepare",
+  "configurationMaintenance.inspect",
+  "configurationMaintenance.decide",
+  "configurationMaintenance.settle",
   "stack.start",
   "stack.stop",
   "service.start",
@@ -143,6 +183,13 @@ export const OPS_KIND_POLICIES = {
   "services.inspect": sync("api", 15_000, 512 * 1024),
   "configuration.inspect": sync("api", 15_000),
   "configuration.hardlinks.inspect": sync("api", 15_000, 1024 * 1024),
+  "configuration.sources.inspect": sync("api", 15_000, 128 * 1024),
+  "configuration.hardlinks.preview": sync("api", 15_000, 32 * 1024),
+  "configuration.hardlinks.apply": asyncEffect("api", 10 * 60_000),
+  "configurationMaintenance.prepare": asyncEffect("api", 3600_000, 65536),
+  "configurationMaintenance.inspect": sync("api", 15_000, 65536),
+  "configurationMaintenance.decide": asyncEffect("api", 60_000, 65536),
+  "configurationMaintenance.settle": asyncEffect("api", 60_000, 65536),
   "stack.render": asyncEffect("api", 120_000),
   "stack.start": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "stack.stop": asyncEffect("api", 5 * 60_000),
@@ -221,16 +268,6 @@ export function opsKindRequiresControlAuthority(kind: OpsOperationKind): boolean
   );
 }
 const operationKindSchema = z.enum(OPS_OPERATION_KINDS);
-const serviceIdSchema = z
-  .string()
-  .min(1)
-  .max(64)
-  .regex(/^[a-z0-9][a-z0-9-]*$/);
-const stableIdSchema = z
-  .string()
-  .min(1)
-  .max(128)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/);
 const backupIdSchema = z
   .string()
   .min(1)
@@ -302,8 +339,6 @@ const kindOnly = <T extends OpsOperationKind>(kind: T) => z.strictObject({ kind:
 const serviceOperation = <T extends OpsOperationKind>(kind: T) =>
   z.strictObject({ kind: z.literal(kind), serviceId: serviceIdSchema });
 
-export const configurationGenerationRevisionSchema = z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/);
-
 export const opsOperationSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("controlRetention.acknowledge"),
@@ -317,11 +352,25 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   kindOnly("stack.status"),
   kindOnly("services.inspect"),
   kindOnly("configuration.inspect"),
+  kindOnly("configuration.sources.inspect"),
+  configurationMaintenancePrepareSchema,
   z.strictObject({
-    kind: z.literal("stack.render"),
-    revisionId: stableIdSchema,
-    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
+    kind: z.literal("configurationMaintenance.inspect"),
+    maintenanceId: z.uuid(),
+    candidateId: z.uuid(),
   }),
+  configurationMaintenanceDecisionSchema,
+  configurationMaintenanceSettleSchema,
+  z.strictObject({
+    kind: z.literal("configuration.hardlinks.preview"),
+    candidateId: z.uuid(),
+    revisionId: configurationGenerationRevisionSchema,
+    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
+    expectedSourceRevision: z.uuid(),
+    coordinatorMode: coordinatorModeSchema,
+  }),
+  configurationHardlinksApplyOperationSchema,
+  stackRenderOperationSchema,
   // The hardlink plan of the named, applied configuration generation. Fails if
   // another generation has been applied since. Data-manager applies it: only
   // its mounts confine the links and prunes to the data root.
@@ -329,16 +378,28 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
     kind: z.literal("configuration.hardlinks.inspect"),
     revisionId: configurationGenerationRevisionSchema,
   }),
-  kindOnly("stack.start"),
+  z.strictObject({
+    kind: z.literal("stack.start"),
+    expectedConfigurationRevisionId: configurationGenerationRevisionSchema,
+  }),
   kindOnly("stack.stop"),
-  serviceOperation("service.start"),
+  z.strictObject({
+    kind: z.literal("service.start"),
+    serviceId: serviceIdSchema,
+    expectedConfigurationRevisionId: configurationGenerationRevisionSchema,
+  }),
   serviceOperation("service.stop"),
   serviceOperation("service.restart"),
-  serviceOperation("service.recreate"),
-  serviceOperation("service.recreateIsolated"),
-  serviceOperation("service.pull"),
+  serviceRecreateOperationSchema,
+  serviceRecreateIsolatedOperationSchema,
+  servicePullOperationSchema,
   serviceOperation("service.remove"),
-  serviceOperation("service.update"),
+  z.strictObject({
+    kind: z.literal("service.update"),
+    serviceId: serviceIdSchema,
+    expectedConfigurationRevisionId: configurationGenerationRevisionSchema,
+    noDeps: z.boolean().optional(),
+  }),
   z.strictObject({
     kind: z.literal("service.build"),
     serviceId: serviceIdSchema,
@@ -429,30 +490,11 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
     extensionId: serviceIdSchema,
   }),
   kindOnly("communityServices.inspect"),
-  z.strictObject({
-    kind: z.literal("serviceSelection.apply"),
-    revisionId: stableIdSchema,
-    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
-  }),
+  serviceSelectionApplyOperationSchema,
   kindOnly("serviceSelection.inspect"),
-  z.strictObject({
-    kind: z.literal("serviceConfig.apply"),
-    serviceId: serviceIdSchema,
-    revisionId: stableIdSchema,
-    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
-  }),
-  z.strictObject({
-    kind: z.literal("integrationConfig.apply"),
-    integrationId: serviceIdSchema,
-    revisionId: stableIdSchema,
-    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
-  }),
-  z.strictObject({
-    kind: z.literal("vault.apply"),
-    serviceId: serviceIdSchema,
-    revisionId: stableIdSchema,
-    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
-  }),
+  serviceConfigApplyOperationSchema,
+  integrationConfigApplyOperationSchema,
+  vaultApplyOperationSchema,
   kindOnly("data.inspect"),
   z.strictObject({ kind: z.literal("data.downloadOsm"), regionId: regionIdSchema.optional() }),
   kindOnly("data.downloadFonts"),
@@ -503,6 +545,28 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   kindOnly("gbfsCatalogLock.inspect"),
 ]);
 export type OpsOperation = z.infer<typeof opsOperationSchema>;
+export type TrustedConfigurationApplyOperation = Extract<
+  OpsOperation,
+  {
+    kind:
+      | "stack.render"
+      | "serviceSelection.apply"
+      | "serviceConfig.apply"
+      | "integrationConfig.apply"
+      | "vault.apply";
+  }
+>;
+export function isTrustedConfigurationApplyOperation(
+  operation: OpsOperation,
+): operation is TrustedConfigurationApplyOperation {
+  return [
+    "stack.render",
+    "serviceSelection.apply",
+    "serviceConfig.apply",
+    "integrationConfig.apply",
+    "vault.apply",
+  ].includes(operation.kind);
+}
 
 const opsRequestSchema = z
   .strictObject({
@@ -541,6 +605,7 @@ export type OpsErrorClass =
   | "control_upgrade_required"
   | "recovery_required"
   | "host_update_required"
+  | "configuration_prerequisite"
   | "runtime";
 export const OPS_PUBLIC_ERROR_MESSAGES: Record<OpsErrorClass, string> = {
   authentication: "Request authentication failed",
@@ -552,6 +617,8 @@ export const OPS_PUBLIC_ERROR_MESSAGES: Record<OpsErrorClass, string> = {
   timeout: "Operation timed out",
   busy: "Operations service is busy",
   conflict: "Operation key conflicts with an existing operation",
+  configuration_prerequisite:
+    "Apply or update Data Manager before changing instance configuration.",
   not_found: "Operation was not found",
   not_wired: "Operation is not available",
   control_upgrade_required:
@@ -933,6 +1000,13 @@ export const OPS_RESULT_SCHEMAS = {
       )
       .max(256),
   }),
+  "configuration.sources.inspect": configurationSourcesInspectionSchema,
+  "configuration.hardlinks.preview": configurationHardlinksPreviewSchema,
+  "configuration.hardlinks.apply": hardlinkApplySummarySchema,
+  "configurationMaintenance.prepare": configurationMaintenanceReceiptSchema,
+  "configurationMaintenance.inspect": configurationMaintenanceReceiptSchema,
+  "configurationMaintenance.decide": configurationMaintenanceReceiptSchema,
+  "configurationMaintenance.settle": configurationMaintenanceReceiptSchema,
   "configuration.inspect": z.strictObject({
     revisionId: configurationGenerationRevisionSchema.nullable(),
     integrationConfigDigests: z
@@ -952,9 +1026,12 @@ export const OPS_RESULT_SCHEMAS = {
   "service.restart": changed,
   "service.recreate": changed,
   "service.recreateIsolated": changed,
-  "service.pull": changed,
+  "service.pull": servicePullResultSchema,
   "service.remove": changed,
-  "service.update": changed,
+  "service.update": z.strictObject({
+    changed: z.literal(true),
+    revisionId: configurationGenerationRevisionSchema,
+  }),
   "service.build": completed,
   "services.buildAll": z.strictObject({
     completedServiceIds: z.array(serviceIdSchema).max(256),
@@ -1197,6 +1274,19 @@ export const OPS_RESULT_SCHEMAS = {
 } as const satisfies Record<OpsOperationKind, z.ZodType>;
 
 export type OpsResultFor<K extends OpsOperationKind> = z.infer<(typeof OPS_RESULT_SCHEMAS)[K]>;
+export type OpsObservedResultFor<K extends OpsOperationKind> = K extends "service.pull"
+  ? OpsResultFor<K> | HistoricalServicePullResult
+  : OpsResultFor<K>;
+/** Status observation only. Fresh execution/settlement continues to use the
+ * strict parseOpsResult/parseBoundedOpsResult above the runtime boundary. */
+export function parseObservedOpsResult<K extends OpsOperationKind>(
+  kind: K,
+  value: unknown,
+): OpsObservedResultFor<K> {
+  if (kind === "service.pull" && historicalServicePullResultSchema.safeParse(value).success)
+    return historicalServicePullResultSchema.parse(value) as OpsObservedResultFor<K>;
+  return parseBoundedOpsResult(kind, value) as OpsObservedResultFor<K>;
+}
 export function parseOpsResult<K extends OpsOperationKind>(
   kind: K,
   value: unknown,
@@ -1289,7 +1379,7 @@ export function parseOpsJobStatus(input: unknown): OpsJobStatus {
   if (status.state === "succeeded") {
     if (status.result === undefined || status.errorClass !== undefined)
       throw new Error("Invalid operation status");
-    parseOpsResult(status.kind, status.result);
+    parseObservedOpsResult(status.kind, status.result);
   } else if (status.state === "failed" || status.state === "timed_out") {
     if (status.result !== undefined || status.errorClass === undefined)
       throw new Error("Invalid operation status");
@@ -1310,7 +1400,7 @@ export type OpsJobStatusFor<K extends OpsOperationKind> =
     })
   | (OpsJobStatusBase<K> & {
       state: "succeeded";
-      result: OpsResultFor<K>;
+      result: OpsObservedResultFor<K>;
       errorClass?: never;
     })
   | (OpsJobStatusBase<K> & {
@@ -1330,7 +1420,7 @@ export function parseOpsJobStatusForKind<K extends OpsOperationKind>(
   }
   return {
     ...status,
-    ...(status.result === undefined ? {} : { result: parseOpsResult(kind, status.result) }),
+    ...(status.result === undefined ? {} : { result: parseObservedOpsResult(kind, status.result) }),
   } as OpsJobStatusFor<K>;
 }
 const stateEvent = z.strictObject({
@@ -1450,7 +1540,7 @@ export function opsResourceId(operation: OpsOperation): string {
   if ("serviceId" in operation) return operation.serviceId;
   if ("backupId" in operation && operation.backupId) return operation.backupId;
   if ("preparedRunId" in operation) return operation.preparedRunId;
-  if ("candidateId" in operation) return operation.candidateId;
+  if ("candidateId" in operation && operation.candidateId) return operation.candidateId;
   if ("repository" in operation) return operation.repository;
   if ("extensionId" in operation) return operation.extensionId;
   if ("integrationId" in operation) return operation.integrationId;

@@ -423,7 +423,7 @@ it("rejects arbitrary caller text as effect evidence", async () => {
     }),
   ).toThrow(/evidence|receipt/);
 });
-it("retains terminal maintenance ownership and permits only frozen one-use continuations", async () => {
+it("keeps a bare terminal maintenance summary fenced without the fixed owner source", async () => {
   const c = await import("./control-authority");
   const a = await api();
   const { writeFileSync } = await import("node:fs");
@@ -448,7 +448,24 @@ it("retains terminal maintenance ownership and permits only frozen one-use conti
     deadlineAt,
     fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
   };
-  const body = { kind: "service.recreate" as const, serviceId: "motis" };
+  const { commitConfigurationGeneration } = await import("../services/configuration-generation"),
+    generation = await commitConfigurationGeneration({
+      infraDir: root,
+      services: [],
+      input: {
+        domain: "example.test",
+        selectedRoots: [],
+        serviceConfigs: [],
+        integrationConfigs: [],
+        serviceSecrets: [],
+      },
+      ownedServiceGenerations: [],
+    });
+  const body = {
+    kind: "service.recreate" as const,
+    serviceId: "motis",
+    expectedConfigurationRevisionId: generation.revisionId,
+  };
   const hash = opsOperationFingerprint(body);
   const child = {
     ...execution,
@@ -521,48 +538,16 @@ it("retains terminal maintenance ownership and permits only frozen one-use conti
       childPublicKey: agent.publicKey,
     }),
   ).rejects.toThrow();
-  const assertion = await a.delegateArtifactTargetLease(lease, {
-    ...plan,
-    childPublicKey: agent.publicKey,
-  });
+  // A private journal summary and ordinary own-effect settlement are not
+  // the actual fixed candidate/owner/decision/guard closure source.
   await expect(
     a.delegateArtifactTargetLease(lease, { ...plan, childPublicKey: agent.publicKey }),
-  ).rejects.toThrow(/replay/);
-  const peer = c.verifyRetainedLocalControlPeer(agent, {
-    assertion,
-    execution: child,
-    kind: body.kind,
-  });
-  const borrowed = await a.adoptArtifactTargetLease({
-    dataRoot: join(root, "data"),
-    assertion,
-    peer,
-    execution: child,
-    serviceIds: ["motis"],
-  });
-  const childAuthority = c.retainAdmittedControlExecution(agent, {
-    requestedDeadlineAt: child.deadlineAt,
-    execution: child,
-    kind: body.kind,
-    operation: body,
-    parent: c.verifiedRetainedControlParent(agent, execution),
-    admittedAt: deadlineAt - 60000,
-    serviceIds: ["motis"],
-  });
+  ).rejects.toThrow();
+  await expect(
+    a.settleArtifactTargetLeaseChild(lease, c.verifyControlEffectSettlement(agent, execution)),
+  ).rejects.toThrow();
   await expect(a.releaseArtifactTargetLease(lease)).rejects.toThrow();
-  c.retainControlEffectReceipt(childAuthority, {
-    outcome: "failed_without_effect",
-    publication: "not_started",
-    receipt: { kind: "not-started" },
-  });
-  await a.settleArtifactTargetLeaseChild(borrowed, c.verifyControlEffectSettlement(agent, child));
-  c.retainControlEffectReceipt(authority, {
-    outcome: "failed_without_effect",
-    publication: "not_started",
-    receipt: { kind: "not-started" },
-  });
-  await a.settleArtifactTargetLeaseChild(lease, c.verifyControlEffectSettlement(agent, execution));
-  await a.releaseArtifactTargetLease(lease);
+  a.closeArtifactTargetLeaseHandle(lease);
   c.closeControlInstallation(agent);
 });
 it("orders physical target ownership before a nonblocking reservation, configuration writer and release store", async () => {

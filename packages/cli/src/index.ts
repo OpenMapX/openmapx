@@ -11,6 +11,7 @@ import { registerServicesCommands } from "./commands/services";
 import { registerTransitousCommands } from "./commands/transitous-bump";
 import { registerTransportApisPinCommands } from "./commands/transport-apis-pin";
 import { registerUsersCommands } from "./commands/users";
+import { fixedCliCommandExitCode } from "./lib/control-context";
 import { assertCliExecutionAvailable, withCliExecutionDeadline } from "./lib/execution-deadline";
 import { loadInfraEnv } from "./lib/infra-env";
 
@@ -39,8 +40,17 @@ registerCacheCommands(program);
 registerTransportApisPinCommands(program);
 registerTransitousCommands(program);
 
-await withCliExecutionDeadline(process.argv.slice(2), async () => {
-  loadInfraEnv();
-  program.hook("preAction", () => assertCliExecutionAvailable());
-  await program.parseAsync(process.argv);
-});
+try {
+  await withCliExecutionDeadline(process.argv.slice(2), async () => {
+    loadInfraEnv();
+    program.hook("preAction", () => assertCliExecutionAvailable());
+    await program.parseAsync(process.argv);
+  });
+} catch (error) {
+  if (!process.env.OPENMAPX_CONTROL_DELEGATION && !process.env.OPENMAPX_PARENT_EXECUTION)
+    throw error;
+  // The control context has already retained its actual disposition and closed
+  // local handles. Avoid forwarding exception paths/stacks to public job logs.
+  process.stderr.write("Fixed CLI command failed; inspect the original operation status.\n");
+  process.exitCode = fixedCliCommandExitCode(error) ?? 1;
+}

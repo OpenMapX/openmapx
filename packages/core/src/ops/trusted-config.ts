@@ -1,6 +1,11 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import z from "zod/v4";
-import { type OpsOperation, type OpsRole, opsOperationSchema } from "./contract";
+import {
+  isTrustedConfigurationApplyOperation,
+  type OpsOperation,
+  type OpsRole,
+  opsOperationSchema,
+} from "./contract";
 import { opsOperationFingerprint } from "./fingerprint";
 
 export const OPS_TRUSTED_CONFIG_MAX_BYTES = 512 * 1024;
@@ -209,9 +214,7 @@ function snapshotMac(snapshot: AuthenticatedSnapshot, token: string): string {
 }
 
 function revisionFromOperation(operation: OpsOperation): string | undefined {
-  return "revisionId" in operation && typeof operation.revisionId === "string"
-    ? operation.revisionId
-    : undefined;
+  return isTrustedConfigurationApplyOperation(operation) ? operation.revisionId : undefined;
 }
 
 function deepFreeze<T>(value: T): T {

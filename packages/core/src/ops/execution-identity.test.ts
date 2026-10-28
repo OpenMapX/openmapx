@@ -4,6 +4,7 @@ import { OPS_KIND_POLICIES } from "./contract";
 import {
   normalizeExecutionAdmission,
   opsExecutionBudget,
+  verifiedApiJobParentBinding,
   verifyApiJobParentExecution,
 } from "./execution-identity";
 
@@ -79,6 +80,11 @@ describe("immutable execution admission", () => {
       operationFingerprint: base.operationFingerprint,
       requestedDeadlineAt: fields.requestedDeadlineAt,
     });
+    expect(verifiedApiJobParentBinding(parent)).toEqual(fields);
+    expect(Object.isFrozen(verifiedApiJobParentBinding(parent))).toBe(true);
+    expect(() => verifiedApiJobParentBinding({ ...parent })).toThrow(
+      "Actual verified API job parent binding required",
+    );
     const result = normalizeExecutionAdmission({
       ...base,
       requestedDeadlineAt: fields.requestedDeadlineAt,

@@ -36,8 +36,15 @@
       "backup.list",
       "backup.restore",
       "communityServices.inspect",
+      "configuration.hardlinks.apply",
       "configuration.hardlinks.inspect",
+      "configuration.hardlinks.preview",
       "configuration.inspect",
+      "configuration.sources.inspect",
+      "configurationMaintenance.decide",
+      "configurationMaintenance.inspect",
+      "configurationMaintenance.prepare",
+      "configurationMaintenance.settle",
       "controlRetention.acknowledge",
       "data.clean",
       "data.convertOverpass",
@@ -201,8 +208,16 @@
     {
       "id": "api.configuration-hardlinks",
       "callSiteIds": [],
-      "semanticSources": ["apps/api/src/services/admin-ops.ts#applyGenerationHardlinks"],
-      "typedKinds": ["configuration.hardlinks.inspect"]
+      "semanticSources": [
+        "apps/api/src/services/configuration-hardlinks.ts#applyGenerationHardlinks",
+        "apps/ops-agent/src/configuration-hardlinks-runtime.ts#installConfigurationHardlinksRuntime",
+        "apps/ops-agent/src/trusted-config-runtime.ts#installTrustedConfigurationRuntime"
+      ],
+      "typedKinds": [
+        "configuration.hardlinks.inspect",
+        "configuration.hardlinks.apply",
+        "configuration.hardlinks.preview"
+      ]
     },
     {
       "id": "api.compose-runtime",
@@ -269,14 +284,16 @@
         "apps/api/src/services/trusted-config-operations.ts#applyTrustedConfigurationWithEvidence",
         "apps/api/src/services/admin-cli.ts#validateServiceSelectionForWrite",
         "apps/api/src/routes/admin.ts#adminRoute",
-        "apps/api/src/services/service-secrets.ts#setServiceSecret"
+        "apps/api/src/services/service-secrets.ts#setServiceSecret",
+        "packages/core/src/build-artifacts/configuration-source-witness.ts#observeConfigurationSources"
       ],
       "typedKinds": [
         "configuration.inspect",
         "serviceSelection.apply",
         "serviceConfig.apply",
         "integrationConfig.apply",
-        "vault.apply"
+        "vault.apply",
+        "configuration.sources.inspect"
       ]
     },
     {
@@ -312,6 +329,23 @@
         "transitousLock.propose",
         "transitousLock.approve",
         "gbfsCatalogLock.inspect"
+      ]
+    },
+    {
+      "id": "api.configuration-maintenance",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/prospective-configuration.ts#prepareConfigurationMaintenance",
+        "apps/api/src/services/prospective-configuration.ts#inspectConfigurationMaintenance",
+        "apps/api/src/services/prospective-configuration.ts#decideConfigurationMaintenance",
+        "apps/api/src/services/prospective-configuration.ts#settleConfigurationMaintenance",
+        "apps/ops-agent/src/configuration-maintenance-store.ts#prepareConfigurationMaintenanceAdmission"
+      ],
+      "typedKinds": [
+        "configurationMaintenance.prepare",
+        "configurationMaintenance.inspect",
+        "configurationMaintenance.decide",
+        "configurationMaintenance.settle"
       ]
     }
   ],

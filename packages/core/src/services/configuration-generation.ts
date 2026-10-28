@@ -87,6 +87,9 @@ export interface CommitConfigurationOptions {
   revisionId?: string;
   /** Applied identity to compare under writer ownership; null means no pointer. */
   expectedCurrentRevisionId?: string | null;
+  /** Fixed executor correlation for a retained noncommit observation. */
+  operationKey?: string;
+  installationId?: string;
   signal?: AbortSignal;
   beforeCommit?: () => Promise<void>;
   afterGenerationRename?: () => Promise<void>;
@@ -114,6 +117,43 @@ export class ConfigurationGenerationError extends Error {
 export interface ConfigurationGenerationWriter {
   commit(options: Omit<CommitConfigurationOptions, "infraDir">): Promise<CommittedConfiguration>;
 }
+const liveWriters = new WeakSet<ConfigurationGenerationWriter>();
+const writerCommits = new WeakMap<ConfigurationGenerationWriter, CommittedConfiguration>();
+declare const nonCommitBrand: unique symbol;
+export type OriginalConfigurationGenerationNonCommit = Readonly<{ [nonCommitBrand]: true }>;
+type NonCommitSource = Readonly<{
+  infraDir: string;
+  installationId: string;
+  operationKey: string;
+  revisionId: string;
+  expectedCurrentRevisionId: string;
+  result: Extract<ConfigurationApplyResult, { outcome: "not_committed" }>;
+}>;
+const pendingNonCommits = new WeakMap<Error, NonCommitSource>(),
+  nonCommitErrors = new WeakMap<Error, OriginalConfigurationGenerationNonCommit>(),
+  nonCommitSources = new WeakMap<OriginalConfigurationGenerationNonCommit, NonCommitSource>();
+export function configurationGenerationNonCommitForError(
+  error: unknown,
+): OriginalConfigurationGenerationNonCommit | undefined {
+  return error instanceof Error ? nonCommitErrors.get(error) : undefined;
+}
+export function originalConfigurationGenerationNonCommitSource(
+  value: OriginalConfigurationGenerationNonCommit,
+): NonCommitSource {
+  const source = nonCommitSources.get(value);
+  if (!source) throw Error("Actual completed configuration writer noncommit required");
+  return source;
+}
+export function assertConfigurationGenerationWriter(writer: ConfigurationGenerationWriter): void {
+  if (!liveWriters.has(writer)) throw Error("Configuration writer is not available");
+}
+/** Exact evidence from this live writer, never a competing current-pointer read. */
+export function configurationGenerationWriterCommit(
+  writer: ConfigurationGenerationWriter,
+): Readonly<CommittedConfiguration> | undefined {
+  assertConfigurationGenerationWriter(writer);
+  return writerCommits.get(writer);
+}
 
 /** Hold ownership before reading state used to construct a write, through all follow-up work. */
 export async function withConfigurationGenerationWriter<T>(
@@ -127,22 +167,71 @@ export async function withConfigurationGenerationWriter<T>(
   let value!: T;
   let active = true;
   let pending: Promise<CommittedConfiguration> | undefined;
+  let writer: ConfigurationGenerationWriter | undefined;
   try {
     release = await acquireConfigurationOwnership(infraDir, signal);
-    value = await run({
+    writer = {
       commit: (options) => {
         if (!active || pending) throw new Error("Configuration writer is not available");
         pending = commitOwnedConfigurationGeneration({
           ...options,
           infraDir,
           signal: options.signal ?? signal,
-        }).then((result) => {
-          committed = result;
-          return result;
-        });
+        })
+          .then((result) => {
+            committed = result;
+            writerCommits.set(writer!, result);
+            return result;
+          })
+          .catch((error) => {
+            if (
+              error instanceof ConfigurationGenerationError &&
+              error.result.outcome === "committed"
+            )
+              writerCommits.set(writer!, {
+                revisionId: error.result.revisionId,
+                enabledServiceIds: error.result.enabledServiceIds,
+                warnings: [],
+              });
+            // Only this awaited native writer attempt, without an injected hook,
+            // can record conclusive nonpublication while ownership is still held.
+            if (
+              error instanceof ConfigurationGenerationError &&
+              error.result.outcome === "not_committed" &&
+              !error.result.cleanupFailed &&
+              options.revisionId &&
+              options.expectedCurrentRevisionId &&
+              options.operationKey &&
+              options.installationId &&
+              /^opk1_[A-Za-z0-9_-]{16,64}$/.test(options.operationKey) &&
+              !options.beforeCommit &&
+              !options.afterGenerationRename &&
+              !options.afterCommit
+            ) {
+              try {
+                if (currentConfigurationGeneration(infraDir) === options.expectedCurrentRevisionId)
+                  pendingNonCommits.set(
+                    error,
+                    Object.freeze({
+                      infraDir,
+                      installationId: options.installationId,
+                      operationKey: options.operationKey,
+                      revisionId: options.revisionId,
+                      expectedCurrentRevisionId: options.expectedCurrentRevisionId,
+                      result: Object.freeze({ ...error.result }),
+                    }),
+                  );
+              } catch {
+                /* An unreadable pointer cannot prove nonpublication. */
+              }
+            }
+            throw error;
+          });
         return pending;
       },
-    });
+    };
+    liveWriters.add(writer);
+    value = await run(writer);
   } catch (error) {
     failure =
       error instanceof Error
@@ -150,6 +239,7 @@ export async function withConfigurationGenerationWriter<T>(
         : new Error("Configuration generation failed", { cause: error });
   }
   active = false;
+  if (writer) liveWriters.delete(writer);
   // Even a misbehaving callback that did not await commit cannot release its fence early.
   try {
     await pending;
@@ -191,10 +281,22 @@ export async function withConfigurationGenerationWriter<T>(
               reason: failure instanceof ConfigurationWriterBusyError ? "busy" : "failed",
               cleanupFailed: false,
             };
-    throw new ConfigurationGenerationError(
+    const wrapped = new ConfigurationGenerationError(
       { ...result, cleanupFailed: result.cleanupFailed || cleanupFailed },
       failure,
     );
+    const original = failure instanceof Error ? pendingNonCommits.get(failure) : undefined;
+    if (
+      original &&
+      !cleanupFailed &&
+      wrapped.result.outcome === "not_committed" &&
+      !wrapped.result.cleanupFailed
+    ) {
+      const proof = Object.freeze({}) as OriginalConfigurationGenerationNonCommit;
+      nonCommitSources.set(proof, original);
+      nonCommitErrors.set(wrapped, proof);
+    }
+    throw wrapped;
   }
   return value;
 }

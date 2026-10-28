@@ -105,10 +105,15 @@ export const serviceAdminOperations = {
     method: "POST",
     path: "/api/admin/services/:id/config",
     auth: "admin",
-    request: { params: adminServiceParamsSchema, body: adminServiceConfigUpdateSchema },
+    request: {
+      params: adminServiceParamsSchema,
+      body: adminServiceConfigUpdateSchema,
+      headers: adminServiceIdempotencyHeadersSchema,
+    },
     responses: {
       ...adminCommonResponses,
       200: adminJson(adminServiceOkSchema),
+      409: adminJson(httpErrorSchema),
       404: adminJson(httpErrorSchema),
       400: adminJson(z.union([httpErrorSchema, adminServiceValidationErrorSchema])),
     },
@@ -128,24 +133,32 @@ export const serviceAdminOperations = {
     method: "PUT",
     path: "/api/admin/services/:id/credentials/:key",
     auth: "admin",
-    request: { params: adminServiceCredentialParamsSchema, body: adminServiceCredentialSetSchema },
+    request: {
+      params: adminServiceCredentialParamsSchema,
+      body: adminServiceCredentialSetSchema,
+      headers: adminServiceIdempotencyHeadersSchema,
+    },
     responses: {
       ...adminCommonResponses,
       200: adminJson(adminServiceCredentialChangedSchema),
       404: adminJson(httpErrorSchema),
-      409: adminJson(adminServiceCredentialManagedSchema),
+      409: adminJson(z.union([adminServiceCredentialManagedSchema, httpErrorSchema])),
     },
   },
   deleteAdminServiceCredential: {
     method: "DELETE",
     path: "/api/admin/services/:id/credentials/:key",
     auth: "admin",
-    request: { params: adminServiceCredentialParamsSchema, body: adminServiceEmptyMutationSchema },
+    request: {
+      params: adminServiceCredentialParamsSchema,
+      body: adminServiceEmptyMutationSchema,
+      headers: adminServiceIdempotencyHeadersSchema,
+    },
     responses: {
       ...adminCommonResponses,
       200: adminJson(adminServiceCredentialChangedSchema),
       404: adminJson(httpErrorSchema),
-      409: adminJson(adminServiceCredentialManagedSchema),
+      409: adminJson(z.union([adminServiceCredentialManagedSchema, httpErrorSchema])),
     },
   },
   streamAdminServiceLogs: {
@@ -211,10 +224,14 @@ export const serviceAdminOperations = {
     method: "PUT",
     path: "/api/admin/services/selection",
     auth: "admin",
-    request: { body: adminServiceSelectionSetSchema },
+    request: {
+      body: adminServiceSelectionSetSchema,
+      headers: adminServiceIdempotencyHeadersSchema,
+    },
     responses: {
       ...adminCommonResponses,
       200: adminJson(adminServiceSelectionUpdatedSchema),
+      409: adminJson(httpErrorSchema),
       503: adminJson(httpErrorSchema),
     },
   },
@@ -281,6 +298,7 @@ export const serviceAdminOperations = {
     responses: {
       ...adminCommonResponses,
       200: adminJson(adminServiceComposeStartedSchema),
+      409: adminJson(httpErrorSchema),
       400: adminJson(z.union([httpErrorSchema, adminServiceFailureSchema])),
     },
   },

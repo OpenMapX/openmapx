@@ -7,6 +7,16 @@ import {
 } from "../admin-job-ops";
 import type { JobContext } from "../job-runner";
 
+const previousAuthSecret = vi.hoisted(() => {
+  const previous = process.env.BETTER_AUTH_SECRET;
+  process.env.BETTER_AUTH_SECRET ??= "task012-unit-only-synthetic-auth-secret";
+  return { previous };
+});
+afterAll(() => {
+  if (previousAuthSecret.previous === undefined) delete process.env.BETTER_AUTH_SECRET;
+  else process.env.BETTER_AUTH_SECRET = previousAuthSecret.previous;
+});
+
 let fixtureRoot: string, previousToken: string | undefined;
 beforeAll(async () => {
   const { mkdtemp, writeFile } = await import("node:fs/promises"),
@@ -572,8 +582,10 @@ it("retains a service workflow parent budget beyond its short render child", asy
       ctx,
       {
         kind: "stack.render",
-        revisionId: "generation",
+        revisionId: `cfg1_${"a".repeat(43)}`,
         expectedCurrentRevisionId: null,
+        expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+        coordinatorMode: "ensure-running",
       },
       "opk1_renderAttempt12345",
     );
@@ -588,7 +600,11 @@ it("retains a service workflow parent budget beyond its short render child", asy
     now.mockReturnValue(1_800_000_000_000 + opsExecutionBudget("stack.render").processMs);
     const start = prepareApiJobChildAttempt(
       ctx,
-      { kind: "service.start", serviceId: "tileserver" },
+      {
+        kind: "service.start",
+        serviceId: "tileserver",
+        expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+      },
       "opk1_serviceAttempt1234",
     );
     expect(start?.parentDeadlineAt).toBe(render?.parentDeadlineAt);

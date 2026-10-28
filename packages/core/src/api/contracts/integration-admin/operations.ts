@@ -13,6 +13,7 @@ import {
   adminIntegrationDetailSchema,
   adminIntegrationEmptyMutationSchema,
   adminIntegrationEnvVarsSchema,
+  adminIntegrationIdempotencyHeadersSchema,
   adminIntegrationImportFailureSchema,
   adminIntegrationParamsSchema,
   adminIntegrationRefParamsSchema,
@@ -44,7 +45,11 @@ const mutation = {
   params: adminIntegrationParamsSchema,
   body: adminIntegrationEmptyMutationSchema,
 };
-const reloaded = { ...missing, 200: adminJson(adminIntegrationReloadResultSchema) };
+const reloaded = {
+  ...missing,
+  200: adminJson(adminIntegrationReloadResultSchema),
+  409: adminJson(httpErrorSchema),
+};
 const ok = adminJson(z.strictObject({ ok: z.literal(true) }));
 
 /** Complete integration/credential/overview family. Authentication metadata never enforces access. */
@@ -78,12 +83,15 @@ export const integrationAdminOperations = {
     method: "POST",
     path: "/api/admin/integrations/import",
     auth: "admin",
-    request: { body: adminIntegrationConfigImportSchema },
+    request: {
+      body: adminIntegrationConfigImportSchema,
+      headers: adminIntegrationIdempotencyHeadersSchema,
+    },
     responses: {
       ...common,
       400: configErrors,
       200: adminJson(adminIntegrationConfigImportedSchema),
-      409: adminJson(adminIntegrationImportFailureSchema),
+      409: adminJson(z.union([adminIntegrationImportFailureSchema, httpErrorSchema])),
     },
   },
   runAdminIntegrationHealthChecks: {
@@ -104,25 +112,30 @@ export const integrationAdminOperations = {
     method: "PATCH",
     path: "/api/admin/integrations/:id/config",
     auth: "admin",
-    request: { params: adminIntegrationParamsSchema, body: adminIntegrationConfigPatchSchema },
+    request: {
+      params: adminIntegrationParamsSchema,
+      body: adminIntegrationConfigPatchSchema,
+      headers: adminIntegrationIdempotencyHeadersSchema,
+    },
     responses: {
       ...missing,
       400: configErrors,
       200: adminJson(adminIntegrationConfigUpdatedSchema),
+      409: adminJson(httpErrorSchema),
     },
   },
   enableAdminIntegration: {
     method: "POST",
     path: "/api/admin/integrations/:id/enable",
     auth: "admin",
-    request: mutation,
+    request: { ...mutation, headers: adminIntegrationIdempotencyHeadersSchema },
     responses: reloaded,
   },
   disableAdminIntegration: {
     method: "POST",
     path: "/api/admin/integrations/:id/disable",
     auth: "admin",
-    request: mutation,
+    request: { ...mutation, headers: adminIntegrationIdempotencyHeadersSchema },
     responses: reloaded,
   },
   getAdminIntegrationHealth: {
@@ -204,6 +217,7 @@ export const integrationAdminOperations = {
     path: "/api/admin/credentials/:integrationId/:key",
     auth: "admin",
     request: {
+      headers: adminIntegrationIdempotencyHeadersSchema,
       params: adminIntegrationCredentialParamsSchema,
       body: adminIntegrationCredentialSetSchema,
     },
@@ -217,6 +231,7 @@ export const integrationAdminOperations = {
     path: "/api/admin/credentials/:integrationId/:key",
     auth: "admin",
     request: {
+      headers: adminIntegrationIdempotencyHeadersSchema,
       params: adminIntegrationCredentialParamsSchema,
       body: adminIntegrationEmptyMutationSchema,
     },

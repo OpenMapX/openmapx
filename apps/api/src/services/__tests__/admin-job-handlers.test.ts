@@ -2,6 +2,11 @@ import Fastify from "fastify";
 import { describe, expect, it, vi } from "vitest";
 
 const runCliMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const preparedRevision = `cfg1_${"p".repeat(43)}`;
+const prepareGenerationMock = vi.hoisted(() => vi.fn());
+vi.mock("../service-preparation", () => ({
+  prepareServiceGeneration: (...args: unknown[]) => prepareGenerationMock(...args),
+}));
 const runAdminOperationMock = vi.hoisted(() =>
   vi
     .fn()
@@ -344,6 +349,58 @@ describe("admin job handlers", () => {
   });
 
   describe("bulk service operations", () => {
+    it("prepares one full generation before bulk Start and carries it to deterministic target children", async () => {
+      prepareGenerationMock.mockReset().mockResolvedValue({
+        revisionId: preparedRevision,
+        coordinatorMode: "ensure-running",
+        hardlinks: { applied: true, entries: 0, linked: 0, skipped: 0, pruned: 0 },
+      });
+      runAdminOperationMock.mockClear();
+      const ctx = {
+        jobId: "bulk-start-fixture",
+        payload: { action: "start", serviceIds: ["valhalla", "osrm"] },
+        signal: new AbortController().signal,
+        log: vi.fn(),
+        setProgress: vi.fn(),
+        checkpoint: vi.fn(),
+      };
+      await handleServiceBulkJob(ctx);
+      expect(prepareGenerationMock).toHaveBeenCalledTimes(1);
+      expect(prepareGenerationMock).toHaveBeenCalledWith(ctx, "bulk-start", {
+        coordinatorMode: "ensure-running",
+      });
+      expect(runAdminOperationMock.mock.calls.map((call) => call[1])).toEqual([
+        {
+          kind: "service.start",
+          serviceId: "valhalla",
+          expectedConfigurationRevisionId: preparedRevision,
+        },
+        {
+          kind: "service.start",
+          serviceId: "osrm",
+          expectedConfigurationRevisionId: preparedRevision,
+        },
+      ]);
+      expect(runAdminOperationMock.mock.calls.map((call) => call[3])).toEqual([
+        { durableIdentity: "valhalla" },
+        { durableIdentity: "osrm" },
+      ]);
+    });
+    it("starts no bulk target when full preparation or hardlinks fail", async () => {
+      prepareGenerationMock.mockReset().mockRejectedValue(new Error("synthetic hardlink failure"));
+      runAdminOperationMock.mockClear();
+      await expect(
+        handleServiceBulkJob({
+          jobId: "bulk-start-refusal",
+          payload: { action: "start", serviceIds: ["valhalla", "osrm"] },
+          signal: new AbortController().signal,
+          log: vi.fn(),
+          setProgress: vi.fn(),
+          checkpoint: vi.fn(),
+        }),
+      ).rejects.toThrow("synthetic hardlink failure");
+      expect(runAdminOperationMock).not.toHaveBeenCalled();
+    });
     it("does not continue a batch after unknown admission even with continueOnError", async () => {
       const { OpsObservationPending } = await import("../ops-client");
       const pending = new OpsObservationPending(

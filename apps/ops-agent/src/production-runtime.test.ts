@@ -1,6 +1,17 @@
+import { execFileSync, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   closeControlInstallation,
   openControlInstallation,
@@ -8,28 +19,444 @@ import {
 } from "@openmapx/core/build-artifacts";
 import { createControlRootOperationKey, type OpsOperation } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { parse as parseYaml } from "yaml";
 import { installedCompose } from "../../../packages/core/src/services/__fixtures__/compose-path-host";
 import { ownedComposePathRuntime } from "./__fixtures__/owned-compose-path-runtime";
 import { ownedServiceHost } from "./__fixtures__/owned-service-host";
+import { createAgentHandoffBindings, createDefaultReleaseEffects } from "./administrative-runtime";
+import { agentHandoffPath, readAgentHandoff, writeAgentHandoff } from "./agent-handoff";
+import { startOpsAgentServer } from "./bootstrap";
 import { runContainedProcess } from "./docker-runtime";
 import { openOpsJobJournal } from "./journal";
-import { createProductionOpsRuntime } from "./production-runtime";
-import { dispatchOpsOperation } from "./runtime";
+import { createProductionOpsRuntime, productionReleaseEffects } from "./production-runtime";
+import { dispatchOpsOperation, OpsNotWiredError } from "./runtime";
 import { buildOpsAgentServer } from "./server";
 import { initializeTrustedConfigurationRuntime } from "./trusted-config-runtime";
 
 const roots: string[] = [];
-async function fixture() {
-  const host = await ownedServiceHost();
+async function fixture(options: Parameters<typeof ownedServiceHost>[0] = {}) {
+  const host = await ownedServiceHost(options);
   roots.push(host.root);
   return host;
 }
 afterEach(() => {
+  vi.unstubAllEnvs();
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
 describe("assembled production service authority", () => {
+  it("refuses unsupported legacy release mutation without staging and keeps inspection available", async () => {
+    const host = await fixture();
+    const effects = productionReleaseEffects(host.runtime);
+    const io = { signal: new AbortController().signal, emitLog() {} };
+    const before = services.currentConfigurationGeneration(host.infraDir);
+    host.calls.length = 0;
+    await expect(effects.apply("release-unavailable", ["app-api"], io)).rejects.toBeInstanceOf(
+      OpsNotWiredError,
+    );
+    await expect(
+      effects.updateAgent?.(
+        {
+          releaseId: "release-unavailable",
+          expectedDigest: "a".repeat(64),
+          handoffId: "handoff-unavailable",
+          otherActiveOperations: 0,
+        },
+        io,
+      ),
+    ).rejects.toBeInstanceOf(OpsNotWiredError);
+    await expect(
+      dispatchOpsOperation(
+        host.runtime,
+        {
+          kind: "system.update",
+          releaseId: "release-unavailable",
+          expectedDigest: "a".repeat(64),
+          createBackup: true,
+          backupId: "unavailable-backup",
+        },
+        await host.context({ kind: "configuration.inspect" }),
+      ),
+    ).rejects.toBeInstanceOf(OpsNotWiredError);
+    expect(
+      host.calls.every(
+        (args) =>
+          (args[0] === "container" && ["ls", "inspect"].includes(args[1] ?? "")) ||
+          (args[0] === "image" && args[1] === "inspect") ||
+          (args[0] === "compose" && args.includes("config")),
+      ),
+    ).toBe(true);
+    expect(existsSync(join(host.infraDir, ".ops-agent-releases", "transaction.json"))).toBe(false);
+    expect(existsSync(agentHandoffPath(host.root))).toBe(false);
+    expect(services.currentConfigurationGeneration(host.infraDir)).toBe(before);
+    await expect(effects.inspect()).resolves.toBeDefined();
+    await expect(effects.runtimeInspect?.()).resolves.toEqual({});
+    await expect(effects.inspectSystem(io)).resolves.toMatchObject({ maintenanceReady: false });
+  });
+
+  it("production helper entry and write bindings preserve original handoff evidence", async () => {
+    const host = await fixture();
+    const record = {
+      version: 1 as const,
+      handoffId: "handoff-unavailable",
+      releaseId: "release-unavailable",
+      digest: "a".repeat(64),
+      phase: "launched" as const,
+      previousOverlay: "previous\n",
+      createdAt: "2026-10-20T00:00:00.000Z",
+      updatedAt: "2026-10-20T00:00:00.000Z",
+    };
+    mkdirSync(dirname(agentHandoffPath(host.root)), { recursive: true, mode: 0o700 });
+    writeAgentHandoff(host.root, record);
+    const path = agentHandoffPath(host.root),
+      bytes = readFileSync(path);
+    const bindings = createAgentHandoffBindings(host.root);
+    expect(() => bindings.writeOverlay(record.releaseId, record.digest)).toThrow(OpsNotWiredError);
+    expect(() => bindings.restoreOverlay(record.previousOverlay)).toThrow(OpsNotWiredError);
+    expect(() => bindings.assertAvailable()).toThrow(OpsNotWiredError);
+    const entry = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        createRequire(import.meta.url).resolve("tsx/esm"),
+        fileURLToPath(new URL("./agent-handoff-main.ts", import.meta.url)),
+      ],
+      {
+        env: {
+          ...process.env,
+          OPENMAPX_ROOT_DIR: host.root,
+          OPS_AGENT_HANDOFF_ID: record.handoffId,
+        },
+        encoding: "utf8",
+        timeout: 15000,
+      },
+    );
+    expect(entry.status, entry.stderr).toBe(1);
+    expect(entry.stderr).toContain("Typed adapter is not wired");
+    expect(readFileSync(path)).toEqual(bytes);
+    expect(readAgentHandoff(host.root)).toEqual(record);
+    expect(existsSync(host.stack.composeReleasePath)).toBe(false);
+  });
+
+  it("production startup preserves actual interrupted legacy transaction and handoff while reads remain available", async () => {
+    const host = await fixture();
+    const directory = join(host.infraDir, ".ops-agent-releases");
+    const manifest = services.parseReleaseManifest(
+      JSON.stringify({
+        schemaVersion: 1,
+        release: "release-legacy",
+        images: Object.fromEntries(
+          services.RELEASE_IMAGE_NAMES.map((name) => [
+            name,
+            `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`,
+          ]),
+        ),
+        privacyReleaseValidation: {
+          version: 1,
+          sourceBuildFingerprint: "a".repeat(64),
+          validatedAt: "2026-09-05T12:00:00.000Z",
+          checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
+        },
+      }),
+    );
+    writeFileSync(
+      join(directory, "release-legacy.json"),
+      services.canonicalReleaseManifest(manifest),
+      { mode: 0o600 },
+    );
+    const legacy = createDefaultReleaseEffects(
+      host.root,
+      async () => {
+        throw Error("No CLI expected before prepared");
+      },
+      {
+        afterReleasePhase(phase) {
+          if (phase === "prepared") throw Error("actual legacy prepared interruption");
+        },
+      },
+    );
+    await expect(
+      legacy.apply(
+        manifest.release,
+        ["app-api"],
+        await host.context({ kind: "configuration.inspect" }),
+      ),
+    ).rejects.toThrow("actual legacy prepared interruption");
+    mkdirSync(dirname(agentHandoffPath(host.root)), { recursive: true, mode: 0o700 });
+    writeAgentHandoff(host.root, {
+      version: 1,
+      handoffId: "handoff-legacy",
+      releaseId: manifest.release,
+      digest: "a".repeat(64),
+      phase: "overlay_written",
+      previousOverlay: null,
+      createdAt: "2026-10-20T00:00:00.000Z",
+      updatedAt: "2026-10-20T00:00:00.000Z",
+    });
+    const transaction = join(directory, "transaction.json"),
+      handoff = agentHandoffPath(host.root);
+    const before = [readFileSync(transaction), readFileSync(handoff)];
+    const restarted = await createProductionOpsRuntime({
+      rootDir: host.root,
+      stack: host.stack,
+      loadAuthority: host.loadAuthority,
+      communityRepositories: host.repositories,
+      docker: { execFile: host.execFile, fileExists: existsSync },
+    });
+    const effects = productionReleaseEffects(restarted);
+    host.calls.length = 0;
+    await expect(effects.initialize?.()).rejects.toMatchObject({ errorClass: "recovery_required" });
+    await expect(effects.inspect()).resolves.toMatchObject({
+      availableReleaseId: manifest.release,
+    });
+    await expect(effects.runtimeInspect?.()).resolves.toEqual({});
+    await expect(effects.inspectAgentHandoff?.("handoff-legacy")).resolves.toMatchObject({
+      phase: "overlay_written",
+    });
+    expect([readFileSync(transaction), readFileSync(handoff)]).toEqual(before);
+    expect(host.calls).toEqual([]);
+    const app = await startOpsAgentServer(
+      {
+        tokens: {
+          api: Buffer.alloc(32, 1).toString("base64url"),
+          "data-manager": Buffer.alloc(32, 2).toString("base64url"),
+        },
+        runtime: restarted,
+        resourcePolicy: { allowGlobal: () => true, allowService: () => true },
+      },
+      effects,
+      { host: "127.0.0.1", port: 0 },
+    );
+    try {
+      expect((await app.inject({ method: "GET", url: "/health" })).json()).toMatchObject({
+        ok: true,
+        releaseRecovery: { ready: false, reason: "recovery_required" },
+      });
+      expect([readFileSync(transaction), readFileSync(handoff)]).toEqual(before);
+    } finally {
+      await app.close();
+    }
+  });
+  it("production service.update pulls then prepares and recreates", async () => {
+    const host = await fixture({
+      defaultCliEntry: fileURLToPath(new URL("./index.ts", import.meta.url)),
+      actualComposeConfig: true,
+    });
+    const bin = join(host.root, "fake-bin"),
+      trace = join(host.root, "docker-trace.jsonl");
+    mkdirSync(bin);
+    const docker = join(bin, "docker"),
+      realDocker = execFileSync("which", ["docker"], { encoding: "utf8" }).trim();
+    writeFileSync(
+      docker,
+      `#!${process.execPath}\nconst fs=require("node:fs"),cp=require("node:child_process"),a=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(trace)},JSON.stringify(a)+"\\n");if(a[0]==="compose"&&a.includes("config")){const r=cp.spawnSync(${JSON.stringify(realDocker)},a,{encoding:"utf8"});process.stdout.write(r.stdout||"");process.stderr.write(r.stderr||"");process.exit(r.status??1);}\n`,
+      { mode: 0o700 },
+    );
+    chmodSync(docker, 0o700);
+    for (const [key, value] of Object.entries({
+      PATH: `${bin}:${process.env.PATH}`,
+      OPENMAPX_ROOT_DIR: host.root,
+      OPENMAPX_RELEASE: "local",
+      DOMAIN: "example.test",
+      POSTGRES_PASSWORD: "p".repeat(24),
+      BETTER_AUTH_SECRET: "a".repeat(32),
+      DATA_MANAGER_AUTH_TOKEN: "d".repeat(32),
+      OPENMAPX_ENABLED_SERVICES: "",
+    }))
+      vi.stubEnv(key, value);
+    const installation = openControlInstallation({
+      infraDir: host.infraDir,
+      role: "ops-agent",
+      serviceIds: host.loaded.map((s) => s.manifest.id),
+    });
+    const journal = await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json"));
+    const app = buildOpsAgentServer({
+      tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+      runtime: host.runtime,
+      resourceClaimer: host.claimer,
+      journal,
+      controlInstallation: installation,
+    });
+    const operation = {
+      kind: "service.update",
+      serviceId: "motis",
+      expectedConfigurationRevisionId: host.initial.revisionId,
+    } as const;
+    const requestedDeadlineAt = Date.now() + 90000,
+      headers = { authorization: `Bearer ${host.token}`, "x-ops-protocol-version": "2" };
+    try {
+      const submitted = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers,
+        payload: {
+          version: 2,
+          requestId: "ops1_productionUpdate0000001",
+          operationKey: createControlRootOperationKey({
+            notAfter: requestedDeadlineAt,
+            nonce: randomBytes(16),
+          }),
+          issuedAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 20000).toISOString(),
+          execution: { requestedDeadlineAt },
+          operation,
+        },
+      });
+      expect(submitted.statusCode, submitted.body).toBe(202);
+      const id = submitted.json().result.operationId,
+        until = Date.now() + 45000;
+      let status: {
+        state: string;
+        result?: { changed: boolean; revisionId: string };
+        failureResult?: unknown;
+      } = { state: "pending" };
+      do {
+        status = (await app.inject({ method: "GET", url: `/v1/operations/${id}`, headers })).json()
+          .result;
+        if (!["succeeded", "failed", "timed_out"].includes(status.state))
+          await new Promise((resolve) => setTimeout(resolve, 20));
+      } while (!["succeeded", "failed", "timed_out"].includes(status.state) && Date.now() < until);
+      expect(status).toMatchObject({
+        state: "succeeded",
+        result: { changed: true, revisionId: expect.stringMatching(/^cfg1_/) },
+      });
+      expect(status.result?.revisionId).toBe(
+        services.currentConfigurationGeneration(host.infraDir),
+      );
+      expect(status.result?.revisionId).not.toBe(host.initial.revisionId);
+      const calls = readFileSync(trace, "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as string[]);
+      const effects = calls.filter(
+        (args) => args.includes("pull") || args.includes("--force-recreate"),
+      );
+      expect(effects).toHaveLength(2);
+      expect(effects[0]!.slice(-2)).toEqual(["pull", "motis"]);
+      expect(effects[1]!.slice(-4)).toEqual(["up", "-d", "--force-recreate", "motis"]);
+      expect(calls.some((args) => args.includes("config"))).toBe(true);
+      expect(
+        JSON.parse(
+          readFileSync(
+            services.currentConfigurationFile(host.infraDir, services.SERVICE_SELECTION_FILE),
+            "utf8",
+          ),
+        ).selected,
+      ).toContain("motis");
+    } finally {
+      await app.close();
+      closeControlInstallation(installation);
+    }
+  }, 60000);
+  it("refuses a declared indirect coordinator recreation at actual production registry admission", async () => {
+    const host = await fixture({
+        withCoordinator: true,
+        coordinatorDependency: true,
+        actualComposeConfig: true,
+      }),
+      operation = {
+        kind: "service.start",
+        serviceId: "motis",
+        expectedConfigurationRevisionId: host.initial.revisionId,
+      } as const;
+    const claim = await host.claimer.claim(
+      operation,
+      (await import("@openmapx/core/ops")).opsOperationFingerprint(operation),
+      new AbortController().signal,
+      {
+        role: "api",
+        operationKey: (await import("./__fixtures__/execution")).testExecution().operationKey,
+      },
+    );
+    expect(claim).toBeNull();
+    const inspect = { kind: "services.inspect" } as const,
+      status = await dispatchOpsOperation(host.runtime, inspect, await host.context(inspect)),
+      motis = status.services.find((service) => service.serviceId === "motis");
+    for (const action of ["start", "apply", "update"] as const)
+      expect(motis?.actions[action]).toMatchObject({ available: false, reason: "unavailable" });
+    expect(host.calls.some((args) => args.includes("up") || args.includes("pull"))).toBe(false);
+  }, 60000);
+  it("refuses a foreign native Compose dependency before an actual normal Start can recreate the coordinator", async () => {
+    const host = await fixture({ withCoordinator: true, actualComposeConfig: true }),
+      compose = parseYaml(readFileSync(host.firstCompose, "utf8"));
+    compose.services.motis.depends_on = {
+      "data-manager": { condition: "service_started", required: true },
+    };
+    writeFileSync(host.firstCompose, JSON.stringify(compose));
+    mkdirSync(join(host.infraDir, "data/ops-agent"), { recursive: true, mode: 0o700 });
+    const installation = openControlInstallation({
+        infraDir: host.infraDir,
+        role: "ops-agent",
+        serviceIds: host.loaded.map((service) => service.manifest.id),
+      }),
+      app = buildOpsAgentServer({
+        tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+        runtime: host.runtime,
+        resourceClaimer: host.claimer,
+        journal: await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json")),
+        controlInstallation: installation,
+      }),
+      deadline = Date.now() + 60000,
+      headers = { authorization: `Bearer ${host.token}`, "x-ops-protocol-version": "2" };
+    try {
+      const submitted = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers,
+        payload: {
+          version: 2,
+          requestId: "ops1_indirectCoordinator0001",
+          operationKey: createControlRootOperationKey({
+            notAfter: deadline,
+            nonce: randomBytes(16),
+          }),
+          issuedAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 20000).toISOString(),
+          execution: { requestedDeadlineAt: deadline },
+          operation: {
+            kind: "service.start",
+            serviceId: "motis",
+            expectedConfigurationRevisionId: host.initial.revisionId,
+          },
+        },
+      });
+      expect(submitted.statusCode).toBe(202);
+      let state = "queued";
+      const until = Date.now() + 45000;
+      while (!["succeeded", "failed", "timed_out"].includes(state)) {
+        state = (
+          await app.inject({
+            method: "GET",
+            url: `/v1/operations/${submitted.json().result.operationId}`,
+            headers,
+          })
+        ).json().result.state;
+        if (Date.now() > until) throw Error("Actual indirect Start did not settle");
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(state).toBe("failed");
+      expect(host.calls.some((args) => args.includes("up"))).toBe(false);
+    } finally {
+      await app.close();
+      closeControlInstallation(installation);
+    }
+  }, 60000);
+  it("refuses a prepared Start after a competing generation before any up effect", async () => {
+    const host = await fixture();
+    const operation = {
+      kind: "service.start",
+      serviceId: "motis",
+      expectedConfigurationRevisionId: host.initial.revisionId,
+    } as const;
+    const context = await host.context(operation);
+    expect(await host.select(["motis"])).toMatchObject({ outcome: "committed" });
+    host.calls.length = 0;
+    await expect(dispatchOpsOperation(host.runtime, operation, context)).rejects.toMatchObject({
+      errorClass: "conflict",
+    });
+    expect(host.calls.some((args) => args.includes("up"))).toBe(false);
+  });
   it("executes Stop and post-stop Logs for a deselected owned container through the installed adapters", async () => {
     const host = await fixture();
     await host.deselect();
@@ -68,7 +495,7 @@ describe("assembled production service authority", () => {
   it("authorizes deselected Stop and post-stop Logs through authenticated HTTP with original control authority", async () => {
     const host = await fixture();
     await host.deselect();
-    mkdirSync(join(host.infraDir, "data"), { mode: 0o700 });
+    mkdirSync(join(host.infraDir, "data"), { mode: 0o700, recursive: true });
     await provisionControlInstallation(host.infraDir);
     const installation = openControlInstallation({
       infraDir: host.infraDir,
@@ -179,7 +606,11 @@ describe("assembled production service authority", () => {
 
   it("rechecks deselection after admission before invoking a lifecycle effect", async () => {
     const host = await fixture();
-    const operation = { kind: "service.start", serviceId: "motis" } as const;
+    const operation = {
+      kind: "service.start",
+      serviceId: "motis",
+      expectedConfigurationRevisionId: services.currentConfigurationGeneration(host.infraDir)!,
+    } as const;
     const context = await host.context(operation);
     await host.deselect();
     await expect(dispatchOpsOperation(host.runtime, operation, context)).rejects.toThrow(
@@ -339,7 +770,7 @@ describe("assembled production service authority", () => {
 });
 
 async function installedCommunity() {
-  const host = await fixture();
+  const host = await fixture({ actualComposeConfig: true });
   host.setRows([]);
   const publication = await host.repositories.publish(
     {
@@ -367,7 +798,11 @@ async function installedCommunity() {
     repository: publication.repository,
     extensionId: "test-extension",
   } as const;
-  const start = { kind: "service.start", serviceId: "community-live" } as const;
+  const start = {
+    kind: "service.start",
+    serviceId: "community-live",
+    expectedConfigurationRevisionId: services.currentConfigurationGeneration(host.infraDir)!,
+  } as const;
   const checkout = join(host.root, "services/.community", publication.repository);
   const record = join(
     host.root,
@@ -402,7 +837,11 @@ describe("assembled lifecycle/removal exclusion", () => {
       host.stack.composeReleasePath,
       "services:\n  motis:\n    depends_on:\n      community-live:\n        condition: service_started\n",
     );
-    const start = { kind: "service.start", serviceId: "motis" } as const;
+    const start = {
+      kind: "service.start",
+      serviceId: "motis",
+      expectedConfigurationRevisionId: services.currentConfigurationGeneration(host.infraDir)!,
+    } as const;
     const entered = Promise.withResolvers<void>(),
       finish = Promise.withResolvers<void>();
     host.setCreatingProcess(async () => {
@@ -482,7 +921,10 @@ describe("assembled lifecycle/removal exclusion", () => {
     const { host, start, remove, checkout, create } = await installedCommunity();
     const startContext = await host.context(start),
       removeContext = await host.context(remove);
-    const stackStart = { kind: "stack.start" } as const;
+    const stackStart = {
+      kind: "stack.start",
+      expectedConfigurationRevisionId: services.currentConfigurationGeneration(host.infraDir)!,
+    } as const;
     const stackContext = await host.context(stackStart);
     const entered = Promise.withResolvers<void>(),
       finish = Promise.withResolvers<void>();
@@ -619,7 +1061,10 @@ describe("settlement and cancellation at the installed lifecycle boundary", () =
     await expect(
       dispatchOpsOperation(host.runtime, start, await host.context(start)),
     ).rejects.toThrow("Contained process failed");
-    const global = { kind: "stack.start" } as const;
+    const global = {
+      kind: "stack.start",
+      expectedConfigurationRevisionId: services.currentConfigurationGeneration(host.infraDir)!,
+    } as const;
     await expect(
       dispatchOpsOperation(host.runtime, global, await host.context(global)),
     ).resolves.toMatchObject({ changed: true });

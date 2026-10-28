@@ -20,6 +20,9 @@ async function main(): Promise<number> {
   }
   const journal = join(rootDir, "infra", "docker", "data", "ops-agent", "jobs-v1.json");
   const bindings = createAgentHandoffBindings(rootDir);
+  // Refuse before the legacy helper can advance a phase, drain, recreate or
+  // falsely report rollback. Task08.3 owns the real guarded installer.
+  bindings.assertAvailable();
   const phase = await runAgentHandoff({
     rootDir,
     handoffId,

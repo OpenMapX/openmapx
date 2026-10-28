@@ -27,6 +27,7 @@ import {
 } from "./control-authority";
 import {
   acquireArtifactTargetLease,
+  closeArtifactTargetLeaseHandle,
   delegateArtifactTargetLease,
   releaseArtifactTargetLease,
   settleArtifactTargetLeaseChild,
@@ -120,7 +121,11 @@ describe("separate-process physical-mount delegation", () => {
       const operation =
         role === "data-manager"
           ? { kind: "transit-sync" }
-          : { kind: "service.start", serviceId: "motis" };
+          : {
+              kind: "service.start",
+              serviceId: "motis",
+              expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+            };
       const kind = operation.kind;
       const rootRef = ref(role, kind, operation);
       const childOperation =
@@ -287,7 +292,11 @@ it.each([false, true])(
   "certifies a depth-two hardlink leaf across processes (cancel intermediate: %s)",
   async (cancelIntermediate) => {
     const c = await import("./control-authority");
-    const operation = { kind: "service.start" as const, serviceId: "motis" };
+    const operation = {
+      kind: "service.start" as const,
+      serviceId: "motis",
+      expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+    };
     const execution = ref("ops-agent", operation.kind, operation);
     const cli = ref("host-cli", operation.kind, operation, execution, "lifecycle");
     const plan: ControlPlannedChild = {
@@ -662,7 +671,7 @@ it("keeps paired-pin approval a one-use leaf under its original activation root"
   await releaseArtifactTargetLease(lease);
   c.closeControlInstallation(installation);
 });
-it("settles the logical configuration-fence leaf without releasing the maintenance owner", async () => {
+it("rejects a logical configuration-fence delegation without the actual maintenance producer's owner", async () => {
   const c = await import("./control-authority");
   const operation = {
     kind: "configurationMaintenance.prepare",
@@ -705,38 +714,24 @@ it("settles the logical configuration-fence leaf without releasing the maintenan
   });
   const key = JSON.parse(readFileSync(join(root, "secrets/control-verifiers.json"), "utf8"))
     .publicKeys["data-manager"];
-  const assertion = await delegateArtifactTargetLease(lease, { ...plan, childPublicKey: key });
-  const envelope = JSON.parse(Buffer.from(assertion, "base64url").toString("utf8"));
-  const forged = Buffer.from(JSON.stringify({ ...envelope, signature: "a".repeat(86) })).toString(
-    "base64url",
-  );
-  const foreign = Buffer.from(
-    JSON.stringify({ ...envelope, installationId: randomUUID() }),
-  ).toString("base64url");
-  const input = {
-    infraDir: root,
-    role: "data-manager",
-    assertion,
-    execution: childRef,
-    kind: body.kind,
-    operation: body,
-    admittedAt: childRef.deadlineAt - 60000,
-  };
-  expect(await child({ ...input, assertion: forged })).toMatchObject({ ok: false });
-  expect(await child({ ...input, assertion: foreign })).toMatchObject({ ok: false });
-  expect(await child({ ...input, settle: true })).toMatchObject({ ok: true });
-  await expect(releaseArtifactTargetLease(lease)).rejects.toThrow(/settlement/);
-  c.retainControlEffectReceipt(authority, {
-    outcome: "failed_without_effect",
-    publication: "not_started",
-    receipt: { kind: "not-started" },
-  });
-  await settleArtifactTargetLeaseChild(
-    lease,
-    c.verifyControlEffectSettlement(installation, execution),
-  );
-  await releaseArtifactTargetLease(lease);
-  c.closeControlInstallation(installation);
+  try {
+    // A bare root/plan cannot impersonate the actual maintenance producer.
+    // Genuine short-leaf/SQL preparation, forged/foreign controls and held-root
+    // acceptance run through the owned API/agent/DM PostgreSQL fixture.
+    await expect(
+      delegateArtifactTargetLease(lease, { ...plan, childPublicKey: key }),
+    ).rejects.toThrow();
+    await expect(releaseArtifactTargetLease(lease)).rejects.toThrow();
+    expect(
+      readFileSync(
+        join(root, `data/.admin-target-control/leases/${lease.leaseId}/owner.json`),
+        "utf8",
+      ),
+    ).toContain(execution.operationKey);
+  } finally {
+    closeArtifactTargetLeaseHandle(lease);
+    c.closeControlInstallation(installation);
+  }
 });
 
 it("serializes a paused observer and a newer writer across actual processes", async () => {

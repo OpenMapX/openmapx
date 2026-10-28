@@ -4,7 +4,12 @@ import type { OwnedServiceSnapshot } from "./owned-services";
 export interface ServiceAuthority {
   revisionId: string;
   enabledServiceIds: ReadonlySet<string>;
-  services: readonly { serviceId: string; isBuiltIn: boolean; buildable: boolean }[];
+  services: readonly {
+    serviceId: string;
+    isBuiltIn: boolean;
+    buildable: boolean;
+    creationDependencies?: readonly string[];
+  }[];
 }
 
 const controlPlane = new Set(["ops-agent", "app-api", "traefik"]);
@@ -39,8 +44,22 @@ export function decideServiceAction(
   if (dependencies.has(service.serviceId)) return denied("host_only", "host");
   if (action !== "stop" && !authority.enabledServiceIds.has(service.serviceId))
     return denied("disabled");
-  // These workflows belong to 01.2/01.4. A route or a declared type is not an installer.
-  if (action === "update") return denied("unavailable");
+  // Pull-only DM staging needs Plan09 M3's purpose-bound producer. The installed
+  // coordinator Update's private checked submission is a separate fixed path.
+  if (service.serviceId === "data-manager" && action === "pull") return denied("unavailable");
+  if (service.serviceId === "data-manager" && (action === "apply" || action === "update"))
+    return {
+      available: true,
+      execution: "workflow",
+      reason: null,
+      workflow: action === "apply" ? "coordinator-apply" : "coordinator-update",
+    };
+  if (
+    ["start", "apply", "update"].includes(action) &&
+    service.serviceId !== "data-manager" &&
+    service.creationDependencies?.includes("data-manager")
+  )
+    return denied("unavailable");
   if (action === "build" && (!service.isBuiltIn || !service.buildable))
     return denied("not_buildable");
   if (action === "stop" || action === "restart") {

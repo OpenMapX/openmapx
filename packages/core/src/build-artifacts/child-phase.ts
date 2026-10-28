@@ -1,5 +1,19 @@
+import {
+  type ControlChildPhase,
+  type ControlChildReservation,
+  type ControlRecipient,
+  childPhaseKinds,
+  controlChildOperationKey,
+} from "./control-child-records";
+
+export {
+  type ControlChildReservation,
+  controlChildReservationSchema,
+} from "./control-child-records";
+
 /** Server-only fixed phase identities. An observation never mints a dispatch ticket. */
 import { z } from "zod";
+import { canonicalJson } from "../ops/canonical-json";
 import {
   type ExecutionRef,
   executionFingerprint,
@@ -7,17 +21,12 @@ import {
   normalizeExecutionAdmission,
   opsExecutionBudget,
 } from "../ops/execution-identity";
-import { canonicalJson } from "../ops/fingerprint";
 // biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
 import {
   assertControlDelegationForward,
   assertControlPublicationScope,
   attestParentExecution,
-  type ControlChildPhase,
   type ControlPlannedChild,
-  type ControlRecipient,
-  childPhaseKinds,
-  controlChildOperationKey,
   executionAuthorityState,
   readPrivateRecord,
   retainedControlParent,
@@ -37,7 +46,9 @@ import {
   validateOriginRecord,
   verifyControl,
 } from "./control-records";
+// biome-ignore-start lint/suspicious/noImportCycles: Reserved-child publication verifies original indexed bytes; family recovery consults the same admitted-child guards. Both calls are deferred until initialization completes.
 import { verifyFamilyOwnedRecord } from "./retention-family";
+// biome-ignore-end lint/suspicious/noImportCycles: Exact deferred original-owner/index guard join.
 // biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
 import {
   delegateArtifactTargetLease,
@@ -47,44 +58,6 @@ import {
 } from "./target-lease";
 // biome-ignore-end lint/suspicious/noImportCycles: Live protocol dependency described above.
 
-export type ControlChildReservation = {
-  version: 1;
-  phase: ControlChildPhase;
-  ordinal: number;
-  kind: string;
-  recipient: ControlRecipient;
-  serviceIds: readonly string[];
-  execution: Pick<ExecutionRef, "executor" | "principal" | "executionId" | "operationKey">;
-  operationFingerprint: string;
-};
-const address = z
-  .strictObject({
-    executor: executionRefSchema.shape.executor,
-    principal: executionRefSchema.shape.principal,
-    executionId: z.string(),
-    operationKey: executionRefSchema.shape.operationKey,
-  })
-  .refine((v) =>
-    v.executor === "ops-agent"
-      ? /^job1_[A-Za-z0-9_-]{16,64}$/.test(v.executionId)
-      : z.uuid().safeParse(v.executionId).success,
-  );
-export const controlChildReservationSchema: z.ZodType<ControlChildReservation> = z.lazy(() =>
-  z.strictObject({
-    version: z.literal(1),
-    phase: z.enum(Object.keys(childPhaseKinds) as [ControlChildPhase, ...ControlChildPhase[]]),
-    ordinal: z.number().int().min(0).max(63),
-    kind: z.string().min(1).max(128),
-    recipient: z.enum(["fixed-cli", "data-manager", "ops-agent", "configuration-helper"]),
-    serviceIds: z
-      .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
-      .min(1)
-      .max(256)
-      .refine((a) => a.every((v, i) => i === 0 || (a[i - 1] ?? v) < v)),
-    execution: address,
-    operationFingerprint: digest,
-  }),
-);
 export function validateControlChildReservations(input: {
   role: ControlRecipient | "host-cli";
   kind: string;
