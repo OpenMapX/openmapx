@@ -285,6 +285,11 @@
         }
       ]
     },
+    "healthCheckIntervalMs": {
+      "type": "integer",
+      "minimum": 60000,
+      "maximum": 9007199254740991
+    },
     "quality": {
       "type": "string",
       "enum": ["built-in", "community-verified", "community"]

@@ -419,13 +419,37 @@ export async function executeIntegrationHealthCheck(
   return results.filter((r): r is ServiceStatus => r !== null);
 }
 
+// Key by the loaded generation so a reload seeds fresh health immediately.
+const scheduledChecks = new WeakMap<LoadedIntegration, { startedAt: number; pending: boolean }>();
+
 export async function executeAllIntegrationHealthChecks(
   integrations: LoadedIntegration[],
+  options: { scheduled?: boolean } = {},
 ): Promise<ServiceStatus[]> {
-  const checks = integrations.filter((i) => i.manifest.healthCheck);
+  const now = Date.now();
+  const checks = integrations.filter((integration) => {
+    if (!integration.manifest.healthCheck) return false;
+    if (!options.scheduled) return true;
+    const previous = scheduledChecks.get(integration);
+    const interval = integration.manifest.healthCheckIntervalMs ?? 60_000;
+    if (previous && (previous.pending || now - previous.startedAt < interval)) return false;
+    scheduledChecks.set(integration, { startedAt: now, pending: true });
+    return true;
+  });
+  if (options.scheduled && checks.length === 0) {
+    return getCachedIntegrationHealthSnapshot(integrations).results;
+  }
   const results = await Promise.all(
     checks.map(async (integration) => {
-      const subResults = await executeIntegrationHealthCheck(integration);
+      let subResults: ServiceStatus[];
+      try {
+        subResults = await executeIntegrationHealthCheck(integration);
+      } finally {
+        if (options.scheduled) {
+          const state = scheduledChecks.get(integration);
+          if (state) state.pending = false;
+        }
+      }
       // Multi-check integrations (e.g. fuel with 4 country sub-checks) write
       // entries under composite ids `<integration>:<sub>`, never under the
       // bare id. The integration-list endpoint looks up the bare id, gets
@@ -454,7 +478,7 @@ export async function executeAllIntegrationHealthChecks(
   }
   healthCacheUpdatedAt = Date.now();
 
-  return filtered;
+  return options.scheduled ? getCachedIntegrationHealthSnapshot(integrations).results : filtered;
 }
 
 /**

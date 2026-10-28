@@ -364,6 +364,8 @@ export const integrationManifestSchema = z.object({
   configSchema: z.record(z.string(), z.unknown()).optional(),
 
   healthCheck: z.union([healthCheckSchema, z.array(healthCheckSchema)]).optional(),
+  /** Minimum time between background probes; explicit admin checks remain immediate. */
+  healthCheckIntervalMs: z.number().int().min(60_000).optional(),
   quality: z.enum(["built-in", "community-verified", "community"]).optional(),
 
   dataSources: z.array(dataSourceSchema).optional(),

@@ -908,3 +908,78 @@ describe("Entur composite health dispatch", () => {
     expect(coreServerMocks.safeFetchStatus).not.toHaveBeenCalled();
   });
 });
+
+describe("scheduled integration health checks", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-28T12:00:00Z"));
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
+    vi.mocked(recordHealthResult).mockClear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  function mangrove(): LoadedIntegration {
+    const manifest = JSON.parse(
+      readFileSync(resolve(REPO_ROOT, "integrations/reviews-mangrove/manifest.json"), "utf8"),
+    );
+    return { ...makeIntegration(manifest.healthCheck), id: "reviews-mangrove", manifest };
+  }
+
+  it("uses a static Mangrove endpoint and probes only once per 15 minutes", async () => {
+    const integration = mangrove();
+    await executeAllIntegrationHealthChecks([integration], { scheduled: true });
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "https://api.mangrove.reviews/robots.txt",
+      expect.anything(),
+    );
+    vi.mocked(globalThis.fetch).mockClear();
+    vi.mocked(recordHealthResult).mockClear();
+    for (let minute = 1; minute < 15; minute++) {
+      vi.setSystemTime(Date.now() + 60_000);
+      const cached = await executeAllIntegrationHealthChecks([integration], { scheduled: true });
+      expect(cached[0]?.status).toBe("up");
+    }
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(recordHealthResult).not.toHaveBeenCalled();
+    vi.setSystemTime(Date.now() + 60_000);
+    await executeAllIntegrationHealthChecks([integration], { scheduled: true });
+    expect(globalThis.fetch).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the default minute cadence and permits explicit on-demand checks", async () => {
+    const normal = makeIntegration({ type: "http", url: "https://example.org/health" });
+    const external = mangrove();
+    await executeAllIntegrationHealthChecks([normal, external], { scheduled: true });
+    vi.mocked(globalThis.fetch).mockClear();
+    vi.setSystemTime(Date.now() + 60_000);
+    await executeAllIntegrationHealthChecks([normal, external], { scheduled: true });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    await executeAllIntegrationHealthChecks([external]);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not overlap slow scheduled probes and seeds replacement generations", async () => {
+    const integration = mangrove();
+    let finish!: (response: Response) => void;
+    vi.mocked(globalThis.fetch).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const first = executeAllIntegrationHealthChecks([integration], { scheduled: true });
+    vi.setSystemTime(Date.now() + 16 * 60_000);
+    await executeAllIntegrationHealthChecks([integration], { scheduled: true });
+    expect(globalThis.fetch).toHaveBeenCalledOnce();
+    finish(new Response(null, { status: 503 }));
+    await first;
+    const replacement = mangrove();
+    await executeAllIntegrationHealthChecks([replacement], { scheduled: true });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(getCachedIntegrationHealthSnapshot([replacement]).results[0]?.status).toBe("up");
+  });
+});

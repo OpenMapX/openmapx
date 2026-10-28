@@ -35,8 +35,9 @@
   },
   "healthCheck": {
     "type": "http",
-    "url": "https://api.mangrove.reviews/reviews?limit=1"
+    "url": "https://api.mangrove.reviews/robots.txt"
   },
+  "healthCheckIntervalMs": 900000,
   "quality": "built-in",
   "category": "External",
   "dataSources": [
