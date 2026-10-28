@@ -372,6 +372,33 @@ describe("dedupeRoadConditionEvents across sources", () => {
     expect(dedupeRoadConditionEvents([{ ...state, effects: lanes }, motorway])).toHaveLength(2);
   });
 
+  it("keeps the record stating effects, even when the other covers it", () => {
+    const closed = ev({
+      id: "closed",
+      source: "de-be-berlin-events",
+      ...works,
+      geometry: line(0, 280),
+      validity: autumn,
+      effects: [effect("1", "closure")],
+    });
+    expect(dedupeRoadConditionEvents([state, closed])).toEqual([closed]);
+  });
+
+  it("does not compare a record spanning more than about 50 km", () => {
+    const wide = {
+      type: "LineString" as const,
+      coordinates: [
+        [12, 50],
+        [15, 51.5],
+      ],
+    };
+    const out = dedupeRoadConditionEvents([
+      { ...state, geometry: wide },
+      ev({ id: "w", source: "de-sn-dresden-events", ...works, geometry: wide, validity: autumn }),
+    ]);
+    expect(out).toHaveLength(2);
+  });
+
   it("keeps a point near another source's record on a crossing road", () => {
     const crossing = ev({
       id: "crossing",

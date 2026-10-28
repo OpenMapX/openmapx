@@ -319,6 +319,10 @@ function shapeOf(geometry: RoadConditionEvent["geometry"]): Shape | undefined {
 function computeShape(geometry: RoadConditionEvent["geometry"]): Shape | undefined {
   const parts = partsOf(geometry);
   if (parts.length === 0) return undefined;
+  // A coordinate that is no longitude/latitude makes the record no shape to compare.
+  const valid = ([x, y]: [number, number]) =>
+    Number.isFinite(x) && Number.isFinite(y) && Math.abs(x) <= 180 && Math.abs(y) <= 90;
+  if (!parts.every((part) => part.every(valid))) return undefined;
   const bbox: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
   for (const part of parts)
     for (const [x, y] of part) {
@@ -443,14 +447,28 @@ function crossSourceSurvivor(
   if (point && (!headlineSimilar(a.headline, b.headline) || roadsConflict(a, b))) return undefined;
   if (evidenceA) return a;
   if (evidenceB) return b;
+  // Stated effects (a closure, a limit) are what routing reads: their record stays.
+  if (a.effects.length > 0) return a;
+  if (b.effects.length > 0) return b;
   if (aInB !== bInA) return aInB > bInA ? b : a;
   return newer(a, b);
 }
 
 /** Grid cells, about a kilometre across, that a bounding box grown by {@link COVER_METERS} touches. */
 const CELL_DEG = 0.01;
+/**
+ * At most this many cells (about 50 km square) per record: a record spanning
+ * more is not compared across sources, rather than indexed in a number of
+ * cells its publisher chooses.
+ */
+const MAX_CELLS = 2500;
 function cellsOf(bbox: Shape["bbox"]): string[] {
   const grow = (2 * COVER_METERS) / M_PER_DEG;
+  const columns =
+    Math.floor((bbox[2] + grow) / CELL_DEG) - Math.floor((bbox[0] - grow) / CELL_DEG) + 1;
+  const rows =
+    Math.floor((bbox[3] + grow) / CELL_DEG) - Math.floor((bbox[1] - grow) / CELL_DEG) + 1;
+  if (!Number.isFinite(columns * rows) || columns * rows > MAX_CELLS) return [];
   const out: string[] = [];
   for (
     let x = Math.floor((bbox[0] - grow) / CELL_DEG);
