@@ -124,6 +124,7 @@ const PRIVATE = new Set([
   "execution-adoptions",
   "configuration-maintenance",
   "hardlinks",
+  "catalog-commits",
 ]);
 const recordMaximum = (record: { scope: string; namespace: string }) =>
   record.scope === "shared" && record.namespace === "service-lifecycle"
@@ -1121,6 +1122,33 @@ export function verifyFamilyOwnedRecord(
     });
   } finally {
     family.close();
+  }
+}
+/** Catalog recovery may finish only the exact terminal cache preimage already
+ * indexed before a lost rename. This does not authorize pointer publication. */
+export function verifyCatalogPinReceiptRepairPreimage(
+  state: InstallationState,
+  origin: ControlExecutionOrigin,
+  operationKey: string,
+  bytes: string,
+): void {
+  if (!/^opk1_[A-Za-z0-9_-]{16,64}$/.test(operationKey) || Buffer.byteLength(bytes) > 65536)
+    throw Error("Invalid catalog receipt repair");
+  const f = openFamily(state, origin);
+  try {
+    guard(f.slot, ".family-writer", () => {
+      checkLocalIdentity(f);
+      const record = findRecord(f, {
+        scope: "private",
+        namespace: "catalog-commits",
+        name: `${operationKey}.json`,
+        container: "",
+      });
+      if (!record || record.digest !== controlDigest(bytes) || record.state !== "written")
+        throw Error("Original indexed catalog receipt preimage required");
+    });
+  } finally {
+    f.close();
   }
 }
 /** Fixed normal coordinator source observation. Unlike ordinary indexed

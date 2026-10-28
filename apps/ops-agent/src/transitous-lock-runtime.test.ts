@@ -1,6 +1,12 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  closeControlInstallation,
+  openControlInstallation,
+  provisionControlInstallation,
+} from "@openmapx/core/build-artifacts";
+import { initializeManagedCatalogPins } from "@openmapx/core/catalog-pins";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { testExecution } from "./__fixtures__/execution";
 import { createUnavailableRuntime, dispatchOpsOperation } from "./runtime";
@@ -122,6 +128,32 @@ describe("agent-owned Transitous catalog lock", () => {
         comment: "pinned",
       }),
     );
+    const commit = "b".repeat(40);
+    writeFileSync(
+      join(rootDir, "infra/docker/gbfs-catalog.lock.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        source: "mobilitydata-gbfs",
+        commit,
+        url: `https://raw.githubusercontent.com/MobilityData/gbfs/${commit}/systems.csv`,
+        sha256: "c".repeat(64),
+        lockedAt: "2026-01-01T00:00:00.000Z",
+        lockedBy: "fixture",
+      }),
+    );
+    const infra = join(rootDir, "infra/docker");
+    mkdirSync(join(infra, "data"), { mode: 0o700 });
+    await provisionControlInstallation(infra);
+    const installation = openControlInstallation({
+      infraDir: infra,
+      role: "ops-agent",
+      serviceIds: ["motis"],
+    });
+    try {
+      await initializeManagedCatalogPins({ rootDir, installation });
+    } finally {
+      closeControlInstallation(installation);
+    }
     const result = (await dispatchOpsOperation(
       runtimeFor(rootDir),
       { kind: "transitousLock.inspect" },
@@ -135,6 +167,6 @@ describe("agent-owned Transitous catalog lock", () => {
     writeFileSync(lockPath(rootDir), `{"ref":"${"x".repeat(300_000)}"}`);
     await expect(
       dispatchOpsOperation(runtimeFor(rootDir), { kind: "transitousLock.inspect" }, context()),
-    ).rejects.toThrow(/too large/i);
+    ).rejects.toThrow(/not wired/i);
   });
 });

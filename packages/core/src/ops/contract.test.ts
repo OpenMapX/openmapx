@@ -289,6 +289,7 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   },
   "valhalla.traffic.refreshWaysToEdges": { kind: "valhalla.traffic.refreshWaysToEdges" },
   "postgis.capacity.inspect": { kind: "postgis.capacity.inspect" },
+  "catalogPins.inspect": { kind: "catalogPins.inspect" },
   "transitousLock.inspect": { kind: "transitousLock.inspect" },
   "transitousLock.propose": {
     kind: "transitousLock.propose",
@@ -699,6 +700,9 @@ describe("ops contract", () => {
   );
 
   it("authorizes roles from the operation kind without inspecting operation arguments", () => {
+    expect(authorizeOpsOperation("api", "catalogPins.inspect")).toBe(true);
+    expect(authorizeOpsOperation("data-manager", "catalogPins.inspect")).toBe(true);
+    expect(authorizeOpsOperation("data-manager", "configuration.inspect")).toBe(false);
     expect(authorizeOpsOperation("api", "service.start")).toBe(true);
     expect(authorizeOpsOperation("api", "motis.primary.restart")).toBe(false);
     expect(authorizeOpsOperation("data-manager", "motis.primary.restart")).toBe(true);

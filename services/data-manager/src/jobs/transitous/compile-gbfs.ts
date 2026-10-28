@@ -10,7 +10,6 @@ import {
   parseMobilityDataGbfsCsv,
 } from "@openmapx/transitous-core";
 import pMap from "p-map";
-import { runOpsOperation } from "../../ops-client.js";
 import { atomicWriteJsonSync } from "../../utils/atomic-write.js";
 import { scrubSecrets } from "../../utils/scrub-secrets.js";
 import { readFeedOverlay } from "../transitous-feeds-overlay.js";
@@ -288,7 +287,9 @@ export const run: StageFn = async (ctx) => {
   try {
     // The catalog lock lives under the repository's `infra/docker/`, which only
     // the operations agent may read on this service's behalf.
-    const lock = await runOpsOperation({ kind: "gbfsCatalogLock.inspect" });
+    const lock = ctx.state.catalogPins?.gbfs;
+    if (!lock)
+      throw Error("Preparation must capture the paired catalog pins before GBFS compilation");
     const response = await fetch(lock.url, {
       headers: { "User-Agent": "Open-MapX-gbfs-compiler" },
     });

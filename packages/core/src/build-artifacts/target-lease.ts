@@ -2937,6 +2937,20 @@ export function assertArtifactTargetLeaseForward(lease: TargetLeaseAuthority): v
   if (!node || !forwardAncestry(t, s.node) || Date.now() >= s.execution.deadlineAt)
     throw Error("Target lease permits observation/settlement only");
 }
+/** Fixed catalog-store adapter; caller DTOs cannot construct physical ownership. */
+export function catalogPinTargetOwner(lease: TargetLeaseAuthority) {
+  assertArtifactTargetLeaseForward(lease);
+  const s = stateOf(lease);
+  if (!s.certificate.serviceIds.includes("motis") || !s.certificate.origin)
+    throw Error("MOTIS target authority required for catalog pins");
+  if (!["ops-agent", "host-cli"].includes(s.installation.installation.role))
+    throw Error("Catalog pins are owned by the agent or standalone host CLI");
+  return {
+    installation: s.installation.installation,
+    execution: s.execution,
+    origin: s.certificate.origin,
+  };
+}
 export function assertArtifactTargetLeaseExecution(
   lease: TargetLeaseAuthority,
   execution: ExecutionRef,

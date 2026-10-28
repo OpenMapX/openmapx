@@ -503,6 +503,7 @@ export function writePrivateRecord(
         "execution-adoptions",
         "configuration-maintenance",
         "hardlinks",
+        "catalog-commits",
       ].includes(namespace)
     )
       throw Error("Unknown fixed authority namespace");
@@ -1044,6 +1045,7 @@ export function retainAdmittedControlExecution(
       "notable-places-build",
       "catalog.activate",
       "catalog.validate",
+      "catalog-pins.initialize",
       "artifactTransfer.import",
       "artifactTransfer.export",
       "artifactTransfer.validate",
@@ -1104,6 +1106,18 @@ export function retainAdmittedControlExecution(
     plan,
     reservations,
   });
+  if (
+    input.kind === "catalog-pins.initialize" &&
+    (state.fixedChildId ||
+      input.parent ||
+      plan.length ||
+      reservations.length ||
+      serviceIds.length !== 1 ||
+      serviceIds[0] !== "motis" ||
+      !["ops-agent", "host-cli"].includes(installation.role) ||
+      controlDigest(input.operation) !== controlDigest({ kind: "catalog-pins.initialize" }))
+  )
+    throw Error("Fixed local catalog bootstrap only");
   const budget = (() => {
     try {
       return opsExecutionMaximumMs(input.kind);
@@ -1116,6 +1130,7 @@ export function retainAdmittedControlExecution(
         ].includes(input.kind)
       )
         return 3600000;
+      if (input.kind === "catalog-pins.initialize") return 60000;
       if (
         ["configuration-maintenance.prepare", "configuration-maintenance.settle"].includes(
           input.kind,
@@ -1512,6 +1527,7 @@ const settlementSchema = z.strictObject({
   terminalReceiptDigest: digest,
 });
 const effectObservationSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("catalog-pins-initialized"), generationId: digest.nullable() }),
   z.strictObject({
     kind: z.literal("configuration-generation-not-committed"),
     revisionId: z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/),
@@ -1928,7 +1944,38 @@ export function retainControlEffectReceipt(
     const receipt = parsed.data;
     let outcome: ChildSettlement["outcome"] = "unknown",
       publication: ChildSettlement["publication"] = "unknown";
-    if (receipt.kind === "ops-result") {
+    if (receipt.kind === "catalog-pins-initialized") {
+      if (
+        s.kind !== "catalog-pins.initialize" ||
+        s.installation.fixedChildId ||
+        !s.origin ||
+        !["ops-agent", "host-cli"].includes(s.installation.installation.role)
+      )
+        throw Error("Original local catalog initialization required");
+      const source = verifyControl(
+        s.installation.installation.publicKey,
+        "openmapx-catalog-pin-initialization-v1",
+        readPrivateRecord(
+          s.installation,
+          "catalog-commits",
+          `initialization-${s.execution.operationKey}.json`,
+          65536,
+        ),
+        z.strictObject({
+          version: z.literal(1),
+          execution: executionRefSchema,
+          generationId: digest.nullable(),
+          pointerDigest: digest.nullable(),
+        }),
+      );
+      if (
+        controlDigest(source.execution) !== controlDigest(s.execution) ||
+        source.generationId !== receipt.generationId
+      )
+        throw Error("Catalog initialization source mismatch");
+      outcome = "committed";
+      publication = "committed";
+    } else if (receipt.kind === "ops-result") {
       receipt.result = parseBoundedOpsResult(s.kind as OpsOperationKind, receipt.result);
       if (s.kind === "data.update") {
         const actual = readDataWorkflowProgress(authority),

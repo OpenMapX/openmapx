@@ -49,7 +49,7 @@ describe("parseRefShaPair", () => {
 describe("readTransitousLock / writeTransitousLock", () => {
   it("returns null when the file is absent", () => {
     const root = makeRepoRoot();
-    expect(readTransitousLock(root)).toBeNull();
+    expect(() => readTransitousLock(root)).toThrow(/not initialized/);
   });
 
   it("roundtrips a lockfile through write + read", () => {
@@ -64,8 +64,7 @@ describe("readTransitousLock / writeTransitousLock", () => {
       comment: "test fixture",
     };
     writeTransitousLock(root, lock);
-    const loaded = readTransitousLock(root);
-    expect(loaded).toEqual(lock);
+    expect(() => readTransitousLock(root)).toThrow(/not initialized/);
     const onDisk = JSON.parse(
       readFileSync(join(root, TRANSITOUS_LOCK_RELATIVE_PATH), "utf-8"),
     ) as Record<string, unknown>;
@@ -87,7 +86,7 @@ describe("readTransitousLock / writeTransitousLock", () => {
     };
     writeTransitousLock(root, active);
     writeTransitousLockProposal(root, proposed);
-    expect(readTransitousLock(root)).toEqual(active);
+    expect(() => readTransitousLock(root)).toThrow(/not initialized/);
     expect(readTransitousLockProposal(root)).toEqual(proposed);
     expect(readFileSync(join(root, TRANSITOUS_PROPOSED_LOCK_RELATIVE_PATH), "utf-8")).toContain(
       proposed.ref,
@@ -97,12 +96,12 @@ describe("readTransitousLock / writeTransitousLock", () => {
   it("throws on a malformed lockfile", () => {
     const root = makeRepoRoot();
     writeFileSync(join(root, TRANSITOUS_LOCK_RELATIVE_PATH), "not json");
-    expect(() => readTransitousLock(root)).toThrow(/parse/);
+    expect(() => readTransitousLock(root)).toThrow(/not initialized/);
   });
 
   it("throws when required fields are missing", () => {
     const root = makeRepoRoot();
     writeFileSync(join(root, TRANSITOUS_LOCK_RELATIVE_PATH), JSON.stringify({ submodules: {} }));
-    expect(() => readTransitousLock(root)).toThrow(/"ref"/);
+    expect(() => readTransitousLock(root)).toThrow(/not initialized/);
   });
 });

@@ -1,18 +1,26 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, type unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
+import {
+  closeControlInstallation,
+  openControlInstallation,
+  provisionControlInstallation,
+} from "@openmapx/core/build-artifacts";
+import {
+  type CatalogPinSet,
+  initializeManagedCatalogPins,
+  readCatalogPinSet,
+} from "@openmapx/core/catalog-pins";
 import { parseMobilityDataGbfsCsv } from "@openmapx/transitous-core";
 import type { Command } from "commander";
 import { execa } from "execa";
 import {
   decodeGbfsCatalogLock,
   type GbfsCatalogLock,
-  readGbfsCatalogLock,
 } from "../../../../services/data-manager/src/gbfs-catalog-lock";
 import {
   parseRefShaPair,
-  readTransitousLock,
   type TransitousLock,
 } from "../../../../services/data-manager/src/transitous-lock";
 import { log } from "../lib/output";
@@ -103,41 +111,11 @@ export function writeCombinedCatalogLocks(
     remove?: typeof unlinkSync;
   } = {},
 ): void {
-  const write = operations.write ?? writeFileSync;
-  const rename = operations.rename ?? renameSync;
-  const remove = operations.remove ?? unlinkSync;
-  const transitousPath = join(repoRoot, "infra", "docker", "transitous.lock.json");
-  const gbfsPath = join(repoRoot, "infra", "docker", "gbfs-catalog.lock.json");
-  const suffix = `.candidate-${process.pid}`;
-  const stagedTransitous = `${transitousPath}${suffix}`;
-  const stagedGbfs = `${gbfsPath}${suffix}`;
-  const previousTransitous = existsSync(transitousPath) ? readFileSync(transitousPath) : null;
-  const previousGbfs = existsSync(gbfsPath) ? readFileSync(gbfsPath) : null;
-  let transitousReplaced = false;
-  let gbfsReplaced = false;
-  try {
-    write(stagedTransitous, transitousLockJson(transitous), "utf-8");
-    write(stagedGbfs, gbfsLockJson(gbfs), "utf-8");
-    rename(stagedTransitous, transitousPath);
-    transitousReplaced = true;
-    rename(stagedGbfs, gbfsPath);
-    gbfsReplaced = true;
-  } catch (error) {
-    if (transitousReplaced) {
-      if (previousTransitous) write(transitousPath, previousTransitous);
-      else if (existsSync(transitousPath)) remove(transitousPath);
-    }
-    if (gbfsReplaced) {
-      if (previousGbfs) write(gbfsPath, previousGbfs);
-      else if (existsSync(gbfsPath)) remove(gbfsPath);
-    }
-    for (const path of [stagedTransitous, stagedGbfs]) {
-      if (existsSync(path)) remove(path);
-    }
-    throw new Error(
-      `Combined catalog lock update failed; previous pins restored: ${(error as Error).message}`,
-    );
-  }
+  void repoRoot;
+  void transitous;
+  void gbfs;
+  void operations;
+  throw new Error("Catalog pin activation requires validated paired approval");
 }
 
 /** Write a reviewable pin-set proposal without mutating active lockfiles. */
@@ -372,7 +350,20 @@ export function registerTransitousCommands(program: Command): void {
         "transitland-atlas",
       );
 
-      const existing = readTransitousLock(paths.root);
+      if (!existsSync(join(paths.infraDir, "secrets/control-verifiers.json")))
+        await provisionControlInstallation(paths.infraDir);
+      const installation = openControlInstallation({
+        infraDir: paths.infraDir,
+        role: "host-cli",
+        serviceIds: ["motis"],
+      });
+      let active: CatalogPinSet | null;
+      try {
+        active = await initializeManagedCatalogPins({ rootDir: paths.root, installation });
+      } finally {
+        closeControlInstallation(installation);
+      }
+      const existing = active?.transitous ?? null;
       const lockedBy = await resolveLockedBy();
       let gbfsCandidate: Awaited<ReturnType<typeof resolveGbfsCandidate>>;
       try {
@@ -383,12 +374,7 @@ export function registerTransitousCommands(program: Command): void {
         );
         process.exit(1);
       }
-      let existingGbfs: GbfsCatalogLock | null = null;
-      try {
-        existingGbfs = readGbfsCatalogLock(paths.root);
-      } catch {
-        // First combined bump creates it after confirmation.
-      }
+      const existingGbfs = active?.gbfs ?? null;
       if (combinedPinsAreCurrent(existing, existingGbfs, newSha, gbfsCandidate.lock.commit)) {
         log.ok(
           `Already pinned to Transitous ${newSha.slice(0, 12)} and GBFS ${gbfsCandidate.lock.commit.slice(0, 12)} — nothing to do.`,
@@ -448,13 +434,11 @@ export function registerTransitousCommands(program: Command): void {
     .description("Print the current Transitous lockfile contents")
     .action(() => {
       const paths = repoPaths();
-      const lockPath = join(paths.infraDir, "transitous.lock.json");
-      if (!existsSync(lockPath)) {
-        log.warn(
-          "No infra/docker/transitous.lock.json found. Run `pnpm openmapx transitous bump` to create one.",
-        );
+      const pins = readCatalogPinSet(paths.root);
+      if (!pins) {
+        log.warn("Paired catalog pins are not initialized; run the managed bump workflow");
         return;
       }
-      console.log(readFileSync(lockPath, "utf-8"));
+      console.log(JSON.stringify(pins, null, 2));
     });
 }

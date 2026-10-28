@@ -598,6 +598,9 @@ export function registerDataCommands(program: Command): void {
           const result = dm.unwrapDataManagerResponse(
             await dm.addTransitSource(
               {
+                expectedSourceRevision: dm.unwrapDataManagerResponse(
+                  await dm.getTransitSources(undefined, { transport: createCliTransport() }),
+                ).sourceRevision,
                 url,
                 name: options.name,
                 region: options.region,
@@ -621,11 +624,19 @@ export function registerDataCommands(program: Command): void {
 
   source
     .command("remove <sourceId>")
-    .description("Disable a desired source and start a transactional sync")
+    .description("Remove operator source metadata and start a transactional sync")
     .action(async (sourceId: string) => {
       try {
         const result = dm.unwrapDataManagerResponse(
-          await dm.removeTransitSource(sourceId, {}, { transport: createCliTransport() }),
+          await dm.removeTransitSource(
+            sourceId,
+            {
+              expectedSourceRevision: dm.unwrapDataManagerResponse(
+                await dm.getTransitSources(undefined, { transport: createCliTransport() }),
+              ).sourceRevision,
+            },
+            { transport: createCliTransport() },
+          ),
         );
         log.ok(`Source ${result.sourceId} removal queued: jobId=${result.jobId}`);
       } catch (err) {
@@ -636,12 +647,43 @@ export function registerDataCommands(program: Command): void {
     });
 
   source
+    .command("disable <sourceId>")
+    .description("Reversibly disable a source and start a transactional sync")
+    .action(async (sourceId: string) => {
+      try {
+        const expectedSourceRevision = dm.unwrapDataManagerResponse(
+          await dm.getTransitSources(undefined, { transport: createCliTransport() }),
+        ).sourceRevision;
+        const result = dm.unwrapDataManagerResponse(
+          await dm.disableTransitSource(
+            sourceId,
+            { expectedSourceRevision },
+            { transport: createCliTransport() },
+          ),
+        );
+        log.ok(`Source ${result.sourceId} disable queued: jobId=${result.jobId}`);
+      } catch (err) {
+        log.err(`source disable failed: ${(err as Error).message}`);
+        dataManagerHint();
+        completeCliCommand(1);
+      }
+    });
+
+  source
     .command("enable <sourceId>")
-    .description("Enable a catalog source and start a transactional sync")
+    .description("Re-enable a retained source and start a transactional sync")
     .action(async (sourceId: string) => {
       try {
         const result = dm.unwrapDataManagerResponse(
-          await dm.enableTransitSource(sourceId, {}, { transport: createCliTransport() }),
+          await dm.enableTransitSource(
+            sourceId,
+            {
+              expectedSourceRevision: dm.unwrapDataManagerResponse(
+                await dm.getTransitSources(undefined, { transport: createCliTransport() }),
+              ).sourceRevision,
+            },
+            { transport: createCliTransport() },
+          ),
         );
         log.ok(`Source ${result.sourceId} enable queued: jobId=${result.jobId}`);
       } catch (err) {

@@ -1,6 +1,7 @@
 import { constants, existsSync } from "node:fs";
 import { open } from "node:fs/promises";
 import { loadControlStartup } from "@openmapx/core/build-artifacts";
+import { initializeManagedCatalogPins } from "@openmapx/core/catalog-pins";
 import { readOpsTokenFile } from "@openmapx/core/ops";
 import { repoPaths, services } from "@openmapx/core/server";
 import {
@@ -135,6 +136,18 @@ async function main(): Promise<void> {
       container: existsSync("/run/secrets/openmapx-control-verifiers"),
     });
     if (controlStartup.reason) console.error(controlStartup.reason);
+    if (controlStartup.installation) {
+      try {
+        await initializeManagedCatalogPins({
+          rootDir: config.rootDir,
+          installation: controlStartup.installation,
+        });
+      } catch {
+        console.error(
+          "Paired catalog initialization unavailable; preserve original ownership and reconcile before transit operations",
+        );
+      }
+    }
     const terminalClaimCleanup = await initializeTerminalClaimCleanup(
       config.trustedConfigDirectory,
       {

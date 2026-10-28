@@ -35,6 +35,7 @@
       "backup.delete",
       "backup.list",
       "backup.restore",
+      "catalogPins.inspect",
       "communityServices.inspect",
       "configuration.hardlinks.apply",
       "configuration.hardlinks.inspect",
@@ -107,10 +108,10 @@
       "transitousLock.approve",
       "transitousLock.inspect",
       "transitousLock.propose",
+      "valhalla.traffic.disable",
       "valhalla.traffic.inspect",
       "valhalla.traffic.maintain",
-      "valhalla.traffic.refreshWaysToEdges",
-      "valhalla.traffic.disable"
+      "valhalla.traffic.refreshWaysToEdges"
     ]
   },
   "trustedDataSourceKinds": [
@@ -333,7 +334,8 @@
         "transitousLock.inspect",
         "transitousLock.propose",
         "transitousLock.approve",
-        "gbfsCatalogLock.inspect"
+        "gbfsCatalogLock.inspect",
+        "catalogPins.inspect"
       ]
     },
     {

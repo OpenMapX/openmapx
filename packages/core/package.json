@@ -201,6 +201,14 @@
     "./ops/control-root-key": {
       "types": "./src/ops/control-root-key.ts",
       "default": "./src/ops/control-root-key.ts"
+    },
+    "./catalog-pins": {
+      "types": "./src/catalog-pins/index.ts",
+      "default": "./src/catalog-pins/index.ts"
+    },
+    "./catalog-pins/types": {
+      "types": "./src/catalog-pins/types.ts",
+      "default": "./src/catalog-pins/types.ts"
     }
   },
   "scripts": {

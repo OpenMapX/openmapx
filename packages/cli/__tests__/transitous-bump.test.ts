@@ -63,7 +63,7 @@ describe("Transitous combined catalog bump", () => {
     expect(combinedPinsAreCurrent(TRANSITOUS, GBFS, "a".repeat(40), "f".repeat(40))).toBe(false);
   });
 
-  it("restores both previous locks if replacement fails midway", () => {
+  it("refuses unvalidated direct activation before replacing either compatibility file", () => {
     temporaryRoot = mkdtempSync(join(tmpdir(), "openmapx-bump-lockset-"));
     const directory = join(temporaryRoot, "infra", "docker");
     mkdirSync(directory, { recursive: true });
@@ -80,7 +80,8 @@ describe("Transitous combined catalog bump", () => {
           return renameSync(from, to);
         },
       }),
-    ).toThrow(/previous pins restored/);
+    ).toThrow(/validated paired approval/);
+    expect(renameCalls).toBe(0);
     expect(readFileSync(transitousPath, "utf-8")).toBe("old-transitous\n");
     expect(readFileSync(gbfsPath, "utf-8")).toBe("old-gbfs\n");
   });

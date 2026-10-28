@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync } from "node:fs";
+import { parseCatalogPinSet } from "@openmapx/core/catalog-pins";
 import { ensureCatalog } from "@openmapx/transitous-core";
 import { runOpsOperation } from "../../ops-client.js";
 import { parseRefShaPair, type TransitousLock } from "../../transitous-lock.js";
@@ -21,6 +22,16 @@ export const run: StageFn = async (ctx) => {
   const startedAt = ctx.now();
   const start = Date.now();
   try {
+    if (ctx.useProposedLock)
+      throw Error("Paired proposal validation requires the reviewed activation workflow");
+    const pins = await runOpsOperation({ kind: "catalogPins.inspect" });
+    if (!pins.active || pins.catalogRevisionId !== pins.active.generationId)
+      throw Error("Paired catalog pins are unavailable");
+    try {
+      ctx.state.catalogPins = parseCatalogPinSet(pins.active);
+    } catch {
+      throw Error("Paired catalog pin response is invalid");
+    }
     mkdirSync(ctx.dataDir, { recursive: true });
 
     const catalogDir = ctx.catalogDir;
@@ -40,7 +51,7 @@ export const run: StageFn = async (ctx) => {
       catalogDir,
       ctx.runner,
       ctx.logger,
-      ctx.useProposedLock ?? false,
+      ctx.state.catalogPins.transitous,
     );
     ensureTransitousWorkdirs(catalogDir, ctx.outDir, ctx.downloadsDir);
     pruneOrphanedGtfsDatasets(ctx);
@@ -113,29 +124,9 @@ async function enforceTransitousLock(
   catalogDir: string,
   runner: JobContext["runner"],
   logger: JobLogger,
-  useProposedLock: boolean,
+  pinned: TransitousLock,
 ): Promise<TransitousLock> {
-  let lock: TransitousLock | null;
-  try {
-    // The lock is agent-owned; data-manager reads it through the typed
-    // operation rather than bind-mounting the host checkout. The auto-bump
-    // canary validates the proposed ref in the staging slot before it is
-    // activated; every other run enforces the active lock.
-    const slots = await runOpsOperation({ kind: "transitousLock.inspect" });
-    lock = useProposedLock ? (slots.proposed ?? slots.active) : slots.active;
-  } catch (error) {
-    throw new Error(
-      `transitous-pipeline: refusing to run — the catalog lock could not be read (${(error as Error).message})`,
-    );
-  }
-  if (!lock) {
-    throw new Error(
-      "transitous-pipeline: refusing to run — no infra/docker/transitous.lock.json is pinned (run `pnpm openmapx transitous bump`)",
-    );
-  }
-  if (useProposedLock) {
-    logger.info(`transitous-pipeline: enforcing PROPOSED lock ${lock.ref} (auto-bump canary)`);
-  }
+  const lock = pinned;
   let sha: string;
   try {
     ({ sha } = parseRefShaPair(lock.ref));

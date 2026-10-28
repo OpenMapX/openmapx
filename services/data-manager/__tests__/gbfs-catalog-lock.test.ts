@@ -28,7 +28,7 @@ describe("GBFS catalog lock", () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-gbfs-lock-"));
     mkdirSync(join(tmp, "infra", "docker"), { recursive: true });
     writeGbfsCatalogLock(tmp, LOCK);
-    expect(readGbfsCatalogLock(tmp)).toEqual(LOCK);
+    expect(() => readGbfsCatalogLock(tmp!)).toThrow(/not initialized/);
     expect(readFileSync(join(tmp, "infra", "docker", "gbfs-catalog.lock.json"), "utf-8")).toContain(
       LOCK.sha256,
     );

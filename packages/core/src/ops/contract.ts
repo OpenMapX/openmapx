@@ -1,3 +1,4 @@
+import { catalogPinSetSchema } from "../catalog-pins/schemas";
 import {
   configurationGenerationRevisionSchema,
   configurationHardlinksApplyOperationSchema,
@@ -131,6 +132,7 @@ export const OPS_OPERATION_KINDS = [
   "valhalla.traffic.maintain",
   "valhalla.traffic.refreshWaysToEdges",
   "postgis.capacity.inspect",
+  "catalogPins.inspect",
   "transitousLock.inspect",
   "transitousLock.propose",
   "transitousLock.approve",
@@ -257,6 +259,7 @@ export const OPS_KIND_POLICIES = {
   "valhalla.traffic.maintain": asyncEffect("data-manager", 30 * 60_000),
   "valhalla.traffic.refreshWaysToEdges": asyncEffect("data-manager", 30 * 60_000),
   "postgis.capacity.inspect": sync("data-manager", 30_000),
+  "catalogPins.inspect": sync("api", 30_000, 768 * 1024),
   "transitousLock.inspect": sync("data-manager", 30_000),
   "transitousLock.propose": sync("data-manager", 30_000),
   "transitousLock.approve": asyncEffect("data-manager", 120_000, 4096),
@@ -541,6 +544,7 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   kindOnly("postgis.capacity.inspect"),
   // The catalog lock lives under the repository's `infra/docker/`, which only
   // the operations agent may write. Callers name a pinned ref, never a path.
+  kindOnly("catalogPins.inspect"),
   kindOnly("transitousLock.inspect"),
   z.strictObject({
     kind: z.literal("transitousLock.propose"),
@@ -595,7 +599,10 @@ const opsRequestSchema = z
 export type OpsRequest = z.infer<typeof opsRequestSchema>;
 
 export function authorizeOpsOperation(role: OpsRole, kind: OpsOperationKind): boolean {
-  return OPS_KIND_POLICIES[kind].role === role;
+  return (
+    OPS_KIND_POLICIES[kind].role === role ||
+    (role === "data-manager" && kind === "catalogPins.inspect")
+  );
 }
 
 export type OpsErrorClass =
@@ -1271,6 +1278,18 @@ export const OPS_RESULT_SCHEMAS = {
   }),
   "valhalla.traffic.refreshWaysToEdges": changed,
   "postgis.capacity.inspect": z.strictObject({ availableBytes: z.number().int().nonnegative() }),
+  "catalogPins.inspect": z
+    .strictObject({
+      active: catalogPinSetSchema.nullable(),
+      catalogRevisionId: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .nullable(),
+    })
+    .refine(
+      (value) => value.catalogRevisionId === (value.active?.generationId ?? null),
+      "Catalog pair/revision mismatch",
+    ),
   "transitousLock.inspect": z.strictObject({
     active: transitousLockRecordSchema.nullable(),
     proposed: transitousLockRecordSchema.nullable(),

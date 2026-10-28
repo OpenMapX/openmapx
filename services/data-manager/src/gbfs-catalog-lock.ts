@@ -1,18 +1,12 @@
-import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { atomicWriteJsonSync } from "./utils/atomic-write.js";
 
 export const GBFS_CATALOG_LOCK_RELATIVE_PATH = "infra/docker/gbfs-catalog.lock.json";
 
-export interface GbfsCatalogLock {
-  schemaVersion: 1;
-  source: "mobilitydata-gbfs";
-  commit: string;
-  url: string;
-  sha256: string;
-  lockedAt: string;
-  lockedBy: string;
-}
+export type { GbfsCatalogLock } from "@openmapx/core/catalog-pins/types";
+
+import { readCatalogPinSet } from "@openmapx/core/catalog-pins";
+import type { GbfsCatalogLock } from "@openmapx/core/catalog-pins/types";
 
 export function decodeGbfsCatalogLock(
   value: unknown,
@@ -47,9 +41,9 @@ export function decodeGbfsCatalogLock(
 }
 
 export function readGbfsCatalogLock(repoRoot: string): GbfsCatalogLock {
-  const path = join(repoRoot, GBFS_CATALOG_LOCK_RELATIVE_PATH);
-  if (!existsSync(path)) throw new Error(`GBFS catalog lock missing at ${path}`);
-  return decodeGbfsCatalogLock(JSON.parse(readFileSync(path, "utf-8")), path);
+  const pins = readCatalogPinSet(repoRoot);
+  if (!pins) throw Error("Paired catalog pins are not initialized");
+  return pins.gbfs;
 }
 
 export function writeGbfsCatalogLock(repoRoot: string, lock: GbfsCatalogLock): void {

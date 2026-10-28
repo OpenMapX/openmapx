@@ -7,25 +7,19 @@ import { join } from "node:path";
  * unrelated upstream `feeds/*.json` schema change doesn't silently break our
  * fetch pipeline.
  */
-export interface TransitousLock {
-  ref: string; // e.g. "main@<sha>"
-  submodules: Record<string, string>;
-  lockedAt: string;
-  lockedBy: string;
-  comment?: string;
-}
+export type { TransitousLock } from "@openmapx/core/catalog-pins/types";
+
+import { readCatalogPinSet } from "@openmapx/core/catalog-pins";
+import type { TransitousLock } from "@openmapx/core/catalog-pins/types";
 
 export const TRANSITOUS_LOCK_RELATIVE_PATH = "infra/docker/transitous.lock.json";
 export const TRANSITOUS_PROPOSED_LOCK_RELATIVE_PATH = "infra/docker/transitous.lock.proposed.json";
 
-/**
- * Read the lockfile from `<repoRoot>/infra/docker/transitous.lock.json`.
- * Returns `null` if the file does not exist; the caller is expected to log a
- * warning and continue (existing deployments must keep working before the
- * first `transitous bump` run).
- */
+/** Read the initialized paired generation. Compatibility files never provide active authority. */
 export function readTransitousLock(repoRoot: string): TransitousLock | null {
-  return readTransitousLockAt(repoRoot, TRANSITOUS_LOCK_RELATIVE_PATH);
+  const pins = readCatalogPinSet(repoRoot);
+  if (!pins) throw new Error("Paired catalog pins are not initialized");
+  return pins.transitous;
 }
 
 function readTransitousLockAt(repoRoot: string, relativePath: string): TransitousLock | null {

@@ -12,6 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
+import { catalogRevisionId, readCatalogPinSet } from "@openmapx/core/catalog-pins";
 import type { OpsResultFor } from "@openmapx/core/ops";
 import { OpsNotWiredError, type OpsRuntime } from "./runtime";
 
@@ -98,29 +99,31 @@ export function createTransitousLockRuntime(
   options: TransitousLockRuntimeOptions,
 ): OpsRuntime {
   const now = options.now ?? (() => new Date());
-  const lockPath = join(options.rootDir, LOCK_RELATIVE_PATH);
   const proposedPath = join(options.rootDir, PROPOSED_RELATIVE_PATH);
 
+  const pair = () => {
+    const active = readCatalogPinSet(options.rootDir);
+    if (
+      !active &&
+      (existsSync(join(options.rootDir, LOCK_RELATIVE_PATH)) ||
+        existsSync(join(options.rootDir, GBFS_LOCK_RELATIVE_PATH)))
+    )
+      throw new OpsNotWiredError();
+    return active;
+  };
+  runtime["catalogPins.inspect"] = async () => {
+    const active = pair();
+    return { active, catalogRevisionId: active ? catalogRevisionId(active) : null };
+  };
   runtime["transitousLock.inspect"] = async () => ({
-    active: readLockAt(lockPath),
+    active: pair()?.transitous ?? null,
     proposed: readLockAt(proposedPath),
   });
-
   runtime["gbfsCatalogLock.inspect"] = async () => {
-    const path = join(options.rootDir, GBFS_LOCK_RELATIVE_PATH);
-    if (!existsSync(path)) throw new Error("GBFS catalog lock is missing");
-    const raw = readFileSync(path, "utf-8");
-    if (Buffer.byteLength(raw, "utf8") > MAX_LOCK_BYTES) {
-      throw new Error("GBFS catalog lock is too large");
-    }
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    return {
-      commit: String(parsed.commit ?? ""),
-      url: String(parsed.url ?? ""),
-      sha256: String(parsed.sha256 ?? ""),
-      lockedAt: String(parsed.lockedAt ?? ""),
-      lockedBy: String(parsed.lockedBy ?? ""),
-    };
+    const active = pair();
+    if (!active) throw new OpsNotWiredError();
+    const { commit, url, sha256, lockedAt, lockedBy } = active.gbfs;
+    return { commit, url, sha256, lockedAt, lockedBy };
   };
 
   runtime["transitousLock.propose"] = async (operation) => {

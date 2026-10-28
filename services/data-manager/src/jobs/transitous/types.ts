@@ -1,3 +1,4 @@
+import type { CatalogPinSet } from "@openmapx/core/catalog-pins/types";
 import type { TransitSource } from "@openmapx/transitous-core";
 import type { DatasetMetadata, StateStore } from "../../state.js";
 import type { TransitousLock } from "../../transitous-lock.js";
@@ -118,6 +119,7 @@ export interface JobState {
   proxyTransaction?: ProxyTransactionState;
   /** The catalog lock prepare enforced; the capability snapshot records it. */
   transitousLock?: TransitousLock;
+  catalogPins?: CatalogPinSet;
   gbfsCompilation?: {
     output: string;
     healthy: number;
