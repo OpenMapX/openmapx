@@ -15,6 +15,14 @@ vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
 }));
 
+const follow = vi.hoisted(() => ({
+  track: null as import("@/lib/sheetFollow").SheetFollowTrack | null,
+}));
+vi.mock("@/lib/sheetFollow", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/sheetFollow")>()),
+  useSheetFollowTrack: () => follow.track,
+}));
+
 beforeEach(() => {
   useMapAttributionStore.setState({ byLayer: {} });
 });
@@ -324,4 +332,23 @@ describe("footer background joining", () => {
       vi.unstubAllGlobals();
     }
   });
+});
+
+it("rides a driving sheet on the compositor from its zero-height edge, and stops once docked", () => {
+  follow.track = { scrollStart: 4, cap: 440, lift: 20, floor: 30 };
+  try {
+    const { container } = render(<MapFooter />);
+    const footer = container.querySelector("footer") as HTMLElement;
+    const className = [...footer.classList].find((name) => name.startsWith("css-"));
+    const css = [...document.querySelectorAll("style")].map((s) => s.textContent ?? "").join("");
+    const rules = css.split("}").filter((rule) => rule.includes(`.${className}`));
+    // clamp(floor 30, lift 20 + f): flat until f = 10, then 1px per sheet pixel to the cap.
+    expect(rules.some((rule) => /min-width:0px\)\{[^{]*\{bottom:30px/.test(rule))).toBe(true);
+    expect(css).toContain("animation-range:14px 444px;");
+    expect(css).toContain("--omx-sheet-follow-travel:430px;");
+    const docked = rules.find((rule) => rule.includes('[data-map-footer-surface="sheet"]>'));
+    expect(docked).toContain("animation:none");
+  } finally {
+    follow.track = null;
+  }
 });

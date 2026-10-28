@@ -14,12 +14,8 @@ import { AttributionDetails } from "@/components/ui/AttributionDetails";
 import { AttributionNotices } from "@/components/ui/AttributionNotices";
 import { useMapAttributionPresentation } from "@/integration-api/overlay/mapAttributionStore";
 import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
-import {
-  coversFooterCenter,
-  MAP_FOOTER_OBSTRUCTION_ID,
-  publishMapFooterCenterCovered,
-} from "@/lib/mapFooterCenter";
-import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
+import { coversFooterCenter, publishMapFooterCenterCovered } from "@/lib/mapFooterCenter";
+import { planSheetFollow, sheetFollowSx, useSheetFollowTrack } from "@/lib/sheetFollow";
 import { CREDITS_SX } from "./MapCredits";
 import { useMapFooterSurface } from "./useMapFooterSurface";
 
@@ -77,7 +73,12 @@ export function MapFooter() {
     setHome,
     mapBudget,
   } = useMapFooterSurface(footerEl, mobile, centerCovered);
-  useMeasuredMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", footerEl);
+  // On the map the footer rides the sheet's top edge, never below the visual
+  // viewport; docked inside the sheet it scrolls with it and the follow stops.
+  const followTrack = useSheetFollowTrack();
+  const follow = followTrack
+    ? planSheetFollow(followTrack, { offset: followTrack.lift, min: followTrack.floor })
+    : null;
   const mandatoryRef = useRef<HTMLSpanElement>(null);
   const [tall, setTall] = useState(false);
   const [merged, setMerged] = useState(false);
@@ -132,9 +133,10 @@ export function MapFooter() {
         bgcolor: merged ? background : "transparent",
         position: "absolute",
         bottom: {
-          xs: "var(--omx-map-footer-bottom, var(--omx-safe-bottom))",
+          xs: follow ? `${follow.base}px` : "var(--omx-map-footer-bottom, var(--omx-safe-bottom))",
           sm: "var(--omx-safe-bottom)",
         },
+        ...sheetFollowSx(follow),
         left: {
           xs: "var(--omx-safe-left)",
           sm: shifted ? `calc(${PANEL_WIDTH}px + var(--omx-safe-left))` : "var(--omx-safe-left)",
@@ -162,6 +164,7 @@ export function MapFooter() {
           marginRight: "var(--omx-safe-right)",
           flexShrink: 0,
           transition: "none",
+          animation: "none",
         },
       }}
     >

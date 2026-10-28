@@ -15,10 +15,17 @@ import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
 import {
   LEGEND_TOGGLE_WIDTH,
   MAP_FOOTER_OBSTRUCTION_ID,
+  useMapFooterBox,
   useMapFooterCenterCovered,
 } from "@/lib/mapFooterCenter";
 import { useMapObstructionExtent } from "@/lib/mapObstructions";
 import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
+import {
+  planAboveFooter,
+  planSheetFollow,
+  sheetFollowSx,
+  useSheetFollowTrack,
+} from "@/lib/sheetFollow";
 import { DeclarativeLegend } from "./overlay/DeclarativeLegend";
 import { dedupeSharedMapLayers } from "./sharedIntegrationLayer";
 
@@ -95,6 +102,8 @@ export function LegendHost() {
   const followHeight = useMobilePanelClearance(vh);
   const footerExtent = useMapObstructionExtent(MAP_FOOTER_OBSTRUCTION_ID);
   const footerCoversCenter = useMapFooterCenterCovered();
+  const footerBox = useMapFooterBox();
+  const followTrack = useSheetFollowTrack();
 
   // Declarative legends (manifest `frontend.overlay.legend` data) are rendered by
   // the host; they take precedence over the code legend path.
@@ -123,9 +132,18 @@ export function LegendHost() {
   // transitioned: an eased transition restarted on every frame of a sheet drag
   // lags the sheet and the footer by a few hundred pixels.
   const onFooter = footerCoversCenter && footerExtent > 0 ? `${footerExtent}px` : null;
+  // While a sheet drives the follow, the same two edges come from its track
+  // and the tab rides them on the compositor (see lib/sheetFollow).
+  const follow = !followTrack
+    ? null
+    : footerCoversCenter
+      ? planAboveFooter(followTrack, footerBox, 0, 0)
+      : planSheetFollow(followTrack, { offset: 0, min: 0 });
   const bottom = {
     // The visible sheet height already includes its safe-area padding.
-    xs: onFooter ?? (followHeight > 0 ? `${followHeight}px` : FLUSH_BOTTOM),
+    xs: follow
+      ? `${follow.base}px`
+      : (onFooter ?? (followHeight > 0 ? `${followHeight}px` : FLUSH_BOTTOM)),
     sm: onFooter ?? FLUSH_BOTTOM,
   };
 
@@ -138,6 +156,7 @@ export function LegendHost() {
         transform: "translateX(-50%)",
         // Matches the footer's own `left` transition as the sidebar shifts.
         transition: "left 0.25s ease",
+        ...sheetFollowSx(follow),
         zIndex: 10,
         // column-reverse: the toggle (first child) sits flush at the bottom edge
         // and the legends stack upward above it.

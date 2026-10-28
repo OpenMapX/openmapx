@@ -3,6 +3,7 @@
 import Box from "@mui/material/Box";
 import { isOverSpeed, useNavigationStore, useSettingsStore } from "@openmapx/core";
 import type { Ref } from "react";
+import { planSheetFollow, sheetFollowSx, useSheetFollowTrack } from "@/lib/sheetFollow";
 import { SpeedLimitBadge } from "./SpeedLimitBadge";
 
 interface Props {
@@ -22,6 +23,11 @@ export function NavSpeedLimitSlot({ isMobile, sheetClearance, elementRef }: Prop
   const currentSpeedLimit = useNavigationStore((s) => s.currentSpeedLimit);
   const speedMps = useNavigationStore((s) => s.progress?.speedMps ?? 0);
   const units = useSettingsStore((s) => s.units);
+  // While a sheet drives the follow, the badge rides its top edge on the
+  // compositor instead of a margin rewritten every frame (see lib/sheetFollow).
+  const followTrack = useSheetFollowTrack();
+  const follow =
+    isMobile && followTrack ? planSheetFollow(followTrack, { offset: 0, min: 0 }) : null;
 
   // Keep the measured element stable: publishing its first ref from a GPS
   // fix would re-render the cold chrome that owns the junction budget.
@@ -38,7 +44,8 @@ export function NavSpeedLimitSlot({ isMobile, sheetClearance, elementRef }: Prop
         // Lifts the badge above the fixed-position mobile sheet;
         // inert on desktop, where the panel stays in-flow below it
         // and the sheet (so this clearance) never mounts.
-        mb: isMobile && sheetClearance > 0 ? `${sheetClearance}px` : 0,
+        mb: !follow && isMobile && sheetClearance > 0 ? `${sheetClearance}px` : 0,
+        ...sheetFollowSx(follow),
       }}
     >
       {currentSpeedLimit !== null && (

@@ -47,6 +47,40 @@ export function useMapFooterCenterCovered(): boolean {
   return useSyncExternalStore(subscribe, getMapFooterCenterCovered, getServerSnapshot);
 }
 
+/** Whether the footer rides inside the mobile sheet, and its own height. */
+export interface MapFooterBox {
+  docked: boolean;
+  height: number;
+}
+
+let box: MapFooterBox = { docked: false, height: 0 };
+const boxListeners = new Set<() => void>();
+
+/**
+ * Published as the footer moves between the map and the sheet or resizes.
+ * Chrome standing on an undocked footer while it rides the sheet needs these
+ * two constants, not the footer's moving position.
+ */
+export function publishMapFooterBox(next: MapFooterBox): void {
+  if (next.docked === box.docked && next.height === box.height) return;
+  box = next;
+  for (const listener of boxListeners) listener();
+}
+
+function subscribeBox(listener: () => void): () => void {
+  boxListeners.add(listener);
+  return () => {
+    boxListeners.delete(listener);
+  };
+}
+
+const getBox = () => box;
+const SERVER_BOX: MapFooterBox = { docked: false, height: 0 };
+
+export function useMapFooterBox(): MapFooterBox {
+  return useSyncExternalStore(subscribeBox, getBox, () => SERVER_BOX);
+}
+
 /**
  * True when any of `boxes` reaches into the centre column of `footer`, which
  * spans the same visible map width the legend tab is centred on.

@@ -16,9 +16,10 @@ import type { FocusEvent, MouseEvent } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { LAYER_SELECTOR_OPEN_EVENT } from "@/components/command-palette/constants";
 import { isPanelShiftActive, PANEL_WIDTH, shouldHideLayerSelector } from "@/lib/layout";
-import { MAP_FOOTER_OBSTRUCTION_ID } from "@/lib/mapFooterCenter";
+import { MAP_FOOTER_OBSTRUCTION_ID, useMapFooterBox } from "@/lib/mapFooterCenter";
 import { useMapObstructionExtent } from "@/lib/mapObstructions";
 import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
+import { planAboveFooter, sheetFollowSx, useSheetFollowTrack } from "@/lib/sheetFollow";
 import { DesktopMorePanel } from "./DesktopMorePanel";
 import { DesktopQuickSelector } from "./DesktopQuickSelector";
 import { BASE_LAYER_OPTIONS } from "./layerSelectorConfig";
@@ -52,6 +53,11 @@ export function LayerSelector() {
   // inside it, read live so the button rides a moving sheet.
   const footerExtent = useMapObstructionExtent(MAP_FOOTER_OBSTRUCTION_ID);
   const sheetClearance = useMobilePanelClearance(useWindowHeight());
+  // While a sheet drives the follow, the same edges come from its track and
+  // the button rides them on the compositor (see lib/sheetFollow).
+  const followTrack = useSheetFollowTrack();
+  const footerBox = useMapFooterBox();
+  const follow = followTrack ? planAboveFooter(followTrack, footerBox, 8, 26) : null;
 
   const panelShiftActive = isPanelShiftActive({
     sidebarOpen: activeSidebarId !== null,
@@ -182,7 +188,8 @@ export function LayerSelector() {
         sx={[
           {
             position: "absolute",
-            bottom: Math.max(26, footerExtent + 8, sheetClearance + 8),
+            bottom: follow ? follow.base : Math.max(26, footerExtent + 8, sheetClearance + 8),
+            ...sheetFollowSx(follow),
             left: 12,
             transition: "opacity 0.18s ease",
             zIndex: 10,
