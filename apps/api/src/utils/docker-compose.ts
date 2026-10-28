@@ -12,7 +12,7 @@ import {
 
 export interface PsEntry {
   service: string;
-  state: "running" | "exited" | "restarting" | "created" | "paused" | "not-running";
+  state: "running" | "exited" | "restarting" | "created" | "paused" | "not-running" | "unknown";
 }
 
 interface OpsDependencies {
@@ -36,7 +36,7 @@ function client(dependencies: OpsDependencies): ApiOpsClient {
 function composeState(
   state: OpsResultFor<"stack.status">["services"][number]["state"],
 ): PsEntry["state"] {
-  if (state === "stopped" || state === "unknown") return "not-running";
+  if (state === "stopped") return "not-running";
   return state;
 }
 
@@ -49,16 +49,12 @@ export async function dockerStatus(
 }
 
 export async function dockerComposePs(dependencies: OpsDependencies = {}): Promise<PsEntry[]> {
-  try {
-    const submitted = await client(dependencies).execute({ kind: "stack.status" }, {});
-    if (submitted.execution !== "sync") return [];
-    return submitted.value.services.map((service) => ({
-      service: service.serviceId,
-      state: composeState(service.state),
-    }));
-  } catch {
-    return [];
-  }
+  const submitted = await client(dependencies).execute({ kind: "stack.status" }, {});
+  if (submitted.execution !== "sync") throw new ApiOpsError("runtime");
+  return submitted.value.services.map((service) => ({
+    service: service.serviceId,
+    state: composeState(service.state),
+  }));
 }
 
 export async function inspectDawarichProvisioning(

@@ -20,7 +20,7 @@ interface AdminUser {
 interface AdminLayoutProps {
   children: React.ReactNode;
   user: AdminUser;
-  selfHosted?: boolean;
+  selfHosted?: boolean | null;
 }
 
 export function AdminLayout({ children, user, selfHosted = false }: AdminLayoutProps) {

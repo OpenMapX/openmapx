@@ -33753,6 +33753,11 @@
                               "minimum": 0,
                               "maximum": 9007199254740991
                             },
+                            "unknown": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
                             "unhealthy": {
                               "type": "integer",
                               "minimum": 0,
@@ -33762,6 +33767,7 @@
                           "required": [
                             "running",
                             "stopped",
+                            "unknown",
                             "unhealthy"
                           ],
                           "additionalProperties": false
@@ -34569,6 +34575,51 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "acquisition": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "state": {
+                              "type": "string",
+                              "enum": [
+                                "available"
+                              ]
+                            },
+                            "reason": {
+                              "type": "null"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "state": {
+                              "type": "string",
+                              "enum": [
+                                "unavailable"
+                              ]
+                            },
+                            "reason": {
+                              "type": "string",
+                              "enum": [
+                                "ops_unavailable"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
                     "services": {
                       "type": "array",
                       "items": {
@@ -34809,6 +34860,486 @@
                               "not-running",
                               "unknown"
                             ]
+                          },
+                          "actions": {
+                            "type": "object",
+                            "properties": {
+                              "start": {
+                                "type": "object",
+                                "properties": {
+                                  "available": {
+                                    "type": "boolean"
+                                  },
+                                  "execution": {
+                                    "type": "string",
+                                    "enum": [
+                                      "direct",
+                                      "workflow",
+                                      "host"
+                                    ]
+                                  },
+                                  "reason": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "disabled",
+                                          "not_owned",
+                                          "not_running",
+                                          "control_plane",
+                                          "host_only",
+                                          "unavailable",
+                                          "not_buildable"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "workflow": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "core-restart",
+                                          "system-update",
+                                          "coordinator-apply",
+                                          "coordinator-update"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "available",
+                                  "execution",
+                                  "reason",
+                                  "workflow"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "stop": {
+                                "type": "object",
+                                "properties": {
+                                  "available": {
+                                    "type": "boolean"
+                                  },
+                                  "execution": {
+                                    "type": "string",
+                                    "enum": [
+                                      "direct",
+                                      "workflow",
+                                      "host"
+                                    ]
+                                  },
+                                  "reason": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "disabled",
+                                          "not_owned",
+                                          "not_running",
+                                          "control_plane",
+                                          "host_only",
+                                          "unavailable",
+                                          "not_buildable"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "workflow": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "core-restart",
+                                          "system-update",
+                                          "coordinator-apply",
+                                          "coordinator-update"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "available",
+                                  "execution",
+                                  "reason",
+                                  "workflow"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "restart": {
+                                "type": "object",
+                                "properties": {
+                                  "available": {
+                                    "type": "boolean"
+                                  },
+                                  "execution": {
+                                    "type": "string",
+                                    "enum": [
+                                      "direct",
+                                      "workflow",
+                                      "host"
+                                    ]
+                                  },
+                                  "reason": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "disabled",
+                                          "not_owned",
+                                          "not_running",
+                                          "control_plane",
+                                          "host_only",
+                                          "unavailable",
+                                          "not_buildable"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "workflow": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "core-restart",
+                                          "system-update",
+                                          "coordinator-apply",
+                                          "coordinator-update"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "available",
+                                  "execution",
+                                  "reason",
+                                  "workflow"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "update": {
+                                "type": "object",
+                                "properties": {
+                                  "available": {
+                                    "type": "boolean"
+                                  },
+                                  "execution": {
+                                    "type": "string",
+                                    "enum": [
+                                      "direct",
+                                      "workflow",
+                                      "host"
+                                    ]
+                                  },
+                                  "reason": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "disabled",
+                                          "not_owned",
+                                          "not_running",
+                                          "control_plane",
+                                          "host_only",
+                                          "unavailable",
+                                          "not_buildable"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "workflow": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "core-restart",
+                                          "system-update",
+                                          "coordinator-apply",
+                                          "coordinator-update"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "available",
+                                  "execution",
+                                  "reason",
+                                  "workflow"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "build": {
+                                "type": "object",
+                                "properties": {
+                                  "available": {
+                                    "type": "boolean"
+                                  },
+                                  "execution": {
+                                    "type": "string",
+                                    "enum": [
+                                      "direct",
+                                      "workflow",
+                                      "host"
+                                    ]
+                                  },
+                                  "reason": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "disabled",
+                                          "not_owned",
+                                          "not_running",
+                                          "control_plane",
+                                          "host_only",
+                                          "unavailable",
+                                          "not_buildable"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "workflow": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "core-restart",
+                                          "system-update",
+                                          "coordinator-apply",
+                                          "coordinator-update"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "available",
+                                  "execution",
+                                  "reason",
+                                  "workflow"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "logs": {
+                                "type": "object",
+                                "properties": {
+                                  "available": {
+                                    "type": "boolean"
+                                  },
+                                  "execution": {
+                                    "type": "string",
+                                    "enum": [
+                                      "direct",
+                                      "workflow",
+                                      "host"
+                                    ]
+                                  },
+                                  "reason": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "disabled",
+                                          "not_owned",
+                                          "not_running",
+                                          "control_plane",
+                                          "host_only",
+                                          "unavailable",
+                                          "not_buildable"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "workflow": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "core-restart",
+                                          "system-update",
+                                          "coordinator-apply",
+                                          "coordinator-update"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "available",
+                                  "execution",
+                                  "reason",
+                                  "workflow"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "pull": {
+                                "type": "object",
+                                "properties": {
+                                  "available": {
+                                    "type": "boolean"
+                                  },
+                                  "execution": {
+                                    "type": "string",
+                                    "enum": [
+                                      "direct",
+                                      "workflow",
+                                      "host"
+                                    ]
+                                  },
+                                  "reason": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "disabled",
+                                          "not_owned",
+                                          "not_running",
+                                          "control_plane",
+                                          "host_only",
+                                          "unavailable",
+                                          "not_buildable"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "workflow": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "core-restart",
+                                          "system-update",
+                                          "coordinator-apply",
+                                          "coordinator-update"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "available",
+                                  "execution",
+                                  "reason",
+                                  "workflow"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "apply": {
+                                "type": "object",
+                                "properties": {
+                                  "available": {
+                                    "type": "boolean"
+                                  },
+                                  "execution": {
+                                    "type": "string",
+                                    "enum": [
+                                      "direct",
+                                      "workflow",
+                                      "host"
+                                    ]
+                                  },
+                                  "reason": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "disabled",
+                                          "not_owned",
+                                          "not_running",
+                                          "control_plane",
+                                          "host_only",
+                                          "unavailable",
+                                          "not_buildable"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "workflow": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "core-restart",
+                                          "system-update",
+                                          "coordinator-apply",
+                                          "coordinator-update"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "available",
+                                  "execution",
+                                  "reason",
+                                  "workflow"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "start",
+                              "stop",
+                              "restart",
+                              "update",
+                              "build",
+                              "logs",
+                              "pull",
+                              "apply"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -34820,7 +35351,8 @@
                           "consumes",
                           "enabled",
                           "isBuiltIn",
-                          "status"
+                          "status",
+                          "actions"
                         ],
                         "additionalProperties": false
                       }
@@ -34838,6 +35370,11 @@
                           "minimum": 0,
                           "maximum": 9007199254740991
                         },
+                        "unknown": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
                         "total": {
                           "type": "integer",
                           "minimum": 0,
@@ -34847,12 +35384,14 @@
                       "required": [
                         "running",
                         "stopped",
+                        "unknown",
                         "total"
                       ],
                       "additionalProperties": false
                     }
                   },
                   "required": [
+                    "acquisition",
                     "services",
                     "summary"
                   ],
@@ -37866,6 +38405,51 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "acquisition": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "state": {
+                              "type": "string",
+                              "enum": [
+                                "available"
+                              ]
+                            },
+                            "reason": {
+                              "type": "null"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "state": {
+                              "type": "string",
+                              "enum": [
+                                "unavailable"
+                              ]
+                            },
+                            "reason": {
+                              "type": "string",
+                              "enum": [
+                                "ops_unavailable"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
                     "statuses": {
                       "type": "array",
                       "items": {
@@ -37901,6 +38485,7 @@
                     }
                   },
                   "required": [
+                    "acquisition",
                     "statuses",
                     "checkedAt"
                   ],
@@ -40394,6 +40979,51 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "acquisition": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "state": {
+                              "type": "string",
+                              "enum": [
+                                "available"
+                              ]
+                            },
+                            "reason": {
+                              "type": "null"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "state": {
+                              "type": "string",
+                              "enum": [
+                                "unavailable"
+                              ]
+                            },
+                            "reason": {
+                              "type": "string",
+                              "enum": [
+                                "ops_unavailable"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
                     "manifest": {
                       "type": "object",
                       "properties": {
@@ -41304,14 +41934,496 @@
                         "not-running",
                         "unknown"
                       ]
+                    },
+                    "actions": {
+                      "type": "object",
+                      "properties": {
+                        "start": {
+                          "type": "object",
+                          "properties": {
+                            "available": {
+                              "type": "boolean"
+                            },
+                            "execution": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "workflow",
+                                "host"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "disabled",
+                                    "not_owned",
+                                    "not_running",
+                                    "control_plane",
+                                    "host_only",
+                                    "unavailable",
+                                    "not_buildable"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "workflow": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "core-restart",
+                                    "system-update",
+                                    "coordinator-apply",
+                                    "coordinator-update"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "available",
+                            "execution",
+                            "reason",
+                            "workflow"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "stop": {
+                          "type": "object",
+                          "properties": {
+                            "available": {
+                              "type": "boolean"
+                            },
+                            "execution": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "workflow",
+                                "host"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "disabled",
+                                    "not_owned",
+                                    "not_running",
+                                    "control_plane",
+                                    "host_only",
+                                    "unavailable",
+                                    "not_buildable"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "workflow": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "core-restart",
+                                    "system-update",
+                                    "coordinator-apply",
+                                    "coordinator-update"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "available",
+                            "execution",
+                            "reason",
+                            "workflow"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "restart": {
+                          "type": "object",
+                          "properties": {
+                            "available": {
+                              "type": "boolean"
+                            },
+                            "execution": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "workflow",
+                                "host"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "disabled",
+                                    "not_owned",
+                                    "not_running",
+                                    "control_plane",
+                                    "host_only",
+                                    "unavailable",
+                                    "not_buildable"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "workflow": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "core-restart",
+                                    "system-update",
+                                    "coordinator-apply",
+                                    "coordinator-update"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "available",
+                            "execution",
+                            "reason",
+                            "workflow"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "update": {
+                          "type": "object",
+                          "properties": {
+                            "available": {
+                              "type": "boolean"
+                            },
+                            "execution": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "workflow",
+                                "host"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "disabled",
+                                    "not_owned",
+                                    "not_running",
+                                    "control_plane",
+                                    "host_only",
+                                    "unavailable",
+                                    "not_buildable"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "workflow": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "core-restart",
+                                    "system-update",
+                                    "coordinator-apply",
+                                    "coordinator-update"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "available",
+                            "execution",
+                            "reason",
+                            "workflow"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "build": {
+                          "type": "object",
+                          "properties": {
+                            "available": {
+                              "type": "boolean"
+                            },
+                            "execution": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "workflow",
+                                "host"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "disabled",
+                                    "not_owned",
+                                    "not_running",
+                                    "control_plane",
+                                    "host_only",
+                                    "unavailable",
+                                    "not_buildable"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "workflow": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "core-restart",
+                                    "system-update",
+                                    "coordinator-apply",
+                                    "coordinator-update"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "available",
+                            "execution",
+                            "reason",
+                            "workflow"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "logs": {
+                          "type": "object",
+                          "properties": {
+                            "available": {
+                              "type": "boolean"
+                            },
+                            "execution": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "workflow",
+                                "host"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "disabled",
+                                    "not_owned",
+                                    "not_running",
+                                    "control_plane",
+                                    "host_only",
+                                    "unavailable",
+                                    "not_buildable"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "workflow": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "core-restart",
+                                    "system-update",
+                                    "coordinator-apply",
+                                    "coordinator-update"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "available",
+                            "execution",
+                            "reason",
+                            "workflow"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "pull": {
+                          "type": "object",
+                          "properties": {
+                            "available": {
+                              "type": "boolean"
+                            },
+                            "execution": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "workflow",
+                                "host"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "disabled",
+                                    "not_owned",
+                                    "not_running",
+                                    "control_plane",
+                                    "host_only",
+                                    "unavailable",
+                                    "not_buildable"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "workflow": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "core-restart",
+                                    "system-update",
+                                    "coordinator-apply",
+                                    "coordinator-update"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "available",
+                            "execution",
+                            "reason",
+                            "workflow"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "apply": {
+                          "type": "object",
+                          "properties": {
+                            "available": {
+                              "type": "boolean"
+                            },
+                            "execution": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "workflow",
+                                "host"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "disabled",
+                                    "not_owned",
+                                    "not_running",
+                                    "control_plane",
+                                    "host_only",
+                                    "unavailable",
+                                    "not_buildable"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "workflow": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "core-restart",
+                                    "system-update",
+                                    "coordinator-apply",
+                                    "coordinator-update"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "available",
+                            "execution",
+                            "reason",
+                            "workflow"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "start",
+                        "stop",
+                        "restart",
+                        "update",
+                        "build",
+                        "logs",
+                        "pull",
+                        "apply"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
+                    "acquisition",
                     "manifest",
                     "directory",
                     "isBuiltIn",
                     "enabled",
-                    "status"
+                    "status",
+                    "actions"
                   ],
                   "additionalProperties": false
                 }

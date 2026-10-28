@@ -2,6 +2,7 @@ import { credentialSetupSchema } from "@openmapx/extension-contracts/integration
 
 import { serviceManifestSchema } from "@openmapx/extension-contracts/service";
 import z from "zod/v4";
+import { serviceActionsSchema } from "../../../ops/service-results";
 import { adminCountSchema, adminJsonValueSchema, adminTimestampSchema } from "../admin";
 import { adminJsonWire, preserveManifestJson } from "../manifest-json";
 import {
@@ -55,6 +56,10 @@ export const adminServiceStatusSchema = z.enum([
   "not-running",
   "unknown",
 ]);
+export const adminServiceAcquisitionSchema = z.union([
+  z.strictObject({ state: z.literal("available"), reason: z.null() }),
+  z.strictObject({ state: z.literal("unavailable"), reason: z.literal("ops_unavailable") }),
+]);
 export const adminServiceSummarySchema = z.strictObject({
   id: serviceManifestSchema.shape.id,
   name: serviceManifestSchema.shape.name,
@@ -67,21 +72,26 @@ export const adminServiceSummarySchema = z.strictObject({
   enabled: z.boolean(),
   isBuiltIn: z.boolean(),
   status: adminServiceStatusSchema,
+  actions: serviceActionsSchema,
 });
 export const adminServicesSchema = z.strictObject({
+  acquisition: adminServiceAcquisitionSchema,
   services: z.array(adminServiceSummarySchema),
   summary: z.strictObject({
     running: adminCountSchema,
     stopped: adminCountSchema,
+    unknown: adminCountSchema,
     total: adminCountSchema,
   }),
 });
 export const adminServiceDetailSchema = z.strictObject({
+  acquisition: adminServiceAcquisitionSchema,
   manifest: adminServiceManifestSchema,
   directory: z.string(),
   isBuiltIn: z.boolean(),
   enabled: z.boolean(),
   status: adminServiceStatusSchema,
+  actions: serviceActionsSchema,
 });
 export const adminServiceConfigSourceSchema = z.enum(["default", "database", "env"]);
 export const adminServiceResolvedConfigSchema = z.record(
@@ -153,6 +163,7 @@ export const adminServicesBulkActionSchema = z.union([
   ),
 ]);
 export const adminServicesCheckedSchema = z.strictObject({
+  acquisition: adminServiceAcquisitionSchema,
   statuses: z.array(z.strictObject({ service: z.string(), state: adminServiceStatusSchema })),
   checkedAt: adminTimestampSchema,
 });

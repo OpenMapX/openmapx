@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
+import { hostControlConfigured } from "../services/deployment-mode";
 import { jobRunner } from "../services/job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "../services/ops-client";
 import { writeAuditLog } from "../utils/audit-log";
@@ -63,7 +64,7 @@ async function deploymentState(durableIdentity: string) {
       deployment: {
         dockerAvailable: inspection.dockerReachable,
         composeRendered: inspection.composeReady,
-        hostControlConfigured: inspection.maintenanceReady,
+        hostControlConfigured: hostControlConfigured(),
         maintenanceReady: inspection.maintenanceReady,
       },
       inspection,
@@ -73,7 +74,7 @@ async function deploymentState(durableIdentity: string) {
       deployment: {
         dockerAvailable: false,
         composeRendered: false,
-        hostControlConfigured: false,
+        hostControlConfigured: hostControlConfigured(),
         maintenanceReady: false,
       },
       inspection: { release: {}, services: [] },

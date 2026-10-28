@@ -2,10 +2,18 @@ import { createRequire } from "node:module";
 import { serviceManifestSchema } from "@openmapx/extension-contracts/service";
 import { describe, expect, it } from "vitest";
 import { OPS_RESULT_SCHEMAS } from "../../ops/contract";
+import { SERVICE_ACTIONS } from "../../ops/service-results";
 import { routeJsonSchema } from "../schema";
 import type { AdminOperation } from "./admin";
 import * as contracts from "./index";
 
+const acquisition = { state: "available", reason: null };
+const actions = Object.fromEntries(
+  SERVICE_ACTIONS.map((action) => [
+    action,
+    { available: false, execution: "direct", reason: "unavailable", workflow: null },
+  ]),
+);
 const at = "2026-10-21T10:00:00.000Z";
 const inventory = [
   ["listAdminServices", "GET", "/services"],
@@ -202,6 +210,8 @@ describe("canonical complete service administration contracts", () => {
     });
     expect(contracts.adminServiceManifestSchema.parse(raw)).toEqual(raw);
     const detail = {
+      acquisition,
+      actions,
       manifest: raw,
       directory: "/synthetic/service",
       isBuiltIn: false,
@@ -268,6 +278,7 @@ describe("canonical complete service administration contracts", () => {
   });
   it("keeps list normalized names and config JSON/source fields complete", () => {
     const summary = {
+      actions,
       id: raw.id,
       name: raw.name,
       version: raw.version,
@@ -279,7 +290,11 @@ describe("canonical complete service administration contracts", () => {
       isBuiltIn: false,
       status: "not-running",
     };
-    const list = { services: [summary], summary: { running: 0, stopped: 1, total: 1 } };
+    const list = {
+      acquisition,
+      services: [summary],
+      summary: { running: 0, stopped: 1, unknown: 0, total: 1 },
+    };
     expect(response("listAdminServices", 200, list)).toEqual(list);
     const config = {
       schema: raw.configSchema,
@@ -602,10 +617,11 @@ describe("canonical complete service administration contracts", () => {
     expect(response("rollbackAdminSharedMobility", 200, policy)).toEqual(policy);
     expect(
       response("checkAdminServices", 200, {
+        acquisition,
         statuses: [{ service: "sample", state: "paused" }],
         checkedAt: at,
       }),
-    ).toEqual({ statuses: [{ service: "sample", state: "paused" }], checkedAt: at });
+    ).toEqual({ acquisition, statuses: [{ service: "sample", state: "paused" }], checkedAt: at });
     const deployment = {
       selfHosted: true,
       dockerAvailable: false,

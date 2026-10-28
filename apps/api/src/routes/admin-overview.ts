@@ -4,18 +4,18 @@ import { db } from "../db";
 import { adminAuditLog, session, user } from "../db/schema";
 import { getAllIntegrations } from "../integration-host";
 import { listActivityJobs } from "../services/activity-jobs";
-import { isDockerAvailable } from "../services/admin-ops";
+import { isSelfHostedDeployment } from "../services/deployment-mode";
 import {
   computeCredentialStatus,
   getIntegrationDisplayName,
 } from "../services/integration-credential-status";
 import { getCachedHealthStatus } from "../services/integration-health";
-import { dockerComposePs, type PsEntry } from "../utils/docker-compose";
+import { readServiceInventory } from "../services/service-inventory";
 import { registerIntegrationAdminRoute } from "./admin-integration-contract";
 
 export async function adminOverviewRoute(app: FastifyInstance): Promise<void> {
   registerIntegrationAdminRoute(app, "getAdminOverview", async () => {
-    const selfHosted = await isDockerAvailable();
+    const selfHosted = isSelfHostedDeployment();
     const now = new Date();
     const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
@@ -26,7 +26,7 @@ export async function adminOverviewRoute(app: FastifyInstance): Promise<void> {
       integrations,
       recentAudit,
       activityJobs,
-      dockerServices,
+      inventory,
     ] = await Promise.all([
       db.select({ total: count() }).from(user),
       db.select({ total: count() }).from(user).where(eq(user.banned, true)),
@@ -34,7 +34,7 @@ export async function adminOverviewRoute(app: FastifyInstance): Promise<void> {
       Promise.resolve(getAllIntegrations()),
       db.select().from(adminAuditLog).orderBy(desc(adminAuditLog.createdAt)).limit(10),
       listActivityJobs({ limit: 10, offset: 0 }),
-      selfHosted ? dockerComposePs() : Promise.resolve([] as PsEntry[]),
+      selfHosted ? readServiceInventory() : Promise.resolve(null),
     ]);
 
     const totalUsers = userRow?.total ?? 0;
@@ -55,19 +55,18 @@ export async function adminOverviewRoute(app: FastifyInstance): Promise<void> {
       return cached?.status === "down";
     }).length;
 
-    // Services summary (Docker only). The new `dockerComposePs` helper reports
-    // raw docker states; we collapse "exited"/"created"/"paused"/"not-running"
-    // into a single "stopped" bucket and treat "restarting" as "unhealthy".
-    const runningServices = dockerServices.filter((s) => s.state === "running").length;
-    const stoppedServices = dockerServices.filter(
-      (s) => s.state !== "running" && s.state !== "restarting",
-    ).length;
+    const dockerServices =
+      inventory?.services.map((s) => ({ service: s.id, state: s.status })) ?? [];
+    const runningServices = inventory?.summary.running ?? 0;
+    const stoppedServices = inventory?.summary.stopped ?? 0;
+    const unknownServices = inventory?.summary.unknown ?? 0;
     const unhealthyServices = dockerServices.filter((s) => s.state === "restarting").length;
 
     // System health
     const unhealthyCount = unhealthyIntegrations + unhealthyServices;
     let overallHealth: "pass" | "degraded" | "down" = "pass";
-    if (unhealthyCount > 0) overallHealth = "degraded";
+    if (unhealthyCount > 0 || unknownServices > 0 || inventory?.acquisition.state === "unavailable")
+      overallHealth = "degraded";
     if (
       (enabledIntegrations > 0 && unhealthyIntegrations > enabledIntegrations / 2) ||
       (selfHosted && runningServices > 0 && unhealthyServices > runningServices)
@@ -82,6 +81,14 @@ export async function adminOverviewRoute(app: FastifyInstance): Promise<void> {
       message: string;
       target?: string;
     }> = [];
+
+    if (inventory?.acquisition.state === "unavailable")
+      attention.push({
+        type: "control_plane_unavailable",
+        severity: "warning",
+        message: "Service status is unavailable. Check the operations agent.",
+        target: "/admin/services",
+      });
 
     // Missing credentials — flag integrations where every declared secret is
     // unresolved in the actual configuration cascade.
@@ -162,6 +169,7 @@ export async function adminOverviewRoute(app: FastifyInstance): Promise<void> {
         ? {
             running: runningServices,
             stopped: stoppedServices,
+            unknown: unknownServices,
             unhealthy: unhealthyServices,
           }
         : null,

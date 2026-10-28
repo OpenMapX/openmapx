@@ -155,4 +155,13 @@ export const serviceActionDecisionSchema = z
         (decision.execution !== "host" || decision.reason === "host_only"),
   );
 export type ServiceActionDecision = z.infer<typeof serviceActionDecisionSchema>;
-export const serviceActionsSchema = z.record(z.enum(SERVICE_ACTIONS), serviceActionDecisionSchema);
+export const serviceActionsSchema = z.strictObject({
+  start: serviceActionDecisionSchema,
+  stop: serviceActionDecisionSchema,
+  restart: serviceActionDecisionSchema,
+  update: serviceActionDecisionSchema,
+  build: serviceActionDecisionSchema,
+  logs: serviceActionDecisionSchema,
+  pull: serviceActionDecisionSchema,
+  apply: serviceActionDecisionSchema,
+});

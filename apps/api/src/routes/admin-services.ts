@@ -19,6 +19,7 @@ import {
   DAWARICH_CREDENTIAL_MANAGED_ERROR,
   isProvisioningOwnedDawarichCredential,
 } from "../services/dawarich/credential-policy.js";
+import { hostControlConfigured, isSelfHostedDeployment } from "../services/deployment-mode";
 import {
   createDirectAdminOpsKey,
   DIRECT_OPS_IDEMPOTENCY_HEADER,
@@ -28,11 +29,12 @@ import { jobRunner } from "../services/job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "../services/ops-client";
 import { isSecretsConfigured } from "../services/secrets";
 import { resolveServiceConfigWithSources } from "../services/service-config-resolver";
+import { readServiceInventory } from "../services/service-inventory";
 import { getServiceRegistry } from "../services/service-registry";
 import { listServiceSecrets } from "../services/service-secrets";
 import { applyTrustedConfiguration } from "../services/trusted-config-operations";
 import { writeAuditLog } from "../utils/audit-log";
-import { dockerComposeLogs, dockerComposePs } from "../utils/docker-compose";
+import { dockerComposeLogs } from "../utils/docker-compose";
 import { maskSecretConfigValues } from "../utils/mask-config.js";
 import { serviceActionLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
@@ -40,7 +42,7 @@ import { declareRouteAuth } from "../utils/route-auth.js";
 import { getSecretFields, validateConfigBody } from "../utils/validate-config-body";
 import { registerServiceAdminRoute } from "./admin-service-contract";
 
-const { getProvidedCapabilityNames, serviceConfigEnvPrefix } = coreServices;
+const { serviceConfigEnvPrefix } = coreServices;
 const BULK_SERVICE_ACTIONS = new Set(["start", "stop", "restart", "update", "build"] as const);
 
 function hasOnlyBodyKeys(body: unknown, allowed: ReadonlySet<string>): boolean {
@@ -118,27 +120,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
 
   // GET /admin/services — list all services from registry with docker ps status
   registerServiceAdminRoute(app, "listAdminServices", async () => {
-    const registry = getServiceRegistry();
-    const ps = await dockerComposePs();
-    const services = registry.list().map((s) => ({
-      id: s.manifest.id,
-      name: s.manifest.name,
-      version: s.manifest.version,
-      description: s.manifest.description,
-      quality: s.manifest.quality,
-      // Normalised to bare strings for the admin UI; the structured-form
-      // metadata isn't surfaced anywhere yet (reserved slot for future
-      // runtime layers like region-aware routing).
-      provides: getProvidedCapabilityNames(s.manifest.provides),
-      consumes: s.manifest.consumes ?? [],
-      exposure: s.manifest.exposure,
-      enabled: s.enabled,
-      isBuiltIn: s.isBuiltIn,
-      status: ps.find((p) => p.service === s.manifest.id)?.state ?? "not-running",
-    }));
-    const running = services.filter((s) => s.status === "running").length;
-    const stopped = services.filter((s) => s.status !== "running").length;
-    return { services, summary: { running, stopped, total: services.length } };
+    return readServiceInventory();
   });
 
   // GET /admin/services/:id — single service detail
@@ -154,10 +136,17 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       reply.status(404);
       return { error: "Service not found" };
     }
-    const ps = await dockerComposePs();
+    const inventory = await readServiceInventory();
+    const observed = inventory.services.find((row) => row.id === svc.manifest.id);
+    if (!observed) {
+      reply.status(503);
+      return { error: "Service registry changed; retry the request" };
+    }
     return {
       ...svc,
-      status: ps.find((p) => p.service === svc?.manifest.id)?.state ?? "not-running",
+      status: observed.status,
+      actions: observed.actions,
+      acquisition: inventory.acquisition,
     };
   });
 
@@ -723,18 +712,11 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   registerServiceAdminRoute(app, "getAdminDeployment", async () => {
     const { INFRA_DIR, isDockerAvailable } = await import("../services/admin-ops");
     const dockerAvailable = await isDockerAvailable();
-    // When the API runs inside app-api, docker-compose actions need the
-    // generated compose file's bind paths to resolve to real host paths.
-    // That only works when the operator sets OPENMAPX_HOST_DIR to the
-    // absolute host-side repo path and the app-api service.json bind-mounts
-    // `${OPENMAPX_HOST_DIR}:${OPENMAPX_HOST_DIR}`. Surface the state so the
-    // admin UI can warn on deploy actions that would silently no-op.
     const hostDir = process.env.OPENMAPX_HOST_DIR?.trim();
-    const hostControlConfigured = Boolean(hostDir) && existsSync(hostDir as string);
     return {
-      selfHosted: dockerAvailable,
+      selfHosted: isSelfHostedDeployment(),
       dockerAvailable,
-      hostControlConfigured,
+      hostControlConfigured: hostControlConfigured(),
       hostDir: hostDir ?? null,
       // True once a configuration generation is applied: its render bakes the
       // applied services into app-api; a host-run API sees the generation.
@@ -750,14 +732,18 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   // POST /admin/services/check — docker compose ps summary
   registerServiceAdminRoute(app, "checkAdminServices", async (request) => {
     const adminSession = getAdminSession(request);
-    const ps = await dockerComposePs();
+    const inventory = await readServiceInventory();
     await writeAuditLog({
       actorId: adminSession.user.id,
       targetType: "service",
       action: "service.health_check",
       request,
     });
-    return { statuses: ps, checkedAt: new Date().toISOString() };
+    return {
+      acquisition: inventory.acquisition,
+      statuses: inventory.services.map((s) => ({ service: s.id, state: s.status })),
+      checkedAt: new Date().toISOString(),
+    };
   });
 
   // GET /admin/services/data — data inventory (OSM, builds, MOTIS health)

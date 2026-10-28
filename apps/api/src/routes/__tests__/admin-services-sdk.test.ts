@@ -5,6 +5,7 @@ import {
   type OpsOperationKind,
   type OpsSubmitResult,
   parseOpsJobStatusForKind,
+  SERVICE_ACTIONS,
 } from "@openmapx/core/ops";
 import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -223,6 +224,25 @@ const execute = vi.fn(
     operation: OpsOperation,
     options: { operationKey?: string; signal?: AbortSignal },
   ): Promise<OpsSubmitResult> => {
+    if (operation.kind === "services.inspect")
+      return {
+        execution: "sync",
+        kind: operation.kind,
+        value: {
+          services: [
+            {
+              serviceId: "motis",
+              state: "running",
+              actions: Object.fromEntries(
+                SERVICE_ACTIONS.map((action) => [
+                  action,
+                  { available: false, execution: "direct", reason: "unavailable", workflow: null },
+                ]),
+              ) as never,
+            },
+          ],
+        },
+      };
     if (operation.kind === "stack.status")
       return {
         execution: "sync",
@@ -354,6 +374,22 @@ async function wire(max = 1000) {
 }
 
 describe("actual service producers through final exported SDK", () => {
+  it("keeps configured deployment identity while the agent is unavailable", async () => {
+    vi.stubEnv("OPS_AGENT_URL", "http://ops-agent:3000");
+    vi.stubEnv("OPS_AGENT_TOKEN_FILE", "/unavailable/token");
+    dockerAvailable.mockResolvedValue(false);
+    const { options, close } = await wire();
+    try {
+      expect(await sdk.getAdminDeployment(options)).toMatchObject({
+        status: 200,
+        data: { selfHosted: true, dockerAvailable: false, hostControlConfigured: true },
+      });
+    } finally {
+      await close();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it.each([null, { count: 1 }])(
     "forwards overlapping intents without route-local desired writes or inverse compensation (prior %j)",
     async (prior) => {
@@ -902,7 +938,19 @@ it("retains structured domain failures and retained credential jobs through SDK 
     });
     expect(await sdk.listAdminServices(options)).toMatchObject({
       status: 200,
-      data: { services: [{ status: "not-running" }] },
+      data: {
+        acquisition: { state: "unavailable", reason: "ops_unavailable" },
+        summary: { running: 0, stopped: 0, unknown: 1, total: 1 },
+        services: [
+          {
+            status: "unknown",
+            actions: {
+              start: { available: false, reason: "unavailable" },
+              logs: { available: false, reason: "unavailable" },
+            },
+          },
+        ],
+      },
     });
     expect(cancelJob).not.toHaveBeenCalled();
   } finally {
