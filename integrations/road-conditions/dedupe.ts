@@ -325,6 +325,15 @@ function computeShape(geometry: RoadConditionEvent["geometry"]): Shape | undefin
   const valid = ([x, y]: [number, number]) =>
     Number.isFinite(x) && Number.isFinite(y) && Math.abs(x) <= 180 && Math.abs(y) <= 90;
   if (!parts.every((part) => part.every(valid))) return undefined;
+  // Comparing two shapes costs their vertex counts multiplied: a longer line is
+  // thinned evenly, keeping each part's ends, and one of more parts is not compared.
+  if (parts.length > RAW_VERTEX_CAP) return undefined;
+  const total = parts.reduce((sum, part) => sum + part.length, 0);
+  if (total > RAW_VERTEX_CAP) {
+    const stride = Math.ceil(total / RAW_VERTEX_CAP);
+    for (const [i, part] of parts.entries())
+      parts[i] = part.filter((_, k) => k % stride === 0 || k === part.length - 1);
+  }
   const bbox: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
   for (const part of parts)
     for (const [x, y] of part) {
@@ -354,7 +363,7 @@ function lengthMeters(parts: Part[], cosRefLat: number): number {
   return sum;
 }
 
-/** Points spread evenly along a shape's lines, at most {@link SAMPLES} of them. */
+/** Points spread evenly along a shape's lines, about {@link SAMPLES} of them and one per segment. */
 function samplesAlong(parts: Part[], cosRefLat: number): [number, number][] {
   const total = lengthMeters(parts, cosRefLat);
   if (total === 0) return parts.map((part) => part[0]);
@@ -490,7 +499,12 @@ function cellsOf(bbox: Shape["bbox"]): string[] {
 
 /** Folds each record into an earlier one of another source describing the same measure. */
 function foldAcrossSources(events: RoadConditionEvent[]): RoadConditionEvent[] {
-  type Kept = { event: RoadConditionEvent; shape: Shape | undefined; order: number };
+  type Kept = {
+    event: RoadConditionEvent;
+    shape: Shape | undefined;
+    order: number;
+    sources: Set<string>;
+  };
   const kept: Kept[] = [];
   const grid = new Map<string, Kept[]>();
   const index = (k: Kept) => {
@@ -511,9 +525,11 @@ function foldAcrossSources(events: RoadConditionEvent[]): RoadConditionEvent[] {
         .filter((k) => !seen.has(k) && seen.add(k))
         .sort((a, b) => a.order - b.order);
       for (const k of near) {
-        if (!k.shape) continue;
+        // Each source's own records stay apart, whichever of the fold survives.
+        if (!k.shape || k.sources.has(event.source)) continue;
         const survivor = crossSourceSurvivor(k.event, k.shape, event, shape);
         if (!survivor) continue;
+        k.sources.add(event.source);
         if (survivor === event) {
           k.event = event;
           k.shape = shape;
@@ -524,7 +540,7 @@ function foldAcrossSources(events: RoadConditionEvent[]): RoadConditionEvent[] {
       }
     }
     if (folded) continue;
-    const entry: Kept = { event, shape, order: kept.length };
+    const entry: Kept = { event, shape, order: kept.length, sources: new Set([event.source]) };
     kept.push(entry);
     index(entry);
   }

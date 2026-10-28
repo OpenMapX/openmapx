@@ -420,6 +420,45 @@ describe("dedupeRoadConditionEvents across sources", () => {
     ).toHaveLength(2);
   });
 
+  it("keeps one source's two sections apart when both lie along another's whole", () => {
+    const section = (id: string, from: number, to: number) =>
+      ev({
+        id,
+        source: "de-sn-dresden-events",
+        ...works,
+        geometry: line(from, to),
+        validity: autumn,
+      });
+    const out = dedupeRoadConditionEvents([
+      state,
+      section("west", 0, 150),
+      section("east", 150, 300),
+    ]);
+    expect(out.map((e) => e.id)).toEqual(["state", "east"]);
+  });
+
+  it("compares lines of many vertices within a bounded budget", () => {
+    const dense = (n: number) => ({
+      type: "LineString" as const,
+      coordinates: Array.from({ length: n + 1 }, (_, k) => [
+        13.7 + ((300 * k) / n) * 0.0000142,
+        51.03,
+      ]),
+    });
+    const many = Array.from({ length: 40 }, (_, i) =>
+      ev({
+        id: `d${i}`,
+        source: `de-src-${i}-events`,
+        ...works,
+        geometry: dense(20_000),
+        validity: autumn,
+      }),
+    );
+    const started = performance.now();
+    expect(dedupeRoadConditionEvents([state, ...many])).toHaveLength(1);
+    expect(performance.now() - started).toBeLessThan(5_000);
+  });
+
   it("does not compare a record spanning more than about 50 km", () => {
     const wide = {
       type: "LineString" as const,
