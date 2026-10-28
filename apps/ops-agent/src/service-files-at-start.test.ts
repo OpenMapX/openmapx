@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
 import { afterEach, describe, expect, it } from "vitest";
-import { describeServiceFilesAtStart } from "./service-files-at-start";
+import { agentLogLine, describeServiceFilesAtStart } from "./service-files-at-start";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -58,10 +58,21 @@ describe("the agent's start after a panel self-update", () => {
     const generation = join(f.infraDir, services.CONFIGURATION_GENERATIONS, revision);
     rmSync(join(generation, "service-files.json"));
     const lines = describeServiceFilesAtStart(f.infraDir, f.release);
+    // What a panel self-update leaves, as expected: information.
     expect(lines).toEqual([
-      "The applied configuration was rendered by an earlier release, whose services mount their files from the checkout. The next render mounts this release's files instead.",
-      "The next render imports, once, your edits in the checkout's service files as overrides in infra/docker/overrides/services.",
+      {
+        level: "info",
+        message:
+          "The applied configuration was rendered by an earlier release, whose services mount their files from the checkout. The next render mounts this release's files instead.",
+      },
+      {
+        level: "info",
+        message:
+          "The next render imports, once, your edits in the checkout's service files as overrides in infra/docker/overrides/services.",
+      },
     ]);
+    // The agent's log has it as is; a warning would start with ⚠.
+    expect(lines.map(agentLogLine)).toEqual(lines.map((line) => line.message));
 
     // The update's own render: the import first, then the release's files.
     const committed = await services.commitConfigurationGeneration({
@@ -94,11 +105,18 @@ describe("the agent's start after a panel self-update", () => {
       ...f.release,
       history: new Map([["martin/config/martin.yaml", new Set([shipped])]]),
     };
-    expect(describeServiceFilesAtStart(f.infraDir, release)).toEqual([
-      expect.stringContaining(
-        "The one-time import of your edits in the checkout's service files waits: the checkout's services/service-file-history.json lists versions of services/martin/config/martin.yaml that the release doesn't",
-      ),
+    const lines = describeServiceFilesAtStart(f.infraDir, release);
+    expect(lines).toEqual([
+      {
+        level: "warn",
+        message: expect.stringContaining(
+          "The one-time import of your edits in the checkout's service files waits: the checkout's services/service-file-history.json lists versions of services/martin/config/martin.yaml that the release doesn't",
+        ),
+      },
     ]);
+    expect(agentLogLine(lines[0] as services.ServiceFileReportLine)).toMatch(
+      /^⚠ The one-time import .* waits:/,
+    );
   });
 
   it("reports an override it may not use instead of failing to start", () => {
@@ -108,10 +126,13 @@ describe("the agent's start after a panel self-update", () => {
     writeFileSync(override, "x: 1\n");
     chmodSync(override, 0o666);
     expect(describeServiceFilesAtStart(f.infraDir, f.release)).toEqual([
-      expect.stringContaining("The next render imports, once"),
-      expect.stringContaining(
-        "infra/docker/overrides/services/martin/config/martin.yaml can't be used: group or others may write it",
-      ),
+      { level: "info", message: expect.stringContaining("The next render imports, once") },
+      {
+        level: "warn",
+        message: expect.stringContaining(
+          "infra/docker/overrides/services/martin/config/martin.yaml can't be used: group or others may write it",
+        ),
+      },
     ]);
   });
 });

@@ -406,7 +406,10 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
         const report = `${checked.stdout}${checked.stderr}`;
         expect(report).not.toMatch(/ENOENT/);
         if (layout === "narrow") {
-          expect(report).toContain("runs without the checkout, so it doesn't compare");
+          // The healthy state after the switch: information, on stdout, which
+          // Run diagnostics shows apart from the warnings on stderr.
+          expect(checked.stdout).toContain("runs without the checkout, so it doesn't compare");
+          expect(checked.stderr).not.toContain("so it doesn't compare");
         }
         const rendered = await agent.exec("node", "dist/cli.mjs", "compose", "render");
         expect(rendered, `${rendered.stdout}${rendered.stderr}`).not.toHaveProperty("failed");

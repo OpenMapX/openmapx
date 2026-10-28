@@ -1137,12 +1137,17 @@ describe("ops-agent trusted configuration runtime", () => {
       expect(services.currentConfigurationGeneration(paths.infraDir)).toBeNull();
 
       chmodSync(override, 0o644);
+      stderr.mockClear();
       const applied = `cfg1_${"a".repeat(43)}`;
       await expect(apply(applied)).resolves.toMatchObject({ outcome: "committed" });
       await expect(failure(applied)).resolves.toEqual({
         attemptedRevisionId: applied,
         problem: null,
       });
+      // The override in use is information in the agent's log: no ⚠.
+      expect(stderr.mock.calls.flat().map(String)).toContainEqual(
+        "Service file overrides in use, in place of the release's files (infra/docker/overrides/services): alpha/config/alpha.yml.\n",
+      );
     } finally {
       stderr.mockRestore();
     }

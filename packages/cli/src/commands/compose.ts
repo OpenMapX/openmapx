@@ -427,7 +427,7 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
       allowMissingSelected: applied.source === "default",
     });
     for (const problem of committed.stackFileProblems) log.warn(problem);
-    for (const line of committed.serviceFileReport) log.warn(line);
+    for (const { level, message } of committed.serviceFileReport) log[level](message);
     if (legacyTraefik === true) log.warn(coreServices.LEGACY_TRAEFIK_MOUNT_NOTICE);
     else if (legacyTraefik === undefined) {
       log.dim(

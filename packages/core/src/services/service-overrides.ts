@@ -9,6 +9,7 @@ import {
   ServiceFileError,
   sha256,
 } from "./release-service-files";
+import type { ServiceFileReportLine } from "./service-file-report";
 import type { ServiceFileOverlay } from "./service-file-store";
 
 /**
@@ -258,31 +259,41 @@ export function staleOverrides(
   return stale;
 }
 
-/** What render, the agent's log, check and Run diagnostics say about the overrides; names only. */
+/**
+ * What render, the agent's log, check and Run diagnostics say about the
+ * overrides; names only. The overrides in use are how things should be;
+ * one whose release file changed, or one that is ignored, needs a look.
+ */
 export function describeServiceOverrides(
   overrides: ServiceOverrides,
   stale: readonly ActiveOverride[],
-): string[] {
-  const lines: string[] = [];
+): ServiceFileReportLine[] {
+  const lines: ServiceFileReportLine[] = [];
   if (overrides.active.length > 0) {
     const names = overrides.active.map(
       (entry) =>
         `${entry.serviceId}/${entry.path}${entry.releaseSha256 === null ? " (no release file; Traefik's dynamic directory)" : ""}`,
     );
-    lines.push(
-      `Service file overrides in use, in place of the release's files (infra/docker/overrides/services): ${names.join(", ")}.`,
-    );
+    lines.push({
+      level: "info",
+      message: `Service file overrides in use, in place of the release's files (infra/docker/overrides/services): ${names.join(", ")}.`,
+    });
   }
   for (const entry of stale) {
     const key = `${entry.serviceId}/${entry.path}`;
-    lines.push(
-      entry.releaseSha256 === null
-        ? `The release no longer ships services/${key}, which infra/docker/overrides/services/${key} was made for. Check that it still applies, then edit the override to acknowledge it.`
-        : `The release's services/${key} changed since infra/docker/overrides/services/${key} was made, and the override still replaces it. Compare the two, then edit the override to acknowledge the release's change.`,
-    );
+    lines.push({
+      level: "warn",
+      message:
+        entry.releaseSha256 === null
+          ? `The release no longer ships services/${key}, which infra/docker/overrides/services/${key} was made for. Check that it still applies, then edit the override to acknowledge it.`
+          : `The release's services/${key} changed since infra/docker/overrides/services/${key} was made, and the override still replaces it. Compare the two, then edit the override to acknowledge the release's change.`,
+    });
   }
   for (const entry of overrides.ignored) {
-    lines.push(`infra/docker/overrides/services/${entry.path} is ignored: ${entry.reason}.`);
+    lines.push({
+      level: "warn",
+      message: `infra/docker/overrides/services/${entry.path} is ignored: ${entry.reason}.`,
+    });
   }
   return lines;
 }

@@ -339,7 +339,7 @@ export {
   serviceFilesImported,
   waitingTraefikEdits,
 } from "./service-file-import";
-export { describeServiceFiles } from "./service-file-report";
+export { describeServiceFiles, type ServiceFileReportLine } from "./service-file-report";
 export { readGenerationServiceFiles, serviceFileStore } from "./service-file-store";
 export { readServiceOverrides, staleOverrides } from "./service-overrides";
 export {

@@ -9,14 +9,16 @@ import { selectedReleaseServiceFiles } from "./release-service-files";
  * says about the service files, without changing anything: the overrides in
  * use, flagged and ignored, an import still to run, unused checkout edits,
  * containers on the checkout's files, and, run from the checkout, what a
- * host render would refuse. Each entry is a warning, or an error when render
- * would fail on it.
+ * host render would refuse. Each entry is information when nothing needs
+ * doing, a warning when something needs a look, or an error when render
+ * would fail on it. In Run diagnostics information reaches the panel on the
+ * fixed CLI's stdout, warnings and errors on its stderr.
  */
 export async function serviceFileReport(): Promise<
-  Array<{ level: "warn" | "err"; message: string }>
+  Array<{ level: "info" | "warn" | "err"; message: string }>
 > {
   const paths = repoPaths();
-  const lines: Array<{ level: "warn" | "err"; message: string }> = [];
+  const lines: Array<{ level: "info" | "warn" | "err"; message: string }> = [];
   const registry = new coreServices.ServiceRegistry({ rootDir: paths.root });
   await registry.load();
   const services = registry.list();
@@ -55,7 +57,7 @@ export async function serviceFileReport(): Promise<
   if (plan?.kind === "import") {
     const keys = plan.edits.map((edit) => `services/${edit.key}`);
     lines.push({
-      level: "warn",
+      level: "info",
       message: `The next render imports, once, your edits in the checkout's service files as overrides in infra/docker/overrides/services${keys.length > 0 ? ` (${keys.join(", ")})` : ""}, and from then on uses the release's files.`,
     });
   } else if (plan?.kind === "defer") {
@@ -73,16 +75,16 @@ export async function serviceFileReport(): Promise<
     );
   }
   const mounts = await containerBindMounts();
-  for (const message of coreServices.describeServiceFiles({
-    infraDir: paths.infraDir,
-    services,
-    release,
-    overrides,
-    stale: coreServices.staleOverrides(paths.infraDir, overrides, { record: false }),
-    ...(mounts ? { mounts } : {}),
-  })) {
-    lines.push({ level: "warn", message });
-  }
+  lines.push(
+    ...coreServices.describeServiceFiles({
+      infraDir: paths.infraDir,
+      services,
+      release,
+      overrides,
+      stale: coreServices.staleOverrides(paths.infraDir, overrides, { record: false }),
+      ...(mounts ? { mounts } : {}),
+    }),
+  );
   if (selected && selected !== "none") {
     // The edits the next render imports are not what it would refuse.
     const importing = new Set(

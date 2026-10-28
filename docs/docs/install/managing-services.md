@@ -446,7 +446,12 @@ back to the release's file.
   such as `traefik/config/dynamic/auth.yml`, is added to Traefik's
   configuration. `generated-routes.yml` is render's own.
 - Render's output, the operations agent's log, `pnpm openmapx check` and
-  **Run diagnostics** list the overrides in use, by name only.
+  **Run diagnostics** list the overrides in use, by name only. That list, the
+  files the one-time import carried over, and, for an agent without the
+  checkout, the note that it doesn't compare the checkout's files, are
+  information. A changed release file under an override, an ignored override,
+  an import that waits, or a container still on the checkout's files is a
+  warning (⚠), and so is shown apart in Run diagnostics.
 
 **When a release changes a file you override.** The agent's state records, for
 each override, the release file it replaced. When a later release changes that

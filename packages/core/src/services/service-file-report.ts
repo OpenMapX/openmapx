@@ -22,6 +22,22 @@ import {
 import type { LoadedService } from "./types";
 
 /**
+ * One line of the service file report. `info` says how things are when
+ * nothing needs doing (the overrides in use, the import that ran); `warn`
+ * asks the operator to look at something. Every surface keeps the level:
+ * render's output and `check` log it at that level, the agent's log marks a
+ * warning with ⚠ as the CLI does, and Run diagnostics shows the agent's
+ * `check` output, warnings among its errors.
+ */
+export interface ServiceFileReportLine {
+  level: "info" | "warn";
+  message: string;
+}
+
+const info = (message: string): ServiceFileReportLine => ({ level: "info", message });
+const warn = (message: string): ServiceFileReportLine => ({ level: "warn", message });
+
+/**
  * What render's output, the agent's log, `check` and Run diagnostics say
  * about the service files: the import, once, or why it waits; the overrides in use, those
  * whose release file changed since and those ignored; checkout edits no
@@ -36,10 +52,13 @@ export function describeServiceFiles(options: {
   stale: readonly ActiveOverride[];
   imported?: ServiceFileImport | null;
   mounts?: readonly ContainerBindMounts[];
-}): string[] {
+}): ServiceFileReportLine[] {
   const { infraDir, release, overrides } = options;
+  const imported = options.imported ?? null;
+  // The import's own report: what it made overrides of, or why it waits.
+  const importLevel = imported && "deferred" in imported ? warn : info;
   const lines = [
-    ...describeServiceFileImport(options.imported ?? null),
+    ...describeServiceFileImport(imported).map(importLevel),
     ...describeServiceOverrides(overrides, options.stale),
   ];
   if (
@@ -48,7 +67,9 @@ export function describeServiceFiles(options: {
     !checkoutMountedAt(infraDir)
   ) {
     lines.push(
-      "The one-time import of your edits in the checkout's service files has run (infra/docker/state/ops-agent/overrides-import.json). This operations agent runs without the checkout, so it doesn't compare the checkout's service files with the release's; `pnpm openmapx check` on the host does.",
+      info(
+        "The one-time import of your edits in the checkout's service files has run (infra/docker/state/ops-agent/overrides-import.json). This operations agent runs without the checkout, so it doesn't compare the checkout's service files with the release's; `pnpm openmapx check` on the host does.",
+      ),
     );
   } else if (release.origin === "release" && serviceFilesImported(infraDir)) {
     lines.push(
@@ -59,14 +80,14 @@ export function describeServiceFiles(options: {
           release,
           overrides: overrideOverlay(overrides).files,
         }),
-      ),
+      ).map(warn),
     );
   }
   if (options.mounts) {
     lines.push(
       ...describeContainersOnCheckoutServiceFiles(
         containersOnCheckoutServiceFiles(resolve(infraDir, "..", ".."), options.mounts),
-      ),
+      ).map(warn),
     );
   }
   return lines;
