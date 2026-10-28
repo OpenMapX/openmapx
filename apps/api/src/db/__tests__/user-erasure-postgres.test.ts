@@ -49,6 +49,8 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
       "account.user_id:c",
       "admin_audit_log.actor_id:n",
       "admin_job.created_by:n",
+      "auth_policy_application.actor_id:n",
+      "auth_policy_state.activated_by:n",
       "data_disclosure_event.user_id:n",
       "data_export_reauthentication.initiating_admin_user_id:n",
       "data_export_reauthentication.user_id:n",

@@ -335,7 +335,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "admin-audit-attribution",
-    version: 1,
+    version: 2,
     category: "administrative-accountability",
     source: "openmapx-db",
     strategy: "collector",
@@ -343,6 +343,8 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     locators: [
       { type: "actor_id", field: "admin_audit_log.actor_id" },
       { type: "target_id", field: "admin_audit_log.target_id" },
+      { type: "actor_id", field: "auth_policy_application.actor_id" },
+      { type: "actor_id", field: "auth_policy_state.activated_by" },
     ],
     purposes: ["legal-accountability", "security-and-abuse-prevention"],
     legalBases: ["legal-obligation", "legitimate-interest"],

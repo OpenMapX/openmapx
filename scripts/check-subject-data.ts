@@ -14,6 +14,8 @@ export const DIRECT_USER_FK_CLASSIFICATIONS: Record<string, string> = {
   "account.user_id": "auth-accounts",
   "data_disclosure_event.user_id": "disclosure-events",
   "admin_audit_log.actor_id": "admin-audit-attribution",
+  "auth_policy_application.actor_id": "admin-audit-attribution",
+  "auth_policy_state.activated_by": "admin-audit-attribution",
   "admin_job.created_by": "admin-jobs-attribution",
   "installed_extension.installed_by": "installed-component-attribution",
   "installed_integration.installed_by": "installed-component-attribution",

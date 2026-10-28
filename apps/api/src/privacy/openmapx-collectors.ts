@@ -4,6 +4,8 @@ import {
   account,
   adminAuditLog,
   adminJob,
+  authPolicyApplication,
+  authPolicyState,
   dataDisclosureEvent,
   dataExportReauthentication,
   dataManagerOfflinePackageArtifactReferences,
@@ -757,6 +759,51 @@ export async function* streamOpenMapxRegistrationRecords(
             targetType: row.targetType,
             action: row.action,
             details: safeAuditDetails(row.details),
+            createdAt: row.createdAt,
+          }),
+        },
+      );
+      yield* emit(
+        database
+          .select({ id: authPolicyApplication.key, createdAt: authPolicyApplication.createdAt })
+          .from(authPolicyApplication)
+          .where(
+            and(
+              eq(authPolicyApplication.actorId, context.userId),
+              lte(authPolicyApplication.createdAt, cutoff),
+            ),
+          )
+          .orderBy(asc(authPolicyApplication.key)),
+        {
+          map: (row) => ({
+            recordId: `policy-application-${pseudonymousIdentifier(String(row.id))}`,
+            actor: "subject",
+            action: "auth.policy.apply",
+            createdAt: row.createdAt,
+          }),
+        },
+      );
+      yield* emit(
+        database
+          .select({
+            id: authPolicyState.id,
+            revision: authPolicyState.revision,
+            createdAt: authPolicyState.activatedAt,
+          })
+          .from(authPolicyState)
+          .where(
+            and(
+              eq(authPolicyState.activatedBy, context.userId),
+              lte(authPolicyState.activatedAt, cutoff),
+            ),
+          )
+          .orderBy(asc(authPolicyState.id)),
+        {
+          map: (row) => ({
+            recordId: `policy-owner-${pseudonymousIdentifier(String(row.id))}`,
+            actor: "subject",
+            action: "auth.policy.current-owner",
+            revision: row.revision,
             createdAt: row.createdAt,
           }),
         },

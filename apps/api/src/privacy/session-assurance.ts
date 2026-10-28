@@ -34,7 +34,7 @@ export interface SessionAssuranceDatabase {
 }
 
 export async function recordSessionAuthAssurance(input: {
-  database?: typeof defaultDb;
+  database?: Pick<SessionAssuranceDatabase, "insert">;
   sessionId: string;
   userId: string;
   method: SessionAuthMethod;
@@ -82,7 +82,7 @@ export async function getSessionAuthAssurance(
 export async function recordSessionFromAuthContext(
   session: { id: string; userId: string; createdAt?: Date },
   context: { path?: string; body?: unknown } | null | undefined,
-  database: typeof defaultDb = defaultDb,
+  database: Pick<SessionAssuranceDatabase, "insert"> = defaultDb,
 ): Promise<boolean> {
   const method = assuranceMethodForAuthPath(context?.path);
   if (!method) return false;

@@ -120,6 +120,14 @@ dbDescribe("account policy through installed Better Auth", () => {
         pending: { passwordMinLength: 40 },
         ownership: { twoFaEnabled: "default" },
       });
+      await auth.api.createUser({
+        body: {
+          name: "Preserved admin",
+          email: "preserved-admin@example.test",
+          password: "original-password",
+          role: "admin",
+        },
+      });
       await fixture.db
         .update(user)
         .set({ role: "privacy_admin" })
@@ -220,12 +228,17 @@ dbDescribe("account policy through installed Better Auth", () => {
       settings,
       expectedRevision: initial.revision,
       confirmed: true,
-      idempotencyKey: "policy-activation-synthetic-0001",
+      idempotencyKey: `policy-activation-${admin.user.id}-0001`,
     };
     const applied = await applyAuthPolicy(request, admin.user.id);
     release();
     expect(await oldResult).toBe("verification required");
     expect(await applyAuthPolicy(request, admin.user.id)).toEqual(applied);
+    expect(
+      (await fixture.db.select().from(authPolicyApplication)).every(
+        (row) => !row.key.includes(admin.user.id),
+      ),
+    ).toBe(true);
     await expect(
       applyAuthPolicy(
         {
@@ -368,6 +381,7 @@ dbDescribe("account policy through installed Better Auth", () => {
       .from(user)
       .where(eq(user.email, "policy-admin@example.test"));
     if (!admin) throw Error("Missing admin fixture");
+    const applications = await fixture.db.select().from(authPolicyApplication);
     const before = await loadAuthPolicy(),
       rows = await fixture.db.select().from(authPolicyState),
       drafts = await fixture.db.select().from(systemSettings);
@@ -394,12 +408,7 @@ dbDescribe("account policy through installed Better Auth", () => {
       expect(await loadAuthPolicy()).toEqual(before);
       expect(await fixture.db.select().from(authPolicyState)).toEqual(rows);
       expect(await fixture.db.select().from(systemSettings)).toEqual(drafts);
-      expect(
-        await fixture.db
-          .select()
-          .from(authPolicyApplication)
-          .where(eq(authPolicyApplication.key, "rollback-policy-synthetic-0001")),
-      ).toHaveLength(0);
+      expect(await fixture.db.select().from(authPolicyApplication)).toEqual(applications);
     } finally {
       await fixture.db.execute(
         sql`ALTER TABLE admin_audit_log DROP CONSTRAINT synthetic_policy_audit_failure`,

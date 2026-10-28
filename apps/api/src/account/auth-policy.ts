@@ -116,7 +116,8 @@ export async function applyAuthPolicy(
   const parsed = authPolicyApplySchema.safeParse(input);
   if (!parsed.success) throw new AuthPolicyError("AUTH_POLICY_INVALID");
   const request = parsed.data,
-    intentDigest = digest(request);
+    intentDigest = digest(request),
+    applicationKey = digest([actorId, request.idempotencyKey]);
   return database.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(163578142, 1)`);
     const [actor] = await tx
@@ -128,7 +129,7 @@ export async function applyAuthPolicy(
     const [prior] = await tx
       .select()
       .from(authPolicyApplication)
-      .where(eq(authPolicyApplication.key, request.idempotencyKey));
+      .where(eq(authPolicyApplication.key, applicationKey));
     if (prior) {
       if (prior.actorId !== actorId || prior.intentDigest !== intentDigest)
         throw new AuthPolicyError("AUTH_POLICY_CONFLICT");
@@ -177,7 +178,7 @@ export async function applyAuthPolicy(
     });
     await tx
       .insert(authPolicyApplication)
-      .values({ key: request.idempotencyKey, actorId, intentDigest, snapshot: result });
+      .values({ key: applicationKey, actorId, intentDigest, snapshot: result });
     return result;
   });
 }

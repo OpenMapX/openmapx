@@ -1,13 +1,21 @@
 import type { AuthPolicySnapshot } from "@openmapx/core/api-contracts";
 import type { BetterAuthOptions } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
+import { accountRoleSchema } from "./account-mutations";
 export function applyPasswordVerificationPolicy(policy: AuthPolicySnapshot) {
   const userHooks: NonNullable<NonNullable<BetterAuthOptions["databaseHooks"]>["user"]> = {
     create: {
-      before: async (user, context) =>
-        context?.path === "/admin/create-user"
+      before: async (user, context) => {
+        const role = (user as typeof user & { role?: unknown }).role;
+        if (role !== undefined && !accountRoleSchema.safeParse(role).success)
+          throw new APIError("BAD_REQUEST", {
+            code: "INVALID_ROLE",
+            message: "Select one supported account role",
+          });
+        return context?.path === "/admin/create-user"
           ? { data: { ...user, emailVerified: false } }
-          : undefined,
+          : undefined;
+      },
     },
     update: {
       before: async (patch, context) => {

@@ -1,9 +1,10 @@
-import { createHash, randomUUID } from "node:crypto";
-import { and, eq, isNull, or } from "drizzle-orm";
+import { isAPIError } from "better-auth/api";
+import { eq } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import z from "zod/v4";
+import { accountRoleSchema, changeAccountRole } from "../account/account-mutations";
 import { db as defaultDb } from "../db/index.js";
-import { adminAuditLog, session, user } from "../db/schema.js";
+import { user } from "../db/schema.js";
 import { getAdminSession, requireAdmin } from "../utils/require-admin.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
 
@@ -79,40 +80,26 @@ export const privacyRolesRoute: FastifyPluginAsync<PrivacyRolesRouteOptions> = a
     if (target.role === "admin") return reply.status(409).send({ code: "FULL_ADMIN_PROTECTED" });
     if ((target.role ?? "user") === desired)
       return reply.send({ userId: target.id, role: desired, changed: false });
-    const previousRole = target.role ?? "user";
-    await database.transaction(async (tx) => {
-      const updated = await tx
-        .update(user)
-        .set({ role: desired, updatedAt: new Date() })
-        .where(
-          and(
-            eq(user.id, targetId),
-            or(isNull(user.role), eq(user.role, "user"), eq(user.role, "privacy_admin")),
-          ),
-        )
-        .returning({ id: user.id });
-      if (!updated[0]) throw new Error("ROLE_VERSION_CONFLICT");
-      // Role changes invalidate all existing sessions (and their recorded
-      // authentication assurance) before the new least-privilege session is
-      // used.  This prevents a stale session from retaining old authority.
-      await tx.delete(session).where(eq(session.userId, targetId));
-      await tx.insert(adminAuditLog).values({
-        id: randomUUID(),
-        actorId: actor.user.id,
-        targetId,
-        targetType: "user",
-        action: desired === "privacy_admin" ? "privacy.role.grant" : "privacy.role.revoke",
-        details: {
-          role: desired,
-          previousRole,
-          mutationDigest: createHash("sha256").update(key).digest("hex").slice(0, 32),
-        },
-        ipAddress: null,
-        userAgent: "privacy-role-admin",
-        createdAt: new Date(),
-      });
-    });
-    return reply.send({ userId: target.id, role: desired, changed: true });
+    try {
+      return reply.send(
+        await changeAccountRole(
+          {
+            actorId: actor.user.id,
+            userId: target.id,
+            role: desired,
+            expectedRole: accountRoleSchema.parse(target.role ?? "user"),
+            idempotencyKey: key,
+          },
+          database,
+        ),
+      );
+    } catch (error) {
+      if (isAPIError(error))
+        return reply
+          .status(error.statusCode)
+          .send({ code: error.body?.code ?? "ROLE_MUTATION_FAILED" });
+      throw error;
+    }
   }
 
   fastify.post<{ Params: { userId: string }; Body: unknown }>(

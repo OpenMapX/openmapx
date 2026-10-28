@@ -16,7 +16,7 @@ import {
 } from "better-auth/plugins";
 import { emailHarmony } from "better-auth-harmony";
 import { eq } from "drizzle-orm";
-import type { AuthDatabase } from "./account/auth-database";
+import { type AuthDatabase, currentAuthDatabase } from "./account/auth-database";
 import { createAuthRuntime } from "./account/auth-runtime";
 import { applyPasswordVerificationPolicy } from "./account/password-verification-policy";
 import {
@@ -25,7 +25,6 @@ import {
   fetchOsmUserDetails,
 } from "./auth-provider-http";
 import { resolveBetterAuthSecret } from "./auth-secret";
-import { db } from "./db";
 import { user as userTable } from "./db/schema";
 import { managedOAuthProviderOptions } from "./managed-oauth-provider";
 import { recordDataDisclosureBestEffort } from "./privacy/disclosures.js";
@@ -84,14 +83,14 @@ const providerAvatarSync = createProviderAvatarSync({
   },
   fetchProviderImage,
   async getCurrentImage(userId) {
-    const [currentUser] = await db
+    const [currentUser] = await currentAuthDatabase()
       .select({ image: userTable.image })
       .from(userTable)
       .where(eq(userTable.id, userId));
     return currentUser?.image;
   },
   async setUserImage(userId, image) {
-    await db.update(userTable).set({ image }).where(eq(userTable.id, userId));
+    await currentAuthDatabase().update(userTable).set({ image }).where(eq(userTable.id, userId));
   },
 });
 
@@ -170,7 +169,7 @@ function createPolicyAuth(
           // This hook runs after Better Auth has created the usable session. It
           // intentionally records nothing for unrecognised endpoints.
           after: async (createdSession, context) => {
-            await recordSessionFromAuthContext(createdSession, context, db);
+            await recordSessionFromAuthContext(createdSession, context, currentAuthDatabase());
           },
         },
       },

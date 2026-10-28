@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { AuthPolicySnapshot } from "@openmapx/core/api-contracts";
 import { isAPIError } from "better-auth/api";
+import { accountAuthEntry } from "./auth-account-entry";
 import {
   type AuthDatabase,
   currentAuthDatabase,
@@ -87,11 +88,45 @@ export function createAuthRuntime<
       if (typeof value !== "function") return value;
       return Object.assign(
         (...args: unknown[]) =>
-          entry(key === "resetPasswordEmailOTP", () =>
-            withAuthOperation(async (instance) =>
-              Reflect.apply(Reflect.get(instance.api, key), instance.api, args),
-            ),
-          ),
+          (async () => {
+            const input = (args[0] ?? {}) as {
+              body?: unknown;
+              headers?: HeadersInit;
+              request?: Request;
+              asResponse?: boolean;
+            };
+            try {
+              return await withAuthOperation(() =>
+                accountAuthEntry(
+                  {
+                    entry: String(key),
+                    body: input.body,
+                    headers: input.headers,
+                    internal: !input.headers && !input.request,
+                  },
+                  () =>
+                    withAuthOperation(async (instance) =>
+                      Reflect.apply(Reflect.get(instance.api, "getSession"), instance.api, [
+                        {
+                          headers: input.headers ?? new Headers(),
+                          query: { disableCookieCache: true, disableRefresh: true },
+                        },
+                      ]),
+                    ),
+                  () =>
+                    entry(key === "resetPasswordEmailOTP", () =>
+                      withAuthOperation(async (instance) =>
+                        Reflect.apply(Reflect.get(instance.api, key), instance.api, args),
+                      ),
+                    ),
+                ),
+              );
+            } catch (error) {
+              if (input.asResponse && isAPIError(error))
+                return Response.json(error.body, { status: error.statusCode });
+              throw error;
+            }
+          })(),
         value,
       );
     },
@@ -102,11 +137,34 @@ export function createAuthRuntime<
       if (key === "handler")
         return async (request: Request) => {
           try {
-            return await entry(
-              new URL(request.url).pathname === "/api/auth/email-otp/reset-password",
-              () => withAuthOperation((instance) => instance.handler(request)),
+            const path = new URL(request.url).pathname;
+            const body =
+              request.method === "POST"
+                ? await request
+                    .clone()
+                    .json()
+                    .catch(() => null)
+                : null;
+            return await withAuthOperation(() =>
+              accountAuthEntry(
+                { entry: path, body, headers: request.headers, internal: false },
+                () =>
+                  withAuthOperation(async (instance) =>
+                    Reflect.apply(Reflect.get(instance.api, "getSession"), instance.api, [
+                      {
+                        headers: request.headers,
+                        query: { disableCookieCache: true, disableRefresh: true },
+                      },
+                    ]),
+                  ),
+                () =>
+                  entry(path === "/api/auth/email-otp/reset-password", () =>
+                    withAuthOperation((instance) => instance.handler(request)),
+                  ),
+              ),
             );
           } catch (error) {
+            if (isAPIError(error)) return Response.json(error.body, { status: error.statusCode });
             if (error instanceof AuthPolicyError)
               return Response.json(
                 { code: error.code, message: "Authentication policy is unavailable" },

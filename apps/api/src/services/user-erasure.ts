@@ -10,7 +10,9 @@ import {
   readErasureJournalKeyFile,
 } from "@openmapx/core/erasure-journal";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { db } from "../db";
+import { currentAccountMutation } from "../account/account-context";
+import { assertAccountDeletionAllowed } from "../account/admin-invariant";
+import { currentAuthDatabase } from "../account/auth-database";
 import {
   dataExportArtifact,
   dataSubjectRequest,
@@ -99,7 +101,7 @@ export async function cleanupResidualUserData(user: ErasureUser): Promise<void> 
   // is still available.  A missing store/object is idempotent, but an unsafe
   // path or failed delete aborts account deletion so we never report an
   // erasure while a deliverable archive remains readable.
-  const requests = await db
+  const requests = await currentAuthDatabase()
     .select({ id: dataSubjectRequest.id, state: dataSubjectRequest.state })
     .from(dataSubjectRequest)
     .where(eq(dataSubjectRequest.userId, user.id));
@@ -112,18 +114,18 @@ export async function cleanupResidualUserData(user: ErasureUser): Promise<void> 
   const deletionRequestIds = requestIds.filter((id) => !retainedActiveRequestIds.has(id));
   if (deletionRequestIds.length) {
     const [artifacts, attachments, sourceSnapshots] = await Promise.all([
-      db
+      currentAuthDatabase()
         .select({ id: dataExportArtifact.id, storageKey: dataExportArtifact.storageKey })
         .from(dataExportArtifact)
         .where(inArray(dataExportArtifact.requestId, deletionRequestIds)),
-      db
+      currentAuthDatabase()
         .select({
           id: dataSubjectRequestAttachment.id,
           storageKey: dataSubjectRequestAttachment.storageKey,
         })
         .from(dataSubjectRequestAttachment)
         .where(inArray(dataSubjectRequestAttachment.requestId, deletionRequestIds)),
-      db
+      currentAuthDatabase()
         .select({
           id: dataSubjectRequestSourceSnapshot.id,
           storageKey: dataSubjectRequestSourceSnapshot.storageKey,
@@ -137,7 +139,7 @@ export async function cleanupResidualUserData(user: ErasureUser): Promise<void> 
       else await deletePrivacyCiphertext(object.storageKey);
     }
     const erasedAt = new Date();
-    await db.transaction(async (tx) => {
+    await currentAuthDatabase().transaction(async (tx) => {
       if (artifacts.length) {
         await tx
           .update(dataExportArtifact)
@@ -194,7 +196,7 @@ export async function cleanupResidualUserData(user: ErasureUser): Promise<void> 
   }
   const [emailIdentifier, changeEmailIdentifier] = erasureVerificationIdentifiers(user);
   const accountErasedAt = new Date();
-  await db.transaction(async (tx) => {
+  await currentAuthDatabase().transaction(async (tx) => {
     await tx
       .update(dataSubjectRequest)
       .set({
@@ -302,7 +304,15 @@ async function deletePrivacyCiphertext(storageKey: string): Promise<void> {
 }
 
 export const userErasureHooks = createUserErasureHooks({
-  request: async (userId) => appendErasureRequest(journalPath(), readJournalKey(), userId),
+  request: async (userId) => {
+    await assertAccountDeletionAllowed(userId);
+    return appendErasureRequest(journalPath(), readJournalKey(), userId);
+  },
   cleanup: cleanupResidualUserData,
-  complete: async (receiptId) => appendErasureCompleted(journalPath(), readJournalKey(), receiptId),
+  complete: async (receiptId) => {
+    const complete = () => appendErasureCompleted(journalPath(), readJournalKey(), receiptId);
+    const context = currentAccountMutation();
+    if (context) context.afterCommit.push(complete);
+    else await complete();
+  },
 });
