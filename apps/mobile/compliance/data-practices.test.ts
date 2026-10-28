@@ -73,6 +73,7 @@ const REQUIRED_PRACTICES = [
   "account-and-contact",
   "saved-places-and-settings",
   "review-keypair",
+  "review-shared-signer",
   "published-reviews",
   "diagnostics-export",
   "system-auth-handoff",

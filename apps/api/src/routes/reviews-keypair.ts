@@ -1,37 +1,14 @@
-/**
- * Auth-gated endpoints for the logged-in user's Mangrove keypair.
- *
- * Encryption modes:
- *   `unencrypted` → server sees the signing key (explicit opt-in).
- *   `encrypted`   → server stores age-armored ciphertexts only; decryption
- *                   happens on the client with age-encryption.js using either
- *                   a passphrase or a WebAuthn passkey.
- *
- * The age v1 spec forbids mixing a scrypt (passphrase) recipient with any
- * other recipient in the same ciphertext. To let a user unlock with EITHER
- * their passphrase OR any registered passkey, we persist two ciphertexts of
- * the same plaintext:
- *   - `passphraseCiphertext`  (age scrypt-only, set iff user has a passphrase)
- *   - `recipientsCiphertext`  (age webauthn, 1..N passkey recipients)
- *
- * Either column may be null; at least one must be non-null in encrypted mode.
- *
- *  GET    /api/reviews/keypair        — current envelope + wrap metadata (or 204)
- *  POST   /api/reviews/keypair        — create the envelope from scratch
- *  PUT    /api/reviews/keypair/wraps  — atomically replace ciphertexts + wrap list
- *  DELETE /api/reviews/keypair        — discard everything
- */
+/** Authenticated encrypted-only key envelopes. Private keys never cross this boundary. */
 
 import { randomUUID } from "node:crypto";
 import { httpError } from "@openmapx/integration-framework";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { db } from "../db";
 import { mangroveKeypair, mangroveKeypairWrap } from "../db/schema";
 import { getUserId, requireAuthHook } from "../utils/require-auth";
 import { declareRouteAuth } from "../utils/route-auth";
 
-type EncryptionMode = "unencrypted" | "encrypted";
 type WrapType = "passphrase" | "webauthn";
 
 interface WrapInput {
@@ -78,14 +55,20 @@ export function isMangrovePublicJwk(v: unknown): v is Record<string, unknown> {
   if (!isCoord(jwk.x) || !isCoord(jwk.y)) return false;
   const keys = Object.keys(jwk);
   if (keys.length > MAX_JWK_KEYS) return false;
+  const allowed = new Set(["kty", "crv", "x", "y", "alg", "ext", "key_ops", "kid"]);
+  if (keys.some((key) => !allowed.has(key))) return false;
+  if (jwk.alg !== undefined && jwk.alg !== "ES256") return false;
+  if (jwk.ext !== undefined && typeof jwk.ext !== "boolean") return false;
+  if (jwk.kid !== undefined && typeof jwk.kid !== "string") return false;
+  if (
+    jwk.key_ops !== undefined &&
+    (!Array.isArray(jwk.key_ops) || jwk.key_ops.some((op) => op !== "verify"))
+  )
+    return false;
   for (const val of Object.values(jwk)) {
     if (typeof val === "string" && val.length > MAX_JWK_STRING_CHARS) return false;
   }
   return true;
-}
-
-export function isMangrovePrivateJwk(v: unknown): v is Record<string, unknown> {
-  return isMangrovePublicJwk(v) && isCoord((v as Record<string, unknown>).d);
 }
 
 export function validateWrap(w: WrapInput): {
@@ -93,6 +76,7 @@ export function validateWrap(w: WrapInput): {
   label: string;
   identityString: string | null;
 } {
+  if (!w || typeof w !== "object") throw httpError(400, "Invalid wrap");
   if (w.wrapType !== "passphrase" && w.wrapType !== "webauthn") {
     throw Object.assign(new Error("wrap.wrapType must be 'passphrase' or 'webauthn'"), {
       statusCode: 400,
@@ -192,208 +176,131 @@ export function validateEncryptedState(body: {
   return { passphraseCiphertext, recipientsCiphertext, wraps };
 }
 
+function readBody(value: unknown, allowed: string[]): Record<string, unknown> {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).some((key) => !allowed.includes(key))
+  ) {
+    throw httpError(400, "Invalid encrypted envelope fields");
+  }
+  return value as Record<string, unknown>;
+}
+function expectedRevision(body: Record<string, unknown>): string {
+  const value = body.expectedRevision;
+  if (typeof value !== "string" || value.length === 0 || value.length > 128) {
+    throw httpError(400, "expectedRevision is required");
+  }
+  return value;
+}
+const encryptedFields = ["passphraseCiphertext", "recipientsCiphertext", "wraps"];
+
 export const reviewsKeypairRoute: FastifyPluginAsync = async (fastify) => {
   declareRouteAuth(fastify, "session");
-
-  // Every keypair route is per-user; authenticate once here so no handler can
-  // forget the check.
   fastify.addHook("preHandler", requireAuthHook);
-  // Responses carry per-user key material — the cleartext private JWK in
-  // unencrypted mode. Keep them out of every HTTP cache and proxy.
   fastify.addHook("onSend", async (_request, reply, payload) => {
     reply.header("Cache-Control", "no-store");
     return payload;
   });
 
-  /** GET — current envelope state. */
   fastify.get("/reviews/keypair", async (request, reply) => {
     const userId = getUserId(request);
-
-    const [row] = await db
-      .select()
-      .from(mangroveKeypair)
-      .where(eq(mangroveKeypair.userId, userId))
-      .limit(1);
-
-    if (!row) return reply.status(204).send();
-
-    if (row.encryptionMode === "unencrypted") {
-      return reply.send({
-        mode: "unencrypted" as const,
-        publicJwk: row.publicJwk,
-        privateJwk: row.privateJwk,
-      });
-    }
-
-    const wraps = await db
-      .select()
-      .from(mangroveKeypairWrap)
-      .where(eq(mangroveKeypairWrap.userId, userId));
-
-    const wireWraps: WrapWire[] = wraps.map((w) => ({
-      id: w.id,
-      wrapType: w.wrapType as WrapType,
-      label: w.label,
-      identityString: w.identityString,
-      createdAt: w.createdAt.toISOString(),
-    }));
-
-    return reply.send({
-      mode: "encrypted" as const,
-      publicJwk: row.publicJwk,
-      passphraseCiphertext: row.passphraseCiphertext,
-      recipientsCiphertext: row.recipientsCiphertext,
-      wraps: wireWraps,
-    });
+    // Both queries see the same snapshot even when wraps are concurrently replaced.
+    const envelope = await db.transaction(
+      async (tx) => {
+        const [row] = await tx
+          .select()
+          .from(mangroveKeypair)
+          .where(eq(mangroveKeypair.userId, userId))
+          .limit(1);
+        if (!row) return null;
+        const wraps = await tx
+          .select()
+          .from(mangroveKeypairWrap)
+          .where(eq(mangroveKeypairWrap.userId, userId));
+        const wireWraps: WrapWire[] = wraps.map((w) => ({
+          id: w.id,
+          wrapType: w.wrapType as WrapType,
+          label: w.label,
+          identityString: w.identityString,
+          createdAt: w.createdAt.toISOString(),
+        }));
+        return {
+          revision: row.revision,
+          publicJwk: row.publicJwk,
+          passphraseCiphertext: row.passphraseCiphertext,
+          recipientsCiphertext: row.recipientsCiphertext,
+          wraps: wireWraps,
+        };
+      },
+      { isolationLevel: "repeatable read", accessMode: "read only" },
+    );
+    return envelope ? reply.send(envelope) : reply.status(204).send();
   });
 
-  /** POST — create the keypair envelope. Rejects if one already exists. */
   fastify.post("/reviews/keypair", async (request, reply) => {
     const userId = getUserId(request);
-
-    const [existing] = await db
-      .select({ userId: mangroveKeypair.userId })
-      .from(mangroveKeypair)
-      .where(eq(mangroveKeypair.userId, userId))
-      .limit(1);
-    if (existing) {
-      return reply
-        .status(409)
-        .send({ error: "Keypair already exists. DELETE it first to start over." });
-    }
-
-    const body = request.body as {
-      mode?: EncryptionMode;
-      publicJwk?: unknown;
-      privateJwk?: unknown;
-      passphraseCiphertext?: string | null;
-      recipientsCiphertext?: string | null;
-      wraps?: WrapInput[];
-    } | null;
-
-    if (!body || !isMangrovePublicJwk(body.publicJwk)) {
-      return reply.status(400).send({ error: "publicJwk must be a valid P-256 JWK" });
-    }
-
-    if (body.mode === "unencrypted") {
-      if (!isMangrovePrivateJwk(body.privateJwk)) {
-        return reply.status(400).send({ error: "privateJwk must be a valid P-256 JWK with d" });
-      }
-      await db.insert(mangroveKeypair).values({
-        userId,
-        encryptionMode: "unencrypted",
-        publicJwk: body.publicJwk,
-        privateJwk: body.privateJwk,
-      });
-      return reply.status(201).send({ ok: true });
-    }
-
-    if (body.mode !== "encrypted") {
-      return reply.status(400).send({ error: "mode must be 'unencrypted' or 'encrypted'" });
-    }
-
-    let state: EncryptedState;
-    try {
-      state = validateEncryptedState(body);
-    } catch (err) {
-      const status = (err as { statusCode?: number }).statusCode ?? 400;
-      return reply.status(status).send({ error: (err as Error).message });
-    }
-
-    try {
-      await db.transaction(async (tx) => {
-        await tx.insert(mangroveKeypair).values({
+    const body = readBody(request.body, ["publicJwk", ...encryptedFields]);
+    if (!isMangrovePublicJwk(body.publicJwk))
+      throw httpError(400, "publicJwk must be a valid P-256 public JWK");
+    const state = validateEncryptedState(body);
+    const revision = randomUUID();
+    await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(mangroveKeypair)
+        .values({
           userId,
-          encryptionMode: "encrypted",
-          publicJwk: body.publicJwk as Record<string, unknown>,
+          revision,
+          publicJwk: body.publicJwk,
           passphraseCiphertext: state.passphraseCiphertext,
           recipientsCiphertext: state.recipientsCiphertext,
-        });
-        await tx.insert(mangroveKeypairWrap).values(
-          state.wraps.map((w) => ({
-            id: randomUUID(),
-            userId,
-            wrapType: w.wrapType,
-            label: w.label,
-            identityString: w.identityString,
-          })),
-        );
-      });
-    } catch (err) {
-      fastify.log.warn(err, "Keypair POST failed");
-      return reply.status(500).send({ error: "Keypair creation failed" });
-    }
-
-    return reply.status(201).send({ ok: true });
+        })
+        .onConflictDoNothing()
+        .returning({ revision: mangroveKeypair.revision });
+      if (!created) throw httpError(409, "Keypair revision conflict");
+      await tx
+        .insert(mangroveKeypairWrap)
+        .values(state.wraps.map((w) => ({ id: randomUUID(), userId, ...w })));
+    });
+    return reply.status(201).send({ revision });
   });
 
-  /**
-   * PUT — atomically replace ciphertexts + wrap list (for add/remove/rename
-   * passphrase or passkeys). Client re-encrypts the private JWK locally before
-   * calling; server only stores the new state.
-   */
   fastify.put("/reviews/keypair/wraps", async (request, reply) => {
     const userId = getUserId(request);
-
-    const [kp] = await db
-      .select({ mode: mangroveKeypair.encryptionMode })
-      .from(mangroveKeypair)
-      .where(eq(mangroveKeypair.userId, userId))
-      .limit(1);
-    if (!kp) return reply.status(404).send({ error: "No keypair" });
-    if (kp.mode !== "encrypted") {
-      return reply.status(409).send({ error: "Wraps only apply to encrypted keypairs" });
-    }
-
-    const body = request.body as {
-      passphraseCiphertext?: string | null;
-      recipientsCiphertext?: string | null;
-      wraps?: WrapInput[];
-    } | null;
-    if (!body) return reply.status(400).send({ error: "Body required" });
-
-    let state: EncryptedState;
-    try {
-      state = validateEncryptedState(body);
-    } catch (err) {
-      const status = (err as { statusCode?: number }).statusCode ?? 400;
-      return reply.status(status).send({ error: (err as Error).message });
-    }
-
-    try {
-      await db.transaction(async (tx) => {
-        await tx
-          .update(mangroveKeypair)
-          .set({
-            passphraseCiphertext: state.passphraseCiphertext,
-            recipientsCiphertext: state.recipientsCiphertext,
-          })
-          .where(eq(mangroveKeypair.userId, userId));
-        await tx.delete(mangroveKeypairWrap).where(eq(mangroveKeypairWrap.userId, userId));
-        await tx.insert(mangroveKeypairWrap).values(
-          state.wraps.map((w) => ({
-            id: randomUUID(),
-            userId,
-            wrapType: w.wrapType,
-            label: w.label,
-            identityString: w.identityString,
-          })),
-        );
-      });
-    } catch (err) {
-      fastify.log.warn(err, "Wraps PUT failed");
-      return reply.status(500).send({ error: "Wrap update failed" });
-    }
-
-    return reply.send({ ok: true });
+    const body = readBody(request.body, ["expectedRevision", ...encryptedFields]);
+    const expected = expectedRevision(body);
+    const state = validateEncryptedState(body);
+    const revision = randomUUID();
+    await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(mangroveKeypair)
+        .set({
+          revision,
+          passphraseCiphertext: state.passphraseCiphertext,
+          recipientsCiphertext: state.recipientsCiphertext,
+        })
+        .where(and(eq(mangroveKeypair.userId, userId), eq(mangroveKeypair.revision, expected)))
+        .returning({ revision: mangroveKeypair.revision });
+      if (!updated) throw httpError(409, "Keypair revision conflict");
+      await tx.delete(mangroveKeypairWrap).where(eq(mangroveKeypairWrap.userId, userId));
+      await tx
+        .insert(mangroveKeypairWrap)
+        .values(state.wraps.map((w) => ({ id: randomUUID(), userId, ...w })));
+    });
+    return reply.send({ revision });
   });
 
-  /** DELETE — wipe keypair + all wraps. Next GET returns 204. */
   fastify.delete("/reviews/keypair", async (request, reply) => {
     const userId = getUserId(request);
+    const expected = expectedRevision(readBody(request.body, ["expectedRevision"]));
     await db.transaction(async (tx) => {
-      await tx.delete(mangroveKeypairWrap).where(eq(mangroveKeypairWrap.userId, userId));
-      await tx.delete(mangroveKeypair).where(eq(mangroveKeypair.userId, userId));
+      const [deleted] = await tx
+        .delete(mangroveKeypair)
+        .where(and(eq(mangroveKeypair.userId, userId), eq(mangroveKeypair.revision, expected)))
+        .returning({ userId: mangroveKeypair.userId });
+      if (!deleted) throw httpError(409, "Keypair revision conflict");
+      // Child metadata is removed by the parent FK cascade.
     });
     return reply.send({ deleted: true });
   });

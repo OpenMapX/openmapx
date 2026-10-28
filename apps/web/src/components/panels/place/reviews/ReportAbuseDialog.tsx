@@ -9,7 +9,7 @@ import DialogContentText from "@mui/material/DialogContentText";
 import DialogTitle from "@mui/material/DialogTitle";
 import TextField from "@mui/material/TextField";
 import type { Review } from "@openmapx/core";
-import { useSubmitReview, useUserKeypair } from "@openmapx/mangrove-react";
+import { useReviewIdentity, useSubmitReview } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 
@@ -23,11 +23,11 @@ export function ReportAbuseDialog({ open, onClose, review }: Props) {
   const t = useTranslations("place");
   const tc = useTranslations("common");
   const submit = useSubmitReview();
-  const { keypair, isLoading: keypairLoading } = useUserKeypair();
+  const { canSign, isLoading: keypairLoading } = useReviewIdentity();
   const [reason, setReason] = useState("");
 
   async function handleConfirm() {
-    if (!keypair) return;
+    if (!canSign) return;
     await submit.mutateAsync({
       subject: review.subject,
       action: "report_abuse",
@@ -66,7 +66,7 @@ export function ReportAbuseDialog({ open, onClose, review }: Props) {
         </Button>
         <Button
           onClick={handleConfirm}
-          disabled={submit.isPending || !keypair || keypairLoading}
+          disabled={submit.isPending || !canSign || keypairLoading}
           color="error"
           variant="contained"
         >

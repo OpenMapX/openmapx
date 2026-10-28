@@ -31,7 +31,8 @@ below remain pending review; omitted rows do not establish an exemption.
 | Precise Location | Transit origin, destination, departure time, and a rotating refresh token | App Functionality | No | No |
 | Contact Info | Email address, display name, and authentication credentials | App Functionality | Yes | No |
 | Other Data | Saved places, labels, and app preferences | App Functionality | Yes | No |
-| Other Data | Review signing key material | App Functionality | Yes | No |
+| Other Data | Encrypted local review signing key material and public unlock metadata | App Functionality | Yes | No |
+| Other Data | Signer session token, provider login information, review content and public signing identity | App Functionality | Yes | No |
 | User Content | Review text, rating, nickname, photos and public signing identity the user chooses to publish | App Functionality | No | No |
 | Coarse Location | Tile and imagery requests revealing the viewed area, with network metadata such as IP address | App Functionality | No | No |
 
@@ -69,7 +70,9 @@ areas. Review other enabled web features before describing all location uses.
   then to API `/mobile-auth/exchange`. Server rows contain an account ID;
   redemption expiry and eventual row deletion are different events.
 - Saved places are readable by the server/operator and can be shared by bearer
-  link. Review signing keys have an explicit unencrypted mode. Public review
+  link. Local review keys are encrypted before upload. Shared signing sends a
+  session token and review content through the API to Mangrove, which holds the
+  signing key. Provider login also exposes browser request and login data. Public
   submissions use an authenticated relay, so identity linkage needs review.
 - Sign-out does not clear every cache or downloaded offline area. Review local
   storage, cookie transmission and deletion controls separately.

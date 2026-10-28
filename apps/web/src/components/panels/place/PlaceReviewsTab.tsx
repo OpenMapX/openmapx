@@ -9,11 +9,12 @@ import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
 import Typography from "@mui/material/Typography";
 import { type Place, type Review, safeHref, useSession } from "@openmapx/core";
-import { usePlaceReviews, useReviewAggregate, useUserKeypair } from "@openmapx/mangrove-react";
+import { usePlaceReviews, useReviewAggregate, useReviewIdentity } from "@openmapx/mangrove-react";
 import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
+import { MangroveConnectDialog } from "@/components/auth/MangroveConnectDialog";
 import { MangroveSetupWizard } from "@/components/auth/MangroveSetupWizard";
 import { MangroveUnlockDialog } from "@/components/auth/MangroveUnlockDialog";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
@@ -41,7 +42,8 @@ export function PlaceReviewsTab({ place }: Props) {
   const [lng, lat] = place.coordinates;
   const { data: session } = useSession();
   const isSignedIn = !!session?.user?.id;
-  const { keypair, publicPem, needsSetup, needsUnlock } = useUserKeypair();
+  const { canSign, publicPem, needsSetup, needsUnlock, needsConnection, isLoading } =
+    useReviewIdentity();
   // `ids.osm` is only present when this place is linked to an OSM element —
   // Mangrove's metadata.osm_id is reserved for `node|way|relation/ID[/VERSION]`.
   const subject = { lat, lng, name: place.name, osmId: place.ids?.osm };
@@ -71,6 +73,7 @@ export function PlaceReviewsTab({ place }: Props) {
   const [reportReview, setReportReview] = useState<Review | null>(null);
   const [pending, setPending] = useState<PendingAction>(null);
   const [setupOpen, setSetupOpen] = useState(false);
+  const [connectOpen, setConnectOpen] = useState(false);
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
 
@@ -85,6 +88,15 @@ export function PlaceReviewsTab({ place }: Props) {
    */
   function gatedAction(action: PendingAction) {
     if (!action) return;
+    if (isLoading) {
+      setPending(action);
+      return;
+    }
+    if (needsConnection) {
+      setPending(action);
+      setConnectOpen(true);
+      return;
+    }
     if (needsSetup) {
       setPending(action);
       setSetupOpen(true);
@@ -117,15 +129,32 @@ export function PlaceReviewsTab({ place }: Props) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional trigger
   useEffect(() => {
     if (!pending) return;
-    if (needsSetup || needsUnlock) return;
-    if (!keypair) return;
+    if (isLoading) return;
+    if (needsConnection) return;
+    if (needsSetup) {
+      setSetupOpen(true);
+      return;
+    }
+    if (needsUnlock) {
+      setUnlockOpen(true);
+      return;
+    }
+    if (!canSign) return;
     const action = pending;
     setPending(null);
     runAction(action);
-  }, [keypair, needsSetup, needsUnlock]);
+  }, [canSign, needsSetup, needsUnlock, needsConnection, isLoading]);
 
   return (
     <Box sx={{ px: 2, pt: 2, pb: 2 }}>
+      <MangroveConnectDialog
+        open={connectOpen}
+        onClose={() => {
+          setConnectOpen(false);
+          setPending(null);
+        }}
+        onLocal={() => setConnectOpen(false)}
+      />
       <ReviewAggregate
         aggregate={aggregateQuery.data}
         reviews={reviewsQuery.data}
@@ -136,6 +165,7 @@ export function PlaceReviewsTab({ place }: Props) {
       <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
         <Button
           variant="contained"
+          disabled={isLoading}
           color="primary"
           startIcon={ownReview ? <EditIcon /> : <RateReviewIcon />}
           onClick={() => {
@@ -230,6 +260,10 @@ export function PlaceReviewsTab({ place }: Props) {
       )}
       <MangroveSetupWizard
         open={setupOpen}
+        onDone={() => {
+          if (pending) runAction(pending);
+          setPending(null);
+        }}
         onClose={() => {
           setSetupOpen(false);
           if (needsSetup) setPending(null);
@@ -237,6 +271,10 @@ export function PlaceReviewsTab({ place }: Props) {
       />
       <MangroveUnlockDialog
         open={unlockOpen}
+        onUnlocked={() => {
+          if (pending) runAction(pending);
+          setPending(null);
+        }}
         onClose={() => {
           setUnlockOpen(false);
           if (needsUnlock) setPending(null);

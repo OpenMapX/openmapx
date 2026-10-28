@@ -33,7 +33,7 @@ export function MangroveUnlockDialog({ open, onClose, onUnlocked, rpId }: Props)
   const [error, setError] = useState<string | null>(null);
 
   const envelope = state.data?.state === "ready" ? (state.data as KeypairEnvelope) : null;
-  const encrypted = envelope?.mode === "encrypted" ? envelope : null;
+  const encrypted = envelope;
   const hasPassphrase = !!encrypted?.wraps.some((w) => w.wrapType === "passphrase");
   const hasWebAuthn = !!encrypted?.wraps.some((w) => w.wrapType === "webauthn");
 

@@ -12,7 +12,7 @@
   "domains": ["reviews"],
   "dependencies": ["reviews"],
   "backend": {
-    "routes": false
+    "routes": true
   },
   "configSchema": {
     "type": "object",
@@ -20,6 +20,16 @@
       "enabled": {
         "type": "boolean",
         "default": true
+      },
+      "signerClientId": {
+        "type": "string",
+        "default": "",
+        "description": "Client ID registered with the official Mangrove signer for this instance. Leave empty to disable shared signing."
+      },
+      "signerRedirectUri": {
+        "type": "string",
+        "default": "",
+        "description": "Exact registered HTTPS callback URL ending in /auth/mangrove. HTTP is permitted only for localhost or loopback development."
       }
     }
   },
@@ -59,6 +69,44 @@
           {
             "text": "CC-BY-4.0",
             "url": "https://creativecommons.org/licenses/by/4.0/"
+          }
+        ]
+      }
+    },
+    {
+      "sourceId": "mangrove-signer",
+      "name": "Mangrove shared signer",
+      "url": "https://signer.mangrove.reviews",
+      "apiHosts": ["signer.mangrove.reviews"],
+      "commercialUse": "unknown",
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://mangrove.reviews/terms",
+      "termsUrl": "https://mangrove.reviews/terms",
+      "credentialOwner": "end-user",
+      "dataUseClass": "restricted",
+      "reviewedAt": "2026-10-28",
+      "endUserExposure": "mixed",
+      "personalData": true,
+      "cookies": true,
+      "dpaAvailable": false,
+      "capabilities": ["write"],
+      "notes": "Optional delegated signing. Browser login and provider identity, session tokens, review content and the public review key are processed by the signer. The signer can decrypt the private key and sign; this is not end-to-end encryption. OpenMapX does not persist signer tokens. Third-party apps cannot manage signer account keys or logins.",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "Mangrove shared signing service",
+            "license": {
+              "kind": "unknown",
+              "url": "https://mangrove.reviews/terms"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Mangrove service terms",
+            "url": "https://mangrove.reviews/terms"
           }
         ]
       }

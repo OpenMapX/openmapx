@@ -20,7 +20,12 @@ export {
   toMangroveExportJwk,
 } from "./keypair";
 export type { MangroveReviewPayload } from "./sign";
-export { fingerprintPem, signMangroveReview } from "./sign";
+export {
+  fingerprintPem,
+  matchesMangrovePayload,
+  normalizeMangrovePayload,
+  signMangroveReview,
+} from "./sign";
 export type {
   GeoExperienceContext,
   MangroveSubject,

@@ -1,14 +1,18 @@
 "use client";
 
 import type { Review, ReviewAggregate } from "@integrations/reviews/types";
-import { API_ENDPOINTS, apiClient, useSession } from "@openmapx/core";
+import { API_ENDPOINTS, apiClient } from "@openmapx/core";
 import {
+  MangroveConflictError,
   type MangroveCurrentUser,
   MangroveProvider,
+  MangroveSignerError,
   type MangroveTransport,
+  type SignerTransport,
 } from "@openmapx/mangrove-react";
 import type { ReactNode } from "react";
 import { useMemo } from "react";
+import { useSettledSessionAuthority } from "./SessionAuthorityBoundary";
 
 /**
  * Adapts OpenMapX's `apiClient` + `useSession` + the `@integrations/reviews`
@@ -54,7 +58,9 @@ const openMapxTransport: MangroveTransport<Review, ReviewAggregate> = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (res.status === 409) throw new MangroveConflictError();
+    if (!res.ok) throw new Error("Review key creation failed.");
+    return res.json();
   },
   async updateKeypairWraps(payload) {
     const res = await rawFetch(`${API_ENDPOINTS.reviewKeypair}/wraps`, {
@@ -62,14 +68,28 @@ const openMapxTransport: MangroveTransport<Review, ReviewAggregate> = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (res.status === 409) throw new MangroveConflictError();
+    if (!res.ok) throw new Error("Review key update failed.");
+    return res.json();
   },
-  async deleteKeypairEnvelope() {
-    const res = await rawFetch(API_ENDPOINTS.reviewKeypair, { method: "DELETE" });
-    if (!res.ok) throw new Error(await res.text());
+  async deleteKeypairEnvelope(payload) {
+    const res = await rawFetch(API_ENDPOINTS.reviewKeypair, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (res.status === 409) throw new MangroveConflictError();
+    if (!res.ok) throw new Error("Review key deletion failed.");
   },
-  submitReview(payload) {
-    return apiClient.post<{ id: string }>(API_ENDPOINTS.reviewSubmit, payload);
+  async submitReview(payload, options) {
+    const res = await rawFetch(API_ENDPOINTS.reviewSubmit, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: options?.signal,
+    });
+    if (!res.ok) throw new Error("Review submission failed. Please try again.");
+    return res.json();
   },
   uploadReviewImage(payload) {
     return apiClient.post<{ src: string }>(API_ENDPOINTS.reviewImage, payload);
@@ -100,16 +120,41 @@ const openMapxTransport: MangroveTransport<Review, ReviewAggregate> = {
 };
 
 export function MangroveTransportProvider({ children }: { children: ReactNode }) {
-  const { data: session } = useSession();
+  const { data: session } = useSettledSessionAuthority();
   const currentUser = useMemo<MangroveCurrentUser | null>(() => {
     const id = session?.user?.id;
     if (!id) return null;
-    return { id, nickname: session.user.name ?? null };
-  }, [session?.user?.id, session?.user?.name]);
+    return { id, nickname: session.user.name ?? null, authorityId: session.session?.id };
+  }, [session?.user?.id, session?.user?.name, session?.session?.id]);
 
+  const transport = useMemo(() => {
+    const call = async <T,>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> => {
+      const res = await rawFetch(`/api/integrations/reviews-mangrove/signer/${path}`, {
+        cache: "no-store",
+        signal,
+        ...(body === undefined
+          ? {}
+          : {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...(body as object), expectedUserId: currentUser?.id }),
+            }),
+      });
+      if (!res.ok) throw new MangroveSignerError(res.status);
+      return res.json();
+    };
+    const signer: SignerTransport = {
+      getConfig: (options) => call("config", undefined, options?.signal),
+      getAccount: (sessionToken, options) => call("account", { sessionToken }, options?.signal),
+      signReview: (sessionToken, review, options) =>
+        call("sign", { sessionToken, review }, options?.signal),
+      revokeSession: (sessionToken, options) => call("revoke", { sessionToken }, options?.signal),
+    };
+    return { ...openMapxTransport, signer };
+  }, [currentUser?.id]);
   return (
     <MangroveProvider
-      transport={openMapxTransport}
+      transport={transport}
       currentUser={currentUser}
       webauthnKeyName="OpenMapX — Mangrove Reviews"
     >

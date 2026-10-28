@@ -14,7 +14,7 @@ vi.mock("../../db/index.js", () => ({ db: dbMock.db }));
 vi.mock("../../db/schema.js", () => ({
   mangroveKeypair: {
     userId: "mangrove_keypair.user_id",
-    encryptionMode: "mangrove_keypair.encryption_mode",
+    revision: "mangrove_keypair.revision",
     publicJwk: "mangrove_keypair.public_jwk",
     privateJwk: "mangrove_keypair.private_jwk",
     passphraseCiphertext: "mangrove_keypair.passphrase_ciphertext",
@@ -44,14 +44,12 @@ function webauthnWraps(count: number) {
 describe("reviews-keypair validation helpers", () => {
   // Imported after the vi.mock calls so the route module's mocked deps resolve.
   let isMangrovePublicJwk: typeof import("../reviews-keypair.js").isMangrovePublicJwk;
-  let isMangrovePrivateJwk: typeof import("../reviews-keypair.js").isMangrovePrivateJwk;
   let validateWrap: typeof import("../reviews-keypair.js").validateWrap;
   let validateEncryptedState: typeof import("../reviews-keypair.js").validateEncryptedState;
 
   beforeAll(async () => {
     const mod = await import("../reviews-keypair.js");
     isMangrovePublicJwk = mod.isMangrovePublicJwk;
-    isMangrovePrivateJwk = mod.isMangrovePrivateJwk;
     validateWrap = mod.validateWrap;
     validateEncryptedState = mod.validateEncryptedState;
   });
@@ -68,6 +66,8 @@ describe("reviews-keypair validation helpers", () => {
       ["wrong crv", { kty: "EC", crv: "P-384", x: "a", y: "b" }],
       ["missing x", { kty: "EC", crv: "P-256", y: "b" }],
       ["empty x", { kty: "EC", crv: "P-256", x: "", y: "b" }],
+      ["nested private material in kid", { ...PUBLIC_JWK, kid: PRIVATE_JWK }],
+      ["private signing operations", { ...PUBLIC_JWK, key_ops: ["sign"] }],
       ["oversized x", { kty: "EC", crv: "P-256", x: "x".repeat(129), y: "b" }],
     ])("rejects %s", (_label, jwk) => {
       expect(isMangrovePublicJwk(jwk)).toBe(false);
@@ -84,13 +84,12 @@ describe("reviews-keypair validation helpers", () => {
     });
   });
 
-  describe("isMangrovePrivateJwk", () => {
-    it("accepts a valid private JWK (has d)", () => {
-      expect(isMangrovePrivateJwk(PRIVATE_JWK)).toBe(true);
-    });
-    it("rejects a public JWK (no d)", () => {
-      expect(isMangrovePrivateJwk(PUBLIC_JWK)).toBe(false);
-    });
+  it.each([
+    PRIVATE_JWK,
+    { ...PUBLIC_JWK, privateJwk: PRIVATE_JWK },
+    { ...PUBLIC_JWK, secret: { d: "secret" } },
+  ])("rejects private or unknown public JWK fields", (jwk) => {
+    expect(isMangrovePublicJwk(jwk)).toBe(false);
   });
 
   describe("validateWrap", () => {
@@ -245,19 +244,10 @@ describe("reviews-keypair routes", () => {
     expect(res.statusCode).toBe(204);
   });
 
-  it("GET returns the unencrypted envelope", async () => {
-    dbMock.queueSelect([
-      { encryptionMode: "unencrypted", publicJwk: PUBLIC_JWK, privateJwk: PRIVATE_JWK },
-    ]);
-    const res = await get();
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ mode: "unencrypted", publicJwk: PUBLIC_JWK });
-  });
-
   it("GET returns the encrypted envelope with wrap metadata", async () => {
     dbMock.queueSelect([
       {
-        encryptionMode: "encrypted",
+        revision: "r1",
         publicJwk: PUBLIC_JWK,
         passphraseCiphertext: "pct",
         recipientsCiphertext: null,
@@ -275,7 +265,8 @@ describe("reviews-keypair routes", () => {
     const res = await get();
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.mode).toBe("encrypted");
+    expect(body.revision).toBe("r1");
+    expect(body).not.toHaveProperty("mode");
     expect(body.wraps).toEqual([
       {
         id: "w1",
@@ -293,88 +284,88 @@ describe("reviews-keypair routes", () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it("POST returns 409 when a keypair already exists", async () => {
-    dbMock.queueSelect([{ userId: USER_ID }]);
-    const res = await post({ mode: "unencrypted", publicJwk: PUBLIC_JWK, privateJwk: PRIVATE_JWK });
-    expect(res.statusCode).toBe(409);
+  const encrypted = {
+    publicJwk: PUBLIC_JWK,
+    passphraseCiphertext: "ct",
+    wraps: [{ wrapType: "passphrase", label: "Pass" }],
+  };
+  it.each([
+    { mode: "unencrypted", privateJwk: PRIVATE_JWK },
+    { mode: "encrypted" },
+    { privateJwk: PRIVATE_JWK },
+  ])("rejects removed plaintext/mode fields", async (extra) => {
+    expect((await post({ ...encrypted, ...extra })).statusCode).toBe(400);
     expect(dbMock.db.insert).not.toHaveBeenCalled();
   });
-
-  it("POST creates an unencrypted keypair (201)", async () => {
-    dbMock.queueSelect([]);
-    const res = await post({ mode: "unencrypted", publicJwk: PUBLIC_JWK, privateJwk: PRIVATE_JWK });
+  it("POST returns a new opaque revision", async () => {
+    dbMock.queueInsert([{ revision: "r-created" }]);
+    const res = await post(encrypted);
     expect(res.statusCode).toBe(201);
-    expect(dbMock.db.insert).toHaveBeenCalled();
+    expect(res.json().revision).toBeTypeOf("string");
   });
-
-  it("POST creates an encrypted keypair in a transaction (201)", async () => {
-    dbMock.queueSelect([]);
-    const res = await post({
-      mode: "encrypted",
-      publicJwk: PUBLIC_JWK,
-      passphraseCiphertext: "ct",
-      wraps: [{ wrapType: "passphrase", label: "Pass" }],
-    });
-    expect(res.statusCode).toBe(201);
-    expect(dbMock.db.transaction).toHaveBeenCalledTimes(1);
+  it("POST conflicting creation returns 409 before inserting wraps", async () => {
+    dbMock.queueInsert([]);
+    expect((await post(encrypted)).statusCode).toBe(409);
+    expect(dbMock.db.insert).toHaveBeenCalledTimes(1);
   });
-
-  it("POST rejects more than 32 encrypted-keypair wraps before write work", async () => {
-    dbMock.queueSelect([]);
-    const res = await post({
-      mode: "encrypted",
-      publicJwk: PUBLIC_JWK,
-      recipientsCiphertext: "ct",
-      wraps: webauthnWraps(33),
-    });
-    expect(res.statusCode).toBe(400);
-    expect(res.json()).toEqual({ error: "At most 32 keypair wraps are supported" });
-    expect(dbMock.db.transaction).not.toHaveBeenCalled();
+  it("PUT stale revision returns 409 without touching wraps", async () => {
+    dbMock.queueUpdate([]);
+    const res = await put({ ...encrypted, publicJwk: undefined, expectedRevision: "old" });
+    expect(res.statusCode).toBe(409);
+    expect(dbMock.db.delete).not.toHaveBeenCalled();
+    expect(dbMock.db.insert).not.toHaveBeenCalled();
   });
-
-  it("PUT returns 404 when there is no keypair", async () => {
-    dbMock.queueSelect([]);
+  it("PUT replaces wraps only after a successful conditional row update", async () => {
+    dbMock.queueUpdate([{ revision: "new" }]);
     const res = await put({
-      passphraseCiphertext: "ct",
-      wraps: [{ wrapType: "passphrase", label: "P" }],
+      passphraseCiphertext: "new",
+      wraps: encrypted.wraps,
+      expectedRevision: "r1",
     });
-    expect(res.statusCode).toBe(404);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().revision).toBeTypeOf("string");
+    expect(dbMock.db.insert).toHaveBeenCalledTimes(1);
   });
-
-  it("PUT returns 409 for an unencrypted keypair", async () => {
-    dbMock.queueSelect([{ mode: "unencrypted" }]);
-    const res = await put({
-      passphraseCiphertext: "ct",
-      wraps: [{ wrapType: "passphrase", label: "P" }],
+  it.each(["POST", "PUT"] as const)(
+    "%s rejects too many wraps before transaction",
+    async (method) => {
+      const res = await app.inject({
+        method,
+        url: method === "POST" ? "/api/reviews/keypair" : "/api/reviews/keypair/wraps",
+        payload: {
+          ...(method === "POST" ? { publicJwk: PUBLIC_JWK } : { expectedRevision: "r1" }),
+          recipientsCiphertext: "ct",
+          wraps: webauthnWraps(33),
+        },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(dbMock.db.transaction).not.toHaveBeenCalled();
+    },
+  );
+  it("requires expected revision for update/delete", async () => {
+    expect((await put({ passphraseCiphertext: "ct", wraps: encrypted.wraps })).statusCode).toBe(
+      400,
+    );
+    expect((await del()).statusCode).toBe(400);
+  });
+  it("DELETE stale revision returns 409", async () => {
+    dbMock.queueDelete([]);
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/api/reviews/keypair",
+      payload: { expectedRevision: "old" },
     });
     expect(res.statusCode).toBe(409);
+    expect(dbMock.db.delete).toHaveBeenCalledTimes(1);
   });
-
-  it("PUT replaces wraps for an encrypted keypair (200)", async () => {
-    dbMock.queueSelect([{ mode: "encrypted" }]);
-    const res = await put({
-      passphraseCiphertext: "ct",
-      wraps: [{ wrapType: "passphrase", label: "P" }],
+  it("DELETE conditionally removes parent and lets FK cascade", async () => {
+    dbMock.queueDelete([{ userId: USER_ID }]);
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/api/reviews/keypair",
+      payload: { expectedRevision: "r1" },
     });
     expect(res.statusCode).toBe(200);
-    expect(dbMock.db.transaction).toHaveBeenCalledTimes(1);
-  });
-
-  it("PUT rejects more than 32 encrypted-keypair wraps before write work", async () => {
-    dbMock.queueSelect([{ mode: "encrypted" }]);
-    const res = await put({
-      recipientsCiphertext: "ct",
-      wraps: webauthnWraps(33),
-    });
-    expect(res.statusCode).toBe(400);
-    expect(res.json()).toEqual({ error: "At most 32 keypair wraps are supported" });
-    expect(dbMock.db.transaction).not.toHaveBeenCalled();
-  });
-
-  it("DELETE wipes the keypair and wraps in a transaction", async () => {
-    const res = await del();
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ deleted: true });
-    expect(dbMock.db.transaction).toHaveBeenCalledTimes(1);
+    expect(dbMock.db.delete).toHaveBeenCalledTimes(1);
   });
 });

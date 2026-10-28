@@ -67,7 +67,7 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: October 18, 2026 (hazard data now read through OpenConditions)
+        Last updated: October 28, 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -327,16 +327,20 @@ export default function PrivacyContent({
           </li>
           <li>
             <Typography>
-              <strong>Mangrove review keypair</strong> — if you opt in to the review feature, an
-              ECDSA P-256 signing keypair is generated and stored for you. The public key is stored
-              in cleartext on our server (it is, by design, public). The private key is stored
-              according to the protection mode you choose:
+              <strong>Mangrove review signing</strong> — the main connection flow uses Mangrove's
+              shared signer. Mangrove holds your signing key and signs on your behalf. OpenMapX
+              relays your signer session token and review content to{" "}
+              <code>signer.mangrove.reviews</code> and receives your public signing identity. See
+              Section&nbsp;6 for login and recipient details. Alternatively, you can choose an
+              encrypted local ECDSA P-256 key. For local signing, our server stores the public key,
+              encrypted private-key material and unlock-method metadata. Plaintext private-key
+              storage is not supported. Local protection options are:
             </Typography>
             <ul>
               <li>
                 <Typography>
-                  <strong>Passphrase (recommended)</strong> — the private key is encrypted in your
-                  browser with a passphrase you choose, using the audited{" "}
+                  <strong>Local passphrase</strong> — the private key is encrypted in your browser
+                  with a passphrase you choose, using the audited{" "}
                   <Link
                     href="https://age-encryption.org/v1"
                     target="_blank"
@@ -358,23 +362,15 @@ export default function PrivacyContent({
                   material.
                 </Typography>
               </li>
-              <li>
-                <Typography>
-                  <strong>Unencrypted (explicit opt-in)</strong> — only if you actively choose this,
-                  the private key is stored in cleartext on our server. In this mode, anyone with
-                  access to the database (including the operator) could cryptographically sign
-                  reviews in your name. We show a warning before you make this choice.
-                </Typography>
-              </li>
             </ul>
           </li>
           <li>
             <Typography>
               <strong>Review content</strong> — if you submit a review, the content you provide
               (rating, free-text review, optional images, optional affiliations, optional experience
-              context, place reference) is cryptographically signed in your browser and then
-              forwarded by our server to the Mangrove.reviews network. See Section&nbsp;6 below for
-              the publication model.
+              context, place reference) is signed by the shared Mangrove signer or, when you choose
+              local signing, in your browser. Our server then forwards the signed review to the
+              Mangrove.reviews network. See Section&nbsp;6 below for the publication model.
             </Typography>
           </li>
         </ul>
@@ -440,6 +436,24 @@ export default function PrivacyContent({
           review.
         </Typography>
         <ul>
+          <li>
+            <Typography>
+              <strong>Shared signer and provider login.</strong> Connecting redirects your browser
+              to <code>signer.mangrove.reviews</code> and your selected OpenStreetMap, Bluesky or
+              passkey login flow. Mangrove and the selected provider can receive your IP address,
+              browser request data and login information. Through authenticated relays, OpenMapX
+              sends the signer session token and review to Mangrove and receives your public key,
+              reviewer identifier and optional account details or decentralized identifier. Mangrove
+              holds the private key and can sign for that identity; this is delegated custody, not
+              end-to-end encryption. The token is kept in this tab's session storage, bound to your
+              OpenMapX session, and is accessible to same-origin scripts. OpenMapX does not store it
+              in its database. Signer sessions normally expire after 24 hours. Disconnecting or
+              signing out removes the local token and attempts remote revocation, which may fail
+              during an outage. Manage the remote identity at Mangrove; deleting your OpenMapX
+              account does not delete it. A reconnect draft may also remain in tab storage;
+              restoration is allowed for one hour and never restores publishing consent.
+            </Typography>
+          </li>
           <li>
             <Typography>
               <strong>Reviews are public and permanent.</strong> When you submit a review, it is
@@ -1111,9 +1125,10 @@ export default function PrivacyContent({
           </li>
           <li>
             <Typography>
-              <strong>Mangrove keypair</strong> — retained until you regenerate it or delete your
-              account. Deleting the keypair on our servers does <strong>not</strong> retract
-              previously published reviews from the Mangrove network.
+              <strong>Local Mangrove keypair</strong> — retained until you replace or delete it or
+              delete your OpenMapX account, subject to the erasure and backup rules in this policy.
+              This does not delete the separate shared-signer identity or retract previously
+              published reviews from the Mangrove network.
             </Typography>
           </li>
           <li>
@@ -1189,15 +1204,13 @@ export default function PrivacyContent({
           transit do not change that boundary.
         </Typography>
         <Typography sx={{ mt: 1 }}>
-          <strong>Trust model for the Mangrove keypair (Section&nbsp;5).</strong> In passphrase mode
-          and passphrase + passkey mode, the private signing key never leaves your browser in
-          cleartext. Even a full compromise of our database would only reveal age-encrypted
-          ciphertext, which cannot be decrypted without your passphrase or a registered passkey. In
-          contrast, the &ldquo;unencrypted&rdquo; opt-in mode stores the private key in cleartext;
-          anyone with database access could therefore sign reviews in your name. We recommend
-          choosing one of the encrypted modes and never sharing your passphrase. These modes protect
-          the stored key against a database-only disclosure; they cannot prevent a compromised web
-          application from targeting the key or review content after your browser unlocks it.
+          <strong>Trust model for Mangrove signing (Section&nbsp;5).</strong> Shared signing trusts
+          Mangrove to protect and use the private key; Mangrove receives the review and session
+          token through our relay. For advanced local signing, the browser encrypts the private key
+          before upload using a passphrase or supported passkey. A database-only disclosure reveals
+          ciphertext rather than a usable local private key. Local encryption cannot protect an
+          unlocked key or review content from compromised application code. Both paths publish
+          reviews in readable form; neither encrypts published reviews.
         </Typography>
         <Typography sx={{ mt: 1 }}>
           <strong>OAuth provider tokens.</strong> Tokens issued by OpenStreetMap and Mapillary are

@@ -25,11 +25,9 @@ export const mangroveKeypair = pgTable("mangrove_keypair", {
   userId: text("user_id")
     .primaryKey()
     .references(() => user.id, { onDelete: "cascade" }),
-  /** "unencrypted" | "encrypted" */
-  encryptionMode: text("encryption_mode").notNull(),
+  /** Opaque CAS identity, replaced on every envelope mutation. */
+  revision: text("revision").notNull(),
   publicJwk: jsonb("public_jwk").notNull(),
-  /** Cleartext private JWK — only when encryptionMode = "unencrypted". */
-  privateJwk: jsonb("private_jwk"),
   /** age-encoded ciphertext with a single scrypt recipient. Null if user has no passphrase wrap. */
   passphraseCiphertext: text("passphrase_ciphertext"),
   /** age-encoded ciphertext with N WebAuthn PRF recipients. Null if user has no passkey wraps. */
@@ -42,7 +40,6 @@ export const mangroveKeypair = pgTable("mangrove_keypair", {
  *   - at most 32 total wraps per user
  *   - at most one passphrase wrap per user
  *   - at least one wrap per user (the LAST one cannot be removed)
- *   - when encryptionMode = "encrypted", at least one wrap must exist
  *
  * `identityString` for webauthn wraps is the age plugin identity returned
  * from `age.webauthn.createCredential` (begins with `AGE-PLUGIN-FIDO2PRF-1...`).
