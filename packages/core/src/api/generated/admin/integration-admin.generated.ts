@@ -5,11 +5,14 @@ import type {
   DeleteAdminIntegrationBinding400,
   DeleteAdminIntegrationBinding401,
   DeleteAdminIntegrationBinding403,
+  DeleteAdminIntegrationBinding409,
   DeleteAdminIntegrationBinding413,
   DeleteAdminIntegrationBinding415,
   DeleteAdminIntegrationBinding429,
   DeleteAdminIntegrationBinding500,
+  DeleteAdminIntegrationBinding503,
   DeleteAdminIntegrationBindingBody,
+  DeleteAdminIntegrationBindingHeaders,
   DeleteAdminIntegrationCredential200,
   DeleteAdminIntegrationCredential400,
   DeleteAdminIntegrationCredential401,
@@ -186,12 +189,14 @@ import type {
   SetAdminIntegrationBinding400,
   SetAdminIntegrationBinding401,
   SetAdminIntegrationBinding403,
+  SetAdminIntegrationBinding409,
   SetAdminIntegrationBinding413,
   SetAdminIntegrationBinding415,
   SetAdminIntegrationBinding429,
   SetAdminIntegrationBinding500,
   SetAdminIntegrationBinding503,
   SetAdminIntegrationBindingBody,
+  SetAdminIntegrationBindingHeaders,
   SetAdminIntegrationCredential200,
   SetAdminIntegrationCredential400,
   SetAdminIntegrationCredential401,
@@ -2052,6 +2057,11 @@ export type setAdminIntegrationBindingResponse403 = {
   status: 403;
 };
 
+export type setAdminIntegrationBindingResponse409 = {
+  data: SetAdminIntegrationBinding409;
+  status: 409;
+};
+
 export type setAdminIntegrationBindingResponse413 = {
   data: SetAdminIntegrationBinding413;
   status: 413;
@@ -2084,6 +2094,7 @@ export type setAdminIntegrationBindingResponseError = (
   | setAdminIntegrationBindingResponse400
   | setAdminIntegrationBindingResponse401
   | setAdminIntegrationBindingResponse403
+  | setAdminIntegrationBindingResponse409
   | setAdminIntegrationBindingResponse413
   | setAdminIntegrationBindingResponse415
   | setAdminIntegrationBindingResponse429
@@ -2105,6 +2116,7 @@ export const setAdminIntegrationBinding = async (
   integrationId: string,
   capability: string,
   setAdminIntegrationBindingBody: SetAdminIntegrationBindingBody,
+  headers: SetAdminIntegrationBindingHeaders,
   options?: Parameters<typeof setAdminIntegrationBindingRequest>[1],
 ): Promise<setAdminIntegrationBindingResponse> => {
   const getHeaders = (
@@ -2131,7 +2143,7 @@ export const setAdminIntegrationBinding = async (
     {
       ...options,
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
       body: JSON.stringify(setAdminIntegrationBindingBody),
     },
   );
@@ -2157,6 +2169,11 @@ export type deleteAdminIntegrationBindingResponse403 = {
   status: 403;
 };
 
+export type deleteAdminIntegrationBindingResponse409 = {
+  data: DeleteAdminIntegrationBinding409;
+  status: 409;
+};
+
 export type deleteAdminIntegrationBindingResponse413 = {
   data: DeleteAdminIntegrationBinding413;
   status: 413;
@@ -2177,6 +2194,11 @@ export type deleteAdminIntegrationBindingResponse500 = {
   status: 500;
 };
 
+export type deleteAdminIntegrationBindingResponse503 = {
+  data: DeleteAdminIntegrationBinding503;
+  status: 503;
+};
+
 export type deleteAdminIntegrationBindingResponseSuccess =
   deleteAdminIntegrationBindingResponse200 & {
     headers: Headers;
@@ -2185,10 +2207,12 @@ export type deleteAdminIntegrationBindingResponseError = (
   | deleteAdminIntegrationBindingResponse400
   | deleteAdminIntegrationBindingResponse401
   | deleteAdminIntegrationBindingResponse403
+  | deleteAdminIntegrationBindingResponse409
   | deleteAdminIntegrationBindingResponse413
   | deleteAdminIntegrationBindingResponse415
   | deleteAdminIntegrationBindingResponse429
   | deleteAdminIntegrationBindingResponse500
+  | deleteAdminIntegrationBindingResponse503
 ) & {
   headers: Headers;
 };
@@ -2204,7 +2228,8 @@ export const getDeleteAdminIntegrationBindingUrl = (integrationId: string, capab
 export const deleteAdminIntegrationBinding = async (
   integrationId: string,
   capability: string,
-  deleteAdminIntegrationBindingBody?: DeleteAdminIntegrationBindingBody,
+  deleteAdminIntegrationBindingBody: DeleteAdminIntegrationBindingBody,
+  headers: DeleteAdminIntegrationBindingHeaders,
   options?: Parameters<typeof deleteAdminIntegrationBindingRequest>[1],
 ): Promise<deleteAdminIntegrationBindingResponse> => {
   const getHeaders = (
@@ -2231,7 +2256,7 @@ export const deleteAdminIntegrationBinding = async (
     {
       ...options,
       method: "DELETE",
-      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
       body: JSON.stringify(deleteAdminIntegrationBindingBody),
     },
   );

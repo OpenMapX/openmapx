@@ -18,6 +18,8 @@ export async function createConfigurationPostgresFixture() {
       "admin_job_log",
       "admin_audit_log",
       "capability_binding",
+      "integration_application_receipt",
+      "integration_binding_revision",
       "service_config",
       "integration_config",
       "service_secret",

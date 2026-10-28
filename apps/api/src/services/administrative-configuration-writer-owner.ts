@@ -154,7 +154,21 @@ async function capture(
         _rowVersion: query<string>`xmin::text`,
       })
       .from(schema.integrationSecret);
+    const bindingRows = await tx
+      .select({
+        ...getTableColumns(schema.capabilityBinding),
+        _rowVersion: query<string>`xmin::text`,
+      })
+      .from(schema.capabilityBinding);
+    const bindingRevisionRows = await tx
+      .select({
+        ...getTableColumns(schema.integrationBindingRevision),
+        _rowVersion: query<string>`xmin::text`,
+      })
+      .from(schema.integrationBindingRevision);
     const context = openAdministrativeConfigurationRead({
+      bindingRows,
+      bindingRevisionRows,
       services,
       integrations,
       env: Object.freeze({ ...process.env }),

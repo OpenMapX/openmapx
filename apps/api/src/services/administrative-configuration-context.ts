@@ -13,6 +13,15 @@ export interface AdministrativeConfigurationReadContext {
   readonly integrationRows: readonly (typeof schema.integrationConfig.$inferSelect)[];
   readonly serviceSecretRows: readonly (typeof schema.serviceSecret.$inferSelect)[];
   readonly integrationSecretRows: readonly (typeof schema.integrationSecret.$inferSelect)[];
+  /** Actual transaction rows include PostgreSQL xmin for delete/reinsert CAS. */
+  readonly bindingRows?: readonly (typeof schema.capabilityBinding.$inferSelect & {
+    _rowVersion?: string;
+  })[];
+  readonly bindingRevisionRows?: readonly (typeof schema.integrationBindingRevision.$inferSelect & {
+    _rowVersion?: string;
+  })[];
+  /** Original candidate's proposed map, used only for its captured reload. */
+  readonly integrationBindingSnapshot?: Readonly<Record<string, Readonly<Record<string, string>>>>;
   /** Only the committed-candidate reload scope supplies an already resolved snapshot. */
   readonly integrationReloadSnapshot?: Readonly<
     Record<string, Readonly<Record<string, import("../integration-config").ConfigValueWithSource>>>

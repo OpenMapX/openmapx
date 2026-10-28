@@ -9,7 +9,7 @@ import { integrationConfigDbFixture } from "../../services/__tests__/helpers/int
 import type { IntegrationImportPorts } from "../../services/integration-config-import";
 import { TrustedConfigurationApplyError } from "../../services/trusted-config-outcome";
 import { makeCsrfGuardHook } from "../../utils/csrf";
-import { healthCheckSweepLimit, RateLimiter } from "../../utils/rate-limit";
+import { healthCheckSweepLimit, RateLimiter, serviceActionLimit } from "../../utils/rate-limit";
 import { installAdminRouteMocks } from "./admin-test-helpers";
 import { administrationSdkFetch } from "./helpers/administration-sdk-fetch";
 
@@ -18,8 +18,15 @@ const { requireAdmin: mockRequireAdmin, session: fakeSession } = installAdminRou
 const mockJobRunnerEnqueue = vi.fn().mockResolvedValue("job-main-123");
 const mockJobRunnerCancel = vi.fn().mockResolvedValue(true);
 const mockImmediateImport = vi.fn();
+const mockImmediateBinding = vi.fn();
+const expectedBinding = { expectedServiceId: null, expectedRevision: "a".repeat(64) };
+const bindingHeaders = () => {
+  serviceActionLimit.reset();
+  return { "idempotency-key": crypto.randomUUID() };
+};
 vi.mock("../../services/job-runner.js", () => ({
   jobRunner: {
+    applyImmediateIntegrationBinding: (...args: unknown[]) => mockImmediateBinding(...args),
     enqueue: (...args: unknown[]) => mockJobRunnerEnqueue(...args),
     cancel: (...args: unknown[]) => mockJobRunnerCancel(...args),
     importImmediateIntegrationConfiguration: (...args: unknown[]) => mockImmediateImport(...args),
@@ -85,6 +92,11 @@ vi.mock("../../db/index.js", () => ({
 vi.mock("../../db/schema.js", () => ({
   user: { id: "id", banned: "banned" },
   session: { id: "id", userId: "userId", updatedAt: "updatedAt" },
+  integrationApplicationReceipt: {
+    integrationId: "integration_id",
+    createdAt: "created_at",
+    result: "result",
+  },
   adminAuditLog: {
     id: "id",
     action: "action",
@@ -124,7 +136,7 @@ const MOCK_INTEGRATION = {
     quality: "built-in",
 
     dependencies: [],
-    requires: [],
+    requires: [{ capability: "routing" }],
 
     configSchema: {
       type: "object",
@@ -147,6 +159,7 @@ const mockReloadIntegrations = vi
 const mockResolveConfigWithSources = vi.fn().mockResolvedValue({});
 
 vi.mock("../../integration-host.js", () => ({
+  inspectIntegrationRuntime: () => null,
   getAllIntegrations: (...args: unknown[]) => mockGetAllIntegrations(...args),
   getIntegration: (...args: unknown[]) => mockGetIntegration(...args),
   reloadIntegrations: (...args: unknown[]) => mockReloadIntegrations(...args),
@@ -197,6 +210,19 @@ vi.mock("../../services/admin-ops.js", () => ({
   isDockerAvailable: vi.fn().mockResolvedValue(false),
 }));
 
+vi.mock("../../services/administrative-configuration-writer", () => ({
+  withAdministrativeConfigurationRead: async (
+    _options: unknown,
+    run: (read: unknown) => Promise<unknown>,
+  ) => run({}),
+}));
+vi.mock("../../services/integration-binding-state", () => ({
+  capturedBindingState: () => ({
+    bindings: { routing: "fixture-service" },
+    revision: "a".repeat(64),
+    desiredRevision: "a".repeat(64),
+  }),
+}));
 const setBinding = vi.fn();
 const removeBinding = vi.fn();
 const getRegistry = vi.fn();
@@ -257,7 +283,17 @@ beforeEach(() => {
   mockIsSecretsConfigured.mockReset().mockReturnValue(true);
   getRegistry.mockReset().mockReturnValue({
     get: (id: string) =>
-      id === "fixture-service" ? { manifest: { id, provides: ["routing"] } } : undefined,
+      id === "fixture-service"
+        ? { enabled: true, manifest: { id, provides: ["routing"] } }
+        : undefined,
+  });
+  mockImmediateBinding.mockReset().mockResolvedValue({
+    operationId: "binding-sdk-fixture",
+    integrationId: "geocoding-maptiler",
+    desiredRevision: "a".repeat(64),
+    database: "retained",
+    runtime: "applied",
+    runtimeGenerationId: "11111111-1111-4111-8111-111111111111",
   });
   setBinding.mockReset().mockResolvedValue(undefined);
   removeBinding.mockReset().mockResolvedValue(undefined);
@@ -349,8 +385,21 @@ describe("actual integration producers through generated SDK", () => {
         () => sdk.reloadAdminIntegration(id, undefined, options),
         () => sdk.listAdminIntegrationBindings(id, options),
         () =>
-          sdk.setAdminIntegrationBinding(id, "routing", { serviceId: "fixture-service" }, options),
-        () => sdk.deleteAdminIntegrationBinding(id, "routing", undefined, options),
+          sdk.setAdminIntegrationBinding(
+            id,
+            "routing",
+            { serviceId: "fixture-service", ...expectedBinding },
+            bindingHeaders(),
+            options,
+          ),
+        () =>
+          sdk.deleteAdminIntegrationBinding(
+            id,
+            "routing",
+            expectedBinding,
+            bindingHeaders(),
+            options,
+          ),
         () => sdk.listAdminCredentials(options),
         () => sdk.getAdminIntegrationCredentials(id, options),
         () => {
@@ -541,25 +590,34 @@ describe("actual integration producers through generated SDK", () => {
           await sdk.setAdminIntegrationBinding(
             "fixture",
             "routing",
-            { serviceId: "fixture-service" },
+            { serviceId: "fixture-service", ...expectedBinding },
+            bindingHeaders(),
             { client },
           )
         ).status,
       ).toBe(403);
       mockRequireAdmin.mockResolvedValue(fakeSession);
-      setBinding.mockRejectedValueOnce(Error("synthetic-secret"));
+      mockImmediateBinding.mockRejectedValueOnce(Error("synthetic-secret"));
       const failed = await sdk.setAdminIntegrationBinding(
         "fixture",
         "routing",
-        { serviceId: "fixture-service" },
+        { serviceId: "fixture-service", ...expectedBinding },
+        bindingHeaders(),
         { client },
       );
       expect(failed.status).toBe(500);
       expect(JSON.stringify(failed)).not.toContain("synthetic-secret");
-      removeBinding.mockRejectedValueOnce(Error("synthetic-secret"));
+      mockImmediateBinding.mockRejectedValueOnce(Error("synthetic-secret"));
       expect(
-        (await sdk.deleteAdminIntegrationBinding("fixture", "routing", undefined, { client }))
-          .status,
+        (
+          await sdk.deleteAdminIntegrationBinding(
+            "fixture",
+            "routing",
+            expectedBinding,
+            bindingHeaders(),
+            { client },
+          )
+        ).status,
       ).toBe(500);
       getRegistry.mockImplementationOnce(() => {
         throw Error("unavailable");
@@ -569,7 +627,8 @@ describe("actual integration producers through generated SDK", () => {
           await sdk.setAdminIntegrationBinding(
             "fixture",
             "routing",
-            { serviceId: "fixture-service" },
+            { serviceId: "fixture-service", ...expectedBinding },
+            bindingHeaders(),
             { client },
           )
         ).status,

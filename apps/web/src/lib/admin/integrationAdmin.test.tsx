@@ -79,7 +79,7 @@ describe("integration query boundaries and reload observation", () => {
         await expect(run[kind]()).rejects.toThrow();
       });
       expect(requests).toHaveLength(1);
-      const init = requests[0]!.init;
+      const init = requests[0]?.init;
       expect(new Headers(init.headers).get("idempotency-key")).toMatch(
         /^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/,
       );
@@ -91,6 +91,42 @@ describe("integration query boundaries and reload observation", () => {
               ? { value: "synthetic-private" }
               : { integrations: [{ integrationId: "demo", config: { endpoint: "synthetic" } }] },
         );
+    },
+  );
+  it.each(["POST", "DELETE"])(
+    "sends binding %s CAS and the retained intent through the actual generated client",
+    async (method) => {
+      const requests = fakeFetch(() =>
+        Response.json({ error: "Binding version changed" }, { status: 409 }),
+      );
+      const { result } = renderHookWithQuery(() => useIntegrationAdmin(), {
+        queryClient: client(),
+      });
+      const expected = {
+        expectedServiceId: "old",
+        expectedRevision: "a".repeat(64),
+        operationId: "binding-retained-header-0001",
+      };
+      await act(async () => {
+        await expect(
+          result.current.setBinding(
+            "demo",
+            "search /places",
+            method === "POST" ? "new" : null,
+            expected,
+          ),
+        ).rejects.toThrow(/Binding version changed/);
+      });
+      expect(requests).toHaveLength(1);
+      expect(requests[0]?.init.method).toBe(method);
+      expect(new Headers(requests[0]?.init.headers).get("idempotency-key")).toBe(
+        expected.operationId,
+      );
+      expect(JSON.parse(String(requests[0]?.init.body))).toEqual({
+        expectedServiceId: "old",
+        expectedRevision: expected.expectedRevision,
+        ...(method === "POST" ? { serviceId: "new" } : {}),
+      });
     },
   );
   it("keeps full raw manifest and canonical config values without response casts", async () => {

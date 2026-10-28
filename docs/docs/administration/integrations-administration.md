@@ -172,10 +172,18 @@ let auto-select or the public fallback take over. The picker only offers
 services that genuinely provide the capability — a service that doesn't is
 rejected.
 
-A binding is a stored `(integration, capability) → service` mapping. The
-integration host loads all bindings once at startup and re-reads them on reload,
-so after changing a binding, reload the integration (or restart the API) for it
-to take effect. Like every admin action, setting a binding is audit-logged.
+A binding is a stored `(integration, capability) → service` mapping. Saving it
+also applies the trusted configuration and reloads the integration. The panel
+shows **Saved** and **Active** separately: a saved choice is only active after
+the host has activated that exact provider generation. If reload fails, the
+previous provider remains active and the desired choice stays saved. Use
+**Apply saved binding** to make a new explicit attempt. Disabled integrations
+remain pending until enabled. **Refresh binding status** reads the retained
+operation outcome without repeating the write.
+
+Changes check the previously observed mapping and revision, so a stale page
+cannot overwrite another administrator's choice. Refresh after a conflict.
+Binding changes and their retained outcomes are audit-logged.
 
 :::note[Bindings are per integration, not global]
 The same capability can be bound to different services for different

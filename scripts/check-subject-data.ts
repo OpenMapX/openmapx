@@ -22,6 +22,7 @@ export const DIRECT_USER_FK_CLASSIFICATIONS: Record<string, string> = {
   "admin_job.created_by": "admin-jobs-attribution",
   "installed_extension.installed_by": "installed-component-attribution",
   "installed_integration.installed_by": "installed-component-attribution",
+  "integration_application_receipt.actor_id": "admin-audit-attribution",
   "integration_secret.updated_by": "secret-update-attribution",
   "labeled_place.user_id": "labeled-places",
   "mangrove_keypair.user_id": "mangrove-keypairs",

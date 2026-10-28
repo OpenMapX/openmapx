@@ -6,6 +6,7 @@ import z from "zod/v4";
 import { configurationApplyResultSchema } from "../../../ops/contract";
 import { adminCountSchema, adminJsonValueSchema, adminTimestampSchema } from "../admin";
 import { adminJsonWire, preserveManifestJson } from "../manifest-json";
+import { integrationApplyReceiptSchema, integrationRuntimeEvidenceSchema } from "./application";
 import {
   adminIntegrationConfigSourceSchema,
   adminIntegrationCredentialSchema,
@@ -149,8 +150,18 @@ export const adminIntegrationBindingSchema = z.strictObject({
 });
 export const adminIntegrationBindingsSchema = z.strictObject({
   bindings: z.array(adminIntegrationBindingSchema),
+  revision: z.string().regex(/^[a-f0-9]{64}$/),
+  desiredRevision: z.string().regex(/^[a-f0-9]{64}$/),
+  runtime: integrationRuntimeEvidenceSchema.nullable(),
+  lastApplication: integrationApplyReceiptSchema.nullable(),
 });
-export const adminIntegrationBindingSetSchema = z.strictObject({ serviceId: z.string().min(1) });
+export const adminIntegrationBindingDeleteSchema = z.strictObject({
+  expectedServiceId: z.string().min(1).max(64).nullable(),
+  expectedRevision: z.string().regex(/^[a-f0-9]{64}$/),
+});
+export const adminIntegrationBindingSetSchema = adminIntegrationBindingDeleteSchema.extend({
+  serviceId: z.string().min(1).max(64),
+});
 export const adminIntegrationEmptyMutationSchema = z.strictObject({}).optional();
 export const adminIntegrationIdempotencyHeadersSchema = z.object({
   "idempotency-key": z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/),

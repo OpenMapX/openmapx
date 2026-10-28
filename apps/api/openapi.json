@@ -34096,10 +34096,265 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "revision": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "desiredRevision": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "runtime": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "generationId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "bindings": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "configRevision": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "generationId",
+                            "bindings",
+                            "configRevision"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "lastApplication": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "operationId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            "integrationId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 64
+                            },
+                            "desiredRevision": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "database": {
+                              "type": "string",
+                              "enum": [
+                                "retained",
+                                "restored",
+                                "conflict",
+                                "unknown"
+                              ]
+                            },
+                            "runtime": {
+                              "type": "string",
+                              "enum": [
+                                "applied",
+                                "pending",
+                                "failed",
+                                "unknown"
+                              ]
+                            },
+                            "runtimeGenerationId": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "reason": {
+                              "type": "string",
+                              "enum": [
+                                "integration_disabled",
+                                "reload_failed",
+                                "ownership_changed",
+                                "authority_unavailable",
+                                "reconciliation_required"
+                              ]
+                            },
+                            "hostApply": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "outcome": {
+                                      "type": "string",
+                                      "enum": [
+                                        "committed"
+                                      ]
+                                    },
+                                    "revisionId": {
+                                      "type": "string",
+                                      "pattern": "^cfg1_[A-Za-z0-9_-]{43}$"
+                                    },
+                                    "enabledServiceIds": {
+                                      "maxItems": 256,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 64,
+                                        "pattern": "^[a-z0-9][a-z0-9-]*$"
+                                      }
+                                    },
+                                    "followUp": {
+                                      "type": "string",
+                                      "enum": [
+                                        "complete",
+                                        "failed"
+                                      ]
+                                    },
+                                    "cleanupFailed": {
+                                      "type": "boolean"
+                                    },
+                                    "publisherCleanupFailed": {
+                                      "type": "boolean"
+                                    },
+                                    "registryUpdateFailed": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "required": [
+                                    "outcome",
+                                    "revisionId",
+                                    "enabledServiceIds",
+                                    "followUp",
+                                    "cleanupFailed",
+                                    "publisherCleanupFailed",
+                                    "registryUpdateFailed"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "outcome": {
+                                      "type": "string",
+                                      "enum": [
+                                        "not_committed"
+                                      ]
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "conflict",
+                                        "busy",
+                                        "failed"
+                                      ]
+                                    },
+                                    "currentRevisionId": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string",
+                                          "pattern": "^cfg1_[A-Za-z0-9_-]{43}$"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "cleanupFailed": {
+                                      "type": "boolean"
+                                    },
+                                    "publisherCleanupFailed": {
+                                      "type": "boolean"
+                                    },
+                                    "registryUpdateFailed": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "required": [
+                                    "outcome",
+                                    "reason",
+                                    "cleanupFailed",
+                                    "publisherCleanupFailed",
+                                    "registryUpdateFailed"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "outcome": {
+                                      "type": "string",
+                                      "enum": [
+                                        "unknown"
+                                      ]
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "transport_or_result"
+                                      ]
+                                    },
+                                    "publisherCleanupFailed": {
+                                      "type": "boolean"
+                                    },
+                                    "registryUpdateFailed": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "required": [
+                                    "outcome",
+                                    "reason",
+                                    "publisherCleanupFailed",
+                                    "registryUpdateFailed"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "operationId",
+                            "integrationId",
+                            "desiredRevision",
+                            "database",
+                            "runtime",
+                            "runtimeGenerationId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
-                    "bindings"
+                    "bindings",
+                    "revision",
+                    "desiredRevision",
+                    "runtime",
+                    "lastApplication"
                   ],
                   "additionalProperties": false
                 }
@@ -34527,6 +34782,15 @@
             "in": "path",
             "name": "capability",
             "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$"
+            },
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true
           }
         ],
         "requestBody": {
@@ -34536,12 +34800,31 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "expectedServiceId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "expectedRevision": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
                   "serviceId": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 64
                   }
                 },
                 "required": [
+                  "expectedServiceId",
+                  "expectedRevision",
                   "serviceId"
                 ],
                 "additionalProperties": false
@@ -34557,15 +34840,200 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "ok": {
-                      "type": "boolean",
+                    "operationId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "integrationId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "desiredRevision": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "database": {
+                      "type": "string",
                       "enum": [
-                        true
+                        "retained",
+                        "restored",
+                        "conflict",
+                        "unknown"
+                      ]
+                    },
+                    "runtime": {
+                      "type": "string",
+                      "enum": [
+                        "applied",
+                        "pending",
+                        "failed",
+                        "unknown"
+                      ]
+                    },
+                    "runtimeGenerationId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "integration_disabled",
+                        "reload_failed",
+                        "ownership_changed",
+                        "authority_unavailable",
+                        "reconciliation_required"
+                      ]
+                    },
+                    "hostApply": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "outcome": {
+                              "type": "string",
+                              "enum": [
+                                "committed"
+                              ]
+                            },
+                            "revisionId": {
+                              "type": "string",
+                              "pattern": "^cfg1_[A-Za-z0-9_-]{43}$"
+                            },
+                            "enabledServiceIds": {
+                              "maxItems": 256,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 64,
+                                "pattern": "^[a-z0-9][a-z0-9-]*$"
+                              }
+                            },
+                            "followUp": {
+                              "type": "string",
+                              "enum": [
+                                "complete",
+                                "failed"
+                              ]
+                            },
+                            "cleanupFailed": {
+                              "type": "boolean"
+                            },
+                            "publisherCleanupFailed": {
+                              "type": "boolean"
+                            },
+                            "registryUpdateFailed": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "outcome",
+                            "revisionId",
+                            "enabledServiceIds",
+                            "followUp",
+                            "cleanupFailed",
+                            "publisherCleanupFailed",
+                            "registryUpdateFailed"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "outcome": {
+                              "type": "string",
+                              "enum": [
+                                "not_committed"
+                              ]
+                            },
+                            "reason": {
+                              "type": "string",
+                              "enum": [
+                                "conflict",
+                                "busy",
+                                "failed"
+                              ]
+                            },
+                            "currentRevisionId": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "pattern": "^cfg1_[A-Za-z0-9_-]{43}$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "cleanupFailed": {
+                              "type": "boolean"
+                            },
+                            "publisherCleanupFailed": {
+                              "type": "boolean"
+                            },
+                            "registryUpdateFailed": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "outcome",
+                            "reason",
+                            "cleanupFailed",
+                            "publisherCleanupFailed",
+                            "registryUpdateFailed"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "outcome": {
+                              "type": "string",
+                              "enum": [
+                                "unknown"
+                              ]
+                            },
+                            "reason": {
+                              "type": "string",
+                              "enum": [
+                                "transport_or_result"
+                              ]
+                            },
+                            "publisherCleanupFailed": {
+                              "type": "boolean"
+                            },
+                            "registryUpdateFailed": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "outcome",
+                            "reason",
+                            "publisherCleanupFailed",
+                            "registryUpdateFailed"
+                          ],
+                          "additionalProperties": false
+                        }
                       ]
                     }
                   },
                   "required": [
-                    "ok"
+                    "operationId",
+                    "integrationId",
+                    "desiredRevision",
+                    "database",
+                    "runtime",
+                    "runtimeGenerationId"
                   ],
                   "additionalProperties": false
                 }
@@ -34693,6 +35161,66 @@
             }
           },
           "403": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -35051,15 +35579,45 @@
             "in": "path",
             "name": "capability",
             "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$"
+            },
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true
           }
         ],
         "requestBody": {
-          "required": false,
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": {},
+                "properties": {
+                  "expectedServiceId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "expectedRevision": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": [
+                  "expectedServiceId",
+                  "expectedRevision"
+                ],
                 "additionalProperties": false
               }
             }
@@ -35073,15 +35631,200 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "ok": {
-                      "type": "boolean",
+                    "operationId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "integrationId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "desiredRevision": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "database": {
+                      "type": "string",
                       "enum": [
-                        true
+                        "retained",
+                        "restored",
+                        "conflict",
+                        "unknown"
+                      ]
+                    },
+                    "runtime": {
+                      "type": "string",
+                      "enum": [
+                        "applied",
+                        "pending",
+                        "failed",
+                        "unknown"
+                      ]
+                    },
+                    "runtimeGenerationId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "integration_disabled",
+                        "reload_failed",
+                        "ownership_changed",
+                        "authority_unavailable",
+                        "reconciliation_required"
+                      ]
+                    },
+                    "hostApply": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "outcome": {
+                              "type": "string",
+                              "enum": [
+                                "committed"
+                              ]
+                            },
+                            "revisionId": {
+                              "type": "string",
+                              "pattern": "^cfg1_[A-Za-z0-9_-]{43}$"
+                            },
+                            "enabledServiceIds": {
+                              "maxItems": 256,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 64,
+                                "pattern": "^[a-z0-9][a-z0-9-]*$"
+                              }
+                            },
+                            "followUp": {
+                              "type": "string",
+                              "enum": [
+                                "complete",
+                                "failed"
+                              ]
+                            },
+                            "cleanupFailed": {
+                              "type": "boolean"
+                            },
+                            "publisherCleanupFailed": {
+                              "type": "boolean"
+                            },
+                            "registryUpdateFailed": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "outcome",
+                            "revisionId",
+                            "enabledServiceIds",
+                            "followUp",
+                            "cleanupFailed",
+                            "publisherCleanupFailed",
+                            "registryUpdateFailed"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "outcome": {
+                              "type": "string",
+                              "enum": [
+                                "not_committed"
+                              ]
+                            },
+                            "reason": {
+                              "type": "string",
+                              "enum": [
+                                "conflict",
+                                "busy",
+                                "failed"
+                              ]
+                            },
+                            "currentRevisionId": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "pattern": "^cfg1_[A-Za-z0-9_-]{43}$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "cleanupFailed": {
+                              "type": "boolean"
+                            },
+                            "publisherCleanupFailed": {
+                              "type": "boolean"
+                            },
+                            "registryUpdateFailed": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "outcome",
+                            "reason",
+                            "cleanupFailed",
+                            "publisherCleanupFailed",
+                            "registryUpdateFailed"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "outcome": {
+                              "type": "string",
+                              "enum": [
+                                "unknown"
+                              ]
+                            },
+                            "reason": {
+                              "type": "string",
+                              "enum": [
+                                "transport_or_result"
+                              ]
+                            },
+                            "publisherCleanupFailed": {
+                              "type": "boolean"
+                            },
+                            "registryUpdateFailed": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "outcome",
+                            "reason",
+                            "publisherCleanupFailed",
+                            "registryUpdateFailed"
+                          ],
+                          "additionalProperties": false
+                        }
                       ]
                     }
                   },
                   "required": [
-                    "ok"
+                    "operationId",
+                    "integrationId",
+                    "desiredRevision",
+                    "database",
+                    "runtime",
+                    "runtimeGenerationId"
                   ],
                   "additionalProperties": false
                 }
@@ -35209,6 +35952,66 @@
             }
           },
           "403": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -35422,6 +36225,66 @@
             }
           },
           "500": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
             "description": "Response",
             "content": {
               "application/json": {

@@ -23,6 +23,7 @@ import {
   dataSubjectRequestTask,
   installedExtension,
   installedIntegration,
+  integrationApplicationReceipt,
   integrationSecret,
   labeledPlace,
   mangroveKeypair,
@@ -881,6 +882,32 @@ export async function* streamOpenMapxRegistrationRecords(
           policyCodes: ["rights-of-others", "foreign-identifiers-redacted"],
           map: ({ key, ...row }) => ({
             recordId: `account-action-${pseudonymousIdentifier(key)}`,
+            ...row,
+          }),
+        },
+      );
+      yield* emit(
+        database
+          .select({
+            operationId: integrationApplicationReceipt.operationId,
+            integrationId: integrationApplicationReceipt.integrationId,
+            capability: integrationApplicationReceipt.capability,
+            createdAt: integrationApplicationReceipt.createdAt,
+            database: sql<string>`${integrationApplicationReceipt.result}->>'database'`,
+            runtime: sql<string>`${integrationApplicationReceipt.result}->>'runtime'`,
+          })
+          .from(integrationApplicationReceipt)
+          .where(
+            and(
+              eq(integrationApplicationReceipt.actorId, context.userId),
+              lte(integrationApplicationReceipt.createdAt, cutoff),
+            ),
+          )
+          .orderBy(asc(integrationApplicationReceipt.operationId)),
+        {
+          policyCodes: ["rights-of-others", "foreign-identifiers-redacted"],
+          map: ({ operationId, ...row }) => ({
+            recordId: `integration-application-${pseudonymousIdentifier(operationId)}`,
             ...row,
           }),
         },

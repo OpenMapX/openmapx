@@ -115,7 +115,7 @@ const overview = {
   systemHealth: { status: "degraded", unhealthyCount: 1 },
   users: { total: 2, active24h: 1, banned: 0 },
   integrations: { total: 3, enabled: 2, unhealthy: 1, unconfigured: 0 },
-  services: { running: 1, stopped: 2, unhealthy: 0 },
+  services: { running: 1, stopped: 2, unhealthy: 0, unknown: 0 },
   attention: [
     { type: "health_check_failed", severity: "error", message: "Probe failed", target: "sample" },
   ],
@@ -235,9 +235,28 @@ describe("integration administration canonical producer contracts", () => {
       reloadAdminIntegration: { ok: true, jobId: "job" },
       listAdminIntegrationBindings: {
         bindings: [{ capability: "routing-engine", serviceId: "router" }],
+        revision: "a".repeat(64),
+        desiredRevision: "a".repeat(64),
+        runtime: null,
+        lastApplication: null,
       },
-      setAdminIntegrationBinding: { ok: true },
-      deleteAdminIntegrationBinding: { ok: true },
+      setAdminIntegrationBinding: {
+        operationId: "binding-test-operation",
+        integrationId: "sample",
+        desiredRevision: "a".repeat(64),
+        database: "retained",
+        runtime: "applied",
+        runtimeGenerationId: "11111111-1111-4111-8111-111111111111",
+      },
+      deleteAdminIntegrationBinding: {
+        operationId: "binding-test-operation",
+        integrationId: "sample",
+        desiredRevision: "a".repeat(64),
+        database: "retained",
+        runtime: "pending",
+        runtimeGenerationId: null,
+        reason: "integration_disabled",
+      },
       listAdminCredentials: {
         credentials: [
           {
@@ -520,13 +539,19 @@ describe("integration administration canonical producer contracts", () => {
       "reloadAdminIntegration",
       "reloadAdminIntegrations",
       "runAdminIntegrationHealthChecks",
-      "deleteAdminIntegrationBinding",
       "deleteAdminIntegrationCredential",
     ] as const) {
       expect(ops[id].request.body.safeParse(undefined).success).toBe(true);
       expect(ops[id].request.body.safeParse({}).success).toBe(true);
       expect(ops[id].request.body.safeParse({ extra: true }).success).toBe(false);
     }
+    expect(ops.deleteAdminIntegrationBinding.request.body.safeParse(undefined).success).toBe(false);
+    expect(
+      ops.deleteAdminIntegrationBinding.request.body.safeParse({
+        expectedServiceId: null,
+        expectedRevision: "a".repeat(64),
+      }).success,
+    ).toBe(true);
     for (const body of [{}, [], null, { enabled: true }])
       expect(ops.patchAdminIntegrationConfig.request.body.safeParse(body).success).toBe(false);
   });

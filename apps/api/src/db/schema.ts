@@ -65,6 +65,7 @@ export {
 } from "./installed-extension-schema";
 // Installed community integrations
 export { installedIntegration } from "./installed-integration-schema";
+export * from "./integration-administration-schema";
 // Integration config
 export { integrationConfig } from "./integration-config-schema";
 // Integration secrets

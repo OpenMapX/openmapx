@@ -2,6 +2,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import {
   adminIntegrationConfigImportedSchema,
   adminIntegrationImportFailureSchema,
+  integrationApplyReceiptSchema,
 } from "@openmapx/core/api-contracts";
 import { canonicalJson, hardlinkApplySummarySchema, readOpsTokenFile } from "@openmapx/core/ops";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
@@ -34,6 +35,7 @@ import {
   renewAdminJobClaim,
 } from "./admin-job-state";
 import { coordinatorLifecycleOperationKey } from "./coordinator-lifecycle";
+import { IntegrationBindingConflict as RetainedBindingConflict } from "./integration-binding-participant";
 import { type JobStatusEvent, jobEventBus, TERMINAL_JOB_STATUSES } from "./job-events";
 import { ApiOpsError, OpsObservationPending } from "./ops-client";
 import { appApiRestartCheckpoint } from "./system-update-state";
@@ -113,6 +115,7 @@ export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
   "configuration.apply",
   "compose.start",
   "integration.config.import",
+  "integration.binding.apply",
   "system.diagnostics",
   "system.update",
 ] as const;
@@ -129,7 +132,12 @@ function hasRetainedImmediateConfiguration(job: {
   const result = job.result as Record<string, unknown> | null,
     payload = job.payload as Record<string, unknown> | null;
   return (
-    ["service.apply", "configuration.apply", "integration.config.import"].includes(job.type) &&
+    [
+      "service.apply",
+      "configuration.apply",
+      "integration.config.import",
+      "integration.binding.apply",
+    ].includes(job.type) &&
     result?._immediateJobId === job.id &&
     typeof result._immediateActorId === "string" &&
     typeof result._immediateIntentDigest === "string" &&
@@ -200,7 +208,12 @@ class AdminJobRunner {
 
   private async immediate<T>(
     options: {
-      type: "configuration.apply" | "service.apply" | "compose.start" | "integration.config.import";
+      type:
+        | "configuration.apply"
+        | "service.apply"
+        | "compose.start"
+        | "integration.config.import"
+        | "integration.binding.apply";
       actorId?: string;
       operationKey: string;
       intent: unknown;
@@ -275,9 +288,12 @@ class AdminJobRunner {
       if (
         !["running", "cancel_pending"].includes(job.status) ||
         !checkpoint._configurationCandidate ||
-        !["service.apply", "configuration.apply", "integration.config.import"].includes(
-          options.type,
-        )
+        ![
+          "service.apply",
+          "configuration.apply",
+          "integration.config.import",
+          "integration.binding.apply",
+        ].includes(options.type)
       )
         throw new JobObservationPending("recovery_required");
       const claimed = await claimAdminJob(job, {}, true);
@@ -381,6 +397,11 @@ class AdminJobRunner {
       )
     )
       throw new AdminJobFailure("Original configuration did not apply", result);
+    if (
+      result.integrationBinding &&
+      integrationApplyReceiptSchema.parse(result.integrationBinding).runtime === "failed"
+    )
+      throw new AdminJobFailure("Binding provider did not activate", result);
     return result;
   }
 
@@ -530,6 +551,41 @@ class AdminJobRunner {
         return success.success
           ? success.data
           : adminIntegrationImportFailureSchema.parse(result.integrationImport);
+      },
+    );
+  }
+
+  applyImmediateIntegrationBinding(options: {
+    input: import("./integration-binding-participant").IntegrationBindingInput;
+    actorId: string;
+    operationKey: string;
+    signal?: AbortSignal;
+  }) {
+    return this.immediate(
+      { ...options, type: "integration.binding.apply", intent: options.input },
+      async (ctx) => {
+        const { runBindingChange } = await import("./integration-application");
+        try {
+          const value = await runBindingChange(ctx, options);
+          return {
+            value,
+            result: { integrationBinding: value },
+            failed: value.runtime === "failed",
+          };
+        } catch (error) {
+          const { IntegrationBindingConflict } = await import("./integration-binding-participant");
+          if (error instanceof IntegrationBindingConflict)
+            await ctx.checkpoint({
+              ...ctx.checkpointResult,
+              integrationBindingConflict: error.code,
+            });
+          throw error;
+        }
+      },
+      (result) => {
+        if (typeof result.integrationBindingConflict === "string")
+          throw new RetainedBindingConflict(result.integrationBindingConflict);
+        return integrationApplyReceiptSchema.parse(result.integrationBinding);
       },
     );
   }

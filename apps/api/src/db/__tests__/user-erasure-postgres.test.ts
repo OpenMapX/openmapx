@@ -68,6 +68,7 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
       "data_subject_request_task.assigned_to:n",
       "installed_extension.installed_by:n",
       "installed_integration.installed_by:n",
+      "integration_application_receipt.actor_id:n",
       "integration_secret.updated_by:n",
       "labeled_place.user_id:c",
       "mangrove_keypair.user_id:c",

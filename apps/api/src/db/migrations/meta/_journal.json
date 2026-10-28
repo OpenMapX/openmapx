@@ -330,6 +330,13 @@
       "when": 1793195693647,
       "tag": "0046_admin_account_provisioning",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1793203302497,
+      "tag": "0047_admin_integration_application",
+      "breakpoints": true
     }
   ]
 }

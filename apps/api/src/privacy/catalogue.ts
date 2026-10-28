@@ -348,6 +348,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
       { type: "actor_id", field: "admin_audit_log.actor_id" },
       { type: "target_id", field: "admin_audit_log.target_id" },
       { type: "actor_id", field: "auth_policy_application.actor_id" },
+      { type: "actor_id", field: "integration_application_receipt.actor_id" },
       { type: "actor_id", field: "account_action_receipt.actor_id" },
       { type: "target_id", field: "account_action_receipt.target_id" },
       { type: "actor_id", field: "auth_policy_state.activated_by" },

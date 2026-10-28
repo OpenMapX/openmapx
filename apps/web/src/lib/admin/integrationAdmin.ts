@@ -167,12 +167,27 @@ export function useIntegrationAdmin() {
             { client },
           ),
         ),
-      setBinding: (id: string, capability: string, serviceId: string | null) =>
-        integrationOrThrow(
+      setBinding: (
+        id: string,
+        capability: string,
+        serviceId: string | null,
+        expected: {
+          expectedServiceId: string | null;
+          expectedRevision: string;
+          operationId: string;
+        },
+      ) => {
+        const { operationId, expectedServiceId, expectedRevision } = expected,
+          body = { expectedServiceId, expectedRevision },
+          headers = { "idempotency-key": operationId };
+        return integrationOrThrow(
           serviceId === null
-            ? sdk.deleteAdminIntegrationBinding(id, capability, undefined, { client })
-            : sdk.setAdminIntegrationBinding(id, capability, { serviceId }, { client }),
-        ),
+            ? sdk.deleteAdminIntegrationBinding(id, capability, body, headers, { client })
+            : sdk.setAdminIntegrationBinding(id, capability, { ...body, serviceId }, headers, {
+                client,
+              }),
+        );
+      },
       importConfigs: async (input: unknown) => {
         const parsed = sdk.adminIntegrationConfigImportSchema.safeParse(input);
         if (!parsed.success)

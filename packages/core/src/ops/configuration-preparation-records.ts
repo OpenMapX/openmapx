@@ -115,6 +115,7 @@ export const preparedConfigurationRecordSchema = z.strictObject({
           }),
         ),
       ),
+      bindings: z.record(id, z.record(z.string().min(1).max(128), id)).optional(),
       legacyImport: z
         .strictObject({
           version: z.literal(1),

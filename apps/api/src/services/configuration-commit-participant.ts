@@ -16,9 +16,11 @@ export async function withConfigurationCommitParticipant<T>(
   const { isLegacyIntegrationImportParticipant } = await import(
     "./configuration-migration/legacy-integration-import-intent"
   );
+  const { isIntegrationBindingParticipant } = await import("./integration-binding-participant");
   // Exact installed built-in issuer, never a registration or caller callback.
   if (
-    !isLegacyIntegrationImportParticipant(participant, writer) ||
+    (!isLegacyIntegrationImportParticipant(participant, writer) &&
+      !isIntegrationBindingParticipant(participant, writer)) ||
     participant.actorId !== writer.actorId ||
     participant.operationKey !== writer.operationKey ||
     (state.participant && state.participant !== participant)

@@ -200,7 +200,14 @@ describe("integration administration browser behavior", () => {
       if (init.method && init.method !== "GET") return pending;
       if (url.pathname === "/api/admin/integrations") return Response.json([summary]);
       if (url.pathname === "/api/admin/integrations/demo") return Response.json(detail);
-      if (url.pathname.endsWith("/bindings")) return Response.json({ bindings: [] });
+      if (url.pathname.endsWith("/bindings"))
+        return Response.json({
+          bindings: [],
+          revision: "a".repeat(64),
+          desiredRevision: "a".repeat(64),
+          runtime: null,
+          lastApplication: null,
+        });
       if (url.pathname.endsWith("/env-vars"))
         return Response.json({
           integrations: [
@@ -426,6 +433,82 @@ describe("integration administration browser behavior", () => {
     },
   );
 
+  it.each(["desired", "generation"])(
+    "does not label an older successful receipt as current (%s)",
+    async (mode) => {
+      transport(() =>
+        Response.json({
+          bindings: [{ capability: "search /places", serviceId: "local" }],
+          revision: "b".repeat(64),
+          desiredRevision: (mode === "desired" ? "b" : "a").repeat(64),
+          runtime: {
+            generationId:
+              mode === "generation"
+                ? "22222222-2222-4222-8222-222222222222"
+                : "11111111-1111-4111-8111-111111111111",
+            bindings: { "search /places": "old-provider" },
+            configRevision: "a".repeat(64),
+          },
+          lastApplication: {
+            operationId: "old-binding-operation",
+            integrationId: "demo",
+            desiredRevision: "a".repeat(64),
+            database: "retained",
+            runtime: "applied",
+            runtimeGenerationId: "11111111-1111-4111-8111-111111111111",
+          },
+        }),
+      );
+      mount(
+        <RequiredServicesPanel
+          integrationId="demo"
+          requires={[{ capability: "search /places" }]}
+        />,
+      );
+      expect(await screen.findByText(/Active: old-provider/)).toBeInTheDocument();
+      expect(screen.queryByText("Binding saved and active.")).not.toBeInTheDocument();
+    },
+  );
+  it("shows saved and live bindings independently when activation fails", async () => {
+    transport((_url, init) => {
+      if (init.method && init.method !== "GET") {
+        expect(JSON.parse(String(init.body))).toEqual({
+          serviceId: "local",
+          expectedServiceId: null,
+          expectedRevision: "a".repeat(64),
+        });
+        return Response.json({
+          operationId: "opk1_syntheticbindingoperation",
+          integrationId: "demo",
+          desiredRevision: "a".repeat(64),
+          database: "retained",
+          runtime: "failed",
+          runtimeGenerationId: "11111111-1111-4111-8111-111111111111",
+          reason: "reload_failed",
+        });
+      }
+      return Response.json({
+        bindings: [],
+        revision: "a".repeat(64),
+        desiredRevision: "a".repeat(64),
+        runtime: {
+          generationId: "11111111-1111-4111-8111-111111111111",
+          bindings: { "search /places": "old-provider" },
+          configRevision: "a".repeat(64),
+        },
+        lastApplication: null,
+      });
+    });
+    mount(
+      <RequiredServicesPanel integrationId="demo" requires={[{ capability: "search /places" }]} />,
+    );
+    expect(await screen.findByText(/Active: old-provider/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("combobox"));
+    await userEvent.click(await screen.findByRole("option", { name: "Local (local)" }));
+    expect(await screen.findByText(/Binding saved.*Reload failed/)).toBeInTheDocument();
+    expect(screen.getByText(/Active: old-provider/)).toBeInTheDocument();
+  });
+
   it.each(["POST", "DELETE"])(
     "rejects binding %s without success invalidation or retry",
     async (method) => {
@@ -433,6 +516,10 @@ describe("integration administration browser behavior", () => {
         if (init.method === "GET" || !init.method) {
           expect(url.pathname).toBe("/api/admin/integrations/demo/bindings");
           return Response.json({
+            revision: "a".repeat(64),
+            desiredRevision: "a".repeat(64),
+            runtime: null,
+            lastApplication: null,
             bindings:
               method === "DELETE" ? [{ capability: "search /places", serviceId: "local" }] : [],
           });
