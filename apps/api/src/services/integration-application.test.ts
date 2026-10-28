@@ -51,6 +51,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
   "actual binding candidate / API / agent / PostgreSQL / captured provider",
   () => {
     let raceAfterPreview = false;
+    let driftAfterCommit = false;
     let migrated: Awaited<ReturnType<typeof createMigratedPostgresFixture>>,
       host: Awaited<ReturnType<typeof ownedServiceHost>>,
       api: ReturnType<typeof Fastify>,
@@ -63,14 +64,37 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     afterAll(async () => {
       await migrated?.stop();
     });
-    beforeEach(async () => {
+    beforeEach(async (context) => {
+      vi.stubEnv("BETTER_AUTH_SECRET", "binding-owned-synthetic-auth-secret-only");
+      vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3001");
       vi.stubEnv("OPENMAPX_ADMIN_JOB_TEST_DATABASE_URL", migrated.connectionUri);
       state.fixture = await createConfigurationPostgresFixture();
       raceAfterPreview = false;
+      driftAfterCommit = false;
       host = await ownedServiceHost({
-        extraServiceIds: ["engine-b"],
+        extraServiceIds: [
+          "engine-b",
+          ...(context.task.name.includes("managed transit") ? ["data-manager"] : []),
+        ],
         capabilities: { motis: ["routing-engine"], "engine-b": ["routing-engine"] },
+        schemas: {
+          motis: {
+            type: "object",
+            properties: {
+              REGION: { type: "string", default: "default" },
+              TOKEN: { type: "string", "x-openmapx-secret": true },
+              OPENMAPX_MEMORY_MIB: { type: "integer", minimum: 128 },
+            },
+          },
+        },
+        resources: { motis: { memory: "${MOTIS_SLOT_MEMORY:-4g}" } },
       });
+      for (const service of host.loaded) {
+        const checked = services.validateServiceManifest(service.manifest, {
+          firstParty: service.isBuiltIn,
+        });
+        expect(checked.valid, JSON.stringify(checked.errors)).toBe(true);
+      }
       state.root = host.root;
       const root = join(host.root, "integrations"),
         directory = join(root, "binding-test");
@@ -86,11 +110,17 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           quality: "built-in",
           requires: [{ capability: "routing-engine" }],
           backend: { routes: true },
+          configSchema: {
+            properties: {
+              TOKEN: { type: "string", "x-openmapx-secret": true, default: "old-synthetic-token" },
+              ENDPOINT: { type: "string", default: "old-endpoint" },
+            },
+          },
         }),
       );
       writeFileSync(
         join(directory, "index.ts"),
-        `export function setup(ctx){const captured=ctx.getRequiredService('routing-engine');ctx.registerRoute('GET','/bound',async(_req,reply)=>reply.send({serviceId:captured?.serviceId??null}));}`,
+        `export function setup(ctx){const captured=ctx.getRequiredService('routing-engine');ctx.registerRoute('GET','/bound',async(_req,reply)=>reply.send({serviceId:captured?.serviceId??null}));const token=ctx.config.TOKEN;ctx.registerRoute('GET','/credential',async(_req,reply)=>reply.send({rotated:token==='new-synthetic-token'}));}`,
       );
       installation = openControlInstallation({
         infraDir: host.infraDir,
@@ -113,6 +143,21 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           raceAfterPreview = false;
           await state.fixture
             .sql`UPDATE capability_binding SET updated_at=now() WHERE integration_id='binding-test'`;
+        }
+        if (
+          driftAfterCommit &&
+          request.method === "GET" &&
+          request.url.startsWith("/v1/operations/") &&
+          typeof payload === "string"
+        ) {
+          const response = JSON.parse(payload);
+          if (response.result?.result?.outcome === "committed") {
+            driftAfterCommit = false;
+            writeFileSync(
+              join(directory, "config.json"),
+              JSON.stringify({ TOKEN: "host-drift-token" }),
+            );
+          }
         }
         return payload;
       });
@@ -146,6 +191,19 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await (await import("../routes/admin-capability-bindings")).registerCapabilityBindingRoutes(
         api,
       );
+      api.addHook("preHandler", async (request: import("fastify").FastifyRequest) => {
+        if (request.url.startsWith("/api/admin/"))
+          request.adminSession = await (await import("../utils/require-admin")).requireAdmin(
+            request,
+          );
+      });
+      await api.register(
+        (await import("../routes/admin-integration-credentials")).adminIntegrationCredentialsRoute,
+        { prefix: "/api" },
+      );
+      await api.register((await import("../routes/admin-services")).adminServicesRoute, {
+        prefix: "/api",
+      });
       await api.ready();
     }, 30000);
     afterEach(async () => {
@@ -357,6 +415,319 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         0,
       );
       expect((await set(body, key)).statusCode).toBe(409);
+    }, 90000);
+    it("returns an applied credential receipt for the actual provider without exposing the value", async () => {
+      const revision = (
+        await (
+          await import("./configuration-ownership-view")
+        ).inspectIntegrationConfiguration("binding-test")
+      ).revision;
+      (await import("../utils/rate-limit")).serviceActionLimit.reset();
+      const result = await api.inject({
+        method: "PUT",
+        url: "/api/admin/credentials/binding-test/TOKEN",
+        headers: { ...headers, "idempotency-key": `credential-${randomUUID()}` },
+        payload: { value: "new-synthetic-token", expectedRevision: revision },
+      });
+      expect(result.statusCode, result.body).toBe(200);
+      expect(result.json()).toMatchObject({
+        database: "retained",
+        runtime: "applied",
+        runtimeGenerationId: expect.any(String),
+      });
+      expect(result.body).not.toContain("new-synthetic-token");
+      expect((await api.inject("/api/integrations/binding-test/credential")).json()).toEqual({
+        rotated: true,
+      });
+    }, 90000);
+    it("recovers credential activation observation without replaying provider setup", async () => {
+      const before = await (
+          await api.inject({ url: "/api/admin/credentials/binding-test", headers })
+        ).json(),
+        key = randomUUID(),
+        reload = vi.spyOn(await import("../integration-host"), "reloadIntegrations");
+      await state.fixture.sql.unsafe(
+        `CREATE FUNCTION reject_credential_completion() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.result#>>'{integrationReload,state}'='complete' THEN RAISE EXCEPTION 'synthetic completion unavailable'; END IF; RETURN NEW; END $$`,
+      );
+      await state.fixture.sql.unsafe(
+        `CREATE TRIGGER reject_credential_completion BEFORE UPDATE ON admin_job FOR EACH ROW EXECUTE FUNCTION reject_credential_completion()`,
+      );
+      const interrupted = await credential("PUT", before.configurationRevision, key);
+      expect(interrupted.statusCode, interrupted.body).toBe(503);
+      expect((await api.inject("/api/integrations/binding-test/credential")).json()).toEqual({
+        rotated: true,
+      });
+      expect(reload).toHaveBeenCalledTimes(1);
+      const original = await state.fixture
+        .sql`SELECT id,result FROM admin_job WHERE type='configuration.apply'`;
+      expect(original).toHaveLength(1);
+      expect(original[0]!.result.integrationReload.state).toBe("attempted");
+      await state.fixture.sql.unsafe(`DROP TRIGGER reject_credential_completion ON admin_job`);
+      await state.fixture
+        .sql`UPDATE admin_job SET result=jsonb_set(result,'{_observationLeaseUntil}',to_jsonb('2000-01-01T00:00:00.000Z'::text)) WHERE type='configuration.apply'`;
+      const recovered = await credential("PUT", before.configurationRevision, key);
+      expect(recovered.statusCode, recovered.body).toBe(200);
+      expect(recovered.json().runtime).toBe("applied");
+      expect(reload).toHaveBeenCalledTimes(1);
+      const current = await state.fixture
+        .sql`SELECT id,status FROM admin_job WHERE type='configuration.apply'`;
+      expect(current).toEqual([{ id: original[0]!.id, status: "success" }]);
+    }, 90000);
+    it("locks real service host fields and resource knobs, then permits explicit adoption after removal", async () => {
+      vi.stubEnv("SERVICE_MOTIS_REGION", "host-region");
+      vi.stubEnv("SERVICE_MOTIS_TOKEN", "host-private");
+      writeFileSync(join(host.infraDir, ".env"), "MOTIS_SLOT_MEMORY=8g\n");
+      const view = await api.inject({ url: "/api/admin/services/motis/config", headers });
+      expect(view.statusCode, view.body).toBe(200);
+      expect(view.json().ownership.REGION).toMatchObject({ source: "env", writable: false });
+      expect(view.json().ownership.OPENMAPX_MEMORY_MIB).toMatchObject({
+        source: "env",
+        writable: false,
+        envVar: "MOTIS_SLOT_MEMORY",
+      });
+      expect(view.body).not.toContain("host-private");
+      for (const config of [{ REGION: "new" }, { OPENMAPX_MEMORY_MIB: 1024 }]) {
+        (await import("../utils/rate-limit")).serviceActionLimit.reset();
+        const refused = await api.inject({
+          method: "POST",
+          url: "/api/admin/services/motis/config",
+          headers: { ...headers, "idempotency-key": `ownership-${randomUUID()}` },
+          payload: { config },
+        });
+        expect(refused.statusCode, refused.body).toBe(409);
+        expect(refused.json()).toMatchObject({
+          code: "CONFIGURATION_SOURCE_OWNED",
+          ownership: { writable: false },
+        });
+      }
+      const key = `ownership-${randomUUID()}`;
+      for (const method of ["PUT", "DELETE"] as const) {
+        (await import("../utils/rate-limit")).serviceActionLimit.reset();
+        const refused = await api.inject({
+          method,
+          url: "/api/admin/services/motis/credentials/TOKEN",
+          headers: { ...headers, "idempotency-key": method + key },
+          ...(method === "PUT" ? { payload: { value: "new-private" } } : {}),
+        });
+        expect(refused.statusCode, refused.body).toBe(409);
+      }
+      expect(await state.fixture.sql`SELECT * FROM service_config`).toHaveLength(0);
+      expect(await state.fixture.sql`SELECT * FROM service_secret`).toHaveLength(0);
+      vi.stubEnv("SERVICE_MOTIS_REGION", "");
+      vi.stubEnv("SERVICE_MOTIS_TOKEN", "");
+      rmSync(join(host.infraDir, ".env"));
+      (await import("../utils/rate-limit")).serviceActionLimit.reset();
+      const adopted = await api.inject({
+        method: "POST",
+        url: "/api/admin/services/motis/config",
+        headers: { ...headers, "idempotency-key": `adopt-${randomUUID()}` },
+        payload: { config: { REGION: "new" } },
+      });
+      expect(adopted.statusCode, adopted.body).toBe(200);
+      expect(
+        (await state.fixture.sql`SELECT config FROM service_config WHERE service_id='motis'`)[0]!
+          .config,
+      ).toEqual({ REGION: "new" });
+    }, 90000);
+    async function credentials() {
+      const response = await api.inject({ url: "/api/admin/credentials/binding-test", headers });
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json();
+    }
+    async function credential(method: "PUT" | "DELETE", revision: string, key = randomUUID()) {
+      (await import("../utils/rate-limit")).serviceActionLimit.reset();
+      return api.inject({
+        method,
+        url: "/api/admin/credentials/binding-test/TOKEN",
+        headers: { ...headers, "idempotency-key": key },
+        payload: {
+          expectedRevision: revision,
+          ...(method === "PUT" ? { value: "new-synthetic-token" } : {}),
+        },
+      });
+    }
+    it.each(["env", "config.json"] as const)(
+      "refuses %s-shadowed vault changes without writes, then explicitly rotates and deletes",
+      async (source) => {
+        const directory = join(host.root, "integrations/binding-test"),
+          path = join(directory, "config.json");
+        if (source === "env") vi.stubEnv("INTEGRATION_BINDING_TEST_TOKEN", "host-private-token");
+        else writeFileSync(path, JSON.stringify({ TOKEN: "host-private-token" }));
+        const before = await credentials(),
+          reload = vi.spyOn(await import("../integration-host"), "reloadIntegrations");
+        expect(
+          before.credentials.find((field: { key: string }) => field.key === "TOKEN"),
+        ).toMatchObject({
+          source,
+          ownership: { writable: false, adoption: "host_action_required" },
+        });
+        expect(JSON.stringify(before)).not.toContain("host-private-token");
+        for (const method of ["PUT", "DELETE"] as const) {
+          const key = randomUUID(),
+            rejected = await credential(method, before.configurationRevision, key);
+          expect(rejected.statusCode, rejected.body).toBe(409);
+          expect(rejected.json()).toMatchObject({ code: "CONFIGURATION_SOURCE_OWNED" });
+          expect((await credential(method, before.configurationRevision, key)).statusCode).toBe(
+            409,
+          );
+        }
+        expect(await state.fixture.sql`SELECT * FROM integration_secret`).toHaveLength(0);
+        expect(await state.fixture.sql`SELECT * FROM integration_config`).toHaveLength(0);
+        expect(reload).not.toHaveBeenCalled();
+        if (source === "env") vi.stubEnv("INTEGRATION_BINDING_TEST_TOKEN", "");
+        else rmSync(path);
+        const refreshed = await credentials();
+        const applied = await credential("PUT", refreshed.configurationRevision);
+        expect(applied.statusCode, applied.body).toBe(200);
+        expect(applied.json().runtime).toBe("applied");
+        expect((await api.inject("/api/integrations/binding-test/credential")).json()).toEqual({
+          rotated: true,
+        });
+        const current = await credentials();
+        expect(current.credentials[0]).toMatchObject({
+          source: "vault",
+          ownership: { writable: true },
+        });
+        const removed = await credential("DELETE", current.configurationRevision);
+        expect(removed.statusCode, removed.body).toBe(200);
+        expect(removed.json().runtime).toBe("applied");
+        expect((await api.inject("/api/integrations/binding-test/credential")).json()).toEqual({
+          rotated: false,
+        });
+        expect(await state.fixture.sql`SELECT * FROM integration_secret`).toHaveLength(0);
+      },
+      90000,
+    );
+    it("does not report applied when a host file changes after committed generation", async () => {
+      const before = await credentials();
+      driftAfterCommit = true;
+      const result = await credential("PUT", before.configurationRevision);
+      expect(driftAfterCommit).toBe(false);
+      expect(result.statusCode, result.body).toBe(200);
+      expect(result.json()).toMatchObject({
+        database: "retained",
+        runtime: "failed",
+        reason: "reload_failed",
+      });
+      expect((await api.inject("/api/integrations/binding-test/credential")).json()).toEqual({
+        rotated: false,
+      });
+      expect(await state.fixture.sql`SELECT * FROM integration_secret`).toHaveLength(1);
+      expect(result.body).not.toContain("new-synthetic-token");
+      expect(result.body).not.toContain("host-drift-token");
+    }, 90000);
+    it.each(["service-query", "vault", "file"] as const)(
+      "refuses unavailable strict %s acquisition before admission",
+      async (failure) => {
+        const run = vi.spyOn(host.runtime, "stack.render"),
+          path = join(host.root, "integrations/binding-test/config.json");
+        if (failure === "service-query")
+          await state.fixture.sql`ALTER TABLE service_config RENAME TO unavailable_service_config`;
+        if (failure === "file") writeFileSync(path, "{malformed");
+        if (failure === "vault") {
+          const encrypted = (await import("./secrets")).encrypt("private-value");
+          await state.fixture
+            .sql`INSERT INTO integration_secret(id,integration_id,key,ciphertext,iv,tag) VALUES (${randomUUID()},'binding-test','TOKEN','invalid',${encrypted.iv},${encrypted.tag})`;
+        }
+        try {
+          expect(await state.fixture.sql`SELECT * FROM capability_binding`).toHaveLength(1);
+          const rejected = await credential("PUT", "a".repeat(64));
+          expect(rejected.statusCode).toBeGreaterThanOrEqual(400);
+          expect(await state.fixture.sql`SELECT * FROM integration_config`).toHaveLength(0);
+          expect(await state.fixture.sql`SELECT * FROM integration_secret`).toHaveLength(
+            failure === "vault" ? 1 : 0,
+          );
+          expect(run).not.toHaveBeenCalled();
+        } finally {
+          if (failure === "service-query")
+            await state.fixture
+              .sql`ALTER TABLE unavailable_service_config RENAME TO service_config`;
+        }
+      },
+      90000,
+    );
+    it("rejects managed transit writes before malformed body validation, including an undeclared key", async () => {
+      for (const method of ["PUT", "DELETE"] as const) {
+        (await import("../utils/rate-limit")).serviceActionLimit.reset();
+        const result = await api.inject({
+          method,
+          url: "/api/admin/services/data-manager/credentials/TRANSITOUS_API_KEYS",
+          headers: { ...headers, "idempotency-key": randomUUID() },
+          payload: { unexpected: true },
+        });
+        expect(result.statusCode, result.body).toBe(409);
+        expect(result.json()).toMatchObject({ code: "transit_credentials_managed" });
+      }
+      expect(await state.fixture.sql`SELECT * FROM service_secret`).toHaveLength(0);
+    });
+    it("serializes binding and mixed import or refuses the busy writer without a partial candidate", async () => {
+      const before = await desired(),
+        { jobRunner } = await import("./job-runner"),
+        { createDirectAdminOpsKey } = await import("./direct-ops-idempotency");
+      const results = await Promise.allSettled([
+        jobRunner.applyImmediateIntegrationBinding({
+          actorId: "loopback",
+          operationKey: createDirectAdminOpsKey("loopback", randomUUID()),
+          input: {
+            integrationId: "binding-test",
+            capability: "routing-engine",
+            expectedServiceId: "motis",
+            expectedRevision: before.revision,
+            serviceId: "engine-b",
+          },
+        }),
+        jobRunner.importImmediateIntegrationConfiguration({
+          actorId: "loopback",
+          operationKey: createDirectAdminOpsKey("loopback", randomUUID()),
+          body: {
+            integrations: [{ integrationId: "binding-test", config: { ENDPOINT: "new-endpoint" } }],
+          },
+        }),
+      ]);
+      expect(
+        results.filter((result) => result.status === "fulfilled").length,
+      ).toBeGreaterThanOrEqual(1);
+      for (const [index, result] of results.entries())
+        if (result.status === "rejected") {
+          expect(result.reason).toBeInstanceOf(
+            (await import("./admin-job-failure")).JobObservationPending,
+          );
+          const type = index === 0 ? "integration.binding.apply" : "integration.config.import";
+          const rows = await state.fixture.sql`SELECT result FROM admin_job WHERE type=${type}`;
+          expect(rows.length).toBeLessThanOrEqual(1);
+          for (const row of rows) expect(row.result._configurationCandidate).toBeUndefined();
+        }
+      if (results[0]!.status === "rejected") {
+        expect((await desired()).bindings).toEqual([
+          { capability: "routing-engine", serviceId: "motis" },
+        ]);
+        const current = await desired(),
+          applied = await set({
+            serviceId: "engine-b",
+            expectedServiceId: "motis",
+            expectedRevision: current.revision,
+          });
+        expect(applied.statusCode, applied.body).toBe(200);
+        expect(applied.json().runtime).toBe("applied");
+      }
+      if (results[1]!.status === "rejected") {
+        expect(await state.fixture.sql`SELECT * FROM integration_config`).toHaveLength(0);
+        const imported = await jobRunner.importImmediateIntegrationConfiguration({
+          actorId: "loopback",
+          operationKey: createDirectAdminOpsKey("loopback", randomUUID()),
+          body: {
+            integrations: [{ integrationId: "binding-test", config: { ENDPOINT: "new-endpoint" } }],
+          },
+        });
+        expect(imported.ok).toBe(true);
+      }
+      expect((await desired()).runtime.bindings["routing-engine"]).toBe("engine-b");
+      expect(
+        (
+          await state.fixture
+            .sql`SELECT config FROM integration_config WHERE integration_id='binding-test'`
+        )[0]!.config,
+      ).toMatchObject({ ENDPOINT: "new-endpoint" });
     }, 90000);
     it("rolls back binding, revision and application receipt together on an actual SQL constraint failure", async () => {
       const before = await desired();

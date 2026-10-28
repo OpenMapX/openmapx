@@ -21,6 +21,14 @@ import { RequiredServicesPanel } from "../RequiredServicesPanel";
 import { SetCredentialDialog } from "../SetCredentialDialog";
 import { detail, summary } from "./fixtures";
 
+const credentialReceipt = {
+  operationId: "credential-synthetic-operation",
+  integrationId: "demo",
+  desiredRevision: "a".repeat(64),
+  database: "retained",
+  runtime: "applied",
+  runtimeGenerationId: "11111111-1111-4111-8111-111111111111",
+};
 let apiUrl = "http://admin.test";
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({ useEnv: () => ({ apiUrl }) }));
 // Service acquisition is outside this integration-family task.
@@ -85,6 +93,7 @@ describe("integration administration browser behavior", () => {
         replacementClose = vi.fn();
       const props = {
         open: true,
+        expectedRevision: "a".repeat(64),
         integrationId: "demo",
         credentialKey: "token",
         title: "Token",
@@ -115,7 +124,7 @@ describe("integration administration browser behavior", () => {
         });
       }
       await act(async () => {
-        finish(Response.json({ ok: true, message: "Saved", reloaded: 1, enabled: 1 }));
+        finish(Response.json(credentialReceipt));
         await pending;
       });
       await waitFor(() => expect(invalidation).toHaveBeenCalled());
@@ -199,7 +208,11 @@ describe("integration administration browser behavior", () => {
     const calls = transport((url, init) => {
       if (init.method && init.method !== "GET") return pending;
       if (url.pathname === "/api/admin/integrations") return Response.json([summary]);
-      if (url.pathname === "/api/admin/integrations/demo") return Response.json(detail);
+      if (url.pathname === "/api/admin/integrations/demo")
+        return Response.json({
+          ...detail,
+          credentialStatus: detail.credentialStatus.map((field) => ({ ...field, source: "vault" })),
+        });
       if (url.pathname.endsWith("/bindings"))
         return Response.json({
           bindings: [],
@@ -282,9 +295,11 @@ describe("integration administration browser behavior", () => {
       ? { ok: true, jobId: "job-old" }
       : scenario.endsWith("sweep")
         ? { timestamp: "2026-10-20T10:00:00.000Z", count: 1, results: [] }
-        : scenario === "binding"
-          ? { ok: true }
-          : { ok: true, message: "Saved", reloaded: 1, enabled: 1 };
+        : scenario.endsWith("delete")
+          ? credentialReceipt
+          : scenario === "binding"
+            ? { ok: true }
+            : { ok: true, message: "Saved", reloaded: 1, enabled: 1 };
     await act(async () => {
       finish(
         Response.json(status === 200 ? response : { errors: ["old-owner-error"] }, { status }),
@@ -324,6 +339,7 @@ describe("integration administration browser behavior", () => {
       const closed = vi.fn();
       const props = {
         open: true,
+        expectedRevision: "a".repeat(64),
         integrationId: "demo",
         credentialKey: "token",
         title: "Token",
@@ -559,7 +575,7 @@ describe("integration administration browser behavior", () => {
     expect(screen.getByRole("button", { name: "Delete from vault" })).toBeInTheDocument();
   });
 
-  it("keeps the bulk credential's env source and independently deletes its stored vault entry", async () => {
+  it("keeps an env-sourced bulk credential locked despite a retained vault entry", async () => {
     const requests = transport((url, init) => {
       switch (url.pathname) {
         case "/api/admin/integrations":
@@ -593,9 +609,8 @@ describe("integration administration browser behavior", () => {
     await userEvent.click(await screen.findByRole("button", { name: /Demo demo/ }));
     expect(await screen.findByText("env")).toBeInTheDocument();
     expect(screen.getByText(/Vault updated/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Delete from vault" }));
-    expect(await screen.findByText("Credential deleted")).toBeInTheDocument();
-    expect(requests.filter(({ init }) => init.method === "DELETE")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Delete from vault" })).toBeDisabled();
+    expect(requests.filter(({ init }) => init.method === "DELETE")).toHaveLength(0);
   });
 
   it("uses complete overview and credential summaries and refreshes after a health sweep", async () => {
@@ -816,6 +831,68 @@ describe("integration administration browser behavior", () => {
     expect(calls).toHaveLength(1);
   });
 
+  it("keeps a failed activation visibly saved and never reports provider success", async () => {
+    transport(() =>
+      Response.json({ ...credentialReceipt, runtime: "failed", reason: "reload_failed" }),
+    );
+    const close = vi.fn();
+    mount(
+      <SetCredentialDialog
+        open
+        expectedRevision={"a".repeat(64)}
+        onClose={close}
+        integrationId="demo"
+        credentialKey="token"
+        title="Token"
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Token"), {
+      target: { value: "synthetic-new-private" },
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Save Credential" }));
+    expect(await screen.findByText(/Credential saved. Provider reload failed/)).toBeInTheDocument();
+    expect(close).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Token")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Save Credential" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(close).toHaveBeenCalledOnce();
+  });
+  it("retains the original revision and idempotency key for an unchanged rejected credential draft", async () => {
+    const calls = transport(() =>
+        Response.json(
+          { error: "Configuration changed. Refresh before applying." },
+          { status: 409 },
+        ),
+      ),
+      close = vi.fn();
+    const props = {
+      open: true,
+      expectedRevision: "a".repeat(64),
+      onClose: close,
+      integrationId: "demo",
+      credentialKey: "token",
+      title: "Token",
+    };
+    const { client, rerender } = mount(<SetCredentialDialog {...props} />);
+    fireEvent.change(screen.getByLabelText("Token"), { target: { value: "synthetic-private" } });
+    await userEvent.click(screen.getByRole("button", { name: "Save Credential" }));
+    await screen.findByText(/Configuration changed/);
+    rerender(
+      <QueryClientProvider client={client}>
+        <AdminToastProvider>
+          <SetCredentialDialog {...props} expectedRevision={"b".repeat(64)} />
+        </AdminToastProvider>
+      </QueryClientProvider>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Save Credential" }));
+    await waitFor(() => expect(calls).toHaveLength(2));
+    expect(JSON.parse(calls[0]!.init.body as string).expectedRevision).toBe("a".repeat(64));
+    expect(calls[1]!.init.body).toBe(calls[0]!.init.body);
+    expect(new Headers(calls[1]!.init.headers).get("Idempotency-Key")).toBe(
+      new Headers(calls[0]!.init.headers).get("Idempotency-Key"),
+    );
+    expect(close).not.toHaveBeenCalled();
+  });
   it("shows the declared vault hint without closing or retrying a failed credential write", async () => {
     const calls = transport((url) => {
       expect(url.pathname).toBe("/api/admin/credentials/demo/token%20%2Fkey");
@@ -831,6 +908,7 @@ describe("integration administration browser behavior", () => {
         onClose={close}
         integrationId="demo"
         credentialKey="token /key"
+        expectedRevision={"a".repeat(64)}
         title="Token"
       />,
     );

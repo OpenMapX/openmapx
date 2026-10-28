@@ -3,7 +3,7 @@ import { integrationEnvVarName } from "@openmapx/integration-framework";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
 import { integrationConfig } from "../db/schema";
-import { getAllIntegrations, getIntegration, resolveConfigWithSources } from "../integration-host";
+import { getAllIntegrations, getIntegration, inspectIntegrationRuntime } from "../integration-host";
 import {
   createDirectAdminOpsKey,
   DIRECT_OPS_IDEMPOTENCY_HEADER,
@@ -18,6 +18,8 @@ import {
 import {
   computeCredentialStatus,
   getIntegrationDisplayName,
+  inspectIntegrationCredentialView,
+  latestIntegrationApplication,
 } from "../services/integration-credential-status";
 import {
   executeAllIntegrationHealthChecks,
@@ -146,13 +148,16 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
     const integration = getIntegration(request.params.id);
     if (!integration) return reply.status(404).send({ error: "Integration not found" });
 
-    const [cached, resolvedRaw, credentialStatus] = await Promise.all([
+    const [cached, snapshot] = await Promise.all([
       Promise.resolve(getCachedHealthStatus(integration.id)),
-      resolveConfigWithSources(integration.manifest, integration.directory),
-      computeCredentialStatus(integration),
+      inspectIntegrationCredentialView(integration),
     ]);
 
-    const resolvedConfig = maskSecretConfigValues(resolvedRaw, integration.manifest.configSchema);
+    const credentialStatus = snapshot.credentials;
+    const resolvedConfig = maskSecretConfigValues(
+      snapshot.resolved,
+      integration.manifest.configSchema,
+    );
 
     const dependencyStatus = (integration.manifest.dependencies ?? []).map((depId) => {
       const dep = getIntegration(depId);
@@ -186,6 +191,10 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
       infrastructure: integration.manifest.infrastructure ?? null,
       manifest: integration.manifest,
       resolvedConfig,
+      ownership: snapshot.ownership,
+      configurationRevision: snapshot.revision,
+      runtime: inspectIntegrationRuntime(integration.id),
+      application: await latestIntegrationApplication(integration.id),
       dependencyStatus,
       credentialStatus,
       secretsConfigured: isSecretsConfigured(),

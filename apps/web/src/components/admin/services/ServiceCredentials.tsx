@@ -138,11 +138,15 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
                   <Chip
                     size="small"
                     label={
-                      cred.managedBy === "dawarich-provisioning"
-                        ? "Managed"
-                        : cred.source === "vault"
-                          ? "Set"
-                          : "Not set"
+                      cred.source === "env"
+                        ? "Host environment"
+                        : cred.source === "config.json"
+                          ? "Host file"
+                          : cred.managedBy === "dawarich-provisioning"
+                            ? "Managed"
+                            : cred.source === "vault"
+                              ? "Set"
+                              : "Not set"
                     }
                     color={
                       cred.managedBy === "dawarich-provisioning"
@@ -163,6 +167,15 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
                     {cred.description}
                   </Typography>
                 )}
+                {(cred.source === "env" || cred.source === "config.json") && (
+                  <Typography variant="body2">
+                    Host controlled{cred.ownership?.envVar ? ` (${cred.ownership.envVar})` : ""}.
+                    Remove the host override, refresh, then rotate.
+                  </Typography>
+                )}
+                {cred.managedBy === "transit.credentials" && (
+                  <Button href="/admin/transit">Manage pinned feed credentials</Button>
+                )}
                 {cred.updatedAt && (
                   <Typography variant="caption" sx={{ color: "text.secondary" }}>
                     Updated {new Date(cred.updatedAt).toLocaleString()}
@@ -177,12 +190,16 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
                   </Typography>
                 )}
               </Box>
-              {cred.managedBy !== "dawarich-provisioning" && (
+              {!cred.managedBy && (
                 <Stack direction="row" spacing={1}>
                   <Button
                     size="small"
                     variant="contained"
-                    disabled={!secretsConfigured}
+                    disabled={
+                      !secretsConfigured ||
+                      cred.ownership?.writable === false ||
+                      ["env", "config.json"].includes(cred.source)
+                    }
                     onClick={() => {
                       setCred.reset();
                       setDialogVersion((v) => v + 1);
@@ -197,7 +214,11 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
                       size="small"
                       color="error"
                       onClick={() => handleDelete(cred.key)}
-                      disabled={deleteCred.isPending}
+                      disabled={
+                        deleteCred.isPending ||
+                        cred.ownership?.writable === false ||
+                        ["env", "config.json"].includes(cred.source)
+                      }
                     >
                       Remove
                     </Button>

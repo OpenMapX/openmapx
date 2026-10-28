@@ -1,5 +1,6 @@
 /** Existing ordinary integration batch adapter; its sole issuer is the
  * adjacent built-in intent module, with no future workflow registration. */
+
 import type {
   AdminIntegrationConfigImported,
   AdminIntegrationImportFailure,
@@ -11,6 +12,10 @@ import {
   withAdministrativeConfigurationWriter,
   withConfigurationCommitParticipant,
 } from "../administrative-configuration-writer";
+import {
+  ConfigurationSourceOwned,
+  IntegrationConfigurationConflict,
+} from "../configuration-ownership-view";
 import { completeConfigurationApply, prepareIntegrationImport } from "../integration-config-import";
 import type { JobContext } from "../job-runner";
 import {
@@ -181,7 +186,9 @@ export async function runLegacyIntegrationImport(
           if (
             error instanceof JobObservationPending ||
             error instanceof OpsObservationPending ||
-            error instanceof ConfigurationPrerequisiteFailure
+            error instanceof ConfigurationPrerequisiteFailure ||
+            error instanceof ConfigurationSourceOwned ||
+            error instanceof IntegrationConfigurationConflict
           )
             throw error;
           if (progress.phase === "reload")

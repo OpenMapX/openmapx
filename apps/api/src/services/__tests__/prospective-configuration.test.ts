@@ -34,6 +34,8 @@ vi.mock("../../db/schema", () => ({
   integrationConfig: { name: "integration_config" },
   serviceSecret: { name: "service_secret", serviceId: "service_id" },
   integrationSecret: { name: "integration_secret", integrationId: "integration_id" },
+  capabilityBinding: { name: "capability_binding" },
+  integrationBindingRevision: { name: "integration_binding_revision" },
 }));
 vi.mock("../../integration-host", () => ({ getAllIntegrations: () => [] }));
 vi.mock("../service-registry", () => ({

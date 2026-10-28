@@ -5,6 +5,7 @@ import {
 import z from "zod/v4";
 import { configurationApplyResultSchema } from "../../../ops/contract";
 import { adminCountSchema, adminJsonValueSchema, adminTimestampSchema } from "../admin";
+import { configurationOwnershipSchema } from "../configuration-ownership";
 import { adminJsonWire, preserveManifestJson } from "../manifest-json";
 import { integrationApplyReceiptSchema, integrationRuntimeEvidenceSchema } from "./application";
 import {
@@ -64,6 +65,13 @@ export const adminIntegrationDetailSchema = adminIntegrationSummarySchema.extend
   documentation: integrationManifestSchema.shape.documentation,
   manifest: adminIntegrationManifestSchema,
   resolvedConfig: adminIntegrationResolvedConfigSchema,
+  ownership: z.record(z.string(), configurationOwnershipSchema).optional(),
+  configurationRevision: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
+  runtime: integrationRuntimeEvidenceSchema.nullable().optional(),
+  application: integrationApplyReceiptSchema.nullable().optional(),
   dependencyStatus: z.array(
     z.strictObject({ id: z.string(), loaded: z.boolean(), enabled: z.boolean() }),
   ),

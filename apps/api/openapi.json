@@ -13713,51 +13713,138 @@
                 "schema": {
                   "anyOf": [
                     {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "error": {
+                              "type": "string"
+                            },
+                            "ok": {
+                              "type": "boolean",
+                              "enum": [
+                                false
+                              ]
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "jobId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "error"
+                          ],
+                          "additionalProperties": false
                         },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
+                        {
+                          "type": "object",
+                          "properties": {
+                            "statusCode": {
+                              "type": "integer",
+                              "minimum": 400,
+                              "maximum": 599
+                            },
+                            "error": {
+                              "type": "string"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "code": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "statusCode",
+                            "error",
+                            "message"
+                          ],
+                          "additionalProperties": false
                         }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
+                      ]
                     },
                     {
                       "type": "object",
                       "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_SOURCE_OWNED"
+                          ]
                         },
                         "error": {
                           "type": "string"
                         },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
+                        "ownership": {
+                          "type": "object",
+                          "properties": {
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "default",
+                                "database",
+                                "vault",
+                                "config.json",
+                                "env"
+                              ]
+                            },
+                            "writable": {
+                              "type": "boolean"
+                            },
+                            "secret": {
+                              "type": "boolean"
+                            },
+                            "adoption": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "host_action_required"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "host_environment",
+                                    "host_file",
+                                    "vault_only",
+                                    "managed_workflow"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "envVar": {
+                              "type": "string",
+                              "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+                            },
+                            "managedBy": {
+                              "type": "string",
+                              "enum": [
+                                "transit.credentials",
+                                "dawarich-provisioning"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "source",
+                            "writable",
+                            "secret",
+                            "adoption",
+                            "reason"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
-                        "statusCode",
+                        "code",
                         "error",
-                        "message"
+                        "ownership"
                       ],
                       "additionalProperties": false
                     }
@@ -14736,6 +14823,69 @@
                               "missing"
                             ]
                           },
+                          "ownership": {
+                            "type": "object",
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "default",
+                                  "database",
+                                  "vault",
+                                  "config.json",
+                                  "env"
+                                ]
+                              },
+                              "writable": {
+                                "type": "boolean"
+                              },
+                              "secret": {
+                                "type": "boolean"
+                              },
+                              "adoption": {
+                                "type": "string",
+                                "enum": [
+                                  "direct",
+                                  "host_action_required"
+                                ]
+                              },
+                              "reason": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "host_environment",
+                                      "host_file",
+                                      "vault_only",
+                                      "managed_workflow"
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "envVar": {
+                                "type": "string",
+                                "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+                              },
+                              "managedBy": {
+                                "type": "string",
+                                "enum": [
+                                  "transit.credentials",
+                                  "dawarich-provisioning"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "source",
+                              "writable",
+                              "secret",
+                              "adoption",
+                              "reason"
+                            ],
+                            "additionalProperties": false
+                          },
                           "sharedSecretName": {
                             "type": "string"
                           },
@@ -14801,6 +14951,253 @@
                         "additionalProperties": false
                       }
                     },
+                    "configurationRevision": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "runtime": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "generationId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "bindings": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "configRevision": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "generationId",
+                            "bindings",
+                            "configRevision"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "application": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "operationId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            "integrationId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 64
+                            },
+                            "desiredRevision": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "database": {
+                              "type": "string",
+                              "enum": [
+                                "retained",
+                                "restored",
+                                "conflict",
+                                "unknown"
+                              ]
+                            },
+                            "runtime": {
+                              "type": "string",
+                              "enum": [
+                                "applied",
+                                "pending",
+                                "failed",
+                                "unknown"
+                              ]
+                            },
+                            "runtimeGenerationId": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "reason": {
+                              "type": "string",
+                              "enum": [
+                                "integration_disabled",
+                                "reload_failed",
+                                "ownership_changed",
+                                "authority_unavailable",
+                                "reconciliation_required"
+                              ]
+                            },
+                            "hostApply": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "outcome": {
+                                      "type": "string",
+                                      "enum": [
+                                        "committed"
+                                      ]
+                                    },
+                                    "revisionId": {
+                                      "type": "string",
+                                      "pattern": "^cfg1_[A-Za-z0-9_-]{43}$"
+                                    },
+                                    "enabledServiceIds": {
+                                      "maxItems": 256,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 64,
+                                        "pattern": "^[a-z0-9][a-z0-9-]*$"
+                                      }
+                                    },
+                                    "followUp": {
+                                      "type": "string",
+                                      "enum": [
+                                        "complete",
+                                        "failed"
+                                      ]
+                                    },
+                                    "cleanupFailed": {
+                                      "type": "boolean"
+                                    },
+                                    "publisherCleanupFailed": {
+                                      "type": "boolean"
+                                    },
+                                    "registryUpdateFailed": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "required": [
+                                    "outcome",
+                                    "revisionId",
+                                    "enabledServiceIds",
+                                    "followUp",
+                                    "cleanupFailed",
+                                    "publisherCleanupFailed",
+                                    "registryUpdateFailed"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "outcome": {
+                                      "type": "string",
+                                      "enum": [
+                                        "not_committed"
+                                      ]
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "conflict",
+                                        "busy",
+                                        "failed"
+                                      ]
+                                    },
+                                    "currentRevisionId": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string",
+                                          "pattern": "^cfg1_[A-Za-z0-9_-]{43}$"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "cleanupFailed": {
+                                      "type": "boolean"
+                                    },
+                                    "publisherCleanupFailed": {
+                                      "type": "boolean"
+                                    },
+                                    "registryUpdateFailed": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "required": [
+                                    "outcome",
+                                    "reason",
+                                    "cleanupFailed",
+                                    "publisherCleanupFailed",
+                                    "registryUpdateFailed"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "outcome": {
+                                      "type": "string",
+                                      "enum": [
+                                        "unknown"
+                                      ]
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "transport_or_result"
+                                      ]
+                                    },
+                                    "publisherCleanupFailed": {
+                                      "type": "boolean"
+                                    },
+                                    "registryUpdateFailed": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "required": [
+                                    "outcome",
+                                    "reason",
+                                    "publisherCleanupFailed",
+                                    "registryUpdateFailed"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "operationId",
+                            "integrationId",
+                            "desiredRevision",
+                            "database",
+                            "runtime",
+                            "runtimeGenerationId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "secretsConfigured": {
                       "type": "boolean"
                     }
@@ -14809,6 +15206,9 @@
                     "integrationId",
                     "name",
                     "credentials",
+                    "configurationRevision",
+                    "runtime",
+                    "application",
                     "secretsConfigured"
                   ],
                   "additionalProperties": false
@@ -15857,11 +16257,16 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "expectedRevision": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
                   "value": {
                     "type": "string"
                   }
                 },
                 "required": [
+                  "expectedRevision",
                   "value"
                 ],
                 "additionalProperties": false
@@ -15877,31 +16282,200 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "ok": {
-                      "type": "boolean",
+                    "operationId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "integrationId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "desiredRevision": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "database": {
+                      "type": "string",
                       "enum": [
-                        true
+                        "retained",
+                        "restored",
+                        "conflict",
+                        "unknown"
                       ]
                     },
-                    "message": {
-                      "type": "string"
+                    "runtime": {
+                      "type": "string",
+                      "enum": [
+                        "applied",
+                        "pending",
+                        "failed",
+                        "unknown"
+                      ]
                     },
-                    "reloaded": {
-                      "type": "integer",
-                      "minimum": 0,
-                      "maximum": 9007199254740991
+                    "runtimeGenerationId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
-                    "enabled": {
-                      "type": "integer",
-                      "minimum": 0,
-                      "maximum": 9007199254740991
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "integration_disabled",
+                        "reload_failed",
+                        "ownership_changed",
+                        "authority_unavailable",
+                        "reconciliation_required"
+                      ]
+                    },
+                    "hostApply": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "outcome": {
+                              "type": "string",
+                              "enum": [
+                                "committed"
+                              ]
+                            },
+                            "revisionId": {
+                              "type": "string",
+                              "pattern": "^cfg1_[A-Za-z0-9_-]{43}$"
+                            },
+                            "enabledServiceIds": {
+                              "maxItems": 256,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 64,
+                                "pattern": "^[a-z0-9][a-z0-9-]*$"
+                              }
+                            },
+                            "followUp": {
+                              "type": "string",
+                              "enum": [
+                                "complete",
+                                "failed"
+                              ]
+                            },
+                            "cleanupFailed": {
+                              "type": "boolean"
+                            },
+                            "publisherCleanupFailed": {
+                              "type": "boolean"
+                            },
+                            "registryUpdateFailed": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "outcome",
+                            "revisionId",
+                            "enabledServiceIds",
+                            "followUp",
+                            "cleanupFailed",
+                            "publisherCleanupFailed",
+                            "registryUpdateFailed"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "outcome": {
+                              "type": "string",
+                              "enum": [
+                                "not_committed"
+                              ]
+                            },
+                            "reason": {
+                              "type": "string",
+                              "enum": [
+                                "conflict",
+                                "busy",
+                                "failed"
+                              ]
+                            },
+                            "currentRevisionId": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "pattern": "^cfg1_[A-Za-z0-9_-]{43}$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "cleanupFailed": {
+                              "type": "boolean"
+                            },
+                            "publisherCleanupFailed": {
+                              "type": "boolean"
+                            },
+                            "registryUpdateFailed": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "outcome",
+                            "reason",
+                            "cleanupFailed",
+                            "publisherCleanupFailed",
+                            "registryUpdateFailed"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "outcome": {
+                              "type": "string",
+                              "enum": [
+                                "unknown"
+                              ]
+                            },
+                            "reason": {
+                              "type": "string",
+                              "enum": [
+                                "transport_or_result"
+                              ]
+                            },
+                            "publisherCleanupFailed": {
+                              "type": "boolean"
+                            },
+                            "registryUpdateFailed": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "outcome",
+                            "reason",
+                            "publisherCleanupFailed",
+                            "registryUpdateFailed"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
                     }
                   },
                   "required": [
-                    "ok",
-                    "message",
-                    "reloaded",
-                    "enabled"
+                    "operationId",
+                    "integrationId",
+                    "desiredRevision",
+                    "database",
+                    "runtime",
+                    "runtimeGenerationId"
                   ],
                   "additionalProperties": false
                 }
@@ -16155,51 +16729,157 @@
                 "schema": {
                   "anyOf": [
                     {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "error": {
+                              "type": "string"
+                            },
+                            "ok": {
+                              "type": "boolean",
+                              "enum": [
+                                false
+                              ]
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "jobId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "statusCode": {
+                              "type": "integer",
+                              "minimum": 400,
+                              "maximum": 599
+                            },
+                            "error": {
+                              "type": "string"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "code": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "statusCode",
+                            "error",
+                            "message"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    {
                       "type": "object",
                       "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_SOURCE_OWNED"
+                          ]
+                        },
                         "error": {
                           "type": "string"
                         },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
+                        "ownership": {
+                          "type": "object",
+                          "properties": {
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "default",
+                                "database",
+                                "vault",
+                                "config.json",
+                                "env"
+                              ]
+                            },
+                            "writable": {
+                              "type": "boolean"
+                            },
+                            "secret": {
+                              "type": "boolean"
+                            },
+                            "adoption": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "host_action_required"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "host_environment",
+                                    "host_file",
+                                    "vault_only",
+                                    "managed_workflow"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "envVar": {
+                              "type": "string",
+                              "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+                            },
+                            "managedBy": {
+                              "type": "string",
+                              "enum": [
+                                "transit.credentials",
+                                "dawarich-provisioning"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "source",
+                            "writable",
+                            "secret",
+                            "adoption",
+                            "reason"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
-                        "error"
+                        "code",
+                        "error",
+                        "ownership"
                       ],
                       "additionalProperties": false
                     },
                     {
                       "type": "object",
                       "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_VERSION_CONFLICT"
+                          ]
                         },
                         "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
                           "type": "string"
                         }
                       },
                       "required": [
-                        "statusCode",
-                        "error",
-                        "message"
+                        "code",
+                        "error"
                       ],
                       "additionalProperties": false
                     }
@@ -16539,12 +17219,20 @@
           }
         ],
         "requestBody": {
-          "required": false,
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": {},
+                "properties": {
+                  "expectedRevision": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": [
+                  "expectedRevision"
+                ],
                 "additionalProperties": false
               }
             }
@@ -16558,31 +17246,200 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "ok": {
-                      "type": "boolean",
+                    "operationId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "integrationId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "desiredRevision": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "database": {
+                      "type": "string",
                       "enum": [
-                        true
+                        "retained",
+                        "restored",
+                        "conflict",
+                        "unknown"
                       ]
                     },
-                    "message": {
-                      "type": "string"
+                    "runtime": {
+                      "type": "string",
+                      "enum": [
+                        "applied",
+                        "pending",
+                        "failed",
+                        "unknown"
+                      ]
                     },
-                    "reloaded": {
-                      "type": "integer",
-                      "minimum": 0,
-                      "maximum": 9007199254740991
+                    "runtimeGenerationId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
-                    "enabled": {
-                      "type": "integer",
-                      "minimum": 0,
-                      "maximum": 9007199254740991
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "integration_disabled",
+                        "reload_failed",
+                        "ownership_changed",
+                        "authority_unavailable",
+                        "reconciliation_required"
+                      ]
+                    },
+                    "hostApply": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "outcome": {
+                              "type": "string",
+                              "enum": [
+                                "committed"
+                              ]
+                            },
+                            "revisionId": {
+                              "type": "string",
+                              "pattern": "^cfg1_[A-Za-z0-9_-]{43}$"
+                            },
+                            "enabledServiceIds": {
+                              "maxItems": 256,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 64,
+                                "pattern": "^[a-z0-9][a-z0-9-]*$"
+                              }
+                            },
+                            "followUp": {
+                              "type": "string",
+                              "enum": [
+                                "complete",
+                                "failed"
+                              ]
+                            },
+                            "cleanupFailed": {
+                              "type": "boolean"
+                            },
+                            "publisherCleanupFailed": {
+                              "type": "boolean"
+                            },
+                            "registryUpdateFailed": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "outcome",
+                            "revisionId",
+                            "enabledServiceIds",
+                            "followUp",
+                            "cleanupFailed",
+                            "publisherCleanupFailed",
+                            "registryUpdateFailed"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "outcome": {
+                              "type": "string",
+                              "enum": [
+                                "not_committed"
+                              ]
+                            },
+                            "reason": {
+                              "type": "string",
+                              "enum": [
+                                "conflict",
+                                "busy",
+                                "failed"
+                              ]
+                            },
+                            "currentRevisionId": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "pattern": "^cfg1_[A-Za-z0-9_-]{43}$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "cleanupFailed": {
+                              "type": "boolean"
+                            },
+                            "publisherCleanupFailed": {
+                              "type": "boolean"
+                            },
+                            "registryUpdateFailed": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "outcome",
+                            "reason",
+                            "cleanupFailed",
+                            "publisherCleanupFailed",
+                            "registryUpdateFailed"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "outcome": {
+                              "type": "string",
+                              "enum": [
+                                "unknown"
+                              ]
+                            },
+                            "reason": {
+                              "type": "string",
+                              "enum": [
+                                "transport_or_result"
+                              ]
+                            },
+                            "publisherCleanupFailed": {
+                              "type": "boolean"
+                            },
+                            "registryUpdateFailed": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "outcome",
+                            "reason",
+                            "publisherCleanupFailed",
+                            "registryUpdateFailed"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
                     }
                   },
                   "required": [
-                    "ok",
-                    "message",
-                    "reloaded",
-                    "enabled"
+                    "operationId",
+                    "integrationId",
+                    "desiredRevision",
+                    "database",
+                    "runtime",
+                    "runtimeGenerationId"
                   ],
                   "additionalProperties": false
                 }
@@ -16836,51 +17693,157 @@
                 "schema": {
                   "anyOf": [
                     {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "error": {
+                              "type": "string"
+                            },
+                            "ok": {
+                              "type": "boolean",
+                              "enum": [
+                                false
+                              ]
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "jobId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "statusCode": {
+                              "type": "integer",
+                              "minimum": 400,
+                              "maximum": 599
+                            },
+                            "error": {
+                              "type": "string"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "code": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "statusCode",
+                            "error",
+                            "message"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    {
                       "type": "object",
                       "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_SOURCE_OWNED"
+                          ]
+                        },
                         "error": {
                           "type": "string"
                         },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
+                        "ownership": {
+                          "type": "object",
+                          "properties": {
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "default",
+                                "database",
+                                "vault",
+                                "config.json",
+                                "env"
+                              ]
+                            },
+                            "writable": {
+                              "type": "boolean"
+                            },
+                            "secret": {
+                              "type": "boolean"
+                            },
+                            "adoption": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "host_action_required"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "host_environment",
+                                    "host_file",
+                                    "vault_only",
+                                    "managed_workflow"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "envVar": {
+                              "type": "string",
+                              "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+                            },
+                            "managedBy": {
+                              "type": "string",
+                              "enum": [
+                                "transit.credentials",
+                                "dawarich-provisioning"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "source",
+                            "writable",
+                            "secret",
+                            "adoption",
+                            "reason"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
-                        "error"
+                        "code",
+                        "error",
+                        "ownership"
                       ],
                       "additionalProperties": false
                     },
                     {
                       "type": "object",
                       "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_VERSION_CONFLICT"
+                          ]
                         },
                         "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
                           "type": "string"
                         }
                       },
                       "required": [
-                        "statusCode",
-                        "error",
-                        "message"
+                        "code",
+                        "error"
                       ],
                       "additionalProperties": false
                     }
@@ -17043,6 +18006,66 @@
             }
           },
           "500": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -28039,6 +29062,108 @@
                           "additionalProperties": false
                         }
                       ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_SOURCE_OWNED"
+                          ]
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "ownership": {
+                          "type": "object",
+                          "properties": {
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "default",
+                                "database",
+                                "vault",
+                                "config.json",
+                                "env"
+                              ]
+                            },
+                            "writable": {
+                              "type": "boolean"
+                            },
+                            "secret": {
+                              "type": "boolean"
+                            },
+                            "adoption": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "host_action_required"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "host_environment",
+                                    "host_file",
+                                    "vault_only",
+                                    "managed_workflow"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "envVar": {
+                              "type": "string",
+                              "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+                            },
+                            "managedBy": {
+                              "type": "string",
+                              "enum": [
+                                "transit.credentials",
+                                "dawarich-provisioning"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "source",
+                            "writable",
+                            "secret",
+                            "adoption",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "error",
+                        "ownership"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_VERSION_CONFLICT"
+                          ]
+                        },
+                        "error": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "error"
+                      ],
+                      "additionalProperties": false
                     }
                   ]
                 }
@@ -29989,6 +31114,319 @@
                         "additionalProperties": false
                       }
                     },
+                    "ownership": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "default",
+                              "database",
+                              "vault",
+                              "config.json",
+                              "env"
+                            ]
+                          },
+                          "writable": {
+                            "type": "boolean"
+                          },
+                          "secret": {
+                            "type": "boolean"
+                          },
+                          "adoption": {
+                            "type": "string",
+                            "enum": [
+                              "direct",
+                              "host_action_required"
+                            ]
+                          },
+                          "reason": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "host_environment",
+                                  "host_file",
+                                  "vault_only",
+                                  "managed_workflow"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "envVar": {
+                            "type": "string",
+                            "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+                          },
+                          "managedBy": {
+                            "type": "string",
+                            "enum": [
+                              "transit.credentials",
+                              "dawarich-provisioning"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "source",
+                          "writable",
+                          "secret",
+                          "adoption",
+                          "reason"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "configurationRevision": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "runtime": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "generationId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "bindings": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "configRevision": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "generationId",
+                            "bindings",
+                            "configRevision"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "application": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "operationId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            "integrationId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 64
+                            },
+                            "desiredRevision": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "database": {
+                              "type": "string",
+                              "enum": [
+                                "retained",
+                                "restored",
+                                "conflict",
+                                "unknown"
+                              ]
+                            },
+                            "runtime": {
+                              "type": "string",
+                              "enum": [
+                                "applied",
+                                "pending",
+                                "failed",
+                                "unknown"
+                              ]
+                            },
+                            "runtimeGenerationId": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "reason": {
+                              "type": "string",
+                              "enum": [
+                                "integration_disabled",
+                                "reload_failed",
+                                "ownership_changed",
+                                "authority_unavailable",
+                                "reconciliation_required"
+                              ]
+                            },
+                            "hostApply": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "outcome": {
+                                      "type": "string",
+                                      "enum": [
+                                        "committed"
+                                      ]
+                                    },
+                                    "revisionId": {
+                                      "type": "string",
+                                      "pattern": "^cfg1_[A-Za-z0-9_-]{43}$"
+                                    },
+                                    "enabledServiceIds": {
+                                      "maxItems": 256,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 64,
+                                        "pattern": "^[a-z0-9][a-z0-9-]*$"
+                                      }
+                                    },
+                                    "followUp": {
+                                      "type": "string",
+                                      "enum": [
+                                        "complete",
+                                        "failed"
+                                      ]
+                                    },
+                                    "cleanupFailed": {
+                                      "type": "boolean"
+                                    },
+                                    "publisherCleanupFailed": {
+                                      "type": "boolean"
+                                    },
+                                    "registryUpdateFailed": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "required": [
+                                    "outcome",
+                                    "revisionId",
+                                    "enabledServiceIds",
+                                    "followUp",
+                                    "cleanupFailed",
+                                    "publisherCleanupFailed",
+                                    "registryUpdateFailed"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "outcome": {
+                                      "type": "string",
+                                      "enum": [
+                                        "not_committed"
+                                      ]
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "conflict",
+                                        "busy",
+                                        "failed"
+                                      ]
+                                    },
+                                    "currentRevisionId": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string",
+                                          "pattern": "^cfg1_[A-Za-z0-9_-]{43}$"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "cleanupFailed": {
+                                      "type": "boolean"
+                                    },
+                                    "publisherCleanupFailed": {
+                                      "type": "boolean"
+                                    },
+                                    "registryUpdateFailed": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "required": [
+                                    "outcome",
+                                    "reason",
+                                    "cleanupFailed",
+                                    "publisherCleanupFailed",
+                                    "registryUpdateFailed"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "outcome": {
+                                      "type": "string",
+                                      "enum": [
+                                        "unknown"
+                                      ]
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "transport_or_result"
+                                      ]
+                                    },
+                                    "publisherCleanupFailed": {
+                                      "type": "boolean"
+                                    },
+                                    "registryUpdateFailed": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "required": [
+                                    "outcome",
+                                    "reason",
+                                    "publisherCleanupFailed",
+                                    "registryUpdateFailed"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "operationId",
+                            "integrationId",
+                            "desiredRevision",
+                            "database",
+                            "runtime",
+                            "runtimeGenerationId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "dependencyStatus": {
                       "type": "array",
                       "items": {
@@ -30036,6 +31474,69 @@
                               "env",
                               "missing"
                             ]
+                          },
+                          "ownership": {
+                            "type": "object",
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "default",
+                                  "database",
+                                  "vault",
+                                  "config.json",
+                                  "env"
+                                ]
+                              },
+                              "writable": {
+                                "type": "boolean"
+                              },
+                              "secret": {
+                                "type": "boolean"
+                              },
+                              "adoption": {
+                                "type": "string",
+                                "enum": [
+                                  "direct",
+                                  "host_action_required"
+                                ]
+                              },
+                              "reason": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "host_environment",
+                                      "host_file",
+                                      "vault_only",
+                                      "managed_workflow"
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "envVar": {
+                                "type": "string",
+                                "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+                              },
+                              "managedBy": {
+                                "type": "string",
+                                "enum": [
+                                  "transit.credentials",
+                                  "dawarich-provisioning"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "source",
+                              "writable",
+                              "secret",
+                              "adoption",
+                              "reason"
+                            ],
+                            "additionalProperties": false
                           },
                           "sharedSecretName": {
                             "type": "string"
@@ -30944,51 +32445,157 @@
                 "schema": {
                   "anyOf": [
                     {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "error": {
+                              "type": "string"
+                            },
+                            "ok": {
+                              "type": "boolean",
+                              "enum": [
+                                false
+                              ]
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "jobId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "statusCode": {
+                              "type": "integer",
+                              "minimum": 400,
+                              "maximum": 599
+                            },
+                            "error": {
+                              "type": "string"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "code": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "statusCode",
+                            "error",
+                            "message"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    {
                       "type": "object",
                       "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_SOURCE_OWNED"
+                          ]
+                        },
                         "error": {
                           "type": "string"
                         },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
+                        "ownership": {
+                          "type": "object",
+                          "properties": {
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "default",
+                                "database",
+                                "vault",
+                                "config.json",
+                                "env"
+                              ]
+                            },
+                            "writable": {
+                              "type": "boolean"
+                            },
+                            "secret": {
+                              "type": "boolean"
+                            },
+                            "adoption": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "host_action_required"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "host_environment",
+                                    "host_file",
+                                    "vault_only",
+                                    "managed_workflow"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "envVar": {
+                              "type": "string",
+                              "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+                            },
+                            "managedBy": {
+                              "type": "string",
+                              "enum": [
+                                "transit.credentials",
+                                "dawarich-provisioning"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "source",
+                            "writable",
+                            "secret",
+                            "adoption",
+                            "reason"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
-                        "error"
+                        "code",
+                        "error",
+                        "ownership"
                       ],
                       "additionalProperties": false
                     },
                     {
                       "type": "object",
                       "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_VERSION_CONFLICT"
+                          ]
                         },
                         "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
                           "type": "string"
                         }
                       },
                       "required": [
-                        "statusCode",
-                        "error",
-                        "message"
+                        "code",
+                        "error"
                       ],
                       "additionalProperties": false
                     }
@@ -31538,51 +33145,157 @@
                 "schema": {
                   "anyOf": [
                     {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "error": {
+                              "type": "string"
+                            },
+                            "ok": {
+                              "type": "boolean",
+                              "enum": [
+                                false
+                              ]
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "jobId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "statusCode": {
+                              "type": "integer",
+                              "minimum": 400,
+                              "maximum": 599
+                            },
+                            "error": {
+                              "type": "string"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "code": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "statusCode",
+                            "error",
+                            "message"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    {
                       "type": "object",
                       "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_SOURCE_OWNED"
+                          ]
+                        },
                         "error": {
                           "type": "string"
                         },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
+                        "ownership": {
+                          "type": "object",
+                          "properties": {
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "default",
+                                "database",
+                                "vault",
+                                "config.json",
+                                "env"
+                              ]
+                            },
+                            "writable": {
+                              "type": "boolean"
+                            },
+                            "secret": {
+                              "type": "boolean"
+                            },
+                            "adoption": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "host_action_required"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "host_environment",
+                                    "host_file",
+                                    "vault_only",
+                                    "managed_workflow"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "envVar": {
+                              "type": "string",
+                              "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+                            },
+                            "managedBy": {
+                              "type": "string",
+                              "enum": [
+                                "transit.credentials",
+                                "dawarich-provisioning"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "source",
+                            "writable",
+                            "secret",
+                            "adoption",
+                            "reason"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
-                        "error"
+                        "code",
+                        "error",
+                        "ownership"
                       ],
                       "additionalProperties": false
                     },
                     {
                       "type": "object",
                       "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_VERSION_CONFLICT"
+                          ]
                         },
                         "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
                           "type": "string"
                         }
                       },
                       "required": [
-                        "statusCode",
-                        "error",
-                        "message"
+                        "code",
+                        "error"
                       ],
                       "additionalProperties": false
                     }
@@ -32132,51 +33845,157 @@
                 "schema": {
                   "anyOf": [
                     {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "error": {
+                              "type": "string"
+                            },
+                            "ok": {
+                              "type": "boolean",
+                              "enum": [
+                                false
+                              ]
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "jobId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "statusCode": {
+                              "type": "integer",
+                              "minimum": 400,
+                              "maximum": 599
+                            },
+                            "error": {
+                              "type": "string"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "code": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "statusCode",
+                            "error",
+                            "message"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    {
                       "type": "object",
                       "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_SOURCE_OWNED"
+                          ]
+                        },
                         "error": {
                           "type": "string"
                         },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
+                        "ownership": {
+                          "type": "object",
+                          "properties": {
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "default",
+                                "database",
+                                "vault",
+                                "config.json",
+                                "env"
+                              ]
+                            },
+                            "writable": {
+                              "type": "boolean"
+                            },
+                            "secret": {
+                              "type": "boolean"
+                            },
+                            "adoption": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "host_action_required"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "host_environment",
+                                    "host_file",
+                                    "vault_only",
+                                    "managed_workflow"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "envVar": {
+                              "type": "string",
+                              "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+                            },
+                            "managedBy": {
+                              "type": "string",
+                              "enum": [
+                                "transit.credentials",
+                                "dawarich-provisioning"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "source",
+                            "writable",
+                            "secret",
+                            "adoption",
+                            "reason"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
-                        "error"
+                        "code",
+                        "error",
+                        "ownership"
                       ],
                       "additionalProperties": false
                     },
                     {
                       "type": "object",
                       "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_VERSION_CONFLICT"
+                          ]
                         },
                         "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
                           "type": "string"
                         }
                       },
                       "required": [
-                        "statusCode",
-                        "error",
-                        "message"
+                        "code",
+                        "error"
                       ],
                       "additionalProperties": false
                     }
@@ -35227,51 +37046,157 @@
                 "schema": {
                   "anyOf": [
                     {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "error": {
+                              "type": "string"
+                            },
+                            "ok": {
+                              "type": "boolean",
+                              "enum": [
+                                false
+                              ]
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "jobId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "statusCode": {
+                              "type": "integer",
+                              "minimum": 400,
+                              "maximum": 599
+                            },
+                            "error": {
+                              "type": "string"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "code": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "statusCode",
+                            "error",
+                            "message"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    {
                       "type": "object",
                       "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_SOURCE_OWNED"
+                          ]
+                        },
                         "error": {
                           "type": "string"
                         },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
+                        "ownership": {
+                          "type": "object",
+                          "properties": {
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "default",
+                                "database",
+                                "vault",
+                                "config.json",
+                                "env"
+                              ]
+                            },
+                            "writable": {
+                              "type": "boolean"
+                            },
+                            "secret": {
+                              "type": "boolean"
+                            },
+                            "adoption": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "host_action_required"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "host_environment",
+                                    "host_file",
+                                    "vault_only",
+                                    "managed_workflow"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "envVar": {
+                              "type": "string",
+                              "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+                            },
+                            "managedBy": {
+                              "type": "string",
+                              "enum": [
+                                "transit.credentials",
+                                "dawarich-provisioning"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "source",
+                            "writable",
+                            "secret",
+                            "adoption",
+                            "reason"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
-                        "error"
+                        "code",
+                        "error",
+                        "ownership"
                       ],
                       "additionalProperties": false
                     },
                     {
                       "type": "object",
                       "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_VERSION_CONFLICT"
+                          ]
                         },
                         "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
                           "type": "string"
                         }
                       },
                       "required": [
-                        "statusCode",
-                        "error",
-                        "message"
+                        "code",
+                        "error"
                       ],
                       "additionalProperties": false
                     }
@@ -36018,51 +37943,157 @@
                 "schema": {
                   "anyOf": [
                     {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "error": {
+                              "type": "string"
+                            },
+                            "ok": {
+                              "type": "boolean",
+                              "enum": [
+                                false
+                              ]
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "jobId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "statusCode": {
+                              "type": "integer",
+                              "minimum": 400,
+                              "maximum": 599
+                            },
+                            "error": {
+                              "type": "string"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "code": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "statusCode",
+                            "error",
+                            "message"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    {
                       "type": "object",
                       "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_SOURCE_OWNED"
+                          ]
+                        },
                         "error": {
                           "type": "string"
                         },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
+                        "ownership": {
+                          "type": "object",
+                          "properties": {
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "default",
+                                "database",
+                                "vault",
+                                "config.json",
+                                "env"
+                              ]
+                            },
+                            "writable": {
+                              "type": "boolean"
+                            },
+                            "secret": {
+                              "type": "boolean"
+                            },
+                            "adoption": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "host_action_required"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "host_environment",
+                                    "host_file",
+                                    "vault_only",
+                                    "managed_workflow"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "envVar": {
+                              "type": "string",
+                              "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+                            },
+                            "managedBy": {
+                              "type": "string",
+                              "enum": [
+                                "transit.credentials",
+                                "dawarich-provisioning"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "source",
+                            "writable",
+                            "secret",
+                            "adoption",
+                            "reason"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
-                        "error"
+                        "code",
+                        "error",
+                        "ownership"
                       ],
                       "additionalProperties": false
                     },
                     {
                       "type": "object",
                       "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_VERSION_CONFLICT"
+                          ]
                         },
                         "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
                           "type": "string"
                         }
                       },
                       "required": [
-                        "statusCode",
-                        "error",
-                        "message"
+                        "code",
+                        "error"
                       ],
                       "additionalProperties": false
                     }
@@ -46341,51 +48372,138 @@
                 "schema": {
                   "anyOf": [
                     {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "error": {
+                              "type": "string"
+                            },
+                            "ok": {
+                              "type": "boolean",
+                              "enum": [
+                                false
+                              ]
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "jobId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "error"
+                          ],
+                          "additionalProperties": false
                         },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
+                        {
+                          "type": "object",
+                          "properties": {
+                            "statusCode": {
+                              "type": "integer",
+                              "minimum": 400,
+                              "maximum": 599
+                            },
+                            "error": {
+                              "type": "string"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "code": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "statusCode",
+                            "error",
+                            "message"
+                          ],
+                          "additionalProperties": false
                         }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
+                      ]
                     },
                     {
                       "type": "object",
                       "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_SOURCE_OWNED"
+                          ]
                         },
                         "error": {
                           "type": "string"
                         },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
+                        "ownership": {
+                          "type": "object",
+                          "properties": {
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "default",
+                                "database",
+                                "vault",
+                                "config.json",
+                                "env"
+                              ]
+                            },
+                            "writable": {
+                              "type": "boolean"
+                            },
+                            "secret": {
+                              "type": "boolean"
+                            },
+                            "adoption": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "host_action_required"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "host_environment",
+                                    "host_file",
+                                    "vault_only",
+                                    "managed_workflow"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "envVar": {
+                              "type": "string",
+                              "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+                            },
+                            "managedBy": {
+                              "type": "string",
+                              "enum": [
+                                "transit.credentials",
+                                "dawarich-provisioning"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "source",
+                            "writable",
+                            "secret",
+                            "adoption",
+                            "reason"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
-                        "statusCode",
+                        "code",
                         "error",
-                        "message"
+                        "ownership"
                       ],
                       "additionalProperties": false
                     }
@@ -49388,51 +51506,138 @@
                 "schema": {
                   "anyOf": [
                     {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "error": {
+                              "type": "string"
+                            },
+                            "ok": {
+                              "type": "boolean",
+                              "enum": [
+                                false
+                              ]
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "jobId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "error"
+                          ],
+                          "additionalProperties": false
                         },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
+                        {
+                          "type": "object",
+                          "properties": {
+                            "statusCode": {
+                              "type": "integer",
+                              "minimum": 400,
+                              "maximum": 599
+                            },
+                            "error": {
+                              "type": "string"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "code": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "statusCode",
+                            "error",
+                            "message"
+                          ],
+                          "additionalProperties": false
                         }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
+                      ]
                     },
                     {
                       "type": "object",
                       "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_SOURCE_OWNED"
+                          ]
                         },
                         "error": {
                           "type": "string"
                         },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
+                        "ownership": {
+                          "type": "object",
+                          "properties": {
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "default",
+                                "database",
+                                "vault",
+                                "config.json",
+                                "env"
+                              ]
+                            },
+                            "writable": {
+                              "type": "boolean"
+                            },
+                            "secret": {
+                              "type": "boolean"
+                            },
+                            "adoption": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "host_action_required"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "host_environment",
+                                    "host_file",
+                                    "vault_only",
+                                    "managed_workflow"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "envVar": {
+                              "type": "string",
+                              "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+                            },
+                            "managedBy": {
+                              "type": "string",
+                              "enum": [
+                                "transit.credentials",
+                                "dawarich-provisioning"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "source",
+                            "writable",
+                            "secret",
+                            "adoption",
+                            "reason"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
-                        "statusCode",
+                        "code",
                         "error",
-                        "message"
+                        "ownership"
                       ],
                       "additionalProperties": false
                     }
@@ -52359,6 +54564,7 @@
                             "enum": [
                               "default",
                               "database",
+                              "vault",
                               "env"
                             ]
                           }
@@ -52372,6 +54578,72 @@
                     },
                     "envPrefix": {
                       "type": "string"
+                    },
+                    "ownership": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "default",
+                              "database",
+                              "vault",
+                              "config.json",
+                              "env"
+                            ]
+                          },
+                          "writable": {
+                            "type": "boolean"
+                          },
+                          "secret": {
+                            "type": "boolean"
+                          },
+                          "adoption": {
+                            "type": "string",
+                            "enum": [
+                              "direct",
+                              "host_action_required"
+                            ]
+                          },
+                          "reason": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "host_environment",
+                                  "host_file",
+                                  "vault_only",
+                                  "managed_workflow"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "envVar": {
+                            "type": "string",
+                            "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+                          },
+                          "managedBy": {
+                            "type": "string",
+                            "enum": [
+                              "transit.credentials",
+                              "dawarich-provisioning"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "source",
+                          "writable",
+                          "secret",
+                          "adoption",
+                          "reason"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -53181,51 +55453,138 @@
                 "schema": {
                   "anyOf": [
                     {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "error": {
+                              "type": "string"
+                            },
+                            "ok": {
+                              "type": "boolean",
+                              "enum": [
+                                false
+                              ]
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "jobId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "error"
+                          ],
+                          "additionalProperties": false
                         },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
+                        {
+                          "type": "object",
+                          "properties": {
+                            "statusCode": {
+                              "type": "integer",
+                              "minimum": 400,
+                              "maximum": 599
+                            },
+                            "error": {
+                              "type": "string"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "code": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "statusCode",
+                            "error",
+                            "message"
+                          ],
+                          "additionalProperties": false
                         }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
+                      ]
                     },
                     {
                       "type": "object",
                       "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_SOURCE_OWNED"
+                          ]
                         },
                         "error": {
                           "type": "string"
                         },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
+                        "ownership": {
+                          "type": "object",
+                          "properties": {
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "default",
+                                "database",
+                                "vault",
+                                "config.json",
+                                "env"
+                              ]
+                            },
+                            "writable": {
+                              "type": "boolean"
+                            },
+                            "secret": {
+                              "type": "boolean"
+                            },
+                            "adoption": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "host_action_required"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "host_environment",
+                                    "host_file",
+                                    "vault_only",
+                                    "managed_workflow"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "envVar": {
+                              "type": "string",
+                              "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+                            },
+                            "managedBy": {
+                              "type": "string",
+                              "enum": [
+                                "transit.credentials",
+                                "dawarich-provisioning"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "source",
+                            "writable",
+                            "secret",
+                            "adoption",
+                            "reason"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
-                        "statusCode",
+                        "code",
                         "error",
-                        "message"
+                        "ownership"
                       ],
                       "additionalProperties": false
                     }
@@ -53541,14 +55900,82 @@
                           "source": {
                             "type": "string",
                             "enum": [
+                              "default",
+                              "database",
                               "vault",
+                              "config.json",
+                              "env",
                               "missing"
                             ]
+                          },
+                          "ownership": {
+                            "type": "object",
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "default",
+                                  "database",
+                                  "vault",
+                                  "config.json",
+                                  "env"
+                                ]
+                              },
+                              "writable": {
+                                "type": "boolean"
+                              },
+                              "secret": {
+                                "type": "boolean"
+                              },
+                              "adoption": {
+                                "type": "string",
+                                "enum": [
+                                  "direct",
+                                  "host_action_required"
+                                ]
+                              },
+                              "reason": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "host_environment",
+                                      "host_file",
+                                      "vault_only",
+                                      "managed_workflow"
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "envVar": {
+                                "type": "string",
+                                "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+                              },
+                              "managedBy": {
+                                "type": "string",
+                                "enum": [
+                                  "transit.credentials",
+                                  "dawarich-provisioning"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "source",
+                              "writable",
+                              "secret",
+                              "adoption",
+                              "reason"
+                            ],
+                            "additionalProperties": false
                           },
                           "managedBy": {
                             "type": "string",
                             "enum": [
-                              "dawarich-provisioning"
+                              "dawarich-provisioning",
+                              "transit.credentials"
                             ]
                           },
                           "updatedAt": {
@@ -54400,7 +56827,8 @@
                         "code": {
                           "type": "string",
                           "enum": [
-                            "DAWARICH_CREDENTIAL_MANAGED"
+                            "DAWARICH_CREDENTIAL_MANAGED",
+                            "transit_credentials_managed"
                           ]
                         },
                         "error": {
@@ -54465,6 +56893,89 @@
                           "additionalProperties": false
                         }
                       ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_SOURCE_OWNED"
+                          ]
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "ownership": {
+                          "type": "object",
+                          "properties": {
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "default",
+                                "database",
+                                "vault",
+                                "config.json",
+                                "env"
+                              ]
+                            },
+                            "writable": {
+                              "type": "boolean"
+                            },
+                            "secret": {
+                              "type": "boolean"
+                            },
+                            "adoption": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "host_action_required"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "host_environment",
+                                    "host_file",
+                                    "vault_only",
+                                    "managed_workflow"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "envVar": {
+                              "type": "string",
+                              "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+                            },
+                            "managedBy": {
+                              "type": "string",
+                              "enum": [
+                                "transit.credentials",
+                                "dawarich-provisioning"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "source",
+                            "writable",
+                            "secret",
+                            "adoption",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "error",
+                        "ownership"
+                      ],
+                      "additionalProperties": false
                     }
                   ]
                 }
@@ -55039,7 +57550,8 @@
                         "code": {
                           "type": "string",
                           "enum": [
-                            "DAWARICH_CREDENTIAL_MANAGED"
+                            "DAWARICH_CREDENTIAL_MANAGED",
+                            "transit_credentials_managed"
                           ]
                         },
                         "error": {
@@ -55104,6 +57616,89 @@
                           "additionalProperties": false
                         }
                       ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_SOURCE_OWNED"
+                          ]
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "ownership": {
+                          "type": "object",
+                          "properties": {
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "default",
+                                "database",
+                                "vault",
+                                "config.json",
+                                "env"
+                              ]
+                            },
+                            "writable": {
+                              "type": "boolean"
+                            },
+                            "secret": {
+                              "type": "boolean"
+                            },
+                            "adoption": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "host_action_required"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "host_environment",
+                                    "host_file",
+                                    "vault_only",
+                                    "managed_workflow"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "envVar": {
+                              "type": "string",
+                              "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+                            },
+                            "managedBy": {
+                              "type": "string",
+                              "enum": [
+                                "transit.credentials",
+                                "dawarich-provisioning"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "source",
+                            "writable",
+                            "secret",
+                            "adoption",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "error",
+                        "ownership"
+                      ],
+                      "additionalProperties": false
                     }
                   ]
                 }
@@ -55622,51 +58217,138 @@
                 "schema": {
                   "anyOf": [
                     {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "error": {
+                              "type": "string"
+                            },
+                            "ok": {
+                              "type": "boolean",
+                              "enum": [
+                                false
+                              ]
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "jobId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "error"
+                          ],
+                          "additionalProperties": false
                         },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
+                        {
+                          "type": "object",
+                          "properties": {
+                            "statusCode": {
+                              "type": "integer",
+                              "minimum": 400,
+                              "maximum": 599
+                            },
+                            "error": {
+                              "type": "string"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "code": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "statusCode",
+                            "error",
+                            "message"
+                          ],
+                          "additionalProperties": false
                         }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
+                      ]
                     },
                     {
                       "type": "object",
                       "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CONFIGURATION_SOURCE_OWNED"
+                          ]
                         },
                         "error": {
                           "type": "string"
                         },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
+                        "ownership": {
+                          "type": "object",
+                          "properties": {
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "default",
+                                "database",
+                                "vault",
+                                "config.json",
+                                "env"
+                              ]
+                            },
+                            "writable": {
+                              "type": "boolean"
+                            },
+                            "secret": {
+                              "type": "boolean"
+                            },
+                            "adoption": {
+                              "type": "string",
+                              "enum": [
+                                "direct",
+                                "host_action_required"
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "host_environment",
+                                    "host_file",
+                                    "vault_only",
+                                    "managed_workflow"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "envVar": {
+                              "type": "string",
+                              "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+                            },
+                            "managedBy": {
+                              "type": "string",
+                              "enum": [
+                                "transit.credentials",
+                                "dawarich-provisioning"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "source",
+                            "writable",
+                            "secret",
+                            "adoption",
+                            "reason"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
-                        "statusCode",
+                        "code",
                         "error",
-                        "message"
+                        "ownership"
                       ],
                       "additionalProperties": false
                     }

@@ -23,6 +23,7 @@ import type {
   DeleteAdminIntegrationCredential415,
   DeleteAdminIntegrationCredential429,
   DeleteAdminIntegrationCredential500,
+  DeleteAdminIntegrationCredential503,
   DeleteAdminIntegrationCredentialBody,
   DeleteAdminIntegrationCredentialHeaders,
   DisableAdminIntegration200,
@@ -674,6 +675,11 @@ export type deleteAdminIntegrationCredentialResponse500 = {
   status: 500;
 };
 
+export type deleteAdminIntegrationCredentialResponse503 = {
+  data: DeleteAdminIntegrationCredential503;
+  status: 503;
+};
+
 export type deleteAdminIntegrationCredentialResponseSuccess =
   deleteAdminIntegrationCredentialResponse200 & {
     headers: Headers;
@@ -688,6 +694,7 @@ export type deleteAdminIntegrationCredentialResponseError = (
   | deleteAdminIntegrationCredentialResponse415
   | deleteAdminIntegrationCredentialResponse429
   | deleteAdminIntegrationCredentialResponse500
+  | deleteAdminIntegrationCredentialResponse503
 ) & {
   headers: Headers;
 };
@@ -703,8 +710,8 @@ export const getDeleteAdminIntegrationCredentialUrl = (integrationId: string, ke
 export const deleteAdminIntegrationCredential = async (
   integrationId: string,
   key: string,
+  deleteAdminIntegrationCredentialBody: DeleteAdminIntegrationCredentialBody,
   headers: DeleteAdminIntegrationCredentialHeaders,
-  deleteAdminIntegrationCredentialBody?: DeleteAdminIntegrationCredentialBody,
   options?: Parameters<typeof deleteAdminIntegrationCredentialRequest>[1],
 ): Promise<deleteAdminIntegrationCredentialResponse> => {
   const getHeaders = (

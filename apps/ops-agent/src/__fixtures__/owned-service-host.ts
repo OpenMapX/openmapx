@@ -33,7 +33,7 @@ import { testExecution } from "./execution";
 import { createDefaultFixedCli } from "../administrative-runtime";
 import { runContainedProcess } from "../docker-runtime";
 
-export async function ownedServiceHost(options: { capabilities?:Record<string,string[]>; extraServiceIds?:string[]; coordinatorDependency?:boolean; oversizedMaintenancePlan?:boolean; nestedRootSegments?:number; imageReferences?:Record<string,{image:string;tag:string;digest?:string}>; schemas?: Record<string, Record<string, unknown>>; withHardlinks?: boolean; withCoordinator?: boolean; defaultCliEntry?: string; competeAfterDefaultCli?: boolean; actualComposeConfig?: boolean } = {}) {
+export async function ownedServiceHost(options: { resources?:Record<string,{memory?:string;cpus?:string}>; capabilities?:Record<string,string[]>; extraServiceIds?:string[]; coordinatorDependency?:boolean; oversizedMaintenancePlan?:boolean; nestedRootSegments?:number; imageReferences?:Record<string,{image:string;tag:string;digest?:string}>; schemas?: Record<string, Record<string, unknown>>; withHardlinks?: boolean; withCoordinator?: boolean; defaultCliEntry?: string; competeAfterDefaultCli?: boolean; actualComposeConfig?: boolean } = {}) {
   const withCoordinator = options.withHardlinks || options.withCoordinator;
   const cleanupRoot = mkdtempSync(join(tmpdir(), "openmapx-owned-"));
   const root=join(cleanupRoot,...Array.from({length:options.nestedRootSegments??0},(_,index)=>`${index}${"x".repeat(79)}`));
@@ -60,7 +60,7 @@ export async function ownedServiceHost(options: { capabilities?:Record<string,st
       version: "1.0.0",
       quality: "built-in",
       ...(options.capabilities?.[id]?{provides:options.capabilities[id]}:{}),
-      container: {...(options.capabilities?.[id]?{expose:[8080]}:{}),...(options.imageReferences?.[id] ?? { image: `example/${id}`, tag: "1" }),
+      container: {...(options.resources?.[id]??{}),...(options.capabilities?.[id]?{expose:[8080]}:{}),...(options.imageReferences?.[id] ?? { image: `example/${id}`, tag: "1" }),
         ...(options.coordinatorDependency && id==="motis"?{dependsOn:[{service:"data-manager"}]}:{})},
       ...(options.schemas?.[id] ? { configSchema: options.schemas[id] } : {}),
       ...(options.oversizedMaintenancePlan && id==="motis" ? {

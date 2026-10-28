@@ -1,5 +1,12 @@
 import { integrationAdminOperations } from "@openmapx/core/api-contracts";
-import { ConfigurationPrerequisiteFailure } from "../services/admin-job-failure";
+import {
+  ConfigurationPrerequisiteFailure,
+  JobObservationPending,
+} from "../services/admin-job-failure";
+import {
+  ConfigurationSourceOwned,
+  IntegrationConfigurationConflict,
+} from "../services/configuration-ownership-view";
 import { createAdminRouteRegistrar } from "./admin-contract";
 
 const register = createAdminRouteRegistrar(integrationAdminOperations, {
@@ -17,6 +24,21 @@ export const registerIntegrationAdminRoute: typeof register = (app, operation, h
       try {
         return await handler(request, reply);
       } catch (error) {
+        if (
+          error instanceof JobObservationPending &&
+          (operation === "setAdminIntegrationCredential" ||
+            operation === "deleteAdminIntegrationCredential")
+        )
+          return reply.code(503).send({
+            error:
+              "Credential saved or awaiting reconciliation; inspect its operation status before retrying",
+          });
+        if (error instanceof IntegrationConfigurationConflict)
+          return reply.code(409).send({ code: error.code, error: error.message });
+        if (error instanceof ConfigurationSourceOwned)
+          return reply
+            .code(409)
+            .send({ code: error.code, error: error.message, ownership: error.ownership });
         if (error instanceof ConfigurationPrerequisiteFailure)
           return reply.code(409).send({ error: error.message });
         return reply.code(500).send({ error: "Integration administration failed" });

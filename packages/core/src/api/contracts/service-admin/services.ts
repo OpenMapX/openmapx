@@ -1,9 +1,9 @@
 import { credentialSetupSchema } from "@openmapx/extension-contracts/integration";
-
 import { serviceManifestSchema } from "@openmapx/extension-contracts/service";
 import z from "zod/v4";
 import { serviceActionsSchema } from "../../../ops/service-results";
 import { adminCountSchema, adminJsonValueSchema, adminTimestampSchema } from "../admin";
+import { configurationOwnershipSchema } from "../configuration-ownership";
 import { adminJsonWire, preserveManifestJson } from "../manifest-json";
 import {
   adminServiceAcceptedSchema,
@@ -93,7 +93,7 @@ export const adminServiceDetailSchema = z.strictObject({
   status: adminServiceStatusSchema,
   actions: serviceActionsSchema,
 });
-export const adminServiceConfigSourceSchema = z.enum(["default", "database", "env"]);
+export const adminServiceConfigSourceSchema = z.enum(["default", "database", "vault", "env"]);
 export const adminServiceResolvedConfigSchema = z.record(
   z.string(),
   z.strictObject({ value: adminJsonValueSchema, source: adminServiceConfigSourceSchema }),
@@ -102,6 +102,7 @@ export const adminServiceConfigSchema = z.strictObject({
   schema: adminServiceJsonObjectSchema.nullable(),
   resolvedConfig: adminServiceResolvedConfigSchema,
   envPrefix: z.string(),
+  ownership: z.record(z.string(), configurationOwnershipSchema).optional(),
 });
 export const adminServiceConfigUpdateSchema = z.strictObject({
   config: adminServiceJsonObjectSchema,
@@ -114,8 +115,9 @@ export const adminServiceCredentialSchema = z.strictObject({
   title: z.string(),
   description: z.string().optional(),
   setup: adminServiceCredentialSetupSchema.optional(),
-  source: z.enum(["vault", "missing"]),
-  managedBy: z.literal("dawarich-provisioning").optional(),
+  source: z.enum(["default", "database", "vault", "config.json", "env", "missing"]),
+  ownership: configurationOwnershipSchema.optional(),
+  managedBy: z.enum(["dawarich-provisioning", "transit.credentials"]).optional(),
   updatedAt: adminTimestampSchema.optional(),
   updatedBy: z.string().nullable(),
 });
@@ -132,7 +134,7 @@ export const adminServiceCredentialChangedSchema = z.union([
   z.strictObject({ ok: z.literal(true), needsRender: z.literal(true) }),
 ]);
 export const adminServiceCredentialManagedSchema = z.strictObject({
-  code: z.literal("DAWARICH_CREDENTIAL_MANAGED"),
+  code: z.enum(["DAWARICH_CREDENTIAL_MANAGED", "transit_credentials_managed"]),
   error: z.string(),
 });
 export const adminServiceActionSchema = z.strictObject({

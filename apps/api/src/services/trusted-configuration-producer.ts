@@ -1,3 +1,4 @@
+import type { IntegrationApplyReceipt } from "@openmapx/core/api-contracts";
 import {
   type CoordinatorMode,
   canonicalJson,
@@ -75,6 +76,7 @@ export async function applyTrustedConfiguration(
   enabledServiceIds: string[];
   jobId?: string;
   integrationReload?: CapturedIntegrationReloadResult;
+  integrationApplication?: IntegrationApplyReceipt;
 }> {
   return completeTrustedConfigurationApplication(
     options,
@@ -91,6 +93,7 @@ export async function applyTrustedConfigurationWithEvidence(
   outcome: TrustedConfigurationApplyOutcome;
   jobId?: string;
   integrationReload?: CapturedIntegrationReloadResult;
+  integrationApplication?: IntegrationApplyReceipt;
 }> {
   if (options.ctx && hasRetainedAdminJobOperation(options.ctx, options.operationKey)) {
     const outcome = configurationApplyResultSchema.parse(
@@ -198,6 +201,20 @@ export async function applyTrustedConfigurationWithEvidence(
             "./prospective-configuration"
           );
           await completeProspectiveServiceCredential(candidate);
+        }
+        if (
+          candidateState.overlay.purpose === "integration-secret" &&
+          candidateState.overlay.changes.some(
+            (change) => change.kind === "integration-secret" && change.expectedRevision,
+          ) &&
+          completeTrustedConfigurationApply(receipt.application)
+        ) {
+          const { completeIntegrationActivation } = await import("./prospective-configuration");
+          const integrationApplication = await completeIntegrationActivation(
+            candidate,
+            receipt.application,
+          );
+          return { payload, previousApplied, outcome: receipt.application, integrationApplication };
         }
         if (
           candidateState.record.apiFollowUp === "integration-reload" &&

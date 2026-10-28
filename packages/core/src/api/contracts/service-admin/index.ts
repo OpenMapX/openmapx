@@ -7,6 +7,7 @@ import {
   adminText,
   httpErrorSchema,
 } from "../admin";
+import { configurationSourceOwnedSchema } from "../configuration-ownership";
 import {
   adminServiceAcceptedSchema,
   adminServiceCredentialParamsSchema,
@@ -113,7 +114,7 @@ export const serviceAdminOperations = {
     responses: {
       ...adminCommonResponses,
       200: adminJson(adminServiceOkSchema),
-      409: adminJson(httpErrorSchema),
+      409: adminJson(z.union([httpErrorSchema, configurationSourceOwnedSchema])),
       404: adminJson(httpErrorSchema),
       400: adminJson(z.union([httpErrorSchema, adminServiceValidationErrorSchema])),
     },
@@ -142,7 +143,13 @@ export const serviceAdminOperations = {
       ...adminCommonResponses,
       200: adminJson(adminServiceCredentialChangedSchema),
       404: adminJson(httpErrorSchema),
-      409: adminJson(z.union([adminServiceCredentialManagedSchema, httpErrorSchema])),
+      409: adminJson(
+        z.union([
+          adminServiceCredentialManagedSchema,
+          httpErrorSchema,
+          configurationSourceOwnedSchema,
+        ]),
+      ),
     },
   },
   deleteAdminServiceCredential: {
@@ -158,7 +165,13 @@ export const serviceAdminOperations = {
       ...adminCommonResponses,
       200: adminJson(adminServiceCredentialChangedSchema),
       404: adminJson(httpErrorSchema),
-      409: adminJson(z.union([adminServiceCredentialManagedSchema, httpErrorSchema])),
+      409: adminJson(
+        z.union([
+          adminServiceCredentialManagedSchema,
+          httpErrorSchema,
+          configurationSourceOwnedSchema,
+        ]),
+      ),
     },
   },
   streamAdminServiceLogs: {
@@ -174,7 +187,7 @@ export const serviceAdminOperations = {
       ...adminCommonResponses,
       200: adminStream("text/plain"),
       404: adminJson(httpErrorSchema),
-      409: adminJson(httpErrorSchema),
+      409: adminJson(z.union([httpErrorSchema, configurationSourceOwnedSchema])),
       503: adminJson(httpErrorSchema),
     },
   },
@@ -231,7 +244,7 @@ export const serviceAdminOperations = {
     responses: {
       ...adminCommonResponses,
       200: adminJson(adminServiceSelectionUpdatedSchema),
-      409: adminJson(httpErrorSchema),
+      409: adminJson(z.union([httpErrorSchema, configurationSourceOwnedSchema])),
       503: adminJson(httpErrorSchema),
     },
   },
@@ -257,7 +270,7 @@ export const serviceAdminOperations = {
       ...adminCommonResponses,
       200: adminJson(adminServiceAcceptedSchema),
       404: adminJson(httpErrorSchema),
-      409: adminJson(httpErrorSchema),
+      409: adminJson(z.union([httpErrorSchema, configurationSourceOwnedSchema])),
     },
   },
   deleteAdminServiceBackup: {
@@ -298,7 +311,7 @@ export const serviceAdminOperations = {
     responses: {
       ...adminCommonResponses,
       200: adminJson(adminServiceComposeStartedSchema),
-      409: adminJson(httpErrorSchema),
+      409: adminJson(z.union([httpErrorSchema, configurationSourceOwnedSchema])),
       400: adminJson(z.union([httpErrorSchema, adminServiceFailureSchema])),
     },
   },

@@ -147,23 +147,34 @@ export function useIntegrationAdmin() {
             { client },
           ),
         ),
-      setCredential: (id: string, key: string, value: string) =>
+      setCredential: (
+        id: string,
+        key: string,
+        value: string,
+        expectedRevision: string,
+        operationId = crypto.randomUUID(),
+      ) =>
         integrationOrThrow(
           sdk.setAdminIntegrationCredential(
             id,
             key,
-            { value },
-            { "idempotency-key": crypto.randomUUID() },
+            { value, expectedRevision },
+            { "idempotency-key": operationId },
             { client },
           ),
         ),
-      deleteCredential: (id: string, key: string) =>
+      deleteCredential: (
+        id: string,
+        key: string,
+        expectedRevision: string,
+        operationId = crypto.randomUUID(),
+      ) =>
         integrationOrThrow(
           sdk.deleteAdminIntegrationCredential(
             id,
             key,
-            { "idempotency-key": crypto.randomUUID() },
-            undefined,
+            { expectedRevision },
+            { "idempotency-key": operationId },
             { client },
           ),
         ),

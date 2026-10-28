@@ -67,8 +67,9 @@ describe("integration query boundaries and reload observation", () => {
       await act(async () => {
         const run = {
           patch: () => result.current.patchConfig("demo", { endpoint: "synthetic" }),
-          set: () => result.current.setCredential("demo", "TOKEN", "synthetic-private"),
-          delete: () => result.current.deleteCredential("demo", "TOKEN"),
+          set: () =>
+            result.current.setCredential("demo", "TOKEN", "synthetic-private", "a".repeat(64)),
+          delete: () => result.current.deleteCredential("demo", "TOKEN", "a".repeat(64)),
           enable: () => result.current.toggle("demo", true),
           disable: () => result.current.toggle("demo", false),
           import: () =>
@@ -88,7 +89,7 @@ describe("integration query boundaries and reload observation", () => {
           kind === "patch"
             ? { endpoint: "synthetic" }
             : kind === "set"
-              ? { value: "synthetic-private" }
+              ? { value: "synthetic-private", expectedRevision: "a".repeat(64) }
               : { integrations: [{ integrationId: "demo", config: { endpoint: "synthetic" } }] },
         );
     },

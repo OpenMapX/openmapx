@@ -102,6 +102,12 @@ import {
 } from "./configuration-maintenance-step-records";
 import { assertLegacyIntegrationImportOverlay } from "./configuration-migration/legacy-integration-import-intent";
 import {
+  ConfigurationSourceOwned,
+  IntegrationConfigurationConflict,
+  integrationOwnershipSnapshot,
+  projectFieldOwnership,
+} from "./configuration-ownership-view";
+import {
   assertCoordinatorLifecycleIntent,
   assertRetainedCoordinatorLifecycleProvenance,
   type CoordinatorLifecycleIntent,
@@ -112,6 +118,7 @@ import {
   assertIntegrationBindingOverlay,
   assertSavedIntegrationBinding,
 } from "./integration-binding-participant";
+import { capturedBindingState } from "./integration-binding-state";
 import { integrationConfigRevision } from "./integration-runtime-evidence";
 import type { JobContext } from "./job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-client";
@@ -183,11 +190,23 @@ const overlaySchema = z.strictObject({
         z.strictObject({ kind: z.literal("integration-config"), integrationId: id, ...ordinary }),
         z.strictObject({ kind: z.literal("service-secret"), serviceId: id, ...secretSet }),
         z.strictObject({ kind: z.literal("service-secret"), serviceId: id, ...secretDelete }),
-        z.strictObject({ kind: z.literal("integration-secret"), integrationId: id, ...secretSet }),
+        z.strictObject({
+          kind: z.literal("integration-secret"),
+          integrationId: id,
+          ...secretSet,
+          expectedRevision: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+        }),
         z.strictObject({
           kind: z.literal("integration-secret"),
           integrationId: id,
           ...secretDelete,
+          expectedRevision: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
         }),
         z.strictObject({
           kind: z.literal("integration-binding"),
@@ -1109,6 +1128,9 @@ export async function retireSettledProspectiveConfiguration(
           : {}),
         ...(original.integrationReload ? { integrationReload: original.integrationReload } : {}),
         ...(original.integrationBinding ? { integrationBinding: original.integrationBinding } : {}),
+        ...(original.integrationApplication
+          ? { integrationApplication: original.integrationApplication }
+          : {}),
         ...(provenance
           ? {
               integrationImport: {
@@ -1348,7 +1370,42 @@ export async function withProspectiveConfigurationRead<T>(
 /** The finite reload continuation. Recovery consumes the authenticated resolved
  * values, with exact registry metadata revalidation; it never reconstructs the
  * candidate from current desired rows or captures unrelated process secrets. */
+async function assertCurrentIntegrationReloadSources(candidate: ValidatedConfigurationCandidate) {
+  const state = validatedConfigurationCandidateState(candidate),
+    retained = state.record.privateIntegrationReload;
+  if (!retained?.bindings) throw new JobObservationPending("recovery_required");
+  const expectedBindings = retained.bindings;
+  await withAdministrativeConfigurationRead({}, async (read) => {
+    if (
+      canonicalJson(retained.services) !== canonicalJson(read.services) ||
+      canonicalJson(retained.integrations) !==
+        canonicalJson(
+          read.integrations.map((i) => ({
+            id: i.id,
+            directory: i.directory,
+            manifest: i.manifest,
+            isBuiltIn: i.isBuiltIn,
+          })),
+        )
+    )
+      throw Error("Integration source changed");
+    for (const integration of read.integrations) {
+      const resolved = await resolveIntegrationConfigWithSourcesStrict(
+        integration.manifest,
+        integration.directory,
+        read,
+      );
+      if (
+        canonicalJson(resolved) !== canonicalJson(retained.values[integration.id]) ||
+        canonicalJson(capturedBindingState(read, integration.id).bindings) !==
+          canonicalJson(expectedBindings[integration.id] ?? {})
+      )
+        throw Error("Integration source changed");
+    }
+  });
+}
 export async function reloadProspectiveIntegrations(candidate: ValidatedConfigurationCandidate) {
+  await assertCurrentIntegrationReloadSources(candidate);
   const state = validatedConfigurationCandidateState(candidate);
   assertCommittedConfigurationCandidate(candidate);
   const { reloadIntegrations } = await import("../integration-host");
@@ -2569,9 +2626,20 @@ export async function resumeRetainedConfigurationCandidate(): Promise<Record<str
       !completeTrustedConfigurationApply(receipt.application)
     )
       return { configuration: receipt.application };
-    if (state.overlay.purpose === "integration-binding") {
-      const integrationBinding = await completeBindingActivation(candidate, receipt.application);
-      return { configuration: receipt.application, integrationBinding };
+    if (
+      state.overlay.purpose === "integration-binding" ||
+      (state.overlay.purpose === "integration-secret" &&
+        state.overlay.changes.some(
+          (change) => change.kind === "integration-secret" && change.expectedRevision,
+        ))
+    ) {
+      const applied = await completeIntegrationActivation(candidate, receipt.application);
+      return {
+        configuration: receipt.application,
+        [state.overlay.purpose === "integration-binding"
+          ? "integrationBinding"
+          : "integrationApplication"]: applied,
+      };
     }
     // An interrupted activation is not permission to invoke setup again. Only
     // an unattempted reload may begin; a durable completion can be copied.
@@ -2849,6 +2917,13 @@ async function mergeOverlay(
           integration!.directory,
           context,
         );
+    if (
+      change.kind === "integration-secret" &&
+      change.expectedRevision &&
+      (await integrationOwnershipSnapshot(change.integrationId, context)).revision !==
+        change.expectedRevision
+    )
+      throw new IntegrationConfigurationConflict();
     const changedKeys =
       "set" in change ? [...Object.keys(change.set), ...change.unset] : [change.key];
     for (const key of changedKeys) {
@@ -2868,7 +2943,13 @@ async function mergeOverlay(
           .find((item) => item.serviceId === service.manifest.id)
           ?.fields.find((field) => field.key === key);
       if (host?.source === "host" || ["env", "config.json"].includes(resolved[key]?.source ?? ""))
-        throw Error("Configuration field is host-owned");
+        throw new ConfigurationSourceOwned(
+          projectFieldOwnership({
+            source: host?.source === "host" ? "env" : resolved[key]!.source,
+            secret: definition["x-openmapx-secret"] === true,
+            envVar: host?.envVar,
+          }),
+        );
     }
     if (change.kind === "service-config") {
       let row = rows.serviceRows.find((row) => row.serviceId === change.serviceId);
@@ -5497,19 +5578,25 @@ const configurationMaintenanceProtocol = Object.freeze({
 });
 
 /** Observation-only after an interrupted attempt; never replay unknown setup. */
-export async function completeBindingActivation(
+export async function completeIntegrationActivation(
   candidate: ValidatedConfigurationCandidate,
   hostApply: IntegrationApplyReceipt["hostApply"],
 ): Promise<IntegrationApplyReceipt> {
   const state = validatedConfigurationCandidateState(candidate),
     { job } = administrativeConfigurationState(state.writer),
     change = state.overlay.changes[0];
+  const binding = state.overlay.purpose === "integration-binding";
   if (
-    state.overlay.purpose !== "integration-binding" ||
     state.overlay.changes.length !== 1 ||
-    change?.kind !== "integration-binding"
+    !change ||
+    !(
+      (binding && change.kind === "integration-binding") ||
+      (state.overlay.purpose === "integration-secret" &&
+        change.kind === "integration-secret" &&
+        change.expectedRevision)
+    )
   )
-    throw Error("Original binding candidate required");
+    throw Error("Original integration candidate required");
   const retained = state.record.privateIntegrationReload,
     retainedManifest = retained?.integrations.find((i) => i.id === change.integrationId)?.manifest,
     values = retained?.values[change.integrationId];
@@ -5546,10 +5633,46 @@ export async function completeBindingActivation(
       ? live
       : null;
   };
-  let receipt = await withConfigurationWriteTransaction(
-    state.writer,
-    async (tx) => (await assertSavedIntegrationBinding(candidate, state.overlay, tx)).result,
-  );
+  let receipt: IntegrationApplyReceipt = binding
+    ? await withConfigurationWriteTransaction(
+        state.writer,
+        async (tx) => (await assertSavedIntegrationBinding(candidate, state.overlay, tx)).result,
+      )
+    : integrationApplyReceiptSchema.parse(
+        job.checkpointResult?.integrationApplication ?? {
+          operationId: candidate.operationKey,
+          integrationId: change.integrationId,
+          desiredRevision: await withAdministrativeConfigurationRead(
+            {},
+            async (read) =>
+              (await integrationOwnershipSnapshot(change.integrationId, read)).revision,
+          ),
+          database: "retained",
+          runtime: "pending",
+          runtimeGenerationId: null,
+        },
+      );
+  if (
+    receipt.operationId !== candidate.operationKey ||
+    receipt.integrationId !== change.integrationId
+  )
+    throw new JobObservationPending("recovery_required");
+  async function saveReceipt(next: IntegrationApplyReceipt) {
+    if (binding)
+      await withConfigurationWriteTransaction(state.writer, async (tx) => {
+        await assertSavedIntegrationBinding(candidate, state.overlay, tx);
+        await tx
+          .update(integrationApplicationReceipt)
+          .set({ result: next })
+          .where(
+            and(
+              eq(integrationApplicationReceipt.operationId, candidate.operationKey),
+              eq(integrationApplicationReceipt.candidateId, candidate.candidateId),
+            ),
+          );
+      });
+    else await job.checkpoint({ ...job.checkpointResult, integrationApplication: next });
+  }
   const original = job.checkpointResult?.integrationReload as Record<string, unknown> | undefined;
   if (original?.candidateId && original.candidateId !== candidate.candidateId)
     throw new JobObservationPending("recovery_required");
@@ -5557,6 +5680,7 @@ export async function completeBindingActivation(
     const before = inspectIntegrationRuntime(change.integrationId);
     let failed = false;
     if (!original) {
+      if (!binding) await saveReceipt(receipt);
       await job.checkpoint({
         ...job.checkpointResult,
         integrationReload: {
@@ -5571,9 +5695,17 @@ export async function completeBindingActivation(
         failed = true;
       }
     }
-    const live = matches(),
+    let sourceCurrent = true;
+    try {
+      await assertCurrentIntegrationReloadSources(candidate);
+    } catch {
+      sourceCurrent = false;
+    }
+    const live = sourceCurrent ? matches() : null,
       disabled =
-        config.enabled === false && getIntegration(change.integrationId)?.enabled === false;
+        sourceCurrent &&
+        config.enabled === false &&
+        getIntegration(change.integrationId)?.enabled === false;
     if (live)
       receipt = {
         ...receipt,
@@ -5600,43 +5732,19 @@ export async function completeBindingActivation(
         reason: "reload_failed",
       };
     else {
-      await withConfigurationWriteTransaction(state.writer, async (tx) => {
-        await assertSavedIntegrationBinding(candidate, state.overlay, tx);
-        await tx
-          .update(integrationApplicationReceipt)
-          .set({
-            result: {
-              ...receipt,
-              runtime: "unknown",
-              reason: "reconciliation_required",
-              hostApply,
-            },
-          })
-          .where(
-            and(
-              eq(integrationApplicationReceipt.operationId, candidate.operationKey),
-              eq(integrationApplicationReceipt.candidateId, candidate.candidateId),
-            ),
-          );
+      await saveReceipt({
+        ...receipt,
+        runtime: "unknown",
+        reason: "reconciliation_required",
+        hostApply,
       });
       throw new JobObservationPending("recovery_required");
     }
     receipt = integrationApplyReceiptSchema.parse({ ...receipt, hostApply });
-    await withConfigurationWriteTransaction(state.writer, async (tx) => {
-      await assertSavedIntegrationBinding(candidate, state.overlay, tx);
-      await tx
-        .update(integrationApplicationReceipt)
-        .set({ result: receipt })
-        .where(
-          and(
-            eq(integrationApplicationReceipt.operationId, candidate.operationKey),
-            eq(integrationApplicationReceipt.candidateId, candidate.candidateId),
-          ),
-        );
-    });
+    await saveReceipt(receipt);
     await job.checkpoint({
       ...job.checkpointResult,
-      integrationBinding: receipt,
+      [binding ? "integrationBinding" : "integrationApplication"]: receipt,
       _configurationCandidate: {
         ...(job.checkpointResult?._configurationCandidate as Record<string, unknown>),
         phase: "settled",

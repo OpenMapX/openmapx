@@ -7,5 +7,6 @@ export type GetAdminServiceConfig200ResolvedConfigSource =
 export const GetAdminServiceConfig200ResolvedConfigSource = {
   default: "default",
   database: "database",
+  vault: "vault",
   env: "env",
 } as const;

@@ -13,8 +13,8 @@ import {
   getServiceSelectionSummary,
   validateServiceSelectionForWrite,
 } from "../services/admin-cli";
+import { inspectServiceConfiguration } from "../services/configuration-ownership-view";
 import {
-  DAWARICH_CREDENTIAL_MANAGED_BY,
   DAWARICH_CREDENTIAL_MANAGED_CODE,
   DAWARICH_CREDENTIAL_MANAGED_ERROR,
   isProvisioningOwnedDawarichCredential,
@@ -26,9 +26,13 @@ import {
   parseDirectOpsIdempotency,
 } from "../services/direct-ops-idempotency";
 import { jobRunner } from "../services/job-runner";
+import {
+  isManagedTransitCredential,
+  managedServiceCredential,
+  TRANSIT_CREDENTIAL_MANAGED_CODE,
+} from "../services/managed-service-credentials";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "../services/ops-client";
 import { isSecretsConfigured } from "../services/secrets";
-import { resolveServiceConfigWithSources } from "../services/service-config-resolver";
 import { readServiceInventory } from "../services/service-inventory";
 import { getServiceRegistry } from "../services/service-registry";
 import { listServiceSecrets } from "../services/service-secrets";
@@ -356,17 +360,13 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     // Reduce declared-secret fields to the "***" configured sentinel so a
     // credential never reaches the Config tab, mirroring the integration
     // detail route.
-    const resolvedConfig = maskSecretConfigValues(
-      await resolveServiceConfigWithSources({
-        id: svc.manifest.id,
-        configSchema: svc.manifest.configSchema,
-      }),
-      svc.manifest.configSchema,
-    );
+    const snapshot = await inspectServiceConfiguration(svc.manifest.id);
+    const resolvedConfig = maskSecretConfigValues(snapshot.resolved, svc.manifest.configSchema);
     return {
       schema: svc.manifest.configSchema ?? null,
       resolvedConfig,
       envPrefix: serviceConfigEnvPrefix(svc.manifest.id),
+      ownership: snapshot.ownership,
     };
   });
 
@@ -452,6 +452,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       return { error: "Service not found" };
     }
     const fields = getSecretFields(svc.manifest.configSchema);
+    const snapshot = await inspectServiceConfiguration(svc.manifest.id);
     const vault = await listServiceSecrets(svc.manifest.id);
     const vaultByKey = new Map(vault.map((v) => [v.key, v]));
     return {
@@ -464,10 +465,14 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
           title: f.title,
           description: f.description,
           setup: f.setup,
-          source: v ? ("vault" as const) : ("missing" as const),
-          managedBy: isProvisioningOwnedDawarichCredential(svc.manifest.id, f.key)
-            ? DAWARICH_CREDENTIAL_MANAGED_BY
-            : undefined,
+          source:
+            snapshot.resolved[f.key]?.value === undefined ||
+            snapshot.resolved[f.key]?.value === null ||
+            snapshot.resolved[f.key]?.value === ""
+              ? ("missing" as const)
+              : snapshot.resolved[f.key]!.source,
+          ownership: snapshot.ownership[f.key],
+          managedBy: managedServiceCredential(svc.manifest.id, f.key),
           updatedAt: v?.updatedAt?.toISOString(),
           updatedBy: v?.updatedBy ?? null,
         };
@@ -489,6 +494,11 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         reply.status(400);
         return { error: "Invalid credential key" };
       }
+      if (isManagedTransitCredential(svc.manifest.id, req.params.key))
+        return reply.code(409).send({
+          code: TRANSIT_CREDENTIAL_MANAGED_CODE,
+          error: "Use the pinned transit feed credential workflow.",
+        });
       if (isProvisioningOwnedDawarichCredential(svc.manifest.id, req.params.key)) {
         reply.status(409);
         return {
@@ -553,6 +563,11 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         if (!svc) return reply.code(404).send({ error: "Service not found" });
         if (!isValidSecretKey(key))
           return reply.code(400).send({ error: "Invalid credential key" });
+        if (isManagedTransitCredential(svc.manifest.id, key))
+          return reply.code(409).send({
+            code: TRANSIT_CREDENTIAL_MANAGED_CODE,
+            error: "Use the pinned transit feed credential workflow.",
+          });
         if (isProvisioningOwnedDawarichCredential(svc.manifest.id, key))
           return reply.code(409).send({
             code: DAWARICH_CREDENTIAL_MANAGED_CODE,
@@ -576,6 +591,11 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         reply.status(400);
         return { error: "Invalid credential key" };
       }
+      if (isManagedTransitCredential(svc.manifest.id, req.params.key))
+        return reply.code(409).send({
+          code: TRANSIT_CREDENTIAL_MANAGED_CODE,
+          error: "Use the pinned transit feed credential workflow.",
+        });
       if (isProvisioningOwnedDawarichCredential(svc.manifest.id, req.params.key)) {
         reply.status(409);
         return {
@@ -638,6 +658,11 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         if (!svc) return reply.code(404).send({ error: "Service not found" });
         if (!isValidSecretKey(key))
           return reply.code(400).send({ error: "Invalid credential key" });
+        if (isManagedTransitCredential(svc.manifest.id, key))
+          return reply.code(409).send({
+            code: TRANSIT_CREDENTIAL_MANAGED_CODE,
+            error: "Use the pinned transit feed credential workflow.",
+          });
         if (isProvisioningOwnedDawarichCredential(svc.manifest.id, key))
           return reply.code(409).send({
             code: DAWARICH_CREDENTIAL_MANAGED_CODE,

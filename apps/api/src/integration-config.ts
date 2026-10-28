@@ -289,9 +289,9 @@ export function warnInvalidConfig(
       warn(`Integration ${id}: missing required config key "${key}"`);
     }
     if (def.enum && config[key] !== undefined && !def.enum.includes(config[key])) {
-      warn(
-        `Integration ${id}: config "${key}" value "${config[key]}" not in allowed values: ${def.enum.join(", ")}`,
-      );
+      // Values and enum members can both contain credentials. Diagnostics
+      // identify only the field, including for ordinary provider settings.
+      warn(`Integration ${id}: config "${key}" is not an allowed value`);
     }
   }
 }

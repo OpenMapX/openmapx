@@ -426,6 +426,7 @@ function ConfigTab({ data }: { data: ServiceDetailData }) {
           schema={manifest.configSchema}
           resolvedConfig={configQuery.data?.resolvedConfig ?? {}}
           envPrefix={configQuery.data?.envPrefix}
+          ownership={configQuery.data?.ownership}
           onSave={async (values) => {
             await saveConfig.mutateAsync(values);
           }}

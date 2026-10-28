@@ -1,5 +1,9 @@
 import z from "zod/v4";
 import { type AdminOperation, adminCommonResponses, adminJson, httpErrorSchema } from "../admin";
+import {
+  configurationSourceOwnedSchema,
+  configurationVersionConflictSchema,
+} from "../configuration-ownership";
 import { integrationApplyReceiptSchema } from "./application";
 import {
   adminIntegrationBindingDeleteSchema,
@@ -27,6 +31,7 @@ import {
 } from "./common";
 import {
   adminCredentialsSchema,
+  adminIntegrationCredentialDeleteSchema,
   adminIntegrationCredentialSetSchema,
   adminIntegrationCredentialsSchema,
   adminIntegrationCredentialTestRequestSchema,
@@ -50,7 +55,9 @@ const mutation = {
 const reloaded = {
   ...missing,
   200: adminJson(adminIntegrationReloadResultSchema),
-  409: adminJson(httpErrorSchema),
+  409: adminJson(
+    z.union([httpErrorSchema, configurationSourceOwnedSchema, configurationVersionConflictSchema]),
+  ),
 };
 const _ok = adminJson(z.strictObject({ ok: z.literal(true) }));
 
@@ -93,7 +100,14 @@ export const integrationAdminOperations = {
       ...common,
       400: configErrors,
       200: adminJson(adminIntegrationConfigImportedSchema),
-      409: adminJson(z.union([adminIntegrationImportFailureSchema, httpErrorSchema])),
+      409: adminJson(
+        z.union([
+          adminIntegrationImportFailureSchema,
+          httpErrorSchema,
+          configurationSourceOwnedSchema,
+          configurationVersionConflictSchema,
+        ]),
+      ),
     },
   },
   runAdminIntegrationHealthChecks: {
@@ -123,7 +137,13 @@ export const integrationAdminOperations = {
       ...missing,
       400: configErrors,
       200: adminJson(adminIntegrationConfigUpdatedSchema),
-      409: adminJson(httpErrorSchema),
+      409: adminJson(
+        z.union([
+          httpErrorSchema,
+          configurationSourceOwnedSchema,
+          configurationVersionConflictSchema,
+        ]),
+      ),
     },
   },
   enableAdminIntegration: {
@@ -182,7 +202,13 @@ export const integrationAdminOperations = {
     },
     responses: {
       ...common,
-      409: adminJson(httpErrorSchema),
+      409: adminJson(
+        z.union([
+          httpErrorSchema,
+          configurationSourceOwnedSchema,
+          configurationVersionConflictSchema,
+        ]),
+      ),
       503: adminJson(httpErrorSchema),
       200: adminJson(integrationApplyReceiptSchema),
     },
@@ -198,7 +224,13 @@ export const integrationAdminOperations = {
     },
     responses: {
       ...common,
-      409: adminJson(httpErrorSchema),
+      409: adminJson(
+        z.union([
+          httpErrorSchema,
+          configurationSourceOwnedSchema,
+          configurationVersionConflictSchema,
+        ]),
+      ),
       503: adminJson(httpErrorSchema),
       200: adminJson(integrationApplyReceiptSchema),
     },
@@ -236,7 +268,15 @@ export const integrationAdminOperations = {
       body: adminIntegrationCredentialSetSchema,
     },
     responses: {
-      ...reloaded,
+      ...missing,
+      200: adminJson(integrationApplyReceiptSchema),
+      409: adminJson(
+        z.union([
+          httpErrorSchema,
+          configurationSourceOwnedSchema,
+          configurationVersionConflictSchema,
+        ]),
+      ),
       503: adminJson(z.union([httpErrorSchema, adminIntegrationVaultUnavailableSchema])),
     },
   },
@@ -247,9 +287,20 @@ export const integrationAdminOperations = {
     request: {
       headers: adminIntegrationIdempotencyHeadersSchema,
       params: adminIntegrationCredentialParamsSchema,
-      body: adminIntegrationEmptyMutationSchema,
+      body: adminIntegrationCredentialDeleteSchema,
     },
-    responses: reloaded,
+    responses: {
+      ...missing,
+      200: adminJson(integrationApplyReceiptSchema),
+      409: adminJson(
+        z.union([
+          httpErrorSchema,
+          configurationSourceOwnedSchema,
+          configurationVersionConflictSchema,
+        ]),
+      ),
+      503: adminJson(httpErrorSchema),
+    },
   },
   getAdminOverview: {
     method: "GET",

@@ -431,6 +431,7 @@ function ConfigTab({
               integrationId={integrationId}
               schema={data.manifest.configSchema}
               resolvedConfig={data.resolvedConfig}
+              ownership={data.ownership}
             />
           </CardContent>
         </Card>
@@ -469,9 +470,19 @@ function CredentialsTab({
     retry: false,
     mutationFn: async (key: string) => {
       try {
-        await admin.deleteCredential(integrationId, key);
+        const result = await admin.deleteCredential(
+          integrationId,
+          key,
+          data.configurationRevision ?? "",
+        );
         void admin.refresh();
-        if (owner.active) showToast(`Credential "${key}" deleted`);
+        if (owner.active)
+          showToast(
+            result.runtime === "applied"
+              ? `Credential "${key}" deleted and active`
+              : "Credential removal saved; provider activation is pending or failed",
+            result.runtime === "applied" ? "success" : "info",
+          );
       } catch (err) {
         if (owner.active) showToast(`Failed to delete "${key}"`, "error");
         throw err;
@@ -479,6 +490,13 @@ function CredentialsTab({
     },
   });
 
+  const application =
+    data.application &&
+    data.application.desiredRevision === data.configurationRevision &&
+    (data.application.runtime === "unknown" ||
+      data.application.runtimeGenerationId === (data.runtime?.generationId ?? null))
+      ? data.application
+      : null;
   const secretCredentials = data.credentialStatus;
   const { paged: pagedSecrets, paginationProps: secretsPagination } =
     useClientPagination(secretCredentials);
@@ -497,6 +515,23 @@ function CredentialsTab({
         gap: 2,
       }}
     >
+      {application && (
+        <Alert
+          severity={
+            application.runtime === "applied"
+              ? "success"
+              : application.runtime === "failed"
+                ? "warning"
+                : "info"
+          }
+        >
+          {application.runtime === "applied"
+            ? "The saved credential change is active."
+            : application.runtime === "failed"
+              ? "The credential change is saved, but provider reload failed. The previous provider remains active."
+              : "The credential change is saved or awaiting reconciliation. Review the operation before retrying."}
+        </Alert>
+      )}
       {!data.secretsConfigured && secretCredentials.length > 0 && (
         <Alert severity="warning" variant="outlined">
           Vault not configured — secrets cannot be stored. Set <code>OPENMAPX_SECRETS_KEY</code>{" "}
@@ -582,6 +617,14 @@ function CredentialsTab({
                       </TableCell>
                       <TableCell>
                         <CredentialSourceBadge source={cred.source} />
+                        {(cred.ownership?.writable === false ||
+                          ["env", "config.json"].includes(cred.source)) && (
+                          <Typography variant="caption" sx={{ display: "block" }}>
+                            Host controlled
+                            {cred.ownership?.envVar ? ` (${cred.ownership.envVar})` : ""}. Remove
+                            the override on the host, refresh, then rotate.
+                          </Typography>
+                        )}
                       </TableCell>
                       <TableCell>
                         {cred.updatedAt ? (
@@ -618,7 +661,12 @@ function CredentialsTab({
                             size="small"
                             variant="outlined"
                             onClick={() => setDialogField(cred)}
-                            disabled={!data.secretsConfigured}
+                            disabled={
+                              !data.secretsConfigured ||
+                              !data.configurationRevision ||
+                              cred.ownership?.writable === false ||
+                              ["env", "config.json"].includes(cred.source)
+                            }
                           >
                             {hasVaultCredential(cred) ? "Rotate" : "Set"}
                           </Button>
@@ -628,7 +676,12 @@ function CredentialsTab({
                                 size="small"
                                 color="error"
                                 onClick={() => deleteMutation.mutate(cred.key)}
-                                disabled={deleteMutation.isPending}
+                                disabled={
+                                  deleteMutation.isPending ||
+                                  !data.configurationRevision ||
+                                  cred.ownership?.writable === false ||
+                                  ["env", "config.json"].includes(cred.source)
+                                }
                               >
                                 <DeleteIcon fontSize="small" />
                               </IconButton>
@@ -651,6 +704,7 @@ function CredentialsTab({
           onClose={() => setDialogField(null)}
           integrationId={integrationId}
           credentialKey={dialogField.key}
+          expectedRevision={data.configurationRevision}
           title={dialogField.title}
           description={dialogField.description}
           setup={dialogField.setup}

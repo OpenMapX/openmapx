@@ -1125,7 +1125,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               sdk.setAdminIntegrationCredential(
                 "alpha",
                 "TOKEN",
-                { value: "synthetic-new-secret" },
+                { value: "synthetic-new-secret", expectedRevision: "a".repeat(64) },
                 headers,
                 options,
               ),
@@ -1133,7 +1133,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           [
             "integration credential delete",
             (headers) =>
-              sdk.deleteAdminIntegrationCredential("alpha", "TOKEN", headers, undefined, options),
+              sdk.deleteAdminIntegrationCredential(
+                "alpha",
+                "TOKEN",
+                { expectedRevision: "a".repeat(64) },
+                headers,
+                options,
+              ),
           ],
           [
             "integration enable",

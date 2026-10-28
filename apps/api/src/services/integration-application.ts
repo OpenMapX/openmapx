@@ -14,7 +14,7 @@ import {
 import type { JobContext } from "./job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-client";
 import {
-  completeBindingActivation,
+  completeIntegrationActivation,
   persistAndApplyProspectiveConfiguration,
   prepareProspectiveConfiguration,
 } from "./prospective-configuration";
@@ -55,7 +55,7 @@ export async function runBindingChange(
           });
           if (!completeTrustedConfigurationApply(receipt.application))
             throw new JobObservationPending("recovery_required");
-          return completeBindingActivation(candidate, receipt.application);
+          return completeIntegrationActivation(candidate, receipt.application);
         });
       },
     ),

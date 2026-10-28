@@ -275,6 +275,9 @@ describe("integration administration canonical producer contracts", () => {
         name: "Sample",
         credentials: [credential],
         secretsConfigured: true,
+        configurationRevision: "a".repeat(64),
+        runtime: null,
+        application: null,
       },
       testAdminIntegrationCredentials: {
         ok: true,
@@ -284,8 +287,23 @@ describe("integration administration canonical producer contracts", () => {
         responseTime: 15,
         error: null,
       },
-      setAdminIntegrationCredential: reload,
-      deleteAdminIntegrationCredential: reload,
+      setAdminIntegrationCredential: {
+        operationId: "test-credential",
+        integrationId: "sample",
+        desiredRevision: "a".repeat(64),
+        database: "retained",
+        runtime: "applied",
+        runtimeGenerationId: "11111111-1111-4111-8111-111111111111",
+      },
+      deleteAdminIntegrationCredential: {
+        operationId: "test-credential",
+        integrationId: "sample",
+        desiredRevision: "a".repeat(64),
+        database: "retained",
+        runtime: "pending",
+        runtimeGenerationId: null,
+        reason: "integration_disabled",
+      },
       getAdminOverview: overview,
     };
     for (const [id, fixture] of Object.entries(fixtures))
@@ -510,8 +528,14 @@ describe("integration administration canonical producer contracts", () => {
   });
   it("rejects unknown mutation keys and malformed credential/binding/no-body shapes", () => {
     const ops = contracts.integrationAdminOperations;
-    expect(ops.setAdminIntegrationCredential.request.body.parse({ value: " synthetic " })).toEqual({
+    expect(
+      ops.setAdminIntegrationCredential.request.body.parse({
+        value: " synthetic ",
+        expectedRevision: "a".repeat(64),
+      }),
+    ).toEqual({
       value: " synthetic ",
+      expectedRevision: "a".repeat(64),
     });
     for (const value of ["", " ", null, 1])
       expect(ops.setAdminIntegrationCredential.request.body.safeParse({ value }).success).toBe(
@@ -539,7 +563,6 @@ describe("integration administration canonical producer contracts", () => {
       "reloadAdminIntegration",
       "reloadAdminIntegrations",
       "runAdminIntegrationHealthChecks",
-      "deleteAdminIntegrationCredential",
     ] as const) {
       expect(ops[id].request.body.safeParse(undefined).success).toBe(true);
       expect(ops[id].request.body.safeParse({}).success).toBe(true);
@@ -549,6 +572,11 @@ describe("integration administration canonical producer contracts", () => {
     expect(
       ops.deleteAdminIntegrationBinding.request.body.safeParse({
         expectedServiceId: null,
+        expectedRevision: "a".repeat(64),
+      }).success,
+    ).toBe(true);
+    expect(
+      ops.deleteAdminIntegrationCredential.request.body.safeParse({
         expectedRevision: "a".repeat(64),
       }).success,
     ).toBe(true);

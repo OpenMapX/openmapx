@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createApiClient } from "@openmapx/core";
 import { integrationAdminOperations } from "@openmapx/core/api-contracts";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
@@ -19,6 +20,7 @@ const mockJobRunnerEnqueue = vi.fn().mockResolvedValue("job-main-123");
 const mockJobRunnerCancel = vi.fn().mockResolvedValue(true);
 const mockImmediateImport = vi.fn();
 const mockImmediateBinding = vi.fn();
+const mockImmediateCredential = vi.fn();
 const expectedBinding = { expectedServiceId: null, expectedRevision: "a".repeat(64) };
 const bindingHeaders = () => {
   serviceActionLimit.reset();
@@ -26,6 +28,7 @@ const bindingHeaders = () => {
 };
 vi.mock("../../services/job-runner.js", () => ({
   jobRunner: {
+    applyImmediateIntegrationCredential: (...args: unknown[]) => mockImmediateCredential(...args),
     applyImmediateIntegrationBinding: (...args: unknown[]) => mockImmediateBinding(...args),
     enqueue: (...args: unknown[]) => mockJobRunnerEnqueue(...args),
     cancel: (...args: unknown[]) => mockJobRunnerCancel(...args),
@@ -166,6 +169,30 @@ vi.mock("../../integration-host.js", () => ({
   resolveConfigWithSources: (...args: unknown[]) => mockResolveConfigWithSources(...args),
 }));
 
+vi.mock("../../services/integration-credential-status", async (original) => {
+  const view = async () => {
+    const resolved = await mockResolveConfigWithSources();
+    return {
+      revision: "a".repeat(64),
+      resolved,
+      ownership: {},
+      credentials: [
+        {
+          key: "apiKey",
+          title: "API Key",
+          source: resolved.apiKey?.source ?? "missing",
+          updatedBy: null,
+        },
+      ],
+    };
+  };
+  return {
+    ...(await original<typeof import("../../services/integration-credential-status")>()),
+    inspectIntegrationCredentialView: view,
+    computeCredentialStatus: async () => (await view()).credentials,
+    latestIntegrationApplication: async () => null,
+  };
+});
 // Health services
 const mockGetCachedHealthStatus = vi.fn().mockReturnValue(null);
 const mockExecuteIntegrationHealthCheck = vi.fn().mockResolvedValue([]);
@@ -286,6 +313,14 @@ beforeEach(() => {
       id === "fixture-service"
         ? { enabled: true, manifest: { id, provides: ["routing"] } }
         : undefined,
+  });
+  mockImmediateCredential.mockReset().mockResolvedValue({
+    operationId: "credential-sdk-fixture",
+    integrationId: "geocoding-maptiler",
+    desiredRevision: "a".repeat(64),
+    database: "retained",
+    runtime: "applied",
+    runtimeGenerationId: "11111111-1111-4111-8111-111111111111",
   });
   mockImmediateBinding.mockReset().mockResolvedValue({
     operationId: "binding-sdk-fixture",
@@ -416,7 +451,7 @@ describe("actual integration producers through generated SDK", () => {
           sdk.setAdminIntegrationCredential(
             id,
             "apiKey",
-            { value: "synthetic-credential" },
+            { value: "synthetic-credential", expectedRevision: "a".repeat(64) },
             { "idempotency-key": crypto.randomUUID() },
             options,
           ),
@@ -424,8 +459,8 @@ describe("actual integration producers through generated SDK", () => {
           sdk.deleteAdminIntegrationCredential(
             id,
             "apiKey",
+            { expectedRevision: "a".repeat(64) },
             { "idempotency-key": crypto.randomUUID() },
-            undefined,
             options,
           ),
         () => sdk.getAdminOverview(options),
@@ -664,7 +699,7 @@ describe("actual integration producers through generated SDK", () => {
         await sdk.setAdminIntegrationCredential(
           id,
           "apiKey",
-          { value: "synthetic" },
+          { value: "synthetic", expectedRevision: "a".repeat(64) },
           { "idempotency-key": crypto.randomUUID() },
           { client },
         ),
@@ -916,6 +951,39 @@ describe("actual integration producers through generated SDK", () => {
       await app.close();
     }
   });
+  it.each(["set", "delete"] as const)(
+    "reports %s credential reconciliation as unavailable rather than an internal error",
+    async (action) => {
+      const { JobObservationPending } = await import("../../services/admin-job-failure");
+      mockImmediateCredential.mockRejectedValue(new JobObservationPending("recovery_required"));
+      const sdk = await import("@openmapx/core/api-admin-sdk"),
+        { app, client } = await wire();
+      try {
+        const headers = { "idempotency-key": randomUUID() },
+          body = { expectedRevision: "a".repeat(64) };
+        const result =
+          action === "set"
+            ? await sdk.setAdminIntegrationCredential(
+                "geocoding-maptiler",
+                "apiKey",
+                { ...body, value: "synthetic" },
+                headers,
+                { client },
+              )
+            : await sdk.deleteAdminIntegrationCredential(
+                "geocoding-maptiler",
+                "apiKey",
+                body,
+                headers,
+                { client },
+              );
+        expect(result.status).toBe(503);
+        expect(result.data).toMatchObject({ error: expect.stringMatching(/reconciliation/) });
+      } finally {
+        await app.close();
+      }
+    },
+  );
   it("retains real cookie CSRF and the public rate floor", async () => {
     const app = Fastify();
     const limiter = new RateLimiter({ max: 2, windowMs: 60000 });

@@ -1,6 +1,9 @@
 "use client";
 
-import type { AdminServiceResolvedConfig } from "@openmapx/core/api-contracts";
+import type {
+  AdminServiceResolvedConfig,
+  ConfigurationOwnership,
+} from "@openmapx/core/api-contracts";
 import { useActivityClient } from "../activity/activityQueries";
 import { SchemaConfigForm } from "../shared/SchemaConfigForm";
 
@@ -11,6 +14,7 @@ interface ServiceConfigFormProps {
   resolvedConfig: AdminServiceResolvedConfig;
   /** Env-var prefix (`SERVICE_<ID>_`) shown as an override hint in the header. */
   envPrefix?: string;
+  ownership?: Record<string, ConfigurationOwnership>;
   /** Save the new config to the database (no container restart). */
   onSave: (values: Record<string, unknown>) => Promise<void>;
   /**
@@ -30,6 +34,7 @@ export function ServiceConfigForm({
   schema,
   resolvedConfig,
   envPrefix,
+  ownership,
   onSave,
   onSaveAndApply,
 }: ServiceConfigFormProps) {
@@ -42,6 +47,7 @@ export function ServiceConfigForm({
       schema={schema}
       resolvedConfig={resolvedConfig}
       envPrefix={envPrefix}
+      ownership={ownership}
       onSave={onSave}
       onSaveAndApply={onSaveAndApply}
       applyLabel="Save & apply"

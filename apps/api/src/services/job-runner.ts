@@ -34,6 +34,10 @@ import {
   readJobExecution,
   renewAdminJobClaim,
 } from "./admin-job-state";
+import {
+  configurationRejection,
+  restoreConfigurationRejection,
+} from "./configuration-ownership-view";
 import { coordinatorLifecycleOperationKey } from "./coordinator-lifecycle";
 import { IntegrationBindingConflict as RetainedBindingConflict } from "./integration-binding-participant";
 import { type JobStatusEvent, jobEventBus, TERMINAL_JOB_STATUSES } from "./job-events";
@@ -284,7 +288,11 @@ class AdminJobRunner {
         errorCode: "conflict",
       });
     if (!(job as { _fresh?: boolean })._fresh) {
-      if (["success", "failed"].includes(job.status)) return restore(checkpoint);
+      if (["success", "failed"].includes(job.status)) {
+        if (checkpoint._configurationRejection)
+          throw restoreConfigurationRejection(checkpoint._configurationRejection);
+        return restore(checkpoint);
+      }
       if (
         !["running", "cancel_pending"].includes(job.status) ||
         !checkpoint._configurationCandidate ||
@@ -333,6 +341,9 @@ class AdminJobRunner {
             return result.result;
           } catch (error) {
             failure = error;
+            const rejection = configurationRejection(error);
+            if (rejection)
+              await ctx.checkpoint({ ...ctx.checkpointResult, _configurationRejection: rejection });
             throw error;
           }
         },
@@ -398,8 +409,10 @@ class AdminJobRunner {
     )
       throw new AdminJobFailure("Original configuration did not apply", result);
     if (
-      result.integrationBinding &&
-      integrationApplyReceiptSchema.parse(result.integrationBinding).runtime === "failed"
+      (result.integrationBinding || result.integrationApplication) &&
+      integrationApplyReceiptSchema.parse(
+        result.integrationBinding ?? result.integrationApplication,
+      ).runtime === "failed"
     )
       throw new AdminJobFailure("Binding provider did not activate", result);
     return result;
@@ -552,6 +565,26 @@ class AdminJobRunner {
           ? success.data
           : adminIntegrationImportFailureSchema.parse(result.integrationImport);
       },
+    );
+  }
+
+  applyImmediateIntegrationCredential(
+    options: import("./integration-credential-application").IntegrationCredentialIntent,
+  ) {
+    return this.immediate(
+      { ...options, type: "configuration.apply", intent: { ...options, operationKey: undefined } },
+      async (ctx) => {
+        const { runIntegrationCredentialChange } = await import(
+          "./integration-credential-application"
+        );
+        const value = await runIntegrationCredentialChange(ctx, options);
+        return {
+          value,
+          result: { integrationApplication: value },
+          failed: value.runtime === "failed",
+        };
+      },
+      (result) => integrationApplyReceiptSchema.parse(result.integrationApplication),
     );
   }
 
