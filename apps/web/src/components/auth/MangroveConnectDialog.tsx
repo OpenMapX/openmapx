@@ -1,8 +1,8 @@
 "use client";
 import FingerprintIcon from "@mui/icons-material/Fingerprint";
 import KeyOutlinedIcon from "@mui/icons-material/KeyOutlined";
-import MapOutlinedIcon from "@mui/icons-material/MapOutlined";
 import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
@@ -15,6 +15,7 @@ import Typography from "@mui/material/Typography";
 import { useKeypairStore, useMangroveSigner } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { SiBluesky } from "react-icons/si";
 import {
   mobileFullScreenDialogPaperSx,
   useFullScreenOnMobile,
@@ -106,7 +107,9 @@ export function MangroveConnectDialog({
           <Button
             variant="outlined"
             size="large"
-            startIcon={<MapOutlinedIcon />}
+            startIcon={
+              <Box component="img" src="/osm-logo.svg" alt="" sx={{ width: 20, height: 20 }} />
+            }
             disabled={busy || unavailable}
             onClick={() => void login("osm")}
           >
@@ -115,6 +118,7 @@ export function MangroveConnectDialog({
           <Button
             variant="outlined"
             size="large"
+            startIcon={<SiBluesky size={20} color="#0560FF" aria-hidden="true" />}
             disabled={busy || unavailable}
             onClick={() => void login("bluesky")}
           >
