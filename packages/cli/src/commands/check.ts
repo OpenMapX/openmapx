@@ -51,11 +51,12 @@ export const DEEP_PROBES: Record<string, { port: number; path: string; expect?: 
   otp: { port: 8080, path: "/otp/routers" },
   nominatim: { port: 8080, path: "/status" },
   photon: { port: 2322, path: "/api?q=test", expect: "features" },
-  // The explicit `[timeout:25]` matters: a timeout-less query reaped under load
-  // can orphan its query-hash-keyed shm segment, after which Overpass returns
-  // `duplicate_query` for that exact string indefinitely. Bounding the query lets
-  // it clean up. `node(1)` is a cheap liveness query — an empty `elements` array
-  // is still a valid 2xx body.
+  // The same string every time, as Docker's healthcheck has too: the bundled
+  // service sets OVERPASS_ALLOW_DUPLICATE_QUERIES=yes, without which the
+  // dispatcher answers a repeated string with a `duplicate_query` error page
+  // (HTTP 200, no `elements`) for about 30 seconds. `[timeout:25]` bounds the
+  // query. `node(1)` is a cheap liveness query — an empty `elements` array is
+  // still a valid 2xx body.
   overpass: {
     port: 80,
     path: "/api/interpreter?data=%5Bout%3Ajson%5D%5Btimeout%3A25%5D%3Bnode(1)%3Bout%3B",
