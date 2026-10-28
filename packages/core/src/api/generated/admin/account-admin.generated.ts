@@ -12,6 +12,18 @@ import type {
   ApplyAdminAuthPolicy500,
   ApplyAdminAuthPolicy503,
   ApplyAdminAuthPolicyBody,
+  CompleteAdminReauthentication200,
+  CompleteAdminReauthentication400,
+  CompleteAdminReauthentication401,
+  CompleteAdminReauthentication403,
+  CompleteAdminReauthentication409,
+  CompleteAdminReauthentication413,
+  CompleteAdminReauthentication415,
+  CompleteAdminReauthentication429,
+  CompleteAdminReauthentication500,
+  CompleteAdminReauthentication503,
+  CompleteAdminReauthenticationBody,
+  CompleteAdminReauthenticationHeaders,
   GetAdminAuthPolicy200,
   GetAdminAuthPolicy400,
   GetAdminAuthPolicy401,
@@ -21,10 +33,24 @@ import type {
   GetAdminAuthPolicy429,
   GetAdminAuthPolicy500,
   GetAdminAuthPolicy503,
+  StartAdminReauthentication200,
+  StartAdminReauthentication400,
+  StartAdminReauthentication401,
+  StartAdminReauthentication403,
+  StartAdminReauthentication409,
+  StartAdminReauthentication413,
+  StartAdminReauthentication415,
+  StartAdminReauthentication429,
+  StartAdminReauthentication500,
+  StartAdminReauthentication503,
+  StartAdminReauthenticationBody,
+  StartAdminReauthenticationHeaders,
 } from "./account-models";
 import {
   applyAdminAuthPolicyRequest,
+  completeAdminReauthenticationRequest,
   getAdminAuthPolicyRequest,
+  startAdminReauthenticationRequest,
 } from "./operation-bindings.generated";
 export type getAdminAuthPolicyResponse200 = {
   data: GetAdminAuthPolicy200;
@@ -208,4 +234,225 @@ export const applyAdminAuthPolicy = async (
     headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
     body: JSON.stringify(applyAdminAuthPolicyBody),
   });
+};
+
+export type completeAdminReauthenticationResponse200 = {
+  data: CompleteAdminReauthentication200;
+  status: 200;
+};
+
+export type completeAdminReauthenticationResponse400 = {
+  data: CompleteAdminReauthentication400;
+  status: 400;
+};
+
+export type completeAdminReauthenticationResponse401 = {
+  data: CompleteAdminReauthentication401;
+  status: 401;
+};
+
+export type completeAdminReauthenticationResponse403 = {
+  data: CompleteAdminReauthentication403;
+  status: 403;
+};
+
+export type completeAdminReauthenticationResponse409 = {
+  data: CompleteAdminReauthentication409;
+  status: 409;
+};
+
+export type completeAdminReauthenticationResponse413 = {
+  data: CompleteAdminReauthentication413;
+  status: 413;
+};
+
+export type completeAdminReauthenticationResponse415 = {
+  data: CompleteAdminReauthentication415;
+  status: 415;
+};
+
+export type completeAdminReauthenticationResponse429 = {
+  data: CompleteAdminReauthentication429;
+  status: 429;
+};
+
+export type completeAdminReauthenticationResponse500 = {
+  data: CompleteAdminReauthentication500;
+  status: 500;
+};
+
+export type completeAdminReauthenticationResponse503 = {
+  data: CompleteAdminReauthentication503;
+  status: 503;
+};
+
+export type completeAdminReauthenticationResponseSuccess =
+  completeAdminReauthenticationResponse200 & {
+    headers: Headers;
+  };
+export type completeAdminReauthenticationResponseError = (
+  | completeAdminReauthenticationResponse400
+  | completeAdminReauthenticationResponse401
+  | completeAdminReauthenticationResponse403
+  | completeAdminReauthenticationResponse409
+  | completeAdminReauthenticationResponse413
+  | completeAdminReauthenticationResponse415
+  | completeAdminReauthenticationResponse429
+  | completeAdminReauthenticationResponse500
+  | completeAdminReauthenticationResponse503
+) & {
+  headers: Headers;
+};
+
+export type completeAdminReauthenticationResponse =
+  | completeAdminReauthenticationResponseSuccess
+  | completeAdminReauthenticationResponseError;
+
+export const getCompleteAdminReauthenticationUrl = () => {
+  return `/api/admin/reauth/complete`;
+};
+
+export const completeAdminReauthentication = async (
+  completeAdminReauthenticationBody: CompleteAdminReauthenticationBody,
+  headers: CompleteAdminReauthenticationHeaders,
+  options?: Parameters<typeof completeAdminReauthenticationRequest>[1],
+): Promise<completeAdminReauthenticationResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return completeAdminReauthenticationRequest<completeAdminReauthenticationResponse>(
+    getCompleteAdminReauthenticationUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+      body: JSON.stringify(completeAdminReauthenticationBody),
+    },
+  );
+};
+
+export type startAdminReauthenticationResponse200 = {
+  data: StartAdminReauthentication200;
+  status: 200;
+};
+
+export type startAdminReauthenticationResponse400 = {
+  data: StartAdminReauthentication400;
+  status: 400;
+};
+
+export type startAdminReauthenticationResponse401 = {
+  data: StartAdminReauthentication401;
+  status: 401;
+};
+
+export type startAdminReauthenticationResponse403 = {
+  data: StartAdminReauthentication403;
+  status: 403;
+};
+
+export type startAdminReauthenticationResponse409 = {
+  data: StartAdminReauthentication409;
+  status: 409;
+};
+
+export type startAdminReauthenticationResponse413 = {
+  data: StartAdminReauthentication413;
+  status: 413;
+};
+
+export type startAdminReauthenticationResponse415 = {
+  data: StartAdminReauthentication415;
+  status: 415;
+};
+
+export type startAdminReauthenticationResponse429 = {
+  data: StartAdminReauthentication429;
+  status: 429;
+};
+
+export type startAdminReauthenticationResponse500 = {
+  data: StartAdminReauthentication500;
+  status: 500;
+};
+
+export type startAdminReauthenticationResponse503 = {
+  data: StartAdminReauthentication503;
+  status: 503;
+};
+
+export type startAdminReauthenticationResponseSuccess = startAdminReauthenticationResponse200 & {
+  headers: Headers;
+};
+export type startAdminReauthenticationResponseError = (
+  | startAdminReauthenticationResponse400
+  | startAdminReauthenticationResponse401
+  | startAdminReauthenticationResponse403
+  | startAdminReauthenticationResponse409
+  | startAdminReauthenticationResponse413
+  | startAdminReauthenticationResponse415
+  | startAdminReauthenticationResponse429
+  | startAdminReauthenticationResponse500
+  | startAdminReauthenticationResponse503
+) & {
+  headers: Headers;
+};
+
+export type startAdminReauthenticationResponse =
+  | startAdminReauthenticationResponseSuccess
+  | startAdminReauthenticationResponseError;
+
+export const getStartAdminReauthenticationUrl = () => {
+  return `/api/admin/reauth/start`;
+};
+
+export const startAdminReauthentication = async (
+  startAdminReauthenticationBody: StartAdminReauthenticationBody,
+  headers: StartAdminReauthenticationHeaders,
+  options?: Parameters<typeof startAdminReauthenticationRequest>[1],
+): Promise<startAdminReauthenticationResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return startAdminReauthenticationRequest<startAdminReauthenticationResponse>(
+    getStartAdminReauthenticationUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+      body: JSON.stringify(startAdminReauthenticationBody),
+    },
+  );
 };

@@ -35,6 +35,13 @@ export async function checkAdminServicesRequest<T>(
 ): Promise<T> {
   return checkAdminServicesBound<T>(url, options);
 }
+const completeAdminReauthenticationBound = bindAdminOperation("completeAdminReauthentication");
+export async function completeAdminReauthenticationRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return completeAdminReauthenticationBound<T>(url, options);
+}
 const createAdminServiceBackupBound = bindAdminOperation("createAdminServiceBackup");
 export async function createAdminServiceBackupRequest<T>(
   url: string,
@@ -659,6 +666,13 @@ export async function startAdminComposeRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return startAdminComposeBound<T>(url, options);
+}
+const startAdminReauthenticationBound = bindAdminOperation("startAdminReauthentication");
+export async function startAdminReauthenticationRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return startAdminReauthenticationBound<T>(url, options);
 }
 const stopAdminComposeBound = bindAdminOperation("stopAdminCompose");
 export async function stopAdminComposeRequest<T>(

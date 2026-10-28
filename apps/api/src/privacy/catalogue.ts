@@ -58,7 +58,10 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     source: "openmapx-db",
     strategy: "collector",
     collectorId: "openmapx-authentication",
-    locators: [{ type: "user_id", field: "session.user_id" }],
+    locators: [
+      { type: "user_id", field: "session.user_id" },
+      { type: "actor_id", field: "admin_action_reauthentication.actor_id" },
+    ],
     purposes: ["authentication", "security-and-abuse-prevention"],
     legalBases: ["contract", "legitimate-interest"],
     origin: { kind: "controller", descriptionCode: "service-generated" },

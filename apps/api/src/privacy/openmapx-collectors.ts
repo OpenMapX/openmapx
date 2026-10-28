@@ -2,6 +2,7 @@ import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import { db as defaultDb } from "../db/index.js";
 import {
   account,
+  adminActionReauthentication,
   adminAuditLog,
   adminJob,
   authPolicyApplication,
@@ -335,6 +336,30 @@ export async function* streamOpenMapxRegistrationRecords(
         {
           policyCodes: ["session-token-redacted"],
           map: ({ id, ...row }) => ({ sessionDigest: pseudonymousIdentifier(id), ...row }),
+        },
+      );
+      yield* emit(
+        database
+          .select({
+            id: adminActionReauthentication.id,
+            purpose: adminActionReauthentication.purpose,
+            state: adminActionReauthentication.state,
+            createdAt: adminActionReauthentication.createdAt,
+            expiresAt: adminActionReauthentication.expiresAt,
+            completedAt: adminActionReauthentication.completedAt,
+            consumedAt: adminActionReauthentication.consumedAt,
+          })
+          .from(adminActionReauthentication)
+          .where(
+            and(
+              eq(adminActionReauthentication.actorId, context.userId),
+              lte(adminActionReauthentication.createdAt, cutoff),
+            ),
+          )
+          .orderBy(asc(adminActionReauthentication.id)),
+        {
+          policyCodes: ["session-token-redacted"],
+          map: ({ id, ...row }) => ({ challengeDigest: pseudonymousIdentifier(id), ...row }),
         },
       );
       return;

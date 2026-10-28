@@ -772,3 +772,15 @@ describe("complete Pino record boundary", () => {
     expect(records[1]).toMatchObject({ level: 30, time: 126, msg: "safe after oversize" });
   });
 });
+
+it("redacts administrator ceremony references and nonce material", () => {
+  expect(
+    JSON.stringify(
+      sanitizeLogMetadata({
+        challengeId: "synthetic-challenge-reference",
+        nonce: "synthetic-private-nonce",
+        proofs: [{ challengeId: "synthetic-second-reference" }],
+      }),
+    ),
+  ).not.toMatch(/synthetic/);
+});

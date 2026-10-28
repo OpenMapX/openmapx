@@ -34,6 +34,7 @@ export const DIRECT_USER_FK_CLASSIFICATIONS: Record<string, string> = {
   "saved_list.user_id": "saved-lists",
   "service_secret.updated_by": "secret-update-attribution",
   "session.user_id": "auth-sessions",
+  "admin_action_reauthentication.actor_id": "auth-sessions",
   "share_link.user_id": "share-links",
   "two_factor.user_id": "auth-two-factor",
   "data_subject_request.user_id": "privacy-case-records",

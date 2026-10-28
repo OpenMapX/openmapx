@@ -56,7 +56,7 @@ export async function createMigratedPostgresFixture(options: { throughMigration?
       migrationsFolder = temporaryMigrations;
     }
     await migrate(db, { migrationsFolder });
-    return { sql, db, stop };
+    return { sql, db, stop, connectionUri: container.getConnectionUri() };
   } catch (error) {
     await stop();
     throw error;

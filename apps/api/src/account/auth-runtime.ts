@@ -9,6 +9,7 @@ import {
   withAuthDatabase,
 } from "./auth-database";
 import { AuthPolicyError, loadAuthPolicy, unactivatedAuthPolicy } from "./auth-policy";
+import { withFactorEntrySession } from "./factor-entry-context";
 /** The facade never returns a raw mutable runtime. Nested calls keep their original snapshot/transaction. */
 export function createAuthRuntime<
   T extends {
@@ -38,6 +39,15 @@ export function createAuthRuntime<
     }
     return local.run({ instance, policy, database }, () => run(instance));
   }
+  const rawSession = (headers: HeadersInit | undefined) =>
+    withAuthOperation(async (instance) =>
+      Reflect.apply(Reflect.get(instance.api, "getSession"), instance.api, [
+        {
+          headers: headers ?? new Headers(),
+          query: { disableCookieCache: true, disableRefresh: true },
+        },
+      ]),
+    );
   class ResetResponseRollback extends Error {
     constructor(readonly response: Response) {
       super("Password reset did not commit");
@@ -97,27 +107,32 @@ export function createAuthRuntime<
             };
             try {
               return await withAuthOperation(() =>
-                accountAuthEntry(
-                  {
-                    entry: String(key),
-                    body: input.body,
-                    headers: input.headers,
-                    internal: !input.headers && !input.request,
-                  },
+                withFactorEntrySession(
+                  String(key),
+                  () => rawSession(input.headers),
                   () =>
-                    withAuthOperation(async (instance) =>
-                      Reflect.apply(Reflect.get(instance.api, "getSession"), instance.api, [
-                        {
-                          headers: input.headers ?? new Headers(),
-                          query: { disableCookieCache: true, disableRefresh: true },
-                        },
-                      ]),
-                    ),
-                  () =>
-                    entry(key === "resetPasswordEmailOTP", () =>
-                      withAuthOperation(async (instance) =>
-                        Reflect.apply(Reflect.get(instance.api, key), instance.api, args),
-                      ),
+                    accountAuthEntry(
+                      {
+                        entry: String(key),
+                        body: input.body,
+                        headers: input.headers,
+                        internal: !input.headers && !input.request,
+                      },
+                      () =>
+                        withAuthOperation(async (instance) =>
+                          Reflect.apply(Reflect.get(instance.api, "getSession"), instance.api, [
+                            {
+                              headers: input.headers ?? new Headers(),
+                              query: { disableCookieCache: true, disableRefresh: true },
+                            },
+                          ]),
+                        ),
+                      () =>
+                        entry(key === "resetPasswordEmailOTP", () =>
+                          withAuthOperation(async (instance) =>
+                            Reflect.apply(Reflect.get(instance.api, key), instance.api, args),
+                          ),
+                        ),
                     ),
                 ),
               );
@@ -146,20 +161,25 @@ export function createAuthRuntime<
                     .catch(() => null)
                 : null;
             return await withAuthOperation(() =>
-              accountAuthEntry(
-                { entry: path, body, headers: request.headers, internal: false },
+              withFactorEntrySession(
+                path,
+                () => rawSession(request.headers),
                 () =>
-                  withAuthOperation(async (instance) =>
-                    Reflect.apply(Reflect.get(instance.api, "getSession"), instance.api, [
-                      {
-                        headers: request.headers,
-                        query: { disableCookieCache: true, disableRefresh: true },
-                      },
-                    ]),
-                  ),
-                () =>
-                  entry(path === "/api/auth/email-otp/reset-password", () =>
-                    withAuthOperation((instance) => instance.handler(request)),
+                  accountAuthEntry(
+                    { entry: path, body, headers: request.headers, internal: false },
+                    () =>
+                      withAuthOperation(async (instance) =>
+                        Reflect.apply(Reflect.get(instance.api, "getSession"), instance.api, [
+                          {
+                            headers: request.headers,
+                            query: { disableCookieCache: true, disableRefresh: true },
+                          },
+                        ]),
+                      ),
+                    () =>
+                      entry(path === "/api/auth/email-otp/reset-password", () =>
+                        withAuthOperation((instance) => instance.handler(request)),
+                      ),
                   ),
               ),
             );

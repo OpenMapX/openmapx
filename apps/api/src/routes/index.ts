@@ -10,6 +10,7 @@ import { adminDawarichRoute } from "./admin-dawarich";
 import { adminExtensionsRoute } from "./admin-extensions";
 import { adminJobEventsRoute } from "./admin-job-events";
 import { adminOperationsRoute } from "./admin-operations";
+import { adminReauthenticationRoute } from "./admin-reauthentication";
 import { adminServicesRoute } from "./admin-services";
 import { adminSettingsRoute } from "./admin-settings";
 import { adminSystemRoute } from "./admin-system";
@@ -75,6 +76,7 @@ export async function registerCoreRoutes(
 ): Promise<void> {
   await server.register(authRoute, options);
   await server.register(adminAccountsRoute, { prefix: "/api" });
+  await server.register(adminReauthenticationRoute, { prefix: "/api" });
 
   await server.register(metaRoute);
 

@@ -1,9 +1,12 @@
 import z from "zod/v4";
 import { type AdminOperation, adminCommonResponses, adminJson, httpErrorSchema } from "../admin";
 import { authPolicyApplySchema, authPolicySnapshotSchema, authPolicyViewSchema } from "./policy";
+import { adminReauthOperations } from "./reauth";
 
 export * from "./policy";
+export * from "./reauth";
 export const accountAdminOperations = {
+  ...adminReauthOperations,
   getAdminAuthPolicy: {
     method: "GET",
     path: "/api/admin/accounts/policy",
