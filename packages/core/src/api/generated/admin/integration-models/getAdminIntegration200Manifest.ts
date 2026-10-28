@@ -28,6 +28,11 @@ export type GetAdminIntegration200Manifest = {
   backend?: GetAdminIntegration200ManifestBackend;
   configSchema?: GetAdminIntegration200ManifestConfigSchema;
   healthCheck?: GetAdminIntegration200ManifestHealthCheck;
+  /**
+   * @minimum 60000
+   * @maximum 9007199254740991
+   */
+  healthCheckIntervalMs?: number;
   quality?: GetAdminIntegration200ManifestQuality;
   dataSources?: GetAdminIntegration200ManifestDataSourcesItem[];
   runtimeDataSources?: true;
