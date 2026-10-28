@@ -28,6 +28,13 @@ export async function cancelAdminActivityJobRequest<T>(
 ): Promise<T> {
   return cancelAdminActivityJobBound<T>(url, options);
 }
+const changeAdminAccountRoleBound = bindAdminOperation("changeAdminAccountRole");
+export async function changeAdminAccountRoleRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return changeAdminAccountRoleBound<T>(url, options);
+}
 const checkAdminServicesBound = bindAdminOperation("checkAdminServices");
 export async function checkAdminServicesRequest<T>(
   url: string,
@@ -41,6 +48,13 @@ export async function completeAdminReauthenticationRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return completeAdminReauthenticationBound<T>(url, options);
+}
+const createAdminAccountBound = bindAdminOperation("createAdminAccount");
+export async function createAdminAccountRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return createAdminAccountBound<T>(url, options);
 }
 const createAdminServiceBackupBound = bindAdminOperation("createAdminServiceBackup");
 export async function createAdminServiceBackupRequest<T>(
@@ -108,6 +122,13 @@ export async function exportAdminIntegrationConfigsRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return exportAdminIntegrationConfigsBound<T>(url, options);
+}
+const getAdminAccountDeliveryBound = bindAdminOperation("getAdminAccountDelivery");
+export async function getAdminAccountDeliveryRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return getAdminAccountDeliveryBound<T>(url, options);
 }
 const getAdminActivityJobBound = bindAdminOperation("getAdminActivityJob");
 export async function getAdminActivityJobRequest<T>(
@@ -349,6 +370,13 @@ export async function installAdminExtensionRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return installAdminExtensionBound<T>(url, options);
+}
+const inviteAdminAccountBound = bindAdminOperation("inviteAdminAccount");
+export async function inviteAdminAccountRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return inviteAdminAccountBound<T>(url, options);
 }
 const listAdminActivityJobsBound = bindAdminOperation("listAdminActivityJobs");
 export async function listAdminActivityJobsRequest<T>(
@@ -632,6 +660,29 @@ export async function runAdminServicesBulkActionRequest<T>(
 ): Promise<T> {
   return runAdminServicesBulkActionBound<T>(url, options);
 }
+const sendAdminAccountPasswordResetBound = bindAdminOperation("sendAdminAccountPasswordReset");
+export async function sendAdminAccountPasswordResetRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return sendAdminAccountPasswordResetBound<T>(url, options);
+}
+const sendAdminAccountVerificationEmailBound = bindAdminOperation(
+  "sendAdminAccountVerificationEmail",
+);
+export async function sendAdminAccountVerificationEmailRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return sendAdminAccountVerificationEmailBound<T>(url, options);
+}
+const setAdminAccountPasswordBound = bindAdminOperation("setAdminAccountPassword");
+export async function setAdminAccountPasswordRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return setAdminAccountPasswordBound<T>(url, options);
+}
 const setAdminIntegrationBindingBound = bindAdminOperation("setAdminIntegrationBinding");
 export async function setAdminIntegrationBindingRequest<T>(
   url: string,
@@ -715,4 +766,11 @@ export async function updateAdminServiceConfigRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return updateAdminServiceConfigBound<T>(url, options);
+}
+const verifyAdminAccountBound = bindAdminOperation("verifyAdminAccount");
+export async function verifyAdminAccountRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return verifyAdminAccountBound<T>(url, options);
 }

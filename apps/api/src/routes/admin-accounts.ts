@@ -4,6 +4,7 @@ import { AuthPolicyError, applyAuthPolicy, authPolicyView } from "../account/aut
 import { serviceActionLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { declareRouteAuth } from "../utils/route-auth";
+import { registerAccountActions } from "./admin-account-actions";
 import { createAdminRouteRegistrar } from "./admin-contract";
 
 const register = createAdminRouteRegistrar(accountAdminOperations, {
@@ -17,6 +18,7 @@ export async function adminAccountsRoute(app: FastifyInstance) {
     if (getAdminSession(request).user.id === "loopback")
       return reply.code(403).send({ error: "A full administrator account session is required" });
   });
+  await registerAccountActions(app);
   const failure = (error: unknown, reply: import("fastify").FastifyReply) => {
     if (error instanceof AuthPolicyError) {
       const status =

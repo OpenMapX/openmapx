@@ -86,6 +86,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     collectorId: "openmapx-authentication",
     locators: [
       { type: "exact_identifier", field: "verification.identifier", format: "email-or-purpose" },
+      { type: "user_id", field: "account_mail_outbox.user_id" },
     ],
     purposes: ["authentication", "account-management"],
     legalBases: ["contract"],
@@ -347,6 +348,8 @@ const registrationDefinitions: SubjectDataRegistration[] = [
       { type: "actor_id", field: "admin_audit_log.actor_id" },
       { type: "target_id", field: "admin_audit_log.target_id" },
       { type: "actor_id", field: "auth_policy_application.actor_id" },
+      { type: "actor_id", field: "account_action_receipt.actor_id" },
+      { type: "target_id", field: "account_action_receipt.target_id" },
       { type: "actor_id", field: "auth_policy_state.activated_by" },
     ],
     purposes: ["legal-accountability", "security-and-abuse-prevention"],

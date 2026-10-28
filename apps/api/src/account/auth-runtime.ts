@@ -63,7 +63,7 @@ export function createAuthRuntime<
       (status === 403 && code === "TOO_MANY_ATTEMPTS")
     );
   };
-  async function entry<R>(reset: boolean, run: () => Promise<R>): Promise<R> {
+  async function entry<R>(reset: false | "otp" | "link", run: () => Promise<R>): Promise<R> {
     if (!reset || isTransactionalAuthDatabase()) return run();
     try {
       const outcome = await currentAuthDatabase().transaction((tx) =>
@@ -75,11 +75,12 @@ export function createAuthRuntime<
                 .clone()
                 .json()
                 .catch(() => null);
-              if (!otpRefusal(body, value.status)) throw new ResetResponseRollback(value);
+              if (reset !== "otp" || !otpRefusal(body, value.status))
+                throw new ResetResponseRollback(value);
             }
             return { kind: "value" as const, value };
           } catch (error) {
-            if (isAPIError(error) && otpRefusal(error.body, error.statusCode))
+            if (reset === "otp" && isAPIError(error) && otpRefusal(error.body, error.statusCode))
               return { kind: "error" as const, error };
             throw error;
           }
@@ -128,10 +129,16 @@ export function createAuthRuntime<
                           ]),
                         ),
                       () =>
-                        entry(key === "resetPasswordEmailOTP", () =>
-                          withAuthOperation(async (instance) =>
-                            Reflect.apply(Reflect.get(instance.api, key), instance.api, args),
-                          ),
+                        entry(
+                          key === "resetPasswordEmailOTP"
+                            ? "otp"
+                            : key === "resetPassword"
+                              ? "link"
+                              : false,
+                          () =>
+                            withAuthOperation(async (instance) =>
+                              Reflect.apply(Reflect.get(instance.api, key), instance.api, args),
+                            ),
                         ),
                     ),
                 ),
@@ -177,8 +184,13 @@ export function createAuthRuntime<
                         ]),
                       ),
                     () =>
-                      entry(path === "/api/auth/email-otp/reset-password", () =>
-                        withAuthOperation((instance) => instance.handler(request)),
+                      entry(
+                        path === "/api/auth/email-otp/reset-password"
+                          ? "otp"
+                          : path === "/api/auth/reset-password"
+                            ? "link"
+                            : false,
+                        () => withAuthOperation((instance) => instance.handler(request)),
                       ),
                   ),
               ),

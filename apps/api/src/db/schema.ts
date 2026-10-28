@@ -3,6 +3,7 @@ export {
   authPolicyApplication,
   authPolicyState,
 } from "./account-administration-schema";
+export { accountActionReceipt, accountMailOutbox } from "./account-provisioning-schema";
 export { adminActionReauthentication } from "./admin-reauthentication-schema";
 // Capability bindings — explicit (integration, capability) → service mappings
 

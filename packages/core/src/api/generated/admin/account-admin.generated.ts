@@ -12,6 +12,19 @@ import type {
   ApplyAdminAuthPolicy500,
   ApplyAdminAuthPolicy503,
   ApplyAdminAuthPolicyBody,
+  ChangeAdminAccountRole200,
+  ChangeAdminAccountRole400,
+  ChangeAdminAccountRole401,
+  ChangeAdminAccountRole403,
+  ChangeAdminAccountRole404,
+  ChangeAdminAccountRole409,
+  ChangeAdminAccountRole413,
+  ChangeAdminAccountRole415,
+  ChangeAdminAccountRole429,
+  ChangeAdminAccountRole500,
+  ChangeAdminAccountRole503,
+  ChangeAdminAccountRoleBody,
+  ChangeAdminAccountRoleHeaders,
   CompleteAdminReauthentication200,
   CompleteAdminReauthentication400,
   CompleteAdminReauthentication401,
@@ -24,6 +37,30 @@ import type {
   CompleteAdminReauthentication503,
   CompleteAdminReauthenticationBody,
   CompleteAdminReauthenticationHeaders,
+  CreateAdminAccount200,
+  CreateAdminAccount400,
+  CreateAdminAccount401,
+  CreateAdminAccount403,
+  CreateAdminAccount404,
+  CreateAdminAccount409,
+  CreateAdminAccount413,
+  CreateAdminAccount415,
+  CreateAdminAccount429,
+  CreateAdminAccount500,
+  CreateAdminAccount503,
+  CreateAdminAccountBody,
+  CreateAdminAccountHeaders,
+  GetAdminAccountDelivery200,
+  GetAdminAccountDelivery400,
+  GetAdminAccountDelivery401,
+  GetAdminAccountDelivery403,
+  GetAdminAccountDelivery404,
+  GetAdminAccountDelivery409,
+  GetAdminAccountDelivery413,
+  GetAdminAccountDelivery415,
+  GetAdminAccountDelivery429,
+  GetAdminAccountDelivery500,
+  GetAdminAccountDelivery503,
   GetAdminAuthPolicy200,
   GetAdminAuthPolicy400,
   GetAdminAuthPolicy401,
@@ -33,6 +70,58 @@ import type {
   GetAdminAuthPolicy429,
   GetAdminAuthPolicy500,
   GetAdminAuthPolicy503,
+  InviteAdminAccount200,
+  InviteAdminAccount400,
+  InviteAdminAccount401,
+  InviteAdminAccount403,
+  InviteAdminAccount404,
+  InviteAdminAccount409,
+  InviteAdminAccount413,
+  InviteAdminAccount415,
+  InviteAdminAccount429,
+  InviteAdminAccount500,
+  InviteAdminAccount503,
+  InviteAdminAccountBody,
+  InviteAdminAccountHeaders,
+  SendAdminAccountPasswordReset200,
+  SendAdminAccountPasswordReset400,
+  SendAdminAccountPasswordReset401,
+  SendAdminAccountPasswordReset403,
+  SendAdminAccountPasswordReset404,
+  SendAdminAccountPasswordReset409,
+  SendAdminAccountPasswordReset413,
+  SendAdminAccountPasswordReset415,
+  SendAdminAccountPasswordReset429,
+  SendAdminAccountPasswordReset500,
+  SendAdminAccountPasswordReset503,
+  SendAdminAccountPasswordResetBody,
+  SendAdminAccountPasswordResetHeaders,
+  SendAdminAccountVerificationEmail200,
+  SendAdminAccountVerificationEmail400,
+  SendAdminAccountVerificationEmail401,
+  SendAdminAccountVerificationEmail403,
+  SendAdminAccountVerificationEmail404,
+  SendAdminAccountVerificationEmail409,
+  SendAdminAccountVerificationEmail413,
+  SendAdminAccountVerificationEmail415,
+  SendAdminAccountVerificationEmail429,
+  SendAdminAccountVerificationEmail500,
+  SendAdminAccountVerificationEmail503,
+  SendAdminAccountVerificationEmailBody,
+  SendAdminAccountVerificationEmailHeaders,
+  SetAdminAccountPassword200,
+  SetAdminAccountPassword400,
+  SetAdminAccountPassword401,
+  SetAdminAccountPassword403,
+  SetAdminAccountPassword404,
+  SetAdminAccountPassword409,
+  SetAdminAccountPassword413,
+  SetAdminAccountPassword415,
+  SetAdminAccountPassword429,
+  SetAdminAccountPassword500,
+  SetAdminAccountPassword503,
+  SetAdminAccountPasswordBody,
+  SetAdminAccountPasswordHeaders,
   StartAdminReauthentication200,
   StartAdminReauthentication400,
   StartAdminReauthentication401,
@@ -45,13 +134,147 @@ import type {
   StartAdminReauthentication503,
   StartAdminReauthenticationBody,
   StartAdminReauthenticationHeaders,
+  VerifyAdminAccount200,
+  VerifyAdminAccount400,
+  VerifyAdminAccount401,
+  VerifyAdminAccount403,
+  VerifyAdminAccount404,
+  VerifyAdminAccount409,
+  VerifyAdminAccount413,
+  VerifyAdminAccount415,
+  VerifyAdminAccount429,
+  VerifyAdminAccount500,
+  VerifyAdminAccount503,
+  VerifyAdminAccountBody,
+  VerifyAdminAccountHeaders,
 } from "./account-models";
 import {
   applyAdminAuthPolicyRequest,
+  changeAdminAccountRoleRequest,
   completeAdminReauthenticationRequest,
+  createAdminAccountRequest,
+  getAdminAccountDeliveryRequest,
   getAdminAuthPolicyRequest,
+  inviteAdminAccountRequest,
+  sendAdminAccountPasswordResetRequest,
+  sendAdminAccountVerificationEmailRequest,
+  setAdminAccountPasswordRequest,
   startAdminReauthenticationRequest,
+  verifyAdminAccountRequest,
 } from "./operation-bindings.generated";
+export type createAdminAccountResponse200 = {
+  data: CreateAdminAccount200;
+  status: 200;
+};
+
+export type createAdminAccountResponse400 = {
+  data: CreateAdminAccount400;
+  status: 400;
+};
+
+export type createAdminAccountResponse401 = {
+  data: CreateAdminAccount401;
+  status: 401;
+};
+
+export type createAdminAccountResponse403 = {
+  data: CreateAdminAccount403;
+  status: 403;
+};
+
+export type createAdminAccountResponse404 = {
+  data: CreateAdminAccount404;
+  status: 404;
+};
+
+export type createAdminAccountResponse409 = {
+  data: CreateAdminAccount409;
+  status: 409;
+};
+
+export type createAdminAccountResponse413 = {
+  data: CreateAdminAccount413;
+  status: 413;
+};
+
+export type createAdminAccountResponse415 = {
+  data: CreateAdminAccount415;
+  status: 415;
+};
+
+export type createAdminAccountResponse429 = {
+  data: CreateAdminAccount429;
+  status: 429;
+};
+
+export type createAdminAccountResponse500 = {
+  data: CreateAdminAccount500;
+  status: 500;
+};
+
+export type createAdminAccountResponse503 = {
+  data: CreateAdminAccount503;
+  status: 503;
+};
+
+export type createAdminAccountResponseSuccess = createAdminAccountResponse200 & {
+  headers: Headers;
+};
+export type createAdminAccountResponseError = (
+  | createAdminAccountResponse400
+  | createAdminAccountResponse401
+  | createAdminAccountResponse403
+  | createAdminAccountResponse404
+  | createAdminAccountResponse409
+  | createAdminAccountResponse413
+  | createAdminAccountResponse415
+  | createAdminAccountResponse429
+  | createAdminAccountResponse500
+  | createAdminAccountResponse503
+) & {
+  headers: Headers;
+};
+
+export type createAdminAccountResponse =
+  | createAdminAccountResponseSuccess
+  | createAdminAccountResponseError;
+
+export const getCreateAdminAccountUrl = () => {
+  return `/api/admin/accounts`;
+};
+
+export const createAdminAccount = async (
+  createAdminAccountBody: CreateAdminAccountBody,
+  headers: CreateAdminAccountHeaders,
+  options?: Parameters<typeof createAdminAccountRequest>[1],
+): Promise<createAdminAccountResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return createAdminAccountRequest<createAdminAccountResponse>(getCreateAdminAccountUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+    body: JSON.stringify(createAdminAccountBody),
+  });
+};
+
 export type getAdminAuthPolicyResponse200 = {
   data: GetAdminAuthPolicy200;
   status: 200;
@@ -233,6 +456,798 @@ export const applyAdminAuthPolicy = async (
     method: "POST",
     headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
     body: JSON.stringify(applyAdminAuthPolicyBody),
+  });
+};
+
+export type getAdminAccountDeliveryResponse200 = {
+  data: GetAdminAccountDelivery200;
+  status: 200;
+};
+
+export type getAdminAccountDeliveryResponse400 = {
+  data: GetAdminAccountDelivery400;
+  status: 400;
+};
+
+export type getAdminAccountDeliveryResponse401 = {
+  data: GetAdminAccountDelivery401;
+  status: 401;
+};
+
+export type getAdminAccountDeliveryResponse403 = {
+  data: GetAdminAccountDelivery403;
+  status: 403;
+};
+
+export type getAdminAccountDeliveryResponse404 = {
+  data: GetAdminAccountDelivery404;
+  status: 404;
+};
+
+export type getAdminAccountDeliveryResponse409 = {
+  data: GetAdminAccountDelivery409;
+  status: 409;
+};
+
+export type getAdminAccountDeliveryResponse413 = {
+  data: GetAdminAccountDelivery413;
+  status: 413;
+};
+
+export type getAdminAccountDeliveryResponse415 = {
+  data: GetAdminAccountDelivery415;
+  status: 415;
+};
+
+export type getAdminAccountDeliveryResponse429 = {
+  data: GetAdminAccountDelivery429;
+  status: 429;
+};
+
+export type getAdminAccountDeliveryResponse500 = {
+  data: GetAdminAccountDelivery500;
+  status: 500;
+};
+
+export type getAdminAccountDeliveryResponse503 = {
+  data: GetAdminAccountDelivery503;
+  status: 503;
+};
+
+export type getAdminAccountDeliveryResponseSuccess = getAdminAccountDeliveryResponse200 & {
+  headers: Headers;
+};
+export type getAdminAccountDeliveryResponseError = (
+  | getAdminAccountDeliveryResponse400
+  | getAdminAccountDeliveryResponse401
+  | getAdminAccountDeliveryResponse403
+  | getAdminAccountDeliveryResponse404
+  | getAdminAccountDeliveryResponse409
+  | getAdminAccountDeliveryResponse413
+  | getAdminAccountDeliveryResponse415
+  | getAdminAccountDeliveryResponse429
+  | getAdminAccountDeliveryResponse500
+  | getAdminAccountDeliveryResponse503
+) & {
+  headers: Headers;
+};
+
+export type getAdminAccountDeliveryResponse =
+  | getAdminAccountDeliveryResponseSuccess
+  | getAdminAccountDeliveryResponseError;
+
+export const getGetAdminAccountDeliveryUrl = (userId: string) => {
+  return `/api/admin/accounts/${encodeURIComponent(String(userId))}/delivery`;
+};
+
+export const getAdminAccountDelivery = async (
+  userId: string,
+  options?: Parameters<typeof getAdminAccountDeliveryRequest>[1],
+): Promise<getAdminAccountDeliveryResponse> => {
+  return getAdminAccountDeliveryRequest<getAdminAccountDeliveryResponse>(
+    getGetAdminAccountDeliveryUrl(userId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export type inviteAdminAccountResponse200 = {
+  data: InviteAdminAccount200;
+  status: 200;
+};
+
+export type inviteAdminAccountResponse400 = {
+  data: InviteAdminAccount400;
+  status: 400;
+};
+
+export type inviteAdminAccountResponse401 = {
+  data: InviteAdminAccount401;
+  status: 401;
+};
+
+export type inviteAdminAccountResponse403 = {
+  data: InviteAdminAccount403;
+  status: 403;
+};
+
+export type inviteAdminAccountResponse404 = {
+  data: InviteAdminAccount404;
+  status: 404;
+};
+
+export type inviteAdminAccountResponse409 = {
+  data: InviteAdminAccount409;
+  status: 409;
+};
+
+export type inviteAdminAccountResponse413 = {
+  data: InviteAdminAccount413;
+  status: 413;
+};
+
+export type inviteAdminAccountResponse415 = {
+  data: InviteAdminAccount415;
+  status: 415;
+};
+
+export type inviteAdminAccountResponse429 = {
+  data: InviteAdminAccount429;
+  status: 429;
+};
+
+export type inviteAdminAccountResponse500 = {
+  data: InviteAdminAccount500;
+  status: 500;
+};
+
+export type inviteAdminAccountResponse503 = {
+  data: InviteAdminAccount503;
+  status: 503;
+};
+
+export type inviteAdminAccountResponseSuccess = inviteAdminAccountResponse200 & {
+  headers: Headers;
+};
+export type inviteAdminAccountResponseError = (
+  | inviteAdminAccountResponse400
+  | inviteAdminAccountResponse401
+  | inviteAdminAccountResponse403
+  | inviteAdminAccountResponse404
+  | inviteAdminAccountResponse409
+  | inviteAdminAccountResponse413
+  | inviteAdminAccountResponse415
+  | inviteAdminAccountResponse429
+  | inviteAdminAccountResponse500
+  | inviteAdminAccountResponse503
+) & {
+  headers: Headers;
+};
+
+export type inviteAdminAccountResponse =
+  | inviteAdminAccountResponseSuccess
+  | inviteAdminAccountResponseError;
+
+export const getInviteAdminAccountUrl = (userId: string) => {
+  return `/api/admin/accounts/${encodeURIComponent(String(userId))}/invitation`;
+};
+
+export const inviteAdminAccount = async (
+  userId: string,
+  inviteAdminAccountBody: InviteAdminAccountBody,
+  headers: InviteAdminAccountHeaders,
+  options?: Parameters<typeof inviteAdminAccountRequest>[1],
+): Promise<inviteAdminAccountResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return inviteAdminAccountRequest<inviteAdminAccountResponse>(getInviteAdminAccountUrl(userId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+    body: JSON.stringify(inviteAdminAccountBody),
+  });
+};
+
+export type setAdminAccountPasswordResponse200 = {
+  data: SetAdminAccountPassword200;
+  status: 200;
+};
+
+export type setAdminAccountPasswordResponse400 = {
+  data: SetAdminAccountPassword400;
+  status: 400;
+};
+
+export type setAdminAccountPasswordResponse401 = {
+  data: SetAdminAccountPassword401;
+  status: 401;
+};
+
+export type setAdminAccountPasswordResponse403 = {
+  data: SetAdminAccountPassword403;
+  status: 403;
+};
+
+export type setAdminAccountPasswordResponse404 = {
+  data: SetAdminAccountPassword404;
+  status: 404;
+};
+
+export type setAdminAccountPasswordResponse409 = {
+  data: SetAdminAccountPassword409;
+  status: 409;
+};
+
+export type setAdminAccountPasswordResponse413 = {
+  data: SetAdminAccountPassword413;
+  status: 413;
+};
+
+export type setAdminAccountPasswordResponse415 = {
+  data: SetAdminAccountPassword415;
+  status: 415;
+};
+
+export type setAdminAccountPasswordResponse429 = {
+  data: SetAdminAccountPassword429;
+  status: 429;
+};
+
+export type setAdminAccountPasswordResponse500 = {
+  data: SetAdminAccountPassword500;
+  status: 500;
+};
+
+export type setAdminAccountPasswordResponse503 = {
+  data: SetAdminAccountPassword503;
+  status: 503;
+};
+
+export type setAdminAccountPasswordResponseSuccess = setAdminAccountPasswordResponse200 & {
+  headers: Headers;
+};
+export type setAdminAccountPasswordResponseError = (
+  | setAdminAccountPasswordResponse400
+  | setAdminAccountPasswordResponse401
+  | setAdminAccountPasswordResponse403
+  | setAdminAccountPasswordResponse404
+  | setAdminAccountPasswordResponse409
+  | setAdminAccountPasswordResponse413
+  | setAdminAccountPasswordResponse415
+  | setAdminAccountPasswordResponse429
+  | setAdminAccountPasswordResponse500
+  | setAdminAccountPasswordResponse503
+) & {
+  headers: Headers;
+};
+
+export type setAdminAccountPasswordResponse =
+  | setAdminAccountPasswordResponseSuccess
+  | setAdminAccountPasswordResponseError;
+
+export const getSetAdminAccountPasswordUrl = (userId: string) => {
+  return `/api/admin/accounts/${encodeURIComponent(String(userId))}/password`;
+};
+
+export const setAdminAccountPassword = async (
+  userId: string,
+  setAdminAccountPasswordBody: SetAdminAccountPasswordBody,
+  headers: SetAdminAccountPasswordHeaders,
+  options?: Parameters<typeof setAdminAccountPasswordRequest>[1],
+): Promise<setAdminAccountPasswordResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return setAdminAccountPasswordRequest<setAdminAccountPasswordResponse>(
+    getSetAdminAccountPasswordUrl(userId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+      body: JSON.stringify(setAdminAccountPasswordBody),
+    },
+  );
+};
+
+export type sendAdminAccountPasswordResetResponse200 = {
+  data: SendAdminAccountPasswordReset200;
+  status: 200;
+};
+
+export type sendAdminAccountPasswordResetResponse400 = {
+  data: SendAdminAccountPasswordReset400;
+  status: 400;
+};
+
+export type sendAdminAccountPasswordResetResponse401 = {
+  data: SendAdminAccountPasswordReset401;
+  status: 401;
+};
+
+export type sendAdminAccountPasswordResetResponse403 = {
+  data: SendAdminAccountPasswordReset403;
+  status: 403;
+};
+
+export type sendAdminAccountPasswordResetResponse404 = {
+  data: SendAdminAccountPasswordReset404;
+  status: 404;
+};
+
+export type sendAdminAccountPasswordResetResponse409 = {
+  data: SendAdminAccountPasswordReset409;
+  status: 409;
+};
+
+export type sendAdminAccountPasswordResetResponse413 = {
+  data: SendAdminAccountPasswordReset413;
+  status: 413;
+};
+
+export type sendAdminAccountPasswordResetResponse415 = {
+  data: SendAdminAccountPasswordReset415;
+  status: 415;
+};
+
+export type sendAdminAccountPasswordResetResponse429 = {
+  data: SendAdminAccountPasswordReset429;
+  status: 429;
+};
+
+export type sendAdminAccountPasswordResetResponse500 = {
+  data: SendAdminAccountPasswordReset500;
+  status: 500;
+};
+
+export type sendAdminAccountPasswordResetResponse503 = {
+  data: SendAdminAccountPasswordReset503;
+  status: 503;
+};
+
+export type sendAdminAccountPasswordResetResponseSuccess =
+  sendAdminAccountPasswordResetResponse200 & {
+    headers: Headers;
+  };
+export type sendAdminAccountPasswordResetResponseError = (
+  | sendAdminAccountPasswordResetResponse400
+  | sendAdminAccountPasswordResetResponse401
+  | sendAdminAccountPasswordResetResponse403
+  | sendAdminAccountPasswordResetResponse404
+  | sendAdminAccountPasswordResetResponse409
+  | sendAdminAccountPasswordResetResponse413
+  | sendAdminAccountPasswordResetResponse415
+  | sendAdminAccountPasswordResetResponse429
+  | sendAdminAccountPasswordResetResponse500
+  | sendAdminAccountPasswordResetResponse503
+) & {
+  headers: Headers;
+};
+
+export type sendAdminAccountPasswordResetResponse =
+  | sendAdminAccountPasswordResetResponseSuccess
+  | sendAdminAccountPasswordResetResponseError;
+
+export const getSendAdminAccountPasswordResetUrl = (userId: string) => {
+  return `/api/admin/accounts/${encodeURIComponent(String(userId))}/reset-password`;
+};
+
+export const sendAdminAccountPasswordReset = async (
+  userId: string,
+  sendAdminAccountPasswordResetBody: SendAdminAccountPasswordResetBody,
+  headers: SendAdminAccountPasswordResetHeaders,
+  options?: Parameters<typeof sendAdminAccountPasswordResetRequest>[1],
+): Promise<sendAdminAccountPasswordResetResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return sendAdminAccountPasswordResetRequest<sendAdminAccountPasswordResetResponse>(
+    getSendAdminAccountPasswordResetUrl(userId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+      body: JSON.stringify(sendAdminAccountPasswordResetBody),
+    },
+  );
+};
+
+export type changeAdminAccountRoleResponse200 = {
+  data: ChangeAdminAccountRole200;
+  status: 200;
+};
+
+export type changeAdminAccountRoleResponse400 = {
+  data: ChangeAdminAccountRole400;
+  status: 400;
+};
+
+export type changeAdminAccountRoleResponse401 = {
+  data: ChangeAdminAccountRole401;
+  status: 401;
+};
+
+export type changeAdminAccountRoleResponse403 = {
+  data: ChangeAdminAccountRole403;
+  status: 403;
+};
+
+export type changeAdminAccountRoleResponse404 = {
+  data: ChangeAdminAccountRole404;
+  status: 404;
+};
+
+export type changeAdminAccountRoleResponse409 = {
+  data: ChangeAdminAccountRole409;
+  status: 409;
+};
+
+export type changeAdminAccountRoleResponse413 = {
+  data: ChangeAdminAccountRole413;
+  status: 413;
+};
+
+export type changeAdminAccountRoleResponse415 = {
+  data: ChangeAdminAccountRole415;
+  status: 415;
+};
+
+export type changeAdminAccountRoleResponse429 = {
+  data: ChangeAdminAccountRole429;
+  status: 429;
+};
+
+export type changeAdminAccountRoleResponse500 = {
+  data: ChangeAdminAccountRole500;
+  status: 500;
+};
+
+export type changeAdminAccountRoleResponse503 = {
+  data: ChangeAdminAccountRole503;
+  status: 503;
+};
+
+export type changeAdminAccountRoleResponseSuccess = changeAdminAccountRoleResponse200 & {
+  headers: Headers;
+};
+export type changeAdminAccountRoleResponseError = (
+  | changeAdminAccountRoleResponse400
+  | changeAdminAccountRoleResponse401
+  | changeAdminAccountRoleResponse403
+  | changeAdminAccountRoleResponse404
+  | changeAdminAccountRoleResponse409
+  | changeAdminAccountRoleResponse413
+  | changeAdminAccountRoleResponse415
+  | changeAdminAccountRoleResponse429
+  | changeAdminAccountRoleResponse500
+  | changeAdminAccountRoleResponse503
+) & {
+  headers: Headers;
+};
+
+export type changeAdminAccountRoleResponse =
+  | changeAdminAccountRoleResponseSuccess
+  | changeAdminAccountRoleResponseError;
+
+export const getChangeAdminAccountRoleUrl = (userId: string) => {
+  return `/api/admin/accounts/${encodeURIComponent(String(userId))}/role`;
+};
+
+export const changeAdminAccountRole = async (
+  userId: string,
+  changeAdminAccountRoleBody: ChangeAdminAccountRoleBody,
+  headers: ChangeAdminAccountRoleHeaders,
+  options?: Parameters<typeof changeAdminAccountRoleRequest>[1],
+): Promise<changeAdminAccountRoleResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return changeAdminAccountRoleRequest<changeAdminAccountRoleResponse>(
+    getChangeAdminAccountRoleUrl(userId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+      body: JSON.stringify(changeAdminAccountRoleBody),
+    },
+  );
+};
+
+export type sendAdminAccountVerificationEmailResponse200 = {
+  data: SendAdminAccountVerificationEmail200;
+  status: 200;
+};
+
+export type sendAdminAccountVerificationEmailResponse400 = {
+  data: SendAdminAccountVerificationEmail400;
+  status: 400;
+};
+
+export type sendAdminAccountVerificationEmailResponse401 = {
+  data: SendAdminAccountVerificationEmail401;
+  status: 401;
+};
+
+export type sendAdminAccountVerificationEmailResponse403 = {
+  data: SendAdminAccountVerificationEmail403;
+  status: 403;
+};
+
+export type sendAdminAccountVerificationEmailResponse404 = {
+  data: SendAdminAccountVerificationEmail404;
+  status: 404;
+};
+
+export type sendAdminAccountVerificationEmailResponse409 = {
+  data: SendAdminAccountVerificationEmail409;
+  status: 409;
+};
+
+export type sendAdminAccountVerificationEmailResponse413 = {
+  data: SendAdminAccountVerificationEmail413;
+  status: 413;
+};
+
+export type sendAdminAccountVerificationEmailResponse415 = {
+  data: SendAdminAccountVerificationEmail415;
+  status: 415;
+};
+
+export type sendAdminAccountVerificationEmailResponse429 = {
+  data: SendAdminAccountVerificationEmail429;
+  status: 429;
+};
+
+export type sendAdminAccountVerificationEmailResponse500 = {
+  data: SendAdminAccountVerificationEmail500;
+  status: 500;
+};
+
+export type sendAdminAccountVerificationEmailResponse503 = {
+  data: SendAdminAccountVerificationEmail503;
+  status: 503;
+};
+
+export type sendAdminAccountVerificationEmailResponseSuccess =
+  sendAdminAccountVerificationEmailResponse200 & {
+    headers: Headers;
+  };
+export type sendAdminAccountVerificationEmailResponseError = (
+  | sendAdminAccountVerificationEmailResponse400
+  | sendAdminAccountVerificationEmailResponse401
+  | sendAdminAccountVerificationEmailResponse403
+  | sendAdminAccountVerificationEmailResponse404
+  | sendAdminAccountVerificationEmailResponse409
+  | sendAdminAccountVerificationEmailResponse413
+  | sendAdminAccountVerificationEmailResponse415
+  | sendAdminAccountVerificationEmailResponse429
+  | sendAdminAccountVerificationEmailResponse500
+  | sendAdminAccountVerificationEmailResponse503
+) & {
+  headers: Headers;
+};
+
+export type sendAdminAccountVerificationEmailResponse =
+  | sendAdminAccountVerificationEmailResponseSuccess
+  | sendAdminAccountVerificationEmailResponseError;
+
+export const getSendAdminAccountVerificationEmailUrl = (userId: string) => {
+  return `/api/admin/accounts/${encodeURIComponent(String(userId))}/verification-email`;
+};
+
+export const sendAdminAccountVerificationEmail = async (
+  userId: string,
+  sendAdminAccountVerificationEmailBody: SendAdminAccountVerificationEmailBody,
+  headers: SendAdminAccountVerificationEmailHeaders,
+  options?: Parameters<typeof sendAdminAccountVerificationEmailRequest>[1],
+): Promise<sendAdminAccountVerificationEmailResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return sendAdminAccountVerificationEmailRequest<sendAdminAccountVerificationEmailResponse>(
+    getSendAdminAccountVerificationEmailUrl(userId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+      body: JSON.stringify(sendAdminAccountVerificationEmailBody),
+    },
+  );
+};
+
+export type verifyAdminAccountResponse200 = {
+  data: VerifyAdminAccount200;
+  status: 200;
+};
+
+export type verifyAdminAccountResponse400 = {
+  data: VerifyAdminAccount400;
+  status: 400;
+};
+
+export type verifyAdminAccountResponse401 = {
+  data: VerifyAdminAccount401;
+  status: 401;
+};
+
+export type verifyAdminAccountResponse403 = {
+  data: VerifyAdminAccount403;
+  status: 403;
+};
+
+export type verifyAdminAccountResponse404 = {
+  data: VerifyAdminAccount404;
+  status: 404;
+};
+
+export type verifyAdminAccountResponse409 = {
+  data: VerifyAdminAccount409;
+  status: 409;
+};
+
+export type verifyAdminAccountResponse413 = {
+  data: VerifyAdminAccount413;
+  status: 413;
+};
+
+export type verifyAdminAccountResponse415 = {
+  data: VerifyAdminAccount415;
+  status: 415;
+};
+
+export type verifyAdminAccountResponse429 = {
+  data: VerifyAdminAccount429;
+  status: 429;
+};
+
+export type verifyAdminAccountResponse500 = {
+  data: VerifyAdminAccount500;
+  status: 500;
+};
+
+export type verifyAdminAccountResponse503 = {
+  data: VerifyAdminAccount503;
+  status: 503;
+};
+
+export type verifyAdminAccountResponseSuccess = verifyAdminAccountResponse200 & {
+  headers: Headers;
+};
+export type verifyAdminAccountResponseError = (
+  | verifyAdminAccountResponse400
+  | verifyAdminAccountResponse401
+  | verifyAdminAccountResponse403
+  | verifyAdminAccountResponse404
+  | verifyAdminAccountResponse409
+  | verifyAdminAccountResponse413
+  | verifyAdminAccountResponse415
+  | verifyAdminAccountResponse429
+  | verifyAdminAccountResponse500
+  | verifyAdminAccountResponse503
+) & {
+  headers: Headers;
+};
+
+export type verifyAdminAccountResponse =
+  | verifyAdminAccountResponseSuccess
+  | verifyAdminAccountResponseError;
+
+export const getVerifyAdminAccountUrl = (userId: string) => {
+  return `/api/admin/accounts/${encodeURIComponent(String(userId))}/verify`;
+};
+
+export const verifyAdminAccount = async (
+  userId: string,
+  verifyAdminAccountBody: VerifyAdminAccountBody,
+  headers: VerifyAdminAccountHeaders,
+  options?: Parameters<typeof verifyAdminAccountRequest>[1],
+): Promise<verifyAdminAccountResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return verifyAdminAccountRequest<verifyAdminAccountResponse>(getVerifyAdminAccountUrl(userId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+    body: JSON.stringify(verifyAdminAccountBody),
   });
 };
 

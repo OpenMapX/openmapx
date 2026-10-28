@@ -2,6 +2,8 @@ import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import { db as defaultDb } from "../db/index.js";
 import {
   account,
+  accountActionReceipt,
+  accountMailOutbox,
   adminActionReauthentication,
   adminAuditLog,
   adminJob,
@@ -420,6 +422,29 @@ export async function* streamOpenMapxRegistrationRecords(
           .orderBy(asc(verification.id)),
         { policyCodes: ["challenge-redacted"] },
       );
+      yield* emit(
+        database
+          .select({
+            id: accountMailOutbox.id,
+            kind: accountMailOutbox.kind,
+            state: accountMailOutbox.state,
+            createdAt: accountMailOutbox.createdAt,
+            expiresAt: accountMailOutbox.expiresAt,
+            finishedAt: accountMailOutbox.finishedAt,
+          })
+          .from(accountMailOutbox)
+          .where(
+            and(
+              eq(accountMailOutbox.userId, context.userId),
+              lte(accountMailOutbox.createdAt, cutoff),
+            ),
+          )
+          .orderBy(asc(accountMailOutbox.id)),
+        {
+          policyCodes: ["challenge-redacted"],
+          map: ({ id, ...row }) => ({ mailDigest: pseudonymousIdentifier(id), ...row }),
+        },
+      );
       return;
     case "auth-oauth-resources": {
       const policies = ["oauth-secret-redacted", "opaque-identifier-redacted"];
@@ -830,6 +855,33 @@ export async function* streamOpenMapxRegistrationRecords(
             action: "auth.policy.current-owner",
             revision: row.revision,
             createdAt: row.createdAt,
+          }),
+        },
+      );
+      yield* emit(
+        database
+          .select({
+            key: accountActionReceipt.key,
+            action: accountActionReceipt.action,
+            createdAt: accountActionReceipt.createdAt,
+            mailRequested: accountActionReceipt.mailRequested,
+          })
+          .from(accountActionReceipt)
+          .where(
+            and(
+              or(
+                eq(accountActionReceipt.actorId, context.userId),
+                eq(accountActionReceipt.targetId, context.userId),
+              ),
+              lte(accountActionReceipt.createdAt, cutoff),
+            ),
+          )
+          .orderBy(asc(accountActionReceipt.key)),
+        {
+          policyCodes: ["rights-of-others", "foreign-identifiers-redacted"],
+          map: ({ key, ...row }) => ({
+            recordId: `account-action-${pseudonymousIdentifier(key)}`,
+            ...row,
           }),
         },
       );

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { expo } from "@better-auth/expo";
 import { i18n } from "@better-auth/i18n";
 import { oauthProvider } from "@better-auth/oauth-provider";
@@ -16,6 +17,11 @@ import {
 } from "better-auth/plugins";
 import { emailHarmony } from "better-auth-harmony";
 import { eq } from "drizzle-orm";
+import {
+  capturedAccountPasswordLink,
+  enqueueCapturedAccountMail,
+  isAccountSetupInvitation,
+} from "./account/account-mail-capture";
 import { type AuthDatabase, currentAuthDatabase } from "./account/auth-database";
 import { createAuthRuntime } from "./account/auth-runtime";
 import { applyPasswordVerificationPolicy } from "./account/password-verification-policy";
@@ -25,7 +31,7 @@ import {
   fetchOsmUserDetails,
 } from "./auth-provider-http";
 import { resolveBetterAuthSecret } from "./auth-secret";
-import { user as userTable } from "./db/schema";
+import { adminAuditLog, user as userTable } from "./db/schema";
 import { managedOAuthProviderOptions } from "./managed-oauth-provider";
 import { recordDataDisclosureBestEffort } from "./privacy/disclosures.js";
 import { recordSessionFromAuthContext } from "./privacy/session-assurance.js";
@@ -36,6 +42,7 @@ import { sendMail } from "./utils/email";
 import {
   emailOtpEmail,
   resetPasswordEmail,
+  setupPasswordEmail,
   twoFactorOtpEmail,
   verifyEmailEmail,
 } from "./utils/emailTemplates";
@@ -124,13 +131,30 @@ function createPolicyAuth(
       requireEmailVerification: policy.emailVerificationRequired,
       minPasswordLength: policy.passwordMinLength,
       maxPasswordLength: 128,
-      async sendResetPassword({ user, url }) {
-        const mail = resetPasswordEmail(url);
-        await sendMail({
+      revokeSessionsOnPasswordReset: true,
+      async onPasswordReset({ user }) {
+        await currentAuthDatabase()
+          .insert(adminAuditLog)
+          .values({
+            id: randomUUID(),
+            actorId: null,
+            targetType: "user",
+            targetId: user.id,
+            action: "user.password.reset",
+            details: { channel: "email" },
+          });
+      },
+      async sendResetPassword({ user, url, token }) {
+        const link = capturedAccountPasswordLink(token) ?? url;
+        const mail = isAccountSetupInvitation()
+          ? setupPasswordEmail(link)
+          : resetPasswordEmail(link);
+        const message = {
           to: user.email,
           ...mail,
           disclosure: { userId: user.id, operationCode: "auth.reset-password.email" },
-        });
+        };
+        if (!(await enqueueCapturedAccountMail(message))) await sendMail(message);
       },
     },
     emailVerification: {
@@ -138,11 +162,12 @@ function createPolicyAuth(
       autoSignInAfterVerification: true,
       async sendVerificationEmail({ user, url }) {
         const mail = verifyEmailEmail(url);
-        await sendMail({
+        const message = {
           to: user.email,
           ...mail,
           disclosure: { userId: user.id, operationCode: "auth.verify-email.email" },
-        });
+        };
+        if (!(await enqueueCapturedAccountMail(message))) await sendMail(message);
       },
     },
     account: {

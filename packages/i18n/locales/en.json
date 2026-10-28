@@ -4681,5 +4681,19 @@
     "delay": "+{delay}",
     "coverageExplanation": "Current traffic is included in this travel time.",
     "estimateExplanation": "The extra time is estimated by comparing this route with and without current traffic speeds. Actual delays can vary."
+  },
+  "passwordSetup": {
+    "title": "Choose your password",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm password",
+    "savePassword": "Save password",
+    "requirements": "Your instance’s password policy applies.",
+    "saved": "Password saved.",
+    "verificationSeparate": "Email verification is separate. Follow your verification email if your account is still unverified.",
+    "missingLink": "This setup link is missing or invalid. Request a new invitation or password reset.",
+    "expiredLink": "This setup link expired or was already used. Request a new one.",
+    "failed": "The password could not be saved. Check the password requirements or request a new link.",
+    "originChanged": "The API changed. Open the original link again before setting your password.",
+    "back": "Back to OpenMapX"
   }
 }

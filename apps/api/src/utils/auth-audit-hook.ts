@@ -46,6 +46,8 @@ function pickString(value: unknown): string | undefined {
 // Extracted from the `hooks.after` middleware so it can be tested directly; the
 // middleware below delegates to it with the real better-auth context.
 export async function handleAdminAuditEvent(ctx: AdminAuditCtx): Promise<void> {
+  if (ctx.path === "/admin/set-user-password" && currentAccountMutation()?.action === "password")
+    return;
   if (ctx.path === "/admin/set-role" && currentAccountMutation()?.roleAudit) return;
   const route = ADMIN_AUDIT_ROUTES[ctx.path];
   if (!route) return;

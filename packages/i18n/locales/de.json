@@ -4681,5 +4681,19 @@
     "delay": "+{delay}",
     "coverageExplanation": "Die Fahrzeit berücksichtigt den aktuellen Verkehr.",
     "estimateExplanation": "Die zusätzliche Zeit wird geschätzt, indem diese Route mit und ohne aktuelle Verkehrsgeschwindigkeiten verglichen wird. Tatsächliche Verzögerungen können abweichen."
+  },
+  "passwordSetup": {
+    "title": "Passwort auswählen",
+    "newPassword": "Neues Passwort",
+    "confirmPassword": "Passwort bestätigen",
+    "savePassword": "Passwort speichern",
+    "requirements": "Es gelten die Passwortanforderungen deiner Instanz.",
+    "saved": "Passwort gespeichert.",
+    "verificationSeparate": "Die E-Mail-Verifizierung ist ein separater Schritt. Folge der Verifizierungs-E-Mail, falls dein Konto noch nicht verifiziert ist.",
+    "missingLink": "Dieser Einrichtungslink fehlt oder ist ungültig. Fordere eine neue Einladung oder einen Link zum Zurücksetzen des Passworts an.",
+    "expiredLink": "Dieser Einrichtungslink ist abgelaufen oder wurde bereits verwendet. Fordere einen neuen an.",
+    "failed": "Das Passwort konnte nicht gespeichert werden. Prüfe die Passwortanforderungen oder fordere einen neuen Link an.",
+    "originChanged": "Die API hat sich geändert. Öffne den ursprünglichen Link erneut, bevor du dein Passwort festlegst.",
+    "back": "Zurück zu OpenMapX"
   }
 }

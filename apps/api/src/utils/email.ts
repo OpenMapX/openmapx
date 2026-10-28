@@ -4,6 +4,7 @@ import { createTransport } from "nodemailer";
 import { db } from "../db";
 import { systemSettings } from "../db/schema";
 import { recordDataDisclosureBestEffort } from "../privacy/disclosures.js";
+import { MailDeliveryRefusedError } from "./mail-outcome";
 
 export interface MailOptions {
   to: string;
@@ -121,6 +122,7 @@ async function sendViaEmailLabs(opts: MailOptions, config: EmailConfig): Promise
 
   const res = await fetch("https://api.emaillabs.net.pl/api/new_sendmail", {
     method: "POST",
+    signal: AbortSignal.timeout(30000),
     headers: {
       Authorization: `Basic ${btoa(`${appKey}:${secretKey}`)}`,
       "Content-Type": "application/x-www-form-urlencoded",
@@ -129,8 +131,8 @@ async function sendViaEmailLabs(opts: MailOptions, config: EmailConfig): Promise
   });
 
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`EmailLabs API error ${res.status}: ${body}`);
+    if (res.status >= 400 && res.status < 500) throw new MailDeliveryRefusedError();
+    throw new Error("Mail delivery outcome is unknown");
   }
 }
 
@@ -152,10 +154,26 @@ async function sendViaSmtp(opts: MailOptions, config: EmailConfig): Promise<void
     host: config.smtp.host,
     port: config.smtp.port,
     secure: config.smtp.secure,
+    connectionTimeout: 30000,
+    greetingTimeout: 30000,
+    socketTimeout: 30000,
     auth: { user: config.smtp.user, pass: config.smtp.pass },
   });
 
-  await transporter.sendMail({ from: config.from, ...opts });
+  try {
+    await transporter.sendMail({ from: config.from, ...opts });
+  } catch (error) {
+    const detail = error as { command?: unknown; responseCode?: unknown };
+    if (
+      typeof detail.responseCode === "number" &&
+      detail.responseCode >= 400 &&
+      detail.responseCode < 600 &&
+      typeof detail.command === "string" &&
+      /^(DATA|MAIL FROM|RCPT TO|AUTH(?: .*)?)$/.test(detail.command)
+    )
+      throw new MailDeliveryRefusedError();
+    throw error;
+  }
 }
 
 export async function sendMail(opts: MailOptions): Promise<void> {

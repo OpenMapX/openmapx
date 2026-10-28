@@ -12,6 +12,9 @@ const CATALOGUE_IDS = new Set(SUBJECT_DATA_CATALOGUE.map((item) => item.id));
  * of the live PostgreSQL inventory in user-erasure-postgres.test.ts. */
 export const DIRECT_USER_FK_CLASSIFICATIONS: Record<string, string> = {
   "account.user_id": "auth-accounts",
+  "account_action_receipt.actor_id": "admin-audit-attribution",
+  "account_action_receipt.target_id": "admin-audit-attribution",
+  "account_mail_outbox.user_id": "auth-verifications",
   "data_disclosure_event.user_id": "disclosure-events",
   "admin_audit_log.actor_id": "admin-audit-attribution",
   "auth_policy_application.actor_id": "admin-audit-attribution",

@@ -16,6 +16,7 @@ import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import Fastify from "fastify";
+import { startAccountMailWorker } from "./account/account-mail-outbox";
 import { auth } from "./auth";
 import { db, sql } from "./db/index";
 import { dataSubjectRequest, dataSubjectRequestTask, installedExtension } from "./db/schema";
@@ -733,6 +734,8 @@ await startDataUsePolicyRefresh();
 const port = envInt("PORT", 3000);
 const host = envString("HOST", "0.0.0.0");
 server.addHook("onClose", stopAdminJobReconciliation);
+const stopAccountMailWorker = startAccountMailWorker();
+server.addHook("onClose", stopAccountMailWorker);
 
 try {
   await server.listen({ port, host });

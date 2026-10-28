@@ -6,12 +6,15 @@ import {
   withAccountMutation,
   writeAuthAccountRole,
 } from "./account-mutations";
+import { assertAccountRecoveryProof } from "./account-recovery-context";
 
 const paths: Record<
   string,
   { action: AccountMutationIntent["action"]; callback?: boolean; selfService?: boolean }
 > = {
   createUser: { action: "create" },
+  setUserPassword: { action: "password" },
+  "/api/auth/admin/set-user-password": { action: "password" },
   setRole: { action: "role" },
   banUser: { action: "ban" },
   unbanUser: { action: "unban" },
@@ -75,6 +78,8 @@ export async function accountAuthEntry<T>(
     actorId = typeof actor === "string" ? actor : null;
   const targetId =
     typeof body.userId === "string" ? body.userId : descriptor.action === "delete" ? actorId : null;
+  if (descriptor.action === "password")
+    assertAccountRecoveryProof(actorId, targetId, "account.password.set");
   if (descriptor.action === "role") {
     if (!actorId || !targetId || !role)
       throw new APIError("UNAUTHORIZED", {

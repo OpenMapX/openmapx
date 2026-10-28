@@ -47,6 +47,9 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
     );
     expect(rows).toEqual([
       "account.user_id:c",
+      "account_action_receipt.actor_id:n",
+      "account_action_receipt.target_id:n",
+      "account_mail_outbox.user_id:c",
       "admin_action_reauthentication.actor_id:c",
       "admin_audit_log.actor_id:n",
       "admin_job.created_by:n",

@@ -4,7 +4,16 @@ export interface AccountMutationContext {
   database: AuthDatabase;
   actorId: string | null;
   targetId: string | null;
-  action: "role" | "ban" | "unban" | "delete" | "create" | "profile";
+  action:
+    | "role"
+    | "ban"
+    | "unban"
+    | "delete"
+    | "create"
+    | "profile"
+    | "password"
+    | "verify"
+    | "mail";
   mutationKey: string;
   roleAudit: boolean;
   afterCommit: Array<() => Promise<void>>;
