@@ -260,8 +260,10 @@ export function dedupeRoadConditionEvents(events: RoadConditionEvent[]): RoadCon
  *   inside a long corridor record of the same works is another element of it;
  * - a point, which covers nothing, also has an agreeing headline and lies on
  *   no other named road;
- * - at most one of them states effects (two that do are compared by the first
- *   pass's semantic key).
+ * - both state no effects, or the same kinds of effect (a closure for a
+ *   closure), so the survivor's say as much;
+ * - their dates' slack is at most half the shorter record: a night closure a
+ *   day later is the next night's.
  *
  * On the labelled pairs this folds 99 of 140 duplicates and 91 of 192 records
  * covering part of another, against 3 of 1,109 pairs describing different
@@ -411,9 +413,10 @@ function crossSourceSurvivor(
   sb: Shape,
 ): RoadConditionEvent | undefined {
   if (a.source === b.source || !kindsAgree(a.kind, b.kind)) return undefined;
-  // Two records stating effects are one measure only when the effects agree,
-  // which the semantic key of the first pass decides.
-  if (a.effects.length > 0 && b.effects.length > 0) return undefined;
+  // Two records stating effects are one measure only when they state the same
+  // kinds of effect (a closure for a closure), so the survivor's say as much.
+  if (a.effects.length > 0 && b.effects.length > 0 && effectKinds(a) !== effectKinds(b))
+    return undefined;
   const evidenceA = hasRestrictionEvidence(a);
   const evidenceB = hasRestrictionEvidence(b);
   if (evidenceA && evidenceB) return undefined;
@@ -427,10 +430,11 @@ function crossSourceSurvivor(
     return undefined;
   const dStart = Math.abs(startA - startB);
   const dEnd = Math.abs(endA - endB);
-  const sameDays = dStart <= SAME_DAY_H && dEnd <= SAME_DAY_H;
-  const oneDay =
-    (dStart <= SAME_DAY_H && dEnd <= SAME_MONTH_H) ||
-    (dEnd <= SAME_DAY_H && dStart <= SAME_MONTH_H);
+  // A day's slack absorbs dates written as days; a night closure a day later
+  // is the next night's, so the slack is at most half the shorter record.
+  const day = Math.min(SAME_DAY_H, Math.min(endA - startA, endB - startB) / 2);
+  const sameDays = dStart <= day && dEnd <= day;
+  const oneDay = (dStart <= day && dEnd <= SAME_MONTH_H) || (dEnd <= day && dStart <= SAME_MONTH_H);
   const headlines = !sameDays && oneDay && headlineSimilar(a.headline, b.headline);
   if (!sameDays && !headlines) return undefined;
   if (!bboxesNear(sa.bbox, sb.bbox, COVER_METERS)) return undefined;
@@ -552,3 +556,7 @@ function liesAlong(a: RoadConditionEvent["geometry"], b: RoadConditionEvent["geo
     ) >= 0.5
   );
 }
+
+/** The kinds of effect a record states, as one comparable key. */
+const effectKinds = (e: RoadConditionEvent) =>
+  [...new Set(e.effects.map((x) => x.kind))].sort().join(",");

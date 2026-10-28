@@ -384,6 +384,42 @@ describe("dedupeRoadConditionEvents across sources", () => {
     expect(dedupeRoadConditionEvents([state, closed])).toEqual([closed]);
   });
 
+  it("folds two records stating the same kinds of effect, not different ones", () => {
+    const closing = (id: string, source: string, kinds: ("closure" | "lane_restriction")[]) =>
+      ev({
+        id,
+        source,
+        kind: "closure",
+        type: "closure",
+        geometry: line(0, 290),
+        validity: autumn,
+        effects: kinds.map((k, i) => effect(`${id}${i}`, k)),
+      });
+    expect(
+      dedupeRoadConditionEvents([
+        closing("viz", "de-be-berlin-events", ["closure"]),
+        closing("ab", "de-autobahn-events", ["closure"]),
+      ]),
+    ).toHaveLength(1);
+    expect(
+      dedupeRoadConditionEvents([
+        closing("viz", "de-be-berlin-events", ["closure"]),
+        closing("ab", "de-autobahn-events", ["lane_restriction"]),
+      ]),
+    ).toHaveLength(2);
+  });
+
+  it("keeps a night closure apart from the next night's", () => {
+    const night = (id: string, source: string, start: string, end: string) =>
+      ev({ id, source, ...works, geometry: line(0, 290), validity: dated(start, end) });
+    expect(
+      dedupeRoadConditionEvents([
+        night("ab", "de-autobahn-events", "2026-10-28T20:00:00Z", "2026-10-29T04:00:00Z"),
+        night("viz", "de-be-berlin-events", "2026-10-29T20:00:00Z", "2026-10-30T04:00:00Z"),
+      ]),
+    ).toHaveLength(2);
+  });
+
   it("does not compare a record spanning more than about 50 km", () => {
     const wide = {
       type: "LineString" as const,
