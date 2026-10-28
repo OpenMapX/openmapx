@@ -104,11 +104,11 @@ function publicIdentity(
     )
   )
     throw new SignerFailure(502);
+  const der = body.public_key
+    .replace("-----BEGIN PUBLIC KEY-----", "")
+    .replace("-----END PUBLIC KEY-----", "")
+    .replace(/\s/g, "");
   try {
-    const der = body.public_key
-      .replace("-----BEGIN PUBLIC KEY-----", "")
-      .replace("-----END PUBLIC KEY-----", "")
-      .replace(/\s/g, "");
     const bytes = Buffer.from(der, "base64");
     const key = createPublicKey({ key: bytes, type: "spki", format: "der" });
     if (
@@ -123,7 +123,7 @@ function publicIdentity(
   }
   const identity: Pick<MangroveSignerAccount, "reviewerId" | "publicPem" | "did"> = {
     reviewerId: body.reviewer_id,
-    publicPem: body.public_key,
+    publicPem: `-----BEGIN PUBLIC KEY-----${der}-----END PUBLIC KEY-----`,
   };
   if (body.did != null) {
     if (!text(body.did, 2048) || !/^did:[a-z0-9]+:\S+$/.test(body.did))

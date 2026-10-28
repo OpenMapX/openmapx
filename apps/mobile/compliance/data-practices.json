@@ -269,12 +269,12 @@
     },
     {
       "id": "review-keypair",
-      "dataType": "Review signing key material",
+      "dataType": "Encrypted local review signing key material and public unlock metadata",
       "source": "derived",
       "leavesDevice": true,
-      "recipient": "The OpenMapX API, which stores ciphertext in encrypted modes or a readable private key in explicit unencrypted mode",
+      "recipient": "The OpenMapX API, which stores encrypted private-key material, the public key and unlock-method metadata",
       "endpoint": "/api/reviews/keypair",
-      "purpose": "Synchronizing the signing key used for public Mangrove reviews. Encrypted modes wrap it with a passphrase or passkey before upload. Explicit unencrypted mode stores a private JWK the server can read and use; confidentiality depends on the selected mode.",
+      "purpose": "Synchronizing an optional local signing key. The browser encrypts the private key with a passphrase or supported passkey before upload; plaintext private-key storage is not supported. This protects stored material against database-only disclosure, not compromised application code.",
       "linkedToAccount": true,
       "retention": {
         "kind": "account-lifetime",
@@ -300,13 +300,46 @@
       "legalSection": "reviews"
     },
     {
+      "id": "review-shared-signer",
+      "dataType": "Signer session token, provider login information, review content and public signing identity",
+      "source": "user-entered",
+      "leavesDevice": true,
+      "recipient": "The OpenMapX API relay, signer.mangrove.reviews and the selected OpenStreetMap, Bluesky or passkey login provider",
+      "endpoint": "/api/integrations/reviews-mangrove/signer/*; browser redirect to signer.mangrove.reviews/auth/login",
+      "purpose": "Optional shared signing across apps and devices. Provider login exposes browser request and login data to the selected providers. Mangrove holds the private key and signs review content; this is delegated custody, not end-to-end encryption. OpenMapX relays the token and review without storing the token in its database.",
+      "linkedToAccount": true,
+      "retention": {
+        "kind": "account-lifetime",
+        "note": "The token stays in tab session storage, bound to the exact OpenMapX session; same-origin scripts can access it. Signer sessions normally expire after 24 hours. Disconnect or sign-out removes local credentials and attempts remote revocation. Mangrove controls remote identity/key retention; OpenMapX account deletion does not delete that identity. A reconnect draft may remain in tab storage and is eligible for restore for one hour, without publishing consent."
+      },
+      "shared": "third-party-controller",
+      "encryptedInTransit": true,
+      "userControl": "Choose shared signing or encrypted local signing. Disconnect the signer or sign out to remove the local token; manage or delete the remote account at Mangrove.",
+      "appleLabel": {
+        "collected": true,
+        "category": "Other Data",
+        "purposes": ["App Functionality"],
+        "linkedToIdentity": true,
+        "usedForTracking": false
+      },
+      "googleDataSafety": {
+        "collected": true,
+        "shared": true,
+        "category": "App activity",
+        "optional": true,
+        "purposes": ["App functionality"]
+      },
+      "legalSection": "reviews",
+      "notes": "Draft classification for the served web flow. Installed-device auth, storage, provider retention and store-console answers require candidate-specific qualification."
+    },
+    {
       "id": "published-reviews",
       "dataType": "Review text, rating, nickname, photos and public signing identity the user chooses to publish",
       "source": "user-entered",
       "leavesDevice": true,
       "recipient": "The OpenMapX API relay and Mangrove.reviews, an independent public review commons",
       "endpoint": "POST /api/integrations/reviews/submit; POST /api/integrations/reviews/image",
-      "purpose": "Publishing browser-signed reviews through an authenticated OpenMapX API relay. The public signing key connects reviews under that identity. The API can associate the submission request with the signed-in account; the proposed identity classification needs review.",
+      "purpose": "Publishing reviews signed by the shared signer or an encrypted local key through an authenticated OpenMapX API relay. The public signing key connects reviews under that identity. The API can associate the submission request with the signed-in account; the proposed identity classification needs review.",
       "linkedToAccount": false,
       "retention": {
         "kind": "account-lifetime",

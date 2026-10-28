@@ -6,8 +6,65 @@ import { MangroveProvider } from "./provider";
 import { createMangroveSigner, type SignerTransport } from "./signer";
 import { useMangroveSigner } from "./signerProvider";
 import type { MangroveTransport } from "./transport";
+import { useReviewIdentity } from "./useReviewIdentity";
 
 describe("callback controller lifecycle", () => {
+  it("allows a new connection after disconnecting from a discovery outage", async () => {
+    sessionStorage.clear();
+    const transport = {
+      signer: {
+        getConfig: async () => {
+          throw new Error("outage");
+        },
+      },
+      getKeypairEnvelope: async () => ({ state: "uninitialized" }),
+    } as unknown as MangroveTransport;
+    const client = new QueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>
+        <MangroveProvider transport={transport} currentUser={{ id: "a" }}>
+          {children}
+        </MangroveProvider>
+      </QueryClientProvider>
+    );
+    const hook = renderHook(
+      () => ({ signer: useMangroveSigner(), identity: useReviewIdentity() }),
+      { wrapper },
+    );
+    await waitFor(() => expect(hook.result.current.signer.status).toBe("error"));
+    await act(async () => {
+      await hook.result.current.signer.controller?.disconnect();
+    });
+    expect(hook.result.current.identity.isLoading).toBe(false);
+    expect(hook.result.current.identity.needsConnection).toBe(true);
+  });
+  it("waits for initial signer discovery before offering a new connection", async () => {
+    sessionStorage.clear();
+    let finish!: (value: { configured: false }) => void;
+    const transport = {
+      signer: {
+        getConfig: () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      },
+      getKeypairEnvelope: async () => ({ state: "uninitialized" }),
+    } as unknown as MangroveTransport;
+    const client = new QueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>
+        <MangroveProvider transport={transport} currentUser={{ id: "a" }}>
+          {children}
+        </MangroveProvider>
+      </QueryClientProvider>
+    );
+    const hook = renderHook(() => useReviewIdentity(), { wrapper });
+    expect(hook.result.current.isLoading).toBe(true);
+    expect(hook.result.current.needsConnection).toBe(false);
+    await act(async () => finish({ configured: false }));
+    await waitFor(() => expect(hook.result.current.needsConnection).toBe(true));
+    expect(hook.result.current.isLoading).toBe(false);
+  });
   it("accepts a callback from a child effect, including Strict Mode remounts", async () => {
     sessionStorage.clear();
     const config = {

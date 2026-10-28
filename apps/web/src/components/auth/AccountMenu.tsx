@@ -47,8 +47,21 @@ export function AccountMenu({ anchorEl, onClose, user, onOpenSettings }: Account
     // live.
     useKeypairStore.getState().clear();
     queryClient.removeQueries({ queryKey: MANGROVE_KEYPAIR_QUERY_KEY });
-    void signer.controller?.disconnect();
+    const revocation = signer.controller?.disconnect();
     clearMangroveSignerStorage(window.sessionStorage);
+    if (revocation) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          revocation.catch(() => undefined),
+          new Promise<void>((resolve) => {
+            timer = setTimeout(resolve, 500);
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
     await authClient.signOut();
   };
 

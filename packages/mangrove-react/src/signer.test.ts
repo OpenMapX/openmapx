@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createMangroveSigner, type SignerAccount, type SignerTransport } from "./signer";
 
 const config = {
@@ -53,6 +53,67 @@ function fixture(owner = "owner-a") {
   };
 }
 describe("Mangrove signer authority", () => {
+  it("does not revoke another owner's saved credential", async () => {
+    const f = fixture();
+    f.values.set(
+      "openmapx.mangrove.signer",
+      JSON.stringify({ owner: "owner-b", token: "secret".repeat(8) }),
+    );
+    f.transport.revokeSession = vi.fn(async () => undefined);
+    await f.controller.disconnect();
+    expect(f.transport.revokeSession).not.toHaveBeenCalled();
+  });
+  it("does not reopen login after choosing local signing during reconnect revocation", async () => {
+    const f = fixture();
+    const login = new URL(await f.controller.beginLogin("osm", "/"));
+    await f.controller.acceptCallback(
+      `https://maps.test/auth/mangrove#session_token=${"secret".repeat(8)}&state=${login.searchParams.get("state")}`,
+    );
+    let finish!: () => void;
+    f.transport.revokeSession = () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+    const reconnect = f.controller.beginLogin("osm", "/");
+    const outcome = expect(reconnect).rejects.toThrow();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    f.controller.selectLocal();
+    finish();
+    await outcome;
+    expect(f.controller.getSnapshot().mode).toBe("local");
+    expect(f.values.has("openmapx.mangrove.login")).toBe(false);
+  });
+  it("revokes an owner-bound saved credential even when restore could not load an account", async () => {
+    const f = fixture();
+    f.values.set(
+      "openmapx.mangrove.signer",
+      JSON.stringify({
+        owner: "owner-a",
+        token: "secret".repeat(8),
+        registration: JSON.stringify([config.signerUrl, config.clientId, config.redirectUri]),
+        createdAt: 1000,
+      }),
+    );
+    f.transport.getAccount = async () => {
+      throw new Error("outage");
+    };
+    f.transport.revokeSession = vi.fn(async () => undefined);
+    await expect(f.controller.restore()).rejects.toThrow();
+    expect(f.controller.getSnapshot().account).toBeNull();
+    await f.controller.disconnect();
+    expect(f.transport.revokeSession).toHaveBeenCalledWith("secret".repeat(8), expect.anything());
+    expect(f.values.has("openmapx.mangrove.signer")).toBe(false);
+  });
+  it("revokes the previous session before replacing it during reconnect", async () => {
+    const f = fixture();
+    const login = new URL(await f.controller.beginLogin("osm", "/"));
+    await f.controller.acceptCallback(
+      `https://maps.test/auth/mangrove#session_token=${"secret".repeat(8)}&state=${login.searchParams.get("state")}`,
+    );
+    f.transport.revokeSession = vi.fn(async () => undefined);
+    await f.controller.beginLogin("osm", "/");
+    expect(f.transport.revokeSession).toHaveBeenCalledWith("secret".repeat(8), expect.anything());
+  });
   it("rejects a callback without pending state and never exposes the bearer", async () => {
     const f = fixture();
     await expect(

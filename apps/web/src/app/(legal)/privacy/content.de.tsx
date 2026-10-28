@@ -67,7 +67,7 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 18. Oktober 2026 (Gefahrendaten jetzt über OpenConditions)
+        Zuletzt aktualisiert: 28. Oktober 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -344,16 +344,21 @@ export default function PrivacyContentDe({
           </li>
           <li>
             <Typography>
-              <strong>Mangrove-Bewertungs-Schl&uuml;sselpaar</strong> &mdash; wenn Sie die
-              Bewertungsfunktion aktivieren, wird ein ECDSA-P-256-Signatur-Schl&uuml;sselpaar
-              erzeugt und f&uuml;r Sie gespeichert. Der &ouml;ffentliche Schl&uuml;ssel wird im
-              Klartext auf unserem Server abgelegt (er ist konzeptionell &ouml;ffentlich). Der
-              private Schl&uuml;ssel wird je nach von Ihnen gew&auml;hltem Schutzmodus gespeichert:
+              <strong>Mangrove-Bewertungssignaturen</strong> — der primäre Verbindungsweg nutzt den
+              gemeinsamen Mangrove-Signierdienst. Mangrove verwahrt den privaten Schlüssel und
+              signiert in Ihrem Auftrag. OpenMapX leitet Ihr Signier-Sitzungstoken und den
+              Bewertungsinhalt an <code>signer.mangrove.reviews</code> weiter und erhält Ihre
+              öffentliche Signaturidentität. Einzelheiten zu Anmeldung und Empfängern stehen in
+              Abschnitt&nbsp;6. Alternativ können Sie einen verschlüsselten lokalen
+              ECDSA-P-256-Schlüssel wählen. Dabei speichert unser Server den öffentlichen Schlüssel,
+              verschlüsseltes privates Schlüsselmaterial und Metadaten der Entsperrmethoden. Eine
+              Speicherung privater Schlüssel im Klartext wird nicht unterstützt. Für lokale
+              Schlüssel stehen folgende Schutzoptionen zur Verfügung:
             </Typography>
             <ul>
               <li>
                 <Typography>
-                  <strong>Passphrase (empfohlen)</strong> &mdash; der private Schl&uuml;ssel wird in
+                  <strong>Lokale Passphrase</strong> &mdash; der private Schl&uuml;ssel wird in
                   Ihrem Browser mit einer von Ihnen gew&auml;hlten Passphrase verschl&uuml;sselt,
                   und zwar mit dem auditierten{" "}
                   <Link
@@ -377,25 +382,16 @@ export default function PrivacyContentDe({
                   Relying-Party-ID und Transporthinweis, jedoch kein geheimes Material.
                 </Typography>
               </li>
-              <li>
-                <Typography>
-                  <strong>Unverschl&uuml;sselt (ausdr&uuml;ckliches Opt-in)</strong> &mdash; nur
-                  wenn Sie dies aktiv w&auml;hlen, wird der private Schl&uuml;ssel im Klartext auf
-                  unserem Server gespeichert. In diesem Modus k&ouml;nnten Personen mit
-                  Datenbankzugriff (einschlie&szlig;lich des Betreibers) kryptografisch Bewertungen
-                  in Ihrem Namen signieren. Wir zeigen vor dieser Wahl eine Warnung an.
-                </Typography>
-              </li>
             </ul>
           </li>
           <li>
             <Typography>
               <strong>Bewertungsinhalte</strong> &mdash; wenn Sie eine Bewertung abgeben, werden die
               von Ihnen bereitgestellten Inhalte (Sternebewertung, Freitext, optionale Bilder,
-              optionale Interessenangaben, optionaler Erlebniskontext, Ortsreferenz) in Ihrem
-              Browser kryptografisch signiert und anschlie&szlig;end von unserem Server an das
-              Mangrove.reviews-Netzwerk weitergeleitet. Siehe Abschnitt&nbsp;6 zur
-              Ver&ouml;ffentlichung.
+              optionale Interessenangaben, optionaler Erlebniskontext, Ortsreferenz) vom gemeinsamen
+              Mangrove-Signierdienst oder bei gewählter lokaler Signierung in Ihrem Browser
+              signiert. Anschließend leitet unser Server die signierte Bewertung an das
+              Mangrove.reviews-Netzwerk weiter. Siehe Abschnitt&nbsp;6 zur Ver&ouml;ffentlichung.
             </Typography>
           </li>
         </ul>
@@ -471,6 +467,27 @@ export default function PrivacyContentDe({
           Bewertung abgeben.
         </Typography>
         <ul>
+          <li>
+            <Typography>
+              <strong>Gemeinsamer Signierdienst und Anbieter-Anmeldung.</strong> Beim Verbinden wird
+              Ihr Browser zu <code>signer.mangrove.reviews</code> und zur gewählten Anmeldung mit
+              OpenStreetMap, Bluesky oder Passkey weitergeleitet. Mangrove und der gewählte Anbieter
+              können Ihre IP-Adresse, Browser-Anfragedaten und Anmeldeinformationen erhalten. Über
+              authentifizierte Schnittstellen übermittelt OpenMapX das Signier-Sitzungstoken und die
+              Bewertung an Mangrove und erhält Ihren öffentlichen Schlüssel, die Rezensentenkennung
+              und gegebenenfalls Kontodetails oder eine dezentrale Kennung. Mangrove verwahrt den
+              privaten Schlüssel und kann für diese Identität signieren; dies ist delegierte
+              Schlüsselverwahrung, keine Ende-zu-Ende-Verschlüsselung. Das Token liegt im
+              Sitzungsspeicher dieses Tabs, ist an Ihre OpenMapX-Sitzung gebunden und für Skripte
+              desselben Ursprungs zugänglich. OpenMapX speichert es nicht in seiner Datenbank.
+              Signier-Sitzungen laufen normalerweise nach 24 Stunden ab. Trennen oder Abmelden
+              entfernt das lokale Token und versucht einen entfernten Widerruf, der bei einer
+              Störung scheitern kann. Verwalten Sie die entfernte Identität bei Mangrove; das
+              Löschen Ihres OpenMapX-Kontos löscht diese nicht. Ein Entwurf für das erneute
+              Verbinden kann ebenfalls im Tab-Speicher verbleiben; eine Wiederherstellung ist eine
+              Stunde lang möglich und übernimmt keine Zustimmung zur Veröffentlichung.
+            </Typography>
+          </li>
           <li>
             <Typography>
               <strong>Bewertungen sind &ouml;ffentlich und dauerhaft.</strong> Wenn Sie eine
@@ -1217,10 +1234,11 @@ export default function PrivacyContentDe({
           </li>
           <li>
             <Typography>
-              <strong>Mangrove-Schl&uuml;sselpaar</strong> &mdash; wird aufbewahrt, bis Sie es neu
-              generieren oder Ihr Konto l&ouml;schen. Das L&ouml;schen des Schl&uuml;sselpaars auf
-              unseren Servern <strong>widerruft nicht</strong> bereits ver&ouml;ffentlichte
-              Bewertungen aus dem Mangrove-Netzwerk.
+              <strong>Lokales Mangrove-Schlüsselpaar</strong> — bleibt bis zum Ersetzen, Löschen
+              oder Löschen Ihres OpenMapX-Kontos gespeichert, vorbehaltlich der Lösch- und
+              Sicherungsregeln dieser Erklärung. Dadurch wird weder die separate Identität beim
+              gemeinsamen Signierdienst gelöscht noch eine bereits im Mangrove-Netzwerk
+              veröffentlichte Bewertung widerrufen.
             </Typography>
           </li>
           <li>
@@ -1306,21 +1324,15 @@ export default function PrivacyContentDe({
           Zugangsdaten im Ruhezustand und TLS beim Transport &auml;ndern diese Grenze nicht.
         </Typography>
         <Typography sx={{ mt: 1 }}>
-          <strong>
-            Vertrauensmodell f&uuml;r das Mangrove-Schl&uuml;sselpaar (Abschnitt&nbsp;5).
-          </strong>{" "}
-          Im Passphrase-Modus sowie im kombinierten Passphrase- und Passkey-Modus verl&auml;sst der
-          private Signaturschl&uuml;ssel Ihren Browser niemals im Klartext. Selbst eine
-          vollst&auml;ndige Kompromittierung unserer Datenbank w&uuml;rde nur
-          age-verschl&uuml;sseltes Chiffrat offenlegen, das ohne Ihre Passphrase oder einen
-          registrierten Passkey nicht entschl&uuml;sselt werden kann. Im
-          &bdquo;unverschl&uuml;sselten Opt-in-Modus&ldquo; hingegen wird der private Schl&uuml;ssel
-          im Klartext gespeichert; Personen mit Datenbankzugriff k&ouml;nnten daher Bewertungen in
-          Ihrem Namen signieren. Wir empfehlen, einen der verschl&uuml;sselten Modi zu w&auml;hlen
-          und Ihre Passphrase niemals weiterzugeben. Diese Modi sch&uuml;tzen den gespeicherten
-          Schl&uuml;ssel bei einer ausschlie&szlig;lichen Offenlegung der Datenbank; sie k&ouml;nnen
-          einen kompromittierten Webserver nicht daran hindern, den Schl&uuml;ssel oder
-          Bewertungsinhalt anzugreifen, nachdem Ihr Browser ihn entsperrt hat.
+          <strong>Vertrauensmodell für Mangrove-Signaturen (Abschnitt&nbsp;5).</strong> Beim
+          gemeinsamen Signierdienst vertrauen Sie Mangrove den Schutz und die Verwendung des
+          privaten Schlüssels an; Mangrove erhält Bewertung und Sitzungstoken über unsere
+          Schnittstelle. Bei der erweiterten lokalen Signierung verschlüsselt der Browser den
+          privaten Schlüssel vor dem Hochladen mit einer Passphrase oder einem unterstützten
+          Passkey. Eine ausschließliche Datenbankoffenlegung zeigt Chiffrat statt eines nutzbaren
+          lokalen privaten Schlüssels. Lokale Verschlüsselung schützt einen entsperrten Schlüssel
+          oder Bewertungsinhalte nicht vor kompromittiertem Anwendungscode. Beide Wege
+          veröffentlichen lesbare Bewertungen; keiner verschlüsselt veröffentlichte Bewertungen.
         </Typography>
         <Typography sx={{ mt: 1 }}>
           <strong>OAuth-Anbieter-Token.</strong> Von OpenStreetMap und Mapillary ausgestellte Token

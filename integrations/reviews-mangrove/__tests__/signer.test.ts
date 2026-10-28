@@ -12,10 +12,10 @@ const CONFIG = {
   signerClientId: "registered-client",
   signerRedirectUri: "https://maps.test/auth/mangrove",
 };
-const PEM = generateKeyPairSync("ec", { namedCurve: "prime256v1" })
+const MULTILINE_PEM = generateKeyPairSync("ec", { namedCurve: "prime256v1" })
   .publicKey.export({ type: "spki", format: "pem" })
-  .toString()
-  .replace(/\n/g, "");
+  .toString();
+const PEM = MULTILINE_PEM.replace(/\n/g, "");
 const ACCOUNT = {
   reviewer_id: "reviewer-1",
   public_key: PEM,
@@ -208,6 +208,19 @@ describe("Mangrove signer through integration setup", () => {
     });
     expect(f.admission.mock.calls[0][0]).not.toHaveProperty("policy");
   });
+
+  it.each(["\n", "\r\n"])(
+    "canonicalizes multiline PEM keys with %j line breaks",
+    async (newline) => {
+      const f = fixture();
+      f.respond({ ...ACCOUNT, public_key: MULTILINE_PEM.replace(/\n/g, newline) });
+      expect((await f.call("account")).body).toMatchObject({ publicPem: PEM });
+      f.respond({ ...ACCOUNT, jwt: JWT, public_key: MULTILINE_PEM.replace(/\n/g, newline) });
+      expect(
+        (await f.call("sign", { sessionToken: "fixture-token", review: REVIEW })).body,
+      ).toMatchObject({ publicPem: PEM });
+    },
+  );
 
   it("allows missing/null optional DID and account metadata", async () => {
     const f = fixture();

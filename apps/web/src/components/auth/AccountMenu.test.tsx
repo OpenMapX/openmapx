@@ -30,7 +30,7 @@ beforeEach(() => {
 });
 
 describe("AccountMenu sign-out", () => {
-  it("clears secrets and logs out without waiting for signer revocation", async () => {
+  it("clears secrets immediately and logs out after a bounded revocation wait", async () => {
     disconnect.mockImplementation(() => new Promise(() => {}));
     const { AccountMenu } = await import("./AccountMenu");
     const user = userEvent.setup();
@@ -57,8 +57,9 @@ describe("AccountMenu sign-out", () => {
     );
 
     await user.click(screen.getByRole("menuitem", { name: "account.signOut" }));
-    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
     expect(clearKeypair).toHaveBeenCalledTimes(1);
     expect(removeQueries).toHaveBeenCalledWith({ queryKey: ["mangrove-keypair"] });
+    expect(signOut).not.toHaveBeenCalled();
+    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
   });
 });

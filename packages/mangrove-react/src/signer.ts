@@ -74,7 +74,7 @@ export function createMangroveSigner({
 }: Options) {
   let snapshot: SignerSnapshot = {
     mode: "signer",
-    status: "disconnected",
+    status: "restoring",
     account: null,
     config: null,
   };
@@ -115,6 +115,34 @@ export function createMangroveSigner({
     storage.removeItem(SESSION);
     storage.removeItem(PENDING);
   };
+  const savedToken = () => {
+    const saved = read(SESSION);
+    return saved?.owner === owner &&
+      typeof saved.token === "string" &&
+      /^[A-Za-z0-9_-]{16,512}$/.test(saved.token)
+      ? saved.token
+      : null;
+  };
+  async function revokeBestEffort(old: string | null) {
+    if (!old) return;
+    const cancellation = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        Promise.resolve()
+          .then(() => transport.revokeSession(old, { signal: cancellation.signal }))
+          .catch(() => undefined),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(() => {
+            cancellation.abort();
+            resolve();
+          }, 750);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
   async function configFor(op: ReturnType<typeof capture>) {
     let config: SignerConfig;
     try {
@@ -172,13 +200,17 @@ export function createMangroveSigner({
     },
     async restore() {
       const op = capture();
+      publish({ status: "restoring" });
       const mode = read(MODE);
       if (mode?.owner === owner && mode.mode === "local") publish({ mode: "local" });
       const saved = read(SESSION);
       if (saved && saved.owner !== owner) forget();
       try {
         const config = await configFor(op);
-        if (snapshot.mode === "local" || !saved || saved.owner !== owner) return;
+        if (snapshot.mode === "local" || !saved || saved.owner !== owner) {
+          publish({ status: "disconnected" });
+          return;
+        }
         if (!config.configured) {
           publish({ status: "error" });
           return;
@@ -191,6 +223,7 @@ export function createMangroveSigner({
           saved.createdAt > now()
         ) {
           forget();
+          publish({ status: "disconnected", account: null });
           return;
         }
         publish({ status: "restoring" });
@@ -214,10 +247,14 @@ export function createMangroveSigner({
         throw new MangroveSignerError();
       const config = await configFor(op);
       if (!config.configured) throw new MangroveSignerError();
+      const old = token ?? savedToken();
       invalidate();
       forget();
       publish({ mode: "signer", status: "disconnected", account: null });
       storage.removeItem(MODE);
+      const login = capture();
+      await revokeBestEffort(old);
+      assert(login);
       const state = crypto.randomUUID();
       storage.setItem(
         PENDING,
@@ -314,26 +351,20 @@ export function createMangroveSigner({
       }
     },
     async disconnect() {
-      const old = token;
+      const old = token ?? savedToken();
       invalidate();
       forget();
       storage.removeItem(MODE);
       publish({ mode: "signer", status: "disconnected", account: null });
-      if (old) {
-        try {
-          await transport.revokeSession(old);
-        } catch {
-          /* Local removal does not depend on the signer being reachable. */
-        }
-      }
+      await revokeBestEffort(old);
     },
     selectLocal() {
-      const old = token;
+      const old = token ?? savedToken();
       invalidate();
       forget();
       storage.setItem(MODE, JSON.stringify({ owner, mode: "local" }));
       publish({ mode: "local", status: "disconnected", account: null });
-      if (old) void transport.revokeSession(old).catch(() => undefined);
+      void revokeBestEffort(old);
     },
   };
 }

@@ -29,7 +29,8 @@ also be reviewed; their absence does not establish that data is not collected.
 | Location | Transit origin, destination, departure time, and a rotating refresh token | Collected only | Processed ephemerally | Required | App functionality |
 | Personal info | Email address, display name, and authentication credentials | Collected only | Retained | Optional | Account management, App functionality |
 | App activity | Saved places, labels, and app preferences | Collected only | Retained | Optional | App functionality |
-| App activity | Review signing key material | Collected only | Retained | Optional | App functionality |
+| App activity | Encrypted local review signing key material and public unlock metadata | Collected only | Retained | Optional | App functionality |
+| App activity | Signer session token, provider login information, review content and public signing identity | Shared | Retained | Optional | App functionality |
 | App activity | Review text, rating, nickname, photos and public signing identity the user chooses to publish | Shared | Retained | Optional | App functionality |
 | Location | Tile and imagery requests revealing the viewed area, with network metadata such as IP address | Shared | Processed ephemerally | Required | App functionality |
 
@@ -67,7 +68,9 @@ does not establish that the underlying data stays on the device.
   row/byte limits without a demonstrated 24-hour purge. These facts need review
   against the retained retention classifications and budgets.
 - Saved content is readable by the server/operator and can be shared through
-  bearer links. Review keys have an explicit unencrypted mode. Public review
+  bearer links. Local review keys are encrypted before upload. Shared signing sends
+  a session token and review through the API to Mangrove, which holds the signing
+  key. Provider login also exposes browser request and login data. Public review
   submissions use an authenticated relay; assess identity linkage separately.
 - Sign-out leaves offline downloads and some other browser storage. Verify the
   separate removal controls. Review distributor diagnostics and developer-console

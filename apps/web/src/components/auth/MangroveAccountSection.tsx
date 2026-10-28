@@ -48,24 +48,24 @@ export function MangroveAccountSection() {
             <Button variant="outlined" onClick={() => setConnect(true)}>
               {signer.account ? t("mangroveReconnect") : t("mangroveConnectTitle")}
             </Button>
+            {(signer.account || signer.status === "error" || signer.status === "restoring") && (
+              <Button
+                onClick={() => {
+                  useKeypairStore.getState().lock();
+                  void signer.controller?.disconnect();
+                }}
+              >
+                {t("mangroveDisconnect")}
+              </Button>
+            )}
             {signer.account && (
-              <>
-                <Button
-                  onClick={() => {
-                    useKeypairStore.getState().lock();
-                    void signer.controller?.disconnect();
-                  }}
-                >
-                  {t("mangroveDisconnect")}
-                </Button>
-                <Button
-                  href="https://mangrove.reviews/account"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {t("mangroveManageAccount")}
-                </Button>
-              </>
+              <Button
+                href="https://mangrove.reviews/account"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {t("mangroveManageAccount")}
+              </Button>
             )}
           </Stack>
         </Stack>

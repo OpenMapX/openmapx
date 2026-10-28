@@ -85,6 +85,7 @@ const REQUIRED_COVERAGE: { subject: string; practiceId: string }[] = [
   { subject: "GET /api/integrations/transit/plan", practiceId: "transit-plan-and-refresh" },
   { subject: "POST /api/mobile-auth/exchange", practiceId: "system-auth-handoff" },
   { subject: "/api/auth/*", practiceId: "account-and-contact" },
+  { subject: "/api/integrations/reviews-mangrove/signer/*", practiceId: "review-shared-signer" },
   { subject: "/api/saved/*", practiceId: "saved-places-and-settings" },
   { subject: "local SQLite navigation session", practiceId: "precise-location-active-navigation" },
   { subject: "local diagnostics buffer", practiceId: "diagnostics-export" },
@@ -193,7 +194,9 @@ areas. Review other enabled web features before describing all location uses.
   then to API \`/mobile-auth/exchange\`. Server rows contain an account ID;
   redemption expiry and eventual row deletion are different events.
 - Saved places are readable by the server/operator and can be shared by bearer
-  link. Review signing keys have an explicit unencrypted mode. Public review
+  link. Local review keys are encrypted before upload. Shared signing sends a
+  session token and review content through the API to Mangrove, which holds the
+  signing key. Provider login also exposes browser request and login data. Public
   submissions use an authenticated relay, so identity linkage needs review.
 - Sign-out does not clear every cache or downloaded offline area. Review local
   storage, cookie transmission and deletion controls separately.
@@ -279,7 +282,9 @@ does not establish that the underlying data stays on the device.
   row/byte limits without a demonstrated 24-hour purge. These facts need review
   against the retained retention classifications and budgets.
 - Saved content is readable by the server/operator and can be shared through
-  bearer links. Review keys have an explicit unencrypted mode. Public review
+  bearer links. Local review keys are encrypted before upload. Shared signing sends
+  a session token and review through the API to Mangrove, which holds the signing
+  key. Provider login also exposes browser request and login data. Public review
   submissions use an authenticated relay; assess identity linkage separately.
 - Sign-out leaves offline downloads and some other browser storage. Verify the
   separate removal controls. Review distributor diagnostics and developer-console

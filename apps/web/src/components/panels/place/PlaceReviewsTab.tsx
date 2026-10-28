@@ -42,7 +42,8 @@ export function PlaceReviewsTab({ place }: Props) {
   const [lng, lat] = place.coordinates;
   const { data: session } = useSession();
   const isSignedIn = !!session?.user?.id;
-  const { canSign, publicPem, needsSetup, needsUnlock, needsConnection } = useReviewIdentity();
+  const { canSign, publicPem, needsSetup, needsUnlock, needsConnection, isLoading } =
+    useReviewIdentity();
   // `ids.osm` is only present when this place is linked to an OSM element —
   // Mangrove's metadata.osm_id is reserved for `node|way|relation/ID[/VERSION]`.
   const subject = { lat, lng, name: place.name, osmId: place.ids?.osm };
@@ -87,6 +88,10 @@ export function PlaceReviewsTab({ place }: Props) {
    */
   function gatedAction(action: PendingAction) {
     if (!action) return;
+    if (isLoading) {
+      setPending(action);
+      return;
+    }
     if (needsConnection) {
       setPending(action);
       setConnectOpen(true);
@@ -124,6 +129,7 @@ export function PlaceReviewsTab({ place }: Props) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional trigger
   useEffect(() => {
     if (!pending) return;
+    if (isLoading) return;
     if (needsConnection) return;
     if (needsSetup) {
       setSetupOpen(true);
@@ -137,7 +143,7 @@ export function PlaceReviewsTab({ place }: Props) {
     const action = pending;
     setPending(null);
     runAction(action);
-  }, [canSign, needsSetup, needsUnlock, needsConnection]);
+  }, [canSign, needsSetup, needsUnlock, needsConnection, isLoading]);
 
   return (
     <Box sx={{ px: 2, pt: 2, pb: 2 }}>
@@ -159,6 +165,7 @@ export function PlaceReviewsTab({ place }: Props) {
       <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
         <Button
           variant="contained"
+          disabled={isLoading}
           color="primary"
           startIcon={ownReview ? <EditIcon /> : <RateReviewIcon />}
           onClick={() => {

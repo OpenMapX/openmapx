@@ -13,6 +13,7 @@ export function useReviewIdentity() {
       needsUnlock: local.needsUnlock,
       isLoading: local.isLoading,
     };
+  const isLoading = signer.status === "restoring";
   return {
     mode: "signer" as const,
     publicPem: signer.account?.publicPem ?? null,
@@ -20,9 +21,9 @@ export function useReviewIdentity() {
       !!signer.account &&
       !!signer.config?.configured &&
       (signer.status === "connected" || signer.status === "error"),
-    needsConnection: !signer.account || !signer.config?.configured,
+    needsConnection: !isLoading && (!signer.account || !signer.config?.configured),
     needsSetup: false,
     needsUnlock: false,
-    isLoading: signer.status === "restoring",
+    isLoading,
   };
 }
