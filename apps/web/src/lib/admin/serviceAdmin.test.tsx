@@ -1,10 +1,19 @@
 import { createApiClient } from "@openmapx/core";
+import { SERVICE_ACTIONS } from "@openmapx/core/ops";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, createTestQueryClient, renderHookWithQuery, waitFor } from "@/test";
 import { invalidateServiceAdministration, serviceAdminQueries } from "./serviceAdmin";
 
 let apiUrl = "http://admin.test";
+const availableActions = Object.fromEntries(
+  SERVICE_ACTIONS.map((action) => [
+    action,
+    { available: true, execution: "direct", reason: null, workflow: null },
+  ]),
+);
+const acquisition = { state: "available", reason: null };
+
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({ useEnv: () => ({ apiUrl }) }));
 const clients: ReturnType<typeof createTestQueryClient>[] = [];
 function cache() {
@@ -226,8 +235,10 @@ describe("service administration query acquisition", () => {
     expect(new Set(keys).size).toBe(keys.length);
     vi.stubGlobal("fetch", (url: string) =>
       Response.json({
+        acquisition,
         services: [],
         summary: {
+          unknown: 0,
           running: 0,
           stopped: 0,
           total: new URL(url).origin === new URL(apiUrl).origin ? 1 : 2,
@@ -260,7 +271,9 @@ describe("service administration query acquisition", () => {
     await waitFor(() => expect(qc.isFetching()).toBe(1));
     unmount();
     await waitFor(() => expect(canceled).toBe(true));
-    vi.stubGlobal("fetch", () => Response.json({ services: [], secret: "synthetic-private" }));
+    vi.stubGlobal("fetch", () =>
+      Response.json({ acquisition, services: [], secret: "synthetic-private" }),
+    );
     await expect(qc.fetchQuery(queries().list())).rejects.toThrow("Service request failed");
     expect(qc.getQueryData(queries().list().queryKey)).toBeUndefined();
   });
@@ -291,9 +304,11 @@ describe("service administration query acquisition", () => {
         });
       expect(u.pathname).toBe("/api/admin/services/selection");
       return Response.json({
+        acquisition,
         manifest: { ...manifest, name: marker },
         directory: "/synthetic",
         isBuiltIn: true,
+        actions: availableActions,
         enabled: true,
         status: "running",
       });

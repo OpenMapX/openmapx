@@ -149,3 +149,26 @@ export async function invalidateServiceAdministration(
   // Default active-only refetch preserves invalidation for inactive queries too.
   await queryClient.invalidateQueries(filters);
 }
+
+/** Display the same decision used by the server, without inferring permission from status. */
+export function serviceActionReason(
+  decision: import("@openmapx/core/ops").ServiceActionDecision | undefined,
+): string | null {
+  if (decision?.available) return null;
+  switch (decision?.reason) {
+    case "disabled":
+      return "Enable this service before using this action.";
+    case "not_owned":
+      return "No owned container is available for this action.";
+    case "not_running":
+      return "This service is not running.";
+    case "control_plane":
+      return "Use System Maintenance for core updates; stopping the control plane requires host access.";
+    case "host_only":
+      return "This action requires host access.";
+    case "not_buildable":
+      return "This service does not prepare build artifacts.";
+    default:
+      return "This action is currently unavailable. Check the operations agent.";
+  }
+}

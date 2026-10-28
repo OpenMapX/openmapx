@@ -35,6 +35,7 @@ import {
   useServicesBulkAction,
   useServicesList,
 } from "@/hooks/useServices";
+import { serviceActionReason } from "@/lib/admin/serviceAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { useActivityClient } from "../activity/activityQueries";
 import { StatusBadge } from "../integrations/StatusBadge";
@@ -226,6 +227,17 @@ function ServiceCatalogView() {
     });
   };
 
+  const deniedIds = (action: BulkAction) =>
+    [...selectedIds].filter((id) => {
+      const decision = services.find((service) => service.id === id)?.actions?.[action];
+      return Boolean(serviceActionReason(decision)) || decision?.workflow === "core-restart";
+    });
+  const bulkReason = (action: BulkAction) => {
+    const denied = deniedIds(action);
+    return denied.length
+      ? `Unavailable for: ${denied.join(", ")}. Use individual core Restart where available.`
+      : undefined;
+  };
   const healthCheckMutation = useServiceHealthCheck();
   const saveSelectionMutation = useServiceSelectionSave();
   const bulkMutation = useServicesBulkAction();
@@ -263,6 +275,10 @@ function ServiceCatalogView() {
 
   const queueBulkAction = (action: BulkAction) => {
     const ids = [...selectedIds];
+    if (deniedIds(action).length) {
+      showToast(bulkReason(action) ?? "Action unavailable", "warning");
+      return;
+    }
     if (action !== "build" && ids.length === 0) {
       showToast("Select one or more services first", "warning");
       return;
@@ -296,6 +312,14 @@ function ServiceCatalogView() {
         gap: 2,
       }}
     >
+      {data?.acquisition.state === "unavailable" && (
+        <CompactAlert severity="warning">
+          Operations agent is unavailable. Service state is unknown.{" "}
+          <Button onClick={() => void refetch()} size="small">
+            Retry
+          </Button>
+        </CompactAlert>
+      )}
       <Paper variant="outlined" sx={{ p: 2 }}>
         <Stack
           sx={{
@@ -476,7 +500,10 @@ function ServiceCatalogView() {
               size="small"
               variant="outlined"
               onClick={() => queueBulkAction("start")}
-              disabled={bulkMutation.isPending || selectedIds.size === 0}
+              title={bulkReason("start")}
+              disabled={
+                bulkMutation.isPending || selectedIds.size === 0 || deniedIds("start").length > 0
+              }
             >
               Start Selected
             </Button>
@@ -485,7 +512,10 @@ function ServiceCatalogView() {
               variant="outlined"
               color="warning"
               onClick={() => queueBulkAction("stop")}
-              disabled={bulkMutation.isPending || selectedIds.size === 0}
+              title={bulkReason("stop")}
+              disabled={
+                bulkMutation.isPending || selectedIds.size === 0 || deniedIds("stop").length > 0
+              }
             >
               Stop Selected
             </Button>
@@ -493,7 +523,10 @@ function ServiceCatalogView() {
               size="small"
               variant="outlined"
               onClick={() => queueBulkAction("restart")}
-              disabled={bulkMutation.isPending || selectedIds.size === 0}
+              title={bulkReason("restart")}
+              disabled={
+                bulkMutation.isPending || selectedIds.size === 0 || deniedIds("restart").length > 0
+              }
             >
               Restart Selected
             </Button>
@@ -501,7 +534,10 @@ function ServiceCatalogView() {
               size="small"
               variant="outlined"
               onClick={() => queueBulkAction("update")}
-              disabled={bulkMutation.isPending || selectedIds.size === 0}
+              title={bulkReason("update")}
+              disabled={
+                bulkMutation.isPending || selectedIds.size === 0 || deniedIds("update").length > 0
+              }
             >
               Update selected
             </Button>
@@ -509,7 +545,10 @@ function ServiceCatalogView() {
               size="small"
               variant="outlined"
               onClick={() => queueBulkAction("build")}
-              disabled={bulkMutation.isPending || selectedIds.size === 0}
+              title={bulkReason("build")}
+              disabled={
+                bulkMutation.isPending || selectedIds.size === 0 || deniedIds("build").length > 0
+              }
             >
               Build Selected
             </Button>
@@ -517,7 +556,7 @@ function ServiceCatalogView() {
               size="small"
               variant="contained"
               onClick={queueBuildAll}
-              disabled={bulkMutation.isPending}
+              disabled={bulkMutation.isPending || !services.some((s) => s.actions?.build.available)}
             >
               Build All
             </Button>
@@ -525,6 +564,22 @@ function ServiceCatalogView() {
               View Jobs
             </Button>
           </Stack>
+          {selectedIds.size > 0 &&
+            ["start", "stop", "restart", "update", "build"].some(
+              (action) => deniedIds(action as BulkAction).length > 0,
+            ) && (
+              <Typography role="status" variant="caption" color="text.secondary">
+                Unavailable targets:{" "}
+                {["start", "stop", "restart", "update", "build"]
+                  .map((action) => {
+                    const ids = deniedIds(action as BulkAction);
+                    return ids.length ? `${action}: ${ids.join(", ")}` : null;
+                  })
+                  .filter(Boolean)
+                  .join("; ")}
+                . Check individual service controls for the available workflow.
+              </Typography>
+            )}
         </Stack>
       </Paper>
       <Stack
@@ -625,6 +680,11 @@ function ServiceCatalogView() {
         }
         pagination={<AdminTablePagination {...paginationProps} />}
       >
+        {summary && summary.unknown > 0 && (
+          <CompactAlert severity="warning">
+            {summary.unknown} service(s) have unknown status.
+          </CompactAlert>
+        )}
         {isError && (
           <CompactAlert
             severity="error"

@@ -1,3 +1,4 @@
+import { SERVICE_ACTIONS } from "@openmapx/core/ops";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { job } from "@/components/admin/activity/__tests__/fixtures";
@@ -8,6 +9,13 @@ import { ServiceCatalog } from "./ServiceCatalog";
 import { ServiceCredentials } from "./ServiceCredentials";
 import { ServiceDetail } from "./ServiceDetail";
 
+const availableActions = Object.fromEntries(
+  SERVICE_ACTIONS.map((action) => [
+    action,
+    { available: true, execution: "direct", reason: null, workflow: null },
+  ]),
+);
+const acquisition = { state: "available", reason: null };
 let apiUrl = "http://admin.test";
 const toast = vi.fn();
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({ useEnv: () => ({ apiUrl }) }));
@@ -87,6 +95,7 @@ function setup(
     if (path.endsWith("/action")) return Response.json({ ok: true, jobId: "job-1" });
     if (path === "/api/admin/services")
       return Response.json({
+        acquisition,
         services: [
           {
             id: "demo",
@@ -97,15 +106,18 @@ function setup(
             consumes: [],
             enabled: true,
             isBuiltIn: true,
+            actions: availableActions,
             status: "not-running",
           },
         ],
-        summary: { running: 0, stopped: 1, total: 1 },
+        summary: { unknown: 0, running: 0, stopped: 1, total: 1 },
       });
     return Response.json({
+      acquisition,
       manifest: { ...manifest(path.split("/").at(-1) ?? "missing"), provides: ["routing"] },
       directory: "/synthetic",
       isBuiltIn: true,
+      actions: availableActions,
       enabled: true,
       status: "not-running",
     });
@@ -146,9 +158,11 @@ describe("service administration visible behavior with the generated SDK", () =>
     setup((url) =>
       url.pathname === "/api/admin/services/demo"
         ? Response.json({
+            acquisition,
             manifest: manifest("demo"),
             directory: "/synthetic",
             isBuiltIn: true,
+            actions: availableActions,
             enabled: true,
             status: "not-running",
           })
@@ -314,7 +328,9 @@ describe("service administration visible behavior with the generated SDK", () =>
     apiUrl = "http://second.test";
     rerender(view(<ServiceCatalog />));
     await act(async () =>
-      deferred.resolve(Response.json({ statuses: [], checkedAt: "2026-10-21T12:00:00.000Z" })),
+      deferred.resolve(
+        Response.json({ acquisition, statuses: [], checkedAt: "2026-10-21T12:00:00.000Z" }),
+      ),
     );
     expect(toast).not.toHaveBeenCalled();
   });
@@ -424,6 +440,7 @@ describe("service administration visible behavior with the generated SDK", () =>
           });
         if (url.pathname === "/api/admin/services/demo" && replaced)
           return Response.json({
+            acquisition,
             manifest: {
               ...manifest("demo"),
               provides: ["routing"],
@@ -438,6 +455,7 @@ describe("service administration visible behavior with the generated SDK", () =>
             directory: "/synthetic",
             enabled: true,
             isBuiltIn: true,
+            actions: availableActions,
             status: "not-running",
           });
         return undefined;
@@ -518,6 +536,7 @@ describe("service administration visible behavior with the generated SDK", () =>
       }
       if (url.pathname === "/api/admin/services" && init.method === "GET")
         return Response.json({
+          acquisition,
           services: [
             {
               id: "demo",
@@ -528,10 +547,16 @@ describe("service administration visible behavior with the generated SDK", () =>
               consumes: [],
               enabled: true,
               isBuiltIn: true,
+              actions: availableActions,
               status: revision === 2 ? "running" : "not-running",
             },
           ],
-          summary: { running: revision === 2 ? 1 : 0, stopped: revision === 2 ? 0 : 1, total: 1 },
+          summary: {
+            unknown: 0,
+            running: revision === 2 ? 1 : 0,
+            stopped: revision === 2 ? 0 : 1,
+            total: 1,
+          },
         });
       return undefined;
     });
@@ -593,4 +618,100 @@ describe("service administration visible behavior with the generated SDK", () =>
       JSON.stringify({ selectedRoots: [] }),
     );
   });
+});
+
+it("uses capabilities for deselected running service cleanup", async () => {
+  setup((url) =>
+    url.pathname === "/api/admin/services/demo"
+      ? Response.json({
+          manifest: manifest("demo"),
+          directory: "/synthetic",
+          isBuiltIn: true,
+          enabled: false,
+          status: "running",
+          acquisition,
+          actions: {
+            ...availableActions,
+            start: { available: false, execution: "direct", reason: "disabled", workflow: null },
+            apply: { available: false, execution: "direct", reason: "disabled", workflow: null },
+          },
+        })
+      : undefined,
+  );
+  mount(<ServiceDetail id="demo" />);
+  expect(await screen.findByRole("button", { name: "Apply changes" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Stop" })).not.toBeDisabled();
+  expect(screen.getByRole("button", { name: "Logs" })).not.toBeDisabled();
+});
+it("disables unavailable controls and keeps outage guidance visible", async () => {
+  const actions = Object.fromEntries(
+    SERVICE_ACTIONS.map((action) => [
+      action,
+      { available: false, execution: "direct", reason: "unavailable", workflow: null },
+    ]),
+  );
+  setup((url) =>
+    url.pathname === "/api/admin/services/demo"
+      ? Response.json({
+          manifest: manifest("demo"),
+          directory: "/synthetic",
+          isBuiltIn: true,
+          enabled: true,
+          status: "unknown",
+          acquisition: { state: "unavailable", reason: "ops_unavailable" },
+          actions,
+        })
+      : undefined,
+  );
+  mount(<ServiceDetail id="demo" />);
+  expect(await screen.findByRole("button", { name: "Restart" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Logs" })).toBeDisabled();
+  expect(screen.getByText(/Operations agent is unavailable/)).toBeInTheDocument();
+});
+
+it("disables a mixed bulk action and lists ineligible IDs", async () => {
+  const core = {
+    ...availableActions,
+    restart: { available: true, execution: "workflow", reason: null, workflow: "core-restart" },
+  };
+  setup((url) =>
+    url.pathname === "/api/admin/services"
+      ? Response.json({
+          acquisition,
+          services: [
+            {
+              id: "demo",
+              name: "Demo",
+              version: "1",
+              quality: "built-in",
+              provides: [],
+              consumes: [],
+              enabled: true,
+              isBuiltIn: true,
+              status: "running",
+              actions: availableActions,
+            },
+            {
+              id: "app-api",
+              name: "API",
+              version: "1",
+              quality: "built-in",
+              provides: [],
+              consumes: [],
+              enabled: true,
+              isBuiltIn: true,
+              status: "running",
+              actions: core,
+            },
+          ],
+          summary: { running: 2, stopped: 0, unknown: 0, total: 2 },
+        })
+      : undefined,
+  );
+  mount(<ServiceCatalog />);
+  await screen.findByRole("link", { name: "Demo" });
+  fireEvent.click(screen.getAllByRole("checkbox")[0]);
+  const button = screen.getByRole("button", { name: "Restart Selected" });
+  expect(button).toBeDisabled();
+  expect(button).toHaveAttribute("title", expect.stringContaining("app-api"));
 });

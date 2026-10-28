@@ -38,7 +38,7 @@ export function ServiceConfigForm({
     <SchemaConfigForm
       key={JSON.stringify([apiUrl, serviceId, schema])}
       preserveDirtyValuesOnRefresh
-      applySuccessMessage="Configuration saved. Service start queued."
+      applySuccessMessage="Configuration saved. Service apply queued."
       schema={schema}
       resolvedConfig={resolvedConfig}
       envPrefix={envPrefix}

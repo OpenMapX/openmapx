@@ -1,6 +1,7 @@
 "use client";
 
 import type { ApiClient } from "@openmapx/core";
+import type { AdminActivityJobDetail } from "@openmapx/core/api-contracts";
 import { type QueryFunctionContext, useQueries, useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
@@ -12,6 +13,7 @@ import {
 } from "react";
 import {
   activityJobQueryOptions,
+  hasUnresolvedJobObservation,
   useActivityClient,
 } from "@/components/admin/activity/activityQueries";
 import { useAdminMutationOwner } from "./useAdminMutationOwner";
@@ -53,7 +55,9 @@ export function AdminJobEffectsProvider({ children }: PropsWithChildren) {
       const options = activityJobQueryOptions(job.client, job.apiUrl, job.jobId, "application");
       return {
         ...options,
-        queryFn: async (context: QueryFunctionContext<(string | undefined)[]>) => {
+        queryFn: async (
+          context: QueryFunctionContext<(string | undefined)[]>,
+        ): Promise<AdminActivityJobDetail> => {
           if (!options.queryFn) throw new Error("Admin job observation is unavailable");
           const data = await options.queryFn(context);
           if (data.id !== job.jobId || data.source !== "application")
@@ -61,15 +65,24 @@ export function AdminJobEffectsProvider({ children }: PropsWithChildren) {
           return data;
         },
         retry: false,
-        refetchInterval: (query: { state: { data?: { status: string } } }) =>
-          query.state.data && terminal.has(query.state.data.status) ? false : 1_000,
+        refetchInterval: (query: { state: { data?: { status: string; result?: unknown } } }) =>
+          query.state.data &&
+          terminal.has(query.state.data.status) &&
+          !hasUnresolvedJobObservation(query.state.data.result)
+            ? false
+            : 1_000,
       };
     }),
   });
   useEffect(() => {
     const finished = jobs.filter((job, index) => {
       const data = observations[index]?.data;
-      return data?.id === job.jobId && data.source === "application" && terminal.has(data.status);
+      return (
+        data?.id === job.jobId &&
+        data.source === "application" &&
+        terminal.has(data.status) &&
+        !hasUnresolvedJobObservation(data.result)
+      );
     });
     if (!finished.length) return;
     for (const job of finished) void job.onSettled();

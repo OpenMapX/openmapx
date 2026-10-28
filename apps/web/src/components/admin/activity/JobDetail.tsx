@@ -12,6 +12,7 @@ import { cancelAdminActivityJob, unwrapAdminResponse } from "@openmapx/core/api-
 import {
   type AdminActivityJobSource,
   adminJobObservationSchema,
+  serviceBatchResultSchema,
 } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
@@ -20,6 +21,7 @@ import { JobStatusChip } from "../shared/JobStatusChip";
 import {
   ACTIVITY_READ_TIMEOUT_MS,
   activityJobQueryOptions,
+  hasUnresolvedJobObservation,
   useActivityClient,
 } from "./activityQueries";
 import { type JobStreamConnection, useJobEventStream } from "./useJobEventStream";
@@ -70,7 +72,9 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
     refetchInterval: (query) => {
       if (!polling) return false;
       const status = query.state.data?.status;
-      return status && isActive(status) ? POLL_INTERVAL_MS : false;
+      return status && (isActive(status) || hasUnresolvedJobObservation(query.state.data?.result))
+        ? POLL_INTERVAL_MS
+        : false;
     },
   });
   const data = stream.data ?? query.data;
@@ -133,6 +137,7 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
     data.result && typeof data.result === "object" && !Array.isArray(data.result)
       ? data.result
       : {};
+  const batch = serviceBatchResultSchema.safeParse(result.serviceBatch);
   const observation = adminJobObservationSchema.safeParse(result.observation);
   const diagnostics =
     result.diagnostics &&
@@ -189,7 +194,7 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
         >
           Duration: {formatDuration(data.startedAt, data.finishedAt)}
         </Typography>
-        {data.cancelable && isCancelable(data.status) && (
+        {data.cancelable && data.status !== "cancel_pending" && (
           <Button
             size="small"
             color="error"
@@ -202,6 +207,29 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
           </Button>
         )}
       </Stack>
+      {batch.success && (
+        <Box role="status">
+          <Typography
+            variant="subtitle2"
+            color={batch.data.outcome === "success" ? "success.main" : "warning.main"}
+          >
+            {batch.data.outcome === "partial"
+              ? "Partially completed"
+              : batch.data.outcome === "failed"
+                ? "Batch failed"
+                : "Batch completed"}
+          </Typography>
+          <Typography variant="body2">
+            Completed: {batch.data.completedServiceIds.join(", ") || "none"}
+          </Typography>
+          <Typography variant="body2">
+            Failed: {batch.data.failedServiceIds.join(", ") || "none"}
+          </Typography>
+          <Typography variant="body2">
+            Skipped: {batch.data.skippedServiceIds.join(", ") || "none"}
+          </Typography>
+        </Box>
+      )}
       {observation.success && (
         <Typography role="status" variant="body2" color="warning.main">
           Outcome unknown; checking retained operation status.

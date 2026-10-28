@@ -23,6 +23,7 @@ import type {
   AdminServiceAction,
   AdminServiceDetail as ServiceDetailData,
 } from "@openmapx/core/api-contracts";
+import Link from "next/link";
 import { useState } from "react";
 import {
   useServiceAction,
@@ -30,6 +31,7 @@ import {
   useServiceConfigSave,
   useServiceDetail,
 } from "@/hooks/useServices";
+import { serviceActionReason } from "@/lib/admin/serviceAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { useActivityClient } from "../activity/activityQueries";
 import { StatusBadge } from "../integrations/StatusBadge";
@@ -386,6 +388,9 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
 
 function ConfigTab({ data }: { data: ServiceDetailData }) {
   const { manifest } = data;
+  const startAction = data.status === "running" ? "apply" : "start";
+  const reason = (action: import("@openmapx/core/ops").ServiceAction) =>
+    serviceActionReason(data.actions?.[action]);
   // Persisted config from `service_config` table (separate query from the
   // manifest itself so the config tab doesn't refetch the full LoadedService).
   const configQuery = useServiceConfig(manifest.id);
@@ -424,15 +429,21 @@ function ConfigTab({ data }: { data: ServiceDetailData }) {
           onSave={async (values) => {
             await saveConfig.mutateAsync(values);
           }}
-          onSaveAndApply={async (values) => {
-            // Service configs land in the generated compose env, so applying
-            // a new value must go through `docker compose up -d` semantics.
-            // Persist first so a failed apply doesn't lose the edit.
-            const execution = owner;
-            await saveConfig.mutateAsync(values);
-            if (!execution.active) return;
-            await action.mutateAsync("start");
-          }}
+          onSaveAndApply={
+            reason(startAction)
+              ? undefined
+              : async (values) => {
+                  // Service configs land in the generated compose env, so applying
+                  // a new value must go through `docker compose up -d` semantics.
+                  // Persist first so a failed apply doesn't lose the edit.
+                  if (reason(startAction))
+                    throw new Error(reason(startAction) ?? "Action unavailable");
+                  const execution = owner;
+                  await saveConfig.mutateAsync(values);
+                  if (!execution.active) return;
+                  await action.mutateAsync(startAction);
+                }
+          }
         />
       </CardContent>
     </Card>
@@ -493,7 +504,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
   const [logsOpen, setLogsOpen] = useState(false);
   const showToast = useAdminToast();
 
-  const { data, isLoading, isError } = useServiceDetail(id);
+  const { data, isLoading, isError, refetch } = useServiceDetail(id);
   const actionMutation = useServiceAction(id);
 
   if (isLoading) {
@@ -519,9 +530,13 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
   }
 
   const { manifest } = data;
+  const startAction = data.status === "running" ? "apply" : "start";
+  const reason = (action: import("@openmapx/core/ops").ServiceAction) =>
+    serviceActionReason(data.actions?.[action]);
   const isBusy = actionMutation.isPending;
 
   async function runAction(action: AdminServiceAction["action"]) {
+    if (reason(action)) return;
     const execution = owner;
     try {
       const result = await actionMutation.mutateAsync(action);
@@ -537,7 +552,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
   function handleTabChange(_: React.SyntheticEvent, value: number) {
     setTab(value);
     // Auto-open the logs drawer when the Logs tab is selected.
-    if (TABS[value] === "Logs") {
+    if (TABS[value] === "Logs" && !reason("logs")) {
       setLogsOpen(true);
     }
   }
@@ -602,18 +617,26 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
               gap: 1,
               flexWrap: "wrap",
               alignItems: "center",
-              flexShrink: 0,
+              flexShrink: 1,
+              minWidth: 0,
+              maxWidth: "100%",
+              width: { xs: "100%", sm: "auto" },
             }}
           >
-            <Tooltip title="Apply the latest rendered configuration and hardlink plan to this service.">
+            <Tooltip
+              title={
+                reason(startAction) ??
+                "Apply the latest configuration and hardlink plan to this service."
+              }
+            >
               <span>
                 <Button
                   size="small"
                   variant="contained"
                   color="success"
                   startIcon={isBusy ? <CircularProgress size={14} /> : <PlayArrowIcon />}
-                  onClick={() => runAction("start")}
-                  disabled={isBusy}
+                  onClick={() => runAction(startAction)}
+                  disabled={isBusy || Boolean(reason(startAction))}
                 >
                   {data.status === "running" ? "Apply changes" : "Start"}
                 </Button>
@@ -625,18 +648,19 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
               color="error"
               startIcon={isBusy ? <CircularProgress size={14} /> : <StopIcon />}
               onClick={() => runAction("stop")}
-              disabled={isBusy || data.status === "exited" || data.status === "not-running"}
+              disabled={isBusy || Boolean(reason("stop"))}
+              title={reason("stop") ?? undefined}
             >
               Stop
             </Button>
-            <Tooltip title="In-place restart only. Use Start to apply new config/compose/hardlink changes.">
+            <Tooltip title={reason("restart") ?? "Restart the existing owned container."}>
               <span>
                 <Button
                   size="small"
                   variant="outlined"
                   startIcon={isBusy ? <CircularProgress size={14} /> : <RefreshIcon />}
                   onClick={() => runAction("restart")}
-                  disabled={isBusy}
+                  disabled={isBusy || Boolean(reason("restart"))}
                 >
                   Restart
                 </Button>
@@ -646,7 +670,11 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
               size="small"
               variant="outlined"
               startIcon={<ArticleIcon />}
-              onClick={() => setLogsOpen(true)}
+              onClick={() => {
+                if (!reason("logs")) setLogsOpen(true);
+              }}
+              disabled={Boolean(reason("logs"))}
+              title={reason("logs") ?? undefined}
             >
               Logs
             </Button>
@@ -672,6 +700,34 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
           </Typography>
         )}
       </Stack>
+      {[
+        ...new Set(
+          [reason(startAction), reason("stop"), reason("restart"), reason("logs")].filter(Boolean),
+        ),
+      ].length > 0 && (
+        <Typography variant="caption" color="text.secondary">
+          {[
+            ...new Set(
+              [reason(startAction), reason("stop"), reason("restart"), reason("logs")].filter(
+                Boolean,
+              ),
+            ),
+          ].join(" ")}
+        </Typography>
+      )}
+      {data.acquisition?.state === "unavailable" && (
+        <CompactAlert severity="warning">
+          Operations agent is unavailable. Service state is unknown.{" "}
+          <Button onClick={() => void refetch()} size="small">
+            Retry
+          </Button>
+        </CompactAlert>
+      )}
+      {["app-api", "traefik", "ops-agent"].includes(manifest.id) && (
+        <Button component={Link} href="/admin/system" size="small">
+          System Maintenance
+        </Button>
+      )}
       {manifest.id === "dawarich-app" && <ManagedDawarichSetup />}
       <Divider />
       <Box>
@@ -683,7 +739,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
           scrollButtons="auto"
         >
           {TABS.map((label) => (
-            <Tab key={label} label={label} />
+            <Tab key={label} label={label} disabled={label === "Logs" && Boolean(reason("logs"))} />
           ))}
         </Tabs>
 
@@ -708,7 +764,11 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
               variant="outlined"
               size="small"
               startIcon={<ArticleIcon />}
-              onClick={() => setLogsOpen(true)}
+              onClick={() => {
+                if (!reason("logs")) setLogsOpen(true);
+              }}
+              disabled={Boolean(reason("logs"))}
+              title={reason("logs") ?? undefined}
               sx={{ mt: 1.5 }}
             >
               Open Logs Drawer
@@ -718,7 +778,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
         {tab === 4 && <ManifestTab data={data} />}
       </Box>
       <ServiceLogsDrawer
-        open={logsOpen}
+        open={logsOpen && !reason("logs")}
         onClose={() => setLogsOpen(false)}
         serviceId={id}
         serviceName={manifest.name}
