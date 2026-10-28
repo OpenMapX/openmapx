@@ -1148,7 +1148,7 @@ export async function initIntegrations(
   // Run initial health check to seed the cache, then periodically refresh
   const runHealthRefresh = () => {
     const enabled = Array.from(integrations.values()).filter((i) => i.enabled);
-    executeAllIntegrationHealthChecks(enabled).catch((err) =>
+    executeAllIntegrationHealthChecks(enabled, { scheduled: true }).catch((err) =>
       fastify.log.warn(err, "Health cache refresh failed"),
     );
   };

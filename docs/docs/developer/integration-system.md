@@ -249,6 +249,7 @@ still needs source/privacy disclosures even when the integration stores none.
 ```ts
 {
   healthCheck?: HealthCheck | HealthCheck[];
+  healthCheckIntervalMs?: number;             // background cadence; default 60000, minimum 60000
 }
 
 interface HealthCheck {
@@ -267,6 +268,11 @@ interpolate `${configKey}` placeholders resolved through the config cascade, so 
 probe can carry an API key without hard-coding it. If a key listed in
 `requiredConfigKeys` is unset, the probe reports **unconfigured** rather than
 attempting a request without the required configuration.
+Use cheap, static endpoints for third-party reachability checks. Set
+`healthCheckIntervalMs` to a considerate background cadence (Mangrove uses
+900000 ms, or 15 minutes). The scheduler reuses cached results between probes
+and prevents overlapping scheduled probes of the same integration generation.
+Explicit administrator checks still probe immediately.
 An array of checks rolls up into one signal: all must pass. The states and how
 they surface are described on the
 [admin page](../administration/integrations-administration.md#integration-health).
