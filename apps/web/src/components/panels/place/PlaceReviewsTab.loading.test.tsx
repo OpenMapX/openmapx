@@ -12,7 +12,9 @@ vi.mock("../../../../../../packages/core/src/auth/useSession", () => ({
   useSession: () => ({ data: null }),
 }));
 vi.mock("@openmapx/mangrove-react", () => ({
-  useUserKeypair: () => ({}),
+  useMangroveSigner: () => ({ config: { configured: false } }),
+  useKeypairStore: { getState: () => ({ clear: () => {} }) },
+  useReviewIdentity: () => ({}),
   usePlaceReviews: () => state.reviews,
   useReviewAggregate: () => state.aggregate,
 }));

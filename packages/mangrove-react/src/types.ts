@@ -1,12 +1,5 @@
-/**
- * Server-side keypair envelope formats. The server stores either:
- *  - unencrypted: the private JWK in cleartext, or
- *  - encrypted: two age-armored ciphertexts of the same plaintext private JWK
- *    (`passphraseCiphertext` for scrypt-only, `recipientsCiphertext` for the
- *    WebAuthn-PRF recipient set), plus per-wrap metadata.
- */
+/** Encrypted-only server envelope contracts. */
 
-export type KeypairEncryptionMode = "unencrypted" | "encrypted";
 export type KeypairWrapType = "passphrase" | "webauthn";
 
 /**
@@ -24,21 +17,23 @@ export interface KeypairWrap {
   createdAt: string;
 }
 
-export interface KeypairEnvelopeUnencrypted {
-  mode: "unencrypted";
-  publicJwk: JsonWebKey;
-  privateJwk: JsonWebKey;
-}
-
 export interface KeypairEnvelopeEncrypted {
-  mode: "encrypted";
+  revision: string;
   publicJwk: JsonWebKey;
   passphraseCiphertext: string | null;
   recipientsCiphertext: string | null;
   wraps: KeypairWrap[];
 }
+export type KeypairEnvelope = KeypairEnvelopeEncrypted;
 
-export type KeypairEnvelope = KeypairEnvelopeUnencrypted | KeypairEnvelopeEncrypted;
+/** A stale local operation must be surfaced without fetching and retrying. */
+export class MangroveConflictError extends Error {
+  readonly status = 409;
+  constructor() {
+    super("Keypair changed. Refresh and unlock again.");
+    this.name = "MangroveConflictError";
+  }
+}
 
 export type EnvelopeState = { state: "uninitialized" } | (KeypairEnvelope & { state: "ready" });
 
@@ -50,22 +45,16 @@ export interface WrapMeta {
 }
 
 /** Payload sent to `transport.createKeypairEnvelope`. */
-export type CreateKeypairEnvelopePayload =
-  | {
-      mode: "unencrypted";
-      publicJwk: JsonWebKey;
-      privateJwk: JsonWebKey;
-    }
-  | {
-      mode: "encrypted";
-      publicJwk: JsonWebKey;
-      passphraseCiphertext: string | null;
-      recipientsCiphertext: string | null;
-      wraps: WrapMeta[];
-    };
+export interface CreateKeypairEnvelopePayload {
+  publicJwk: JsonWebKey;
+  passphraseCiphertext: string | null;
+  recipientsCiphertext: string | null;
+  wraps: WrapMeta[];
+}
 
 /** Payload sent to `transport.updateKeypairWraps`. */
 export interface UpdateKeypairWrapsPayload {
+  expectedRevision: string;
   passphraseCiphertext: string | null;
   recipientsCiphertext: string | null;
   wraps: WrapMeta[];

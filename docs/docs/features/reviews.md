@@ -51,58 +51,78 @@ OpenMapX checks proximity and identity evidence, such as a matching name or OSM
 reference, before attaching a review to a place. Source differences can still
 cause missing or incorrectly matched reviews. Check the place before posting.
 
-### Writing a review is signed in your browser
+### Connect to Mangrove
 
-The browser signs each write, edit, or deletion with your private key. OpenMapX
-forwards the signed record. The public key identifies the author and connects
-reviews made under that identity, even when the nickname changes.
+Choose **Connect to Mangrove** before writing a review. Continue with a passkey,
+OpenStreetMap, or Bluesky. This authorization is separate from your OpenMapX
+sign-in. Mangrove keeps a signing key for that account and signs your reviews on
+your behalf. The same signer account uses the same key across participating apps
+and devices. Signing in with OSM does not automatically import a key another app
+stored in OSM preferences.
 
-#### Setting up your signing key
+OpenMapX checks the returned signature, key and review content, then relays the
+signed review through its server. A public key identifies your reviews and controls
+editing and deletion. An optional decentralized identifier from the signer is
+account metadata; OpenMapX does not use it to grant authority over another key.
 
-The setup wizard can create a key or import a compatible existing private JWK.
-Choose how it is stored:
+A signer session stays in this browser tab's session storage, bound to your exact
+OpenMapX sign-in session. Same-origin scripts can access it. Disconnecting or signing
+out removes it locally and attempts remote revocation; revocation can fail during
+an outage. The public signer normally expires sessions after 24 hours. Reconnect
+when prompted. OpenMapX never silently switches an expired login to a new local key.
+If reconnecting while composing, a temporary draft is kept in tab session storage
+for up to one hour and restored when you reopen the same review. Publishing consent
+must be confirmed again.
 
-| Mode                 | Protection and recovery                                                                        |
-| -------------------- | ---------------------------------------------------------------------------------------------- |
-| Passphrase           | The browser encrypts the key before uploading it; unlock with that passphrase                  |
-| Passphrase + passkey | Adds a supported device credential as another unlock method; retain the passphrase as recovery |
-| Unencrypted          | The server stores a readable private key; setup requires an explicit confirmation              |
+Use **Manage Mangrove account** for the signer's passkeys, recovery and identity
+settings. The public signer restricts those operations to its own account interface.
 
-An encrypted key supports at most 32 total unlock methods: one passphrase and
-up to 31 passkeys, or up to 32 passkeys without a passphrase. Adding another
-method requires removing an existing one first.
+### Advanced: encrypted local signing
 
-In encrypted modes, the unlocked private key stays in browser memory and locks
-after 15 minutes without a key operation. Signing out clears the session key.
-The review-key passphrase is separate from your OpenMapX sign-in password.
+Choose **Advanced: use an encrypted local key** to keep signing in your browser.
+Create a key or import a compatible private JWK, then protect it with a passphrase
+or a passphrase plus a supported WebAuthn PRF passkey. The browser encrypts the key
+before uploading it. OpenMapX stores ciphertext and public-key/unlock metadata;
+plaintext private-key storage is not supported.
 
-:::caution[Keep a recovery copy]
-Losing the key and every working unlock method prevents you from editing or
-deleting reviews under that identity. Resetting your OpenMapX password cannot
-recover it. Creating a new key creates a different reviewing identity.
-:::
+An encrypted key supports at most 32 unlock methods. It locks after 15 minutes
+without a validated key operation. Signing out clears the session key. Your review
+passphrase is separate from your OpenMapX password. Concurrent changes to the same
+key are rejected; refresh and unlock again before retrying.
 
-### Privacy and portability
+Under **Account settings**, choose the local key's export action to download or
+copy its private JWK. Anyone holding that file can sign as that identity. Keep it
+private. Compatible clients and other OpenMapX instances can import it. The key is
+not included in a normal data-access archive. Losing every unlock method and the
+backup prevents future edits/deletions under that key; resetting your OpenMapX
+password cannot recover it.
 
-Under **Account settings**, find the Mangrove signing-key section. Unlock the
-key and choose its export action to download or copy the private JWK. Store that
-file privately: anyone who obtains it can act as your review identity. The
-export is compatible with supported Mangrove clients and another OpenMapX
-instance's import flow. It is not included in a normal data-access archive.
-
-Encrypted modes protect the stored key from a database-only disclosure. They
-cannot protect an unlocked key from malicious code served by a compromised
-OpenMapX application. Passkeys for this key do not encrypt saved places or other
-account content. See the [user-data trust model](../developer/user-data-trust-model.md).
+Client encryption protects against database-only disclosure. It cannot protect an
+unlocked key from malicious application code. Shared signing instead trusts the
+Mangrove signer to protect and use its key correctly. Neither model encrypts
+published reviews. See the [user-data trust model](../developer/user-data-trust-model.md).
 
 ## Enabling and configuring
 
-The built-in `reviews` and `reviews-mangrove` integrations need no Mangrove API
-key. `reviews-mangrove` is enabled by default. Writing also needs working account
-and database services for the key envelope. Operators manage provider enablement
-under [Admin → Integrations](../administration/integrations-administration.md).
-Disabling the provider prevents normal review retrieval and submission through it;
-it does not delete published reviews or stored keys.
+The `reviews` and `reviews-mangrove` integrations need no API key for reading or
+publishing signed reviews. Writing requires an authenticated OpenMapX session.
+Shared signing additionally requires a registered public client identifier:
+
+1. Register your app and exact callback URL with Mangrove, following its
+   [login guide](https://open-reviews.net/technology/login/).
+2. In **Admin → Integrations → Mangrove.reviews**, configure `signerClientId` and
+   `signerRedirectUri`. The callback is `https://YOUR-INSTANCE/auth/mangrove`.
+   HTTP is allowed only for loopback development; include that exact URI in the
+   upstream registration too.
+3. Keep the Mangrove signer source allowed by the instance's data-use policy.
+   Shared signing needs the host's distributed request-admission runtime.
+
+The signer origin is fixed to `https://signer.mangrove.reviews`; an unregistered
+instance shows an unavailable message and offers encrypted local signing. Running
+a different signer is outside this integration's current configuration contract.
+Disabling the provider prevents normal review retrieval/submission through it; it
+does not delete published reviews. Disabling signer acquisition also prevents login
+and signing but does not erase a remote account or guarantee session revocation.
 
 ## Attribution and licensing
 

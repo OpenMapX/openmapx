@@ -15,7 +15,14 @@ vi.mock("../../../../../../packages/core/src/auth/useSession", () => ({
 }));
 vi.mock("@openmapx/mangrove-react", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@openmapx/mangrove-react")>()),
-  useUserKeypair: () => ({ keypair: null, publicPem: null, needsSetup: false, needsUnlock: false }),
+  useMangroveSigner: () => ({ config: { configured: false } }),
+  useKeypairStore: { getState: () => ({ clear: () => {} }) },
+  useReviewIdentity: () => ({
+    keypair: null,
+    publicPem: null,
+    needsSetup: false,
+    needsUnlock: false,
+  }),
 }));
 const registry = vi.hoisted(() => ({ source: undefined as unknown }));
 vi.mock("@openmapx/integration-framework/react", () => ({
@@ -67,8 +74,8 @@ function renderTab(reviews: Review[], summary: ReviewAggregate, pendingAggregate
   clients.push(client);
   const transport: MangroveTransport<Review, ReviewAggregate> = {
     getKeypairEnvelope: async () => null,
-    createKeypairEnvelope: async () => {},
-    updateKeypairWraps: async () => {},
+    createKeypairEnvelope: async () => ({ revision: "fixture" }),
+    updateKeypairWraps: async () => ({ revision: "fixture" }),
     deleteKeypairEnvelope: async () => {},
     submitReview: async () => ({ id: "unused" }),
     uploadReviewImage: async () => ({ src: "unused" }),

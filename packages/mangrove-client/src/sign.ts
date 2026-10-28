@@ -69,7 +69,7 @@ export async function signMangroveReview(
     jwk: JSON.stringify(publicHeader),
   };
 
-  const body = cleanPayload(payload);
+  const body = { ...normalizeMangrovePayload(payload), iat: Math.floor(Date.now() / 1000) };
   const signingInput = `${base64urlEncode(JSON.stringify(header))}.${base64urlEncode(JSON.stringify(body))}`;
 
   const sigBuf = await subtle.sign(
@@ -82,10 +82,9 @@ export async function signMangroveReview(
   return `${signingInput}.${signature}`;
 }
 
-function cleanPayload(p: MangroveReviewPayload): Record<string, unknown> {
+export function normalizeMangrovePayload(p: MangroveReviewPayload): MangroveReviewPayload {
   const out: Record<string, unknown> = {
     sub: p.sub,
-    iat: Math.floor(Date.now() / 1000),
   };
   if (p.rating !== undefined) out.rating = Math.round(p.rating);
   if (p.opinion) out.opinion = p.opinion.slice(0, 1000);
@@ -100,7 +99,7 @@ function cleanPayload(p: MangroveReviewPayload): Record<string, unknown> {
   }
   if (!metadata.client_id) metadata.client_id = defaultClientId();
   out.metadata = metadata;
-  return out;
+  return out as unknown as MangroveReviewPayload;
 }
 
 function base64urlEncode(input: string): string {
@@ -125,4 +124,47 @@ export function fingerprintPem(pem: string): string {
     .replace(/-----BEGIN PUBLIC KEY-----/, "")
     .replace(/-----END PUBLIC KEY-----/, "");
   return body.slice(0, 8);
+}
+
+/** Compare only verified JWT content; issue time belongs to the signer. */
+export function matchesMangrovePayload(
+  actual: Record<string, unknown>,
+  expected: MangroveReviewPayload,
+): boolean {
+  if (typeof actual.iat !== "number" || !Number.isSafeInteger(actual.iat) || actual.iat < 0)
+    return false;
+  const { iat: _iat, ...content } = actual;
+  if (typeof content.sub !== "string") return false;
+  if (content.sub !== expected.sub) {
+    const left = geoSubject(content.sub);
+    const right = geoSubject(expected.sub);
+    if (!left || !right || stable(left) !== stable(right)) return false;
+    content.sub = expected.sub;
+  }
+  return stable(content) === stable(expected);
+}
+function stable(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
+  if (value !== null && typeof value === "object")
+    return `{${Object.entries(value)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${JSON.stringify(k)}:${stable(v)}`)
+      .join(",")}}`;
+  return JSON.stringify(value) ?? "null";
+}
+function geoSubject(value: string): unknown {
+  const match = /^geo:([^,?]+),([^?]+)\?(.+)$/.exec(value);
+  if (!match) return null;
+  const params = new URLSearchParams(match[3]);
+  if (
+    [...params.keys()].some((key) => key !== "q" && key !== "u") ||
+    params.getAll("q").length !== 1 ||
+    params.getAll("u").length !== 1
+  )
+    return null;
+  const lat = Number(match[1]),
+    lng = Number(match[2]),
+    uncertainty = Number(params.get("u"));
+  if (![lat, lng, uncertainty].every(Number.isFinite)) return null;
+  return { lat, lng, uncertainty, name: params.get("q") };
 }

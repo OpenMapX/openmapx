@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createQueryWrapper, createTestQueryClient, render } from "@/test";
 
-const session = { current: { data: null as unknown, isPending: false } };
-vi.mock("@openmapx/core", () => ({ useSession: () => session.current }));
-
-const clear = vi.fn();
+const session = { current: { authorityKey: null as string | null } };
+vi.mock("./SessionAuthorityBoundary", () => ({
+  useSettledSessionAuthority: () => session.current,
+}));
+const bindOwner = vi.fn();
 vi.mock("@openmapx/mangrove-react", () => ({
-  useKeypairStore: { getState: () => ({ clear }) },
+  useKeypairStore: { getState: () => ({ bindOwner }) },
   MANGROVE_KEYPAIR_QUERY_KEY: ["mangroveKeypairState"],
 }));
 
@@ -14,64 +15,43 @@ import { KeypairSessionGuard } from "./KeypairSessionGuard";
 
 afterEach(() => {
   vi.clearAllMocks();
-  session.current = { data: null, isPending: false };
+  session.current = { authorityKey: null };
 });
-
 describe("KeypairSessionGuard", () => {
-  function createClientWithRemoveQueriesMock() {
+  it("binds exact settled session and invalidates the previous session of the same user", () => {
     const client = createTestQueryClient();
-    const removeQueries = vi.fn() as typeof client.removeQueries;
-    client.removeQueries = removeQueries;
-    return { client, removeQueries };
-  }
-
-  it("evicts the envelope on a sign-out transition", () => {
-    const { client, removeQueries } = createClientWithRemoveQueriesMock();
-    session.current = { data: { user: { id: "u1" } }, isPending: false };
-    const { rerender } = render(<KeypairSessionGuard />, {
+    const remove = vi.spyOn(client, "removeQueries");
+    session.current = { authorityKey: JSON.stringify(["u1", "s1"]) };
+    const { rerender, unmount } = render(<KeypairSessionGuard />, {
       wrapper: createQueryWrapper(client),
     });
-
-    session.current = { data: null, isPending: false };
+    expect(bindOwner).toHaveBeenLastCalledWith(JSON.stringify(["u1", "s1"]));
+    session.current = { authorityKey: JSON.stringify(["u1", "s2"]) };
     rerender(<KeypairSessionGuard />);
-
-    expect(clear).toHaveBeenCalledTimes(1);
-    expect(removeQueries).toHaveBeenCalledWith({ queryKey: ["mangroveKeypairState"] });
+    expect(bindOwner).toHaveBeenCalledWith(null);
+    expect(bindOwner).toHaveBeenLastCalledWith(JSON.stringify(["u1", "s2"]));
+    expect(remove).toHaveBeenCalledWith({ queryKey: ["mangroveKeypairState"] });
+    unmount();
+    expect(bindOwner).toHaveBeenLastCalledWith(null);
   });
-
-  it("evicts the envelope on a user switch", () => {
-    const { client, removeQueries } = createClientWithRemoveQueriesMock();
-    session.current = { data: { user: { id: "u1" } }, isPending: false };
-    const { rerender } = render(<KeypairSessionGuard />, {
-      wrapper: createQueryWrapper(client),
+  it("revokes authority on logout and unmount", () => {
+    session.current = { authorityKey: JSON.stringify(["u1", "s1"]) };
+    const { rerender, unmount } = render(<KeypairSessionGuard />, {
+      wrapper: createQueryWrapper(createTestQueryClient()),
     });
-
-    session.current = { data: { user: { id: "u2" } }, isPending: false };
+    session.current = { authorityKey: null };
     rerender(<KeypairSessionGuard />);
-
-    expect(clear).toHaveBeenCalledTimes(1);
-    expect(removeQueries).toHaveBeenCalledWith({ queryKey: ["mangroveKeypairState"] });
+    expect(bindOwner).toHaveBeenLastCalledWith(null);
+    unmount();
+    expect(bindOwner).toHaveBeenLastCalledWith(null);
   });
-
-  it("does not evict the envelope for a stable session", () => {
-    const { client, removeQueries } = createClientWithRemoveQueriesMock();
-    session.current = { data: { user: { id: "u1" } }, isPending: false };
+  it("does not tear down a stable authority", () => {
+    session.current = { authorityKey: JSON.stringify(["u1", "s1"]) };
     const { rerender } = render(<KeypairSessionGuard />, {
-      wrapper: createQueryWrapper(client),
+      wrapper: createQueryWrapper(createTestQueryClient()),
     });
-
+    bindOwner.mockClear();
     rerender(<KeypairSessionGuard />);
-
-    expect(clear).not.toHaveBeenCalled();
-    expect(removeQueries).not.toHaveBeenCalled();
-  });
-
-  it("does not evict the envelope while the session is pending", () => {
-    const { client, removeQueries } = createClientWithRemoveQueriesMock();
-    session.current = { data: { user: { id: "u1" } }, isPending: true };
-    render(<KeypairSessionGuard />, { wrapper: createQueryWrapper(client) });
-
-    expect(clear).not.toHaveBeenCalled();
-    expect(removeQueries).not.toHaveBeenCalled();
+    expect(bindOwner).not.toHaveBeenCalled();
   });
 });

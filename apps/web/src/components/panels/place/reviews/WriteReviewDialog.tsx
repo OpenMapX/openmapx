@@ -24,13 +24,17 @@ import {
   fingerprintPem,
   type GeoExperienceContext,
 } from "@openmapx/mangrove-client";
-import { useSubmitReview, useUploadReviewImage, useUserKeypair } from "@openmapx/mangrove-react";
+import { useReviewIdentity, useSubmitReview, useUploadReviewImage } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
+import { MangroveConnectDialog } from "@/components/auth/MangroveConnectDialog";
+import { MangroveSetupWizard } from "@/components/auth/MangroveSetupWizard";
+import { MangroveUnlockDialog } from "@/components/auth/MangroveUnlockDialog";
 import {
   mobileFullScreenDialogPaperSx,
   useFullScreenOnMobile,
 } from "@/integration-api/runtime/useFullScreenOnMobile";
+import { saveReviewDraft, takeReviewDraft } from "./reviewDraft";
 
 type Experience = GeoExperienceContext;
 
@@ -91,11 +95,22 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
   const t = useTranslations("place");
   const tc = useTranslations("common");
   const fullScreen = useFullScreenOnMobile();
-  const { keypair, publicPem, isLoading: keypairLoading } = useUserKeypair();
+  const {
+    canSign,
+    publicPem,
+    needsConnection,
+    needsSetup,
+    needsUnlock,
+    isLoading: keypairLoading,
+  } = useReviewIdentity();
   const { data: session } = useSession();
   const sessionName = session?.user?.name?.trim();
   const fingerprint = publicPem ? fingerprintPem(publicPem) : null;
   const publishingAsName = sessionName || (fingerprint ? `User ${fingerprint}` : null);
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(false);
+  const ta = useTranslations("account");
+  const draftKey = JSON.stringify([session?.user?.id, session?.session?.id, subject, initial?.id]);
   const submit = useSubmitReview();
   const upload = useUploadReviewImage();
 
@@ -146,6 +161,28 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
     }
   }
 
+  useEffect(() => {
+    if (!open) return;
+    const draft = takeReviewDraft(window.sessionStorage, draftKey);
+    if (!draft) return;
+    setStars(draft.stars);
+    setOpinion(draft.opinion);
+    setImages(draft.images);
+    setExperience(draft.experience as Experience | null);
+    setIsAffiliated(draft.isAffiliated);
+    setLicense(draft.license);
+  }, [open, draftKey]);
+  function saveBeforeReconnect() {
+    saveReviewDraft(window.sessionStorage, draftKey, {
+      stars,
+      opinion,
+      images,
+      experience,
+      isAffiliated,
+      license,
+    });
+  }
+
   // `submit.reset` / `upload.reset` are recreated every render by TanStack
   // Query, so listing them as deps would fire this effect on every render.
   // We only want to clear mutation state when the dialog closes.
@@ -178,7 +215,7 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
   }
 
   async function handleSubmit() {
-    if (!keypair) return;
+    if (!canSign) return;
     await submit.mutateAsync({
       subject,
       stars: stars ?? undefined,
@@ -195,7 +232,7 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
 
   const charsLeft = MAX_OPINION - opinion.length;
   const hasContent = stars !== null || opinion.trim().length > 0;
-  const canSubmit = !!keypair && hasContent && acceptedTerms && acceptedPrivacy;
+  const canSubmit = canSign && hasContent && acceptedTerms && acceptedPrivacy;
   const isBusy = submit.isPending || upload.isPending || keypairLoading;
 
   return (
@@ -231,7 +268,41 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
           <CloseIcon />
         </IconButton>
       </DialogTitle>
+      <MangroveConnectDialog
+        open={connectOpen}
+        onClose={() => setConnectOpen(false)}
+        onLocal={() => setConnectOpen(false)}
+        beforeLogin={saveBeforeReconnect}
+      />
+      <MangroveSetupWizard open={localOpen && needsSetup} onClose={() => setLocalOpen(false)} />
+      <MangroveUnlockDialog open={localOpen && needsUnlock} onClose={() => setLocalOpen(false)} />
       <DialogContent dividers>
+        {(needsSetup || needsUnlock) && (
+          <Alert
+            severity="info"
+            sx={{ mb: 2 }}
+            action={
+              <Button color="inherit" onClick={() => setLocalOpen(true)}>
+                {ta(needsSetup ? "mangroveSetupStart" : "mangroveUnlockCta")}
+              </Button>
+            }
+          >
+            {ta(needsSetup ? "mangroveSetupPrompt" : "mangroveUnlockIntro")}
+          </Alert>
+        )}
+        {needsConnection && (
+          <Alert
+            severity="info"
+            sx={{ mb: 2 }}
+            action={
+              <Button color="inherit" onClick={() => setConnectOpen(true)}>
+                {ta("mangroveReconnect")}
+              </Button>
+            }
+          >
+            {ta("mangroveConnectionExpired")}
+          </Alert>
+        )}
         <Typography variant="subtitle2" gutterBottom>
           {subject.name}
         </Typography>

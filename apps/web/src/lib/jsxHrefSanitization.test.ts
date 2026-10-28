@@ -36,7 +36,7 @@ const ALLOWED: Record<string, string[]> = {
   // `actionHref` is read only from the module-local CHECK_ACTIONS constant,
   // whose values are fixed relative admin routes; no runtime URL enters it.
   "components/admin/privacy/PrivacyReadinessChecklist.tsx": ["actionHref"],
-  "components/auth/MangroveAccountSection.tsx": ["MANGROVE_HOME_URL"],
+  "components/auth/MangroveLocalAccountSection.tsx": ["MANGROVE_HOME_URL"],
   "components/panels/place/reviews/WriteReviewDialog.tsx": [
     "MANGROVE_HOME_URL",
     "MANGROVE_TERMS_URL",

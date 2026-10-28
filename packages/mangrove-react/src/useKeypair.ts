@@ -1,41 +1,20 @@
-/**
- * Client-side Mangrove keypair lifecycle hooks.
- *
- * All HTTP/storage operations go through the {@link MangroveTransport} provided
- * via {@link MangroveProvider}. Authentication state comes from
- * `useMangroveCurrentUser()` — the host is responsible for telling this layer
- * who's signed in.
- *
- * Hooks:
- *   - `useKeypairState()` — current envelope state from the server.
- *   - `useUserKeypair()` — decrypted keypair if unlocked, else null.
- *   - `useSetupKeypair()` — first-time setup (3 modes).
- *   - `useUnlockKeypair()` — decrypt via passphrase or WebAuthn.
- *   - `useAddWrap()`, `useRemoveWrap()` — manage unlock methods.
- *   - `useChangePassphrase()` — rotate the scrypt-wrap passphrase.
- *   - `useRegenerateMangroveKeypair()` — wipe everything + start over.
- *   - `useImportMangroveKeypair()` — replace the envelope with an imported JWK.
- *   - `useRefreshKeypair()` — re-pull envelope state from the server.
- *   - `useMangroveKeypairExport()` — raw private JWK for backup / cross-device import.
- */
-
+/** Encrypted-only local key lifecycle, bound to an exact host session. */
 import {
   createWebAuthnIdentity,
   decryptWithPassphrase,
   decryptWithWebAuthn,
   encryptForWebAuthnIdentities,
   encryptWithPassphrase,
-  generateKeypair as generateMangroveKeypair,
+  generateKeypair,
   importPublicJwk,
   jwkToKeypair,
   keypairToJwk,
   type MangroveKeypair,
   publicKeyToPem,
-  type SerializedMangroveKeypair,
 } from "@openmapx/mangrove-client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
-import { useKeypairStore } from "./keypairStore";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { type KeypairSigningSnapshot, keypairOwner, useKeypairStore } from "./keypairStore";
 import {
   useMangroveCurrentUser,
   useMangroveTransport,
@@ -46,17 +25,65 @@ import {
   type KeypairEnvelopeEncrypted,
   type KeypairWrap,
   MAX_KEYPAIR_WRAPS,
+  MangroveConflictError,
+  type UpdateKeypairWrapsPayload,
   type WrapMeta,
 } from "./types";
 
-// ── envelope state query ────────────────────────────────────────────────
-
-/**
- * Query-key root for the server-side keypair envelope. Exported so hosts can
- * evict the envelope from the query cache when the session ends — the response
- * contains the cleartext private JWK for unencrypted accounts.
- */
 export const MANGROVE_KEYPAIR_QUERY_KEY = ["mangroveKeypairState"] as const;
+
+/** Every operation has both a component lifetime and a store generation. */
+function useKeypairOperation() {
+  const owner = keypairOwner(useMangroveCurrentUser());
+  const lifetime = useRef({ owner, active: false });
+  useLayoutEffect(() => {
+    const current = { owner, active: true };
+    lifetime.current = current;
+    useKeypairStore.getState().bindOwner(owner);
+    return () => {
+      current.active = false;
+    };
+  }, [owner]);
+  return useCallback(() => {
+    const current = lifetime.current;
+    const state = useKeypairStore.getState();
+    if (!owner || !current.active || current.owner !== owner || state.owner !== owner)
+      throw new Error("Keypair session changed");
+    const generation = state.generation;
+    const assert = () => {
+      const latest = useKeypairStore.getState();
+      if (
+        !current.active ||
+        lifetime.current !== current ||
+        latest.owner !== owner ||
+        latest.generation !== generation
+      )
+        throw new Error("Keypair session changed");
+    };
+    return {
+      owner,
+      generation,
+      assert,
+      async wait<T>(promise: Promise<T>): Promise<T> {
+        try {
+          const value = await promise;
+          assert();
+          return value;
+        } catch (error) {
+          assert();
+          const status =
+            error && typeof error === "object"
+              ? ((error as { status?: number; statusCode?: number }).status ??
+                (error as { statusCode?: number }).statusCode)
+              : undefined;
+          if (status === 409) throw new MangroveConflictError();
+          throw error;
+        }
+      },
+    };
+  }, [owner]);
+}
+type Operation = ReturnType<ReturnType<typeof useKeypairOperation>>;
 
 export function useKeypairState(): {
   data: EnvelopeState | null;
@@ -64,156 +91,91 @@ export function useKeypairState(): {
   refetch: () => Promise<unknown>;
 } {
   const transport = useMangroveTransport();
-  const currentUser = useMangroveCurrentUser();
-  const userId = currentUser?.id ?? null;
-
+  const owner = keypairOwner(useMangroveCurrentUser());
   const q = useQuery({
-    queryKey: [...MANGROVE_KEYPAIR_QUERY_KEY, userId],
-    enabled: !!userId,
-    // In unencrypted mode the GET response contains the private JWK, so we
-    // want to pull it over the wire as rarely as possible. Every mutation
-    // that can change envelope state invalidates this query explicitly, so
-    // `Infinity` is safe — no background refresh, no window-focus refetch.
+    queryKey: [...MANGROVE_KEYPAIR_QUERY_KEY, owner],
+    enabled: !!owner,
     staleTime: Number.POSITIVE_INFINITY,
     queryFn: () => transport.getKeypairEnvelope(),
   });
-
-  return { data: q.data ?? null, isLoading: q.isLoading, refetch: q.refetch };
+  return { data: owner ? (q.data ?? null) : null, isLoading: q.isLoading, refetch: q.refetch };
 }
 
-// ── live (decrypted) keypair ─────────────────────────────────────────────
-
-export function useUserKeypair(): {
-  keypair: MangroveKeypair | null;
-  publicPem: string | null;
-  /** True when an envelope exists but is not unlocked. */
-  needsUnlock: boolean;
-  /** True when the user has no envelope at all (setup wizard should fire). */
-  needsSetup: boolean;
-  /** True when the user is in encrypted mode overall. */
-  isEncrypted: boolean;
-  isAuthed: boolean;
-  isLoading: boolean;
-  clear: () => void;
-} {
-  const currentUser = useMangroveCurrentUser();
-  const isAuthed = !!currentUser?.id;
-  const { keypair, publicPem, setKeypair, setPublicIdentity, clear } = useKeypairStore();
+export function useUserKeypair() {
+  const owner = keypairOwner(useMangroveCurrentUser());
+  const begin = useKeypairOperation();
+  const store = useKeypairStore();
   const state = useKeypairState();
-
   const envelope = state.data;
-  const needsSetup = envelope?.state === "uninitialized";
-  const isEncrypted = envelope?.state === "ready" && envelope.mode === "encrypted";
-  const isUnencrypted = envelope?.state === "ready" && envelope.mode === "unencrypted";
-
+  const keypair =
+    store.owner === owner && envelope?.state === "ready" && store.revision === envelope.revision
+      ? store.keypair
+      : null;
+  const publicPem =
+    store.owner === owner && envelope?.state === "ready" && store.revision === envelope.revision
+      ? store.publicPem
+      : null;
   useEffect(() => {
-    if (!isAuthed || !isUnencrypted || keypair) return;
-    if (envelope?.state !== "ready" || envelope.mode !== "unencrypted") return;
+    if (!owner || envelope?.state !== "ready") return;
+    const op = begin();
     let cancelled = false;
     void (async () => {
-      const kp = await jwkToKeypair({
-        privateJwk: envelope.privateJwk,
-        publicJwk: envelope.publicJwk,
-      });
-      if (cancelled) return;
-      const pem = await publicKeyToPem(kp.publicKey);
-      if (cancelled) return;
-      setKeypair(kp, pem, false, null);
-    })().catch(() => undefined);
+      const pub = await op.wait(importPublicJwk(envelope.publicJwk));
+      const pem = await op.wait(publicKeyToPem(pub));
+      if (!cancelled)
+        useKeypairStore.getState().setPublicIdentity(pem, { ...op, revision: envelope.revision });
+    })().catch(() => {
+      /* Invalid public metadata cannot grant authority. */
+    });
     return () => {
       cancelled = true;
     };
-  }, [isAuthed, isUnencrypted, envelope, keypair, setKeypair]);
-
-  // Publish the public identity even while the private key is locked. The
-  // public JWK isn't sensitive (same value Mangrove publishes with every
-  // review), so keeping it in memory across idle-locks is safe and lets the
-  // UI keep identifying the user's own reviews without forcing an unlock.
-  useEffect(() => {
-    if (!isAuthed || publicPem) return;
-    if (envelope?.state !== "ready") return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const pub = await importPublicJwk(envelope.publicJwk);
-        const pem = await publicKeyToPem(pub);
-        if (cancelled) return;
-        setPublicIdentity(pem);
-      } catch {
-        // Envelope with an unimportable public JWK — not actionable here.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isAuthed, envelope, publicPem, setPublicIdentity]);
-
+  }, [owner, envelope, begin]);
   return {
     keypair,
     publicPem,
-    needsUnlock: isEncrypted && !keypair,
-    needsSetup: !!needsSetup,
-    isEncrypted,
-    isAuthed,
+    needsUnlock: envelope?.state === "ready" && !keypair,
+    needsSetup: envelope?.state === "uninitialized" || (!!owner && !state.isLoading && !envelope),
+    isEncrypted: envelope?.state === "ready",
+    isAuthed: !!owner,
     isLoading: state.isLoading,
-    clear,
+    clear: store.clear,
   };
 }
 
-// ── helpers ──────────────────────────────────────────────────────────────
-
 function extractPublicJwk(privateJwk: JsonWebKey): JsonWebKey {
-  if (privateJwk.kty !== "EC" || privateJwk.crv !== "P-256" || !privateJwk.x || !privateJwk.y) {
+  if (
+    privateJwk.kty !== "EC" ||
+    privateJwk.crv !== "P-256" ||
+    !privateJwk.x ||
+    !privateJwk.y ||
+    !privateJwk.d
+  )
     throw new Error("Expected ECDSA P-256 private JWK");
-  }
   return { kty: "EC", crv: "P-256", x: privateJwk.x, y: privateJwk.y };
 }
-
-interface EncryptedPayload {
-  passphraseCiphertext: string | null;
-  recipientsCiphertext: string | null;
-  wraps: WrapMeta[];
-}
-
-async function buildEncryptedPayload(
+async function verifiedKeypair(
   privateJwk: JsonWebKey,
-  opts: {
-    passphrase?: { value: string; label: string };
-    webauthn?: { rpId?: string; identities: { identityString: string; label: string }[] };
-  },
-): Promise<EncryptedPayload> {
-  const wraps: WrapMeta[] = [];
-  let passphraseCiphertext: string | null = null;
-  let recipientsCiphertext: string | null = null;
-
-  if (opts.passphrase) {
-    passphraseCiphertext = await encryptWithPassphrase(privateJwk, opts.passphrase.value);
-    wraps.push({ wrapType: "passphrase", label: opts.passphrase.label, identityString: null });
-  }
-
-  if (opts.webauthn && opts.webauthn.identities.length > 0) {
-    recipientsCiphertext = await encryptForWebAuthnIdentities(
-      privateJwk,
-      opts.webauthn.identities.map((i) => i.identityString),
-      opts.webauthn.rpId,
-    );
-    for (const i of opts.webauthn.identities) {
-      wraps.push({ wrapType: "webauthn", label: i.label, identityString: i.identityString });
-    }
-  }
-
-  if (wraps.length === 0) {
-    throw new Error("At least one unlock method is required");
-  }
-
-  return { passphraseCiphertext, recipientsCiphertext, wraps };
-}
-
-// ── setup (first-time) ───────────────────────────────────────────────────
-
-export interface SetupUnencryptedInput {
-  mode: "unencrypted";
-  importJwk?: JsonWebKey;
+  publicJwk: JsonWebKey,
+): Promise<MangroveKeypair> {
+  if ("d" in publicJwk) throw new Error("Expected a public key");
+  const kp = await jwkToKeypair({ privateJwk, publicJwk });
+  const challenge = globalThis.crypto.getRandomValues(new Uint8Array(32));
+  const signature = await globalThis.crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" },
+    kp.privateKey,
+    challenge,
+  );
+  if (
+    !(await globalThis.crypto.subtle.verify(
+      { name: "ECDSA", hash: "SHA-256" },
+      kp.publicKey,
+      signature,
+      challenge,
+    ))
+  )
+    throw new Error("Private key does not match public identity");
+  return kp;
 }
 export interface SetupPassphraseInput {
   mode: "passphrase";
@@ -229,81 +191,77 @@ export interface SetupPassphraseAndWebAuthnInput {
   rpId?: string;
   importJwk?: JsonWebKey;
 }
-export type SetupInput =
-  | SetupUnencryptedInput
-  | SetupPassphraseInput
-  | SetupPassphraseAndWebAuthnInput;
-
-export function useSetupKeypair() {
-  const qc = useQueryClient();
-  const transport = useMangroveTransport();
-  const webauthnKeyName = useMangroveWebauthnKeyName();
-  const { setKeypair } = useKeypairStore();
-  return useMutation({
-    mutationFn: async (input: SetupInput): Promise<void> => {
-      let serialized: SerializedMangroveKeypair;
-      let kp: MangroveKeypair;
-      if (input.importJwk) {
-        const pub = extractPublicJwk(input.importJwk);
-        kp = await jwkToKeypair({ privateJwk: input.importJwk, publicJwk: pub });
-        serialized = { privateJwk: input.importJwk, publicJwk: pub };
-      } else {
-        kp = await generateMangroveKeypair();
-        serialized = await keypairToJwk(kp);
-      }
-      const pem = await publicKeyToPem(kp.publicKey);
-
-      if (input.mode === "unencrypted") {
-        await transport.createKeypairEnvelope({
-          mode: "unencrypted",
-          publicJwk: serialized.publicJwk,
-          privateJwk: serialized.privateJwk,
-        });
-        setKeypair(kp, pem, false, null);
-        return;
-      }
-
-      const passphrase = {
-        value: input.passphrase,
-        label:
-          input.mode === "passphrase+webauthn"
-            ? (input.passphraseLabel ?? "Passphrase")
-            : (input.label ?? "Passphrase"),
-      };
-
-      let webauthn: Parameters<typeof buildEncryptedPayload>[1]["webauthn"] | undefined;
-      if (input.mode === "passphrase+webauthn") {
-        const identityString = await createWebAuthnIdentity({
-          rpId: input.rpId,
-          type: "passkey",
-          keyName: webauthnKeyName,
-        });
-        webauthn = {
-          rpId: input.rpId,
-          identities: [{ identityString, label: input.webauthnLabel ?? "Passkey" }],
-        };
-      }
-
-      const payload = await buildEncryptedPayload(serialized.privateJwk, {
-        passphrase,
-        webauthn,
-      });
-
-      await transport.createKeypairEnvelope({
-        mode: "encrypted",
-        publicJwk: serialized.publicJwk,
-        ...payload,
-      });
-      setKeypair(kp, pem, true, serialized.privateJwk);
+export type SetupInput = SetupPassphraseInput | SetupPassphraseAndWebAuthnInput;
+async function prepareSetup(input: SetupInput, op: Operation, webauthnKeyName?: string) {
+  if (input.mode !== "passphrase" && input.mode !== "passphrase+webauthn")
+    throw new Error("Encrypted setup is required");
+  const serialized = input.importJwk
+    ? { privateJwk: structuredClone(input.importJwk), publicJwk: extractPublicJwk(input.importJwk) }
+    : await op.wait(keypairToJwk(await op.wait(generateKeypair())));
+  const kp = await op.wait(verifiedKeypair(serialized.privateJwk, serialized.publicJwk));
+  const pem = await op.wait(publicKeyToPem(kp.publicKey));
+  const passphraseCiphertext = await op.wait(
+    encryptWithPassphrase(serialized.privateJwk, input.passphrase),
+  );
+  const wraps: WrapMeta[] = [
+    {
+      wrapType: "passphrase",
+      label:
+        input.mode === "passphrase"
+          ? (input.label ?? "Passphrase")
+          : (input.passphraseLabel ?? "Passphrase"),
+      identityString: null,
     },
-    onSuccess: async () => {
+  ];
+  let recipientsCiphertext: string | null = null;
+  if (input.mode === "passphrase+webauthn") {
+    const identityString = await op.wait(
+      createWebAuthnIdentity({ rpId: input.rpId, type: "passkey", keyName: webauthnKeyName }),
+    );
+    recipientsCiphertext = await op.wait(
+      encryptForWebAuthnIdentities(serialized.privateJwk, [identityString], input.rpId),
+    );
+    wraps.push({ wrapType: "webauthn", label: input.webauthnLabel ?? "Passkey", identityString });
+  }
+  return {
+    kp,
+    pem,
+    serialized,
+    payload: { publicJwk: serialized.publicJwk, passphraseCiphertext, recipientsCiphertext, wraps },
+  };
+}
+function publishSetup(
+  prepared: Awaited<ReturnType<typeof prepareSetup>>,
+  op: Operation,
+  revision: string,
+) {
+  op.assert();
+  if (
+    !useKeypairStore
+      .getState()
+      .setKeypair(prepared.kp, prepared.pem, prepared.serialized.privateJwk, { ...op, revision })
+  )
+    throw new MangroveConflictError();
+}
+export function useSetupKeypair() {
+  const qc = useQueryClient(),
+    transport = useMangroveTransport(),
+    begin = useKeypairOperation(),
+    name = useMangroveWebauthnKeyName();
+  return useMutation({
+    mutationKey: ["mangrovePrivate"],
+    gcTime: 0,
+    retry: false,
+    mutationFn: async (input: SetupInput) => {
+      const op = begin();
+      const prepared = await prepareSetup(input, op, name);
+      op.assert();
+      const { revision } = await op.wait(transport.createKeypairEnvelope(prepared.payload));
+      publishSetup(prepared, op, revision);
       await qc.invalidateQueries({ queryKey: MANGROVE_KEYPAIR_QUERY_KEY });
     },
   });
 }
-
-// ── unlock ───────────────────────────────────────────────────────────────
-
 export interface UnlockPassphraseInput {
   method: "passphrase";
   passphrase: string;
@@ -311,69 +269,105 @@ export interface UnlockPassphraseInput {
 export interface UnlockWebAuthnInput {
   method: "webauthn";
   rpId?: string;
-  /**
-   * Optional specific credential to unlock with. If omitted, the browser's
-   * discoverable-credential picker is used.
-   */
   identityString?: string;
 }
 export type UnlockInput = UnlockPassphraseInput | UnlockWebAuthnInput;
-
 export function useUnlockKeypair() {
-  const transport = useMangroveTransport();
-  const { setKeypair } = useKeypairStore();
+  const qc = useQueryClient(),
+    transport = useMangroveTransport(),
+    begin = useKeypairOperation();
   return useMutation({
-    mutationFn: async (input: UnlockInput): Promise<void> => {
-      const env = await transport.getKeypairEnvelope();
+    mutationKey: ["mangrovePrivate"],
+    gcTime: 0,
+    retry: false,
+    mutationFn: async (input: UnlockInput) => {
+      let op = begin();
+      const env = await op.wait(transport.getKeypairEnvelope());
       if (env?.state !== "ready") throw new Error("No keypair to unlock");
-      if (env.mode !== "encrypted") throw new Error("Keypair is not encrypted");
-
+      const publicKey = await op.wait(importPublicJwk(env.publicJwk));
+      const pem = await op.wait(publicKeyToPem(publicKey));
+      if (!useKeypairStore.getState().setPublicIdentity(pem, { ...op, revision: env.revision }))
+        throw new MangroveConflictError();
+      op = begin();
       let privateJwk: JsonWebKey;
       if (input.method === "passphrase") {
-        if (!env.passphraseCiphertext) {
+        if (!env.passphraseCiphertext)
           throw new Error("No passphrase unlock method is configured for this account");
-        }
         try {
-          privateJwk = await decryptWithPassphrase(env.passphraseCiphertext, input.passphrase);
+          privateJwk = await op.wait(
+            decryptWithPassphrase(env.passphraseCiphertext, input.passphrase),
+          );
         } catch {
+          op.assert();
           throw new Error("Incorrect passphrase");
         }
       } else {
-        if (!env.recipientsCiphertext) {
+        if (!env.recipientsCiphertext)
           throw new Error("No passkey unlock method is configured for this account");
-        }
-        privateJwk = await decryptWithWebAuthn(env.recipientsCiphertext, {
-          rpId: input.rpId,
-          identityString: input.identityString,
-        });
+        privateJwk = await op.wait(
+          decryptWithWebAuthn(env.recipientsCiphertext, {
+            rpId: input.rpId,
+            identityString: input.identityString,
+          }),
+        );
       }
-
-      const kp = await jwkToKeypair({ privateJwk, publicJwk: env.publicJwk });
-      const pem = await publicKeyToPem(kp.publicKey);
-      setKeypair(kp, pem, true, privateJwk);
+      const kp = await op.wait(verifiedKeypair(privateJwk, env.publicJwk));
+      if (
+        !useKeypairStore
+          .getState()
+          .setKeypair(kp, pem, privateJwk, { ...op, revision: env.revision })
+      )
+        throw new MangroveConflictError();
+      op.assert();
+      qc.setQueryData([...MANGROVE_KEYPAIR_QUERY_KEY, op.owner], env);
     },
   });
 }
 
-// ── add / remove wraps ───────────────────────────────────────────────────
-
-async function fetchReadyEncryptedEnvelope(
+async function fetchBoundEnvelope(
   transport: ReturnType<typeof useMangroveTransport>,
+  op: Operation,
+  snapshot: KeypairSigningSnapshot,
 ): Promise<KeypairEnvelopeEncrypted> {
-  const env = await transport.getKeypairEnvelope();
-  if (env?.state !== "ready" || env.mode !== "encrypted") {
-    throw new Error("Keypair must be encrypted to manage wraps");
+  const env = await op.wait(transport.getKeypairEnvelope());
+  if (
+    env?.state !== "ready" ||
+    env.revision !== snapshot.revision ||
+    !useKeypairStore.getState().isCurrent(snapshot)
+  ) {
+    if (useKeypairStore.getState().isCurrent(snapshot)) useKeypairStore.getState().lock();
+    throw new MangroveConflictError();
   }
   return env;
 }
-
-function currentPassphraseWrap(env: KeypairEnvelopeEncrypted): KeypairWrap | undefined {
-  return env.wraps.find((w) => w.wrapType === "passphrase");
+function requireUnlocked(op: Operation) {
+  const snapshot = useKeypairStore.getState().getSigningSnapshot(op.owner);
+  if (!snapshot) throw new Error("Keypair must be unlocked to manage unlock methods");
+  return snapshot;
 }
-function currentWebAuthnWraps(env: KeypairEnvelopeEncrypted): KeypairWrap[] {
-  return env.wraps.filter((w) => w.wrapType === "webauthn");
+function meta(w: KeypairWrap): WrapMeta {
+  return { wrapType: w.wrapType, label: w.label, identityString: w.identityString };
 }
-
+async function replaceWraps(
+  transport: ReturnType<typeof useMangroveTransport>,
+  op: Operation,
+  snapshot: KeypairSigningSnapshot,
+  payload: Omit<UpdateKeypairWrapsPayload, "expectedRevision">,
+) {
+  op.assert();
+  if (!useKeypairStore.getState().isCurrent(snapshot)) throw new MangroveConflictError();
+  try {
+    const { revision } = await op.wait(
+      transport.updateKeypairWraps({ ...payload, expectedRevision: snapshot.revision }),
+    );
+    if (!useKeypairStore.getState().advanceRevision(snapshot, revision))
+      throw new MangroveConflictError();
+  } catch (error) {
+    if (error instanceof MangroveConflictError && useKeypairStore.getState().isCurrent(snapshot))
+      useKeypairStore.getState().lock();
+    throw error;
+  }
+}
 export interface AddPassphraseWrapInput {
   wrapType: "passphrase";
   passphrase: string;
@@ -385,255 +379,208 @@ export interface AddWebAuthnWrapInput {
   rpId?: string;
 }
 export type AddWrapInput = AddPassphraseWrapInput | AddWebAuthnWrapInput;
-
 export function useAddWrap() {
-  const qc = useQueryClient();
-  const transport = useMangroveTransport();
-  const webauthnKeyName = useMangroveWebauthnKeyName();
+  const qc = useQueryClient(),
+    transport = useMangroveTransport(),
+    begin = useKeypairOperation(),
+    name = useMangroveWebauthnKeyName();
   return useMutation({
-    mutationFn: async (input: AddWrapInput): Promise<void> => {
-      const { privateJwk } = useKeypairStore.getState();
-      if (!privateJwk) {
-        throw new Error(
-          "Keypair must be unlocked before adding a new method. Unlock first, then retry.",
+    mutationKey: ["mangrovePrivate"],
+    gcTime: 0,
+    retry: false,
+    mutationFn: async (input: AddWrapInput) => {
+      const op = begin(),
+        snapshot = requireUnlocked(op);
+      const env = await fetchBoundEnvelope(transport, op, snapshot);
+      if (env.wraps.length >= MAX_KEYPAIR_WRAPS)
+        throw new Error(`At most ${MAX_KEYPAIR_WRAPS} unlock methods are supported`);
+      const wraps = env.wraps.map(meta);
+      let passphraseCiphertext = env.passphraseCiphertext,
+        recipientsCiphertext = env.recipientsCiphertext;
+      if (input.wrapType === "passphrase") {
+        if (wraps.some((w) => w.wrapType === "passphrase"))
+          throw new Error("A passphrase wrap already exists. Remove it first.");
+        passphraseCiphertext = await op.wait(
+          encryptWithPassphrase(snapshot.privateJwk, input.passphrase),
+        );
+        wraps.push({
+          wrapType: "passphrase",
+          label: input.label ?? "Passphrase",
+          identityString: null,
+        });
+      } else {
+        const identityString = await op.wait(
+          createWebAuthnIdentity({ rpId: input.rpId, type: "passkey", keyName: name }),
+        );
+        wraps.push({ wrapType: "webauthn", label: input.label ?? "Passkey", identityString });
+        recipientsCiphertext = await op.wait(
+          encryptForWebAuthnIdentities(
+            snapshot.privateJwk,
+            wraps
+              .filter((w) => w.wrapType === "webauthn")
+              .map((w) => w.identityString)
+              .filter((value): value is string => !!value),
+            input.rpId,
+          ),
         );
       }
-
-      const env = await fetchReadyEncryptedEnvelope(transport);
-      if (env.wraps.length >= MAX_KEYPAIR_WRAPS) {
-        throw new Error(`At most ${MAX_KEYPAIR_WRAPS} unlock methods are supported`);
-      }
-
-      if (input.wrapType === "passphrase") {
-        if (currentPassphraseWrap(env)) {
-          throw new Error("A passphrase wrap already exists. Remove it first.");
-        }
-        const passphraseCiphertext = await encryptWithPassphrase(privateJwk, input.passphrase);
-        const wraps: WrapMeta[] = [
-          { wrapType: "passphrase", label: input.label ?? "Passphrase", identityString: null },
-          ...currentWebAuthnWraps(env).map((w) => ({
-            wrapType: "webauthn" as const,
-            label: w.label,
-            identityString: w.identityString,
-          })),
-        ];
-        await transport.updateKeypairWraps({
-          passphraseCiphertext,
-          recipientsCiphertext: env.recipientsCiphertext,
-          wraps,
-        });
-        return;
-      }
-
-      const identityString = await createWebAuthnIdentity({
-        rpId: input.rpId,
-        type: "passkey",
-        keyName: webauthnKeyName,
-      });
-      const existing = currentWebAuthnWraps(env);
-      const allIdentities = [
-        ...existing.map((w) => w.identityString).filter((s): s is string => !!s),
-        identityString,
-      ];
-      const recipientsCiphertext = await encryptForWebAuthnIdentities(
-        privateJwk,
-        allIdentities,
-        input.rpId,
-      );
-      const existingPassphrase = currentPassphraseWrap(env);
-      const wraps: WrapMeta[] = [
-        ...(existingPassphrase
-          ? [
-              {
-                wrapType: "passphrase" as const,
-                label: existingPassphrase.label,
-                identityString: null,
-              },
-            ]
-          : []),
-        ...existing.map((w) => ({
-          wrapType: "webauthn" as const,
-          label: w.label,
-          identityString: w.identityString,
-        })),
-        { wrapType: "webauthn", label: input.label ?? "Passkey", identityString },
-      ];
-      await transport.updateKeypairWraps({
-        passphraseCiphertext: env.passphraseCiphertext,
+      await replaceWraps(transport, op, snapshot, {
+        passphraseCiphertext,
         recipientsCiphertext,
         wraps,
       });
-    },
-    onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: MANGROVE_KEYPAIR_QUERY_KEY });
     },
   });
 }
-
 export function useRemoveWrap() {
-  const qc = useQueryClient();
-  const transport = useMangroveTransport();
+  const qc = useQueryClient(),
+    transport = useMangroveTransport(),
+    begin = useKeypairOperation();
   return useMutation({
-    mutationFn: async (wrapId: string): Promise<void> => {
-      const { privateJwk } = useKeypairStore.getState();
-      if (!privateJwk) {
-        throw new Error("Keypair must be unlocked to remove an unlock method.");
-      }
-      const env = await fetchReadyEncryptedEnvelope(transport);
+    mutationKey: ["mangrovePrivate"],
+    gcTime: 0,
+    retry: false,
+    mutationFn: async (wrapId: string) => {
+      const op = begin(),
+        snapshot = requireUnlocked(op);
+      const env = await fetchBoundEnvelope(transport, op, snapshot);
       const target = env.wraps.find((w) => w.id === wrapId);
       if (!target) throw new Error("Wrap not found");
-      if (env.wraps.length <= 1) {
-        throw new Error("Cannot remove the last unlock method");
-      }
-
-      const remaining = env.wraps.filter((w) => w.id !== wrapId);
-      const passphraseWrap = remaining.find((w) => w.wrapType === "passphrase");
-      const webauthnWraps = remaining.filter((w) => w.wrapType === "webauthn");
-
-      let passphraseCiphertext: string | null = null;
-      if (passphraseWrap) {
-        passphraseCiphertext = env.passphraseCiphertext;
-      }
-
-      let recipientsCiphertext: string | null = null;
-      if (webauthnWraps.length > 0) {
-        if (target.wrapType === "webauthn") {
-          const identities = webauthnWraps
-            .map((w) => w.identityString)
-            .filter((s): s is string => !!s);
-          recipientsCiphertext = await encryptForWebAuthnIdentities(privateJwk, identities);
-        } else {
-          recipientsCiphertext = env.recipientsCiphertext;
-        }
-      }
-
-      const wraps: WrapMeta[] = remaining.map((w) => ({
-        wrapType: w.wrapType,
-        label: w.label,
-        identityString: w.identityString,
-      }));
-
-      await transport.updateKeypairWraps({ passphraseCiphertext, recipientsCiphertext, wraps });
-    },
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: MANGROVE_KEYPAIR_QUERY_KEY });
-    },
-  });
-}
-
-/**
- * Rotate the passphrase that unlocks the current keypair. The private key
- * itself doesn't change — only the scrypt ciphertext that wraps it. Requires
- * the keypair to be unlocked (we need the plaintext private JWK to
- * re-encrypt under the new passphrase) and a passphrase wrap to already
- * exist (otherwise use {@link useAddWrap} with `wrapType: "passphrase"`).
- */
-export function useChangePassphrase() {
-  const qc = useQueryClient();
-  const transport = useMangroveTransport();
-  return useMutation({
-    mutationFn: async (input: { passphrase: string }): Promise<void> => {
-      const { privateJwk } = useKeypairStore.getState();
-      if (!privateJwk) {
-        throw new Error("Keypair must be unlocked to change the passphrase.");
-      }
-      const env = await fetchReadyEncryptedEnvelope(transport);
-      const existing = currentPassphraseWrap(env);
-      if (!existing) {
-        throw new Error("No passphrase is set. Add one instead of changing it.");
-      }
-
-      const passphraseCiphertext = await encryptWithPassphrase(privateJwk, input.passphrase);
-      const wraps: WrapMeta[] = [
-        { wrapType: "passphrase", label: existing.label, identityString: null },
-        ...currentWebAuthnWraps(env).map((w) => ({
-          wrapType: "webauthn" as const,
-          label: w.label,
-          identityString: w.identityString,
-        })),
-      ];
-      await transport.updateKeypairWraps({
+      if (env.wraps.length <= 1) throw new Error("Cannot remove the last unlock method");
+      const wraps = env.wraps.filter((w) => w.id !== wrapId).map(meta),
+        web = wraps.filter((w) => w.wrapType === "webauthn");
+      const recipientsCiphertext = web.length
+        ? target.wrapType === "webauthn"
+          ? await op.wait(
+              encryptForWebAuthnIdentities(
+                snapshot.privateJwk,
+                web.map((w) => w.identityString).filter((value): value is string => !!value),
+              ),
+            )
+          : env.recipientsCiphertext
+        : null;
+      const passphraseCiphertext = wraps.some((w) => w.wrapType === "passphrase")
+        ? env.passphraseCiphertext
+        : null;
+      await replaceWraps(transport, op, snapshot, {
         passphraseCiphertext,
-        recipientsCiphertext: env.recipientsCiphertext,
+        recipientsCiphertext,
         wraps,
       });
-    },
-    onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: MANGROVE_KEYPAIR_QUERY_KEY });
     },
   });
 }
-
-// ── regenerate / import ──────────────────────────────────────────────────
-
+export function useChangePassphrase() {
+  const qc = useQueryClient(),
+    transport = useMangroveTransport(),
+    begin = useKeypairOperation();
+  return useMutation({
+    mutationKey: ["mangrovePrivate"],
+    gcTime: 0,
+    retry: false,
+    mutationFn: async (input: { passphrase: string }) => {
+      const op = begin(),
+        snapshot = requireUnlocked(op);
+      const env = await fetchBoundEnvelope(transport, op, snapshot);
+      if (!env.wraps.some((w) => w.wrapType === "passphrase"))
+        throw new Error("No passphrase is set. Add one instead of changing it.");
+      const passphraseCiphertext = await op.wait(
+        encryptWithPassphrase(snapshot.privateJwk, input.passphrase),
+      );
+      await replaceWraps(transport, op, snapshot, {
+        passphraseCiphertext,
+        recipientsCiphertext: env.recipientsCiphertext,
+        wraps: env.wraps.map(meta),
+      });
+      await qc.invalidateQueries({ queryKey: MANGROVE_KEYPAIR_QUERY_KEY });
+    },
+  });
+}
+async function deletionEnvelope(
+  transport: ReturnType<typeof useMangroveTransport>,
+  op: Operation,
+  cached: EnvelopeState | null,
+) {
+  const knownRevision = useKeypairStore.getState().revision;
+  const env = cached ?? (await op.wait(transport.getKeypairEnvelope()));
+  if (knownRevision && (env?.state !== "ready" || env.revision !== knownRevision)) {
+    useKeypairStore.getState().lock();
+    throw new MangroveConflictError();
+  }
+  return env;
+}
 export function useRegenerateMangroveKeypair() {
-  const transport = useMangroveTransport();
-  const { clear } = useKeypairStore();
-  const qc = useQueryClient();
+  const qc = useQueryClient(),
+    transport = useMangroveTransport(),
+    begin = useKeypairOperation();
+  const state = useKeypairState();
   return useMutation({
-    mutationFn: async (): Promise<void> => {
-      await transport.deleteKeypairEnvelope();
-    },
-    onSuccess: async () => {
-      clear();
+    mutationKey: ["mangrovePrivate"],
+    gcTime: 0,
+    retry: false,
+    mutationFn: async () => {
+      const op = begin();
+      const env = await deletionEnvelope(transport, op, state.data);
+      if (env?.state === "ready")
+        await op.wait(transport.deleteKeypairEnvelope({ expectedRevision: env.revision }));
+      op.assert();
+      useKeypairStore.getState().clear();
       await qc.invalidateQueries({ queryKey: MANGROVE_KEYPAIR_QUERY_KEY });
     },
   });
 }
-
-/** Replace the envelope with an imported JWK in the caller-specified mode. */
 export function useImportMangroveKeypair() {
-  const setup = useSetupKeypair();
-  const regenerate = useRegenerateMangroveKeypair();
+  const qc = useQueryClient(),
+    transport = useMangroveTransport(),
+    begin = useKeypairOperation(),
+    name = useMangroveWebauthnKeyName();
+  const state = useKeypairState();
   return useMutation({
-    mutationFn: async (input: SetupInput & { importJwk: JsonWebKey }): Promise<void> => {
-      try {
-        await regenerate.mutateAsync();
-      } catch {
-        // no existing envelope — fine
-      }
-      await setup.mutateAsync(input);
-    },
-  });
-}
-
-export function useRefreshKeypair() {
-  const { clear } = useKeypairStore();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (): Promise<void> => {
-      clear();
+    mutationKey: ["mangrovePrivate"],
+    gcTime: 0,
+    retry: false,
+    mutationFn: async (input: SetupInput & { importJwk: JsonWebKey }) => {
+      const op = begin();
+      const env = await deletionEnvelope(transport, op, state.data);
+      const prepared = await prepareSetup(input, op, name);
+      if (env?.state === "ready")
+        await op.wait(transport.deleteKeypairEnvelope({ expectedRevision: env.revision }));
+      op.assert();
+      useKeypairStore.getState().clear();
+      // A fresh generation after deletion cannot authorize work from another session.
+      const next = begin();
+      const { revision } = await next.wait(transport.createKeypairEnvelope(prepared.payload));
+      publishSetup(prepared, next, revision);
       await qc.invalidateQueries({ queryKey: MANGROVE_KEYPAIR_QUERY_KEY });
     },
   });
 }
-
-// ── export ───────────────────────────────────────────────────────────────
-
-/**
- * Exposes the raw private JWK for backup / cross-device import. Mangrove's
- * own web UI persists keypairs in the same JWK shape, so a user can
- * round-trip between the host app and mangrove.reviews.
- *
- * Available when:
- *   - Unencrypted mode: always (server holds cleartext private JWK).
- *   - Encrypted mode: only while unlocked (private JWK is in memory).
- */
+export function useRefreshKeypair() {
+  const qc = useQueryClient(),
+    begin = useKeypairOperation();
+  return useMutation({
+    mutationKey: ["mangrovePrivate"],
+    gcTime: 0,
+    retry: false,
+    mutationFn: async () => {
+      begin().assert();
+      useKeypairStore.getState().clear();
+      await qc.invalidateQueries({ queryKey: MANGROVE_KEYPAIR_QUERY_KEY });
+    },
+  });
+}
 export function useMangroveKeypairExport(): {
   privateJwk: JsonWebKey | null;
   reason: "noEnvelope" | "locked" | null;
 } {
+  const owner = keypairOwner(useMangroveCurrentUser());
   const envelope = useKeypairState().data;
-  const privateJwkStore = useKeypairStore((s) => s.privateJwk);
-
-  if (envelope?.state !== "ready") {
-    return { privateJwk: null, reason: "noEnvelope" };
-  }
-  if (envelope.mode === "unencrypted") {
-    return { privateJwk: envelope.privateJwk, reason: null };
-  }
-  if (privateJwkStore) {
-    return { privateJwk: privateJwkStore, reason: null };
-  }
-  return { privateJwk: null, reason: "locked" };
+  const store = useKeypairStore();
+  const snapshot = store.getSigningSnapshot(owner);
+  if (envelope?.state !== "ready") return { privateJwk: null, reason: "noEnvelope" };
+  if (!snapshot || snapshot.revision !== envelope.revision)
+    return { privateJwk: null, reason: "locked" };
+  return { privateJwk: snapshot.privateJwk, reason: null };
 }

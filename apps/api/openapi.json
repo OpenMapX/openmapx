@@ -64597,6 +64597,74 @@
         "x-openmapx-source": "integrations/restaurants/index.ts"
       }
     },
+    "/api/integrations/reviews-mangrove/signer/account": {
+      "post": {
+        "operationId": "postApiIntegrationsReviewsMangroveSignerAccount",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /signer/account (reviews-mangrove)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "session",
+        "x-openmapx-integration": "reviews-mangrove",
+        "x-openmapx-source": "integrations/reviews-mangrove/signer.ts"
+      }
+    },
+    "/api/integrations/reviews-mangrove/signer/config": {
+      "get": {
+        "operationId": "getApiIntegrationsReviewsMangroveSignerConfig",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /signer/config (reviews-mangrove)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "session",
+        "x-openmapx-integration": "reviews-mangrove",
+        "x-openmapx-source": "integrations/reviews-mangrove/signer.ts"
+      }
+    },
+    "/api/integrations/reviews-mangrove/signer/revoke": {
+      "post": {
+        "operationId": "postApiIntegrationsReviewsMangroveSignerRevoke",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /signer/revoke (reviews-mangrove)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "session",
+        "x-openmapx-integration": "reviews-mangrove",
+        "x-openmapx-source": "integrations/reviews-mangrove/signer.ts"
+      }
+    },
+    "/api/integrations/reviews-mangrove/signer/sign": {
+      "post": {
+        "operationId": "postApiIntegrationsReviewsMangroveSignerSign",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /signer/sign (reviews-mangrove)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "session",
+        "x-openmapx-integration": "reviews-mangrove",
+        "x-openmapx-source": "integrations/reviews-mangrove/signer.ts"
+      }
+    },
     "/api/integrations/reviews/aggregate": {
       "get": {
         "operationId": "getApiIntegrationsReviewsAggregate",

@@ -31,6 +31,7 @@ import {
 import { localStorageAdapter } from "../lib/storage";
 import { IntegrationProvider } from "../providers/IntegrationProvider";
 import { KeypairSessionGuard } from "../providers/KeypairSessionGuard";
+import { MangroveSignerSessionGuard } from "../providers/MangroveSignerSessionGuard";
 import { MangroveTransportProvider } from "../providers/MangroveTransportProvider";
 import { PersonalTimelineSessionGuard } from "../providers/PersonalTimelineSessionGuard";
 import { SessionAuthorityBoundary } from "../providers/SessionAuthorityBoundary";
@@ -141,9 +142,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
         while the private tree is gated, so old in-memory keys and timeline
         queries are cleared before the replacement authority is released.
       */}
-      <KeypairSessionGuard />
+      <MangroveSignerSessionGuard />
       <PersonalTimelineSessionGuard />
       <SessionAuthorityBoundary>
+        <KeypairSessionGuard />
         <ImpersonationBanner />
         <SavedPlacesMirror />
         <MangroveTransportProvider>
