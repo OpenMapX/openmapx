@@ -14,6 +14,13 @@ export async function addAdminExtensionSourceRequest<T>(
 ): Promise<T> {
   return addAdminExtensionSourceBound<T>(url, options);
 }
+const applyAdminAuthPolicyBound = bindAdminOperation("applyAdminAuthPolicy");
+export async function applyAdminAuthPolicyRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return applyAdminAuthPolicyBound<T>(url, options);
+}
 const cancelAdminActivityJobBound = bindAdminOperation("cancelAdminActivityJob");
 export async function cancelAdminActivityJobRequest<T>(
   url: string,
@@ -110,6 +117,13 @@ export async function getAdminActivityJobStreamMetricsRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return getAdminActivityJobStreamMetricsBound<T>(url, options);
+}
+const getAdminAuthPolicyBound = bindAdminOperation("getAdminAuthPolicy");
+export async function getAdminAuthPolicyRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return getAdminAuthPolicyBound<T>(url, options);
 }
 const getAdminComposePreviewBound = bindAdminOperation("getAdminComposePreview");
 export async function getAdminComposePreviewRequest<T>(

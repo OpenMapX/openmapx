@@ -8,10 +8,12 @@ export {
   adminErrorMessage,
   unwrapAdminResponse,
 } from "./admin-sdk-transport";
+export * from "./contracts/account-admin";
 export * from "./contracts/activity-admin";
 export * from "./contracts/extension-admin";
 export * from "./contracts/integration-admin";
 export * from "./contracts/service-admin";
+export * from "./generated/admin/account-admin.generated";
 export * from "./generated/admin/activity-admin.generated";
 export * from "./generated/admin/data-manager-admin.generated";
 export * from "./generated/admin/extension-admin.generated";

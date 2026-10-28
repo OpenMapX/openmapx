@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { adminRoute } from "./admin";
+import { adminAccountsRoute } from "./admin-accounts";
 import { adminActivityRoute } from "./admin-activity";
 import { adminCacheRoute } from "./admin-cache";
 import { registerCapabilityBindingRoutes } from "./admin-capability-bindings";
@@ -73,6 +74,7 @@ export async function registerCoreRoutes(
   options: CoreRouteOptions,
 ): Promise<void> {
   await server.register(authRoute, options);
+  await server.register(adminAccountsRoute, { prefix: "/api" });
 
   await server.register(metaRoute);
 

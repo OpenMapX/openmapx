@@ -3,6 +3,7 @@ import { emitOperationBindings, operationIds } from "../codegen/operation-bindin
 import { validatedResponseTypes } from "./validated-response-types.mjs";
 
 const adminFamilies = [
+  { key: "accountAdmin", tag: "account-admin", models: "account-models" },
   { key: "dataManagerAdmin", tag: "data-manager-admin", models: "models", required: true },
   {
     key: "activityAdmin",

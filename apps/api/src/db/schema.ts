@@ -1,3 +1,4 @@
+export { authPolicyApplication, authPolicyState } from "./account-administration-schema";
 // Capability bindings — explicit (integration, capability) → service mappings
 
 // data-manager pipeline observability (Postgres schema "data_manager")

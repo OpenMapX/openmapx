@@ -302,6 +302,13 @@
       "when": 1792939089650,
       "tag": "0042_admin_data_execution",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1793187169774,
+      "tag": "0043_admin_auth_policy",
+      "breakpoints": true
     }
   ]
 }

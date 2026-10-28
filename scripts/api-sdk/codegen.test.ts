@@ -73,11 +73,11 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
           const source: "default" | "database" | "vault" | "config.json" | "env" = response.data.resolvedConfig.field.source;
         }
       });
-      setAdminIntegrationCredential("sample", "apiKey", {value: "synthetic"}, finiteOptions);
+      setAdminIntegrationCredential("sample", "apiKey", {value: "synthetic"}, {"idempotency-key":"synthetic-intent-0001"}, finiteOptions);
       // @ts-expect-error Credential bodies reject unknown fields.
-      setAdminIntegrationCredential("sample", "apiKey", {value: "synthetic", unexpected: true});
+      setAdminIntegrationCredential("sample", "apiKey", {value: "synthetic", unexpected: true}, {"idempotency-key":"synthetic-intent-0001"});
       // @ts-expect-error Credentials are strings, not numbers.
-      setAdminIntegrationCredential("sample", "apiKey", {value: 1});
+      setAdminIntegrationCredential("sample", "apiKey", {value: 1}, {"idempotency-key":"synthetic-intent-0001"});
       getAdminIntegrationHealthHistory("sample", {hours: 24}, finiteOptions);
       // @ts-expect-error Generated query output exposes bounded integer input, not string coercion.
       getAdminIntegrationHealthHistory("sample", {hours: "24"});
@@ -124,9 +124,9 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
         if (response.status === 200) {}
         if (response.status === 503) { const guidance: string = response.data.error; const ok: false = response.data.ok; }
       });
-      setAdminServiceSelection({selectedRoots: []});
+      setAdminServiceSelection({selectedRoots: []}, {"idempotency-key":"synthetic-intent-0001"});
       // @ts-expect-error An absent selection cannot mean intentional deselection.
-      setAdminServiceSelection({});
+      setAdminServiceSelection({}, {"idempotency-key":"synthetic-intent-0001"});
       // @ts-expect-error Build-only fields cannot enter lifecycle actions.
       runAdminServicesBulkAction({action: "start", serviceIds: ["sample"], all: true});
       restoreAdminServiceBackup("sample", {serviceIds: [], stopRunning: true});
@@ -668,6 +668,20 @@ describe("integration administration generation", () => {
           name: "hours",
           schema: { type: "integer", minimum: 1, maximum: 168, default: 24 },
         });
+      if (request && "headers" in request) {
+        const emitted = routeJsonSchema(request.headers, {
+          identity: `${id}Headers`,
+          io: "output",
+        });
+        const required = emitted.required as string[] | undefined;
+        for (const [name, field] of Object.entries(emitted.properties as Record<string, unknown>))
+          parameters.push({
+            in: "header",
+            name,
+            required: required?.includes(name) ?? false,
+            schema: field,
+          });
+      }
       input.paths[path] ??= {};
       input.paths[path][operation.method.toLowerCase()] = {
         operationId: id,

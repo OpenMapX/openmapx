@@ -22,7 +22,8 @@
     "apps/api/src/services/capability-bindings.test.ts",
     "apps/api/src/services/integration-config-store-postgres.test.ts",
     "apps/api/src/services/mobileAuthHandoff.test.ts",
-    "apps/api/src/services/service-config-writer-postgres.test.ts"
+    "apps/api/src/services/service-config-writer-postgres.test.ts",
+    "apps/api/src/account/auth-policy-postgres.test.ts"
   ],
   "ingestion": [
     "apps/api/src/services/__tests__/job-runner-postgres.test.ts",

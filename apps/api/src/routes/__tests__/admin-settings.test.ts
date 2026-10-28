@@ -82,6 +82,8 @@ vi.mock("../../db/index.js", () => ({
   db: {
     select: (...args: unknown[]) => mockDbSelect(...args),
     insert: (...args: unknown[]) => mockDbInsert(...args),
+    transaction: async (run: (tx: unknown) => Promise<unknown>) =>
+      run({ insert: (...args: unknown[]) => mockDbInsert(...args) }),
   },
 }));
 vi.mock("../../db/schema.js", () => ({
@@ -396,22 +398,15 @@ describe("POST /admin/settings/import", () => {
     expect(res.json().imported).toBe(1);
   });
 
-  it("imports valid values and reports invalid values as skipped", async () => {
+  it("rejects a malformed authentication draft atomically", async () => {
     const res = await app.inject({
       method: "POST",
       url: "/admin/settings/import",
       payload: { settings: { sessionDurationHours: "abc", instanceName: "good" } },
     });
-
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({
-      ok: true,
-      imported: 1,
-      skipped: ["sessionDurationHours"],
-    });
-    expect(mockWriteAuditLog).toHaveBeenCalledWith(
-      expect.objectContaining({ details: { imported: 1, skipped: ["sessionDurationHours"] } }),
-    );
+    expect(res.statusCode).toBe(400);
+    expect(mockDbInsert).not.toHaveBeenCalled();
+    expect(mockWriteAuditLog).not.toHaveBeenCalled();
   });
 });
 
@@ -496,5 +491,17 @@ describe("map settings review regressions", () => {
     expect(insertChain.values).toHaveBeenCalledWith(
       expect.objectContaining({ key: "hostedBasemapProvider", value: "openfreemap" }),
     );
+  });
+});
+
+describe("atomic authentication drafts", () => {
+  it("rejects an invalid auth import before writing another valid setting", async () => {
+    const result = await app.inject({
+      method: "POST",
+      url: "/admin/settings/import",
+      payload: { settings: { instanceName: "Must not be saved", sessionDurationHours: 0 } },
+    });
+    expect(result.statusCode).toBe(400);
+    expect(mockDbInsert).not.toHaveBeenCalled();
   });
 });

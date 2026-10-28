@@ -6,6 +6,7 @@ import {
   apiClient,
   parseRetryAfter,
 } from "./client";
+import { accountAdminOperations } from "./contracts/account-admin";
 import { activityAdminOperations } from "./contracts/activity-admin";
 import type { AdminOperation } from "./contracts/admin";
 import { dataManagerAdminOperations } from "./contracts/data-manager-admin";
@@ -47,6 +48,7 @@ interface AdminResponse {
   data: unknown;
 }
 const operations = {
+  ...accountAdminOperations,
   ...dataManagerAdminOperations,
   ...activityAdminOperations,
   ...integrationAdminOperations,
