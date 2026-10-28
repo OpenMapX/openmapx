@@ -145,14 +145,8 @@ import {
 
 export type BoundedConfigValue =
   TrustedConfigurationPayload["serviceConfigs"][number]["values"][string];
-export type PlatformField<T> = { source: "host" } | { source: "database"; value: T };
-export type PlatformConfigurationPatch = {
-  domain?: PlatformField<string>;
-  acmeEmail?: PlatformField<string>;
-  releaseSelector?: PlatformField<string>;
-  defaultRegion?: PlatformField<string>;
-  backupRetentionDays?: PlatformField<number>;
-};
+export type PlatformField<T> = coreServices.PlatformField<T>;
+export type PlatformConfigurationPatch = Omit<coreServices.PlatformConfiguration, "version">;
 const id = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
 const key = z
   .string()
@@ -221,13 +215,7 @@ const overlaySchema = z.strictObject({
         z.strictObject({ kind: z.literal("selection"), selectedRoots: z.array(id).max(256) }),
         z.strictObject({
           kind: z.literal("platform"),
-          patch: z.strictObject({
-            domain: z.unknown().optional(),
-            acmeEmail: z.unknown().optional(),
-            releaseSelector: z.unknown().optional(),
-            defaultRegion: z.unknown().optional(),
-            backupRetentionDays: z.unknown().optional(),
-          }),
+          patch: coreServices.platformConfigurationSchema.omit({ version: true }),
         }),
       ]),
     )
@@ -3065,7 +3053,7 @@ export async function prepareProspectiveConfiguration(input: {
         const selection = overlay.changes.find((change) => change.kind === "selection");
         const payload = trustedConfigurationPayloadSchema.parse({
           ...(await withAdministrativeConfigurationReadScope(read, () =>
-            buildConfigurationInput(read),
+            buildConfigurationInput(read, source.platform),
           )),
           ...(selection?.kind === "selection" ? { selectedRoots: selection.selectedRoots } : {}),
         });

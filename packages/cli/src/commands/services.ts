@@ -290,9 +290,7 @@ export function registerServicesCommands(program: Command): void {
           continueOnError: options.failFast !== true,
         });
         if (result.completedIds.length > 0) {
-          const rendered = await renderComposeForRepo({
-            domain: process.env.DOMAIN ?? "localhost",
-          });
+          const rendered = await renderComposeForRepo({});
           for (const warning of rendered.selectionWarnings) log.warn(warning);
           const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
           log.ok(
@@ -340,9 +338,7 @@ export function registerServicesCommands(program: Command): void {
             motisImport: options.import === true,
           });
           if (result.completedIds.length > 0) {
-            const rendered = await renderComposeForRepo({
-              domain: process.env.DOMAIN ?? "localhost",
-            });
+            const rendered = await renderComposeForRepo({});
             for (const warning of rendered.selectionWarnings) log.warn(warning);
             const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
             log.ok(

@@ -52,6 +52,11 @@ import {
   readConfigurationGenerationBase,
   SERVICE_SELECTION_FILE,
 } from "./deployment";
+import {
+  type PlatformConfiguration,
+  platformConfigurationSchema,
+  resolvePlatformConfiguration,
+} from "./platform-configuration";
 import { buildAppApiServiceEnv, expandServiceSelection } from "./selection";
 import { renderTraefikDynamicConfiguration, renderTraefikDynamicYaml } from "./traefik-renderer";
 import type { LoadedService } from "./types";
@@ -694,6 +699,7 @@ export function readAppliedConfiguration(
   const resolved = JSON.parse(readFileSync(join(generation, RESOLVED_CONFIG_FILE), "utf-8")) as {
     serviceConfigs?: ConfigurationInput["serviceConfigs"];
     integrationConfigs?: ConfigurationInput["integrationConfigs"];
+    platform?: PlatformConfiguration;
   };
   const serviceSecrets: ConfigurationInput["serviceSecrets"] = [];
   const secretsRoot = join(generation, GENERATED_SECRETS_DIRNAME);
@@ -710,7 +716,24 @@ export function readAppliedConfiguration(
     serviceConfigs: resolved.serviceConfigs ?? [],
     integrationConfigs: resolved.integrationConfigs ?? [],
     serviceSecrets,
+    ...(resolved.platform
+      ? { platform: platformConfigurationSchema.parse(resolved.platform) }
+      : {}),
   };
+}
+
+/** Read only non-secret platform metadata, never service secret files. */
+export function readAppliedPlatformConfiguration(
+  infraDir: string,
+): PlatformConfiguration | undefined {
+  const active = currentConfigurationGeneration(infraDir);
+  if (!active) return undefined;
+  const resolved = JSON.parse(
+    readFileSync(join(infraDir, CONFIGURATION_GENERATIONS, active, RESOLVED_CONFIG_FILE), "utf8"),
+  );
+  return resolved.platform === undefined
+    ? undefined
+    : platformConfigurationSchema.parse(resolved.platform);
 }
 
 /** Call under writer ownership so the pointer and its projections are one observation.
@@ -735,6 +758,9 @@ export function inspectAppliedConfiguration(
   });
   return {
     revisionId,
+    ...(resolved.platform
+      ? { platform: platformConfigurationSchema.parse(resolved.platform) }
+      : {}),
     integrationConfigDigests: integrationConfigs.map(({ integrationId, values }) => ({
       integrationId,
       digest: configurationProjectionFingerprint(values),
@@ -1099,6 +1125,15 @@ export function renderConfiguration(options: RenderConfigurationOptions) {
   );
   const context: RenderContext = {
     domain: input.domain,
+    ...(input.platform
+      ? {
+          platform: input.platform,
+          platformValues: resolvePlatformConfiguration({
+            saved: input.platform,
+            overrides: { domain: input.domain },
+          }).values,
+        }
+      : {}),
     // Runtime supplies a fixed generation alias at this same directory depth.
     // Keep these bytes compatible with existing current/retained generations.
     composeOutDir: join(infraDir, CURRENT_CONFIGURATION),
@@ -1173,6 +1208,7 @@ async function commitOwnedConfigurationGeneration(
       `${JSON.stringify({
         serviceConfigs: input.serviceConfigs,
         integrationConfigs: input.integrationConfigs,
+        ...(input.platform ? { platform: platformConfigurationSchema.parse(input.platform) } : {}),
       })}\n`,
       0o600,
     );

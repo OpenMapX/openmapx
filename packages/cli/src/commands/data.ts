@@ -187,7 +187,7 @@ async function runFontDownload(transport: ReturnType<typeof createCliTransport>)
 }
 
 async function renderAndApplyHardlinks(): Promise<void> {
-  const rendered = await renderComposeForRepo({ domain: process.env.DOMAIN ?? "localhost" });
+  const rendered = await renderComposeForRepo({});
   for (const warning of rendered.selectionWarnings) log.warn(warning);
   const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
   log.ok(
@@ -384,7 +384,7 @@ export function registerDataCommands(program: Command): void {
         // Always render first so the plan file reflects the current
         // service-selection. Running against a stale plan silently links
         // dirs the operator no longer wants.
-        const rendered = await renderComposeForRepo({ domain: process.env.DOMAIN ?? "localhost" });
+        const rendered = await renderComposeForRepo({});
         for (const warning of rendered.selectionWarnings) log.warn(warning);
         const result = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
         log.ok(

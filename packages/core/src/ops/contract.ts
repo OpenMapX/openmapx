@@ -1,4 +1,5 @@
 import { catalogPinSetSchema } from "../catalog-pins/schemas";
+import { platformConfigurationSchema } from "../services/platform-configuration";
 import {
   configurationGenerationRevisionSchema,
   configurationHardlinksApplyOperationSchema,
@@ -1025,6 +1026,7 @@ export const OPS_RESULT_SCHEMAS = {
   "configurationMaintenance.settle": configurationMaintenanceReceiptSchema,
   "configuration.inspect": z.strictObject({
     revisionId: configurationGenerationRevisionSchema.nullable(),
+    platform: platformConfigurationSchema.optional(),
     integrationConfigDigests: z
       .array(
         z.strictObject({

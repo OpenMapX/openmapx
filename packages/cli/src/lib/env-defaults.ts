@@ -1,3 +1,4 @@
+import { services as coreServices, repoPaths } from "@openmapx/core/server";
 export const OPENMAPX_REGION_ENV = "OPENMAPX_REGION";
 export const TRANSITOUS_COUNTRIES_ENV = "TRANSITOUS_COUNTRIES";
 
@@ -51,7 +52,20 @@ export function resolveRegionFromEnv(
 ): ResolvedEnvDefault {
   const direct = normalizeScalar(explicit);
   if (direct) return { value: direct };
-  return resolveFromEnvNames(envNames, env);
+  for (const name of envNames) {
+    if (name === OPENMAPX_REGION_ENV && env === process.env) {
+      const saved = coreServices.readAppliedPlatformConfiguration(repoPaths().infraDir);
+      if (saved?.defaultRegion?.source === "database")
+        return {
+          value:
+            coreServices.resolvePlatformConfiguration({ saved, env }).values.defaultRegion ??
+            undefined,
+        };
+    }
+    const resolved = resolveFromEnvNames([name], env);
+    if (resolved.value) return resolved;
+  }
+  return {};
 }
 
 export function resolveBuildRegion(

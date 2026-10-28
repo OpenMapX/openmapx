@@ -41,6 +41,7 @@ export {
   inspectAppliedConfiguration,
   type RenderConfigurationOptions,
   readAppliedConfiguration,
+  readAppliedPlatformConfiguration,
   readAppliedServiceIds,
   renderConfiguration,
   retainedContainerComposeFile,
@@ -104,6 +105,13 @@ export {
   serviceManifestSchema,
   validateServiceManifest,
 } from "./manifest-schema";
+export {
+  type PlatformConfiguration,
+  type PlatformField,
+  type PlatformValues,
+  platformConfigurationSchema,
+  resolvePlatformConfiguration,
+} from "./platform-configuration";
 export { ServiceRegistry, type ServiceRegistryOptions } from "./registry";
 export {
   captureReleaseServiceAuthority,

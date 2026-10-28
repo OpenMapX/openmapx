@@ -138,3 +138,30 @@ it("freezes the same host .env defaults as the registered CLI, with shell preced
   vi.stubEnv("DOMAIN", "shell.example.test");
   expect(control.planDataUpdate(args).domain).toBe("shell.example.test");
 });
+
+it("uses adopted default regions without expanding the deployment region authority", async () => {
+  const host = await ownedServiceHost({ withCoordinator: true });
+  roots.push(host.cleanupRoot);
+  const { services } = await import("@openmapx/core/server");
+  const { createUnavailableRuntime } = await import("./runtime");
+  const { installDataWorkflowRuntime, resolveDataDefaultRegion } = await import(
+    "./data-workflow-runtime"
+  );
+  const runtime = createUnavailableRuntime();
+  installDataWorkflowRuntime(runtime, { rootDir: host.root, runFixedCli: vi.fn() });
+  await services.commitConfigurationGeneration({
+    infraDir: host.infraDir,
+    services: host.loaded,
+    input: {
+      ...services.readAppliedConfiguration(host.infraDir),
+      domain: "fixture.example.test",
+      selectedRoots: host.loaded.map((s) => s.manifest.id),
+      platform: { version: 1, defaultRegion: { source: "database", value: "europe/france" } },
+    },
+  });
+  vi.stubEnv("OPENMAPX_REGION", "europe/germany");
+  vi.stubEnv("OPENMAPX_ALLOWED_REGIONS", "europe/germany");
+  expect(() => resolveDataDefaultRegion(runtime)).toThrow(/allow-list/);
+  vi.stubEnv("OPENMAPX_ALLOWED_REGIONS", "europe/germany,europe/france");
+  expect(resolveDataDefaultRegion(runtime)).toBe("europe/france");
+});

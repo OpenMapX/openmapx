@@ -357,7 +357,6 @@ export async function runCliServiceLifecycle(options: {
     async prepare({ ownership: owned, coordinatorMode }) {
       const rendered = await renderComposeWithWriter(
         {
-          domain: process.env.DOMAIN ?? "localhost",
           expectedCurrentRevisionId: expected,
           revisionId: finalRevisionId,
         },

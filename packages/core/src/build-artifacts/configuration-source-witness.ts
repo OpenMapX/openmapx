@@ -9,7 +9,10 @@ import {
   configurationSourcesInspectionSchema,
 } from "../ops/configuration-preparation";
 import { serviceConfigEnvPrefix } from "../services/config-resolver";
-import { currentConfigurationGeneration } from "../services/configuration-generation";
+import {
+  currentConfigurationGeneration,
+  readAppliedPlatformConfiguration,
+} from "../services/configuration-generation";
 import { SERVICE_SELECTION_FILE } from "../services/deployment";
 import type { LoadedService } from "../services/types";
 import {
@@ -143,7 +146,12 @@ function releaseSource(infraDir: string) {
   }
 }
 function currentSources(infraDir: string, env: NodeJS.ProcessEnv) {
-  return { ...hostEnv(infraDir, env), release: releaseSource(infraDir) };
+  const platform = readAppliedPlatformConfiguration(infraDir);
+  return {
+    ...hostEnv(infraDir, env),
+    release: releaseSource(infraDir),
+    ...(platform ? { platform } : {}),
+  };
 }
 
 /** The renderer's supported resource interpolation is a finite mapping. */
@@ -213,6 +221,7 @@ export function observeConfigurationSources(options: {
       continue;
     const inspection = configurationSourcesInspectionSchema.parse({
       revisionId,
+      ...(observed.platform ? { platform: observed.platform } : {}),
       sourceRevision: randomUUID(),
       services: configurationHostFields(options.services, observed.env),
     });

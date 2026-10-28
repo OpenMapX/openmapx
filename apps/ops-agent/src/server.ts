@@ -127,7 +127,7 @@ import {
   installCoordinatorStagedOwnershipSource,
   prepareCoordinatorStagedRetention,
 } from "./coordinator-staged-ownership";
-import { prepareDataUpdateAdmission } from "./data-workflow-runtime";
+import { prepareDataUpdateAdmission, resolveDataDefaultRegion } from "./data-workflow-runtime";
 import {
   type DawarichSubjectExportRouteOptions,
   registerDawarichSubjectExportRoute,
@@ -2459,7 +2459,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                     executionFor(job),
                     job.operation,
                     targets,
-                    process.env.OPENMAPX_REGION,
+                    "regionId" in job.operation && job.operation.regionId === undefined
+                      ? resolveDataDefaultRegion(runtime)
+                      : undefined,
                   )
                 : undefined;
               const dataUpdatePlan =

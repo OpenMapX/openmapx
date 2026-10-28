@@ -7,6 +7,7 @@ import {
   parseDirectOpsIdempotency,
 } from "../services/direct-ops-idempotency";
 import { jobRunner } from "../services/job-runner";
+import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "../services/ops-client";
 import { getServiceRegistry } from "../services/service-registry";
 import { buildConfigurationInput, integrationSchemas } from "../services/trusted-config-operations";
 import { STACK_STOP_GUIDANCE } from "../utils/docker-compose";
@@ -33,11 +34,19 @@ export async function registerAdminComposeRoutes(
       return { error: "Service registry not available" };
     }
     const desired = await readDesiredSelection();
+    const source = await executeAndWait(
+      createApiOpsClient(),
+      { kind: "configuration.inspect" },
+      createDurableOpsKey("configuration.inspect", "compose-preview"),
+    );
     const { rendered } = services.renderConfiguration({
       infraDir: repoPaths().infraDir,
       services: registry.list(),
       integrationSchemas: integrationSchemas(),
-      input: { ...(await buildConfigurationInput()), selectedRoots: desired.roots },
+      input: {
+        ...(await buildConfigurationInput(undefined, source.platform)),
+        selectedRoots: desired.roots,
+      },
       allowMissingSelected: desired.source === "default",
     });
     reply.header("Content-Type", "text/yaml; charset=utf-8");

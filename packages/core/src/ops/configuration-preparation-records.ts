@@ -1,5 +1,6 @@
 /** Portable bounded candidate records; parsing creates no authority. */
 import { z } from "zod";
+import { platformConfigurationSchema } from "../services/platform-configuration";
 import { coordinatorLifecycleMetadataSchema } from "./coordinator-lifecycle-records";
 
 const revision = z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/);
@@ -9,6 +10,7 @@ export const coordinatorModeSchema = z.enum(["ensure-running", "require-running"
 export const configurationSourcesInspectionSchema = z
   .strictObject({
     revisionId: revision.nullable(),
+    platform: platformConfigurationSchema.optional(),
     sourceRevision: z.uuid(),
     services: z
       .array(

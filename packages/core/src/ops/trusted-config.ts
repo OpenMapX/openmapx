@@ -1,5 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import z from "zod/v4";
+import { platformConfigurationSchema } from "../services/platform-configuration";
 import {
   isTrustedConfigurationApplyOperation,
   type OpsOperation,
@@ -125,6 +126,7 @@ function uniqueBy<T>(values: readonly T[], identity: (value: T) => string): bool
 export const trustedConfigurationPayloadSchema = z
   .strictObject({
     domain,
+    platform: platformConfigurationSchema.optional(),
     // A new selection, carried by `serviceSelection.apply` only; every other
     // apply renders the operator's selection as it stands.
     selectedRoots: z.array(serviceId).max(256).optional(),

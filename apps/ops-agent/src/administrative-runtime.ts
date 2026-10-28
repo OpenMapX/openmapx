@@ -1,5 +1,5 @@
 import { loadConfiguredResourceAuthority } from "./configured-resource-authority";
-import { installDataWorkflowRuntime } from "./data-workflow-runtime";
+import { installDataWorkflowRuntime, resolveDataDefaultRegion } from "./data-workflow-runtime";
 
 export {
   type ConfiguredResourceAuthority,
@@ -1689,6 +1689,11 @@ export function createDefaultFixedCli(
   return async (args, options) => {
     const timeout = remainingCliTime(options);
     const env = { ...process.env };
+    const platform = coreServices.readAppliedPlatformConfiguration(join(_rootDir, "infra/docker"));
+    if (platform?.defaultRegion?.source === "database")
+      env.OPENMAPX_REGION =
+        coreServices.resolvePlatformConfiguration({ saved: platform, env }).values.defaultRegion ??
+        undefined;
     for (const key of [
       "OPENMAPX_CONTROL_EXECUTION",
       "OPENMAPX_CONTROL_DELEGATION",
@@ -1767,7 +1772,10 @@ export function createAdministrativeRuntime(
     if (!buildable.some((service) => service.serviceId === operation.serviceId)) {
       throw new Error("Build authority rejected");
     }
-    await runFixedCli(buildArgs(operation.serviceId, operation.regionId), context);
+    await runFixedCli(
+      buildArgs(operation.serviceId, operation.regionId ?? resolveDataDefaultRegion(runtime)),
+      context,
+    );
     return { completed: true };
   };
   runtime["services.buildAll"] = async (operation, context) => {
@@ -1784,7 +1792,10 @@ export function createAdministrativeRuntime(
       try {
         context.signal.throwIfAborted();
         attempted = true;
-        await runFixedCli(buildArgs(service.serviceId, operation.regionId), context);
+        await runFixedCli(
+          buildArgs(service.serviceId, operation.regionId ?? resolveDataDefaultRegion(runtime)),
+          context,
+        );
         completedServiceIds.push(service.serviceId);
       } catch (error) {
         if (

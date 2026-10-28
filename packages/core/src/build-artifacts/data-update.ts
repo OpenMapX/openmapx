@@ -5,7 +5,11 @@ import { canonicalJson } from "../ops/canonical-json";
 import type { OpsOperation } from "../ops/contract";
 import type { ExecutionRef } from "../ops/execution-ref";
 import { opsOperationFingerprint } from "../ops/fingerprint";
-import { currentConfigurationGeneration } from "../services/configuration-generation";
+import {
+  currentConfigurationGeneration,
+  readAppliedPlatformConfiguration,
+} from "../services/configuration-generation";
+import { resolvePlatformConfiguration } from "../services/platform-configuration";
 import {
   controlDigest,
   executionAuthorityState,
@@ -46,13 +50,25 @@ export function planDataUpdate(options: {
           .filter(Boolean),
     ),
   ].sort();
+  const saved = readAppliedPlatformConfiguration(options.infraDir);
+  const platform = resolvePlatformConfiguration({
+    saved,
+    env: { DOMAIN: defaults.domain, OPENMAPX_REGION: defaults.region, ...process.env },
+  }).values;
   const sourcesDigest = dataUpdateSourcesDigest(options.infraDir);
+  if (revisionId !== currentConfigurationGeneration(options.infraDir))
+    throw Error("Full Update configuration changed during admission");
   if (sourceBefore !== sourcesDigest) throw Error("Full Update source changed during admission");
   return createDataUpdatePlan({
     parent: options.parent,
     operation: options.operation,
-    domain: process.env.DOMAIN ?? defaults.domain ?? "localhost",
-    region: options.operation.regionId ?? options.defaultRegion ?? defaults.region ?? "",
+    domain: platform.domain,
+    region:
+      options.operation.regionId ??
+      (saved?.defaultRegion?.source === "database"
+        ? platform.defaultRegion
+        : (options.defaultRegion ?? platform.defaultRegion)) ??
+      "",
     countries,
     revisionId,
     sourcesDigest,

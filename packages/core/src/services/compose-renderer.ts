@@ -157,6 +157,8 @@ function hardlinkTargetDir(consumerId: string, c: ServiceConsumes): string {
 }
 
 export interface RenderContext {
+  platform?: import("./platform-configuration").PlatformConfiguration;
+  platformValues?: import("./platform-configuration").PlatformValues;
   domain?: string;
   /**
    * Per-consumer-entry mount paths keyed by the same `<type>` / `<type>/<instance>`
@@ -533,6 +535,28 @@ export function renderServiceSnippet(
       : [...c.envFile];
   }
   if (c.environment) snippet.environment = { ...c.environment };
+  // Only known platform slots in audited built-in manifests may be adopted.
+  // Host-owned slots keep their original Compose interpolation byte-for-byte.
+  if (service.isBuiltIn && snippet.environment && ctx.platform && ctx.platformValues) {
+    const slots = {
+      DOMAIN: "domain",
+      ACME_EMAIL: "acmeEmail",
+      OPENMAPX_RELEASE: "releaseSelector",
+      OPENMAPX_REGION: "defaultRegion",
+      BACKUP_RETENTION_DAYS: "backupRetentionDays",
+    } as const;
+    for (const [key, value] of Object.entries(snippet.environment)) {
+      snippet.environment[key] = value.replace(
+        /\$\{(DOMAIN|ACME_EMAIL|OPENMAPX_RELEASE|OPENMAPX_REGION|BACKUP_RETENTION_DAYS)(?::-[^}]*)?\}/g,
+        (reference, variable: keyof typeof slots) => {
+          const field = slots[variable];
+          return ctx.platform?.[field]?.source === "database"
+            ? escapeComposeInterpolation(String(ctx.platformValues?.[field] ?? ""))
+            : reference;
+        },
+      );
+    }
+  }
   // Overlay operator-resolved config onto the manifest's baseline environment.
   // Resolved values win over manifest defaults (that's the whole point of
   // admin/env config). Keys with `undefined`/`null` values are skipped so a

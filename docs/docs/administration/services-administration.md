@@ -174,6 +174,21 @@ apply the data hardlink plan, and start or stop the whole enabled stack. There's
 no compose file to hand-edit anywhere — it's generated, every time. To re-render
 from the CLI, run `pnpm openmapx compose render`.
 
+## Platform ownership
+
+Applied configuration generations retain a versioned, non-secret ownership
+projection for the instance domain, ACME contact email, release selector, default
+region and backup retention. Unadopted fields continue to use their host variables.
+An explicit database-owned value survives later CLI rendering; a CLI `--domain`
+argument affects that invocation and keeps the saved ownership intact. Returning
+a field to host ownership removes its saved value. Service and integration
+configuration keep their existing environment and file precedence.
+
+The default region never expands the operations agent's deployment allow-list.
+A default outside `OPENMAPX_ALLOWED_REGIONS` is refused; explicit operation
+regions remain subject to the same deployment policy. This projection contains
+no platform credentials or arbitrary environment keys.
+
 ## Data inventory
 
 `/admin/services/data` is the inventory and control surface for the open data the

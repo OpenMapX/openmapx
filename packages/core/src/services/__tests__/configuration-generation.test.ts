@@ -325,3 +325,41 @@ describe("stack compose arguments", () => {
     ]);
   });
 });
+
+it("retains closed platform ownership through a generation without exporting secrets", async () => {
+  const { infraDir } = checkout();
+  const platform = {
+    version: 1 as const,
+    domain: { source: "database" as const, value: "adopted.example.test" },
+    defaultRegion: { source: "database" as const, value: "europe/germany" },
+  };
+  await commitConfigurationGeneration({
+    infraDir,
+    services,
+    input: input({ domain: "adopted.example.test", platform }),
+  });
+  expect(readAppliedConfiguration(infraDir).platform).toEqual(platform);
+  const config = JSON.parse(
+    readFileSync(join(infraDir, ".trusted-config-current/resolved-config.generated.json"), "utf8"),
+  );
+  expect(config.platform).toEqual(platform);
+  expect(config).not.toHaveProperty("serviceSecrets");
+});
+
+it("keeps host-owned Compose interpolation equivalent to legacy generations", () => {
+  const { infraDir } = checkout();
+  const manifest = service("alpha");
+  manifest.manifest.container.environment = {
+    ORIGIN: "https://${DOMAIN:-localhost}",
+    ACME: "${ACME_EMAIL:-admin@example.com}",
+  };
+  const before = renderConfiguration({ infraDir, services: [manifest], input: input() });
+  const after = renderConfiguration({
+    infraDir,
+    services: [manifest],
+    input: input({
+      platform: { version: 1, domain: { source: "host" }, acmeEmail: { source: "host" } },
+    }),
+  });
+  expect(after.rendered.composeYaml).toBe(before.rendered.composeYaml);
+});

@@ -104,3 +104,16 @@ it("rejects a foreign still-live read context inside another coherent read", asy
     });
   });
 });
+
+it("preserves the agent-observed platform projection when collecting unrelated desired configuration", async () => {
+  const platform = {
+    version: 1 as const,
+    domain: { source: "database" as const, value: "adopted.example.test" },
+    backupRetentionDays: { source: "database" as const, value: 45 },
+  };
+  vi.stubEnv("DOMAIN", "host.example.test");
+  const payload = await buildConfigurationInput(undefined, platform);
+  expect(payload.domain).toBe("adopted.example.test");
+  expect(payload.platform).toEqual(platform);
+  expect(payload.serviceConfigs).toHaveLength(3);
+});

@@ -49,7 +49,7 @@ const {
 
 export interface RenderRepoOptions {
   rootDir?: string;
-  domain: string;
+  domain?: string;
   services?: string[];
   expectedCurrentRevisionId?: string | null;
   revisionId?: string;
@@ -300,7 +300,12 @@ export async function renderComposeWithWriter(
     services,
     integrationSchemas,
     input: {
-      domain: opts.domain,
+      domain: coreServices.resolvePlatformConfiguration({
+        saved: saved.platform,
+        env: process.env,
+        overrides: opts.domain === undefined ? {} : { domain: opts.domain },
+      }).values.domain,
+      ...(saved.platform ? { platform: saved.platform } : {}),
       selectedRoots: applied.requestedIds,
       serviceConfigs,
       integrationConfigs: saved.integrationConfigs.filter((entry) =>
@@ -348,13 +353,13 @@ export function registerComposeCommands(program: Command): void {
   compose
     .command("render")
     .description("Apply the service selection and configuration as a new configuration generation")
-    .option("--domain <d>", "Public domain", process.env.DOMAIN ?? "localhost")
+    .option("--domain <d>", "Public domain (default: applied ownership or host)")
     .option("--services <ids>", "Comma/space-separated root service ids for this render")
     .option(
       "--preset <names>",
       "Comma/space-separated preset names (app, routing, transit, pelias, nominatim, photon, overpass, tiles, martin, proxy, dev)",
     )
-    .action(async (options: { domain: string; services?: string; preset?: string }) => {
+    .action(async (options: { domain?: string; services?: string; preset?: string }) => {
       try {
         const services = combineServiceSelection(options.services, options.preset);
         const r = await renderComposeForRepo({ domain: options.domain, services });
@@ -374,13 +379,13 @@ export function registerComposeCommands(program: Command): void {
   compose
     .command("up")
     .description("Start the stack via generated compose")
-    .option("--domain <d>", "Public domain", process.env.DOMAIN ?? "localhost")
+    .option("--domain <d>", "Public domain (default: applied ownership or host)")
     .option("--services <ids>", "Comma/space-separated root service ids for this run")
     .option(
       "--preset <names>",
       "Comma/space-separated preset names (app, routing, transit, pelias, nominatim, photon, overpass, tiles, martin, proxy, dev)",
     )
-    .action(async (options: { domain: string; services?: string; preset?: string }) => {
+    .action(async (options: { domain?: string; services?: string; preset?: string }) => {
       try {
         const services = combineServiceSelection(options.services, options.preset);
         const r = await renderComposeForRepo({ domain: options.domain, services });

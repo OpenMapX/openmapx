@@ -7,9 +7,25 @@ import type { DataWorkflowReceipt, ExecutionRef, OpsOperation } from "@openmapx/
 import { services } from "@openmapx/core/server";
 import type { FixedCliRunner } from "./administrative-runtime";
 import { assertStagedCoordinatorConfigurationWrite } from "./configuration-maintenance-runtime";
+import { loadConfiguredResourceAuthority } from "./configured-resource-authority";
 import { OpsExecutionFailure, OpsHostUpdateRequiredError, type OpsRuntime } from "./runtime";
 
 const sources = new WeakMap<OpsRuntime, { rootDir: string }>();
+export function resolveDataDefaultRegion(runtime: OpsRuntime): string | undefined {
+  const source = sources.get(runtime);
+  if (!source) return process.env.OPENMAPX_REGION;
+  const saved = services.readAppliedPlatformConfiguration(join(source.rootDir, "infra/docker"));
+  const region =
+    services.resolvePlatformConfiguration({ saved, env: process.env }).values.defaultRegion ??
+    undefined;
+  if (
+    saved?.defaultRegion?.source === "database" &&
+    region &&
+    !loadConfiguredResourceAuthority().regions.has(region)
+  )
+    throw Error("Applied default region exceeds the deployment region allow-list");
+  return region;
+}
 export function prepareDataUpdateAdmission(
   runtime: OpsRuntime,
   parent: ExecutionRef,
@@ -23,7 +39,7 @@ export function prepareDataUpdateAdmission(
     parent,
     operation,
     serviceIds,
-    defaultRegion: process.env.OPENMAPX_REGION,
+    defaultRegion: operation.regionId === undefined ? resolveDataDefaultRegion(runtime) : undefined,
     defaultCountries: process.env.TRANSITOUS_COUNTRIES,
   });
 }

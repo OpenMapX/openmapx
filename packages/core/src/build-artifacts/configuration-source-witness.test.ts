@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { commitConfigurationGeneration } from "../services/configuration-generation";
 import { writeServiceSelectionFile } from "../services/deployment";
 import {
   PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV,
@@ -213,6 +214,49 @@ it("includes declared flat-schema host fields in the same private source witness
     // Match the serialized value, not coincidental bytes inside its random source UUID.
     expect(JSON.stringify(observed)).not.toContain('"77"');
     expect(JSON.stringify(observed)).not.toContain('"value"');
+  } finally {
+    closeControlInstallation(installation);
+  }
+});
+
+it("projects only validated non-secret platform ownership under the original revision witness", async () => {
+  const installation = openControlInstallation({
+    infraDir: root,
+    role: "ops-agent",
+    serviceIds: [],
+  });
+  try {
+    const platform = {
+      version: 1 as const,
+      domain: { source: "database" as const, value: "adopted.example.test" },
+    };
+    const applied = await commitConfigurationGeneration({
+      infraDir: root,
+      services: [],
+      input: {
+        domain: "adopted.example.test",
+        platform,
+        selectedRoots: [],
+        serviceConfigs: [],
+        serviceSecrets: [],
+        integrationConfigs: [],
+      },
+    });
+    const options = {
+      installation,
+      infraDir: root,
+      services: [] as LoadedService[],
+      authorityRevision: "v1",
+      env: { BETTER_AUTH_SECRET: "not-public" },
+    };
+    const observed = observeConfigurationSources(options);
+    expect(observed.platform).toEqual(platform);
+    expect(JSON.stringify(observed)).not.toContain("not-public");
+    verifyConfigurationSourceWitness({
+      ...options,
+      sourceRevision: observed.sourceRevision,
+      expectedCurrentRevisionId: applied.revisionId,
+    });
   } finally {
     closeControlInstallation(installation);
   }

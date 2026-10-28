@@ -3,7 +3,11 @@ import {
   type TrustedConfigurationPayload,
   trustedConfigurationPayloadSchema,
 } from "@openmapx/core/ops";
-import { envString } from "@openmapx/core/server-env";
+import { services as coreServices } from "@openmapx/core/server";
+
+type PlatformConfiguration = coreServices.PlatformConfiguration;
+const { platformConfigurationSchema, resolvePlatformConfiguration } = coreServices;
+
 import { resolveIntegrationConfigWithSourcesStrict } from "../integration-config";
 import {
   type AdministrativeConfigurationReadContext,
@@ -21,8 +25,12 @@ import { resolveServiceVaultSecretsStrict } from "./service-secrets";
  */
 export async function buildConfigurationInput(
   context?: AdministrativeConfigurationReadContext,
+  platform?: PlatformConfiguration,
 ): Promise<TrustedConfigurationPayload> {
-  if (!context) return withAdministrativeConfigurationRead({}, buildConfigurationInput);
+  if (!context)
+    return withAdministrativeConfigurationRead({}, (read) =>
+      buildConfigurationInput(read, platform),
+    );
   assertAdministrativeConfigurationRead(context);
   const services = context.services;
   const serviceConfigMap = await resolveAllServiceConfigsStrict(
@@ -66,7 +74,8 @@ export async function buildConfigurationInput(
     }),
   );
   return trustedConfigurationPayloadSchema.parse({
-    domain: envString("DOMAIN", "localhost"),
+    domain: resolvePlatformConfiguration({ saved: platform, env: process.env }).values.domain,
+    ...(platform ? { platform: platformConfigurationSchema.parse(platform) } : {}),
     serviceConfigs: services.map((service) => {
       const envKeys = serviceConfigMap.envKeys.get(service.manifest.id);
       return {
