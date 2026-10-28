@@ -83,6 +83,7 @@ export const transitPolicySchema = z.strictObject({
 });
 export const transitProfileSchema = z.strictObject({ policy: transitPolicySchema });
 export const transitSourcesQuerySchema = z.strictObject({
+  country: z.string().optional(),
   search: z.string().optional(),
   lifecycle: transitSourceLifecycleSchema.optional(),
   origin: z.enum(["catalog", "operator"]).optional(),
@@ -144,9 +145,30 @@ export const transitConflictSchema = z.strictObject({
   reason: z.enum(["in-flight", "duplicate-idempotency-key"]),
   existingJobId: z.string().nullable(),
 });
+export const transitPreflightBindingSchema = z.strictObject({
+  preflightId: z.uuid(),
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  expiresAt: timestampSchema,
+  sourceFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+});
+export const transitPreflightSelectionSchema = z.strictObject({
+  countries: z
+    .array(z.string().regex(/^[A-Za-z]{2,3}$/))
+    .min(1)
+    .max(256),
+});
+export const transitPreflightStaleSchema = z.strictObject({
+  error: z.string(),
+  code: z.literal("preflight_stale"),
+});
 export const transitSyncRequestSchema = z
   .strictObject({
     ...mutationShape,
+    preflightId: z.uuid().optional(),
+    fingerprint: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     countries: z
       .array(z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,31}$/))
       .max(250)
@@ -201,6 +223,14 @@ export const transitPreflightSchema = z.strictObject({
   capacity: z.strictObject(capacityShape),
   blockers: z.array(z.string()),
   warnings: z.array(z.string()),
+});
+export const transitSyncPreflightSchema = z.strictObject({
+  preflightId: z.uuid(),
+  expiresAt: timestampSchema,
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  countries: z.array(z.string()),
+  allowedCountries: z.array(z.string()),
+  result: transitPreflightSchema,
 });
 const safeGitRef = z
   .string()

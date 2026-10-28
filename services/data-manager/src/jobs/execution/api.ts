@@ -14,6 +14,13 @@ import { registerDataManagerRoute } from "../../route-contract.js";
 /** The receiver performs signed admission/adoption, separately from bearer
  * authentication. A missing receiver never authorizes a compatibility worker. */
 export interface DataExecutionReceiver {
+  observeReviewedTransit?(request: {
+    key: string;
+    countries: string[];
+    preflightId: string;
+    fingerprint: string;
+    triggeredBy?: string;
+  }): Promise<DataExecutionStatus | null>;
   admitLocal(
     input: DataExecutionInput,
     options?: { sourceJobId?: string; triggeredBy?: string; legacyTransitKey?: string },

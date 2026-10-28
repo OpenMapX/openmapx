@@ -340,6 +340,17 @@ import type {
   InspectDataConfigurationFence429,
   InspectDataConfigurationFence500,
   InspectDataConfigurationFence503,
+  InspectTransitSyncPreflight200,
+  InspectTransitSyncPreflight400,
+  InspectTransitSyncPreflight401,
+  InspectTransitSyncPreflight409,
+  InspectTransitSyncPreflight413,
+  InspectTransitSyncPreflight415,
+  InspectTransitSyncPreflight422,
+  InspectTransitSyncPreflight429,
+  InspectTransitSyncPreflight500,
+  InspectTransitSyncPreflight503,
+  InspectTransitSyncPreflightBody,
   Link200,
   Link400,
   Link401,
@@ -570,6 +581,7 @@ import {
   headOfflinePackageArchiveRequest,
   ingestOvertureRequest,
   inspectDataConfigurationFenceRequest,
+  inspectTransitSyncPreflightRequest,
   linkRequest,
   lookupDataExecutionRequest,
   preflightTransitRequest,
@@ -5399,6 +5411,115 @@ export const conflateOverture = async (
     headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
     body: JSON.stringify(conflateOvertureBody),
   });
+};
+
+export type inspectTransitSyncPreflightResponse200 = {
+  data: InspectTransitSyncPreflight200;
+  status: 200;
+};
+
+export type inspectTransitSyncPreflightResponse400 = {
+  data: InspectTransitSyncPreflight400;
+  status: 400;
+};
+
+export type inspectTransitSyncPreflightResponse401 = {
+  data: InspectTransitSyncPreflight401;
+  status: 401;
+};
+
+export type inspectTransitSyncPreflightResponse409 = {
+  data: InspectTransitSyncPreflight409;
+  status: 409;
+};
+
+export type inspectTransitSyncPreflightResponse413 = {
+  data: InspectTransitSyncPreflight413;
+  status: 413;
+};
+
+export type inspectTransitSyncPreflightResponse415 = {
+  data: InspectTransitSyncPreflight415;
+  status: 415;
+};
+
+export type inspectTransitSyncPreflightResponse422 = {
+  data: InspectTransitSyncPreflight422;
+  status: 422;
+};
+
+export type inspectTransitSyncPreflightResponse429 = {
+  data: InspectTransitSyncPreflight429;
+  status: 429;
+};
+
+export type inspectTransitSyncPreflightResponse500 = {
+  data: InspectTransitSyncPreflight500;
+  status: 500;
+};
+
+export type inspectTransitSyncPreflightResponse503 = {
+  data: InspectTransitSyncPreflight503;
+  status: 503;
+};
+
+export type inspectTransitSyncPreflightResponseSuccess = inspectTransitSyncPreflightResponse200 & {
+  headers: Headers;
+};
+export type inspectTransitSyncPreflightResponseError = (
+  | inspectTransitSyncPreflightResponse400
+  | inspectTransitSyncPreflightResponse401
+  | inspectTransitSyncPreflightResponse409
+  | inspectTransitSyncPreflightResponse413
+  | inspectTransitSyncPreflightResponse415
+  | inspectTransitSyncPreflightResponse422
+  | inspectTransitSyncPreflightResponse429
+  | inspectTransitSyncPreflightResponse500
+  | inspectTransitSyncPreflightResponse503
+) & {
+  headers: Headers;
+};
+
+export type inspectTransitSyncPreflightResponse =
+  | inspectTransitSyncPreflightResponseSuccess
+  | inspectTransitSyncPreflightResponseError;
+
+export const getInspectTransitSyncPreflightUrl = () => {
+  return `/transit/sync/preflight`;
+};
+
+export const inspectTransitSyncPreflight = async (
+  inspectTransitSyncPreflightBody: InspectTransitSyncPreflightBody,
+  options?: Parameters<typeof inspectTransitSyncPreflightRequest>[1],
+): Promise<inspectTransitSyncPreflightResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return inspectTransitSyncPreflightRequest<inspectTransitSyncPreflightResponse>(
+    getInspectTransitSyncPreflightUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      body: JSON.stringify(inspectTransitSyncPreflightBody),
+    },
+  );
 };
 
 export type syncTransitResponse202 = {

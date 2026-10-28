@@ -277,6 +277,13 @@ export async function inspectDataConfigurationFenceRequest<T>(
 ): Promise<T> {
   return inspectDataConfigurationFenceBound<T>(url, options);
 }
+const inspectTransitSyncPreflightBound = bindDataManagerOperation("inspectTransitSyncPreflight");
+export async function inspectTransitSyncPreflightRequest<T>(
+  url: string,
+  options?: DataManagerRequestOptions,
+): Promise<T> {
+  return inspectTransitSyncPreflightBound<T>(url, options);
+}
 const linkBound = bindDataManagerOperation("link");
 export async function linkRequest<T>(url: string, options?: DataManagerRequestOptions): Promise<T> {
   return linkBound<T>(url, options);

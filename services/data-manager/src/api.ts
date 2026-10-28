@@ -38,6 +38,7 @@ import {
 } from "./jobs/search-index/operation-lock.js";
 import { createSearchIndexRuntimeState, getSearchIndexStatus } from "./jobs/search-index/state.js";
 import type { BakePredictedResult } from "./jobs/traffic/bake-predicted.js";
+import { createTransitPreflightController } from "./jobs/transitous/admin-preflight.js";
 import {
   CatalogBumpError,
   candidateMatchesLock,
@@ -49,6 +50,7 @@ import {
   type MotisOperationsPolicy,
   publicOperationsPolicy,
   resolveOperationsProfileFromEnv,
+  transitAllowedCountries,
 } from "./jobs/transitous/operations-profile.js";
 import {
   getOperatorFeedRelayStore,
@@ -417,6 +419,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     resolveOperationsProfileFromEnv(process.env, { allowEmptyRegional: true });
   const catalogDir = join(dataDir, ".transitous-catalog");
   const overlayPath = resolveTransitOverlayPath(dataDir);
+  const transitPreflight = createTransitPreflightController({ dataDir, policy: operationsPolicy });
   const operatorFeedRelay = opts.operatorFeedRelay ?? getOperatorFeedRelayStore();
   if (!opts.operatorFeedRelay) {
     operatorFeedRelay.setAuditSink((event) => {
@@ -511,7 +514,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       };
     const input = normalizeDataExecutionInput({
       kind: "transit-sync",
-      countries: operationsPolicy.countries,
+      countries: transitAllowedCountries(operationsPolicy),
       sourceMutation: options.mutation,
     });
     const start = await singleFlight.tryStartSync({
@@ -523,7 +526,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         source: "source-mutation",
         action: options.action,
         sourceId: options.sourceId,
-        countries: operationsPolicy.countries,
+        countries: transitAllowedCountries(operationsPolicy),
       },
     });
     if (!start.ok) {
@@ -617,7 +620,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         dataDir,
         catalogDir,
         overlayPath,
-        countries: operationsPolicy.countries,
+        countries: transitAllowedCountries(operationsPolicy),
         feedStates,
         query: {
           search: req.query.search,
@@ -635,7 +638,9 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
 
   registerDataManagerRoute(app, "getTransitCatalog", async (_req, reply) => {
     try {
-      return { sources: listPinnedTransitCatalog(catalogDir, operationsPolicy.countries) };
+      return {
+        sources: listPinnedTransitCatalog(catalogDir, transitAllowedCountries(operationsPolicy)),
+      };
     } catch (error) {
       const status = error instanceof TransitSourceError ? error.statusCode : 500;
       return reply.code(status).send({ ok: false, error: (error as Error).message });
@@ -648,7 +653,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       mutation = prepareAddTransitSource({
         catalogDir,
         overlayPath,
-        countries: operationsPolicy.countries,
+        countries: transitAllowedCountries(operationsPolicy),
         expectedSourceRevision: req.body.expectedSourceRevision,
         source: {
           spec: "gtfs",
@@ -696,7 +701,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       mutation = prepareRemoveTransitSource({
         catalogDir,
         overlayPath,
-        countries: operationsPolicy.countries,
+        countries: transitAllowedCountries(operationsPolicy),
         expectedSourceRevision: req.body.expectedSourceRevision,
         sourceId: req.params.sourceId,
       });
@@ -731,7 +736,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       mutation = prepareEnableTransitSource({
         catalogDir,
         overlayPath,
-        countries: operationsPolicy.countries,
+        countries: transitAllowedCountries(operationsPolicy),
         expectedSourceRevision: req.body.expectedSourceRevision,
         sourceId: req.params.sourceId,
       });
@@ -766,7 +771,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       mutation = prepareSetTransitSourceEnabled({
         catalogDir,
         overlayPath,
-        countries: operationsPolicy.countries,
+        countries: transitAllowedCountries(operationsPolicy),
         expectedSourceRevision: req.body.expectedSourceRevision,
         sourceId: req.params.sourceId,
         enabled: false,
@@ -980,12 +985,60 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   // POST /transit/sync — fire-and-forget Transitous pipeline trigger. Honours
   // the single-flight lock + idempotency key. apps/api proxies user-facing
   // sync requests here.
+  registerDataManagerRoute(app, "inspectTransitSyncPreflight", async (req, reply) => {
+    try {
+      return await transitPreflight.inspect(req.body.countries);
+    } catch (error) {
+      const e = error as Error & { statusCode?: number; code?: string },
+        known = e.code === "preflight_stale",
+        status = known ? (e.statusCode ?? 409) : 503;
+      return reply.code(status).send({
+        error: known
+          ? e.message
+          : "Transit preview inputs or capacity are unavailable. Check instance status.",
+        ...(status === 409 ? { code: "preflight_stale" } : {}),
+      });
+    }
+  });
   registerDataManagerRoute(app, "syncTransit", async (req, reply) => {
     try {
+      const countries = req.body?.countries ?? transitAllowedCountries(operationsPolicy);
+      const reviewed = req.body?.preflightId || req.body?.fingerprint;
+      if (req.body?.idempotencyKey && reviewed) {
+        const original = await opts.executionReceiver?.observeReviewedTransit?.({
+          key: req.body.idempotencyKey,
+          countries,
+          preflightId: req.body.preflightId ?? "",
+          fingerprint: req.body.fingerprint ?? "",
+          triggeredBy: req.body.triggeredBy,
+        });
+        if (original)
+          return reply.code(202).send({ ok: true, jobId: original.id, status: "started" });
+      }
+      let preflight:
+        | import("./jobs/transitous/admin-preflight.js").TransitPreflightBinding
+        | undefined;
+      if (reviewed) {
+        try {
+          preflight = await transitPreflight.verify({
+            countries,
+            preflightId: req.body?.preflightId ?? "",
+            fingerprint: req.body?.fingerprint ?? "",
+          });
+        } catch (error) {
+          const e = error as Error & { code?: string };
+          return e.code === "preflight_stale"
+            ? reply.code(409).send({ error: e.message, code: "preflight_stale" })
+            : reply.code(503).send({
+                error: "Transit preview is unavailable. Check instance status before retrying.",
+              });
+        }
+      }
       const admitted = await admitLegacyData(
         {
           kind: "transit-sync",
-          countries: req.body?.countries ?? operationsPolicy.countries,
+          countries,
+          ...(preflight ? { preflight } : {}),
         },
         { triggeredBy: req.body?.triggeredBy, legacyTransitKey: req.body?.idempotencyKey },
       );

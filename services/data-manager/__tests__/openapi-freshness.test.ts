@@ -8,7 +8,7 @@ it("exports every actual data-manager route with stable IDs, auth and payload co
   expect(generated).toBe(await readFile(DOCUMENT_PATH, "utf8"));
   const document = JSON.parse(generated);
   const operations = Object.values(document.paths).flatMap((path) => Object.values(path as object));
-  expect(operations).toHaveLength(57);
+  expect(operations).toHaveLength(58);
   for (const value of operations) {
     const operation = value as {
       operationId: keyof typeof dataManagerOperations;

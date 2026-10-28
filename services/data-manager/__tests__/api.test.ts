@@ -548,6 +548,76 @@ describe("data-manager API", () => {
     expect(singleFlight.tryStartSync).not.toHaveBeenCalled();
   });
 
+  it.each([{ countries: [] }, { countries: ["de"], freeDiskBytes: 10 ** 15, feedCount: 1 }])(
+    "POST /transit/sync/preflight refuses an invalid selection or caller capacity %j",
+    async (payload) => {
+      const app = createTestApp();
+      registerApi(app, {
+        dataDir: createDataDir(),
+        operationsPolicy: resolveOperationsProfile({ countries: ["de", "at"] }),
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: "/transit/sync/preflight",
+        payload,
+      });
+      expect(response.statusCode).toBe(400);
+    },
+  );
+
+  it("observes an already admitted reviewed intent without replaying an expired preview", async () => {
+    const app = createTestApp(),
+      status = dataReceipt({ kind: "transit-sync", status: "running", publication: "unknown" }),
+      admitLocal = vi.fn(async () => status);
+    registerApi(app, {
+      dataDir: createDataDir(),
+      operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
+      executionReceiver: receiverFixture({
+        admitLocal,
+        observeReviewedTransit: async () => status,
+      }),
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/transit/sync",
+      payload: {
+        countries: ["de"],
+        preflightId: "00000000-0000-4000-8000-000000000001",
+        fingerprint: "a".repeat(64),
+        idempotencyKey: "original-intent",
+      },
+    });
+    expect(response.statusCode).toBe(202);
+    expect(response.json().jobId).toBe(status.id);
+    expect(admitLocal).not.toHaveBeenCalled();
+  });
+
+  it("does not disclose private acquisition diagnostics from transit preview failures", async () => {
+    const ops = await import("../src/ops-client.js"),
+      spy = vi
+        .spyOn(ops, "runOpsOperation")
+        .mockRejectedValueOnce(
+          Error("private acquisition /private/operator-file synthetic-secret"),
+        );
+    try {
+      const app = createTestApp();
+      registerApi(app, {
+        dataDir: createDataDir(),
+        operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: "/transit/sync/preflight",
+        payload: { countries: ["de"] },
+      });
+      expect(response.statusCode).toBe(503);
+      expect(response.body).not.toContain("operator-file");
+      expect(response.body).not.toContain("synthetic-secret");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("POST /transit/sync starts an in-scope country", async () => {
     const dataDir = createDataDir();
     const singleFlight: SingleFlightController = {

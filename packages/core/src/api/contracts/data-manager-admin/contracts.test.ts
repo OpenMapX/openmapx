@@ -9,10 +9,10 @@ import {
 } from "./index";
 
 describe("application data-manager administration contracts", () => {
-  it("describes all 26 actual BFF operations with the real session-only distinctions", () => {
-    expect(Object.keys(dataManagerAdminOperations)).toHaveLength(26);
+  it("describes all 28 actual BFF operations with the real session-only distinctions", () => {
+    expect(Object.keys(dataManagerAdminOperations)).toHaveLength(28);
     const operations = Object.values(dataManagerAdminOperations);
-    expect(new Set(operations.map(({ method, path }) => `${method} ${path}`)).size).toBe(26);
+    expect(new Set(operations.map(({ method, path }) => `${method} ${path}`)).size).toBe(28);
     expect(operations.filter(({ auth }) => auth === "admin")).toHaveLength(11);
     expect(operations.every(({ path }) => path.startsWith("/api/"))).toBe(true);
     expect(dataManagerAdminOperations.getApiDataManagerTransitState.auth).toBe("service");
@@ -83,6 +83,8 @@ describe("application data-manager administration contracts", () => {
       sources: [
         {
           id: "catalog",
+          installedSourceId: null,
+          discoveryIds: ["catalog"],
           name: "Feed",
           source: "mobilitydb",
           countryCode: "de",
@@ -93,6 +95,8 @@ describe("application data-manager administration contracts", () => {
         },
       ],
       total: 1,
+      limit: 50,
+      offset: 0,
     };
     expect(transitCatalogResponseSchema.parse(result)).toEqual(result);
     expect(

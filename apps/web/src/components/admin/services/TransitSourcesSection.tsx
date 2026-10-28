@@ -32,7 +32,8 @@ import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 import { TableEmptyState } from "../shared/TableEmptyState";
 import { TableSearchField, TableToolbar } from "../shared/TableToolbar";
-import { useClientPagination, useTextFilter } from "../shared/tableHooks";
+import { useServerPagination } from "../shared/tableHooks";
+import { TransitSyncDialog } from "./TransitSyncDialog";
 
 export type { TransitSource };
 
@@ -95,6 +96,7 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
   };
   const [toast, setToast] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
   const [region, setRegion] = useState("");
@@ -102,13 +104,35 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
   const [licenseUrl, setLicenseUrl] = useState("");
   const [attribution, setAttribution] = useState("");
   const [catalogSearch, setCatalogSearch] = useState("");
+  const catalogPagination = useServerPagination(50);
   const [lastJobId, setLastJobId] = useState<string | null>(null);
 
+  const [query, setSearch] = useState("");
+  const pagination = useServerPagination(50);
+  const setQuery = (value: string) => {
+    setSearch(value);
+    pagination.setPage(0);
+  };
   const sourcesQuery = useQuery({
-    queryKey: ["admin", "transit", apiUrl, "sources"],
+    queryKey: [
+      "admin",
+      "transit",
+      apiUrl,
+      "sources",
+      query.trim(),
+      pagination.offset,
+      pagination.rowsPerPage,
+    ],
     queryFn: async ({ signal }) =>
       sdk.unwrapAdminResponse(
-        await sdk.getApiDataManagerTransitSources({ limit: 500 }, { client, signal }),
+        await sdk.getApiDataManagerTransitSources(
+          {
+            search: query.trim() || undefined,
+            limit: pagination.rowsPerPage,
+            offset: pagination.offset,
+          },
+          { client, signal },
+        ),
       ),
     refetchInterval: 30_000,
   });
@@ -119,12 +143,24 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
     refetchInterval: 10_000,
   });
   const catalogQuery = useQuery({
-    queryKey: ["admin", "transit", apiUrl, "catalog", catalogSearch],
+    queryKey: [
+      "admin",
+      "transit",
+      apiUrl,
+      "catalog",
+      catalogSearch,
+      catalogPagination.offset,
+      catalogPagination.rowsPerPage,
+    ],
     enabled: dialogOpen && catalogSearch.trim().length >= 2,
     queryFn: async ({ signal }) =>
       sdk.unwrapAdminResponse(
         await sdk.getApiDataManagerTransitCatalog(
-          { search: catalogSearch.trim() },
+          {
+            search: catalogSearch.trim(),
+            limit: catalogPagination.rowsPerPage,
+            offset: catalogPagination.offset,
+          },
           { client, signal },
         ),
       ),
@@ -205,24 +241,12 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
     },
     onError: (error) => setToast(sdk.adminErrorMessage(error, error.message)),
   });
-  const syncMutation = useMutation({
-    retry: false,
-    mutationFn: async () =>
-      sdk.unwrapAdminResponse(await sdk.postApiDataManagerTransitSync({}, { client })),
-    onSuccess: ({ jobId }) => reportJob(jobId, `Transit sync queued as ${jobId}.`),
-    onError: (error) => setToast(sdk.adminErrorMessage(error, error.message)),
-  });
 
   const sources = sourcesQuery.data?.sources ?? [];
-  const { query, setQuery, filtered } = useTextFilter(sources, (source) =>
-    [source.id, source.name, source.region, source.origin, source.originUrl]
-      .filter(Boolean)
-      .join(" "),
-  );
-  const { paged, paginationProps } = useClientPagination(filtered);
+  const paged = sources;
+  const paginationProps = { ...pagination.paginationProps, count: sourcesQuery.data?.total ?? 0 };
   const syncJob = stateQuery.data?.currentJob ?? null;
-  const mutationPending =
-    addMutation.isPending || sourceMutation.isPending || syncMutation.isPending;
+  const mutationPending = addMutation.isPending || sourceMutation.isPending || syncDialogOpen;
   const actionsDisabled = syncJob !== null || mutationPending;
   const disabledReason = syncJob
     ? `Transit sync ${syncJob.jobId} is active. Open Activity to monitor it.`
@@ -260,7 +284,7 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
                 variant="outlined"
                 size="small"
                 disabled={actionsDisabled}
-                onClick={() => syncMutation.mutate()}
+                onClick={() => setSyncDialogOpen(true)}
               >
                 Sync sources
               </Button>
@@ -294,6 +318,16 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
             ? `Transit sync ${syncJob.jobId} is active; source actions are disabled.`
             : `Source change queued as ${lastJobId}.`}
         </Alert>
+      )}
+      {syncDialogOpen && (
+        <TransitSyncDialog
+          apiUrl={apiUrl}
+          onClose={() => setSyncDialogOpen(false)}
+          onQueued={(jobId) => {
+            setSyncDialogOpen(false);
+            reportJob(jobId, `Transit sync queued as ${jobId}.`);
+          }}
+        />
       )}
       <Dialog
         open={dialogOpen}
@@ -334,6 +368,8 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
             />
             <TextField
               label="Attribution"
+              multiline
+              minRows={2}
               value={attribution}
               onChange={(event) => setAttribution(event.target.value)}
               fullWidth
@@ -363,32 +399,61 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
             <TextField
               label="Search installed catalog (optional)"
               value={catalogSearch}
-              onChange={(event) => setCatalogSearch(event.target.value)}
+              onChange={(event) => {
+                setCatalogSearch(event.target.value);
+                catalogPagination.setPage(0);
+              }}
               fullWidth
               size="small"
             />
-            {catalogQuery.data?.sources
-              .filter((source) => source.source === "transitous")
-              .slice(0, 5)
-              .map((source) => (
-                <Button
-                  key={source.id}
-                  variant="text"
-                  sx={{ justifyContent: "flex-start" }}
-                  disabled={actionsDisabled}
-                  onClick={() => {
+            {catalogQuery.error && (
+              <Alert severity="error">
+                {sdk.adminErrorMessage(catalogQuery.error, catalogQuery.error.message)}
+              </Alert>
+            )}
+            {catalogQuery.data?.sources.map((source) => (
+              <Button
+                key={source.id}
+                variant="text"
+                sx={{ justifyContent: "flex-start" }}
+                disabled={actionsDisabled}
+                onClick={() => {
+                  if (source.installedSourceId) {
                     if (sourcesQuery.data)
                       sourceMutation.mutate({
-                        sourceId: source.id,
+                        sourceId: source.installedSourceId,
                         action: "enable",
                         revision: sourcesQuery.data.sourceRevision,
                       });
                     setDialogOpen(false);
-                  }}
-                >
-                  Enable {source.name} ({source.countryCode})
-                </Button>
-              ))}
+                  } else {
+                    setUrl(source.url);
+                    setName(source.name);
+                    setRegion(source.countryCode);
+                    const bindings = source.licensing?.bindings ?? [],
+                      license = bindings.length === 1 ? bindings[0]?.license : undefined;
+                    setLicenseSpdx(license?.kind === "spdx" ? license.expression : "");
+                    setLicenseUrl(license?.url ?? "");
+                    setAttribution(
+                      bindings
+                        .flatMap((binding) => [
+                          binding.subject,
+                          binding.notice,
+                          ...(binding.conditions ?? []),
+                        ])
+                        .filter(Boolean)
+                        .join("\n"),
+                    );
+                  }
+                }}
+              >
+                {source.installedSourceId ? "Enable" : "Use"} {source.name} ({source.countryCode})
+              </Button>
+            ))}
+            <AdminTablePagination
+              {...catalogPagination.paginationProps}
+              count={catalogQuery.data?.total ?? 0}
+            />
           </Stack>
         </DialogContent>
         <DialogActions>

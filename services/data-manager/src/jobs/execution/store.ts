@@ -113,6 +113,7 @@ export interface DataExecutionStore {
   ): Promise<{ created: boolean; record: DataExecutionRecord }>;
   inspect(id: string): Promise<DataExecutionRecord | null>;
   lookup(operationKey: string): Promise<DataExecutionRecord | null>;
+  lookupLegacyTransit?(key: string): Promise<DataExecutionRecord | null>;
   checkpoint(
     id: string,
     expectedVersion: number,
@@ -566,6 +567,12 @@ export function createPostgresDataExecutionStore(
         }
         throw error;
       });
+    },
+    async lookupLegacyTransit(key) {
+      const row = await findLegacyTransit(sql, z.string().max(200).parse(key));
+      if (!row) return null;
+      if (row.execution_version !== 2) throw new LegacyTransitDuplicate(row.id);
+      return decode(row);
     },
     inspect: (id) => find(sql, "id", id),
     lookup: (key) => find(sql, "operation_key", key),

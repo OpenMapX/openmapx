@@ -88,7 +88,17 @@ export function resolveTransitousCountries(
   }
 
   const envValue = normalizeScalar(env[TRANSITOUS_COUNTRIES_ENV]);
-  if (!envValue) return { values: [] };
+  if (!envValue) {
+    const values = [
+      ...new Set(
+        parseCsvList(env.MOTIS_FEED_ALLOW_LIST).flatMap((id) => {
+          const match = /^([a-z]{2,3})_/.exec(id.toLowerCase());
+          return match ? [match[1]!] : [];
+        }),
+      ),
+    ].sort();
+    return values.length ? { values, sourceEnv: "MOTIS_FEED_ALLOW_LIST" } : { values: [] };
+  }
   return {
     values: parseCsvList(envValue),
     sourceEnv: TRANSITOUS_COUNTRIES_ENV,

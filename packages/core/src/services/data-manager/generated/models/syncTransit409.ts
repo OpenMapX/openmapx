@@ -23,4 +23,8 @@ export type SyncTransit409 =
       reason: "in-flight" | "duplicate-idempotency-key";
       /** @nullable */
       existingJobId: string | null;
+    }
+  | {
+      error: string;
+      code: "preflight_stale";
     };

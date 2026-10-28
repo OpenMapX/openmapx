@@ -202,6 +202,20 @@ either an SPDX license identifier or license URL. Adding, disabling, enabling,
 or manually syncing a source queues an asynchronous job; the row links to the
 activity log and disables conflicting actions while that job is active.
 
+Source search and pagination run on the server, so entries beyond the first
+500 remain reachable. Optional discovery enriches installed catalog entries
+without replacing their IDs or licensing; discovery-only entries populate the
+Add form for review rather than pretending they are already enabled.
+
+**Sync sources** and **Run sync now** open a country review. Select a subset of
+the instance's allowed countries, then preview its source count, conservative
+size estimate, capacity blockers and warnings. The preview expires after five
+minutes and is checked again before admission and worker execution. Browser
+supplied capacity values cannot authorize a sync. Slot limits come from the
+instance configuration; an unavailable measurement blocks the preview.
+Queuing reports an Activity job, not a completed import. A retry of an already
+accepted intent observes its original job even if the preview cache was lost.
+
 MOTIS is the only compiled static-schedule runtime. Postgres stores the
 data-manager's source, job, validation, manifest, and promotion metadata; it
 does not contain imported GTFS schedules.

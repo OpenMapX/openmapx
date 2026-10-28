@@ -3,6 +3,16 @@
 import type { GetApiDataManagerTransitCatalog200SourcesItem } from "./getApiDataManagerTransitCatalog200SourcesItem";
 
 export type GetApiDataManagerTransitCatalog200 = {
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  limit: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  offset: number;
   sources: GetApiDataManagerTransitCatalog200SourcesItem[];
   /**
    * @minimum 0

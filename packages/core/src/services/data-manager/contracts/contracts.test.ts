@@ -12,8 +12,8 @@ import {
 } from "./index";
 
 describe("data-manager wire contracts", () => {
-  it("owns all 57 explicit operations with two named glyph HEAD/GET contracts", () => {
-    expect(Object.keys(dataManagerOperations)).toHaveLength(57);
+  it("owns all 58 explicit operations with two named glyph HEAD/GET contracts", () => {
+    expect(Object.keys(dataManagerOperations)).toHaveLength(58);
     expect(dataManagerOperations.getOfflineGlyph.path).toBe(
       "/offline/packages/glyphs/:version/:fontstack/:range.pbf",
     );

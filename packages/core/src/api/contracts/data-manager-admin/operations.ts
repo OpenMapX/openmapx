@@ -17,12 +17,16 @@ import {
   transitBumpResultSchema,
   transitConflictSchema,
   transitMutationRequestSchema,
+  transitPreflightSelectionSchema,
+  transitPreflightStaleSchema,
+  transitProfileSchema,
   transitScopeRejectedSchema,
   transitSourceActionErrorSchema,
   transitSourceListSchema,
   transitSourceMutationResultSchema,
   transitSourcesQuerySchema,
   transitSyncAcceptedSchema,
+  transitSyncPreflightSchema,
   transitSyncRequestSchema,
 } from "../../../services/data-manager/contracts/transit";
 import {
@@ -59,10 +63,11 @@ export const adminSourceMutationRequestSchema = transitMutationRequestSchema.omi
 export const adminAddTransitSourceRequestSchema = addTransitSourceRequestSchema.omit({
   triggeredBy: true,
 });
-export const adminTransitSyncRequestSchema = transitSyncRequestSchema
-  .unwrap()
-  .omit({ triggeredBy: true })
-  .optional();
+export const adminTransitSyncRequestSchema = transitPreflightSelectionSchema.extend({
+  preflightId: z.uuid(),
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  idempotencyKey: z.string().max(200).optional(),
+});
 export const adminTransitBumpRequestSchema = z
   .strictObject({ branch: z.string().max(128).optional(), force: z.boolean().optional() })
   .optional();
@@ -169,6 +174,25 @@ export const dataManagerAdminOperations = {
     request: { params: sourceParams, body: adminSourceMutationRequestSchema },
     responses: mutationResponses,
   },
+  getApiDataManagerTransitProfile: {
+    method: "GET",
+    path: "/api/data-manager/transit/profile",
+    auth: service,
+    responses: { ...common, 200: json(transitProfileSchema), 503: json(httpErrorSchema) },
+  },
+  postApiDataManagerTransitSyncPreflight: {
+    method: "POST",
+    path: "/api/data-manager/transit/sync/preflight",
+    auth: service,
+    request: { body: transitPreflightSelectionSchema },
+    responses: {
+      ...common,
+      200: json(transitSyncPreflightSchema),
+      409: json(transitPreflightStaleSchema),
+      422: json(httpErrorSchema),
+      503: json(httpErrorSchema),
+    },
+  },
   postApiDataManagerTransitSync: {
     method: "POST",
     path: "/api/data-manager/transit/sync",
@@ -177,7 +201,7 @@ export const dataManagerAdminOperations = {
     responses: {
       ...common,
       202: json(transitSyncAcceptedSchema),
-      409: json(transitConflictSchema),
+      409: json(z.union([httpErrorSchema, transitConflictSchema, transitPreflightStaleSchema])),
       422: json(transitScopeRejectedSchema),
     },
   },

@@ -396,6 +396,19 @@ export const dataManagerOperations = {
       422: json(t.transitPreflightSchema.extend({ ok: z.literal(false) })),
     },
   },
+  inspectTransitSyncPreflight: {
+    method: "POST",
+    path: "/transit/sync/preflight",
+    auth: service,
+    request: { body: t.transitPreflightSelectionSchema },
+    responses: {
+      ...serviceErrors,
+      200: json(t.transitSyncPreflightSchema),
+      409: json(t.transitPreflightStaleSchema),
+      422: json(httpErrorSchema),
+      503: json(httpErrorSchema),
+    },
+  },
   syncTransit: {
     method: "POST",
     path: "/transit/sync",
@@ -404,7 +417,7 @@ export const dataManagerOperations = {
     responses: {
       ...dataMutationErrors,
       202: json(t.transitSyncAcceptedSchema),
-      409: json(z.union([httpErrorSchema, t.transitConflictSchema])),
+      409: json(z.union([httpErrorSchema, t.transitConflictSchema, t.transitPreflightStaleSchema])),
       422: json(t.transitScopeRejectedSchema),
     },
   },

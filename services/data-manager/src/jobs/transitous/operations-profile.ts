@@ -166,6 +166,20 @@ export function resolveOperationsProfileFromEnv(
   });
 }
 
+/** Effective country scope for a finite legacy feed allow-list. This does
+ * not select feeds: the preflight independently checks each exact feed ID. */
+export function transitAllowedCountries(policy: MotisOperationsPolicy): string[] {
+  if (policy.countries.length)
+    return [...new Set(policy.countries.map((c) => c.toLowerCase()))].sort();
+  return [
+    ...new Set(
+      policy.feedAllowList.flatMap((id) => {
+        const country = /^([a-z]{2,3})_/.exec(id.toLowerCase())?.[1];
+        return country ? [country] : [];
+      }),
+    ),
+  ].sort();
+}
 export function publicOperationsPolicy(policy: MotisOperationsPolicy): MotisOperationsPolicy {
-  return structuredClone(policy);
+  return { ...structuredClone(policy), countries: transitAllowedCountries(policy) };
 }

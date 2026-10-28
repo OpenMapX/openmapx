@@ -39,7 +39,11 @@ import {
   fingerprintDataset,
   updateCurrentSearchIndexFingerprint,
 } from "../search-index/state.js";
-import type { MotisOperationsPolicy } from "../transitous/operations-profile.js";
+import { verifyTransitPreflightBinding } from "../transitous/admin-preflight.js";
+import {
+  type MotisOperationsPolicy,
+  transitAllowedCountries,
+} from "../transitous/operations-profile.js";
 import { getOperatorFeedRelayStore } from "../transitous/operator-feed-relay.js";
 import { makePersistingOnStageComplete } from "../transitous/persistence.js";
 import { buildJobContext, runTransitousPipeline } from "../transitous/pipeline.js";
@@ -148,9 +152,17 @@ export function createDataExecutionDispatcher(deps: {
         return { kind: input.kind, region: input.region, sizeBytes: result.sizeBytes };
       }
       case "transit-sync": {
+        if (input.preflight)
+          await verifyTransitPreflightBinding(
+            { dataDir: deps.dataDir, policy: deps.operationsPolicy },
+            input.countries,
+            input.preflight,
+          );
         if (
           deps.operationsPolicy.profile !== "planet" &&
-          input.countries.some((country) => !deps.operationsPolicy.countries.includes(country))
+          input.countries.some(
+            (country) => !transitAllowedCountries(deps.operationsPolicy).includes(country),
+          )
         )
           throw Error("Countries outside configured operations profile");
         if (!deps.singleFlight.reserveOwned(context.execution.executionId))

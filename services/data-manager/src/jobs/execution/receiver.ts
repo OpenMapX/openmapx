@@ -8,14 +8,21 @@ import {
   normalizeDataExecutionInput,
   startGenerationHardlinksExecutionSchema,
 } from "@openmapx/core/data-manager-contracts";
-import { createControlRootOperationKey, opsExecutionBudget } from "@openmapx/core/ops";
-import type { MotisOperationsPolicy } from "../transitous/operations-profile.js";
+import {
+  canonicalJson,
+  createControlRootOperationKey,
+  opsExecutionBudget,
+} from "@openmapx/core/ops";
+import {
+  type MotisOperationsPolicy,
+  transitAllowedCountries,
+} from "../transitous/operations-profile.js";
 import type { DataExecutionReceiver } from "./api.js";
 import type { DataConfigurationMaintenance } from "./configuration-maintenance.js";
 import type { createDataExecutionDispatcher } from "./dispatch.js";
 import { transitChildCandidateId } from "./ops-children.js";
 import type { DataExecutionRuntime } from "./runtime.js";
-import { dataExecutionInputFingerprint } from "./store.js";
+import { DataExecutionConflict, dataExecutionInputFingerprint } from "./store.js";
 export function createDataExecutionReceiver(deps: {
   runtime: DataExecutionRuntime;
   installation: ControlInstallation;
@@ -30,7 +37,9 @@ export function createDataExecutionReceiver(deps: {
       input.kind === "transit-sync" &&
       deps.operationsPolicy.profile !== "planet" &&
       (input.countries.length === 0 ||
-        input.countries.some((country) => !deps.operationsPolicy.countries.includes(country)))
+        input.countries.some(
+          (country) => !transitAllowedCountries(deps.operationsPolicy).includes(country),
+        ))
     )
       throw Object.assign(Error("Countries outside configured operations profile"), {
         statusCode: 422,
@@ -38,6 +47,21 @@ export function createDataExecutionReceiver(deps: {
     return input;
   };
   return {
+    async observeReviewedTransit(request) {
+      const record = await runtime.lookupLegacyTransit?.(request.key);
+      if (!record) return null;
+      const input = record.input,
+        countries = [...new Set(request.countries.map((c) => c.toLowerCase()))].sort();
+      if (
+        input.kind !== "transit-sync" ||
+        canonicalJson(input.countries) !== canonicalJson(countries) ||
+        record.triggeredBy !== (request.triggeredBy ?? null) ||
+        input.preflight?.preflightId !== request.preflightId ||
+        input.preflight.fingerprint !== request.fingerprint
+      )
+        throw new DataExecutionConflict("Legacy transit key body or actor conflict");
+      return runtime.inspect(record.status.id);
+    },
     async admit(value, options) {
       const input = validate(value);
       if (input.kind === "generation-hardlinks" || input.kind === "transit-maintenance")

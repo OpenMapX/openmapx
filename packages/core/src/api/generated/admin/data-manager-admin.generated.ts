@@ -110,6 +110,15 @@ import type {
   GetApiDataManagerTransitJobsId429,
   GetApiDataManagerTransitJobsId500,
   GetApiDataManagerTransitJobsParams,
+  GetApiDataManagerTransitProfile200,
+  GetApiDataManagerTransitProfile400,
+  GetApiDataManagerTransitProfile401,
+  GetApiDataManagerTransitProfile403,
+  GetApiDataManagerTransitProfile413,
+  GetApiDataManagerTransitProfile415,
+  GetApiDataManagerTransitProfile429,
+  GetApiDataManagerTransitProfile500,
+  GetApiDataManagerTransitProfile503,
   GetApiDataManagerTransitSources200,
   GetApiDataManagerTransitSources400,
   GetApiDataManagerTransitSources401,
@@ -256,6 +265,18 @@ import type {
   PostApiDataManagerTransitSync429,
   PostApiDataManagerTransitSync500,
   PostApiDataManagerTransitSyncBody,
+  PostApiDataManagerTransitSyncPreflight200,
+  PostApiDataManagerTransitSyncPreflight400,
+  PostApiDataManagerTransitSyncPreflight401,
+  PostApiDataManagerTransitSyncPreflight403,
+  PostApiDataManagerTransitSyncPreflight409,
+  PostApiDataManagerTransitSyncPreflight413,
+  PostApiDataManagerTransitSyncPreflight415,
+  PostApiDataManagerTransitSyncPreflight422,
+  PostApiDataManagerTransitSyncPreflight429,
+  PostApiDataManagerTransitSyncPreflight500,
+  PostApiDataManagerTransitSyncPreflight503,
+  PostApiDataManagerTransitSyncPreflightBody,
 } from "./models";
 import {
   deleteApiDataManagerTransitSourcesSourceIdRequest,
@@ -270,6 +291,7 @@ import {
   getApiDataManagerTransitFeedsRequest,
   getApiDataManagerTransitJobsIdRequest,
   getApiDataManagerTransitJobsRequest,
+  getApiDataManagerTransitProfileRequest,
   getApiDataManagerTransitSourcesRequest,
   getApiDataManagerTransitStateRequest,
   postApiAdminAmbientPlacesBuildRequest,
@@ -283,6 +305,7 @@ import {
   postApiDataManagerTransitSourcesRequest,
   postApiDataManagerTransitSourcesSourceIdDisableRequest,
   postApiDataManagerTransitSourcesSourceIdEnableRequest,
+  postApiDataManagerTransitSyncPreflightRequest,
   postApiDataManagerTransitSyncRequest,
 } from "./operation-bindings.generated";
 export type postApiAdminAmbientPlacesBuildResponse202 = {
@@ -1928,6 +1951,88 @@ export const getApiDataManagerTransitJobsId = async (
   );
 };
 
+export type getApiDataManagerTransitProfileResponse200 = {
+  data: GetApiDataManagerTransitProfile200;
+  status: 200;
+};
+
+export type getApiDataManagerTransitProfileResponse400 = {
+  data: GetApiDataManagerTransitProfile400;
+  status: 400;
+};
+
+export type getApiDataManagerTransitProfileResponse401 = {
+  data: GetApiDataManagerTransitProfile401;
+  status: 401;
+};
+
+export type getApiDataManagerTransitProfileResponse403 = {
+  data: GetApiDataManagerTransitProfile403;
+  status: 403;
+};
+
+export type getApiDataManagerTransitProfileResponse413 = {
+  data: GetApiDataManagerTransitProfile413;
+  status: 413;
+};
+
+export type getApiDataManagerTransitProfileResponse415 = {
+  data: GetApiDataManagerTransitProfile415;
+  status: 415;
+};
+
+export type getApiDataManagerTransitProfileResponse429 = {
+  data: GetApiDataManagerTransitProfile429;
+  status: 429;
+};
+
+export type getApiDataManagerTransitProfileResponse500 = {
+  data: GetApiDataManagerTransitProfile500;
+  status: 500;
+};
+
+export type getApiDataManagerTransitProfileResponse503 = {
+  data: GetApiDataManagerTransitProfile503;
+  status: 503;
+};
+
+export type getApiDataManagerTransitProfileResponseSuccess =
+  getApiDataManagerTransitProfileResponse200 & {
+    headers: Headers;
+  };
+export type getApiDataManagerTransitProfileResponseError = (
+  | getApiDataManagerTransitProfileResponse400
+  | getApiDataManagerTransitProfileResponse401
+  | getApiDataManagerTransitProfileResponse403
+  | getApiDataManagerTransitProfileResponse413
+  | getApiDataManagerTransitProfileResponse415
+  | getApiDataManagerTransitProfileResponse429
+  | getApiDataManagerTransitProfileResponse500
+  | getApiDataManagerTransitProfileResponse503
+) & {
+  headers: Headers;
+};
+
+export type getApiDataManagerTransitProfileResponse =
+  | getApiDataManagerTransitProfileResponseSuccess
+  | getApiDataManagerTransitProfileResponseError;
+
+export const getGetApiDataManagerTransitProfileUrl = () => {
+  return `/api/data-manager/transit/profile`;
+};
+
+export const getApiDataManagerTransitProfile = async (
+  options?: Parameters<typeof getApiDataManagerTransitProfileRequest>[1],
+): Promise<getApiDataManagerTransitProfileResponse> => {
+  return getApiDataManagerTransitProfileRequest<getApiDataManagerTransitProfileResponse>(
+    getGetApiDataManagerTransitProfileUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
 export type postApiDataManagerTransitRestartMotisResponse200 = {
   data: PostApiDataManagerTransitRestartMotis200;
   status: 200;
@@ -2738,6 +2843,122 @@ export const postApiDataManagerTransitSync = async (
       method: "POST",
       headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
       body: JSON.stringify(postApiDataManagerTransitSyncBody),
+    },
+  );
+};
+
+export type postApiDataManagerTransitSyncPreflightResponse200 = {
+  data: PostApiDataManagerTransitSyncPreflight200;
+  status: 200;
+};
+
+export type postApiDataManagerTransitSyncPreflightResponse400 = {
+  data: PostApiDataManagerTransitSyncPreflight400;
+  status: 400;
+};
+
+export type postApiDataManagerTransitSyncPreflightResponse401 = {
+  data: PostApiDataManagerTransitSyncPreflight401;
+  status: 401;
+};
+
+export type postApiDataManagerTransitSyncPreflightResponse403 = {
+  data: PostApiDataManagerTransitSyncPreflight403;
+  status: 403;
+};
+
+export type postApiDataManagerTransitSyncPreflightResponse409 = {
+  data: PostApiDataManagerTransitSyncPreflight409;
+  status: 409;
+};
+
+export type postApiDataManagerTransitSyncPreflightResponse413 = {
+  data: PostApiDataManagerTransitSyncPreflight413;
+  status: 413;
+};
+
+export type postApiDataManagerTransitSyncPreflightResponse415 = {
+  data: PostApiDataManagerTransitSyncPreflight415;
+  status: 415;
+};
+
+export type postApiDataManagerTransitSyncPreflightResponse422 = {
+  data: PostApiDataManagerTransitSyncPreflight422;
+  status: 422;
+};
+
+export type postApiDataManagerTransitSyncPreflightResponse429 = {
+  data: PostApiDataManagerTransitSyncPreflight429;
+  status: 429;
+};
+
+export type postApiDataManagerTransitSyncPreflightResponse500 = {
+  data: PostApiDataManagerTransitSyncPreflight500;
+  status: 500;
+};
+
+export type postApiDataManagerTransitSyncPreflightResponse503 = {
+  data: PostApiDataManagerTransitSyncPreflight503;
+  status: 503;
+};
+
+export type postApiDataManagerTransitSyncPreflightResponseSuccess =
+  postApiDataManagerTransitSyncPreflightResponse200 & {
+    headers: Headers;
+  };
+export type postApiDataManagerTransitSyncPreflightResponseError = (
+  | postApiDataManagerTransitSyncPreflightResponse400
+  | postApiDataManagerTransitSyncPreflightResponse401
+  | postApiDataManagerTransitSyncPreflightResponse403
+  | postApiDataManagerTransitSyncPreflightResponse409
+  | postApiDataManagerTransitSyncPreflightResponse413
+  | postApiDataManagerTransitSyncPreflightResponse415
+  | postApiDataManagerTransitSyncPreflightResponse422
+  | postApiDataManagerTransitSyncPreflightResponse429
+  | postApiDataManagerTransitSyncPreflightResponse500
+  | postApiDataManagerTransitSyncPreflightResponse503
+) & {
+  headers: Headers;
+};
+
+export type postApiDataManagerTransitSyncPreflightResponse =
+  | postApiDataManagerTransitSyncPreflightResponseSuccess
+  | postApiDataManagerTransitSyncPreflightResponseError;
+
+export const getPostApiDataManagerTransitSyncPreflightUrl = () => {
+  return `/api/data-manager/transit/sync/preflight`;
+};
+
+export const postApiDataManagerTransitSyncPreflight = async (
+  postApiDataManagerTransitSyncPreflightBody: PostApiDataManagerTransitSyncPreflightBody,
+  options?: Parameters<typeof postApiDataManagerTransitSyncPreflightRequest>[1],
+): Promise<postApiDataManagerTransitSyncPreflightResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return postApiDataManagerTransitSyncPreflightRequest<postApiDataManagerTransitSyncPreflightResponse>(
+    getPostApiDataManagerTransitSyncPreflightUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      body: JSON.stringify(postApiDataManagerTransitSyncPreflightBody),
     },
   );
 };

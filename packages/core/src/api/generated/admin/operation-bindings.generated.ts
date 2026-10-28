@@ -343,6 +343,13 @@ export async function getApiDataManagerTransitJobsIdRequest<T>(
 ): Promise<T> {
   return getApiDataManagerTransitJobsIdBound<T>(url, options);
 }
+const getApiDataManagerTransitProfileBound = bindAdminOperation("getApiDataManagerTransitProfile");
+export async function getApiDataManagerTransitProfileRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return getApiDataManagerTransitProfileBound<T>(url, options);
+}
 const getApiDataManagerTransitSourcesBound = bindAdminOperation("getApiDataManagerTransitSources");
 export async function getApiDataManagerTransitSourcesRequest<T>(
   url: string,
@@ -563,6 +570,15 @@ export async function postApiDataManagerTransitSyncRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return postApiDataManagerTransitSyncBound<T>(url, options);
+}
+const postApiDataManagerTransitSyncPreflightBound = bindAdminOperation(
+  "postApiDataManagerTransitSyncPreflight",
+);
+export async function postApiDataManagerTransitSyncPreflightRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return postApiDataManagerTransitSyncPreflightBound<T>(url, options);
 }
 const previewAdminExtensionInstallBound = bindAdminOperation("previewAdminExtensionInstall");
 export async function previewAdminExtensionInstallRequest<T>(

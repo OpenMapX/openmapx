@@ -173,6 +173,8 @@ describe("transit source administration workflow", () => {
           sources: [
             {
               id: source.id,
+              installedSourceId: source.id,
+              discoveryIds: [],
               name: source.name,
               source: "transitous",
               countryCode: "de",
@@ -180,6 +182,8 @@ describe("transit source administration workflow", () => {
             },
           ],
           total: 1,
+          limit: 50,
+          offset: 0,
         });
       }
       return reads(String(input));
@@ -197,10 +201,181 @@ describe("transit source administration workflow", () => {
     expect(await screen.findByRole("button", { name: "Enable VBB (de)" })).toBeInTheDocument();
     await waitFor(() =>
       expect(
-        client.getQueryData(["admin", "transit", "https://api.example.test", "catalog", " de "]),
+        client.getQueryData([
+          "admin",
+          "transit",
+          "https://api.example.test",
+          "catalog",
+          " de ",
+          0,
+          50,
+        ]),
       ).toMatchObject({
         total: 1,
       }),
     );
   });
+});
+it("finds source601 through a server query instead of filtering the first500", async () => {
+  const rows = Array.from({ length: 601 }, (_, n) => ({
+    ...source,
+    id: `catalog:de:${n}`,
+    name: `Source ${String(n).padStart(4, "0")}`,
+  }));
+  const requests: URL[] = [];
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/transit/state")) return Response.json(state);
+    requests.push(url);
+    const search = url.searchParams.get("search")?.toLowerCase(),
+      matching = search ? rows.filter((r) => r.name.toLowerCase().includes(search)) : rows;
+    const limit = Number(url.searchParams.get("limit") ?? 50),
+      offset = Number(url.searchParams.get("offset") ?? 0);
+    return Response.json({
+      sourceRevision: "a".repeat(64),
+      sources: matching.slice(offset, offset + limit),
+      total: matching.length,
+      limit,
+      offset,
+    });
+  });
+  view();
+  await screen.findByText("Source 0000");
+  fireEvent.click(screen.getByRole("button", { name: "Go to next page" }));
+  await screen.findByText("Source 0050");
+  fireEvent.change(screen.getByPlaceholderText(/Search sources by name/), {
+    target: { value: "Source 0600" },
+  });
+  expect(await screen.findByText("Source 0600")).toBeInTheDocument();
+  expect(
+    requests.some(
+      (url) =>
+        url.searchParams.get("search") === "Source 0600" && url.searchParams.get("offset") === "0",
+    ),
+  ).toBe(true);
+  fireEvent.change(screen.getByPlaceholderText(/Search sources by name/), {
+    target: { value: "" },
+  });
+  expect(await screen.findByText("Source 0000")).toBeInTheDocument();
+  expect(screen.queryByText("Source 0050")).not.toBeInTheDocument();
+});
+it("opens a country review before submitting a transit sync", async () => {
+  const fetch = vi
+    .spyOn(globalThis, "fetch")
+    .mockImplementation(async (input) => reads(String(input)));
+  view();
+  await screen.findByText("VBB");
+  fireEvent.click(screen.getByRole("button", { name: "Sync sources" }));
+  expect(await screen.findByRole("dialog", { name: "Review transit sync" })).toBeInTheDocument();
+  expect(
+    fetch.mock.calls.some(
+      ([url, init]) =>
+        String(url).endsWith("/transit/sync") &&
+        (init as RequestInit | undefined)?.method === "POST",
+    ),
+  ).toBe(false);
+});
+it("uses a discovery-only result to fill Add and retains its declared license and credit", async () => {
+  const mutations: unknown[] = [];
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    if ((init as RequestInit | undefined)?.method === "POST") {
+      mutations.push(input);
+      return Response.json({});
+    }
+    if (String(input).includes("/catalog"))
+      return Response.json({
+        sources: [
+          {
+            id: "mobilitydb:demo",
+            installedSourceId: null,
+            discoveryIds: ["mobilitydb:demo"],
+            name: "Demo",
+            source: "mobilitydb",
+            countryCode: "de",
+            url: "https://example.test/demo.zip",
+            licensing: {
+              version: 1,
+              bindings: [
+                {
+                  scope: "data",
+                  subject: "Demo publisher",
+                  license: { kind: "spdx", expression: "CC-BY-4.0" },
+                  notice: "Credit Demo",
+                },
+              ],
+            },
+          },
+        ],
+        total: 1,
+        limit: 50,
+        offset: 0,
+      });
+    return reads(String(input));
+  });
+  view();
+  await screen.findByText("VBB");
+  fireEvent.click(screen.getByRole("button", { name: "Add source" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Search installed catalog (optional)" }), {
+    target: { value: "Demo" },
+  });
+  fireEvent.click(await screen.findByRole("button", { name: "Use Demo (de)" }));
+  expect(screen.getByRole("textbox", { name: "Schedule URL" })).toHaveValue(
+    "https://example.test/demo.zip",
+  );
+  expect(screen.getByRole("textbox", { name: "SPDX license" })).toHaveValue("CC-BY-4.0");
+  expect(screen.getByRole("textbox", { name: "Attribution" })).toHaveValue(
+    "Demo publisher\nCredit Demo",
+  );
+  expect(mutations).toEqual([]);
+});
+
+it("ignores old origin and out-of-order search pages", async () => {
+  let old: ((response: Response) => void) | undefined;
+  let earlier: ((response: Response) => void) | undefined;
+  const page = (name: string) =>
+    Response.json({
+      sourceRevision: "a".repeat(64),
+      sources: [{ ...source, name }],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    });
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/state")) return Response.json(state);
+    if (url.hostname === "old.example.test")
+      return new Promise<Response>((resolve) => {
+        old = resolve;
+      });
+    if (url.searchParams.get("search") === "earlier")
+      return new Promise<Response>((resolve) => {
+        earlier = resolve;
+      });
+    return page(url.searchParams.get("search") === "latest" ? "Latest page" : "Current instance");
+  });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  clients.push(client);
+  const renderView = (apiUrl: string) => (
+    <QueryClientProvider client={client}>
+      <TransitSourcesSection apiUrl={apiUrl} />
+    </QueryClientProvider>
+  );
+  const rendered = render(renderView("https://old.example.test"));
+  await waitFor(() => expect(old).toBeTypeOf("function"));
+  rendered.rerender(renderView("https://new.example.test"));
+  await screen.findByText("Current instance");
+  old?.(page("Old instance"));
+  fireEvent.change(screen.getByPlaceholderText(/Search sources by name/), {
+    target: { value: "earlier" },
+  });
+  await waitFor(() => expect(earlier).toBeTypeOf("function"));
+  fireEvent.change(screen.getByPlaceholderText(/Search sources by name/), {
+    target: { value: "latest" },
+  });
+  await screen.findByText("Latest page");
+  earlier?.(page("Earlier page"));
+  await waitFor(() => expect(client.isFetching()).toBe(0));
+  expect(screen.getByText("Latest page")).toBeInTheDocument();
+  expect(screen.queryByText("Earlier page")).not.toBeInTheDocument();
+  expect(screen.queryByText("Old instance")).not.toBeInTheDocument();
 });

@@ -146,7 +146,14 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     try {
       const { searchTransitCatalog } = await import("../services/transit-catalog/index.js");
       const sources = await searchTransitCatalog(req.query.search, req.query.country);
-      return { sources, total: sources.length };
+      const limit = req.query.limit ?? 50,
+        offset = req.query.offset ?? 0;
+      return {
+        sources: sources.slice(offset, offset + limit),
+        total: sources.length,
+        limit,
+        offset,
+      };
     } catch (error) {
       return reply.code(502).send({ error: (error as Error).message });
     }
@@ -408,6 +415,18 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     },
   );
 
+  registerDataManagerAdminRoute(app, "getApiDataManagerTransitProfile", async (_req, reply) => {
+    const result = await dm.getTransitProfile(dataManagerOptions());
+    return reply.code(result.status).send(result.data);
+  });
+  registerDataManagerAdminRoute(
+    app,
+    "postApiDataManagerTransitSyncPreflight",
+    async (req, reply) => {
+      const result = await dm.inspectTransitSyncPreflight(req.body, dataManagerOptions());
+      return reply.code(result.status).send(result.data);
+    },
+  );
   registerDataManagerAdminRoute(app, "postApiDataManagerTransitSync", async (req, reply) => {
     const auth = await authenticateDataManager(req);
 
@@ -417,6 +436,8 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
       {
         idempotencyKey: body.idempotencyKey,
         countries: body.countries,
+        preflightId: body.preflightId,
+        fingerprint: body.fingerprint,
         triggeredBy,
       },
       dataManagerOptions(),

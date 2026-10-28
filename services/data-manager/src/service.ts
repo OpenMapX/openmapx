@@ -30,7 +30,10 @@ import { reconcileOrphanedJobs } from "./jobs/reconcile.js";
 import { createNotablePlacesOperationLock } from "./jobs/search-index/operation-lock.js";
 import { bakePredicted } from "./jobs/traffic/bake-predicted.js";
 import { fetchCoveredWayIds } from "./jobs/traffic/covered-ways.js";
-import { resolveOperationsProfileFromEnv } from "./jobs/transitous/operations-profile.js";
+import {
+  resolveOperationsProfileFromEnv,
+  transitAllowedCountries,
+} from "./jobs/transitous/operations-profile.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
 import { rootLogger } from "./logger.js";
 import { OfflinePackageGenerator } from "./offline-packages/generator.js";
@@ -196,7 +199,7 @@ async function start(): Promise<void> {
       "Data mutation admission remains closed pending retained ownership recovery",
     );
   }
-  const countries = operationsPolicy.countries;
+  const countries = transitAllowedCountries(operationsPolicy);
   const initialized = await initializeRequiredSubsystems({
     readiness,
     initializeOfflineStorage: async () => {

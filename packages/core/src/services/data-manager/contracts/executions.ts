@@ -4,7 +4,7 @@ import { processDiagnosticsSchema } from "../../../ops/job-evidence";
 import { hardlinkApplySummarySchema } from "../../../ops/service-results";
 import { regionSchema } from "./common";
 import { hardlinkEntrySchema } from "./datasets";
-import { transitDesiredSourceMutationSchema } from "./transit";
+import { transitDesiredSourceMutationSchema, transitPreflightBindingSchema } from "./transit";
 
 export const dataOperationKeySchema = z.string().regex(/^opk1_[A-Za-z0-9_-]{16,64}$/);
 export const dataFingerprintSchema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -22,6 +22,7 @@ const ordinaryInputs = [
     kind: z.literal("transit-sync"),
     countries,
     sourceMutation: transitDesiredSourceMutationSchema.optional(),
+    preflight: transitPreflightBindingSchema.optional(),
   }),
   regional("overture-pull"),
   regional("overture-ingest"),

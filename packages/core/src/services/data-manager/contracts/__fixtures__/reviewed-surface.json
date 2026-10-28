@@ -1,7 +1,7 @@
 {
-  "revision": "d721c425dded1da76ea26b80937b741307f939ce",
-  "explicitOperations": 57,
-  "note": "Static inventory. Expands two literal ambient actions and imported relay constant. Excludes Fastify automatic HEAD aliases; binary HEAD routes explicitly included. No route handler was invoked. Updated by explicit review for the eight previously installed durable execution/fence routes and the new reversible source-disable route; baseline revision precedes the latter.",
+  "revision": "42a7964f9b8eaf28a6c2749ab8608e3b1d1f8e19",
+  "explicitOperations": 58,
+  "note": "Static inventory. Expands two literal ambient actions and imported relay constant. Excludes Fastify automatic HEAD aliases; binary HEAD routes explicitly included. No route handler was invoked. Updated by explicit review for the eight previously installed durable execution/fence routes and the new reversible source-disable route; baseline revision precedes the latter. Task05.2 explicitly adds the country-only server preflight route; parser, paging and metadata changes retain existing route identities.",
   "operations": [
     {
       "method": "POST",
@@ -230,6 +230,10 @@
     {
       "method": "POST",
       "path": "/transit/sources/:sourceId/disable"
+    },
+    {
+      "method": "POST",
+      "path": "/transit/sync/preflight"
     }
   ]
 }

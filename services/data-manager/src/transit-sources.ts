@@ -344,6 +344,8 @@ export function listTransitSources(options: {
     };
   });
   const query = options.query ?? {};
+  const country = query.country?.toLowerCase();
+  if (country) rows = rows.filter((row) => countryOfRegion(row.region) === country);
   if (query.origin) rows = rows.filter((source) => source.origin === query.origin);
   if (query.lifecycle) rows = rows.filter((source) => source.lifecycle === query.lifecycle);
   if (query.search?.trim()) {
@@ -354,8 +356,9 @@ export function listTransitSources(options: {
       ),
     );
   }
+  rows.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
   const total = rows.length;
-  const limit = Math.min(Math.max(Math.floor(query.limit ?? 100), 1), 500);
+  const limit = Math.min(Math.max(Math.floor(query.limit ?? 50), 1), 500);
   const offset = Math.max(Math.floor(query.offset ?? 0), 0);
   return { sourceRevision, sources: rows.slice(offset, offset + limit), total, limit, offset };
 }

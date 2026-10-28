@@ -160,3 +160,26 @@ describe("transit source proxy", () => {
     expect(audit).not.toHaveBeenCalled();
   });
 });
+it("pages the deduplicated catalog without losing entries beyond500", async () => {
+  const { searchTransitCatalog } = await import("../../services/transit-catalog/index.js");
+  vi.mocked(searchTransitCatalog).mockResolvedValueOnce(
+    Array.from({ length: 601 }, (_, n) => ({
+      id: `catalog:de:${String(n).padStart(4, "0")}`,
+      installedSourceId: `catalog:de:${String(n).padStart(4, "0")}`,
+      discoveryIds: [],
+      name: `Source ${String(n).padStart(4, "0")}`,
+      source: "transitous" as const,
+      countryCode: "de",
+      url: `https://example.test/${n}.zip`,
+    })),
+  );
+  const response = await app.inject({
+    method: "GET",
+    url: "/data-manager/transit/catalog?offset=550&limit=50&country=de",
+    headers: { authorization: "Bearer service-token" },
+  });
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ total: 601, limit: 50, offset: 550 });
+  expect(response.json().sources[0].installedSourceId).toBe("catalog:de:0550");
+  expect(response.json().sources).toHaveLength(50);
+});
