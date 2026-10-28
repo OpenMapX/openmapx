@@ -272,3 +272,141 @@ describe("dedupeRoadConditionEvents", () => {
     });
   });
 });
+
+describe("dedupeRoadConditionEvents across sources", () => {
+  // Along Hofmühlenstraße, Dresden: a 300 m line and the 150 m section of it.
+  const line = (from: number, to: number) => ({
+    type: "LineString" as const,
+    coordinates: [
+      [13.7 + from * 0.0000142, 51.03],
+      [13.7 + to * 0.0000142, 51.03],
+    ],
+  });
+  const dated = (start: string, end: string) => ({ status: "active" as const, start, end });
+  const autumn = dated("2026-10-05T22:00:00Z", "2026-11-13T23:00:00Z");
+  const state = ev({
+    id: "state",
+    source: "de-sn-list-events",
+    ...works,
+    headline: text("Verlegung 110 KV - Leitungsbau", "de"),
+    geometry: line(0, 300),
+    validity: autumn,
+  });
+
+  it("folds a city's record into the state's record of the same works, the covering one surviving", () => {
+    const city = ev({
+      id: "city",
+      source: "de-sn-dresden-events",
+      kind: "closure",
+      type: "closure",
+      headline: text("Vollsperrung", "de"),
+      geometry: line(0, 280),
+      validity: dated("2026-10-05T22:00:00Z", "2026-11-13T22:59:00Z"),
+    });
+    expect(dedupeRoadConditionEvents([city, state])).toEqual([state]);
+    expect(dedupeRoadConditionEvents([state, city])).toEqual([state]);
+  });
+
+  it("keeps a short element lying inside a long record of the same works", () => {
+    const ramp = ev({
+      id: "ramp",
+      source: "de-autobahn-events",
+      ...works,
+      geometry: line(10, 60),
+      validity: autumn,
+    });
+    expect(dedupeRoadConditionEvents([state, ramp])).toHaveLength(2);
+  });
+
+  it("keeps records whose dates differ, unless one end agrees and so do the headlines", () => {
+    const later = (headline: string) =>
+      ev({
+        id: headline,
+        source: "de-sn-dresden-events",
+        ...works,
+        headline: text(headline, "de"),
+        geometry: line(0, 290),
+        validity: dated("2026-10-19T22:00:00Z", "2026-11-13T23:00:00Z"),
+      });
+    expect(dedupeRoadConditionEvents([state, later("Verlegung 110 KV - Leitungsbau")])).toEqual([
+      state,
+    ]);
+    expect(dedupeRoadConditionEvents([state, later("Kanalreinigung")])).toHaveLength(2);
+  });
+
+  it("keeps records of other kinds, of one source, or without dates", () => {
+    const like = (over: Partial<RoadConditionEvent>) =>
+      ev({
+        id: "x",
+        source: "de-sn-dresden-events",
+        ...works,
+        geometry: line(0, 300),
+        validity: autumn,
+        ...over,
+      });
+    expect(
+      dedupeRoadConditionEvents([state, like({ kind: "congestion", type: "congestion" })]),
+    ).toHaveLength(2);
+    expect(
+      dedupeRoadConditionEvents([
+        state,
+        like({ source: "de-sn-list-events", headline: text("Kanal", "de") }),
+      ]),
+    ).toHaveLength(2);
+    expect(
+      dedupeRoadConditionEvents([state, like({ validity: { status: "active" } })]),
+    ).toHaveLength(2);
+  });
+
+  it("keeps the record with restriction evidence, and two such records apart", () => {
+    const lanes = [effect("1", "closure", { normalization: "partial" })];
+    const motorway = ev({
+      id: "motorway",
+      source: "de-autobahn-events",
+      ...works,
+      geometry: line(0, 290),
+      validity: autumn,
+      effects: lanes,
+    });
+    expect(dedupeRoadConditionEvents([state, motorway])).toEqual([motorway]);
+    expect(dedupeRoadConditionEvents([{ ...state, effects: lanes }, motorway])).toHaveLength(2);
+  });
+
+  it("keeps a point near another source's record on a crossing road", () => {
+    const crossing = ev({
+      id: "crossing",
+      source: "de-sn-dresden-events",
+      ...works,
+      roads: [{ name: text("Kesselsdorfer Straße", "de") }],
+      geometry: { type: "Point", coordinates: [13.7 + 100 * 0.0000142, 51.03] },
+      validity: autumn,
+    });
+    expect(
+      dedupeRoadConditionEvents([
+        { ...state, roads: [{ name: text("Hofmühlenstraße", "de") }] },
+        crossing,
+      ]),
+    ).toHaveLength(2);
+  });
+});
+
+describe("dedupeRoadConditionEvents of one measure's sections", () => {
+  it("keeps two sections that only meet at a junction apart", () => {
+    const section = (id: string, from: number, to: number) =>
+      ev({
+        id,
+        ...works,
+        headline: text("Campuslinie - Bauphase 3", "de"),
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [13.7 + from * 0.0000142, 51.03],
+            [13.7 + to * 0.0000142, 51.03],
+          ],
+        },
+      });
+    expect(dedupeRoadConditionEvents([section("a", 0, 250), section("b", 250, 500)])).toHaveLength(
+      2,
+    );
+  });
+});
