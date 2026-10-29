@@ -354,3 +354,60 @@ ownership and does not silently adopt their values. The host-local
 `openmapx data generate-api-keys` command creates or updates a template from the
 active pins while preserving all existing values and orphaned keys. The previous
 browser generator operation is no longer available.
+
+## Operator settings and resource limits
+
+Every built-in service has a Config tab with optional memory (16–1048576 MiB)
+and CPU (0.125–256 cores) limits. These are Docker `deploy.resources.limits`,
+not environment variables. Leaving a field unset preserves the manifest limit,
+including host interpolation. Clear a saved resource field to restore that limit. Host-owned fields are locked; both `SERVICE_*`
+overrides and the original variable referenced by a manifest take precedence.
+Saving uses the same validated, sealed prospective configuration as applying:
+failed database reads, invalid values or an oversized snapshot refuse the entire
+change. Saving configuration does not rebuild prepared data.
+
+MOTIS resource settings belong to **primary MOTIS**. The same generation gives
+both primary and staging slots identical limits and updates the data-manager's
+capacity projection. The staging fields are read-only. Apply the coordinated
+stack, then rerun transit preflight before another build: profile minimums,
+candidate/rollback headroom, CPU, disk and timeout checks still apply. Reserving
+resources for only the active slot is insufficient.
+
+| Service                               | Editable settings                                                                                                                                                                                                                                                                                                                                                       | Actual consumer                                                                                                                 |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| All 30 built-ins                      | `OPENMAPX_MEMORY_MIB`, `OPENMAPX_CPU_LIMIT` (staging MOTIS follows primary)                                                                                                                                                                                                                                                                                             | Docker Compose resource limits; never container environment                                                                     |
+| app-api                               | `LOG_LEVEL`; `RATE_LIMIT_IMAGE_PROXY_MAX_BYTES`, `RATE_LIMIT_IMAGE_PROXY_WINDOW_MS`, `RATE_LIMIT_IMAGE_PROXY_MAX_CONCURRENT_PER_CLIENT`, `RATE_LIMIT_IMAGE_PROXY_MAX_CONCURRENT_GLOBAL`                                                                                                                                                                                 | Pino logger and image-proxy request/byte/concurrency budget                                                                     |
+| app-web                               | `NEXT_PUBLIC_STYLE_PROVIDER`, `NEXT_PUBLIC_MAP_STYLE_URL`, `NEXT_PUBLIC_TILES_URL`, `NEXT_PUBLIC_TRAFFIC_TILE_URL_TEMPLATE`, `NEXT_PUBLIC_CYCLOSM_TILE_URL_TEMPLATE`, `NEXT_PUBLIC_TERRAIN_DEM_TILEJSON_URL`, `NEXT_PUBLIC_TERRAIN_CONTOUR_TILEJSON_URL`, `NEXT_PUBLIC_TERRAIN_ATTRIBUTION_NAME`, `NEXT_PUBLIC_TERRAIN_ATTRIBUTION_URL`, `NEXT_PUBLIC_TRAFFIC_MIN_ZOOM` | Server runtime projection into the browser; map glyphs/basemap, raster tiles, terrain, attribution and raster traffic zoom gate |
+| data-manager                          | `LOG_LEVEL`, `OVERTURE_DUCKDB_MEMORY_MB`, `OVERTURE_DUCKDB_THREADS`, `OVERTURE_DUCKDB_TEMP_MB`                                                                                                                                                                                                                                                                          | Logger and bounded DuckDB memory/thread/spill settings                                                                          |
+| local-ai                              | `OLLAMA_KEEP_ALIVE` (0 or duration up to 24h), `OLLAMA_MAX_LOADED_MODELS`                                                                                                                                                                                                                                                                                               | Ollama's model lifetime and loaded-model count                                                                                  |
+| elasticsearch                         | `OPENMAPX_JAVA_HEAP_MIB`                                                                                                                                                                                                                                                                                                                                                | Only `-Xms<N>m -Xmx<N>m` in `ES_JAVA_OPTS`; choose heap below the container limit                                               |
+| nominatim                             | `THREADS`, `REPLICATION_UPDATE_INTERVAL`, `IMPORT_STYLE`, `REVERSE_ONLY`, `IMPORT_WIKIPEDIA`, `IMPORT_US_POSTCODES`, `IMPORT_GB_POSTCODES`                                                                                                                                                                                                                              | Image import and replication environment; import settings require a database rebuild                                            |
+| photon                                | `REGION`, `UPDATE_STRATEGY` (PARALLEL/SEQUENTIAL), `UPDATE_INTERVAL` (1h–8760h), `LOG_LEVEL` (DEBUG/INFO/WARN/ERROR)                                                                                                                                                                                                                                                    | Photon image index acquisition, update scheduling and Python logger; TRACE is unsupported                                       |
+| overpass                              | `OVERPASS_SPACE`, `OVERPASS_FASTCGI_PROCESSES`, `OVERPASS_UPDATE_SLEEP`, `OVERPASS_RULES_LOAD`                                                                                                                                                                                                                                                                          | Image query memory, workers, refresh and rules budget                                                                           |
+| postgis                               | `POSTGIS_DIAGNOSTICS`, `POSTGIS_TRACK_IO_TIMING`                                                                                                                                                                                                                                                                                                                        | OpenMapX's PostgreSQL entrypoint diagnostics                                                                                    |
+| valhalla                              | `serve_tiles`, `build_time_zones`, `use_tiles_ignore_pbf`, plus existing `build_elevation` and `build_admins`                                                                                                                                                                                                                                                           | Scripted image environment, serialized as `True`/`False`                                                                        |
+| Existing BRouter and Dawarich schemas | Existing routing/import/thread and application/database/credential fields                                                                                                                                                                                                                                                                                               | Existing service consumers and typed credential workflows, preserved alongside resource fields                                  |
+
+The legacy `NEXT_PUBLIC_MAP_STYLE_URL` name denotes the **glyph server base**,
+not a style JSON document. URL fields accept an absolute HTTP(S) URL without
+credentials or a same-origin path beginning with one `/`. Empty means default.
+Protocol-relative URLs, backslashes, controls and unsupported placeholders are
+refused. Only tile-template fields accept `{z}`, `{x}`, `{y}` and `{s}`.
+Local paths such as `/local-dem/tiles.json`, `/local-contours/tiles.json` and
+`/tiles` remain supported. Runtime values are read by the server for each page
+request; they are not frozen into the Docker image during `next build`.
+
+Raster traffic's optional minimum zoom is an integer from 0 through 24. Unset
+or malformed host values retain its manifest default of 10. Both the raster
+layer and the layer selector use the same threshold; the separate vector
+traffic-flow integration keeps its default of 6.
+
+Free-form JVM flags, Node flags and shell preprocessing commands are not editable
+through these forms. Community manifests cannot declare the platform's reserved
+resource fields to expand their resource authority.
+
+Consumer references: [Ollama environment parser](https://github.com/ollama/ollama/blob/v0.40.3/envconfig/config.go),
+[Photon 2.4.0 settings](https://github.com/rtuszik/photon-docker/blob/2.4.0/src/utils/config.py)
+and [logger](https://github.com/rtuszik/photon-docker/blob/2.4.0/src/utils/logger.py),
+[Nominatim import styles](https://nominatim.org/release-docs/latest/customize/Import-Styles/),
+and [Valhalla scripted image](https://github.com/valhalla/valhalla/blob/master/docker/README.md).

@@ -23,7 +23,7 @@
       "PORT": "4000",
       "HOST": "0.0.0.0",
       "LOG_LEVEL": "${LOG_LEVEL:-}",
-      "DATA_MANAGER_AUTH_TOKEN": "${DATA_MANAGER_AUTH_TOKEN:?DATA_MANAGER_AUTH_TOKEN must be set \u2014 generate with: openssl rand -hex 32}",
+      "DATA_MANAGER_AUTH_TOKEN": "${DATA_MANAGER_AUTH_TOKEN:?DATA_MANAGER_AUTH_TOKEN must be set — generate with: openssl rand -hex 32}",
       "DATABASE_URL": "postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgis:5432/openmapx",
       "OPS_AGENT_URL": "${OPS_AGENT_URL:-http://ops-agent:4300}",
       "OPS_AGENT_TOKEN_FILE": "/run/secrets/ops-agent-data-manager-token",
@@ -236,6 +236,43 @@
         "title": "Transit feed credentials",
         "description": "Managed by the dedicated Transit credentials page.",
         "x-openmapx-secret": true
+      },
+      "LOG_LEVEL": {
+        "type": "string",
+        "title": "Log level",
+        "enum": ["fatal", "error", "warn", "info", "debug", "trace", "silent"]
+      },
+      "OVERTURE_DUCKDB_MEMORY_MB": {
+        "type": "integer",
+        "title": "Overture DuckDB memory (MiB)",
+        "minimum": 256,
+        "maximum": 1048576
+      },
+      "OVERTURE_DUCKDB_THREADS": {
+        "type": "integer",
+        "title": "Overture DuckDB threads",
+        "minimum": 1,
+        "maximum": 64
+      },
+      "OVERTURE_DUCKDB_TEMP_MB": {
+        "type": "integer",
+        "title": "Overture DuckDB temporary disk (MiB)",
+        "minimum": 1024,
+        "maximum": 10485760
+      },
+      "OPENMAPX_MEMORY_MIB": {
+        "type": "integer",
+        "title": "Container memory limit (MiB)",
+        "minimum": 16,
+        "maximum": 1048576,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      },
+      "OPENMAPX_CPU_LIMIT": {
+        "type": "number",
+        "title": "Container CPU limit",
+        "minimum": 0.125,
+        "maximum": 256,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
       }
     }
   }

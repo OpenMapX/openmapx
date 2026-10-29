@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { SERVICE_RESOURCE_FIELDS } from "@openmapx/core/configuration-values";
 import { type OpsResultFor, trustedConfigurationPayloadSchema } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import { isValidSecretKey } from "@openmapx/core/services/secret-key";
@@ -380,7 +381,27 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         reply.status(404);
         return { error: "Service not found" };
       }
-      const body = req.body?.config;
+      const body = { ...req.body.config };
+      const unset: string[] = [];
+      const properties = svc.manifest.configSchema?.properties as
+        | Record<string, { readOnly?: boolean; type?: string }>
+        | undefined;
+      for (const key of Object.keys(body)) {
+        if (
+          body[key] === null &&
+          svc.isBuiltIn &&
+          (SERVICE_RESOURCE_FIELDS as readonly string[]).includes(key) &&
+          properties?.[key] &&
+          properties[key].readOnly !== true &&
+          !(
+            Array.isArray(svc.manifest.configSchema?.required) &&
+            svc.manifest.configSchema.required.includes(key)
+          )
+        ) {
+          unset.push(key);
+          delete body[key];
+        }
+      }
       // Validate against the manifest's configSchema so operators can't store
       // values the service won't accept at startup. Same validator used by the
       // integration config endpoint.
@@ -414,7 +435,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
               set: trustedConfigurationPayloadSchema.shape.serviceConfigs.element.shape.values.parse(
                 config,
               ),
-              unset: [],
+              unset,
             },
           ],
         },
@@ -424,7 +445,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         targetId: req.params.id,
         targetType: "service",
         action: "service.config.update",
-        details: { keys: Object.keys(config) },
+        details: { keys: [...Object.keys(config), ...unset] },
         request: req,
       });
       return { ok: true };

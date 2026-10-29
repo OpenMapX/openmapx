@@ -119,6 +119,7 @@ export async function serviceOwnershipSnapshot(
         id: serviceId,
         configSchema: service.manifest.configSchema,
         containerEnv: service.manifest.container.environment,
+        containerMemory: service.manifest.container.memory,
       },
       context,
     ),

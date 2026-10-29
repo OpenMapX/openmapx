@@ -209,6 +209,10 @@
     "./catalog-pins/types": {
       "types": "./src/catalog-pins/types.ts",
       "default": "./src/catalog-pins/types.ts"
+    },
+    "./configuration-values": {
+      "types": "./src/configuration-values.ts",
+      "default": "./src/configuration-values.ts"
     }
   },
   "scripts": {

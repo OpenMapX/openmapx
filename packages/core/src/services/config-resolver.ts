@@ -13,6 +13,11 @@
 // `SERVICE_VALHALLA_MEMORYLIMIT=2g` — or, for more readable env var names,
 // the config key should already be upper_snake.
 
+import {
+  isRuntimeResourceKey,
+  memoryHostVariable,
+  runtimeResourceNumber,
+} from "./runtime-resources";
 import type { ServiceManifest } from "./types";
 
 export type ConfigSource = "default" | "database" | "vault" | "env";
@@ -20,6 +25,8 @@ export type ConfigSource = "default" | "database" | "vault" | "env";
 export interface ConfigValueWithSource {
   value: unknown;
   source: ConfigSource;
+  /** Legacy host resource ownership is displayed, but its original Compose expression is retained. */
+  manifestExpression?: true;
 }
 
 /**
@@ -72,7 +79,7 @@ export function configSchemaKeys(
  */
 export function resolveServiceConfigFromEnv(
   manifest: Pick<ServiceManifest, "id" | "configSchema"> & {
-    container?: Pick<ServiceManifest["container"], "environment">;
+    container?: Pick<ServiceManifest["container"], "environment" | "memory">;
   },
   env: NodeJS.ProcessEnv = process.env,
 ): Record<string, ConfigValueWithSource> {
@@ -88,6 +95,12 @@ export function resolveServiceConfigFromEnv(
     result[key] = { value: defVal, source: "default" };
   }
 
+  // A manifest-owned host interpolation remains authoritative over database values.
+  for (const { key } of keys) {
+    const variable = memoryHostVariable(manifest.container?.environment?.[key]);
+    if (variable && env[variable] !== undefined && env[variable] !== "")
+      result[key] = { value: env[variable], source: "env", manifestExpression: true };
+  }
   const prefix = serviceConfigEnvPrefix(manifest.id);
   const known = new Set(keys.map((k) => k.key));
   const upperToKey = new Map<string, string>();
@@ -101,9 +114,24 @@ export function resolveServiceConfigFromEnv(
     const rest = envKey.slice(prefix.length);
     const canonical = upperToKey.get(rest);
     if (!canonical) continue;
-    result[canonical] = { value: envVal, source: "env" };
+    const value = isRuntimeResourceKey(canonical)
+      ? runtimeResourceNumber(
+          canonical,
+          /^[0-9]+(?:\.[0-9]+)?$/.test(envVal) ? Number(envVal) : NaN,
+        )
+      : manifest.id === "valhalla" && ["True", "False", "true", "false"].includes(envVal)
+        ? envVal.toLowerCase() === "true"
+        : envVal;
+    result[canonical] = { value, source: "env" };
   }
 
+  const hostMemory = memoryHostVariable(manifest.container?.memory);
+  if (!result.OPENMAPX_MEMORY_MIB && hostMemory && env[hostMemory])
+    result.OPENMAPX_MEMORY_MIB = {
+      value: env[hostMemory],
+      source: "env",
+      manifestExpression: true,
+    };
   return result;
 }
 
@@ -117,7 +145,7 @@ export function flattenResolvedConfig(
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(resolved)) {
-    out[key] = entry.value;
+    if (!entry.manifestExpression) out[key] = entry.value;
   }
   return out;
 }

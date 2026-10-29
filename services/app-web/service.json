@@ -40,7 +40,12 @@
     },
     "memory": "512m",
     "restart": "unless-stopped",
-    "dependsOn": [{ "service": "app-api", "condition": "service_healthy" }]
+    "dependsOn": [
+      {
+        "service": "app-api",
+        "condition": "service_healthy"
+      }
+    ]
   },
   "exposure": {
     "proxy": {
@@ -59,5 +64,84 @@
       ]
     }
   },
-  "ui": { "category": "application" }
+  "ui": {
+    "category": "application"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "NEXT_PUBLIC_STYLE_PROVIDER": {
+        "type": "string",
+        "title": "Map style provider",
+        "enum": ["openmapx", "maptiler"]
+      },
+      "NEXT_PUBLIC_MAP_STYLE_URL": {
+        "type": "string",
+        "title": "Glyph server base URL",
+        "format": "map-url",
+        "maxLength": 2048
+      },
+      "NEXT_PUBLIC_TILES_URL": {
+        "type": "string",
+        "title": "Basemap TileJSON URL",
+        "format": "map-url",
+        "maxLength": 2048
+      },
+      "NEXT_PUBLIC_TRAFFIC_TILE_URL_TEMPLATE": {
+        "type": "string",
+        "title": "Raster traffic tile URL template",
+        "format": "map-tile-url",
+        "maxLength": 2048
+      },
+      "NEXT_PUBLIC_CYCLOSM_TILE_URL_TEMPLATE": {
+        "type": "string",
+        "title": "CyclOSM tile URL template",
+        "format": "map-tile-url",
+        "maxLength": 2048
+      },
+      "NEXT_PUBLIC_TERRAIN_DEM_TILEJSON_URL": {
+        "type": "string",
+        "title": "Terrain DEM TileJSON URL",
+        "format": "map-url",
+        "maxLength": 2048
+      },
+      "NEXT_PUBLIC_TERRAIN_CONTOUR_TILEJSON_URL": {
+        "type": "string",
+        "title": "Contour TileJSON URL",
+        "format": "map-url",
+        "maxLength": 2048
+      },
+      "NEXT_PUBLIC_TERRAIN_ATTRIBUTION_NAME": {
+        "type": "string",
+        "title": "Terrain attribution",
+        "maxLength": 200
+      },
+      "NEXT_PUBLIC_TERRAIN_ATTRIBUTION_URL": {
+        "type": "string",
+        "title": "Terrain attribution URL",
+        "format": "map-url",
+        "maxLength": 2048
+      },
+      "NEXT_PUBLIC_TRAFFIC_MIN_ZOOM": {
+        "type": "integer",
+        "title": "Raster traffic minimum zoom",
+        "minimum": 0,
+        "maximum": 24
+      },
+      "OPENMAPX_MEMORY_MIB": {
+        "type": "integer",
+        "title": "Container memory limit (MiB)",
+        "minimum": 16,
+        "maximum": 1048576,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      },
+      "OPENMAPX_CPU_LIMIT": {
+        "type": "number",
+        "title": "Container CPU limit",
+        "minimum": 0.125,
+        "maximum": 256,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      }
+    }
+  }
 }

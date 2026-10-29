@@ -2923,6 +2923,7 @@ async function mergeOverlay(
             id: service.manifest.id,
             configSchema: service.manifest.configSchema,
             containerEnv: service.manifest.container.environment,
+            containerMemory: service.manifest.container.memory,
           },
           context,
         )

@@ -18,20 +18,66 @@
     "digest": "sha256:8d54e5c589186707ee365417f2202dc878c451fa3001b8edff07019531100933",
     "expose": [8080],
     "command": ["--load", "--serve"],
-    "environment": { "JAVA_TOOL_OPTIONS": "-Xmx12g" },
+    "environment": {
+      "JAVA_TOOL_OPTIONS": "-Xmx12g"
+    },
     "memory": "16g",
     "restart": "unless-stopped"
   },
   "buildCommand": "openmapx services build otp",
   "provides": ["transit-engine"],
-  "produces": [{ "type": "otp-graph", "sourceDir": "data/otp-graph" }],
-  "consumes": [{ "type": "otp-graph", "mountAt": "/var/opentripplanner", "required": true }],
+  "produces": [
+    {
+      "type": "otp-graph",
+      "sourceDir": "data/otp-graph"
+    }
+  ],
+  "consumes": [
+    {
+      "type": "otp-graph",
+      "mountAt": "/var/opentripplanner",
+      "required": true
+    }
+  ],
   "bindMounts": [
-    { "source": "config/build-config.json", "target": "/var/opentripplanner/build-config.json" },
-    { "source": "config/router-config.json", "target": "/var/opentripplanner/router-config.json" }
+    {
+      "source": "config/build-config.json",
+      "target": "/var/opentripplanner/build-config.json"
+    },
+    {
+      "source": "config/router-config.json",
+      "target": "/var/opentripplanner/router-config.json"
+    }
   ],
   "exposure": {
-    "hostPorts": [{ "container": 8080, "host": 8090, "bindAddress": "127.0.0.1" }]
+    "hostPorts": [
+      {
+        "container": 8080,
+        "host": 8090,
+        "bindAddress": "127.0.0.1"
+      }
+    ]
   },
-  "ui": { "category": "transit" }
+  "ui": {
+    "category": "transit"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "OPENMAPX_MEMORY_MIB": {
+        "type": "integer",
+        "title": "Container memory limit (MiB)",
+        "minimum": 16,
+        "maximum": 1048576,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      },
+      "OPENMAPX_CPU_LIMIT": {
+        "type": "number",
+        "title": "Container CPU limit",
+        "minimum": 0.125,
+        "maximum": 256,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      }
+    }
+  }
 }

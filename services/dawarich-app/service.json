@@ -60,12 +60,21 @@
       "startPeriod": "30s"
     },
     "dependsOn": [
-      { "service": "dawarich-postgis", "condition": "service_healthy" },
-      { "service": "dawarich-redis", "condition": "service_healthy" }
+      {
+        "service": "dawarich-postgis",
+        "condition": "service_healthy"
+      },
+      {
+        "service": "dawarich-redis",
+        "condition": "service_healthy"
+      }
     ],
     "logging": {
       "driver": "json-file",
-      "options": { "max-size": "100m", "max-file": "5" }
+      "options": {
+        "max-size": "100m",
+        "max-file": "5"
+      }
     }
   },
   "provides": ["timeline"],
@@ -83,19 +92,44 @@
         "title": "Public Dawarich URL",
         "default": "https://timeline.{domain}"
       },
-      "DOMAIN": { "type": "string", "title": "Dawarich public hostname" },
+      "DOMAIN": {
+        "type": "string",
+        "title": "Dawarich public hostname"
+      },
       "APPLICATION_PROTOCOL": {
         "type": "string",
         "title": "Dawarich public protocol",
         "default": "https"
       },
-      "TIME_ZONE": { "type": "string", "title": "Default time zone", "default": "UTC" },
-      "REDIS_URL": { "type": "string", "title": "Dawarich Redis URL" },
-      "DATABASE_HOST": { "type": "string", "title": "Dawarich database host" },
-      "DATABASE_PORT": { "type": "string", "title": "Dawarich database port" },
-      "DATABASE_USERNAME": { "type": "string", "title": "Dawarich database user" },
-      "DATABASE_NAME": { "type": "string", "title": "Dawarich database name" },
-      "OIDC_CLIENT_ID": { "type": "string", "title": "OpenMapX OIDC client ID" },
+      "TIME_ZONE": {
+        "type": "string",
+        "title": "Default time zone",
+        "default": "UTC"
+      },
+      "REDIS_URL": {
+        "type": "string",
+        "title": "Dawarich Redis URL"
+      },
+      "DATABASE_HOST": {
+        "type": "string",
+        "title": "Dawarich database host"
+      },
+      "DATABASE_PORT": {
+        "type": "string",
+        "title": "Dawarich database port"
+      },
+      "DATABASE_USERNAME": {
+        "type": "string",
+        "title": "Dawarich database user"
+      },
+      "DATABASE_NAME": {
+        "type": "string",
+        "title": "Dawarich database name"
+      },
+      "OIDC_CLIENT_ID": {
+        "type": "string",
+        "title": "OpenMapX OIDC client ID"
+      },
       "OIDC_ISSUER": {
         "type": "string",
         "title": "OpenMapX OIDC issuer",
@@ -106,9 +140,18 @@
         "title": "Dawarich OIDC callback URL",
         "default": "https://timeline.{domain}/users/auth/openid_connect/callback"
       },
-      "OIDC_PROVIDER_NAME": { "type": "string", "title": "OIDC provider name" },
-      "OIDC_AUTO_REGISTER": { "type": "string", "title": "OIDC automatic registration" },
-      "OIDC_PKCE_ENABLED": { "type": "string", "title": "OIDC PKCE requirement" },
+      "OIDC_PROVIDER_NAME": {
+        "type": "string",
+        "title": "OIDC provider name"
+      },
+      "OIDC_AUTO_REGISTER": {
+        "type": "string",
+        "title": "OIDC automatic registration"
+      },
+      "OIDC_PKCE_ENABLED": {
+        "type": "string",
+        "title": "OIDC PKCE requirement"
+      },
       "OPENMAPX_DAWARICH_COMMIT": {
         "type": "string",
         "title": "Pinned Dawarich collector revision",
@@ -155,6 +198,20 @@
         "type": "string",
         "title": "OpenMapX OIDC client secret",
         "x-openmapx-secret": true
+      },
+      "OPENMAPX_MEMORY_MIB": {
+        "type": "integer",
+        "title": "Container memory limit (MiB)",
+        "minimum": 16,
+        "maximum": 1048576,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      },
+      "OPENMAPX_CPU_LIMIT": {
+        "type": "number",
+        "title": "Container CPU limit",
+        "minimum": 0.125,
+        "maximum": 256,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
       }
     }
   },
@@ -198,8 +255,13 @@
   "exposure": {
     "proxy": {
       "enabled": true,
-      "host": { "default": "timeline.{domain}", "configKey": "APPLICATION_HOSTS" }
+      "host": {
+        "default": "timeline.{domain}",
+        "configKey": "APPLICATION_HOSTS"
+      }
     }
   },
-  "ui": { "category": "timeline" }
+  "ui": {
+    "category": "timeline"
+  }
 }

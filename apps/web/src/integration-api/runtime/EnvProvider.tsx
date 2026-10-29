@@ -9,8 +9,12 @@ export function EnvProvider({ config, children }: { config: ClientEnv; children:
   return <EnvContext.Provider value={config}>{children}</EnvContext.Provider>;
 }
 
+export function useOptionalEnv(): ClientEnv | null {
+  return useContext(EnvContext);
+}
+
 export function useEnv(): ClientEnv {
-  const ctx = useContext(EnvContext);
+  const ctx = useOptionalEnv();
   if (!ctx) throw new Error("useEnv must be used within EnvProvider");
   return ctx;
 }

@@ -11,6 +11,7 @@
  * read from the context via the useEnv() hook.
  */
 
+import { parseOperatorUrl } from "@openmapx/core/configuration-values";
 import { hostedBasemapProviderSchema, type MapConfig } from "@openmapx/core/map-config";
 
 export interface ClientEnv {
@@ -20,6 +21,7 @@ export interface ClientEnv {
   tilesUrl: string;
   styleProvider: "maptiler" | "openmapx";
   trafficTileUrlTemplate: string;
+  trafficMinZoom?: number;
   cyclOsmTileUrlTemplate: string;
   terrainDemTilejsonUrl: string;
   terrainDemTileUrlTemplate: string;
@@ -33,21 +35,28 @@ export interface ClientEnv {
 }
 
 /**
- * Build the client environment config from process.env.
+ * Build the client environment config from runtime.
  * Must only be called from server components (where process.env is real).
  */
-export function buildClientEnv(mapConfig?: MapConfig): ClientEnv {
-  const apiBase = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
-  const tilesUrl =
-    process.env.NEXT_PUBLIC_TILES_URL?.trim() || (mapConfig?.selfHostedTilesUrl ?? "");
-  const mapStyleUrl =
-    process.env.NEXT_PUBLIC_MAP_STYLE_URL?.trim() || (mapConfig?.selfHostedGlyphsUrl ?? "");
+export function buildClientEnv(
+  mapConfig?: MapConfig,
+  runtime: Readonly<Record<string, string | undefined>> = process.env,
+): ClientEnv {
+  // Reading through the object prevents Next's NEXT_PUBLIC build-time substitution.
+  const url = (key: string, template = false) =>
+    parseOperatorUrl(runtime[key] ?? "", template) || "";
+  const rawZoom = runtime.NEXT_PUBLIC_TRAFFIC_MIN_ZOOM;
+  const trafficMinZoom =
+    rawZoom && /^\d+$/.test(rawZoom) && Number(rawZoom) <= 24 ? Number(rawZoom) : undefined;
+  const apiBase = (runtime.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+  const tilesUrl = url("NEXT_PUBLIC_TILES_URL") || (mapConfig?.selfHostedTilesUrl ?? "");
+  const mapStyleUrl = url("NEXT_PUBLIC_MAP_STYLE_URL") || (mapConfig?.selfHostedGlyphsUrl ?? "");
   const preference =
     mapConfig?.hostedBasemapProvider ??
-    hostedBasemapProviderSchema.catch("auto").parse(process.env.BASEMAP_PROVIDER);
+    hostedBasemapProviderSchema.catch("auto").parse(runtime.BASEMAP_PROVIDER);
   const keyConfigured =
     mapConfig?.maptilerConfigured ??
-    Boolean(process.env.MAPTILER_KEY?.trim() || process.env.NEXT_PUBLIC_MAPTILER_KEY?.trim());
+    Boolean(runtime.MAPTILER_KEY?.trim() || runtime.NEXT_PUBLIC_MAPTILER_KEY?.trim());
   const basemapProvider = tilesUrl
     ? "selfhosted"
     : preference === "auto"
@@ -56,56 +65,56 @@ export function buildClientEnv(mapConfig?: MapConfig): ClientEnv {
         : "openfreemap"
       : preference;
   const styleProvider =
-    basemapProvider === "maptiler" && process.env.NEXT_PUBLIC_STYLE_PROVIDER === "maptiler"
+    basemapProvider === "maptiler" && runtime.NEXT_PUBLIC_STYLE_PROVIDER === "maptiler"
       ? "maptiler"
       : "openmapx";
   const keylessTerrain = basemapProvider !== "maptiler";
-  const customDem = Boolean(process.env.NEXT_PUBLIC_TERRAIN_DEM_TILEJSON_URL);
+  const customDem = Boolean(url("NEXT_PUBLIC_TERRAIN_DEM_TILEJSON_URL"));
   const useMapterhorn = keylessTerrain && !customDem;
-  const customContour = Boolean(process.env.NEXT_PUBLIC_TERRAIN_CONTOUR_TILEJSON_URL);
+  const customContour = Boolean(url("NEXT_PUBLIC_TERRAIN_CONTOUR_TILEJSON_URL"));
   const generatedContours = (useMapterhorn || customDem) && !customContour;
 
   return {
-    apiUrl: process.env.NEXT_PUBLIC_API_URL ?? "",
+    ...(trafficMinZoom === undefined ? {} : { trafficMinZoom }),
+    apiUrl: runtime.NEXT_PUBLIC_API_URL ?? "",
     mapStyleUrl,
     tilesUrl,
     basemapProvider,
     styleProvider,
     trafficTileUrlTemplate:
-      process.env.NEXT_PUBLIC_TRAFFIC_TILE_URL_TEMPLATE ||
+      url("NEXT_PUBLIC_TRAFFIC_TILE_URL_TEMPLATE", true) ||
       (apiBase
         ? `${apiBase}/api/traffic/flow/{z}/{x}/{y}.png`
         : "/api/traffic/flow/{z}/{x}/{y}.png"),
     cyclOsmTileUrlTemplate:
-      process.env.NEXT_PUBLIC_CYCLOSM_TILE_URL_TEMPLATE ||
+      url("NEXT_PUBLIC_CYCLOSM_TILE_URL_TEMPLATE", true) ||
       (apiBase
         ? `${apiBase}/api/tiles/cyclosm/{z}/{x}/{y}.png`
         : "/api/tiles/cyclosm/{z}/{x}/{y}.png"),
     terrainDemTilejsonUrl:
-      process.env.NEXT_PUBLIC_TERRAIN_DEM_TILEJSON_URL ||
+      url("NEXT_PUBLIC_TERRAIN_DEM_TILEJSON_URL") ||
       (useMapterhorn
         ? `${apiBase}/api/mapterhorn/tiles.json`
         : `${apiBase}/api/maptiler/tiles/terrain-rgb-v2/tiles.json`),
     terrainDemTileUrlTemplate:
-      process.env.NEXT_PUBLIC_TERRAIN_DEM_TILE_URL_TEMPLATE ||
+      url("NEXT_PUBLIC_TERRAIN_DEM_TILE_URL_TEMPLATE", true) ||
       (useMapterhorn ? `${apiBase}/api/mapterhorn/{z}/{x}/{y}.webp` : ""),
     terrainDemEncoding:
-      process.env.NEXT_PUBLIC_TERRAIN_DEM_ENCODING === "terrarium" || useMapterhorn
+      runtime.NEXT_PUBLIC_TERRAIN_DEM_ENCODING === "terrarium" || useMapterhorn
         ? "terrarium"
         : "mapbox",
     terrainContourMode: generatedContours ? "generated" : "vector",
     terrainContourTilejsonUrl:
-      process.env.NEXT_PUBLIC_TERRAIN_CONTOUR_TILEJSON_URL ||
+      url("NEXT_PUBLIC_TERRAIN_CONTOUR_TILEJSON_URL") ||
       `${apiBase}/api/maptiler/tiles/contours-v2/tiles.json`,
     terrainAttributionName:
-      process.env.NEXT_PUBLIC_TERRAIN_ATTRIBUTION_NAME ||
+      runtime.NEXT_PUBLIC_TERRAIN_ATTRIBUTION_NAME ||
       (useMapterhorn ? "© Mapterhorn" : "© MapTiler"),
     terrainAttributionUrl:
-      process.env.NEXT_PUBLIC_TERRAIN_ATTRIBUTION_URL ||
+      url("NEXT_PUBLIC_TERRAIN_ATTRIBUTION_URL") ||
       (useMapterhorn
         ? "https://mapterhorn.com/attribution/"
         : "https://www.maptiler.com/copyright/"),
-    martinBaseUrl:
-      process.env.NEXT_PUBLIC_MARTIN_URL || (apiBase ? `${apiBase}/martin` : "/martin"),
+    martinBaseUrl: url("NEXT_PUBLIC_MARTIN_URL") || (apiBase ? `${apiBase}/martin` : "/martin"),
   };
 }

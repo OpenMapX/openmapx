@@ -1,3 +1,5 @@
+import { OPERATOR_STRING_FORMATS, validOperatorString } from "../configuration-values";
+
 const FAILED = "Trusted configuration schema rejected";
 const MAX_SCHEMA_DEPTH = 16;
 const MAX_SCHEMA_NODES = 4_096;
@@ -156,7 +158,10 @@ function assertSchemaNode(
     rejected();
   if (schema.pattern !== undefined && typeof schema.pattern !== "string") rejected();
   if (typeof schema.pattern === "string") safePattern(schema.pattern);
-  if (schema.format !== undefined && !["url", "password"].includes(schema.format as string))
+  if (
+    schema.format !== undefined &&
+    !["url", "password", ...OPERATOR_STRING_FORMATS].includes(schema.format as string)
+  )
     rejected();
   if (
     schema.additionalProperties !== undefined &&
@@ -267,6 +272,12 @@ function matchesSchema(
     if (typeof schema.minLength === "number" && value.length < schema.minLength) return false;
     if (typeof schema.maxLength === "number" && value.length > schema.maxLength) return false;
     if (typeof schema.pattern === "string" && !safePattern(schema.pattern).test(value))
+      return false;
+    if (
+      typeof schema.format === "string" &&
+      (OPERATOR_STRING_FORMATS as readonly string[]).includes(schema.format) &&
+      !validOperatorString(value, schema.format)
+    )
       return false;
     if (schema.format === "url" && value !== "") {
       try {

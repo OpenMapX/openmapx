@@ -71,7 +71,42 @@
     }
   ],
   "exposure": {
-    "hostPorts": [{ "container": 5432, "host": 5432, "bindAddress": "127.0.0.1" }]
+    "hostPorts": [
+      {
+        "container": 5432,
+        "host": 5432,
+        "bindAddress": "127.0.0.1"
+      }
+    ]
   },
-  "ui": { "category": "infrastructure" }
+  "ui": {
+    "category": "infrastructure"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "POSTGIS_DIAGNOSTICS": {
+        "type": "boolean",
+        "title": "Enable diagnostics"
+      },
+      "POSTGIS_TRACK_IO_TIMING": {
+        "type": "boolean",
+        "title": "Track I/O timing"
+      },
+      "OPENMAPX_MEMORY_MIB": {
+        "type": "integer",
+        "title": "Container memory limit (MiB)",
+        "minimum": 16,
+        "maximum": 1048576,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      },
+      "OPENMAPX_CPU_LIMIT": {
+        "type": "number",
+        "title": "Container CPU limit",
+        "minimum": 0.125,
+        "maximum": 256,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      }
+    }
+  }
 }

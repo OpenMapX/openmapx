@@ -98,11 +98,19 @@ vi.mock("../../utils/rate-limit.js", () => ({
   tilePublicApiLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
 }));
 
-// Resolve service config (service config GET uses this)
+// Route-only fixture: the installed coherent ownership reader owns acquisition.
+// Its source/DB invariants are tested in prospective-configuration tests.
 const mockResolveServiceConfigWithSources = vi.fn().mockResolvedValue({});
 vi.mock("../../services/service-config-resolver.js", () => ({
   resolveServiceConfigWithSources: (...args: unknown[]) =>
     mockResolveServiceConfigWithSources(...args),
+}));
+
+vi.mock("../../services/configuration-ownership-view.js", () => ({
+  inspectServiceConfiguration: async (...args: unknown[]) => ({
+    resolved: await mockResolveServiceConfigWithSources(...args),
+    ownership: {},
+  }),
 }));
 
 const mockRestoreServiceConfig = vi.fn().mockResolvedValue(true);
@@ -786,6 +794,9 @@ describe("service credentials", () => {
   });
 
   it("GET lists declared secret fields with vault/missing status + setup guide", async () => {
+    mockResolveServiceConfigWithSources.mockResolvedValueOnce({
+      NY_511_API_KEY: { value: "synthetic-configured-sentinel", source: "vault" },
+    });
     mockListServiceSecrets.mockResolvedValue([
       { key: "NY_511_API_KEY", updatedAt: new Date("2026-06-26T10:00:00Z"), updatedBy: "u1" },
     ]);
@@ -1073,5 +1084,37 @@ describe("explicit destructive selection intent", () => {
     expect(mockValidateServiceSelectionForWrite).not.toHaveBeenCalled();
     expect(applyTrustedConfiguration).not.toHaveBeenCalled();
     expect(mockWriteAuditLog).not.toHaveBeenCalled();
+  });
+});
+
+describe("resource reset transport", () => {
+  it("uses the original sealed producer's unset for an explicitly cleared built-in resource", async () => {
+    mockRegistryGet.mockReturnValue({
+      isBuiltIn: true,
+      enabled: true,
+      manifest: {
+        id: "redis",
+        configSchema: {
+          type: "object",
+          properties: { OPENMAPX_MEMORY_MIB: { type: "integer", minimum: 16, maximum: 1048576 } },
+        },
+      },
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/admin/services/redis/config",
+      headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
+      payload: { config: { OPENMAPX_MEMORY_MIB: null } },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(applyTrustedConfiguration).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        overlay: expect.objectContaining({
+          changes: [
+            { kind: "service-config", serviceId: "redis", set: {}, unset: ["OPENMAPX_MEMORY_MIB"] },
+          ],
+        }),
+      }),
+    );
   });
 });

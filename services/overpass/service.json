@@ -48,14 +48,81 @@
     },
     "logging": {
       "driver": "json-file",
-      "options": { "max-size": "50m", "max-file": "3" }
+      "options": {
+        "max-size": "50m",
+        "max-file": "3"
+      }
     }
   },
   "provides": ["osm-query"],
-  "consumes": [{ "type": "osm-pbf-bz2", "mountAt": "/osm", "readOnly": true, "required": true }],
-  "bindMounts": [{ "source": "@infra:data/overpass/db", "target": "/db", "readOnly": false }],
+  "consumes": [
+    {
+      "type": "osm-pbf-bz2",
+      "mountAt": "/osm",
+      "readOnly": true,
+      "required": true
+    }
+  ],
+  "bindMounts": [
+    {
+      "source": "@infra:data/overpass/db",
+      "target": "/db",
+      "readOnly": false
+    }
+  ],
   "exposure": {
-    "hostPorts": [{ "container": 80, "host": 8082, "bindAddress": "127.0.0.1" }]
+    "hostPorts": [
+      {
+        "container": 80,
+        "host": 8082,
+        "bindAddress": "127.0.0.1"
+      }
+    ]
   },
-  "ui": { "category": "osm-query" }
+  "ui": {
+    "category": "osm-query"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "OVERPASS_SPACE": {
+        "type": "integer",
+        "title": "Maximum query memory (bytes)",
+        "minimum": 1073741824,
+        "maximum": 10995116277760
+      },
+      "OVERPASS_FASTCGI_PROCESSES": {
+        "type": "integer",
+        "title": "FastCGI processes",
+        "minimum": 1,
+        "maximum": 128
+      },
+      "OVERPASS_UPDATE_SLEEP": {
+        "type": "integer",
+        "title": "Update interval (seconds)",
+        "minimum": 60,
+        "maximum": 604800
+      },
+      "OVERPASS_RULES_LOAD": {
+        "type": "integer",
+        "title": "Rules load",
+        "minimum": 1,
+        "maximum": 100
+      },
+      "OPENMAPX_MEMORY_MIB": {
+        "type": "integer",
+        "title": "Container memory limit (MiB)",
+        "minimum": 16,
+        "maximum": 1048576,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      },
+      "OPENMAPX_CPU_LIMIT": {
+        "type": "number",
+        "title": "Container CPU limit",
+        "minimum": 0.125,
+        "maximum": 256,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      }
+    }
+  }
 }

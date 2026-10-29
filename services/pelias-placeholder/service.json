@@ -16,7 +16,9 @@
     "tag": "v5.11.0",
     "digest": "sha256:79a8e55b63d3e0b257f4e72a86250c97d0e33d6880d6f83f4d68bb06a9636ebe",
     "expose": [4100],
-    "environment": { "PELIAS_CONFIG": "/code/pelias.json" },
+    "environment": {
+      "PELIAS_CONFIG": "/code/pelias.json"
+    },
     "restart": "unless-stopped"
   },
   "consumes": [
@@ -27,9 +29,41 @@
       "required": true
     }
   ],
-  "bindMounts": [{ "source": "@service:pelias:config/pelias.json", "target": "/code/pelias.json" }],
+  "bindMounts": [
+    {
+      "source": "@service:pelias:config/pelias.json",
+      "target": "/code/pelias.json"
+    }
+  ],
   "exposure": {
-    "hostPorts": [{ "container": 4100, "host": 4100, "bindAddress": "127.0.0.1" }]
+    "hostPorts": [
+      {
+        "container": 4100,
+        "host": 4100,
+        "bindAddress": "127.0.0.1"
+      }
+    ]
   },
-  "ui": { "category": "geocoding" }
+  "ui": {
+    "category": "geocoding"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "OPENMAPX_MEMORY_MIB": {
+        "type": "integer",
+        "title": "Container memory limit (MiB)",
+        "minimum": 16,
+        "maximum": 1048576,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      },
+      "OPENMAPX_CPU_LIMIT": {
+        "type": "number",
+        "title": "Container CPU limit",
+        "minimum": 0.125,
+        "maximum": 256,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      }
+    }
+  }
 }

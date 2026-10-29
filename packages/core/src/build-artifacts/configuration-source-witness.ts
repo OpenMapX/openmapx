@@ -184,6 +184,10 @@ export function configurationHostFields(
     const keys = new Set([...declared, "OPENMAPX_MEMORY_MIB", "OPENMAPX_CPU_LIMIT"]);
     const fields = [...keys].sort().map((key) => {
       const names = [`${serviceConfigEnvPrefix(manifest.id)}${key.toUpperCase()}`];
+      const hostExpression = manifest.container.environment?.[key]?.match(
+        /^\$\{([A-Z][A-Z0-9_]*)(?::[-?][^}]*)?\}$/,
+      )?.[1];
+      if (hostExpression) names.push(hostExpression);
       const variable = memory[manifest.id];
       if (
         key === "OPENMAPX_MEMORY_MIB" &&

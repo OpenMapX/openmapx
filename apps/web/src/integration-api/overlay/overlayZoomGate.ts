@@ -3,6 +3,7 @@
 import { integrationIdToOverlayId, useMapStore } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useMemo } from "react";
+import { useOptionalEnv } from "../runtime/EnvProvider";
 
 /**
  * Zoom gating for overlays, declared per integration as
@@ -22,12 +23,14 @@ import { useMemo } from "react";
 /** Manifest `minZoom` for an overlay; 0 when it isn't zoom-gated. */
 export function useOverlayMinZoom(overlayId: string): number {
   const registry = useIntegrationRegistry();
+  const env = useOptionalEnv();
   return useMemo(() => {
+    if (overlayId === "traffic" && env?.trafficMinZoom !== undefined) return env.trafficMinZoom;
     const match = registry
       .getAll()
       .find((integration) => integrationIdToOverlayId(integration.id) === overlayId);
     return match?.frontend?.overlay?.minZoom ?? 0;
-  }, [registry, overlayId]);
+  }, [registry, overlayId, env?.trafficMinZoom]);
 }
 
 export interface OverlayZoomGate {

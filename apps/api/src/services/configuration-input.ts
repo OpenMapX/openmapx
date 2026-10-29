@@ -39,6 +39,7 @@ export async function buildConfigurationInput(
       id: service.manifest.id,
       configSchema: service.manifest.configSchema,
       containerEnv: service.manifest.container.environment,
+      containerMemory: service.manifest.container.memory,
       proxyHostConfigKey: service.manifest.exposure?.proxy?.host?.configKey,
     })),
     context,

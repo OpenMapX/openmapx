@@ -294,6 +294,7 @@ async function readConfig(serviceId: string): Promise<Record<string, unknown>> {
     id: service.manifest.id,
     configSchema: service.manifest.configSchema,
     containerEnv: service.manifest.container.environment,
+    containerMemory: service.manifest.container.memory,
   });
 }
 

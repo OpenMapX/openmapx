@@ -41,7 +41,40 @@
     }
   ],
   "exposure": {
-    "hostPorts": [{ "container": 9200, "host": 9200, "bindAddress": "127.0.0.1" }]
+    "hostPorts": [
+      {
+        "container": 9200,
+        "host": 9200,
+        "bindAddress": "127.0.0.1"
+      }
+    ]
   },
-  "ui": { "category": "geocoding" }
+  "ui": {
+    "category": "geocoding"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "OPENMAPX_JAVA_HEAP_MIB": {
+        "type": "integer",
+        "title": "Java heap (MiB)",
+        "minimum": 128,
+        "maximum": 262144
+      },
+      "OPENMAPX_MEMORY_MIB": {
+        "type": "integer",
+        "title": "Container memory limit (MiB)",
+        "minimum": 16,
+        "maximum": 1048576,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      },
+      "OPENMAPX_CPU_LIMIT": {
+        "type": "number",
+        "title": "Container CPU limit",
+        "minimum": 0.125,
+        "maximum": 256,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      }
+    }
+  }
 }

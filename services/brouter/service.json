@@ -30,11 +30,29 @@
       "retries": 3,
       "startPeriod": "30m"
     },
-    "logging": { "driver": "json-file", "options": { "max-size": "10m", "max-file": "3" } }
+    "logging": {
+      "driver": "json-file",
+      "options": {
+        "max-size": "10m",
+        "max-file": "3"
+      }
+    }
   },
   "provides": ["routing-engine"],
-  "volumes": [{ "name": "openmapx-brouter", "mountAt": "/data/brouter", "backup": false }],
-  "bindMounts": [{ "source": "scripts", "target": "/opt/openmapx/brouter", "readOnly": true }],
+  "volumes": [
+    {
+      "name": "openmapx-brouter",
+      "mountAt": "/data/brouter",
+      "backup": false
+    }
+  ],
+  "bindMounts": [
+    {
+      "source": "scripts",
+      "target": "/opt/openmapx/brouter",
+      "readOnly": true
+    }
+  ],
   "configSchema": {
     "type": "object",
     "properties": {
@@ -71,9 +89,33 @@
         "minimum": 1,
         "maximum": 300,
         "default": 30
+      },
+      "OPENMAPX_MEMORY_MIB": {
+        "type": "integer",
+        "title": "Container memory limit (MiB)",
+        "minimum": 16,
+        "maximum": 1048576,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      },
+      "OPENMAPX_CPU_LIMIT": {
+        "type": "number",
+        "title": "Container CPU limit",
+        "minimum": 0.125,
+        "maximum": 256,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
       }
     }
   },
-  "exposure": { "hostPorts": [{ "container": 17777, "host": 17777, "bindAddress": "127.0.0.1" }] },
-  "ui": { "category": "routing" }
+  "exposure": {
+    "hostPorts": [
+      {
+        "container": 17777,
+        "host": 17777,
+        "bindAddress": "127.0.0.1"
+      }
+    ]
+  },
+  "ui": {
+    "category": "routing"
+  }
 }

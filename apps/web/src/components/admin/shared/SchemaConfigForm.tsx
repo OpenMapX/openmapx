@@ -16,6 +16,7 @@ import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { ConfigurationOwnership } from "@openmapx/core/api-contracts";
+import { OPERATOR_STRING_FORMATS, validOperatorString } from "@openmapx/core/configuration-values";
 import { type CredentialSetup, readCredentialSetup } from "@openmapx/integration-framework";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CredentialSetupGuide } from "../integrations/CredentialSetupGuide";
@@ -54,6 +55,8 @@ interface SchemaProperty {
   default?: unknown;
   enum?: string[];
   format?: string;
+  minimum?: number;
+  maximum?: number;
   "x-openmapx-secret"?: boolean;
   readOnly?: boolean;
   "x-openmapx-setup"?: CredentialSetup;
@@ -66,6 +69,8 @@ export interface SchemaConfigField {
   type: string;
   enum?: string[];
   format?: string;
+  minimum?: number;
+  maximum?: number;
   default?: unknown;
   setup?: CredentialSetup;
 }
@@ -93,6 +98,12 @@ export function buildConfigDiff(
   for (const key of changedKeys) {
     const field = fields.find((candidate) => candidate.key === key);
     const value = values[key];
+    if (
+      field?.format &&
+      (OPERATOR_STRING_FORMATS as readonly string[]).includes(field.format) &&
+      (typeof value !== "string" || !validOperatorString(value, field.format))
+    )
+      throw Error(`${field.title} has an invalid format`);
     if (field && isStructuredField(field)) {
       try {
         diff[key] = JSON.parse(String(value));
@@ -135,6 +146,8 @@ export function extractConfigFields(
       type: def?.type ?? "string",
       enum: def?.enum,
       format: def?.format,
+      minimum: def?.minimum,
+      maximum: def?.maximum,
       default: def?.default,
       setup: readCredentialSetup(def),
     }));
@@ -425,6 +438,13 @@ export function SchemaConfigForm({
                       ? "url"
                       : "text"
                 }
+                slotProps={{
+                  htmlInput: {
+                    min: field.minimum,
+                    max: field.maximum,
+                    step: field.type === "integer" ? 1 : "any",
+                  },
+                }}
                 placeholder={field.default !== undefined ? String(field.default) : undefined}
                 sx={{ maxWidth: 480 }}
               />

@@ -284,14 +284,28 @@ export async function renderComposeWithWriter(
     ).filter(([, entry]) => entry.source === "env");
     // An env value is a reference in the YAML, except the proxy host, which
     // the routes need as a value.
-    const envKeys = fromEnv.map(([key]) => key).filter((key) => key !== proxyHostKey);
+    const envKeys = fromEnv
+      .map(([key]) => key)
+      .filter(
+        (key) =>
+          key !== proxyHostKey &&
+          !coreServices.materializeServiceConfigKey(id, key) &&
+          !fromEnv.find(([name]) => name === key)?.[1].manifestExpression,
+      );
     const values: coreServices.ConfigurationInput["serviceConfigs"][number]["values"] =
       Object.fromEntries(
         Object.entries(savedConfigs.get(id)?.values ?? {}).filter(
-          ([key]) => !envKeys.includes(key),
+          ([key]) =>
+            !envKeys.includes(key) &&
+            !fromEnv.some(([name, entry]) => name === key && entry.manifestExpression),
         ),
       );
-    for (const [key, entry] of fromEnv) if (key === proxyHostKey) values[key] = String(entry.value);
+    for (const [key, entry] of fromEnv)
+      if (
+        !entry.manifestExpression &&
+        (key === proxyHostKey || coreServices.materializeServiceConfigKey(id, key))
+      )
+        values[key] = entry.value as string | number | boolean;
     if (Object.keys(values).length === 0 && envKeys.length === 0) return [];
     return [{ serviceId: id, values, ...(envKeys.length > 0 ? { envKeys } : {}) }];
   });

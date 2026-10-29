@@ -11,6 +11,11 @@ import {
   readExternalProxyNetwork,
 } from "./external-proxy";
 import { detectConsumesCycle } from "./resolver";
+import {
+  isRuntimeResourceKey,
+  resolveServiceRuntimeResources,
+  runtimeResourceNumber,
+} from "./runtime-resources";
 import { assertRenderSandbox } from "./sandbox-policy";
 import type {
   HardlinkEntry,
@@ -400,7 +405,7 @@ export interface ComposeServiceSnippet {
   logging?: { driver: string; options?: Record<string, string> };
   deploy?: {
     resources?: {
-      limits?: { memory?: string };
+      limits?: { memory?: string; cpus?: string };
       reservations?: {
         devices?: Array<{ driver: string; count: number | "all"; capabilities: string[] }>;
       };
@@ -458,6 +463,7 @@ function writeServiceConfigEnvReferences(
   const prefix = serviceConfigEnvPrefix(m.id);
   const env = snippet.environment ?? {};
   for (const key of envKeys) {
+    if (isRuntimeResourceKey(key)) throw Error("Resource settings require validated scalar values");
     if (!fields.has(key)) {
       throw new Error(
         `Service "${m.id}": env-sourced config key "${key}" is not a non-secret configSchema field`,
@@ -561,14 +567,60 @@ export function renderServiceSnippet(
   // Resolved values win over manifest defaults (that's the whole point of
   // admin/env config). Keys with `undefined`/`null` values are skipped so a
   // partial config map doesn't blank out manifest defaults.
-  const resolved = ctx.resolvedServiceConfigs?.get(m.id);
+  const ownResolved = ctx.resolvedServiceConfigs?.get(m.id);
+  if (
+    service.isBuiltIn &&
+    m.id === "motis-staging" &&
+    ["OPENMAPX_MEMORY_MIB", "OPENMAPX_CPU_LIMIT"].some((key) => ownResolved?.[key] !== undefined)
+  )
+    throw Error("Configure the primary MOTIS slot to coordinate both resource limits");
+  const motis = ctx.resolvedServiceConfigs?.get("motis");
+  const resolved =
+    service.isBuiltIn && m.id === "motis-staging"
+      ? {
+          ...ownResolved,
+          ...Object.fromEntries(
+            Object.entries(motis ?? {}).filter(
+              ([key]) => key === "OPENMAPX_MEMORY_MIB" || key === "OPENMAPX_CPU_LIMIT",
+            ),
+          ),
+        }
+      : ownResolved;
   if (resolved) {
     const env = snippet.environment ?? {};
     for (const [key, value] of Object.entries(resolved)) {
       if (value === undefined || value === null) continue;
-      env[key] = String(value);
+      if (isRuntimeResourceKey(key)) {
+        if (!service.isBuiltIn) throw Error("Community resource override forbidden");
+        if (key === "OPENMAPX_JAVA_HEAP_MIB") {
+          if (m.id !== "elasticsearch") throw Error("Unsupported heap override");
+          const heap = runtimeResourceNumber(key, value);
+          env.ES_JAVA_OPTS = `-Xms${heap}m -Xmx${heap}m`;
+        }
+        continue;
+      }
+      env[key] =
+        m.id === "valhalla" && service.isBuiltIn && typeof value === "boolean"
+          ? value
+            ? "True"
+            : "False"
+          : String(value);
     }
     if (Object.keys(env).length > 0) snippet.environment = env;
+  }
+  // Keep the transit preflight's declared envelope consistent with both slots.
+  // Its profile minimums, headroom and runtime checks remain authoritative.
+  if (service.isBuiltIn && m.id === "data-manager" && motis) {
+    const env = snippet.environment ?? {};
+    if (motis.OPENMAPX_MEMORY_MIB !== undefined)
+      env.MOTIS_SLOT_MEMORY_GB = String(
+        runtimeResourceNumber("OPENMAPX_MEMORY_MIB", motis.OPENMAPX_MEMORY_MIB) / 1024,
+      );
+    if (motis.OPENMAPX_CPU_LIMIT !== undefined)
+      env.MOTIS_SLOT_CPU = String(
+        runtimeResourceNumber("OPENMAPX_CPU_LIMIT", motis.OPENMAPX_CPU_LIMIT),
+      );
+    snippet.environment = env;
   }
   // Vault secrets (the container track): mount each as a Docker secret at
   // `/run/secrets/<KEY>` and point `<KEY>_FILE` at it. The value never enters
@@ -730,9 +782,10 @@ export function renderServiceSnippet(
   }
 
   if (c.logging) snippet.logging = c.logging;
-  if (c.memory || c.gpu) {
+  const limits = resolveServiceRuntimeResources(m, resolved ?? {});
+  if (limits.memory || limits.cpus || c.gpu) {
     const resources: NonNullable<NonNullable<typeof snippet.deploy>["resources"]> = {};
-    if (c.memory) resources.limits = { memory: c.memory };
+    if (limits.memory || limits.cpus) resources.limits = limits;
     if (c.gpu) {
       resources.reservations = {
         devices: [{ driver: c.gpu.driver, count: c.gpu.count, capabilities: c.gpu.capabilities }],

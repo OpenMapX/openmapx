@@ -4,6 +4,7 @@ import type {
   AdminServiceResolvedConfig,
   ConfigurationOwnership,
 } from "@openmapx/core/api-contracts";
+import { SERVICE_RESOURCE_FIELDS } from "@openmapx/core/configuration-values";
 import { useActivityClient } from "../activity/activityQueries";
 import { SchemaConfigForm } from "../shared/SchemaConfigForm";
 
@@ -39,6 +40,13 @@ export function ServiceConfigForm({
   onSaveAndApply,
 }: ServiceConfigFormProps) {
   const { apiUrl } = useActivityClient();
+  const withResourceResets = (values: Record<string, unknown>) =>
+    Object.fromEntries(
+      Object.entries(values).map(([key, value]) => [
+        key,
+        value === "" && (SERVICE_RESOURCE_FIELDS as readonly string[]).includes(key) ? null : value,
+      ]),
+    );
   return (
     <SchemaConfigForm
       key={JSON.stringify([apiUrl, serviceId, schema])}
@@ -48,8 +56,10 @@ export function ServiceConfigForm({
       resolvedConfig={resolvedConfig}
       envPrefix={envPrefix}
       ownership={ownership}
-      onSave={onSave}
-      onSaveAndApply={onSaveAndApply}
+      onSave={(values) => onSave(withResourceResets(values))}
+      onSaveAndApply={
+        onSaveAndApply ? (values) => onSaveAndApply(withResourceResets(values)) : undefined
+      }
       applyLabel="Save & apply"
       emptyMessage="No editable configuration fields declared for this service."
     />

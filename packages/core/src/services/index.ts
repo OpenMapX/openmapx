@@ -174,6 +174,12 @@ export {
   resolveRequirement,
 } from "./resolver";
 export {
+  isRuntimeResourceKey,
+  materializeServiceConfigKey,
+  memoryHostVariable,
+  resolveServiceRuntimeResources,
+} from "./runtime-resources";
+export {
   assertRenderSandbox,
   COMMUNITY_SAFE_CAPS,
   checkManifestSandbox,

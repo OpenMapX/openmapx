@@ -29,7 +29,7 @@ import {
   assertAdministrativeConfigurationRead,
 } from "./administrative-configuration-context";
 
-const { configSchemaKeys, resolveServiceConfigFromEnv } = coreServices;
+const { configSchemaKeys, resolveServiceConfigFromEnv, materializeServiceConfigKey } = coreServices;
 
 // Re-export the core types so callers (route handlers, tests) don't need to
 // reach into `@openmapx/core` directly. Services can in principle land on any
@@ -51,6 +51,7 @@ export interface ResolveServiceConfigInput {
    * env/default cascade without constructing a full manifest.
    */
   containerEnv?: Record<string, string>;
+  containerMemory?: string;
   /**
    * The config key naming the service's proxy host (`exposure.proxy.host.configKey`).
    * The host is routed by Traefik labels, which a Compose env reference
@@ -85,7 +86,7 @@ export async function resolveServiceConfigWithSources(
     {
       id: manifest.id,
       configSchema: manifest.configSchema,
-      container: manifest.containerEnv ? { environment: manifest.containerEnv } : undefined,
+      container: { environment: manifest.containerEnv, memory: manifest.containerMemory },
     },
     process.env,
   );
@@ -164,7 +165,13 @@ export async function resolveAllServiceConfigs(
       const flat: Record<string, unknown> = {};
       const fromEnv: string[] = [];
       for (const [key, entry] of Object.entries(resolved)) {
-        if (entry.source === "env" && key !== m.proxyHostConfigKey) fromEnv.push(key);
+        if (entry.manifestExpression) continue;
+        if (
+          entry.source === "env" &&
+          key !== m.proxyHostConfigKey &&
+          !materializeServiceConfigKey(m.id, key)
+        )
+          fromEnv.push(key);
         else if (entry.source !== "default") flat[key] = entry.value;
       }
       return { id: m.id, flat, fromEnv };
@@ -199,7 +206,7 @@ export async function resolveServiceConfigWithSourcesStrict(
     {
       id: manifest.id,
       configSchema: manifest.configSchema,
-      container: manifest.containerEnv ? { environment: manifest.containerEnv } : undefined,
+      container: { environment: manifest.containerEnv, memory: manifest.containerMemory },
     },
     context.env,
   );
@@ -227,7 +234,13 @@ export async function resolveAllServiceConfigsStrict(
     const flat: Record<string, unknown> = {};
     const fromEnv: string[] = [];
     for (const [key, entry] of Object.entries(resolved)) {
-      if (entry.source === "env" && key !== manifest.proxyHostConfigKey) fromEnv.push(key);
+      if (entry.manifestExpression) continue;
+      if (
+        entry.source === "env" &&
+        key !== manifest.proxyHostConfigKey &&
+        !materializeServiceConfigKey(manifest.id, key)
+      )
+        fromEnv.push(key);
       else if (entry.source !== "default") flat[key] = entry.value;
     }
     values.set(manifest.id, flat);

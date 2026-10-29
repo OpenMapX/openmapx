@@ -86,7 +86,7 @@
       "readOnly": false
     },
     {
-      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set \u2014 ops-agent renders and applies trusted local stack configuration}",
+      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — ops-agent renders and applies trusted local stack configuration}",
       "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}",
       "readOnly": false
     },
@@ -139,5 +139,24 @@
   ],
   "ui": {
     "category": "infrastructure"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "OPENMAPX_MEMORY_MIB": {
+        "type": "integer",
+        "title": "Container memory limit (MiB)",
+        "minimum": 16,
+        "maximum": 1048576,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      },
+      "OPENMAPX_CPU_LIMIT": {
+        "type": "number",
+        "title": "Container CPU limit",
+        "minimum": 0.125,
+        "maximum": 256,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      }
+    }
   }
 }
