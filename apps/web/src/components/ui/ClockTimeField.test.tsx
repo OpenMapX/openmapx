@@ -36,7 +36,7 @@ describe("ClockTimeField", () => {
   }
 
   async function openPicker() {
-    await userEvent.click(screen.getByRole("textbox", { name: /ohTimePickerOpen/ }));
+    await userEvent.click(screen.getByRole("textbox", { name: /timePicker\.open/ }));
     return screen.getByRole("dialog");
   }
 
@@ -46,17 +46,17 @@ describe("ClockTimeField", () => {
     expect(screen.getByDisplayValue("09:30")).toBeTruthy();
 
     await openPicker();
-    const dial = screen.getByRole("slider", { name: "osmContributions.ohTimePickerHours" });
+    const dial = screen.getByRole("slider", { name: "timePicker.hours" });
     dial.focus();
     await userEvent.keyboard("{ArrowUp}");
     expect(dial.getAttribute("aria-valuenow")).toBe("10");
 
-    await userEvent.click(screen.getByRole("button", { name: /ohTimePickerMinutes/ }));
-    const minuteDial = screen.getByRole("slider", { name: "osmContributions.ohTimePickerMinutes" });
+    await userEvent.click(screen.getByRole("button", { name: /timePicker\.minutes/ }));
+    const minuteDial = screen.getByRole("slider", { name: "timePicker.minutes" });
     minuteDial.focus();
     await userEvent.keyboard("{ArrowDown}");
 
-    await userEvent.click(screen.getByRole("button", { name: "osmContributions.ohTimePickerOk" }));
+    await userEvent.click(screen.getByRole("button", { name: "timePicker.ok" }));
     expect(onChange).toHaveBeenCalledWith(10, 29);
   });
 
@@ -67,7 +67,7 @@ describe("ClockTimeField", () => {
     await openPicker();
     screen.getByRole("slider").focus();
     await userEvent.keyboard("{ArrowUp}");
-    await userEvent.click(screen.getByRole("button", { name: "osmContributions.cancel" }));
+    await userEvent.click(screen.getByRole("button", { name: "common.cancel" }));
     expect(onChange).not.toHaveBeenCalled();
   });
 
@@ -76,12 +76,10 @@ describe("ClockTimeField", () => {
     const onChange = renderField(9, 30);
 
     await openPicker();
-    await userEvent.click(
-      screen.getByRole("button", { name: "osmContributions.ohTimePickerToKeyboard" }),
-    );
-    const hour = screen.getByRole("textbox", { name: "osmContributions.ohTimePickerHour" });
-    const minute = screen.getByRole("textbox", { name: "osmContributions.ohTimePickerMinute" });
-    const ok = screen.getByRole("button", { name: "osmContributions.ohTimePickerOk" });
+    await userEvent.click(screen.getByRole("button", { name: "timePicker.toKeyboard" }));
+    const hour = screen.getByRole("textbox", { name: "timePicker.hour" });
+    const minute = screen.getByRole("textbox", { name: "timePicker.minute" });
+    const ok = screen.getByRole("button", { name: "timePicker.ok" });
 
     await userEvent.clear(hour);
     await userEvent.type(hour, "25");
@@ -114,7 +112,7 @@ describe("ClockTimeField", () => {
     screen.getByRole("slider").focus();
     await userEvent.keyboard("{ArrowUp}");
     expect(screen.getByRole("slider").getAttribute("aria-valuenow")).toBe("24");
-    await userEvent.click(screen.getByRole("button", { name: "osmContributions.ohTimePickerOk" }));
+    await userEvent.click(screen.getByRole("button", { name: "timePicker.ok" }));
     expect(onChange).toHaveBeenCalledWith(24, 0);
   });
 
@@ -125,7 +123,7 @@ describe("ClockTimeField", () => {
 
     await openPicker();
     await userEvent.click(screen.getByRole("button", { name: "PM" }));
-    await userEvent.click(screen.getByRole("button", { name: "osmContributions.ohTimePickerOk" }));
+    await userEvent.click(screen.getByRole("button", { name: "timePicker.ok" }));
     expect(onChange).toHaveBeenCalledWith(21, 0);
   });
 });

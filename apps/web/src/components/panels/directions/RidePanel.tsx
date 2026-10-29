@@ -22,9 +22,10 @@ import {
   contributorsForRecords,
 } from "@openmapx/mobility-core/contributors";
 import { useLocale, useTranslations } from "next-intl";
-import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { RideQuoteList } from "@/components/panels/directions/RideQuoteList";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { DateTimeField } from "@/components/ui/DateTimeField";
 import { BRAND } from "@/integration-api/runtime/theme";
 
 /** Stop refreshing quotes once the user has stopped interacting with the panel. */
@@ -58,22 +59,6 @@ function compareRanks(a: ReturnType<typeof quoteRank>, b: ReturnType<typeof quot
   if (fareDifference && !Number.isNaN(fareDifference)) return fareDifference;
   return a.eta === b.eta ? 0 : a.eta - b.eta;
 }
-
-const inputSx = {
-  border: "1px solid",
-  borderColor: "divider",
-  borderRadius: "8px",
-  px: 1.5,
-  py: 0.75,
-  fontSize: "0.875rem",
-  fontFamily: "inherit",
-  color: "text.primary",
-  bgcolor: "background.paper",
-  outline: "none",
-  "&:focus": { borderColor: BRAND },
-  width: "100%",
-  boxSizing: "border-box",
-} as const;
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -443,15 +428,14 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
       {allowsPrebook && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
           <SectionLabel>{t("ridePickupTime")}</SectionLabel>
-          <Box
-            component="input"
-            type="datetime-local"
+          <DateTimeField
+            label={t("ridePickupTime")}
             value={pickupAt ?? ""}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => {
+            clearable
+            onChange={(next) => {
               touch();
-              setPickupAt(e.target.value || null);
+              setPickupAt(next || null);
             }}
-            sx={inputSx}
           />
           <AttributionStrip
             attributions={contributorsForRecords([selected?.availability])}
