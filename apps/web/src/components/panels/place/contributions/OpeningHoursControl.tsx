@@ -53,7 +53,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
-import { ClockTimeField } from "./ClockTimeField";
+import { ClockTimeField } from "@/components/ui/ClockTimeField";
 import type { OsmContributionEvent, OsmDraft } from "./osmContributionDraft";
 
 const WEEKDAY_LABEL_KEY: Record<OsmWeekday, string> = {

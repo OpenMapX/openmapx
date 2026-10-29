@@ -1,9 +1,11 @@
+import { useRideStore } from "@openmapx/core";
 import { en } from "@openmapx/i18n";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { enterDateTime } from "@/test/dateTimeField";
 
 let providers: import("@openmapx/core").RideProvidersResponse = {
   providers: [
@@ -285,6 +287,31 @@ describe("RidePanel", () => {
     expect(screen.getByText("Served quote notice")).toBeInTheDocument();
     expect(screen.queryByText("Unused envelope notice")).toBeNull();
   });
+});
+
+it("sets and clears a pre-booked pickup time", async () => {
+  providers = {
+    ...providers,
+    providers: [
+      {
+        ...providers.providers[0],
+        capabilities: { deepLink: true, quote: true, booking: false, tracking: false },
+        availability: {
+          available: true,
+          coverageChecked: true,
+          products: [],
+          bookingRules: { bookingType: 1, priorNoticeMinutesMin: 30 },
+          contributors: [],
+        },
+      },
+    ],
+  };
+  renderPanel();
+  await enterDateTime(screen.getByRole("group", { name: "Pick up at" }), "2026-07-04T18:05");
+  expect(useRideStore.getState().pickupAt).toBe("2026-07-04T18:05");
+
+  await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+  expect(useRideStore.getState().pickupAt).toBeNull();
 });
 
 it("credits displayed availability rules when quote acquisition returned no quotes", () => {

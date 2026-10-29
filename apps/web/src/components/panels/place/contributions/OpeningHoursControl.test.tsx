@@ -84,7 +84,7 @@ async function nudgeHour(field: HTMLElement | undefined, key: string) {
   await userEvent.click(field);
   screen.getByRole("slider").focus();
   await userEvent.keyboard(key);
-  await userEvent.click(screen.getByRole("button", { name: "osmContributions.ohTimePickerOk" }));
+  await userEvent.click(screen.getByRole("button", { name: "timePicker.ok" }));
 }
 
 describe("OpeningHoursControl", () => {
@@ -226,7 +226,7 @@ describe("OpeningHoursControl", () => {
 
   it("edits times on the clock field and keeps a past-midnight end on the next day", async () => {
     render(<Harness currentOpeningHours="Fr 18:00-26:30" />);
-    const [opens, closes] = screen.getAllByRole("textbox", { name: /ohTimePickerOpen/ });
+    const [opens, closes] = screen.getAllByRole("textbox", { name: /timePicker\.open/ });
 
     await nudgeHour(closes, "{ArrowUp}");
     expect(screen.getByTestId("opening-hours-live-preview").textContent).toBe("Fr 18:00-27:30");
@@ -239,7 +239,7 @@ describe("OpeningHoursControl", () => {
     useSettingsStore.setState({ timeFormat: "24h" });
     try {
       render(<Harness currentOpeningHours="Mo-Su 10:00-23:00" />);
-      const closes = () => screen.getAllByRole("textbox", { name: /ohTimePickerOpen/ })[1];
+      const closes = () => screen.getAllByRole("textbox", { name: /timePicker\.open/ })[1];
       const nextDay = () =>
         screen.getByRole("checkbox", { name: "osmContributions.ohNextDayHint" });
 

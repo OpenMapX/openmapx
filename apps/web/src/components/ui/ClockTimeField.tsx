@@ -43,6 +43,13 @@ function dayPeriodLabel(locale: string, hours: number): string {
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
+/** The picker's starting point for an unset field: now, rounded up to five minutes. */
+export function nextFiveMinutes(): { hours: number; minutes: number } {
+  const now = new Date();
+  const total = Math.ceil((now.getHours() * 60 + now.getMinutes()) / 5) * 5;
+  return { hours: Math.floor(total / 60) % 24, minutes: total % 60 };
+}
+
 const tonal = (theme: Theme, color: "primary" | "secondary" | "text", amount: number) =>
   theme.alpha(
     color === "text"
@@ -62,11 +69,12 @@ type View = "hours" | "minutes";
 
 export interface ClockTimeFieldProps {
   label: string;
-  /** Time of day on the dial, 0..23, or 24 for the end of the day. */
-  hours: number;
-  /** 0..59 */
-  minutes: number;
-  disabled: boolean;
+  /** Time of day on the dial, 0..23, or 24 for the end of the day; null when unset. */
+  hours: number | null;
+  /** 0..59; null when unset. */
+  minutes: number | null;
+  disabled?: boolean;
+  error?: boolean;
   /**
    * For closing times: the top of the dial reads 24, and midnight is given
    * as 24:00, the end of the day.
@@ -83,17 +91,22 @@ export function ClockTimeField({
   label,
   hours,
   minutes,
-  disabled,
+  disabled = false,
+  error = false,
   endOfDay = false,
   onChange,
 }: ClockTimeFieldProps) {
-  const t = useTranslations("osmContributions");
+  const t = useTranslations("timePicker");
   const locale = useLocale();
   const timeFormat = useSettingsStore((s) => s.timeFormat);
   const ampm = usesTwelveHourClock(locale, timeFormat);
   const [open, setOpen] = useState(false);
   const formatted =
-    hours === 24 && !ampm ? `24:${pad(minutes)}` : formatTime(locale, ampm, hours, minutes);
+    hours === null || minutes === null
+      ? ""
+      : hours === 24 && !ampm
+        ? `24:${pad(minutes)}`
+        : formatTime(locale, ampm, hours, minutes);
 
   return (
     <>
@@ -102,6 +115,7 @@ export function ClockTimeField({
         label={label}
         value={formatted}
         disabled={disabled}
+        error={error}
         onClick={() => !disabled && setOpen(true)}
         onKeyDown={(e) => {
           if (!disabled && (e.key === "Enter" || e.key === " " || e.key === "ArrowDown")) {
@@ -114,7 +128,7 @@ export function ClockTimeField({
           htmlInput: {
             readOnly: true,
             "aria-haspopup": "dialog",
-            "aria-label": t("ohTimePickerOpen", { time: formatted }),
+            "aria-label": formatted ? t("open", { time: formatted }) : t("choose"),
           },
           input: {
             endAdornment: (
@@ -127,8 +141,7 @@ export function ClockTimeField({
       />
       {open && (
         <TimePickerDialog
-          hours={hours}
-          minutes={minutes}
+          {...(hours === null || minutes === null ? nextFiveMinutes() : { hours, minutes })}
           ampm={ampm}
           endOfDay={endOfDay}
           locale={locale}
@@ -162,7 +175,8 @@ function TimePickerDialog({
   onCancel,
   onConfirm,
 }: TimePickerDialogProps) {
-  const t = useTranslations("osmContributions");
+  const t = useTranslations("timePicker");
+  const tCommon = useTranslations("common");
   const titleId = useId();
   const [draftHours, setDraftHours] = useState(hours);
   const [draftMinutes, setDraftMinutes] = useState(minutes);
@@ -251,7 +265,7 @@ function TimePickerDialog({
         variant="caption"
         sx={{ color: "text.secondary", fontWeight: 500, letterSpacing: 0.5, mb: 2.5 }}
       >
-        {mode === "dial" ? t("ohTimePickerSelect") : t("ohTimePickerEnter")}
+        {mode === "dial" ? t("select") : t("enter")}
       </Typography>
 
       <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "center", gap: 1.5 }}>
@@ -261,14 +275,14 @@ function TimePickerDialog({
               <TimeSegment
                 value={pad(displayHours)}
                 selected={view === "hours"}
-                label={t("ohTimePickerHours")}
+                label={t("hours")}
                 onClick={() => setView("hours")}
               />
               <Separator />
               <TimeSegment
                 value={pad(draftMinutes)}
                 selected={view === "minutes"}
-                label={t("ohTimePickerMinutes")}
+                label={t("minutes")}
                 onClick={() => setView("minutes")}
               />
             </>
@@ -276,7 +290,7 @@ function TimePickerDialog({
             <>
               <TimeInput
                 value={hourText}
-                label={t("ohTimePickerHour")}
+                label={t("hour")}
                 autoFocus
                 invalid={hourText !== "" && !hourValid}
                 onChange={setHourText}
@@ -285,7 +299,7 @@ function TimePickerDialog({
               <Separator />
               <TimeInput
                 value={minuteText}
-                label={t("ohTimePickerMinute")}
+                label={t("minute")}
                 invalid={minuteText !== "" && !minuteValid}
                 onChange={setMinuteText}
                 onEnter={confirm}
@@ -312,7 +326,7 @@ function TimePickerDialog({
             minutes={draftMinutes}
             ampm={ampm}
             endOfDay={endOfDay}
-            label={view === "hours" ? t("ohTimePickerHours") : t("ohTimePickerMinutes")}
+            label={view === "hours" ? t("hours") : t("minutes")}
             onHoursChange={setHours}
             onMinutesChange={setMinutes}
             onHoursSettled={() => setView("minutes")}
@@ -323,15 +337,16 @@ function TimePickerDialog({
       <Box sx={{ display: "flex", alignItems: "center", mt: 3 }}>
         <IconButton
           onClick={switchMode}
-          aria-label={mode === "dial" ? t("ohTimePickerToKeyboard") : t("ohTimePickerToDial")}
+          data-picker-action="toggle-mode"
+          aria-label={mode === "dial" ? t("toKeyboard") : t("toDial")}
           sx={{ ml: -1, color: "text.secondary" }}
         >
           {mode === "dial" ? <KeyboardOutlinedIcon /> : <ScheduleOutlinedIcon />}
         </IconButton>
         <Box sx={{ flex: 1 }} />
-        <Button onClick={onCancel}>{t("cancel")}</Button>
-        <Button onClick={confirm} disabled={!canConfirm}>
-          {t("ohTimePickerOk")}
+        <Button onClick={onCancel}>{tCommon("cancel")}</Button>
+        <Button onClick={confirm} disabled={!canConfirm} data-picker-action="confirm">
+          {t("ok")}
         </Button>
       </Box>
     </Dialog>

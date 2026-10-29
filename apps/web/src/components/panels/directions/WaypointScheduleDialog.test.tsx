@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@/test";
+import { fireEvent, render, screen, within } from "@/test";
+import { enterDateTime } from "@/test/dateTimeField";
 
 // Interpolating override: the shared mock returns the bare key, but these tests
 // need to see the resolved time zone substituted into the hint.
@@ -82,12 +83,10 @@ describe("WaypointScheduleDialog", () => {
     expect(screen.getByTestId("schedule-time-input")).toBeTruthy();
   });
 
-  it("saves the chosen kind and dwell with the resolved zone", () => {
+  it("saves the chosen kind and dwell with the resolved zone", async () => {
     const { onSave } = renderDialog();
     fireEvent.click(screen.getByLabelText("directions.scheduleFixedAt"));
-    fireEvent.change(screen.getByTestId("schedule-time-input"), {
-      target: { value: "2026-09-01T14:00" },
-    });
+    await enterDateTime(screen.getByTestId("schedule-time-input"), "2026-09-01T14:00");
     fireEvent.change(screen.getByTestId("schedule-dwell-input"), { target: { value: "30" } });
     fireEvent.click(screen.getByText("directions.scheduleSave"));
     expect(onSave).toHaveBeenCalledWith({
@@ -127,9 +126,10 @@ describe("WaypointScheduleDialog", () => {
 
   it("preloads an existing constraint", () => {
     renderDialog({ schedule: { arriveBy: "2026-09-01T14:00", dwellSeconds: 900 } });
-    expect((screen.getByTestId("schedule-time-input") as HTMLInputElement).value).toBe(
-      "2026-09-01T14:00",
-    );
+    const group = screen.getByTestId("schedule-time-input");
+    expect(group.querySelector<HTMLInputElement>('input[type="date"]')?.value).toBe("2026-09-01");
+    const time = within(group).getByRole("textbox", { name: /^timePicker\.open\b/ });
+    expect((time as HTMLInputElement).value).toMatch(/^(14:00|2:00\sPM)$/);
     expect((screen.getByTestId("schedule-dwell-input") as HTMLInputElement).value).toBe("15");
   });
 });

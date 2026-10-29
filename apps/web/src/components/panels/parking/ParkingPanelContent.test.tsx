@@ -1,6 +1,7 @@
 import { useParkingStore, useSidebarStore } from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, userEvent, waitFor } from "@/test";
+import { render, screen, userEvent, waitFor, within } from "@/test";
+import { enterDateTime } from "@/test/dateTimeField";
 
 const state = vi.hoisted(() => ({
   parked: [] as unknown[],
@@ -90,6 +91,22 @@ describe("ParkingPanelContent", () => {
     state.parked = [{ ...RECORD, expiresAt: new Date(Date.now() + 3_600_000).toISOString() }];
     render(<ParkingPanelContent />);
     expect(screen.getByText(/parking.timeLeft/)).toBeInTheDocument();
+  });
+
+  it("sets and clears the expiry from the date and time fields", async () => {
+    render(<ParkingPanelContent />);
+    await enterDateTime(screen.getByRole("group", { name: "parking.expires" }), "2026-07-04T18:05");
+    expect(state.update).toHaveBeenLastCalledWith({
+      id: "p1",
+      expiresAt: new Date(2026, 6, 4, 18, 5).toISOString(),
+    });
+
+    state.parked = [{ ...RECORD, expiresAt: new Date(2026, 6, 4, 18, 5).toISOString() }];
+    render(<ParkingPanelContent />);
+    const [, withExpiry] = screen.getAllByRole("group", { name: "parking.expires" });
+    if (!withExpiry) throw new Error("expected the second panel's expiry");
+    await userEvent.click(within(withExpiry).getByRole("button", { name: "common.clear" }));
+    expect(state.update).toHaveBeenLastCalledWith({ id: "p1", expiresAt: null });
   });
 
   it("names the vehicle when the record has one", () => {
