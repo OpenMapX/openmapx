@@ -311,3 +311,36 @@ it("closes new admissions during the existing drain without dropping the active 
   expect(await pending).toBeInstanceOf(Error);
   expect(store.activeStreams).toBe(0);
 });
+it("keeps production transfer metadata out of the strict configuration startup queue", async () => {
+  const { root } = await fixture();
+  const infraDir = join(root, "infra");
+  const queue = join(infraDir, "data", "ops-agent", "trusted-config");
+  await mkdir(queue, { recursive: true, mode: 0o700 });
+  const { artifactTransferPrivateRoot } = await import("./store");
+  const { initializeTerminalClaimCleanup } = await import("../trusted-config-source");
+  await initializeTerminalClaimCleanup(queue, {
+    allowedUids: [process.getuid!()],
+    expectedGid: process.getgid!(),
+    token: "t".repeat(43),
+    journalRecords: [],
+  });
+  const store = new ArtifactTransferStore({
+    dataRoot: join(infraDir, "data", ".openmapx-transfers"),
+    privateRoot: artifactTransferPrivateRoot(infraDir),
+    token: "t".repeat(43),
+    capacity: () => ({ bytes: 2 * 1024 ** 3, inodes: 10000 }),
+  });
+  stores.push(store);
+  await store.createStage({ ...input(), declaredBytes: 4 });
+  await expect(
+    initializeTerminalClaimCleanup(queue, {
+      allowedUids: [process.getuid!()],
+      expectedGid: process.getgid!(),
+      token: "t".repeat(43),
+      journalRecords: [],
+    }),
+  ).resolves.toBeDefined();
+  expect(artifactTransferPrivateRoot(infraDir, true)).toBe(
+    "/var/lib/openmapx/control-private/artifact-transfers",
+  );
+});

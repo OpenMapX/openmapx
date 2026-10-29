@@ -685,3 +685,10 @@ export class ArtifactTransferStore {
     failed(409, "Artifact purpose consumer is not installed");
   }
 }
+
+/** Fixed agent-private location; never a browser-selected path. */
+export function artifactTransferPrivateRoot(infraDir: string, container = false): string {
+  return container
+    ? "/var/lib/openmapx/control-private/artifact-transfers"
+    : join(infraDir, "control-private", "ops-agent", "artifact-transfers");
+}

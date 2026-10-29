@@ -16,7 +16,7 @@ import {
 import { isTerminalHandoff, readAgentHandoff } from "./agent-handoff";
 import { loadArtifactTransferPolicy } from "./artifact-transfer/policy";
 import { installArtifactTransferRuntime } from "./artifact-transfer/runtime";
-import { ArtifactTransferStore } from "./artifact-transfer/store";
+import { ArtifactTransferStore, artifactTransferPrivateRoot } from "./artifact-transfer/store";
 import { startOpsAgentServer } from "./bootstrap";
 import { CommunityRepositoryStore } from "./community-repositories";
 import { loadOpsAgentConfig } from "./config";
@@ -208,10 +208,13 @@ async function main(): Promise<void> {
     };
     const transferPolicy = loadArtifactTransferPolicy();
     const artifactTransfers =
-      "policy" in transferPolicy
+      "policy" in transferPolicy && controlStartup.installation
         ? new ArtifactTransferStore({
             dataRoot: join(paths.infraDir, "data", ".openmapx-transfers"),
-            privateRoot: join(config.trustedConfigDirectory, "artifact-transfers"),
+            privateRoot: artifactTransferPrivateRoot(
+              paths.infraDir,
+              existsSync("/run/secrets/openmapx-control-verifiers"),
+            ),
             token: apiToken,
             policy: transferPolicy.policy,
             admissionsOpen: () => !replacementInProgress(),
