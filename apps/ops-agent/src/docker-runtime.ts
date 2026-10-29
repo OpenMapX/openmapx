@@ -18,6 +18,9 @@ import { createUnavailableRuntime, type OpsRuntime } from "./runtime";
 
 const TRAFFIC_MAINTENANCE_FENCE = ".traffic-maintenance.json";
 const TRAFFIC_GENERATIONS_MANIFEST = "traffic-generations.json";
+// Valhalla's watchdog withdraws the manifest here at an uncoordinated start and
+// restores it once the tiles it then serves still hash to its generation.
+const TRAFFIC_GENERATIONS_UNVERIFIED = "traffic-generations.unverified.json";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const LIFECYCLE_TIMEOUT_MS = 10 * 60_000;
@@ -547,7 +550,12 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   runtime["valhalla.traffic.inspect"] = async (_operation, context) => {
     if (options.trafficDataRoot) {
       const sharedDir = join(options.trafficDataRoot, "valhalla", "osm-pbf");
-      if (existsSync(join(sharedDir, TRAFFIC_MAINTENANCE_FENCE))) {
+      // Maintenance, or the watchdog re-checking a withdrawn manifest, settles
+      // the generation; a rebuild requested meanwhile would only stop serving.
+      if (
+        existsSync(join(sharedDir, TRAFFIC_MAINTENANCE_FENCE)) ||
+        existsSync(join(sharedDir, TRAFFIC_GENERATIONS_UNVERIFIED))
+      ) {
         return { state: "unknown" as const };
       }
       try {

@@ -357,9 +357,13 @@ produced no edge under one `skipped` cause:
   traced to no edges.
 
 `withheld` names why no condition was classified at all this cycle:
-`graph_unattested` (the engine's graph and traffic extract are not attested,
-for example after Valhalla was restarted outside coordinated maintenance; the
-extract guard rebuilds and re-attests them), `policy_unavailable`,
+`graph_unattested` (the engine's graph and traffic extract are not attested:
+briefly after any Valhalla restart outside coordinated maintenance, until the
+engine serves and its tiles are hashed against the withdrawn manifest, and
+until the extract guard rebuilds and re-attests them if the tiles changed;
+Valhalla's log reports the check as `Traffic graph manifest after uncoordinated
+start: restored`, or `changed`, `invalid` or `unverifiable` before a rebuild),
+`policy_unavailable`,
 `policy_lease_ending`, `conditions_unavailable` or `conditions_stale`; it is
 `null` when classification ran.
 `endingBeforeRenewal` counts conditions left out because they end before the
