@@ -1,4 +1,7 @@
 export * from "./api-job-attempt";
+export * from "./artifact-transfer";
+export * from "./artifact-transfer-capability";
+export { ArtifactStageTransportError } from "./artifact-transfer-client";
 export * from "./catalog-pin-approval";
 export * from "./client";
 export * from "./configuration-maintenance";

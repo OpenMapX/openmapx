@@ -1,8 +1,12 @@
 /** Browser administration bindings use application API credentials, never service tokens. */
 
 export {
+  type AdminBinaryUploadRequestOptions,
+  type AdminByteResponseRequestOptions,
   type AdminEventStreamTarget,
   type AdminEventStreamTargetOptions,
+  type AdminNativeDownloadTarget,
+  type AdminNativeDownloadTargetOptions,
   type AdminSdkRequestOptions,
   type AdminTextStreamRequestOptions,
   adminErrorMessage,

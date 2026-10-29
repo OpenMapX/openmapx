@@ -49,7 +49,68 @@ function request(operation: unknown, extra: Record<string, unknown> = {}) {
   };
 }
 
+const transferIdentity = {
+  executionId: "job1_abcdefghijklmnop",
+  operationKey: "opk1_abcdefghijklmnop",
+  fingerprint: "a".repeat(64),
+  executionDeadlineAt: "2026-10-29T00:00:00.000Z",
+};
+const transferClaim = {
+  claimId: "91a78b3e-208b-4ba4-9ddf-870fbdf1da22",
+  stageId: "81a78b3e-208b-4ba4-9ddf-870fbdf1da22",
+  ownerId: "admin",
+  purpose: "prepared-artifact" as const,
+  use: "validate-build" as const,
+  identity: transferIdentity,
+  sha256: "a".repeat(64),
+  bytes: 4,
+};
 const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
+  "artifactTransfer.create": {
+    kind: "artifactTransfer.create",
+    ownerId: "admin",
+    purpose: "prepared-artifact",
+    direction: "upload",
+    operationKey: "opk1_abcdefghijklmnop",
+    declaredBytes: 4,
+  },
+  "artifactTransfer.list": {
+    kind: "artifactTransfer.list",
+    ownerId: "admin",
+    limit: 50,
+    offset: 0,
+  },
+  "artifactTransfer.inspect": {
+    kind: "artifactTransfer.inspect",
+    stageId: transferClaim.stageId,
+    ownerId: "admin",
+    purpose: "prepared-artifact",
+  },
+  "artifactTransfer.delete": {
+    kind: "artifactTransfer.delete",
+    stageId: transferClaim.stageId,
+    ownerId: "admin",
+  },
+  "artifactTransfer.claim": {
+    kind: "artifactTransfer.claim",
+    stageId: transferClaim.stageId,
+    ownerId: "admin",
+    purpose: "prepared-artifact",
+    use: "validate-build",
+    identity: transferIdentity,
+    expectedSha256: "a".repeat(64),
+  },
+  "artifactTransfer.inspectClaim": {
+    kind: "artifactTransfer.inspectClaim",
+    stageId: transferClaim.stageId,
+    ownerId: "admin",
+    identity: transferIdentity,
+  },
+  "artifactTransfer.settle": {
+    kind: "artifactTransfer.settle",
+    claim: transferClaim,
+    settlement: { kind: "unknown", receiptId: "retained" },
+  },
   "controlRetention.acknowledge": {
     kind: "controlRetention.acknowledge",
     originRootKey: "opk1_abcdefghijklmnop",

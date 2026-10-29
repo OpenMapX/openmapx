@@ -190,6 +190,16 @@ export interface ApiRequestOptions {
 export interface ApiResponseOptions extends ApiRequestOptions {
   /** SDK-owned status validation; `all` passes every response to the consumer. */
   acceptedStatuses?: readonly number[] | "all";
+  /** SDK-owned check after all configured header sources have merged. */
+  expectedRequestMediaType?: "application/octet-stream";
+}
+
+export type AdminNativeDownloadTarget = { url: string; ownership: "browser" };
+export class ApiNativeDownloadUnavailableError extends Error {
+  constructor(readonly reason: "runtime" | "origin" | "credentials" | "headers" | "interceptor") {
+    super("Native downloads are unavailable for this API client.");
+    this.name = "ApiNativeDownloadUnavailableError";
+  }
 }
 
 /**
@@ -238,6 +248,36 @@ export class ApiClient {
     return url.toString();
   }
 
+  /** A browser navigation owns the subsequent download; it cannot reproduce client headers. */
+  downloadTarget(path: string): AdminNativeDownloadTarget {
+    if (typeof window === "undefined") throw new ApiNativeDownloadUnavailableError("runtime");
+    const cfg = this.config();
+    if (cfg.headerInterceptor !== undefined)
+      throw new ApiNativeDownloadUnavailableError("interceptor");
+    if (cfg.credentials !== "include" && cfg.credentials !== "same-origin")
+      throw new ApiNativeDownloadUnavailableError("credentials");
+    try {
+      const origin = new URL(window.location.origin),
+        base = new URL(cfg.baseUrl || "/", origin);
+      if (
+        !/^https?:$/.test(base.protocol) ||
+        base.origin !== origin.origin ||
+        base.username ||
+        base.password ||
+        base.hash ||
+        !path.startsWith("/") ||
+        path.startsWith("//")
+      )
+        throw Error();
+      const target = new URL(path, base);
+      if (target.origin !== origin.origin || target.username || target.password || target.hash)
+        throw Error();
+      return { url: target.toString(), ownership: "browser" };
+    } catch {
+      throw new ApiNativeDownloadUnavailableError("origin");
+    }
+  }
+
   /** Native EventSource cannot omit same-origin cookies or send custom headers. */
   connectionTarget(path: string): { url: string; withCredentials: boolean } {
     const cfg = this.config();
@@ -275,7 +315,7 @@ export class ApiClient {
   private async send<T>(
     url: string,
     init: RequestInit,
-    options: ApiRequestOptions,
+    options: ApiResponseOptions,
     consume: (response: Response, signal: AbortSignal) => Promise<T>,
   ): Promise<T> {
     const cfg = this.config();
@@ -303,6 +343,12 @@ export class ApiClient {
           headers.set(key, value);
         });
       }
+      if (
+        options.expectedRequestMediaType &&
+        headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !==
+          options.expectedRequestMediaType
+      )
+        throw new TypeError("Request media type does not match its declared byte contract");
       response = await fetch(url, {
         ...init,
         ...(options.cache === undefined ? {} : { cache: options.cache }),

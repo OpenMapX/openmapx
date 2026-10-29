@@ -444,3 +444,51 @@ downloads and build outputs are reproducible — you can always re-fetch and reb
   the RAM and disk you'll need before you start downloading.
 - **[How it works](../overview/how-it-works.md)** — the service/integration model
   and how the data-manager fits into a running deployment.
+
+## Transfer limits and storage
+
+Artifact transfers use private stages managed by the operations agent. Uploading
+bytes does not validate or install them. The server records the received size and
+SHA-256; an interrupted or ambiguous upload must be inspected before starting a
+new transfer. Deleting a stage cannot interrupt an unfinished installation.
+
+The default limits are 1 TiB uploaded, 2 TiB expanded and 4 TiB across retained
+stages, with two simultaneous transfers and one per administrator. Integration
+archives have a separate 200 MiB limit; encrypted instance migration files have a
+64 MiB limit. Disk admission reserves the actual declared upload size, not the
+expansion ceiling, and requires at least 1 GiB of additional free headroom. Unknown
+free capacity blocks admission. A successful upload stays `uploaded` until its
+purpose-specific validator accepts it.
+
+Operators can supply `infra/docker/artifact-transfer-policy.json`, mounted
+read-only into the agent. Its optional `artifactTransfer` object accepts the
+published deployment limits. For example, a smaller installation can use:
+
+```json
+{
+  "artifactTransfer": {
+    "maxUploadBytes": 17179869184,
+    "maxExpandedBytes": 34359738368,
+    "maxEntryBytes": 34359738368,
+    "maxStageBytes": 68719476736,
+    "maxEntries": 10000,
+    "maxManifestBytes": 8388608,
+    "maxConcurrentTransfers": 1,
+    "maxConcurrentTransfersPerPrincipal": 1,
+    "maxConcurrentArchiveJobs": 1,
+    "memoryBudgetBytes": 268435456
+  }
+}
+```
+
+The supported agent manifest allocates 1 GiB of memory. Larger metadata or
+concurrency limits require a matching declared and actual memory allocation;
+invalid or incompatible policy disables transfers rather than silently weakening
+limits. A missing policy file uses the defaults.
+
+Streams have a five-minute idle limit and a 72-hour total limit, shortened by an
+owning job's earlier deadline. Stages expire after 96 hours, while unfinished or
+unknown publication work retains its ownership. The shipped Traefik HTTPS
+entrypoint permits 72-hour reads and writes without request buffering. These are
+entrypoint-wide settings; ordinary API body limits and authentication still apply.
+Custom ingress deployments must preserve streaming and compatible timeouts.

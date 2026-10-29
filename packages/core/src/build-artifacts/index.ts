@@ -165,6 +165,7 @@ export {
   reserveFeedProxyValidation,
   verifyFeedProxyCanonicalTerminal,
 } from "./feed-proxy-validation";
+export { AnchoredDirectory } from "./filesystem";
 export {
   assertFixedConfigurationMaintenancePlan,
   buildFixedConfigurationMaintenancePlan,

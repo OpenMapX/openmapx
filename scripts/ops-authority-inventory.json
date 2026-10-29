@@ -99,7 +99,14 @@
       "system.inspect",
       "system.update",
       "transitCredentials.inspect",
-      "vault.apply"
+      "vault.apply",
+      "artifactTransfer.create",
+      "artifactTransfer.list",
+      "artifactTransfer.inspect",
+      "artifactTransfer.delete",
+      "artifactTransfer.claim",
+      "artifactTransfer.inspectClaim",
+      "artifactTransfer.settle"
     ],
     "data-manager": [
       "feedProxy.validateAndReload",
@@ -147,7 +154,10 @@
       "overture-sync",
       "overture-conflate",
       "search-index-build",
-      "notable-places-build"
+      "notable-places-build",
+      "overture-pull",
+      "overture-ingest",
+      "overture-extract"
     ],
     "apps/api/src/services/admin-job-handlers.ts#BackupOperation": ["create", "restore", "delete"],
     "apps/api/src/services/admin-job-handlers.ts#BulkServiceAction": [
@@ -378,6 +388,20 @@
         "apps/ops-agent/src/administrative-runtime.ts#createAdministrativeRuntime"
       ],
       "typedKinds": ["data.generateApiKeys"]
+    },
+    {
+      "id": "api.artifact-transfers",
+      "callSiteIds": [],
+      "semanticSources": ["apps/api/src/services/artifact-transfers.ts#AdminArtifactTransfers"],
+      "typedKinds": [
+        "artifactTransfer.create",
+        "artifactTransfer.list",
+        "artifactTransfer.inspect",
+        "artifactTransfer.delete",
+        "artifactTransfer.claim",
+        "artifactTransfer.inspectClaim",
+        "artifactTransfer.settle"
+      ]
     }
   ],
   "mounts": [

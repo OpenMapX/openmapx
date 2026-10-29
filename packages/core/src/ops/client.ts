@@ -1,6 +1,8 @@
 import { randomBytes as nodeRandomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
+import type { ArtifactStageClaim, TransferStage } from "./artifact-transfer";
+import { type ArtifactStageStreamInput, withArtifactStream } from "./artifact-transfer-client";
 import {
   OPS_KIND_POLICIES,
   OPS_MAX_HTTP_RESPONSE_BYTES,
@@ -250,6 +252,64 @@ export class OpsClient {
     this.randomBytes = options.randomBytes ?? nodeRandomBytes;
   }
 
+  async uploadArtifactStage(
+    input: ArtifactStageStreamInput & { body: ReadableStream<Uint8Array>; contentLength?: number },
+  ): Promise<TransferStage> {
+    const observation = await this.execute(
+      {
+        kind: "artifactTransfer.inspect",
+        stageId: input.stageId,
+        ownerId: input.ownerId,
+        purpose: input.purpose,
+      },
+      { signal: input.signal },
+    );
+    if (!("execution" in observation) || observation.execution !== "sync")
+      throw new OpsClientError("runtime");
+    return (await withArtifactStream({
+      baseUrl: this.baseUrl,
+      token: await readOpsTokenFile(this.tokenFile),
+      fetch: this.fetchImpl,
+      now: this.now().getTime(),
+      parentSignal: this.signal,
+      stage: observation.value,
+      input,
+      body: input.body,
+      contentLength: input.contentLength,
+    })) as TransferStage;
+  }
+  async consumeArtifactStage<T>(
+    input: ArtifactStageStreamInput & { claim?: ArtifactStageClaim },
+    consume: (input: {
+      body: ReadableStream<Uint8Array>;
+      signal: AbortSignal;
+      headers: Headers;
+    }) => Promise<T>,
+  ): Promise<T> {
+    const observation = await this.execute(
+      {
+        kind: "artifactTransfer.inspect",
+        stageId: input.stageId,
+        ownerId: input.ownerId,
+        purpose: input.purpose,
+      },
+      { signal: input.signal },
+    );
+    if (!("execution" in observation) || observation.execution !== "sync")
+      throw new OpsClientError("runtime");
+    return (await withArtifactStream(
+      {
+        baseUrl: this.baseUrl,
+        token: await readOpsTokenFile(this.tokenFile),
+        fetch: this.fetchImpl,
+        now: this.now().getTime(),
+        parentSignal: this.signal,
+        stage: observation.value,
+        input,
+      },
+      consume,
+    )) as T;
+  }
   createOperationKey(): string {
     return `opk1_${Buffer.from(this.randomBytes(18)).toString("base64url")}`;
   }

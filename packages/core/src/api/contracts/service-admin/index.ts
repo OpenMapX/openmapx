@@ -1,3 +1,7 @@
+import { artifactTransferAdminOperations } from "./artifact-transfers";
+
+export * from "./artifact-transfers";
+
 import z from "zod/v4";
 import {
   type AdminOperation,
@@ -74,6 +78,7 @@ export * from "./workflows";
 
 /** Complete service/workflow family. Authentication metadata never grants access. */
 export const serviceAdminOperations = {
+  ...artifactTransferAdminOperations,
   listAdminServices: {
     method: "GET",
     path: "/api/admin/services",

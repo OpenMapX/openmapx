@@ -561,3 +561,25 @@ The CLI prints queued 202 job IDs without adding an Activity watcher. Since
 install/update acquire another preview, a preceding explicit `ext preview` does
 not bypass the one-preview-per-30-seconds bucket; 429 ends that command without
 writing or automatically retrying.
+
+## Administration byte transfers
+
+Declare opaque byte bodies with `AdminOperation.requestBody` and successful byte
+responses with `adminBytes`. They are mutually exclusive with a JSON request
+schema. The registrar emits `format: binary`, validates success media/headers and
+requires the shared byte-send adapter; application handlers must not JSON-encode
+or buffer a large stream. Authentication and cookie Origin checks run before the
+scoped octet-stream parser exposes upload bytes.
+
+The generated service-admin clients accept an unchanged `Blob` for uploads and a
+required `onByteChunk(chunk, signal)` callback for downloads. Each callback must
+finish its sink cleanup when aborted. The client waits for that cleanup and EOF;
+a returned response never transfers ownership of a raw response body. Error JSON
+is bounded separately to 64 KiB.
+
+A generated native download target constructs a browser-owned navigation only
+for the actual same origin, compatible cookie credentials and no configured
+header interceptor. It performs no download and cannot provide custom headers,
+progress or cancellation. Other configured clients keep using the callback-based
+byte client with a supported file sink; do not silently change their credentials
+or buffer a large response into a Blob.

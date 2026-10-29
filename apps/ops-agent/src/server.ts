@@ -95,6 +95,9 @@ import {
 } from "@openmapx/core/ops";
 import Fastify, { type FastifyInstance } from "fastify";
 import { inspectConfigurationGenerationNonCommit } from "../../../packages/core/src/build-artifacts/control-authority";
+import { ArtifactTransferError } from "./artifact-transfer/errors";
+import { registerArtifactTransferRoutes } from "./artifact-transfer/routes";
+import type { ArtifactTransferStore } from "./artifact-transfer/store";
 import { readCommittedCatalogApproval } from "./catalog-approval-runtime";
 import { prepareConfigurationHardlinksAdmission } from "./configuration-hardlinks-runtime";
 import {
@@ -222,6 +225,7 @@ export interface OpsAuditEvent {
 }
 
 export interface BuildOpsAgentServerOptions {
+  artifactTransfers?: ArtifactTransferStore;
   controlInstallation?: ControlInstallation;
   terminalClaimCleanup?: VerifiedTerminalClaimCleanup;
   tokens: Record<OpsRole, string>;
@@ -375,6 +379,18 @@ function immutableSnapshot<T>(value: T): T {
 }
 
 function classify(error: unknown): { errorClass: OpsErrorClass; statusCode: number } {
+  if (error instanceof ArtifactTransferError)
+    return {
+      errorClass:
+        error.statusCode === 404
+          ? "not_found"
+          : error.statusCode === 503
+            ? "runtime"
+            : error.statusCode === 429
+              ? "busy"
+              : "conflict",
+      statusCode: error.statusCode,
+    };
   if (error instanceof OpsContractError) {
     return {
       errorClass: error.errorClass,
@@ -408,8 +424,26 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   const app = Fastify({
     logger: false,
     bodyLimit: options.bodyLimit ?? DEFAULT_BODY_LIMIT,
-    requestTimeout: DEFAULT_ADMISSION_TIMEOUT_MS,
+    requestTimeout: 0,
     connectionTimeout: DEFAULT_ADMISSION_TIMEOUT_MS,
+  });
+  app.addHook("onRequest", async (request, reply) => {
+    const streaming =
+      (request.routeOptions.config as { artifactTransferBytes?: boolean }).artifactTransferBytes ===
+      true;
+    request.raw.socket.setTimeout(streaming ? 5 * 60_000 : DEFAULT_ADMISSION_TIMEOUT_MS);
+    if (streaming) return;
+    const timer = setTimeout(() => request.raw.destroy(), DEFAULT_ADMISSION_TIMEOUT_MS);
+    timer.unref?.();
+    const clear = () => {
+      clearTimeout(timer);
+      request.raw.off("end", clear);
+      request.raw.off("aborted", clear);
+      reply.raw.off("close", clear);
+    };
+    request.raw.once("end", clear);
+    request.raw.once("aborted", clear);
+    reply.raw.once("close", clear);
   });
   if (options.dawarichExport) {
     registerDawarichSubjectExportRoute(app, {
@@ -423,6 +457,12 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       apiToken: options.tokens.api,
     });
   }
+  if (options.artifactTransfers)
+    registerArtifactTransferRoutes(app, {
+      store: options.artifactTransfers,
+      apiToken: options.tokens.api,
+      admissionsOpen: () => !options.replacementInProgress?.(),
+    });
   const runtime = options.runtime ?? createUnavailableRuntime();
   const dispatch =
     options.dispatch ??
@@ -1020,7 +1060,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           (other.state === "queued" ||
             other.state === "running" ||
             other.state === "termination_pending"),
-      ).length,
+      ).length + (options.artifactTransfers?.activeStreams ?? 0),
     ...(job.operation.kind === "services.buildAll"
       ? {
           checkpointServiceBatch: async (

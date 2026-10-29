@@ -190,6 +190,9 @@ export function corsOptions(trustedWebOrigins: readonly string[] = configuredTru
     // Browser clients need these response headers when the web app and API are
     // on different origins (the default local-development topology).
     exposedHeaders: [
+      "Content-Length",
+      "Content-Disposition",
+      "X-Artifact-Sha256",
       "X-Tile-Source",
       "Accept-Ranges",
       "Content-Range",

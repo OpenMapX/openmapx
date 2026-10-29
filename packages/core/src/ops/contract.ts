@@ -7,6 +7,10 @@ import { catalogRuntimeInputsSchema } from "../catalog-pins/review-schemas";
 import { catalogPinSetSchema } from "../catalog-pins/schemas";
 import { platformConfigurationSchema } from "../services/platform-configuration";
 import {
+  artifactTransferOperationSchemas,
+  artifactTransferResultSchemas,
+} from "./artifact-transfer";
+import {
   configurationGenerationRevisionSchema,
   configurationHardlinksApplyOperationSchema,
   integrationConfigApplyOperationSchema,
@@ -61,6 +65,13 @@ export const OPS_MAX_BACKUP_ID_LENGTH = 128;
 export const OPS_MAX_BACKUP_INVENTORY_ENTRIES = 128;
 
 export const OPS_OPERATION_KINDS = [
+  "artifactTransfer.create",
+  "artifactTransfer.list",
+  "artifactTransfer.inspect",
+  "artifactTransfer.delete",
+  "artifactTransfer.claim",
+  "artifactTransfer.inspectClaim",
+  "artifactTransfer.settle",
   "controlRetention.acknowledge",
   "docker.status",
   "stack.status",
@@ -192,6 +203,14 @@ const asyncEffect = (
 const LIFECYCLE_TIMEOUT_MS = 10 * 60_000 + 30_000;
 
 export const OPS_KIND_POLICIES = {
+  "artifactTransfer.create": sync("api", 30_000),
+  "artifactTransfer.list": sync("api", 30_000),
+  "artifactTransfer.inspect": sync("api", 30_000),
+  "artifactTransfer.delete": sync("api", 30_000),
+  "artifactTransfer.claim": sync("api", 30_000),
+  "artifactTransfer.inspectClaim": sync("api", 30_000),
+  "artifactTransfer.settle": sync("api", 30_000),
+
   "controlRetention.acknowledge": sync("api", 15_000),
   "docker.status": sync("api", 5_000),
   "stack.status": sync("api", 15_000, 256 * 1024),
@@ -361,6 +380,7 @@ const serviceOperation = <T extends OpsOperationKind>(kind: T) =>
   z.strictObject({ kind: z.literal(kind), serviceId: serviceIdSchema });
 
 export const opsOperationSchema = z.discriminatedUnion("kind", [
+  ...artifactTransferOperationSchemas,
   z.strictObject({
     kind: z.literal("controlRetention.acknowledge"),
     originRootKey: operationKeySchema,
@@ -1007,6 +1027,7 @@ const pinnedImageReference = z
   .regex(/^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$/);
 
 export const OPS_RESULT_SCHEMAS = {
+  ...artifactTransferResultSchemas,
   "controlRetention.acknowledge": z.strictObject({ acknowledged: z.literal(true) }),
   "docker.status": z.strictObject({
     reachable: z.boolean(),

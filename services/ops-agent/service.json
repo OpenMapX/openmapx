@@ -38,10 +38,11 @@
       "OPS_PRIVACY_BACKUP_COLLECTOR_ENABLED": "${OPS_PRIVACY_BACKUP_COLLECTOR_ENABLED:-false}",
       "OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE": "${OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE:-}",
       "OPS_PRIVACY_BACKUP_SCRATCH_ROOT": "/var/lib/openmapx/privacy-extraction",
-      "BACKUP_RETENTION_DAYS": "${BACKUP_RETENTION_DAYS:-30}"
+      "BACKUP_RETENTION_DAYS": "${BACKUP_RETENTION_DAYS:-30}",
+      "OPENMAPX_ARTIFACT_TRANSFER_POLICY_FILE": "/run/openmapx/artifact-transfer-policy.json"
     },
     "capDrop": ["ALL"],
-    "memory": "256m",
+    "memory": "1g",
     "restart": "unless-stopped",
     "healthcheck": {
       "type": "http",
@@ -85,7 +86,7 @@
       "readOnly": false
     },
     {
-      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — ops-agent renders and applies trusted local stack configuration}",
+      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set \u2014 ops-agent renders and applies trusted local stack configuration}",
       "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}",
       "readOnly": false
     },
@@ -128,6 +129,12 @@
       "source": "@infra:control-private/empty",
       "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/control-private/host-cli",
       "readOnly": true
+    },
+    {
+      "source": "@infra:artifact-transfer-policy.json",
+      "target": "/run/openmapx/artifact-transfer-policy.json",
+      "readOnly": true,
+      "optional": true
     }
   ],
   "ui": {

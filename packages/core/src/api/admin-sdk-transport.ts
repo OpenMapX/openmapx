@@ -1,14 +1,17 @@
 import { readBoundedJsonResponse, readBoundedResponseText } from "../utils/fetchJson";
+import { consumeAdminBytes } from "./admin-byte-reader";
 import {
   type ApiClient,
   ApiClientError,
+  ApiNativeDownloadUnavailableError,
+  ApiRequestAbortedError,
   type ApiRequestOptions,
   apiClient,
   parseRetryAfter,
 } from "./client";
 import { accountAdminOperations } from "./contracts/account-admin";
 import { activityAdminOperations } from "./contracts/activity-admin";
-import type { AdminOperation } from "./contracts/admin";
+import { type AdminOperation, assertAdminOperationContract } from "./contracts/admin";
 import { dataManagerAdminOperations } from "./contracts/data-manager-admin";
 import { extensionAdminOperations } from "./contracts/extension-admin";
 import { integrationAdminOperations } from "./contracts/integration-admin";
@@ -23,7 +26,27 @@ export type AdminSdkRequestOptions = Omit<RequestInit, "signal" | "credentials">
     maxErrorBytes?: number;
     /** Called within ApiClient's abort/deadline lifetime; never receives a raw Response. */
     onTextChunk?: (chunk: string) => void | Promise<void>;
+    onByteChunk?: (chunk: Uint8Array, signal: AbortSignal) => void | Promise<void>;
+    onByteHeaders?: (headers: Headers, signal: AbortSignal) => void | Promise<void>;
   };
+export type AdminBinaryUploadRequestOptions = Omit<
+  AdminSdkRequestOptions,
+  "body" | "onTextChunk" | "keepalive"
+>;
+export type AdminByteResponseRequestOptions = Omit<
+  AdminSdkRequestOptions,
+  "body" | "onTextChunk" | "keepalive"
+> & {
+  onByteChunk: (chunk: Uint8Array, signal: AbortSignal) => void | Promise<void>;
+  onByteHeaders?: (headers: Headers, signal: AbortSignal) => void | Promise<void>;
+};
+export type { AdminNativeDownloadTarget } from "./client";
+export type AdminNativeDownloadTargetOptions = {
+  client?: ApiClient;
+  signal?: AbortSignal;
+  method?: "GET";
+  headers?: Readonly<Record<string, never>>;
+};
 /** Required consumer for incremental plain text; successful envelope data is undefined. */
 export type AdminTextStreamRequestOptions = AdminSdkRequestOptions & {
   onTextChunk: NonNullable<AdminSdkRequestOptions["onTextChunk"]>;
@@ -143,6 +166,7 @@ export function createAdminOperationBinder<const Operations extends Record<strin
 ) {
   return (operationId: keyof Operations) => {
     const operation: AdminOperation = registry[operationId];
+    assertAdminOperationContract(operation);
     return async <T = AdminResponse>(
       url: string,
       options: AdminSdkRequestOptions = {},
@@ -157,6 +181,8 @@ export function createAdminOperationBinder<const Operations extends Record<strin
         maxTextBytes,
         maxErrorBytes,
         onTextChunk,
+        onByteChunk,
+        onByteHeaders,
         method = "GET",
         body,
         integrity,
@@ -167,6 +193,24 @@ export function createAdminOperationBinder<const Operations extends Record<strin
       } = options;
       if (!matchesBoundRequest(url, method, operation))
         throw new Error("Administration request does not match its bound operation");
+      const byteResponse = Object.values(operation.responses).some(
+          (contract) => contract.kind === "bytes",
+        ),
+        byteRequest = operation.requestBody?.kind === "bytes",
+        binary = byteRequest || byteResponse;
+      if (byteResponse && (!onByteChunk || body !== undefined || onTextChunk || keepalive))
+        throw new Error("Byte response requires an owned byte consumer");
+      if (byteRequest && (!(body instanceof Blob) || onTextChunk || keepalive))
+        throw new Error("Binary upload requires the original Blob body");
+      const effectiveTimeout = binary ? (timeoutMs ?? 72 * 3600_000) : timeoutMs;
+      if (
+        binary &&
+        (!Number.isFinite(effectiveTimeout) ||
+          !effectiveTimeout ||
+          effectiveTimeout < 0 ||
+          effectiveTimeout > 7 * 24 * 3600_000)
+      )
+        throw new Error("Invalid byte transfer deadline");
       // SSE is deliberately browser-owned and cannot enter the finite/JSON reader.
       if (
         Object.values(operation.responses).some(
@@ -177,18 +221,27 @@ export function createAdminOperationBinder<const Operations extends Record<strin
       // Orval emits application/json even when an optional body is omitted.
       // An empty JSON entity is invalid to Fastify; absence must stay absence.
       const requestHeaders = new Headers(headers);
+      if (byteRequest) requestHeaders.set("content-type", "application/octet-stream");
       if (body === undefined && operation.request?.body?.isOptional())
         requestHeaders.delete("content-type");
       validateRequestHeaders(operation, requestHeaders);
-      const jsonBudget = positive(maxJsonBytes, 8 * 1024 * 1024);
+      const jsonBudget = binary
+        ? Math.min(positive(maxJsonBytes, 64 * 1024), 64 * 1024)
+        : positive(maxJsonBytes, 8 * 1024 * 1024);
       const textBudget = positive(maxTextBytes, 8 * 1024 * 1024);
-      const errorBudget = positive(maxErrorBytes, 64 * 1024);
+      const errorBudget = binary
+        ? Math.min(positive(maxErrorBytes, 64 * 1024), 64 * 1024)
+        : positive(maxErrorBytes, 64 * 1024);
       const result = await client.request(
         url,
         { method, body, integrity, keepalive, mode, referrer, referrerPolicy },
         async (response, effectiveSignal): Promise<AdminResponse> => {
           const contract = operation.responses[response.status];
-          if (!contract) throw new ApiContractError(response.status);
+          if (!contract) {
+            if (binary && response.body && !response.body.locked)
+              await response.body.cancel().catch(() => {});
+            throw new ApiContractError(response.status);
+          }
           try {
             if (
               contract.headers &&
@@ -213,7 +266,11 @@ export function createAdminOperationBinder<const Operations extends Record<strin
                   ? mediaType === "application/json" || mediaType?.endsWith("+json")
                   : mediaType === contract.mediaType;
               if (!correctMedia) throw new ApiContractError(response.status);
-              if (contract.kind === "stream") {
+              if (contract.kind === "bytes") {
+                if (!onByteChunk) throw new ApiContractError(response.status);
+                await consumeAdminBytes(response, effectiveSignal, { onByteChunk, onByteHeaders });
+                data = undefined;
+              } else if (contract.kind === "stream") {
                 if (!onTextChunk) throw new ApiContractError(response.status);
                 await consumeTextStream(response, effectiveSignal, onTextChunk);
                 data = undefined;
@@ -236,11 +293,20 @@ export function createAdminOperationBinder<const Operations extends Record<strin
             }
             return { status: response.status, headers: response.headers, data };
           } catch (error) {
-            if (effectiveSignal.aborted) throw error;
+            if (binary && response.body && !response.body.locked)
+              await response.body.cancel().catch(() => {});
+            if (effectiveSignal.aborted || error instanceof ApiRequestAbortedError) throw error;
             throw new ApiContractError(response.status);
           }
         },
-        { signal, timeoutMs, cache, headers: requestHeaders, acceptedStatuses: "all" },
+        {
+          signal,
+          timeoutMs: effectiveTimeout,
+          cache,
+          headers: requestHeaders,
+          acceptedStatuses: "all",
+          ...(byteRequest ? { expectedRequestMediaType: "application/octet-stream" as const } : {}),
+        },
       );
       return result as T;
     };
@@ -309,4 +375,60 @@ export function adminErrorMessage(error: unknown, fallback: string): string {
     if (typeof value === "string" && value.trim()) return value.slice(0, 512);
   }
   return fallback;
+}
+
+type ByteOperationId = {
+  [K in OperationId]: Extract<
+    (typeof operations)[K]["responses"][keyof (typeof operations)[K]["responses"]],
+    { kind: "bytes" }
+  > extends never
+    ? never
+    : K;
+}[OperationId];
+type BinaryUploadOperationId = {
+  [K in OperationId]: (typeof operations)[K] extends { requestBody: { kind: "bytes" } } ? K : never;
+}[OperationId];
+export function bindAdminByteOperation(operationId: ByteOperationId) {
+  return bindAdminOperation(operationId);
+}
+export function bindAdminBinaryUploadOperation(operationId: BinaryUploadOperationId) {
+  return bindAdminOperation(operationId);
+}
+export function bindAdminDownloadTarget(operationId: ByteOperationId) {
+  const operation: AdminOperation = operations[operationId];
+  if (
+    operation.method !== "GET" ||
+    !Object.values(operation.responses).some((c) => c.kind === "bytes" && c.nativeDownload)
+  )
+    throw Error("Operation cannot construct a native download");
+  return async (url: string, options: AdminNativeDownloadTargetOptions = {}) => {
+    const supported = new Set(["client", "signal", "method", "headers"]);
+    if (Reflect.ownKeys(options).some((k) => typeof k !== "string" || !supported.has(k)))
+      throw new ApiNativeDownloadUnavailableError("headers");
+    if (!matchesBoundRequest(url, options.method ?? "GET", operation))
+      throw new ApiNativeDownloadUnavailableError("origin");
+    const parsedUrl = new URL(url, "https://api.invalid"),
+      template = operation.path.split("/"),
+      segments = parsedUrl.pathname.split("/");
+    const params = Object.fromEntries(
+      template.flatMap((part, index) =>
+        part.startsWith(":") ? [[part.slice(1), decodeURIComponent(segments[index])]] : [],
+      ),
+    );
+    if (operation.request?.params && !operation.request.params.safeParse(params).success)
+      throw new ApiNativeDownloadUnavailableError("origin");
+    if (!operation.request?.query && parsedUrl.search)
+      throw new ApiNativeDownloadUnavailableError("origin");
+    if (options.headers && Reflect.ownKeys(options.headers).length)
+      throw new ApiNativeDownloadUnavailableError("headers");
+    if (
+      operation.request?.query &&
+      !operation.request.query.safeParse(
+        Object.fromEntries(new URL(url, "https://api.invalid").searchParams),
+      ).success
+    )
+      throw new ApiNativeDownloadUnavailableError("origin");
+    options.signal?.throwIfAborted();
+    return (options.client ?? apiClient).downloadTarget(url);
+  };
 }

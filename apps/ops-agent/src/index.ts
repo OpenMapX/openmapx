@@ -1,5 +1,6 @@
 import { constants, existsSync } from "node:fs";
 import { open } from "node:fs/promises";
+import { join } from "node:path";
 import { loadControlStartup } from "@openmapx/core/build-artifacts";
 import { initializeManagedCatalogPins } from "@openmapx/core/catalog-pins";
 import { readOpsTokenFile } from "@openmapx/core/ops";
@@ -13,6 +14,9 @@ import {
   pruneBackupRetention,
 } from "./administrative-runtime";
 import { isTerminalHandoff, readAgentHandoff } from "./agent-handoff";
+import { loadArtifactTransferPolicy } from "./artifact-transfer/policy";
+import { installArtifactTransferRuntime } from "./artifact-transfer/runtime";
+import { ArtifactTransferStore } from "./artifact-transfer/store";
 import { startOpsAgentServer } from "./bootstrap";
 import { CommunityRepositoryStore } from "./community-repositories";
 import { loadOpsAgentConfig } from "./config";
@@ -194,6 +198,27 @@ async function main(): Promise<void> {
         ownerGid: gid,
       },
     });
+    const replacementInProgress = () => {
+      try {
+        const handoff = readAgentHandoff(config.rootDir);
+        return handoff !== null && !isTerminalHandoff(handoff.phase);
+      } catch {
+        return true;
+      }
+    };
+    const transferPolicy = loadArtifactTransferPolicy();
+    const artifactTransfers =
+      "policy" in transferPolicy
+        ? new ArtifactTransferStore({
+            dataRoot: join(paths.infraDir, "data", ".openmapx-transfers"),
+            privateRoot: join(config.trustedConfigDirectory, "artifact-transfers"),
+            token: apiToken,
+            policy: transferPolicy.policy,
+            admissionsOpen: () => !replacementInProgress(),
+          })
+        : undefined;
+    if (artifactTransfers) installArtifactTransferRuntime(runtime, artifactTransfers);
+    else if ("reason" in transferPolicy) console.error(transferPolicy.reason);
     const releaseEffects = productionReleaseEffects(runtime);
     const retentionDays = Number(process.env.BACKUP_RETENTION_DAYS?.trim() || "30");
     if (!Number.isSafeInteger(retentionDays) || retentionDays <= 0 || retentionDays > 36_500) {
@@ -272,6 +297,7 @@ async function main(): Promise<void> {
         controlInstallation: controlStartup.installation,
         terminalClaimCleanup,
         runtime,
+        artifactTransfers,
         replacementInProgress: () => {
           try {
             const handoff = readAgentHandoff(config.rootDir);

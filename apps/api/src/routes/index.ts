@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { adminRoute } from "./admin";
 import { adminAccountsRoute } from "./admin-accounts";
 import { adminActivityRoute } from "./admin-activity";
+import { adminArtifactTransfersRoute } from "./admin-artifact-transfers";
 import { adminCacheRoute } from "./admin-cache";
 import { registerCapabilityBindingRoutes } from "./admin-capability-bindings";
 import { registerAdminComposeRoutes } from "./admin-compose";
@@ -119,6 +120,7 @@ export async function registerCoreRoutes(
   await server.register(statusRoute, { prefix: "/api" });
   await server.register(adminRoute, { prefix: "/api" });
   await server.register(adminServicesRoute, { prefix: "/api" });
+  await server.register(adminArtifactTransfersRoute, { prefix: "/api" });
   await server.register(adminTransitCredentialsRoute, { prefix: "/api" });
   await server.register(adminTransitPinsRoute, { prefix: "/api" });
   await server.register(adminOperationsRoute, { prefix: "/api" });

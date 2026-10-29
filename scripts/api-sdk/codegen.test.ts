@@ -73,7 +73,7 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
           const source: "default" | "database" | "vault" | "config.json" | "env" = response.data.resolvedConfig.field.source;
         }
       });
-      setAdminIntegrationCredential("sample", "apiKey", {value: "synthetic"}, {"idempotency-key":"synthetic-intent-0001"}, finiteOptions);
+      setAdminIntegrationCredential("sample", "apiKey", {value: "synthetic",expectedRevision:"cfg1_synthetic"}, {"idempotency-key":"synthetic-intent-0001"}, finiteOptions);
       // @ts-expect-error Credential bodies reject unknown fields.
       setAdminIntegrationCredential("sample", "apiKey", {value: "synthetic", unexpected: true}, {"idempotency-key":"synthetic-intent-0001"});
       // @ts-expect-error Credentials are strings, not numbers.
@@ -99,7 +99,7 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
     virtual.set(
       filename,
       `${virtual.get(filename)}
-      import { streamAdminServiceLogs, getAdminService, getAdminComposePreview, stopAdminCompose, setAdminServiceSelection, runAdminServicesBulkAction, restoreAdminServiceBackup } from "./service-admin.generated";
+      import { uploadAdminArtifactTransferContent,downloadAdminArtifactTransferContent,getDownloadAdminArtifactTransferContentTarget, streamAdminServiceLogs, getAdminService, getAdminComposePreview, stopAdminCompose, setAdminServiceSelection, runAdminServicesBulkAction, restoreAdminServiceBackup } from "./service-admin.generated";
       getAdminService("sample").then(response => {
         if (response.status === 200) {
           const image: string = response.data.manifest.container.image;
@@ -107,6 +107,17 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
           response.data.manifest.provides?.forEach(entry => { const capability: string = typeof entry === "string" ? entry : entry.capability; });
         }
       });
+      uploadAdminArtifactTransferContent("stage",new Blob([new Uint8Array([0,255])]),{client:undefined});
+      // @ts-expect-error Uploads accept opaque Blob bodies, not JSON.
+      uploadAdminArtifactTransferContent("stage",{body:"invalid"});
+      downloadAdminArtifactTransferContent("stage",{onByteChunk:async(chunk,signal)=>{const byte:number=chunk[0];signal.throwIfAborted();}}).then(response=>{if(response.status===200){const data:undefined=response.data;}});
+      // @ts-expect-error Byte downloads require an explicit owned consumer.
+      downloadAdminArtifactTransferContent("stage");
+      // @ts-expect-error Signal alone cannot consume a byte response.
+      downloadAdminArtifactTransferContent("stage",{signal:new AbortController().signal});
+      const native:Promise<{url:string;ownership:"browser"}>=getDownloadAdminArtifactTransferContentTarget("stage",{headers:{}});
+      // @ts-expect-error Native navigation cannot send custom headers.
+      getDownloadAdminArtifactTransferContentTarget("stage",{headers:{Authorization:"x"}});
       const logHeaders = {"idempotency-key": "synthetic-intent-0001"};
       streamAdminServiceLogs("id", logHeaders, undefined, {onTextChunk: async (chunk) => { const text: string = chunk; }, timeoutMs: 100}).then(response => {
         if (response.status === 200) { const data: undefined = response.data; }
@@ -853,6 +864,21 @@ describe("service administration custom-client generation", () => {
         operationId: id,
         tags: ["service-admin"],
         parameters,
+        ...(Object.values(operation.responses).some((c) => c.kind === "bytes" && c.nativeDownload)
+          ? { "x-openmapx-native-download": true }
+          : {}),
+        ...(operation.requestBody
+          ? {
+              requestBody: {
+                required: true,
+                content: {
+                  [operation.requestBody.mediaType]: {
+                    schema: { type: "string", format: "binary" },
+                  },
+                },
+              },
+            }
+          : {}),
         ...(request?.body
           ? {
               requestBody: {
@@ -875,7 +901,9 @@ describe("service administration custom-client generation", () => {
                   schema:
                     "schema" in response
                       ? schema(response.schema, `${id}Response${status}`)
-                      : { type: "string" },
+                      : response.kind === "bytes"
+                        ? { type: "string", format: "binary" }
+                        : { type: "string" },
                 },
               },
             },

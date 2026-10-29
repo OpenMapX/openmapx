@@ -17,6 +17,13 @@ entryPoints:
 
   websecure:
     address: ":443"
+    # Static entrypoint limits cover streamed artifact transfers. Ordinary API
+    # parsers/body limits remain independently bounded in the application.
+    transport:
+      respondingTimeouts:
+        readTimeout: 72h
+        writeTimeout: 72h
+        idleTimeout: 5m
     # HTTP/3 (QUIC) over UDP/443. `advertisedPort` is the port announced to
     # clients in the Alt-Svc header; it must match the published UDP host port
     # (see services/traefik/service.json `exposure.hostPorts`). Clients still
