@@ -13,20 +13,46 @@ import {
 import { type FileHandle, open } from "node:fs/promises";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { AnchoredDirectory } from "@openmapx/core/build-artifacts";
+import { AnchoredDirectory, executionAuthorityState } from "@openmapx/core/build-artifacts";
 import {
   type ArtifactStageClaim,
+  artifactStageClaimSchema,
   type ClaimTransferStage,
   type CreateTransferStage,
   canonicalJson,
   createTransferStageSchema,
+  opsOperationFingerprint,
   type StageClaimIdentity,
   type StageClaimSettlement,
+  type StageInspectionBinding,
+  stageClaimSettlementSchema,
+  stageInspectionBindingSchema,
   type TransferPurpose,
   type TransferStage,
   transferStageSchema,
 } from "@openmapx/core/ops";
+import {
+  assertIntegrationPublicationJournal,
+  closeIntegrationPublicationJournal,
+  createIntegrationPublicationJournal,
+  describeIntegrationPreparationRoot,
+  describeIntegrationPublication,
+  describePreparedIntegration,
+  discardIntegrationPreparation,
+  type IntegrationArtifactPreparationContext,
+  type IntegrationPublication,
+  type IntegrationPublicationJournal,
+  prepareIntegrationArtifact,
+  restorePreparedIntegration,
+} from "@openmapx/integration-framework/installer";
 import z from "zod/v4";
+import type { OpsExecutionContext } from "../runtime";
+import {
+  type StandaloneInspectionRecord,
+  type StandaloneTransactionRecord,
+  standaloneInspectionRecordSchema,
+  standaloneTransactionRecordSchema,
+} from "../standalone-integration-records";
 import { ArtifactTransferError } from "./errors";
 import {
   type ArtifactTransferPolicy,
@@ -36,6 +62,12 @@ import {
 } from "./policy";
 
 const id = z.uuid();
+const integrationClaimRecordSchema = z.strictObject({
+  claim: artifactStageClaimSchema,
+  settlement: stageClaimSettlementSchema.nullable(),
+  preparation: z.record(z.string(), z.unknown()).nullable(),
+  transactionId: z.uuid().nullable(),
+});
 const metaSchema = z.strictObject({
   stage: transferStageSchema,
   ownerId: z.string().min(1).max(128),
@@ -58,6 +90,8 @@ const metaSchema = z.strictObject({
       ctimeNs: z.string(),
     })
     .nullable(),
+  integrationInspection: stageInspectionBindingSchema.nullable().default(null),
+  claims: z.array(integrationClaimRecordSchema).max(8).default([]),
   attempts: z
     .array(
       z.strictObject({
@@ -97,6 +131,8 @@ export class ArtifactTransferStore {
   private readonly key: Buffer;
   private readonly data: AnchoredDirectory;
   private readonly records: AnchoredDirectory;
+  private readonly integrationRecords: AnchoredDirectory;
+  private readonly integrationJournals = new Map<string, IntegrationPublicationJournal>();
   private readonly streams = new Map<string, { ownerId: string; controller: AbortController }>();
   private readonly capacity: () => { bytes: number; inodes: number };
   private readonly now: () => number;
@@ -120,6 +156,7 @@ export class ArtifactTransferStore {
     mkdirSync(options.privateRoot, { recursive: true, mode: 0o700 });
     this.data = new AnchoredDirectory(options.dataRoot, undefined, true);
     this.records = new AnchoredDirectory(options.privateRoot, undefined, true);
+    this.integrationRecords = this.records.directory("integrations", true, true);
     this.capacity =
       options.capacity ??
       (() => {
@@ -137,6 +174,10 @@ export class ArtifactTransferStore {
   }
   close() {
     if (this.streams.size) throw Error("Transfer streams still owned");
+    for (const journal of this.integrationJournals.values())
+      closeIntegrationPublicationJournal(journal);
+    this.integrationJournals.clear();
+    this.integrationRecords.close();
     this.records.close();
     this.data.close();
     this.key.fill(0);
@@ -294,6 +335,8 @@ export class ArtifactTransferStore {
           directory: { dev: String(directory.stat.dev), ino: String(directory.stat.ino) },
           content: null,
           attempts: [],
+          integrationInspection: null,
+          claims: [],
         });
       } finally {
         directory.close();
@@ -645,21 +688,507 @@ export class ArtifactTransferStore {
       }
     }
   }
-  async claimStage(input: ClaimTransferStage): Promise<ArtifactStageClaim> {
-    this.admit();
-    this.lock(() => {
-      const meta = this.owned(input.stageId, input.ownerId, input.purpose);
-      this.alive(meta);
+  private integrationContext(context: OpsExecutionContext) {
+    if (!context.controlAuthority) throw Error("Integration execution authority is required");
+    const authority = executionAuthorityState(context.controlAuthority);
+    const operation = context.claim.operation;
+    if (
+      authority.installation.installation.role !== "ops-agent" ||
+      authority.execution.principal !== "api" ||
+      canonicalJson(authority.execution) !== canonicalJson(context.execution) ||
+      authority.kind !== operation.kind ||
+      opsOperationFingerprint(operation) !== authority.execution.operationFingerprint ||
+      !["integration.inspectInstall", "integration.install", "integration.settle"].includes(
+        operation.kind,
+      )
+    )
+      throw Error("Integration execution authority does not match the retained operation");
+    return operation;
+  }
+  standaloneInstallationId(context: OpsExecutionContext): string {
+    this.integrationContext(context);
+    return executionAuthorityState(context.controlAuthority!).installation.installation
+      .installationId;
+  }
+  private readIntegrationRecord<T>(name: string, schema: z.ZodType<T>): T {
+    const outer = z
+      .strictObject({ body: z.string().max(65536), mac: z.string().regex(/^[a-f0-9]{64}$/) })
+      .parse(JSON.parse(this.integrationRecords.read(name, 131072).toString("utf8")));
+    const expected = createHmac("sha256", this.key)
+      .update("openmapx-standalone-record-v1\0")
+      .update(name)
+      .update("\0")
+      .update(outer.body)
+      .digest();
+    if (!timingSafeEqual(expected, Buffer.from(outer.mac, "hex")))
+      throw Error("Standalone integration record authentication failed");
+    return schema.parse(JSON.parse(outer.body));
+  }
+  private writeIntegrationRecord(name: string, value: unknown, exclusive: boolean): void {
+    if (exclusive && this.integrationRecords.listBounded(2049).length >= 2048)
+      failed(507, "Integration purpose journal capacity reached");
+    const body = canonicalJson(value);
+    if (Buffer.byteLength(body) > 65536) failed(413, "Standalone integration record is too large");
+    this.integrationRecords.write(
+      name,
+      JSON.stringify({
+        body,
+        mac: createHmac("sha256", this.key)
+          .update("openmapx-standalone-record-v1\0")
+          .update(name)
+          .update("\0")
+          .update(body)
+          .digest("hex"),
+      }),
+      exclusive,
+    );
+  }
+  readStandaloneInspection(
+    context: OpsExecutionContext,
+    inspectionId: string,
+  ): StandaloneInspectionRecord {
+    const installationId = this.standaloneInstallationId(context),
+      operation = this.integrationContext(context);
+    if (operation.kind !== "integration.install" || operation.inspectionId !== inspectionId)
+      throw Error("Standalone inspection read execution mismatch");
+    return this.lock(() => {
+      const record = this.readIntegrationRecord(
+        `inspection-${id.parse(inspectionId)}.json`,
+        standaloneInspectionRecordSchema,
+      );
+      if (record.installationId !== installationId || record.ownerId !== operation.ownerId)
+        throw Error("Standalone inspection owner mismatch");
+      return record;
     });
-    failed(409, "Artifact purpose consumer is not installed");
+  }
+  retainStandaloneInspection(
+    context: OpsExecutionContext,
+    input: StandaloneInspectionRecord,
+  ): void {
+    const installationId = this.standaloneInstallationId(context),
+      operation = this.integrationContext(context),
+      record = standaloneInspectionRecordSchema.parse(input);
+    if (
+      operation.kind !== "integration.inspectInstall" ||
+      record.installationId !== installationId ||
+      record.ownerId !== operation.ownerId ||
+      canonicalJson(record.source) !== canonicalJson(operation.source)
+    )
+      throw Error("Standalone inspection producer mismatch");
+    this.lock(() =>
+      this.writeIntegrationRecord(
+        `inspection-${record.inspection.inspectionId}.json`,
+        record,
+        true,
+      ),
+    );
+  }
+  readStandaloneTransaction(
+    context: OpsExecutionContext,
+    transactionId: string,
+  ): StandaloneTransactionRecord {
+    const installationId = this.standaloneInstallationId(context),
+      operation = this.integrationContext(context);
+    if (
+      (operation.kind !== "integration.install" || operation.operationId !== transactionId) &&
+      (operation.kind !== "integration.settle" || operation.transactionId !== transactionId)
+    )
+      throw Error("Standalone transaction read execution mismatch");
+    return this.lock(() => {
+      const record = this.readIntegrationRecord(
+        `transaction-${id.parse(transactionId)}.json`,
+        standaloneTransactionRecordSchema,
+      );
+      if (
+        record.installationId !== installationId ||
+        record.inspection.installationId !== installationId ||
+        (operation.kind === "integration.install" && record.ownerId !== operation.ownerId)
+      )
+        throw Error("Standalone transaction ownership mismatch");
+      return record;
+    });
+  }
+  retainStandaloneTransaction(
+    context: OpsExecutionContext,
+    input: StandaloneTransactionRecord,
+    publication?: IntegrationPublication,
+  ): void {
+    const installationId = this.standaloneInstallationId(context),
+      operation = this.integrationContext(context),
+      record = standaloneTransactionRecordSchema.parse(input);
+    if (
+      record.installationId !== installationId ||
+      record.inspection.installationId !== installationId
+    )
+      throw Error("Standalone transaction installation mismatch");
+    if (operation.kind === "integration.install") {
+      if (
+        operation.operationId !== record.transactionId ||
+        operation.ownerId !== record.ownerId ||
+        operation.inspectionId !== record.inspection.inspection.inspectionId ||
+        operation.expectedContentDigest !== record.inspection.inspection.contentDigest ||
+        canonicalJson(context.execution) !== canonicalJson(record.installExecution)
+      )
+        throw Error("Standalone transaction producer mismatch");
+    } else if (
+      operation.kind !== "integration.settle" ||
+      operation.transactionId !== record.transactionId ||
+      operation.expectedContentDigest !== record.inspection.inspection.contentDigest
+    )
+      throw Error("Standalone transaction settlement mismatch");
+    if (publication) {
+      assertIntegrationPublicationJournal(publication, this.standalonePublicationJournal(context));
+      record.publication = describeIntegrationPublication(publication);
+    } else if (operation.kind !== "integration.install" || record.publication !== null)
+      throw Error("Actual standalone publication producer required");
+    this.lock(() => {
+      const name = `transaction-${record.transactionId}.json`;
+      let previous: StandaloneTransactionRecord | null = null;
+      try {
+        previous = this.readIntegrationRecord(name, standaloneTransactionRecordSchema);
+      } catch (error) {
+        if (!absent(error)) throw error;
+      }
+      if (previous) {
+        const { publication: _old, ...old } = previous,
+          { publication: _new, ...next } = record;
+        if (canonicalJson(old) !== canonicalJson(next))
+          throw Error("Immutable standalone transaction changed");
+        if (!publication) throw Error("Standalone transaction already exists");
+      }
+      this.writeIntegrationRecord(name, record, previous === null);
+    });
+  }
+  standalonePublicationJournal(context: OpsExecutionContext): IntegrationPublicationJournal {
+    this.standaloneInstallationId(context);
+    const operation = this.integrationContext(context);
+    const transactionId =
+      operation.kind === "integration.install"
+        ? operation.operationId
+        : operation.kind === "integration.settle"
+          ? operation.transactionId
+          : null;
+    if (!transactionId) throw Error("Expected standalone publication execution");
+    let journal = this.integrationJournals.get(transactionId);
+    if (!journal) {
+      journal = createIntegrationPublicationJournal({
+        directory: this.integrationRecords,
+        coordination: this.records,
+        key: this.key,
+        transactionId,
+      });
+      this.integrationJournals.set(transactionId, journal);
+    }
+    return journal;
+  }
+  async claimStage(
+    input: ClaimTransferStage,
+    context?: OpsExecutionContext,
+  ): Promise<ArtifactStageClaim> {
+    if (!context) failed(409, "Artifact purpose consumer is not installed for this operation");
+    const operation = this.integrationContext(context);
+    this.admit();
+    return this.lock(() => {
+      const meta = this.owned(input.stageId, input.ownerId, input.purpose);
+      const identity = {
+        executionId: context.execution.executionId,
+        operationKey: context.execution.operationKey,
+        fingerprint: context.execution.fingerprint,
+        executionDeadlineAt: new Date(context.execution.deadlineAt).toISOString(),
+      };
+      if (
+        input.purpose !== "integration-artifact" ||
+        canonicalJson(input.identity) !== canonicalJson(identity)
+      )
+        failed(409, "Artifact claim execution mismatch");
+      const prior = meta.claims.find(
+        (entry) => canonicalJson(entry.claim.identity) === canonicalJson(identity),
+      );
+      if (prior) {
+        if (prior.claim.use !== input.use || prior.claim.sha256 !== input.expectedSha256)
+          failed(409, "Artifact claim replay mismatch");
+        return prior.claim;
+      }
+      this.alive(meta);
+      context.signal.throwIfAborted();
+      if (context.execution.deadlineAt <= this.now())
+        failed(410, "Artifact claim execution expired");
+      if (
+        meta.stage.direction !== "upload" ||
+        !meta.content ||
+        !meta.stage.sha256 ||
+        meta.stage.sha256 !== input.expectedSha256 ||
+        meta.claims.length >= 8
+      )
+        failed(409, "Artifact content is not available for this claim");
+      if (operation.kind === "integration.inspectInstall") {
+        if (
+          operation.ownerId !== input.ownerId ||
+          operation.source.kind !== "uploaded-artifact" ||
+          operation.source.stageId !== input.stageId ||
+          operation.source.expectedSha256 !== input.expectedSha256 ||
+          input.use !== "inspect-integration" ||
+          !["uploaded", "ready"].includes(meta.stage.state) ||
+          meta.claims.some((record) => record.settlement === null)
+        )
+          failed(409, "Integration inspection claim mismatch");
+      } else if (operation.kind === "integration.install") {
+        if (
+          operation.ownerId !== input.ownerId ||
+          input.use !== "install-integration" ||
+          meta.stage.state !== "ready" ||
+          !meta.integrationInspection ||
+          !input.inspection ||
+          canonicalJson(meta.integrationInspection) !== canonicalJson(input.inspection) ||
+          operation.inspectionId !== meta.integrationInspection.inspectionId ||
+          operation.expectedContentDigest !== meta.integrationInspection.validationFingerprint ||
+          Date.parse(meta.integrationInspection.expiresAt) <= this.now()
+        )
+          failed(409, "Integration installation inspection mismatch");
+      } else failed(409, "This operation cannot claim uploaded bytes");
+      // A prepared copy does not excuse mutation of its pinned upload. Check
+      // the original descriptor tuple again before granting installation.
+      const directory = this.directory(meta);
+      let fd: number | undefined;
+      try {
+        directory.fileIdentity("content");
+        fd = openSync(directory.name("content"), C.O_RDONLY | C.O_NOFOLLOW | C.O_NONBLOCK);
+        const stat = fstatSync(fd, { bigint: true });
+        if (
+          !meta.content ||
+          !stat.isFile() ||
+          stat.nlink !== 1n ||
+          !same(meta.content, stat) ||
+          String(stat.size) !== meta.content.size ||
+          String(stat.mtimeNs) !== meta.content.mtimeNs ||
+          String(stat.ctimeNs) !== meta.content.ctimeNs
+        )
+          failed(409, "Artifact content changed since upload");
+        directory.check();
+      } finally {
+        if (fd !== undefined) closeSync(fd);
+        directory.close();
+      }
+      const claim: ArtifactStageClaim = {
+        claimId: randomUUID(),
+        stageId: input.stageId,
+        ownerId: input.ownerId,
+        purpose: input.purpose,
+        use: input.use,
+        identity,
+        sha256: meta.stage.sha256,
+        bytes: meta.stage.bytes,
+      };
+      meta.claims.push({
+        claim,
+        settlement: null,
+        preparation:
+          operation.kind === "integration.install"
+            ? (meta.claims.find(
+                (record) =>
+                  record.settlement?.outcome === "validated" &&
+                  record.settlement.inspection.inspectionId === operation.inspectionId,
+              )?.preparation ?? null)
+            : null,
+        transactionId: operation.kind === "integration.install" ? operation.operationId : null,
+      });
+      meta.stage.state = input.use === "inspect-integration" ? "validating" : "claimed";
+      this.save(meta);
+      return claim;
+    });
   }
   async inspectClaim(input: {
     stageId: string;
     ownerId: string;
     identity: StageClaimIdentity;
   }): Promise<{ claim: ArtifactStageClaim; settlement: StageClaimSettlement | null } | null> {
-    this.lock(() => this.owned(input.stageId, input.ownerId));
-    return null;
+    return this.lock(() => {
+      const meta = this.owned(input.stageId, input.ownerId);
+      const entry = meta.claims.find(
+        (record) => canonicalJson(record.claim.identity) === canonicalJson(input.identity),
+      );
+      return entry ? { claim: entry.claim, settlement: entry.settlement } : null;
+    });
+  }
+  async validateIntegrationArtifact(
+    context: OpsExecutionContext,
+    preparation: IntegrationArtifactPreparationContext,
+  ) {
+    const operation = this.integrationContext(context);
+    if (
+      operation.kind !== "integration.inspectInstall" ||
+      operation.source.kind !== "uploaded-artifact"
+    )
+      throw Error("Expected an uploaded integration inspection execution");
+    const identity = {
+      executionId: context.execution.executionId,
+      operationKey: context.execution.operationKey,
+      fingerprint: context.execution.fingerprint,
+      executionDeadlineAt: new Date(context.execution.deadlineAt).toISOString(),
+    };
+    const claim = await this.claimStage(
+      {
+        stageId: operation.source.stageId,
+        ownerId: operation.ownerId,
+        purpose: "integration-artifact",
+        use: "inspect-integration",
+        identity,
+        expectedSha256: operation.source.expectedSha256,
+      },
+      context,
+    );
+    const prior = this.lock(
+      () =>
+        this.owned(claim.stageId, claim.ownerId).claims.find(
+          (record) => record.claim.claimId === claim.claimId,
+        )!,
+    );
+    if (prior.settlement) {
+      if (prior.settlement.outcome !== "validated" || !prior.preparation)
+        failed(409, "Integration validation has already settled");
+      const root = describeIntegrationPreparationRoot(preparation);
+      discardIntegrationPreparation(preparation);
+      return {
+        claim,
+        inspection: prior.settlement.inspection,
+        prepared: await restorePreparedIntegration({
+          rootDir: root,
+          receipt: prior.preparation,
+          signal: context.signal,
+        }),
+      };
+    }
+    try {
+      const prepared = await this.withClaimedIntegrationArtifact(
+        { claim, signal: context.signal },
+        async (input) =>
+          prepareIntegrationArtifact(
+            {
+              source: input.source,
+              expectedSha256: input.sha256,
+              maxArtifactBytes: 200 * 1024 ** 2,
+              maxExpandedBytes: 200 * 1024 ** 2,
+              signal: input.signal,
+            },
+            preparation,
+          ),
+      );
+      const receipt = describePreparedIntegration(prepared);
+      const inspection: StageInspectionBinding = {
+        inspectionId: randomUUID(),
+        stageId: claim.stageId,
+        sha256: claim.sha256,
+        bytes: claim.bytes,
+        policyRevision: this.revision,
+        validationFingerprint: prepared.contentDigest,
+        expiresAt: new Date(
+          Math.min(
+            this.now() + 600000,
+            Date.parse(this.lock(() => this.load(claim.stageId).stage.expiresAt)),
+          ),
+        ).toISOString(),
+      };
+      this.lock(() => {
+        const meta = this.owned(claim.stageId, claim.ownerId);
+        const record = meta.claims.find((entry) => entry.claim.claimId === claim.claimId)!;
+        if (record.settlement || meta.stage.state !== "validating")
+          failed(409, "Integration validation ownership changed");
+        record.preparation = receipt;
+        record.settlement = { outcome: "validated", inspection };
+        meta.integrationInspection = inspection;
+        meta.stage.state = "ready";
+        this.save(meta);
+      });
+      return { claim, inspection, prepared };
+    } catch (error) {
+      this.lock(() => {
+        const meta = this.owned(claim.stageId, claim.ownerId);
+        const record = meta.claims.find((entry) => entry.claim.claimId === claim.claimId)!;
+        if (!record.settlement) {
+          record.settlement = { outcome: "failed", receiptId: claim.claimId };
+          meta.stage.state = "failed";
+          this.save(meta);
+        }
+      });
+      throw error;
+    }
+  }
+  async claimIntegrationArtifactInstall(
+    context: OpsExecutionContext,
+    inspection: StageInspectionBinding,
+  ) {
+    const operation = this.integrationContext(context);
+    if (operation.kind !== "integration.install")
+      throw Error("Expected integration install execution");
+    return this.claimStage(
+      {
+        stageId: inspection.stageId,
+        ownerId: operation.ownerId,
+        purpose: "integration-artifact",
+        use: "install-integration",
+        identity: {
+          executionId: context.execution.executionId,
+          operationKey: context.execution.operationKey,
+          fingerprint: context.execution.fingerprint,
+          executionDeadlineAt: new Date(context.execution.deadlineAt).toISOString(),
+        },
+        expectedSha256: inspection.sha256,
+        inspection,
+      },
+      context,
+    );
+  }
+  async settleIntegrationArtifact(
+    context: OpsExecutionContext,
+    claim: ArtifactStageClaim,
+    publication: IntegrationPublication,
+  ): Promise<TransferStage> {
+    const operation = this.integrationContext(context);
+    assertIntegrationPublicationJournal(publication, this.standalonePublicationJournal(context));
+    const receipt = describeIntegrationPublication(publication);
+    if (
+      operation.kind !== "integration.settle" ||
+      operation.transactionId !== receipt.transactionId ||
+      operation.expectedContentDigest !== receipt.preparation.contentDigest ||
+      (operation.decision === "commit"
+        ? receipt.outcome !== "committed"
+        : receipt.outcome !== "restored")
+    )
+      throw Error("Integration publication has not settled under this original execution");
+    return this.lock(() => {
+      const meta = this.owned(claim.stageId, claim.ownerId, "integration-artifact");
+      const record = meta.claims.find(
+        (entry) => canonicalJson(entry.claim) === canonicalJson(claim),
+      );
+      if (
+        !record ||
+        record.claim.use !== "install-integration" ||
+        record.transactionId !== receipt.transactionId ||
+        !record.preparation ||
+        canonicalJson(record.preparation) !== canonicalJson(receipt.preparation)
+      )
+        failed(409, "Integration stage publication ownership mismatch");
+      const settlement: StageClaimSettlement =
+        operation.decision === "commit"
+          ? { outcome: "consumed", receiptId: receipt.transactionId }
+          : { outcome: "released", evidence: "restored" };
+      if (record.settlement) {
+        if (canonicalJson(record.settlement) !== canonicalJson(settlement))
+          failed(409, "Integration stage already settled differently");
+        return meta.stage;
+      }
+      if (meta.stage.state !== "claimed")
+        failed(409, "Integration stage is not held by its original installation");
+      record.settlement = settlement;
+      meta.stage.state =
+        operation.decision === "commit"
+          ? "consumed"
+          : Date.parse(meta.stage.expiresAt) > this.now()
+            ? "ready"
+            : "expired";
+      this.save(meta);
+      return meta.stage;
+    });
   }
   async settleStageClaim(_input: {
     claim: ArtifactStageClaim;
@@ -668,21 +1197,108 @@ export class ArtifactTransferStore {
     failed(409, "Artifact purpose consumer is not installed");
   }
   async withStageFile<T>(
-    _input: { claim: ArtifactStageClaim; signal: AbortSignal },
-    _run: (file: FileHandle, signal: AbortSignal) => Promise<T>,
+    input: { claim: ArtifactStageClaim; signal: AbortSignal },
+    run: (file: FileHandle, signal: AbortSignal) => Promise<T>,
   ): Promise<T> {
-    failed(409, "Artifact purpose consumer is not installed");
+    const claim = artifactStageClaimSchema.parse(input.claim);
+    const meta = this.lock(() => {
+      const meta = this.owned(claim.stageId, claim.ownerId, "integration-artifact");
+      const record = meta.claims.find(
+        (entry) => canonicalJson(entry.claim) === canonicalJson(claim),
+      );
+      if (
+        !record ||
+        record.settlement ||
+        !["validating", "claimed"].includes(meta.stage.state) ||
+        this.streams.has(claim.stageId)
+      )
+        failed(409, "Artifact claim is not an active purpose consumer");
+      if (
+        this.streams.size >= this.policy.maxConcurrentTransfers ||
+        [...this.streams.values()].filter((entry) => entry.ownerId === claim.ownerId).length >=
+          this.policy.maxConcurrentTransfersPerPrincipal
+      )
+        failed(429, "Artifact consumer concurrency limit exceeded");
+      return meta;
+    });
+    const controller = new AbortController();
+    const abort = () => controller.abort(input.signal.reason);
+    input.signal.addEventListener("abort", abort, { once: true });
+    if (input.signal.aborted) abort();
+    const timer = setTimeout(
+      () => controller.abort(new ArtifactTransferError(410, "Artifact claim deadline expired")),
+      Math.max(1, Date.parse(claim.identity.executionDeadlineAt) - this.now()),
+    );
+    timer.unref?.();
+    this.streams.set(claim.stageId, { ownerId: claim.ownerId, controller });
+    let directory: AnchoredDirectory | undefined, file: FileHandle | undefined;
+    try {
+      controller.signal.throwIfAborted();
+      directory = this.directory(meta);
+      file = await open(directory.name("content"), C.O_RDONLY | C.O_NOFOLLOW | C.O_NONBLOCK);
+      const verify = async () => {
+        const stat = await file!.stat({ bigint: true });
+        if (
+          !meta.content ||
+          !stat.isFile() ||
+          stat.nlink !== 1n ||
+          !same(meta.content, stat) ||
+          String(stat.size) !== meta.content.size ||
+          String(stat.mtimeNs) !== meta.content.mtimeNs ||
+          String(stat.ctimeNs) !== meta.content.ctimeNs ||
+          canonicalJson({ dev: meta.content.dev, ino: meta.content.ino }) !==
+            canonicalJson(directory!.fileIdentity("content"))
+        )
+          failed(409, "Artifact content changed");
+        directory!.check();
+      };
+      await verify();
+      const result = await run(file, controller.signal);
+      await verify();
+      return result;
+    } finally {
+      try {
+        await file?.close();
+        directory?.close();
+      } finally {
+        clearTimeout(timer);
+        input.signal.removeEventListener("abort", abort);
+        this.streams.delete(claim.stageId);
+      }
+    }
   }
   async withClaimedIntegrationArtifact<T>(
-    _input: { claim: ArtifactStageClaim; signal: AbortSignal },
-    _run: (input: {
+    input: { claim: ArtifactStageClaim; signal: AbortSignal },
+    run: (input: {
       source: AsyncIterable<Uint8Array>;
       signal: AbortSignal;
       bytes: number;
       sha256: string;
     }) => Promise<T>,
   ): Promise<T> {
-    failed(409, "Artifact purpose consumer is not installed");
+    if (input.claim.purpose !== "integration-artifact" || input.claim.use !== "inspect-integration")
+      failed(409, "Expected integration inspection claim");
+    return this.withStageFile(input, async (file, signal) => {
+      const source = (async function* () {
+        let position = 0;
+        for (;;) {
+          signal.throwIfAborted();
+          const buffer = Buffer.alloc(64 * 1024);
+          const { bytesRead } = await file.read(buffer, 0, buffer.length, position);
+          if (!bytesRead) break;
+          position += bytesRead;
+          if (position > input.claim.bytes)
+            failed(409, "Artifact consumer exceeded its immutable byte count");
+          yield buffer.subarray(0, bytesRead);
+        }
+        if (position !== input.claim.bytes) failed(409, "Artifact consumer byte count changed");
+      })();
+      try {
+        return await run({ source, signal, bytes: input.claim.bytes, sha256: input.claim.sha256 });
+      } finally {
+        await source.return(undefined);
+      }
+    });
   }
 }
 

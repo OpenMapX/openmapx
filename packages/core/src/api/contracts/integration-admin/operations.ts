@@ -45,6 +45,8 @@ import {
 } from "./health";
 import { adminOverviewSchema } from "./overview";
 
+import { standaloneIntegrationAdminOperations } from "./standalone-integrations";
+
 const common = adminCommonResponses;
 const missing = { ...common, 404: adminJson(httpErrorSchema) };
 const configErrors = adminJson(z.union([httpErrorSchema, adminIntegrationValidationErrorSchema]));
@@ -63,6 +65,7 @@ const _ok = adminJson(z.strictObject({ ok: z.literal(true) }));
 
 /** Complete integration/credential/overview family. Authentication metadata never enforces access. */
 export const integrationAdminOperations = {
+  ...standaloneIntegrationAdminOperations,
   listAdminIntegrations: {
     method: "GET",
     path: "/api/admin/integrations",

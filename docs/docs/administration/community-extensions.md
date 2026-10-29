@@ -76,6 +76,27 @@ Installing from the catalog is one click. To install something not in any
 catalog, use **Install from URL** and paste an `extension.json` URL — that always
 lands as **community**.
 
+## Standalone integrations
+
+Use **Extensions → Install integration** for a declarative integration that has
+no `extension.json` bundle. Choose an HTTPS repository and optional ref, an HTTPS
+artifact URL with its SHA-256, or a local `.tar.gz` archive. Archives are limited
+to 200 MiB compressed and expanded. Symbolic links, executable community modules,
+incompatible protocols and unsafe archive paths are rejected.
+
+**Review source** prepares the exact bytes without replacing the installed
+integration. Check the integration ID, version, content digest and resolved Git
+commit before installing. Reviews expire after ten minutes; review again if one
+expires. Uploads remain private to the administrator who created them.
+
+Installation runs as an Activity job and records community trust plus the actual
+source provenance. The agent holds the component and uploaded artifact while the
+API reloads the integration and records ownership. A confirmed failure restores
+the original directory; an uncertain result keeps the original transaction held
+for reconciliation. Closing the dialog only stops observation. Cancellation can
+remain pending until restoration is confirmed. Retrying the same request observes
+its existing job instead of installing twice.
+
 The same operations are available on the CLI:
 
 ```bash

@@ -11,6 +11,8 @@ beforeEach(() =>
 afterEach(() => vi.unstubAllGlobals());
 const at = "2026-10-20T12:00:00.000Z";
 const inventory = [
+  ["previewAdminStandaloneIntegration", "POST", "/api/admin/standalone-integrations/preview"],
+  ["installAdminStandaloneIntegration", "POST", "/api/admin/standalone-integrations/install"],
   ["listAdminIntegrations", "GET", "/api/admin/integrations"],
   ["getAdminIntegration", "GET", "/api/admin/integrations/:id"],
   ["listAdminIntegrationEnvVars", "GET", "/api/admin/integrations/env-vars"],
@@ -171,14 +173,20 @@ const detail = {
   secretsConfigured: true,
 };
 
-function success(id: keyof typeof contracts.integrationAdminOperations, value: unknown) {
+function success(
+  id: Exclude<
+    keyof typeof contracts.integrationAdminOperations,
+    "previewAdminStandaloneIntegration" | "installAdminStandaloneIntegration"
+  >,
+  value: unknown,
+) {
   const contract = contracts.integrationAdminOperations[id].responses[200];
   expect(contract.kind).toBe("json");
   if (contract.kind !== "json") throw new Error("Expected JSON");
   return contract.schema.parse(value);
 }
 describe("integration administration canonical producer contracts", () => {
-  it("binds exactly the 22 approved operation IDs, methods, paths and admin auth", () => {
+  it("binds exactly the 24 approved operation IDs, methods, paths and admin auth", () => {
     expect(contracts).toHaveProperty("integrationAdminOperations");
     expect(
       Object.entries(contracts.integrationAdminOperations).map(([id, op]) => [
@@ -618,3 +626,19 @@ describe("integration administration canonical producer contracts", () => {
     ).toBe(false);
   });
 });
+
+it.each(["previewAdminStandaloneIntegration", "installAdminStandaloneIntegration"] as const)(
+  "retains standalone durable acceptance for %s",
+  (id) => {
+    const op = contracts.integrationAdminOperations[id];
+    expect(
+      op.responses[202].schema.parse({
+        jobId: "568ce225-448a-4a8f-86c3-3994d4c6d8a9",
+        operationId: "99b22375-7d2c-486c-a2f5-d92391ceda2a",
+      }),
+    ).toHaveProperty("operationId");
+    expect(op.request.headers.safeParse({ "idempotency-key": "fixture-operation" }).success).toBe(
+      true,
+    );
+  },
+);

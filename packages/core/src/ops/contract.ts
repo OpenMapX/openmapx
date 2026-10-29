@@ -24,6 +24,10 @@ import {
   vaultApplyOperationSchema,
 } from "./configuration-operation-records";
 import { dataWorkflowReceiptSchema } from "./job-evidence";
+import {
+  standaloneIntegrationOperationSchemas,
+  standaloneIntegrationResultSchemas,
+} from "./standalone-integrations";
 
 export { configurationGenerationRevisionSchema } from "./configuration-operation-records";
 
@@ -65,6 +69,9 @@ export const OPS_MAX_BACKUP_ID_LENGTH = 128;
 export const OPS_MAX_BACKUP_INVENTORY_ENTRIES = 128;
 
 export const OPS_OPERATION_KINDS = [
+  "integration.inspectInstall",
+  "integration.install",
+  "integration.settle",
   "artifactTransfer.create",
   "artifactTransfer.list",
   "artifactTransfer.inspect",
@@ -203,6 +210,9 @@ const asyncEffect = (
 const LIFECYCLE_TIMEOUT_MS = 10 * 60_000 + 30_000;
 
 export const OPS_KIND_POLICIES = {
+  "integration.inspectInstall": asyncEffect("api", 10 * 60_000),
+  "integration.install": asyncEffect("api", 10 * 60_000),
+  "integration.settle": asyncEffect("api", 60_000),
   "artifactTransfer.create": sync("api", 30_000),
   "artifactTransfer.list": sync("api", 30_000),
   "artifactTransfer.inspect": sync("api", 30_000),
@@ -380,6 +390,7 @@ const serviceOperation = <T extends OpsOperationKind>(kind: T) =>
   z.strictObject({ kind: z.literal(kind), serviceId: serviceIdSchema });
 
 export const opsOperationSchema = z.discriminatedUnion("kind", [
+  ...standaloneIntegrationOperationSchemas,
   ...artifactTransferOperationSchemas,
   z.strictObject({
     kind: z.literal("controlRetention.acknowledge"),
@@ -1027,6 +1038,7 @@ const pinnedImageReference = z
   .regex(/^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$/);
 
 export const OPS_RESULT_SCHEMAS = {
+  ...standaloneIntegrationResultSchemas,
   ...artifactTransferResultSchemas,
   "controlRetention.acknowledge": z.strictObject({ acknowledged: z.literal(true) }),
   "docker.status": z.strictObject({

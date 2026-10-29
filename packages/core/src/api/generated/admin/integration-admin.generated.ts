@@ -114,6 +114,18 @@ import type {
   ImportAdminIntegrationConfigs500,
   ImportAdminIntegrationConfigsBody,
   ImportAdminIntegrationConfigsHeaders,
+  InstallAdminStandaloneIntegration202,
+  InstallAdminStandaloneIntegration400,
+  InstallAdminStandaloneIntegration401,
+  InstallAdminStandaloneIntegration403,
+  InstallAdminStandaloneIntegration409,
+  InstallAdminStandaloneIntegration413,
+  InstallAdminStandaloneIntegration415,
+  InstallAdminStandaloneIntegration429,
+  InstallAdminStandaloneIntegration500,
+  InstallAdminStandaloneIntegration503,
+  InstallAdminStandaloneIntegrationBody,
+  InstallAdminStandaloneIntegrationHeaders,
   ListAdminCredentials200,
   ListAdminCredentials400,
   ListAdminCredentials401,
@@ -158,6 +170,18 @@ import type {
   PatchAdminIntegrationConfig500,
   PatchAdminIntegrationConfigBody,
   PatchAdminIntegrationConfigHeaders,
+  PreviewAdminStandaloneIntegration202,
+  PreviewAdminStandaloneIntegration400,
+  PreviewAdminStandaloneIntegration401,
+  PreviewAdminStandaloneIntegration403,
+  PreviewAdminStandaloneIntegration409,
+  PreviewAdminStandaloneIntegration413,
+  PreviewAdminStandaloneIntegration415,
+  PreviewAdminStandaloneIntegration429,
+  PreviewAdminStandaloneIntegration500,
+  PreviewAdminStandaloneIntegration503,
+  PreviewAdminStandaloneIntegrationBody,
+  PreviewAdminStandaloneIntegrationHeaders,
   ReloadAdminIntegration200,
   ReloadAdminIntegration400,
   ReloadAdminIntegration401,
@@ -234,11 +258,13 @@ import {
   getAdminIntegrationRequest,
   getAdminOverviewRequest,
   importAdminIntegrationConfigsRequest,
+  installAdminStandaloneIntegrationRequest,
   listAdminCredentialsRequest,
   listAdminIntegrationBindingsRequest,
   listAdminIntegrationEnvVarsRequest,
   listAdminIntegrationsRequest,
   patchAdminIntegrationConfigRequest,
+  previewAdminStandaloneIntegrationRequest,
   reloadAdminIntegrationRequest,
   reloadAdminIntegrationsRequest,
   runAdminIntegrationHealthChecksRequest,
@@ -2339,4 +2365,226 @@ export const getAdminOverview = async (
     ...options,
     method: "GET",
   });
+};
+
+export type installAdminStandaloneIntegrationResponse202 = {
+  data: InstallAdminStandaloneIntegration202;
+  status: 202;
+};
+
+export type installAdminStandaloneIntegrationResponse400 = {
+  data: InstallAdminStandaloneIntegration400;
+  status: 400;
+};
+
+export type installAdminStandaloneIntegrationResponse401 = {
+  data: InstallAdminStandaloneIntegration401;
+  status: 401;
+};
+
+export type installAdminStandaloneIntegrationResponse403 = {
+  data: InstallAdminStandaloneIntegration403;
+  status: 403;
+};
+
+export type installAdminStandaloneIntegrationResponse409 = {
+  data: InstallAdminStandaloneIntegration409;
+  status: 409;
+};
+
+export type installAdminStandaloneIntegrationResponse413 = {
+  data: InstallAdminStandaloneIntegration413;
+  status: 413;
+};
+
+export type installAdminStandaloneIntegrationResponse415 = {
+  data: InstallAdminStandaloneIntegration415;
+  status: 415;
+};
+
+export type installAdminStandaloneIntegrationResponse429 = {
+  data: InstallAdminStandaloneIntegration429;
+  status: 429;
+};
+
+export type installAdminStandaloneIntegrationResponse500 = {
+  data: InstallAdminStandaloneIntegration500;
+  status: 500;
+};
+
+export type installAdminStandaloneIntegrationResponse503 = {
+  data: InstallAdminStandaloneIntegration503;
+  status: 503;
+};
+
+export type installAdminStandaloneIntegrationResponseSuccess =
+  installAdminStandaloneIntegrationResponse202 & {
+    headers: Headers;
+  };
+export type installAdminStandaloneIntegrationResponseError = (
+  | installAdminStandaloneIntegrationResponse400
+  | installAdminStandaloneIntegrationResponse401
+  | installAdminStandaloneIntegrationResponse403
+  | installAdminStandaloneIntegrationResponse409
+  | installAdminStandaloneIntegrationResponse413
+  | installAdminStandaloneIntegrationResponse415
+  | installAdminStandaloneIntegrationResponse429
+  | installAdminStandaloneIntegrationResponse500
+  | installAdminStandaloneIntegrationResponse503
+) & {
+  headers: Headers;
+};
+
+export type installAdminStandaloneIntegrationResponse =
+  | installAdminStandaloneIntegrationResponseSuccess
+  | installAdminStandaloneIntegrationResponseError;
+
+export const getInstallAdminStandaloneIntegrationUrl = () => {
+  return `/api/admin/standalone-integrations/install`;
+};
+
+export const installAdminStandaloneIntegration = async (
+  installAdminStandaloneIntegrationBody: InstallAdminStandaloneIntegrationBody,
+  headers: InstallAdminStandaloneIntegrationHeaders,
+  options?: Parameters<typeof installAdminStandaloneIntegrationRequest>[1],
+): Promise<installAdminStandaloneIntegrationResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return installAdminStandaloneIntegrationRequest<installAdminStandaloneIntegrationResponse>(
+    getInstallAdminStandaloneIntegrationUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+      body: JSON.stringify(installAdminStandaloneIntegrationBody),
+    },
+  );
+};
+
+export type previewAdminStandaloneIntegrationResponse202 = {
+  data: PreviewAdminStandaloneIntegration202;
+  status: 202;
+};
+
+export type previewAdminStandaloneIntegrationResponse400 = {
+  data: PreviewAdminStandaloneIntegration400;
+  status: 400;
+};
+
+export type previewAdminStandaloneIntegrationResponse401 = {
+  data: PreviewAdminStandaloneIntegration401;
+  status: 401;
+};
+
+export type previewAdminStandaloneIntegrationResponse403 = {
+  data: PreviewAdminStandaloneIntegration403;
+  status: 403;
+};
+
+export type previewAdminStandaloneIntegrationResponse409 = {
+  data: PreviewAdminStandaloneIntegration409;
+  status: 409;
+};
+
+export type previewAdminStandaloneIntegrationResponse413 = {
+  data: PreviewAdminStandaloneIntegration413;
+  status: 413;
+};
+
+export type previewAdminStandaloneIntegrationResponse415 = {
+  data: PreviewAdminStandaloneIntegration415;
+  status: 415;
+};
+
+export type previewAdminStandaloneIntegrationResponse429 = {
+  data: PreviewAdminStandaloneIntegration429;
+  status: 429;
+};
+
+export type previewAdminStandaloneIntegrationResponse500 = {
+  data: PreviewAdminStandaloneIntegration500;
+  status: 500;
+};
+
+export type previewAdminStandaloneIntegrationResponse503 = {
+  data: PreviewAdminStandaloneIntegration503;
+  status: 503;
+};
+
+export type previewAdminStandaloneIntegrationResponseSuccess =
+  previewAdminStandaloneIntegrationResponse202 & {
+    headers: Headers;
+  };
+export type previewAdminStandaloneIntegrationResponseError = (
+  | previewAdminStandaloneIntegrationResponse400
+  | previewAdminStandaloneIntegrationResponse401
+  | previewAdminStandaloneIntegrationResponse403
+  | previewAdminStandaloneIntegrationResponse409
+  | previewAdminStandaloneIntegrationResponse413
+  | previewAdminStandaloneIntegrationResponse415
+  | previewAdminStandaloneIntegrationResponse429
+  | previewAdminStandaloneIntegrationResponse500
+  | previewAdminStandaloneIntegrationResponse503
+) & {
+  headers: Headers;
+};
+
+export type previewAdminStandaloneIntegrationResponse =
+  | previewAdminStandaloneIntegrationResponseSuccess
+  | previewAdminStandaloneIntegrationResponseError;
+
+export const getPreviewAdminStandaloneIntegrationUrl = () => {
+  return `/api/admin/standalone-integrations/preview`;
+};
+
+export const previewAdminStandaloneIntegration = async (
+  previewAdminStandaloneIntegrationBody: PreviewAdminStandaloneIntegrationBody,
+  headers: PreviewAdminStandaloneIntegrationHeaders,
+  options?: Parameters<typeof previewAdminStandaloneIntegrationRequest>[1],
+): Promise<previewAdminStandaloneIntegrationResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return previewAdminStandaloneIntegrationRequest<previewAdminStandaloneIntegrationResponse>(
+    getPreviewAdminStandaloneIntegrationUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+      body: JSON.stringify(previewAdminStandaloneIntegrationBody),
+    },
+  );
 };

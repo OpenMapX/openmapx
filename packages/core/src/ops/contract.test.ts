@@ -66,6 +66,28 @@ const transferClaim = {
   bytes: 4,
 };
 const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
+  "integration.inspectInstall": {
+    kind: "integration.inspectInstall",
+    ownerId: "admin",
+    source: {
+      kind: "artifact",
+      url: "https://example.com/integration.tar.gz",
+      sha256: "a".repeat(64),
+    },
+  },
+  "integration.install": {
+    kind: "integration.install",
+    ownerId: "admin",
+    inspectionId: "91a78b3e-208b-4ba4-9ddf-870fbdf1da22",
+    expectedContentDigest: "a".repeat(64),
+    operationId: "81a78b3e-208b-4ba4-9ddf-870fbdf1da22",
+  },
+  "integration.settle": {
+    kind: "integration.settle",
+    transactionId: "91a78b3e-208b-4ba4-9ddf-870fbdf1da22",
+    decision: "commit",
+    expectedContentDigest: "a".repeat(64),
+  },
   "artifactTransfer.create": {
     kind: "artifactTransfer.create",
     ownerId: "admin",

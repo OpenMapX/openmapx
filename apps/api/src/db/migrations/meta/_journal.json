@@ -344,6 +344,13 @@
       "when": 1793227919397,
       "tag": "0048_admin_transit_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1793271038219,
+      "tag": "0049_admin_integration_ownership",
+      "breakpoints": true
     }
   ]
 }

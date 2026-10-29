@@ -30,7 +30,7 @@ function fixture() {
 }
 
 describe("extension integration install journal", () => {
-  it("restores upgraded artifacts when bookkeeping did not commit", async () => {
+  it("preserves a historical upgraded artifact without an exact publication ownership receipt", async () => {
     const root = fixture();
     const target = join(root, "custom_integrations", "probe");
     const backup = join(root, "custom_integrations", ".rollback-integration-probe-aaaaaaaaaaaa");
@@ -43,14 +43,15 @@ describe("extension integration install journal", () => {
     appendIntegrationJournalEntry(journal, { id: "probe", backupDirectory: backup });
     markIntegrationJournalEntryInstalled(journal, "probe");
 
-    await reconcileExtensionInstallJournal(root, journal.path, async () => false);
-
-    expect(readFileSync(join(target, "version"), "utf8")).toBe("old");
-    expect(existsSync(backup)).toBe(false);
-    expect(existsSync(journal.path)).toBe(false);
+    await expect(
+      reconcileExtensionInstallJournal(root, journal.path, async () => false),
+    ).rejects.toThrow(/ownership receipt/);
+    expect(readFileSync(join(target, "version"), "utf8")).toBe("new");
+    expect(existsSync(backup)).toBe(true);
+    expect(existsSync(journal.path)).toBe(true);
   });
 
-  it("removes a fresh artifact when bookkeeping did not commit", async () => {
+  it("preserves an unprovable historical fresh artifact instead of removing a later writer", async () => {
     const root = fixture();
     const target = join(root, "custom_integrations", "probe");
     mkdirSync(target);
@@ -58,10 +59,11 @@ describe("extension integration install journal", () => {
     appendIntegrationJournalEntry(journal, { id: "probe", backupDirectory: null });
     markIntegrationJournalEntryInstalled(journal, "probe");
 
-    await reconcileExtensionInstallJournal(root, journal.path, async () => false);
-
-    expect(existsSync(target)).toBe(false);
-    expect(existsSync(journal.path)).toBe(false);
+    await expect(
+      reconcileExtensionInstallJournal(root, journal.path, async () => false),
+    ).rejects.toThrow(/ownership receipt/);
+    expect(existsSync(target)).toBe(true);
+    expect(existsSync(journal.path)).toBe(true);
   });
 
   it("keeps installed artifacts and discards backups after committed bookkeeping", async () => {
@@ -110,4 +112,73 @@ describe("extension integration install journal", () => {
     expect(readFileSync(join(target, "version"), "utf8")).toBe("new");
     expect(existsSync(journal.path)).toBe(true);
   });
+});
+
+it.each([false, true])(
+  "settles an actual shared publication from retained bundle journal (bookkeeping=%s)",
+  async (committed) => {
+    const root = fixture();
+    mkdirSync(join(root, "services"));
+    const { createDeterministicTarGz } = await import(
+      "../../../../../packages/integration-framework/src/deterministic-tar"
+    );
+    const { installIntegration, removeIntegration } = await import(
+      "@openmapx/integration-framework/installer"
+    );
+    const { recordIntegrationPublicationPrepared } = await import("../extension-install-journal");
+    const archive = join(root, "fixture.tar.gz");
+    writeFileSync(
+      archive,
+      createDeterministicTarGz([
+        {
+          path: "manifest.json",
+          contents: Buffer.from(
+            JSON.stringify({
+              id: "bundle-fixture",
+              name: "Bundle",
+              version: "1.0.0",
+              platform: "1.0",
+              quality: "community",
+              domains: ["map-overlay"],
+            }),
+          ),
+        },
+      ]),
+    );
+    const journal = createExtensionInstallJournal(root, "bundle", { version: "1.0.0" });
+    appendIntegrationJournalEntry(journal, {
+      id: "bundle-fixture",
+      backupDirectory: null,
+      transactional: true,
+    });
+    await installIntegration({
+      rootDir: root,
+      source: archive,
+      sourceKind: "artifact",
+      expectedId: "bundle-fixture",
+      retainPublication: true,
+      beforePublish: (receipt) =>
+        recordIntegrationPublicationPrepared(journal, "bundle-fixture", receipt),
+    });
+    expect(() => removeIntegration({ rootDir: root, id: "bundle-fixture" })).toThrow(/busy/);
+    await reconcileExtensionInstallJournal(root, journal.path, async () => committed);
+    expect(existsSync(join(root, "custom_integrations", "bundle-fixture"))).toBe(committed);
+    expect(existsSync(journal.path)).toBe(false);
+    if (committed)
+      expect(() => removeIntegration({ rootDir: root, id: "bundle-fixture" })).not.toThrow();
+  },
+);
+it("does not delete a current integration when a transactional install never reached publication", async () => {
+  const root = fixture(),
+    target = join(root, "custom_integrations", "unmodified");
+  mkdirSync(target);
+  writeFileSync(join(target, "keep"), "original");
+  const journal = createExtensionInstallJournal(root, "bundle", { version: "1.0.0" });
+  appendIntegrationJournalEntry(journal, {
+    id: "unmodified",
+    backupDirectory: null,
+    transactional: true,
+  });
+  await reconcileExtensionInstallJournal(root, journal.path, async () => false);
+  expect(readFileSync(join(target, "keep"), "utf8")).toBe("original");
 });

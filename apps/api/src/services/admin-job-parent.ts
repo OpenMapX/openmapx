@@ -17,6 +17,12 @@ export { type ApiJobChildAttempt, apiJobChildAttemptSchema } from "@openmapx/cor
 import type { ApiJobChildAttempt } from "@openmapx/core/ops";
 
 function parentJobBudget(ctx: JobContext, kind: OpsOperationKind): number {
+  if (ctx.jobType === "standalone.install")
+    return (
+      opsExecutionBudget("integration.install").processMs +
+      opsExecutionBudget("integration.settle").processMs +
+      60000
+    );
   if (ctx.jobType === "system.update") return opsExecutionBudget("system.update").processMs;
   if (ctx.jobType === "service.start" || ctx.jobType === "service.apply") {
     // Fixed current workflow: render, inspect, start the coordinator, await its

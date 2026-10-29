@@ -708,7 +708,7 @@ describe("installIntegration (artifact source)", () => {
     ).toBe(true);
   });
 
-  it("extracts safe internal symlinks from artifacts", async () => {
+  it("rejects internal symlinks under the shared regular-file-only archive policy", async () => {
     const src = join(tmp, "symlink-artifact-src");
     const targetDir = join(src, "assets", "real");
     mkdirSync(targetDir, { recursive: true });
@@ -722,15 +722,11 @@ describe("installIntegration (artifact source)", () => {
     const artifact = join(tmp, "symlink-artifact.tar.gz");
     writeTarGz(src, artifact);
 
-    await installIntegration({
-      source: artifact,
-      sourceKind: "artifact",
-      rootDir: tmp,
-    });
-
-    const installedLink = join(tmp, "custom_integrations", "symlink-artifact", "assets", "linked");
-    expect(lstatSync(installedLink).isSymbolicLink()).toBe(true);
-    expect(existsSync(join(installedLink, "data.json"))).toBe(true);
+    await expectArtifactRejection(
+      artifact,
+      "symlink-artifact",
+      /Unsupported artifact entry type '2'/,
+    );
   });
 
   it("rejects artifacts that ship a node_modules directory", async () => {
@@ -924,7 +920,7 @@ describe("packageIntegration", () => {
 });
 
 describe("integration rollback backups", () => {
-  it("restores the exact pre-update files", () => {
+  it("preserves a current target without a transaction receipt and restores the backup only after explicit removal", () => {
     writeIntegration("custom_integrations", "weather-radar", {
       ...baseManifest,
       id: "weather-radar",
@@ -936,6 +932,11 @@ describe("integration rollback backups", () => {
 
     writeFileSync(join(target, "version.txt"), "new", "utf8");
     writeFileSync(join(target, "new-only.txt"), "new", "utf8");
+    expect(() => restoreInstalledIntegration(tmp, backup as NonNullable<typeof backup>)).toThrow(
+      /ownership receipt/,
+    );
+    expect(readFileSync(join(target, "version.txt"), "utf8")).toBe("new");
+    removeIntegration({ rootDir: tmp, id: "weather-radar" });
     restoreInstalledIntegration(tmp, backup as NonNullable<typeof backup>);
 
     expect(readFileSync(join(target, "version.txt"), "utf8")).toBe("old");

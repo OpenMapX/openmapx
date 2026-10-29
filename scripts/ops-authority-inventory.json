@@ -32,6 +32,13 @@
       "agent.update",
       "appApi.replace",
       "appApi.runtime.inspect",
+      "artifactTransfer.claim",
+      "artifactTransfer.create",
+      "artifactTransfer.delete",
+      "artifactTransfer.inspect",
+      "artifactTransfer.inspectClaim",
+      "artifactTransfer.list",
+      "artifactTransfer.settle",
       "backup.create",
       "backup.delete",
       "backup.list",
@@ -58,14 +65,17 @@
       "data.link",
       "data.notablePlacesBuild",
       "data.overtureConflate",
-      "data.overtureSync",
-      "data.overturePull",
-      "data.overtureIngest",
       "data.overtureExtract",
+      "data.overtureIngest",
+      "data.overturePull",
+      "data.overtureSync",
       "data.searchIndexBuild",
       "data.update",
       "dawarich.provisioning.inspect",
       "docker.status",
+      "integration.inspectInstall",
+      "integration.install",
+      "integration.settle",
       "integrationConfig.apply",
       "release.apply",
       "release.inspect",
@@ -99,14 +109,7 @@
       "system.inspect",
       "system.update",
       "transitCredentials.inspect",
-      "vault.apply",
-      "artifactTransfer.create",
-      "artifactTransfer.list",
-      "artifactTransfer.inspect",
-      "artifactTransfer.delete",
-      "artifactTransfer.claim",
-      "artifactTransfer.inspectClaim",
-      "artifactTransfer.settle"
+      "vault.apply"
     ],
     "data-manager": [
       "feedProxy.validateAndReload",
@@ -402,6 +405,15 @@
         "artifactTransfer.inspectClaim",
         "artifactTransfer.settle"
       ]
+    },
+    {
+      "id": "api.standalone-integration-installation",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/standalone-integrations/install.ts",
+        "apps/ops-agent/src/standalone-integration-runtime.ts#installStandaloneIntegrationRuntime"
+      ],
+      "typedKinds": ["integration.inspectInstall", "integration.install", "integration.settle"]
     }
   ],
   "mounts": [

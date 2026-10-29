@@ -16,6 +16,8 @@ import {
 } from "./admin-job-state";
 import { assertConfigurationMaintenanceProjectedStep } from "./configuration-maintenance-step-records";
 
+import { assertStandaloneSettlementCheckpoint } from "./standalone-integrations/settlement-checkpoint";
+
 const equal = (a: unknown, b: unknown) => canonicalJson(a ?? null) === canonicalJson(b ?? null);
 /** Called only for v3. The database row lock owns uniqueness, capacity and merges. */
 export async function checkpointOwnedAdminJob(
@@ -69,8 +71,12 @@ export async function checkpointOwnedAdminJob(
         return { conflict: true as const, result: current };
       if (Object.keys(old.steps).length >= 64 || Object.keys(old.operations).length >= 64)
         return { capacity: true as const, result: current };
-      if (row.status !== "running") throw new JobOwnershipLost();
-      if (current._cancelRequestedAt !== undefined) {
+      const standaloneSettlement =
+        row.type === "standalone.install" && operation.operation?.kind === "integration.settle";
+      if (standaloneSettlement)
+        await assertStandaloneSettlementCheckpoint(row, operation.operation!, tx);
+      if (row.status !== "running" && !standaloneSettlement) throw new JobOwnershipLost();
+      if (current._cancelRequestedAt !== undefined && !standaloneSettlement) {
         // Cancellation never authorizes a forward phase. Only the original
         // no-effect Abandon/Settle controls may be checkpointed against the
         // actual already-delivered preparation in THIS owned job row.

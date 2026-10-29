@@ -107,6 +107,8 @@ function cancellationReceiptContext(job: typeof adminJob.$inferSelect): JobConte
 type JobHandler = (ctx: JobContext) => Promise<Record<string, unknown> | undefined>;
 
 export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
+  "standalone.preview",
+  "standalone.install",
   "backup.operation",
   "data.operation",
   "service.bulk",
@@ -180,6 +182,20 @@ function hasRetainedQueuedCoordinator(job: {
     ordinal !== -1 && candidate.operationKey === coordinatorLifecycleOperationKey(job.id, ordinal)
   );
 }
+export class RetainedJobConflict extends Error {}
+/** Routing only: the fixed handler authenticates the original request and sealed checkpoint before continuing. */
+function hasRetainedStandalone(job: { type: string; result: unknown }) {
+  const value = job.result as {
+    _standalone?: { body?: unknown; mac?: unknown };
+    _standaloneSettled?: unknown;
+  } | null;
+  return (
+    job.type === "standalone.install" &&
+    value?._standaloneSettled !== true &&
+    typeof value?._standalone?.body === "string" &&
+    typeof value._standalone.mac === "string"
+  );
+}
 class JobPersistenceUnavailable extends Error {}
 
 class AdminJobRunner {
@@ -208,6 +224,68 @@ class AdminJobRunner {
     });
     setTimeout(() => void this.pump(), 0);
     return id;
+  }
+
+  /** Two fixed standalone producers share actor/key serialization and immutable request identity. */
+  async enqueueStandalone(
+    type: "standalone.preview" | "standalone.install",
+    payload: Record<string, unknown>,
+    actorId: string,
+    key: string,
+  ): Promise<{ jobId: string; operationId: string }> {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/.test(key))
+      throw new RetainedJobConflict("Invalid mutation key");
+    const token = await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? "");
+    const digest = createHmac("sha256", token)
+      .update("openmapx-standalone-request-v1\0")
+      .update(canonicalJson({ type, payload, actorId }))
+      .digest("hex");
+    const accepted = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${"standalone:" + actorId + ":" + key},0))`,
+      );
+      const rows = await tx
+        .select()
+        .from(adminJob)
+        .where(
+          and(
+            sql`${adminJob.payload}->>'_standaloneActor' = ${actorId}`,
+            sql`${adminJob.payload}->>'_standaloneKey' = ${key}`,
+          ),
+        )
+        .limit(2);
+      if (rows.length) {
+        const old = rows[0]!,
+          retained = old.payload as Record<string, unknown>;
+        if (
+          rows.length !== 1 ||
+          old.type !== type ||
+          retained._requestDigest !== digest ||
+          typeof retained.operationId !== "string"
+        )
+          throw new RetainedJobConflict("Mutation key belongs to a different standalone request");
+        return { jobId: old.id, operationId: retained.operationId };
+      }
+      const jobId = randomUUID(),
+        operationId = randomUUID();
+      await tx.insert(adminJob).values({
+        id: jobId,
+        type,
+        status: "queued",
+        createdBy: dbActorId(actorId),
+        payload: {
+          ...payload,
+          ownerId: actorId,
+          operationId,
+          _standaloneActor: actorId,
+          _standaloneKey: key,
+          _requestDigest: digest,
+        },
+      });
+      return { jobId, operationId };
+    });
+    setTimeout(() => void this.pump(), 0);
+    return accepted;
   }
 
   private async immediate<T>(
@@ -912,7 +990,10 @@ class AdminJobRunner {
   ): Promise<void> {
     const controller = new AbortController(),
       retainedConfiguration =
-        observe && (hasRetainedImmediateConfiguration(job) || hasRetainedQueuedCoordinator(job));
+        observe &&
+        (hasRetainedImmediateConfiguration(job) ||
+          hasRetainedQueuedCoordinator(job) ||
+          hasRetainedStandalone(job));
     this.active.set(job.id, controller);
     this.logSeq.set(job.id, 0);
 
@@ -986,10 +1067,11 @@ class AdminJobRunner {
       retainedQueuedCoordinator =
         observe &&
         hasRetainedQueuedCoordinator({ id: jobId, type, payload, result: checkpointResult }),
-      retainedConfiguration = retainedImmediate || retainedQueuedCoordinator,
+      retainedStandalone = observe && hasRetainedStandalone({ type, result: checkpointResult }),
+      retainedConfiguration = retainedImmediate || retainedQueuedCoordinator || retainedStandalone,
       handler = retainedImmediate
         ? (ctx: JobContext) => this.resumeImmediateConfiguration(ctx)
-        : retainedQueuedCoordinator
+        : retainedQueuedCoordinator || retainedStandalone
           ? this.handlers.get(type)
           : observe
             ? resumeAdminJobObservation
@@ -1231,7 +1313,7 @@ class AdminJobRunner {
           .where(jobOwnership(jobId, execution, ["running", "cancel_pending"]))
           .limit(1);
         if (!current) return;
-        if (current.status === "cancel_pending") {
+        if (current.status === "cancel_pending" && !retainedStandalone) {
           const outcome = await cancelAdminJobOperations(current.result, undefined, {
             context: ctx,
             jobId,

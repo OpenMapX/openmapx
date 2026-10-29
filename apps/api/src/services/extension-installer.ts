@@ -2,12 +2,13 @@ import { createHash, randomUUID } from "node:crypto";
 import { services as coreServices, findRepoRoot } from "@openmapx/core/server";
 import { PLATFORM_VERSION, satisfiesPlatformVersion } from "@openmapx/integration-framework";
 import {
-  backupInstalledIntegration,
   installIntegration as coreInstallIntegration,
   removeIntegration as coreRemoveIntegration,
   discardInstalledIntegrationBackup,
+  type IntegrationPublication,
   type IntegrationRollbackBackup,
   restoreInstalledIntegration,
+  settleIntegrationPublication,
 } from "@openmapx/integration-framework/installer";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db";
@@ -38,6 +39,7 @@ import {
   markExtensionInstallJournalRestoring,
   markIntegrationJournalEntryInstalled,
   reconcileExtensionInstallJournal,
+  recordIntegrationPublicationPrepared,
 } from "./extension-install-journal";
 import { recoverInterruptedExtensionChanges, withExtensionChangeLock } from "./extension-recovery";
 import { getKillSwitch } from "./extension-store";
@@ -349,6 +351,7 @@ interface InstallLedger {
   enabledServiceIds: string[]; // services newly enabled this run
   installedIntegrationIds: string[]; // integrations newly installed this run
   previousIntegrations: IntegrationRollbackBackup[];
+  publishedIntegrations: Array<{ id: string; publication: IntegrationPublication }>;
   touchedServiceIds: string[];
   previouslyEnabledServiceIds: string[];
   selectedRootsBefore: string[] | null;
@@ -394,6 +397,7 @@ async function installExtensionNow(
     enabledServiceIds: [],
     installedIntegrationIds: [],
     previousIntegrations: [],
+    publishedIntegrations: [],
     touchedServiceIds: [],
     previouslyEnabledServiceIds: [],
     selectedRootsBefore: null,
@@ -563,22 +567,18 @@ async function installExtensionNow(
     for (const intg of integrationComponents) {
       if (!integrationJournal) throw new Error("Integration install journal was not initialized");
       const existed = await integrationInstalledExists(intg.id);
-      if (existed) {
-        const backup = backupInstalledIntegration(ROOT_DIR, intg.id);
-        if (!backup) {
-          throw new Error(`Installed integration "${intg.id}" is missing from disk`);
-        }
-        ledger.previousIntegrations.push(backup);
-      }
       appendIntegrationJournalEntry(integrationJournal, {
         id: intg.id,
-        backupDirectory:
-          ledger.previousIntegrations.find((backup) => backup.id === intg.id)?.backupDirectory ??
-          null,
+        backupDirectory: null,
+        transactional: true,
       });
       await ctx.log(`Installing integration ${intg.id} from ${intg.artifact}...`);
       const installed = await coreInstallIntegration({
         rootDir: ROOT_DIR,
+        expectedId: intg.id,
+        retainPublication: true,
+        beforePublish: (receipt) =>
+          recordIntegrationPublicationPrepared(integrationJournal!, intg.id, receipt),
         source: intg.artifact,
         sourceKind: "artifact",
         artifactSha256: intg.sha256,
@@ -596,6 +596,9 @@ async function installExtensionNow(
           `Integration artifact installed "${installed.id}" but the manifest declared "${intg.id}"`,
         );
       }
+      if (!installed.publication)
+        throw Error("Integration publisher did not retain its original transaction");
+      ledger.publishedIntegrations.push({ id: intg.id, publication: installed.publication });
       markIntegrationJournalEntryInstalled(integrationJournal, intg.id);
       if (!existed) ledger.installedIntegrationIds.push(intg.id);
 
@@ -798,8 +801,12 @@ async function installExtensionNow(
 }
 
 async function rollbackInstall(ctx: JobContext, ledger: InstallLedger): Promise<void> {
-  // Integrations first (cheap), then services.
+  // Only the exact held publication may restore its previous directory.
+  for (const entry of [...ledger.publishedIntegrations].reverse())
+    await settleIntegrationPublication(entry.publication, "restore", new AbortController().signal);
+  // Historical entries retain their existing recovery path.
   for (const id of ledger.installedIntegrationIds) {
+    if (ledger.publishedIntegrations.some((entry) => entry.id === id)) continue;
     try {
       coreRemoveIntegration({ rootDir: ROOT_DIR, id });
       await db.delete(installedIntegration).where(eq(installedIntegration.id, id));
@@ -821,7 +828,11 @@ async function rollbackInstall(ctx: JobContext, ledger: InstallLedger): Promise<
         .catch(() => {});
     }
   }
-  if (ledger.installedIntegrationIds.length > 0 || ledger.previousIntegrations.length > 0) {
+  if (
+    ledger.publishedIntegrations.length > 0 ||
+    ledger.installedIntegrationIds.length > 0 ||
+    ledger.previousIntegrations.length > 0
+  ) {
     await reloadIntegrations().catch(() => {});
   }
 

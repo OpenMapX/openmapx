@@ -38,6 +38,7 @@ import {
   productionOwnedServices,
   productionReleaseEffects,
 } from "./production-runtime";
+import { installStandaloneIntegrationRuntime } from "./standalone-integration-runtime";
 import {
   afterValidatedServiceAuthority,
   resolveBootstrapEnabledServiceIds,
@@ -222,6 +223,11 @@ async function main(): Promise<void> {
         : undefined;
     if (artifactTransfers) installArtifactTransferRuntime(runtime, artifactTransfers);
     else if ("reason" in transferPolicy) console.error(transferPolicy.reason);
+    if (controlStartup.installation)
+      installStandaloneIntegrationRuntime(runtime, {
+        rootDir: config.rootDir,
+        store: artifactTransfers,
+      });
     const releaseEffects = productionReleaseEffects(runtime);
     const retentionDays = Number(process.env.BACKUP_RETENTION_DAYS?.trim() || "30");
     if (!Number.isSafeInteger(retentionDays) || retentionDays <= 0 || retentionDays > 36_500) {

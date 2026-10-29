@@ -2059,7 +2059,12 @@ export function retainControlEffectReceipt(
       if (
         !result.outcome ||
         ["applied", "unchanged", "committed"].includes(result.outcome) ||
-        (s.kind === "transitousLock.approve" && result.outcome === "activated")
+        (s.kind === "transitousLock.approve" && result.outcome === "activated") ||
+        // These closed results settle their own awaited filesystem leaf. A
+        // published install still holds its component lock until API bookkeeping
+        // selects the separate commit/restore operation.
+        (s.kind === "integration.install" && result.outcome === "published") ||
+        (s.kind === "integration.settle" && result.outcome === "restored")
       ) {
         outcome = "committed";
         publication = "committed";

@@ -1,3 +1,4 @@
+import { extractIntegrationArtifactStream } from "./artifact-stream";
 // Pure functions for installing, removing, validating, and bundling community
 // integrations under `custom_integrations/`. The CLI (`pnpm openmapx
 // integrations …`) and the admin Store (`apps/api/src/services/store.ts`) both
@@ -6,32 +7,43 @@
 // Community install/package entry points enforce declarative-only artifacts;
 // app-api never builds or executes community bundles at runtime.
 
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import {
+  constants as C,
   chmodSync,
+  closeSync,
   cpSync,
+  createReadStream,
   type Dirent,
   existsSync,
-  linkSync,
+  fstatSync,
+  fsyncSync,
   lstatSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
+  readSync,
   realpathSync,
   renameSync,
   rmSync,
   statSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
-import { gunzipSync } from "node:zlib";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { AnchoredDirectory } from "@openmapx/core/build-artifacts";
 import { scanLicenses } from "@openmapx/core/licenses";
-import { assertAllowedGitUrl, gitShallowClone, safeDownload } from "@openmapx/core/server";
+import {
+  assertAllowedGitUrl,
+  gitShallowClone,
+  gitShallowCloneSnapshot,
+  safeDownload,
+} from "@openmapx/core/server";
 import {
   type ArtifactMetadata,
   validateArtifactMetadata as validatePortableArtifactMetadata,
 } from "@openmapx/extension-contracts/artifact";
+import z from "zod/v4";
 import { createDeterministicTarGz } from "./deterministic-tar";
 import { INTEGRATION_ID_REGEX, validateManifest } from "./manifest";
 import { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";
@@ -51,13 +63,6 @@ function customDir(rootDir: string): string {
 const STAGING_DIR_NAME = ".staging";
 const DEFAULT_MAX_ARTIFACT_BYTES = 200 * 1024 * 1024;
 const MAX_LAYER_SELECTOR_PREVIEW_BYTES = 64 * 1024;
-const TAR_BLOCK_BYTES = 512;
-// Header count includes PAX and GNU metadata headers.
-const MAX_TAR_HEADERS = 4096;
-const MAX_PAX_RECORDS = 256;
-const MAX_ARCHIVE_PATH_BYTES = 1024;
-const MAX_ARCHIVE_PATH_COMPONENTS = 32;
-const MAX_ARCHIVE_PATH_COMPONENT_BYTES = 255;
 
 function stagingDir(rootDir: string): string {
   return join(customDir(rootDir), STAGING_DIR_NAME);
@@ -100,11 +105,41 @@ function resolveInstallTarget(rootDir: string, id: string): string {
   return target;
 }
 
+function readBoundedJson(path: string, limit: number): unknown {
+  const fd = openSync(path, C.O_RDONLY | C.O_NOFOLLOW | C.O_NONBLOCK);
+  try {
+    const before = fstatSync(fd, { bigint: true });
+    if (!before.isFile() || before.size > BigInt(limit))
+      throw Error("Integration JSON metadata exceeds its size limit");
+    const bytes = Buffer.alloc(Number(before.size));
+    let offset = 0;
+    while (offset < bytes.length) {
+      const count = readSync(fd, bytes, offset, bytes.length - offset, offset);
+      if (!count) throw Error("Integration JSON metadata changed");
+      offset += count;
+    }
+    const after = fstatSync(fd, { bigint: true }),
+      named = lstatSync(path, { bigint: true });
+    if (
+      before.dev !== after.dev ||
+      before.ino !== after.ino ||
+      before.size !== after.size ||
+      before.mtimeNs !== after.mtimeNs ||
+      before.ctimeNs !== after.ctimeNs ||
+      named.dev !== before.dev ||
+      named.ino !== before.ino
+    )
+      throw Error("Integration JSON metadata changed");
+    return JSON.parse(bytes.toString("utf8"));
+  } finally {
+    closeSync(fd);
+  }
+}
 function readManifest(directory: string): Record<string, unknown> | null {
   const manifestPath = join(directory, "manifest.json");
   if (!existsSync(manifestPath)) return null;
   try {
-    return JSON.parse(readFileSync(manifestPath, "utf-8")) as Record<string, unknown>;
+    return readBoundedJson(manifestPath, 1024 * 1024) as Record<string, unknown>;
   } catch {
     return null;
   }
@@ -272,9 +307,14 @@ export interface InstallOptions {
   /** Stream-style line callback for log output (stdout + stderr). */
   onLog?: (line: string, stream: "stdout" | "stderr") => void;
   signal?: AbortSignal;
+  /** Server-local bundle orchestration retains publication through reload/bookkeeping. */
+  retainPublication?: boolean;
+  expectedId?: string;
+  beforePublish?: (receipt: IntegrationPublicationReceipt) => void;
 }
 
 export interface InstallResult {
+  publication?: IntegrationPublication;
   id: string;
   directory: string;
   replaced: boolean;
@@ -331,9 +371,12 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
   // Stage inside custom_integrations so the final rename stays on the same
   // filesystem as the install target (renameSync is only atomic within a
   // single filesystem).
-  let stage: string;
+  let stage: string,
+    archiveSha256: string | null = null;
   if (sourceKind === "artifact") {
-    stage = await stageArtifactSource(opts);
+    const artifact = await stageArtifactSource(opts);
+    stage = artifact.directory;
+    archiveSha256 = artifact.archiveSha256;
   } else if (gitUrl) {
     stage = await gitShallowClone({
       url: gitUrl,
@@ -372,16 +415,45 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
     // (via assertSafeId) gives a single point of defense if the schema ever
     // loosens AND verifies the resolved path stays under custom_integrations/.
     const target = resolveInstallTarget(opts.rootDir, id);
-    const replaced = existsSync(target);
     validateDeclarativeArtifact(stage);
     if (sourceKind === "artifact") {
       validateArtifactMetadata(stage, manifest);
     }
-    if (replaced) {
-      rmSync(target, { recursive: true, force: true });
+    if (opts.expectedId !== undefined && opts.expectedId !== id)
+      throw Error(`Integration artifact declares ${id}, expected ${opts.expectedId}`);
+    const signal = opts.signal ?? new AbortController().signal;
+    const context = createIntegrationArtifactPreparation({ rootDir: opts.rootDir });
+    const state = preparationState(context),
+      workspace = checkedWorkspace(state);
+    try {
+      renameSync(stage, workspace.name("content"));
+      privatizeIntegrationDirectory(workspace.name("content"), signal);
+      state.phase = "preparing";
+      const prepared = finishIntegrationPreparation(context, archiveSha256, signal);
+      const previous = inspectInstalledIntegrationFingerprint({
+        rootDir: opts.rootDir,
+        id,
+        signal,
+      });
+      const publication = await publishPreparedIntegration(prepared, {
+        transactionId: randomUUID(),
+        expectedPreviousContentDigest: previous?.contentDigest ?? null,
+        expectedPreviousIdentity: previous?.identity ?? null,
+        signal,
+        beforePublish: opts.beforePublish,
+      });
+      if (opts.retainPublication)
+        return { id, directory: target, replaced: previous !== null, publication };
+      // Publication is the CLI commit point; finish only its already-owned
+      // cleanup even if cancellation arrives after the directory swap.
+      await settleIntegrationPublication(publication, "commit", new AbortController().signal);
+      return { id, directory: target, replaced: previous !== null };
+    } catch (error) {
+      if (state.phase !== "published") discardIntegrationPreparation(context);
+      throw error;
+    } finally {
+      workspace.close();
     }
-    renameSync(stage, target);
-    return { id, directory: target, replaced };
   } catch (err) {
     rmSync(stage, { recursive: true, force: true });
     throw err;
@@ -395,14 +467,16 @@ function stageLocalSource(rootDir: string, source: string): string {
   return stage;
 }
 
-async function stageArtifactSource(opts: InstallOptions): Promise<string> {
+async function stageArtifactSource(
+  opts: InstallOptions,
+): Promise<{ directory: string; archiveSha256: string }> {
   const token = randomBytes(4).toString("hex");
   const parent = stagingDir(opts.rootDir);
   const maxArtifactBytes = opts.maxArtifactBytes ?? DEFAULT_MAX_ARTIFACT_BYTES;
   mkdirSync(parent, { recursive: true });
   const extractRoot = join(parent, `artifact-${token}`);
   const archivePath = join(parent, `artifact-${token}.tar.gz`);
-  mkdirSync(extractRoot, { recursive: true });
+  mkdirSync(extractRoot, { recursive: true, mode: 0o700 });
 
   try {
     let sourcePath = opts.source;
@@ -420,29 +494,23 @@ async function stageArtifactSource(opts: InstallOptions): Promise<string> {
     }
 
     assertArtifactFileSize(sourcePath, maxArtifactBytes);
-    verifyArtifactSha256(sourcePath, opts.artifactSha256);
-    extractTarGz(sourcePath, extractRoot, maxArtifactBytes);
+    const extracted = await extractIntegrationArtifactStream({
+      source: createReadStream(sourcePath, { highWaterMark: 64 * 1024 }),
+      destination: extractRoot,
+      expectedSha256: opts.artifactSha256,
+      maxArtifactBytes,
+      maxExpandedBytes: maxArtifactBytes,
+      signal: opts.signal ?? new AbortController().signal,
+    });
 
     const stage = normalizeExtractedArtifactRoot(extractRoot, join(parent, `source-${token}`));
     if (sourcePath === archivePath) rmSync(archivePath, { force: true });
-    return stage;
+    return { directory: stage, archiveSha256: extracted.archiveSha256 };
   } catch (err) {
     rmSync(extractRoot, { recursive: true, force: true });
     rmSync(archivePath, { force: true });
     throw err;
   }
-}
-
-function verifyArtifactSha256(path: string, expected: string | undefined): void {
-  if (!expected) return;
-  const actual = sha256File(path);
-  if (actual.toLowerCase() !== expected.toLowerCase()) {
-    throw new Error(`Artifact sha256 mismatch: expected ${expected}, got ${actual}`);
-  }
-}
-
-function sha256File(path: string): string {
-  return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
 function assertArtifactFileSize(path: string, maxBytes: number): void {
@@ -471,400 +539,1215 @@ function normalizeExtractedArtifactRoot(extractRoot: string, promoted: string): 
   return extractRoot;
 }
 
-type TarDescriptorType = "directory" | "file" | "hardlink" | "symlink";
-
-interface TarDescriptor {
-  type: TarDescriptorType;
-  path: string;
-  linkTarget?: string;
-  payloadOffset: number;
-  payloadLength: number;
-  mode: number;
+declare const preparationBrand: unique symbol;
+declare const preparedBrand: unique symbol;
+export type IntegrationArtifactPreparationContext = { readonly [preparationBrand]: true };
+export type PreparedIntegrationArtifact = Readonly<{
+  preparationId: string;
+  id: string;
+  version: string;
+  contentDigest: string;
+  archiveSha256: string | null;
+  bytes: number;
+  [preparedBrand]: true;
+}>;
+const inodeSchema = z.strictObject({
+  dev: z.string().regex(/^[0-9]{1,32}$/),
+  ino: z.string().regex(/^[0-9]{1,32}$/),
+});
+const preparationReceiptSchema = z.strictObject({
+  version: z.literal(1),
+  preparationId: z.uuid(),
+  id: z.string().regex(INTEGRATION_ID_REGEX),
+  integrationVersion: z.string().min(1).max(128),
+  contentDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  archiveSha256: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .nullable(),
+  bytes: z.number().int().safe().nonnegative().max(DEFAULT_MAX_ARTIFACT_BYTES),
+  workspace: inodeSchema,
+  content: inodeSchema,
+});
+export type IntegrationPreparationReceipt = z.infer<typeof preparationReceiptSchema>;
+interface PreparationState {
+  rootDir: string;
+  preparationId: string;
+  workspace: { dev: string; ino: string };
+  phase: "empty" | "preparing" | "prepared" | "published" | "discarded";
+  receipt?: IntegrationPreparationReceipt;
+  journal?: IntegrationPublicationJournal;
+  manifest?: Record<string, unknown>;
 }
-
-function extractTarGz(archivePath: string, destDir: string, maxBytes: number): void {
-  let data: Buffer;
-  try {
-    data = gunzipSync(readFileSync(archivePath), { maxOutputLength: maxBytes });
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ERR_BUFFER_TOO_LARGE") {
-      throw new Error(`Artifact extracted size exceeds max ${maxBytes} bytes`);
-    }
-    throw err;
-  }
-
-  const descriptors = validateTarDescriptors(data, destDir);
-  materializeTarDescriptors(data, destDir, descriptors);
+const preparations = new WeakMap<IntegrationArtifactPreparationContext, PreparationState>();
+const preparedHandles = new WeakMap<
+  PreparedIntegrationArtifact,
+  IntegrationArtifactPreparationContext
+>();
+function preparationState(context: IntegrationArtifactPreparationContext): PreparationState {
+  const state = preparations.get(context);
+  if (!state) throw Error("Unverified integration preparation context");
+  return state;
 }
-
-function validateTarDescriptors(data: Buffer, destDir: string): TarDescriptor[] {
-  const descriptors: TarDescriptor[] = [];
-  let pendingPath: string | undefined;
-  let pendingLinkPath: string | undefined;
-  const base = resolve(destDir);
-  let headerCount = 0;
-  let offset = 0;
-  let reachedEndBlock = false;
-  for (; offset + TAR_BLOCK_BYTES <= data.length; ) {
-    const header = data.subarray(offset, offset + TAR_BLOCK_BYTES);
-    offset += TAR_BLOCK_BYTES;
-    if (isZeroBlock(header)) {
-      reachedEndBlock = true;
-      break;
-    }
-    headerCount += 1;
-    if (headerCount > MAX_TAR_HEADERS) {
-      throw new Error(
-        `Artifact tar header limit exceeded: maximum ${MAX_TAR_HEADERS.toLocaleString("en-US")}`,
-      );
-    }
-
-    const name = readTarString(header, 0, 100);
-    const prefix = readTarString(header, 345, 155);
-    const headerPath = prefix ? `${prefix}/${name}` : name;
-    const headerLinkPath = readTarString(header, 157, 100);
-    const size = parseTarOctal(header, 124, 12);
-    const mode = parseTarOctal(header, 100, 8);
-    const typeflag = readTarString(header, 156, 1) || "0";
-    const payloadOffset = offset;
-    if (size > data.length - payloadOffset) {
-      throw new Error(`Artifact tar payload is truncated for ${headerPath || "unnamed entry"}`);
-    }
-    const payloadEnd = payloadOffset + size;
-    const paddingLength = (TAR_BLOCK_BYTES - (size % TAR_BLOCK_BYTES)) % TAR_BLOCK_BYTES;
-    if (paddingLength > data.length - payloadEnd) {
-      throw new Error(
-        `Artifact tar payload padding is truncated for ${headerPath || "unnamed entry"}`,
-      );
-    }
-    const fileData = data.subarray(payloadOffset, payloadEnd);
-    offset = payloadEnd + paddingLength;
-
-    if (typeflag === "x") {
-      const records = parsePaxRecords(fileData);
-      pendingPath = records.path ?? pendingPath;
-      pendingLinkPath = records.linkpath ?? pendingLinkPath;
-      continue;
-    }
-    if (typeflag === "g") {
-      parsePaxRecords(fileData, false);
-      continue; // Global PAX metadata does not carry per-entry paths.
-    }
-    if (typeflag === "L") {
-      assertMetadataPathPayloadSize(fileData, "Artifact path");
-      pendingPath = readTarPayloadString(fileData);
-      continue;
-    }
-    if (typeflag === "K") {
-      assertMetadataPathPayloadSize(fileData, "Artifact link target");
-      pendingLinkPath = readTarPayloadString(fileData);
-      continue;
-    }
-
-    const rawPath = pendingPath ?? headerPath;
-    const rawLinkPath = pendingLinkPath ?? headerLinkPath;
-    pendingPath = undefined;
-    pendingLinkPath = undefined;
-    const safePath = safeArchivePath(rawPath);
-    assertArchivePathStructure(safePath, "Artifact path");
-    const target = resolve(destDir, safePath);
-    if (target !== base && !target.startsWith(`${base}${sep}`)) {
-      throw new Error(`Artifact entry escapes extraction directory: ${rawPath}`);
-    }
-
-    if (typeflag === "5") {
-      descriptors.push({
-        type: "directory",
-        path: safePath,
-        payloadOffset,
-        payloadLength: size,
-        mode,
-      });
-      continue;
-    }
-    if (typeflag === "2") {
-      const linkTarget = resolveSymlinkTarget(base, target, rawLinkPath);
-      descriptors.push({
-        type: "symlink",
-        path: safePath,
-        linkTarget: linkTarget.raw,
-        payloadOffset,
-        payloadLength: size,
-        mode,
-      });
-      continue;
-    }
-    if (typeflag === "1") {
-      const linkTarget = validateHardlinkTarget(base, rawLinkPath);
-      descriptors.push({
-        type: "hardlink",
-        path: safePath,
-        linkTarget,
-        payloadOffset,
-        payloadLength: size,
-        mode,
-      });
-      continue;
-    }
-    if (typeflag !== "0") {
-      throw new Error(`Unsupported artifact entry type '${typeflag}' for ${rawPath}`);
-    }
-
-    descriptors.push({
-      type: "file",
-      path: safePath,
-      payloadOffset,
-      payloadLength: size,
-      mode,
-    });
-  }
-  if (!reachedEndBlock && offset !== data.length) {
-    throw new Error("Artifact contains a partial tar header");
-  }
-  return descriptors;
+/** Server-local descriptor ownership; this path never crosses an HTTP contract. */
+export function describeIntegrationPreparationRoot(
+  context: IntegrationArtifactPreparationContext,
+): string {
+  const state = preparationState(context);
+  const workspace = checkedWorkspace(state);
+  workspace.close();
+  return state.rootDir;
 }
-
-function materializeTarDescriptors(
-  data: Buffer,
-  destDir: string,
-  descriptors: TarDescriptor[],
-): void {
-  const base = resolve(destDir);
-  for (const descriptor of descriptors) {
-    const target = resolve(destDir, descriptor.path);
-    if (descriptor.type === "directory") {
-      assertPathNotThroughSymlink(base, target);
-      mkdirSync(target, { recursive: true });
-      continue;
-    }
-    if (descriptor.type === "symlink") {
-      if (!descriptor.linkTarget) throw new Error("Validated artifact symlink has no target");
-      resolveSymlinkTarget(base, target, descriptor.linkTarget);
-      assertPathNotThroughSymlink(base, dirname(target));
-      mkdirSync(dirname(target), { recursive: true });
-      if (existsSync(target)) {
-        throw new Error(`Artifact link target already exists: ${descriptor.path}`);
-      }
-      symlinkSync(descriptor.linkTarget, target);
-      continue;
-    }
-    if (descriptor.type === "hardlink") {
-      if (!descriptor.linkTarget) throw new Error("Validated artifact hardlink has no target");
-      const linkTarget = resolveHardlinkTarget(base, descriptor.linkTarget);
-      assertPathNotThroughSymlink(base, dirname(target));
-      mkdirSync(dirname(target), { recursive: true });
-      assertPathNotThroughSymlink(base, target);
-      linkSync(linkTarget, target);
-      continue;
-    }
-
-    assertPathNotThroughSymlink(base, dirname(target));
-    mkdirSync(dirname(target), { recursive: true });
-    assertPathNotThroughSymlink(base, target);
-    writeFileSync(
-      target,
-      data.subarray(descriptor.payloadOffset, descriptor.payloadOffset + descriptor.payloadLength),
-    );
-    if (descriptor.mode > 0) {
-      try {
-        chmodSync(target, descriptor.mode & 0o777);
-      } catch {
-        // Non-fatal on filesystems that do not support chmod.
-      }
-    }
-  }
+function workspacePath(state: PreparationState): string {
+  return join(stagingDir(state.rootDir), `preparation-${state.preparationId}`);
 }
-
-function isZeroBlock(block: Buffer): boolean {
-  for (const byte of block) {
-    if (byte !== 0) return false;
-  }
-  return true;
-}
-
-function readTarString(block: Buffer, start: number, length: number): string {
-  const slice = block.subarray(start, start + length);
-  const nul = slice.indexOf(0);
-  return slice
-    .subarray(0, nul >= 0 ? nul : undefined)
-    .toString("utf-8")
-    .trim();
-}
-
-function parseTarOctal(block: Buffer, start: number, length: number): number {
-  const raw = readTarString(block, start, length).replace(/\0/g, "").trim();
-  if (!raw) return 0;
-  const value = Number.parseInt(raw, 8);
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new Error(`Invalid tar numeric field: ${raw}`);
-  }
-  return value;
-}
-
-function readTarPayloadString(data: Buffer): string {
-  const nul = data.indexOf(0);
-  return data
-    .subarray(0, nul >= 0 ? nul : undefined)
-    .toString("utf-8")
-    .trimEnd();
-}
-
-function parsePaxRecords(data: Buffer, capturePaths = true): Record<string, string> {
-  const records: Record<string, string> = {};
-  let offset = 0;
-  let count = 0;
-  while (offset < data.length) {
-    const space = data.indexOf(0x20, offset);
-    if (space < 0) throw new Error("Invalid PAX payload: unterminated trailing data");
-    if (space - offset > 20) throw new Error("Invalid PAX record length");
-    const lengthRaw = data.subarray(offset, space).toString("utf-8");
-    if (!/^\d+$/.test(lengthRaw)) throw new Error(`Invalid PAX record length: ${lengthRaw}`);
-    const length = Number.parseInt(lengthRaw, 10);
-    if (!Number.isInteger(length) || length <= 0 || offset + length > data.length) {
-      throw new Error(`Invalid PAX record length: ${lengthRaw}`);
-    }
-    count += 1;
-    if (count > MAX_PAX_RECORDS) {
-      throw new Error(`PAX payload exceeds ${MAX_PAX_RECORDS} records`);
-    }
-
-    const recordEnd = offset + length;
-    if (recordEnd <= space + 1 || data[recordEnd - 1] !== 10) {
-      throw new Error("Invalid PAX record: declared length must include a terminating newline");
-    }
-    const record = data.subarray(space + 1, recordEnd - 1);
-    const equals = record.indexOf(0x3d);
-    if (equals <= 0) throw new Error("Invalid PAX record: missing key/value separator");
-    if (capturePaths) {
-      const keyBytes = record.subarray(0, equals);
-      const valueBytes = record.subarray(equals + 1);
-      if (keyBytes.equals(Buffer.from("path"))) {
-        assertArchiveTextBytes(valueBytes, "Artifact path");
-        records.path = valueBytes.toString("utf-8");
-      } else if (keyBytes.equals(Buffer.from("linkpath"))) {
-        assertArchiveTextBytes(valueBytes, "Artifact link target");
-        records.linkpath = valueBytes.toString("utf-8");
-      }
-    }
-    offset += length;
-  }
-  return records;
-}
-
-function assertMetadataPathPayloadSize(data: Buffer, label: string): void {
-  const trailingNul = data.length > 0 && data[data.length - 1] === 0 ? 1 : 0;
-  if (data.length - trailingNul > MAX_ARCHIVE_PATH_BYTES) {
-    throw new Error(
-      `${label} exceeds ${MAX_ARCHIVE_PATH_BYTES.toLocaleString("en-US")} UTF-8 bytes`,
-    );
-  }
-}
-
-function assertArchiveTextBytes(data: Buffer, label: string): void {
-  if (data.length > MAX_ARCHIVE_PATH_BYTES) {
-    throw new Error(
-      `${label} exceeds ${MAX_ARCHIVE_PATH_BYTES.toLocaleString("en-US")} UTF-8 bytes`,
-    );
-  }
-}
-
-function assertArchivePathStructure(path: string, label: string): void {
-  if (Buffer.byteLength(path, "utf-8") > MAX_ARCHIVE_PATH_BYTES) {
-    throw new Error(
-      `${label} exceeds ${MAX_ARCHIVE_PATH_BYTES.toLocaleString("en-US")} UTF-8 bytes`,
-    );
-  }
-  const components = path.split(sep).filter((component) => component && component !== ".");
-  if (components.length > MAX_ARCHIVE_PATH_COMPONENTS) {
-    throw new Error(`${label} exceeds ${MAX_ARCHIVE_PATH_COMPONENTS} components`);
-  }
-  for (const component of components) {
-    if (Buffer.byteLength(component, "utf-8") > MAX_ARCHIVE_PATH_COMPONENT_BYTES) {
-      throw new Error(`${label} component exceeds ${MAX_ARCHIVE_PATH_COMPONENT_BYTES} UTF-8 bytes`);
-    }
-  }
-}
-
-function safeArchivePath(path: string): string {
-  const normalized = normalize(path.replace(/\\/g, "/"));
+function checkedWorkspace(state: PreparationState): AnchoredDirectory {
+  const directory = new AnchoredDirectory(workspacePath(state), undefined, true);
   if (
-    !normalized ||
-    normalized === "." ||
-    isAbsolute(normalized) ||
-    /^[A-Za-z]:/.test(normalized) ||
-    normalized === ".." ||
-    normalized.startsWith(`..${sep}`) ||
-    normalized.includes(`${sep}..${sep}`)
+    String(directory.stat.dev) !== state.workspace.dev ||
+    String(directory.stat.ino) !== state.workspace.ino
   ) {
-    throw new Error(`Unsafe artifact path: ${path}`);
+    directory.close();
+    throw Error("Integration preparation directory changed");
   }
-  return normalized;
+  return directory;
+}
+export function createIntegrationArtifactPreparation(options: {
+  rootDir: string;
+}): IntegrationArtifactPreparationContext {
+  const rootDir = resolve(options.rootDir);
+  mkdirSync(customDir(rootDir), { recursive: true });
+  const root = new AnchoredDirectory(customDir(rootDir));
+  let staging: AnchoredDirectory | undefined, workspace: AnchoredDirectory | undefined;
+  try {
+    staging = root.directory(STAGING_DIR_NAME, true, false);
+    const preparationId = randomUUID();
+    workspace = staging.directory(`preparation-${preparationId}`, true, true);
+    const context = Object.freeze({}) as IntegrationArtifactPreparationContext;
+    preparations.set(context, {
+      rootDir,
+      preparationId,
+      workspace: { dev: String(workspace.stat.dev), ino: String(workspace.stat.ino) },
+      phase: "empty",
+    });
+    return context;
+  } finally {
+    workspace?.close();
+    staging?.close();
+    root.close();
+  }
+}
+function validatePreparedIntegration(directory: string, rootDir: string): Record<string, unknown> {
+  const manifest = readManifest(directory);
+  if (!manifest || typeof manifest.id !== "string")
+    throw Error("Source has no manifest.json with a string id");
+  const validation = validateManifest(manifest);
+  if (!validation.valid) throw Error(`Manifest validation failed: ${validation.errors.join("; ")}`);
+  assertCompatibleManifestProtocol(manifest);
+  assertSafeId(manifest.id);
+  assertDoesNotShadowBuiltIn(rootDir, manifest.id);
+  resolveLayerSelectorPreview(directory, manifest);
+  assertNoExecutableCommunityCode(directory, manifest);
+  validateDeclarativeArtifact(directory);
+  validateArtifactMetadata(directory, manifest);
+  return manifest;
+}
+function fingerprintPreparedDirectory(
+  directory: string,
+  signal: AbortSignal,
+  strict = true,
+): { contentDigest: string; bytes: number } {
+  const root = new AnchoredDirectory(directory, undefined, strict);
+  const hash = createHash("sha256");
+  let bytes = 0,
+    count = 0;
+  const walk = (parent: AnchoredDirectory, prefix: string) => {
+    for (const name of parent.listBounded(4096).sort()) {
+      signal.throwIfAborted();
+      if (++count > 4096) throw Error("Integration preparation entry limit exceeded");
+      const path = prefix ? `${prefix}/${name}` : name;
+      const stat = lstatSync(parent.name(name), { bigint: true });
+      if (stat.isDirectory()) {
+        const child = parent.directory(name, false, strict);
+        try {
+          hash.update(JSON.stringify(["directory", path]));
+          walk(child, path);
+        } finally {
+          child.close();
+        }
+      } else {
+        if (
+          !stat.isFile() ||
+          stat.nlink !== 1n ||
+          stat.uid !== BigInt(process.getuid?.() ?? -1) ||
+          (stat.mode & BigInt(strict ? 0o077 : 0o022)) !== 0n
+        )
+          throw Error("Unsafe integration preparation member");
+        bytes += Number(stat.size);
+        if (!Number.isSafeInteger(bytes) || bytes > DEFAULT_MAX_ARTIFACT_BYTES)
+          throw Error("Integration preparation exceeds 200 MiB");
+        const fd = openSync(parent.name(name), C.O_RDONLY | C.O_NOFOLLOW | C.O_NONBLOCK);
+        try {
+          const before = fstatSync(fd, { bigint: true });
+          const fileHash = createHash("sha256"),
+            buffer = Buffer.alloc(64 * 1024);
+          for (;;) {
+            signal.throwIfAborted();
+            const n = readSync(fd, buffer);
+            if (!n) break;
+            fileHash.update(buffer.subarray(0, n));
+          }
+          const after = fstatSync(fd, { bigint: true }),
+            current = parent.fileIdentity(name, strict);
+          if (
+            before.dev !== stat.dev ||
+            before.ino !== stat.ino ||
+            before.size !== stat.size ||
+            before.size !== after.size ||
+            before.mtimeNs !== after.mtimeNs ||
+            before.ctimeNs !== after.ctimeNs ||
+            String(after.dev) !== current.dev ||
+            String(after.ino) !== current.ino
+          )
+            throw Error("Integration preparation changed during fingerprinting");
+          hash.update(JSON.stringify(["file", path, Number(before.size), fileHash.digest("hex")]));
+        } finally {
+          closeSync(fd);
+        }
+      }
+    }
+    parent.check();
+  };
+  try {
+    walk(root, "");
+    return { contentDigest: hash.digest("hex"), bytes };
+  } finally {
+    root.close();
+  }
+}
+function preparedHandle(
+  context: IntegrationArtifactPreparationContext,
+  receipt: IntegrationPreparationReceipt,
+): PreparedIntegrationArtifact {
+  const prepared = Object.freeze({
+    preparationId: receipt.preparationId,
+    id: receipt.id,
+    version: receipt.integrationVersion,
+    contentDigest: receipt.contentDigest,
+    archiveSha256: receipt.archiveSha256,
+    bytes: receipt.bytes,
+  }) as PreparedIntegrationArtifact;
+  preparedHandles.set(prepared, context);
+  return prepared;
+}
+export async function prepareIntegrationArtifact(
+  input: {
+    source: AsyncIterable<Uint8Array>;
+    expectedSha256: string;
+    maxArtifactBytes: number;
+    maxExpandedBytes: number;
+    signal: AbortSignal;
+  },
+  context: IntegrationArtifactPreparationContext,
+): Promise<PreparedIntegrationArtifact> {
+  const state = preparationState(context);
+  if (state.phase !== "empty") throw Error("Integration preparation already used");
+  if (
+    !/^[a-f0-9]{64}$/.test(input.expectedSha256) ||
+    !Number.isSafeInteger(input.maxArtifactBytes) ||
+    input.maxArtifactBytes <= 0 ||
+    input.maxArtifactBytes > DEFAULT_MAX_ARTIFACT_BYTES ||
+    !Number.isSafeInteger(input.maxExpandedBytes) ||
+    input.maxExpandedBytes <= 0 ||
+    input.maxExpandedBytes > DEFAULT_MAX_ARTIFACT_BYTES
+  )
+    throw Error("Invalid integration preparation limits");
+  const workspace = checkedWorkspace(state);
+  state.phase = "preparing";
+  try {
+    const payload = workspace.directory("payload", true, true);
+    payload.close();
+    const output = await extractIntegrationArtifactStream({
+      source: input.source,
+      destination: join(workspacePath(state), "payload"),
+      expectedSha256: input.expectedSha256,
+      maxArtifactBytes: input.maxArtifactBytes,
+      maxExpandedBytes: input.maxExpandedBytes,
+      signal: input.signal,
+    });
+    workspace.check();
+    const content = join(workspacePath(state), "content");
+    const normalized = normalizeExtractedArtifactRoot(
+      join(workspacePath(state), "payload"),
+      content,
+    );
+    if (normalized !== content) renameSync(normalized, content);
+    return finishIntegrationPreparation(context, output.archiveSha256, input.signal);
+  } catch (error) {
+    discardIntegrationPreparation(context);
+    throw error;
+  } finally {
+    workspace.close();
+  }
+}
+/** HTTPS/redirect/public-network checks and byte cap are enforced by the shared downloader. */
+export async function prepareRemoteIntegrationArtifact(
+  input: { url: string; sha256: string; signal: AbortSignal },
+  context: IntegrationArtifactPreparationContext,
+): Promise<PreparedIntegrationArtifact> {
+  const state = preparationState(context);
+  if (state.phase !== "empty") throw Error("Integration preparation already used");
+  const workspace = checkedWorkspace(state);
+  try {
+    const file = workspace.name("download.tar.gz");
+    await safeDownload({
+      url: new URL(input.url),
+      destination: file,
+      maxBytes: DEFAULT_MAX_ARTIFACT_BYTES,
+      timeoutMs: 5 * 60000,
+      allowedContentTypes: [],
+      credentialPolicy: "none",
+      signal: input.signal,
+    });
+    const source = createReadStream(file, { highWaterMark: 64 * 1024, signal: input.signal });
+    try {
+      return await prepareIntegrationArtifact(
+        {
+          source,
+          expectedSha256: input.sha256,
+          maxArtifactBytes: DEFAULT_MAX_ARTIFACT_BYTES,
+          maxExpandedBytes: DEFAULT_MAX_ARTIFACT_BYTES,
+          signal: input.signal,
+        },
+        context,
+      );
+    } finally {
+      source.destroy();
+    }
+  } finally {
+    workspace.close();
+  }
+}
+function finishIntegrationPreparation(
+  context: IntegrationArtifactPreparationContext,
+  archiveSha256: string | null,
+  signal: AbortSignal,
+): PreparedIntegrationArtifact {
+  const state = preparationState(context);
+  const workspace = checkedWorkspace(state);
+  try {
+    const content = join(workspacePath(state), "content");
+    const manifest = validatePreparedIntegration(content, state.rootDir);
+    const proof = fingerprintPreparedDirectory(content, signal);
+    const directory = workspace.directory("content", false, true);
+    try {
+      const receipt = preparationReceiptSchema.parse({
+        version: 1,
+        preparationId: state.preparationId,
+        id: manifest.id,
+        integrationVersion: manifest.version,
+        contentDigest: proof.contentDigest,
+        archiveSha256,
+        bytes: proof.bytes,
+        workspace: state.workspace,
+        content: { dev: String(directory.stat.dev), ino: String(directory.stat.ino) },
+      });
+      state.receipt = receipt;
+      state.manifest = structuredClone(manifest);
+      state.phase = "prepared";
+      return preparedHandle(context, receipt);
+    } finally {
+      directory.close();
+    }
+  } finally {
+    workspace.close();
+  }
+}
+function privatizeIntegrationDirectory(root: string, signal: AbortSignal): void {
+  let entries = 0,
+    bytes = 0;
+  const walk = (directory: string) => {
+    signal.throwIfAborted();
+    const stat = lstatSync(directory, { bigint: true });
+    if (
+      !stat.isDirectory() ||
+      stat.isSymbolicLink() ||
+      stat.uid !== BigInt(process.getuid?.() ?? -1)
+    )
+      throw Error("Unsafe integration preparation directory");
+    chmodSync(directory, 0o700);
+    for (const name of readdirSync(directory)) {
+      if (++entries > 4096) throw Error("Integration preparation entry limit exceeded");
+      const path = join(directory, name),
+        member = lstatSync(path, { bigint: true });
+      if (member.isDirectory()) walk(path);
+      else if (
+        member.isFile() &&
+        member.nlink === 1n &&
+        member.uid === BigInt(process.getuid?.() ?? -1)
+      ) {
+        bytes += Number(member.size);
+        if (!Number.isSafeInteger(bytes) || bytes > DEFAULT_MAX_ARTIFACT_BYTES)
+          throw Error("Integration source exceeds 200 MiB");
+        chmodSync(path, 0o600);
+      } else throw Error("Integration source contains a link or unsupported entry");
+    }
+  };
+  walk(root);
 }
 
-function assertPathNotThroughSymlink(base: string, target: string): void {
-  const resolvedBase = resolve(base);
-  const resolvedTarget = resolve(target);
-  if (resolvedTarget !== resolvedBase && !resolvedTarget.startsWith(`${resolvedBase}${sep}`)) {
-    throw new Error(`Artifact path escapes extraction directory: ${target}`);
+/** Resolve a bounded allowlisted repository exactly once, retaining its immutable commit. */
+export async function prepareIntegrationSource(
+  input: { repository: string; ref?: string; signal: AbortSignal },
+  context: IntegrationArtifactPreparationContext,
+): Promise<{ prepared: PreparedIntegrationArtifact; repository: string; commit: string }> {
+  const state = preparationState(context);
+  if (state.phase !== "empty") throw Error("Integration preparation already used");
+  state.phase = "preparing";
+  const workspace = checkedWorkspace(state);
+  try {
+    const snapshot = await gitShallowCloneSnapshot({
+      url: input.repository,
+      ref: input.ref,
+      targetDir: workspace.name("content"),
+      signal: input.signal,
+    });
+    if (!/^[a-f0-9]{40}$/.test(snapshot.commit)) throw Error("Invalid resolved integration commit");
+    privatizeIntegrationDirectory(workspace.name("content"), input.signal);
+    const prepared = finishIntegrationPreparation(context, null, input.signal);
+    return { prepared, repository: snapshot.canonicalUrl, commit: snapshot.commit };
+  } catch (error) {
+    discardIntegrationPreparation(context);
+    throw error;
+  } finally {
+    workspace.close();
   }
+}
 
-  const rel = relative(resolvedBase, resolvedTarget);
-  if (!rel) return;
+export function describePreparedIntegration(
+  prepared: PreparedIntegrationArtifact,
+): IntegrationPreparationReceipt {
+  const context = preparedHandles.get(prepared);
+  if (!context) throw Error("Unverified prepared integration");
+  const state = preparationState(context);
+  if (state.phase !== "prepared" || !state.receipt)
+    throw Error("Integration preparation is not available");
+  return structuredClone(state.receipt);
+}
+export async function restorePreparedIntegration(options: {
+  rootDir: string;
+  receipt: unknown;
+  signal: AbortSignal;
+}): Promise<PreparedIntegrationArtifact> {
+  const receipt = preparationReceiptSchema.parse(options.receipt);
+  const state: PreparationState = {
+    rootDir: resolve(options.rootDir),
+    preparationId: receipt.preparationId,
+    workspace: receipt.workspace,
+    phase: "prepared",
+    receipt,
+  };
+  const directory = checkedWorkspace(state);
+  try {
+    const content = directory.directory("content", false, true);
+    try {
+      if (
+        String(content.stat.dev) !== receipt.content.dev ||
+        String(content.stat.ino) !== receipt.content.ino
+      )
+        throw Error("Prepared integration content directory changed");
+    } finally {
+      content.close();
+    }
+    const path = join(workspacePath(state), "content");
+    const proof = fingerprintPreparedDirectory(path, options.signal);
+    if (proof.contentDigest !== receipt.contentDigest || proof.bytes !== receipt.bytes)
+      throw Error("Prepared integration content changed");
+    const manifest = validatePreparedIntegration(path, state.rootDir);
+    if (manifest.id !== receipt.id || manifest.version !== receipt.integrationVersion)
+      throw Error("Prepared integration manifest changed");
+    state.manifest = structuredClone(manifest);
+    const context = Object.freeze({}) as IntegrationArtifactPreparationContext;
+    preparations.set(context, state);
+    return preparedHandle(context, receipt);
+  } finally {
+    directory.close();
+  }
+}
+export function discardIntegrationPreparation(
+  context: IntegrationArtifactPreparationContext,
+): void {
+  const state = preparationState(context);
+  if (state.phase === "discarded") return;
+  if (state.phase === "published")
+    throw Error("Published integration requires transaction settlement");
+  const directory = checkedWorkspace(state);
+  try {
+    directory.check();
+    rmSync(workspacePath(state), { recursive: true, force: false });
+    state.phase = "discarded";
+  } finally {
+    directory.close();
+  }
+}
 
-  let current = resolvedBase;
-  for (const part of rel.split(sep)) {
-    if (!part) continue;
-    current = join(current, part);
-    if (existsSync(current) && lstatSync(current).isSymbolicLink()) {
-      throw new Error(`Artifact path traverses a symlink: ${relative(resolvedBase, current)}`);
+declare const componentLockBrand: unique symbol;
+export type IntegrationComponentLock = { readonly [componentLockBrand]: true };
+interface ComponentLockState {
+  rootDir: string;
+  id: string;
+  transactionId: string;
+  identity: { dev: string; ino: string };
+}
+const componentLocks = new WeakMap<IntegrationComponentLock, ComponentLockState>();
+function componentLockDirectory(state: ComponentLockState): {
+  root: AnchoredDirectory;
+  locks: AnchoredDirectory;
+  directory: AnchoredDirectory;
+} {
+  const root = new AnchoredDirectory(customDir(state.rootDir));
+  let locks: AnchoredDirectory | undefined, directory: AnchoredDirectory | undefined;
+  try {
+    locks = root.directory(".installation-locks", false, true);
+    directory = locks.directory(state.id, false, true);
+    const owner = z
+      .strictObject({ version: z.literal(1), transactionId: z.uuid() })
+      .parse(JSON.parse(directory.read("owner.json", 2048).toString("utf8")));
+    if (
+      owner.transactionId !== state.transactionId ||
+      String(directory.stat.dev) !== state.identity.dev ||
+      String(directory.stat.ino) !== state.identity.ino ||
+      directory.listBounded(2).length !== 1
+    )
+      throw Error("Integration component lock ownership changed");
+    return { root, locks, directory };
+  } catch (error) {
+    directory?.close();
+    locks?.close();
+    root.close();
+    throw error;
+  }
+}
+export function acquireIntegrationComponentLock(options: {
+  rootDir: string;
+  id: string;
+  transactionId?: string;
+}): IntegrationComponentLock {
+  assertSafeId(options.id);
+  const transactionId = z.uuid().parse(options.transactionId ?? randomUUID());
+  mkdirSync(customDir(options.rootDir), { recursive: true });
+  const root = new AnchoredDirectory(customDir(options.rootDir));
+  let locks: AnchoredDirectory | undefined, directory: AnchoredDirectory | undefined;
+  try {
+    locks = root.directory(".installation-locks", true, true);
+    try {
+      mkdirSync(locks.name(options.id), { mode: 0o700 });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST")
+        throw Error("Integration component is busy; reconcile its original transaction");
+      throw error;
+    }
+    fsyncSync(locks.fd);
+    directory = locks.directory(options.id, false, true);
+    directory.write("owner.json", JSON.stringify({ version: 1, transactionId }), true);
+    const lock = Object.freeze({}) as IntegrationComponentLock;
+    componentLocks.set(lock, {
+      rootDir: options.rootDir,
+      id: options.id,
+      transactionId,
+      identity: { dev: String(directory.stat.dev), ino: String(directory.stat.ino) },
+    });
+    return lock;
+  } finally {
+    directory?.close();
+    locks?.close();
+    root.close();
+  }
+}
+export function releaseIntegrationComponentLock(lock: IntegrationComponentLock): void {
+  const state = componentLocks.get(lock);
+  if (!state) throw Error("Unverified integration component lock");
+  const opened = componentLockDirectory(state);
+  try {
+    opened.directory.removeFile("owner.json");
+    opened.directory.close();
+    opened.locks.removeDirectory(state.id, state.identity);
+    componentLocks.delete(lock);
+  } finally {
+    opened.directory.close();
+    opened.locks.close();
+    opened.root.close();
+  }
+}
+function restoreComponentLock(state: ComponentLockState): IntegrationComponentLock {
+  const opened = componentLockDirectory(state);
+  opened.directory.close();
+  opened.locks.close();
+  opened.root.close();
+  const lock = Object.freeze({}) as IntegrationComponentLock;
+  componentLocks.set(lock, state);
+  return lock;
+}
+function currentIntegrationFingerprint(
+  rootDir: string,
+  id: string,
+  signal: AbortSignal,
+): { contentDigest: string; identity: { dev: string; ino: string } } | null {
+  const target = resolveInstallTarget(rootDir, id);
+  let stat: import("node:fs").BigIntStats;
+  try {
+    stat = lstatSync(target, { bigint: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  if (!stat.isDirectory() || stat.isSymbolicLink())
+    throw Error("Integration destination is not a regular owned directory");
+  const fingerprint = fingerprintPreparedDirectory(target, signal, false);
+  const after = lstatSync(target, { bigint: true });
+  if (after.dev !== stat.dev || after.ino !== stat.ino)
+    throw Error("Integration destination changed during inspection");
+  return {
+    contentDigest: fingerprint.contentDigest,
+    identity: { dev: String(stat.dev), ino: String(stat.ino) },
+  };
+}
+export function inspectInstalledIntegrationFingerprint(options: {
+  rootDir: string;
+  id: string;
+  signal: AbortSignal;
+}): { contentDigest: string; identity: { dev: string; ino: string } } | null {
+  const lock = acquireIntegrationComponentLock(options);
+  try {
+    return currentIntegrationFingerprint(options.rootDir, options.id, options.signal);
+  } finally {
+    releaseIntegrationComponentLock(lock);
+  }
+}
+const publicationSchema = z.strictObject({
+  version: z.literal(1),
+  transactionId: z.uuid(),
+  integrationId: z.string().regex(INTEGRATION_ID_REGEX),
+  preparation: preparationReceiptSchema,
+  previousContentDigest: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .nullable(),
+  previousIdentity: inodeSchema.nullable(),
+  lockIdentity: inodeSchema,
+  outcome: z.enum([
+    "prepared",
+    "previous-moved",
+    "published",
+    "commit-requested",
+    "committed",
+    "restore-requested",
+    "restored",
+  ]),
+});
+export type IntegrationPublicationReceipt = z.infer<typeof publicationSchema>;
+export const integrationPublicationReceiptSchema = publicationSchema;
+export const integrationPreparationReceiptSchema = preparationReceiptSchema;
+declare const publicationJournalBrand: unique symbol;
+export type IntegrationPublicationJournal = Readonly<{ [publicationJournalBrand]: true }>;
+const publicationJournals = new WeakMap<
+  IntegrationPublicationJournal,
+  {
+    directory: AnchoredDirectory;
+    coordination: AnchoredDirectory;
+    key: Buffer;
+    transactionId: string;
+    closed: boolean;
+  }
+>();
+/** Server-local purpose store descriptor. No filesystem path or key is accepted over HTTP. */
+export function createIntegrationPublicationJournal(input: {
+  directory: AnchoredDirectory;
+  coordination: AnchoredDirectory;
+  key: Uint8Array;
+  transactionId: string;
+}): IntegrationPublicationJournal {
+  z.uuid().parse(input.transactionId);
+  input.directory.check();
+  if (input.key.byteLength !== 32) throw Error("Invalid integration journal authentication key");
+  const handle = Object.freeze({}) as IntegrationPublicationJournal;
+  publicationJournals.set(handle, {
+    directory: input.directory,
+    coordination: input.coordination,
+    key: Buffer.from(input.key),
+    transactionId: input.transactionId,
+    closed: false,
+  });
+  return handle;
+}
+export function closeIntegrationPublicationJournal(handle: IntegrationPublicationJournal): void {
+  const journal = publicationJournals.get(handle);
+  if (!journal) throw Error("Unverified integration publication journal");
+  journal.closed = true;
+  journal.key.fill(0);
+}
+function publicationJournal(handle: IntegrationPublicationJournal) {
+  const journal = publicationJournals.get(handle);
+  if (!journal || journal.closed) throw Error("Integration publication journal is unavailable");
+  journal.directory.check();
+  return journal;
+}
+function readPublicationRecord(state: PreparationState): IntegrationPublicationReceipt {
+  if (state.journal) {
+    const journal = publicationJournal(state.journal);
+    const saved = z
+      .strictObject({ body: z.string().max(16384), mac: z.string().regex(/^[a-f0-9]{64}$/) })
+      .parse(
+        JSON.parse(
+          journal.directory
+            .read(`publication-${journal.transactionId}.json`, 32768)
+            .toString("utf8"),
+        ),
+      );
+    const expected = createHmac("sha256", journal.key)
+      .update("openmapx-integration-publication-v1\0")
+      .update(saved.body)
+      .digest();
+    if (!timingSafeEqual(expected, Buffer.from(saved.mac, "hex")))
+      throw Error("Integration publication journal authentication failed");
+    const receipt = publicationSchema.parse(JSON.parse(saved.body));
+    if (receipt.transactionId !== journal.transactionId)
+      throw Error("Integration publication journal identity changed");
+    return receipt;
+  }
+  const directory = checkedWorkspace(state);
+  try {
+    return publicationSchema.parse(
+      JSON.parse(directory.read("publication.json", 16384).toString("utf8")),
+    );
+  } finally {
+    directory.close();
+  }
+}
+declare const publicationBrand: unique symbol;
+export type IntegrationPublication = { readonly [publicationBrand]: true };
+const publications = new WeakMap<
+  IntegrationPublication,
+  {
+    context: IntegrationArtifactPreparationContext;
+    lock: IntegrationComponentLock | null;
+    receipt: IntegrationPublicationReceipt;
+  }
+>();
+function publicationState(handle: IntegrationPublication) {
+  const state = publications.get(handle);
+  if (!state) throw Error("Unverified integration publication");
+  return state;
+}
+export function assertIntegrationPublicationJournal(
+  publication: IntegrationPublication,
+  journal: IntegrationPublicationJournal,
+): void {
+  if (preparationState(publicationState(publication).context).journal !== journal)
+    throw Error("Integration publication is not owned by its authenticated purpose journal");
+  publicationJournal(journal);
+}
+function writePublication(
+  context: IntegrationArtifactPreparationContext,
+  receipt: IntegrationPublicationReceipt,
+  exclusive = false,
+) {
+  const state = preparationState(context),
+    directory = checkedWorkspace(state);
+  try {
+    const body = JSON.stringify(publicationSchema.parse(receipt));
+    if (state.journal) {
+      const journal = publicationJournal(state.journal);
+      if (journal.transactionId !== receipt.transactionId)
+        throw Error("Integration publication journal transaction mismatch");
+      let guard: AnchoredDirectory | undefined;
+      try {
+        mkdirSync(journal.coordination.name("writer"), { mode: 0o700 });
+        guard = journal.coordination.directory("writer", false, true);
+        const name = `publication-${receipt.transactionId}.json`;
+        if (exclusive && journal.directory.listBounded(2049).length >= 2048)
+          throw Error("Integration purpose journal capacity reached");
+        journal.directory.write(
+          name,
+          JSON.stringify({
+            body,
+            mac: createHmac("sha256", journal.key)
+              .update("openmapx-integration-publication-v1\0")
+              .update(body)
+              .digest("hex"),
+          }),
+          exclusive,
+        );
+      } finally {
+        if (guard) {
+          const identity = { dev: String(guard.stat.dev), ino: String(guard.stat.ino) };
+          guard.close();
+          journal.coordination.removeDirectory("writer", identity);
+        }
+      }
+    }
+    directory.write("publication.json", body);
+  } finally {
+    directory.close();
+  }
+}
+function sameDirectory(a: { dev: string; ino: string }, b: { dev: string; ino: string }) {
+  return a.dev === b.dev && a.ino === b.ino;
+}
+function requirePublishedTarget(state: ReturnType<typeof publicationState>, signal: AbortSignal) {
+  const value = currentIntegrationFingerprint(
+    preparationState(state.context).rootDir,
+    state.receipt.integrationId,
+    signal,
+  );
+  if (
+    !value ||
+    value.contentDigest !== state.receipt.preparation.contentDigest ||
+    !sameDirectory(value.identity, state.receipt.preparation.content)
+  )
+    throw Error("Published integration changed; preserve original transaction");
+}
+function loadPublication(state: ReturnType<typeof publicationState>) {
+  const saved = readPublicationRecord(preparationState(state.context));
+  const { outcome: _old, ...old } = state.receipt,
+    { outcome: _new, ...current } = saved;
+  if (JSON.stringify(old) !== JSON.stringify(current))
+    throw Error("Integration publication journal changed");
+  state.receipt = saved;
+  return saved;
+}
+
+export async function publishPreparedIntegration(
+  prepared: PreparedIntegrationArtifact,
+  input: {
+    transactionId: string;
+    expectedPreviousContentDigest: string | null;
+    expectedPreviousIdentity?: { dev: string; ino: string } | null;
+    beforePublish?: (receipt: IntegrationPublicationReceipt) => void;
+    journal?: IntegrationPublicationJournal;
+    signal: AbortSignal;
+  },
+): Promise<IntegrationPublication> {
+  z.uuid().parse(input.transactionId);
+  const context = preparedHandles.get(prepared);
+  if (!context) throw Error("Unverified prepared integration");
+  const state = preparationState(context);
+  if (state.phase !== "prepared" || !state.receipt)
+    throw Error("Integration preparation unavailable");
+  await restorePreparedIntegration({
+    rootDir: state.rootDir,
+    receipt: state.receipt,
+    signal: input.signal,
+  });
+  const lock = acquireIntegrationComponentLock({
+    rootDir: state.rootDir,
+    id: prepared.id,
+    transactionId: input.transactionId,
+  });
+  state.journal = input.journal;
+  let effectStarted = false;
+  let receipt: IntegrationPublicationReceipt | undefined;
+  try {
+    const previous = currentIntegrationFingerprint(state.rootDir, prepared.id, input.signal);
+    if ((previous?.contentDigest ?? null) !== input.expectedPreviousContentDigest)
+      throw Error("Integration destination changed since inspection");
+    if (
+      input.expectedPreviousIdentity !== undefined &&
+      (previous
+        ? !input.expectedPreviousIdentity ||
+          !sameDirectory(previous.identity, input.expectedPreviousIdentity)
+        : input.expectedPreviousIdentity !== null)
+    )
+      throw Error("Integration destination identity changed since inspection");
+    const lockState = componentLocks.get(lock)!;
+    receipt = {
+      version: 1,
+      transactionId: input.transactionId,
+      integrationId: prepared.id,
+      preparation: state.receipt,
+      previousContentDigest: previous?.contentDigest ?? null,
+      previousIdentity: previous?.identity ?? null,
+      lockIdentity: lockState.identity,
+      outcome: "prepared",
+    };
+    writePublication(context, receipt, true);
+    input.beforePublish?.(structuredClone(receipt));
+    input.signal.throwIfAborted();
+    const workspace = checkedWorkspace(state);
+    try {
+      const target = resolveInstallTarget(state.rootDir, prepared.id);
+      state.phase = "published";
+      effectStarted = true;
+      if (previous) {
+        renameSync(target, workspace.name("previous"));
+        fsyncSync(workspace.fd);
+        const root = new AnchoredDirectory(customDir(state.rootDir));
+        try {
+          fsyncSync(root.fd);
+        } finally {
+          root.close();
+        }
+        receipt.outcome = "previous-moved";
+        writePublication(context, receipt);
+      }
+      renameSync(workspace.name("content"), target);
+      fsyncSync(workspace.fd);
+      const root = new AnchoredDirectory(customDir(state.rootDir));
+      try {
+        fsyncSync(root.fd);
+      } finally {
+        root.close();
+      }
+      receipt.outcome = "published";
+      writePublication(context, receipt);
+      const handle = Object.freeze({}) as IntegrationPublication;
+      publications.set(handle, { context, lock, receipt });
+      requirePublishedTarget(publicationState(handle), new AbortController().signal);
+      return handle;
+    } finally {
+      workspace.close();
+    }
+  } catch (error) {
+    if (!effectStarted) {
+      if (receipt) {
+        const previous = currentIntegrationFingerprint(
+          state.rootDir,
+          prepared.id,
+          new AbortController().signal,
+        );
+        if (
+          (previous?.contentDigest ?? null) !== receipt.previousContentDigest ||
+          (previous &&
+            (!receipt.previousIdentity ||
+              !sameDirectory(previous.identity, receipt.previousIdentity)))
+        )
+          throw Error("Integration pre-publication failure requires reconciliation", {
+            cause: error,
+          });
+        receipt.outcome = "restored";
+        writePublication(context, receipt);
+        state.phase = "published";
+      }
+      releaseIntegrationComponentLock(lock);
+    }
+    throw error;
+  }
+}
+export function describeIntegrationPublication(
+  handle: IntegrationPublication,
+): IntegrationPublicationReceipt {
+  return structuredClone(loadPublication(publicationState(handle)));
+}
+/** Read only the fixed journal belonging to an already retained preparation. */
+export function inspectIntegrationPublication(options: {
+  rootDir: string;
+  preparation: IntegrationPreparationReceipt;
+  transactionId: string;
+  journal?: IntegrationPublicationJournal;
+}): IntegrationPublicationReceipt {
+  const preparation = preparationReceiptSchema.parse(options.preparation);
+  const state: PreparationState = {
+    rootDir: resolve(options.rootDir),
+    preparationId: preparation.preparationId,
+    workspace: preparation.workspace,
+    phase: "published",
+    receipt: preparation,
+    journal: options.journal,
+  };
+  const directory = checkedWorkspace(state);
+  try {
+    const receipt = readPublicationRecord(state);
+    if (
+      receipt.transactionId !== options.transactionId ||
+      JSON.stringify(receipt.preparation) !== JSON.stringify(preparation)
+    )
+      throw Error("Integration publication does not belong to its original preparation");
+    return receipt;
+  } finally {
+    directory.close();
+  }
+}
+export async function restoreIntegrationPublication(options: {
+  rootDir: string;
+  receipt: IntegrationPublicationReceipt;
+  signal: AbortSignal;
+  journal?: IntegrationPublicationJournal;
+}): Promise<IntegrationPublication> {
+  const receipt = publicationSchema.parse(options.receipt);
+  const context = Object.freeze({}) as IntegrationArtifactPreparationContext;
+  preparations.set(context, {
+    rootDir: resolve(options.rootDir),
+    preparationId: receipt.preparation.preparationId,
+    workspace: receipt.preparation.workspace,
+    phase: "published",
+    receipt: receipt.preparation,
+    journal: options.journal,
+  });
+  const handle = Object.freeze({}) as IntegrationPublication;
+  publications.set(handle, { context, lock: null, receipt });
+  const actual = loadPublication(publicationState(handle));
+  const terminal = actual.outcome === "committed" || actual.outcome === "restored";
+  const lockState = {
+    rootDir: options.rootDir,
+    id: receipt.integrationId,
+    transactionId: receipt.transactionId,
+    identity: receipt.lockIdentity,
+  };
+  if (!terminal) publicationState(handle).lock = restoreComponentLock(lockState);
+  else {
+    const path = join(customDir(options.rootDir), ".installation-locks", receipt.integrationId);
+    let identity: import("node:fs").BigIntStats | null = null;
+    try {
+      identity = lstatSync(path, { bigint: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    if (
+      identity &&
+      sameDirectory({ dev: String(identity.dev), ino: String(identity.ino) }, receipt.lockIdentity)
+    ) {
+      const root = new AnchoredDirectory(customDir(options.rootDir));
+      let locks: AnchoredDirectory | undefined, directory: AnchoredDirectory | undefined;
+      try {
+        locks = root.directory(".installation-locks", false, true);
+        directory = locks.directory(receipt.integrationId, false, true);
+        if (
+          !sameDirectory(
+            { dev: String(directory.stat.dev), ino: String(directory.stat.ino) },
+            receipt.lockIdentity,
+          )
+        )
+          throw Error("Original integration lock changed");
+        if (directory.listBounded(2).length === 0) {
+          directory.close();
+          locks.removeDirectory(receipt.integrationId, receipt.lockIdentity);
+        } else publicationState(handle).lock = restoreComponentLock(lockState);
+      } finally {
+        directory?.close();
+        locks?.close();
+        root.close();
+      }
     }
   }
+  if (["published", "commit-requested"].includes(actual.outcome))
+    requirePublishedTarget(publicationState(handle), options.signal);
+  return handle;
 }
-
-function assertSafeLinkText(rawLinkPath: string): string {
-  const linkPath = rawLinkPath.replace(/\\/g, "/");
-  if (!linkPath || linkPath.includes("\0")) {
-    throw new Error("Artifact link has an empty or invalid target");
+export async function settleIntegrationPublication(
+  handle: IntegrationPublication,
+  decision: "commit" | "restore",
+  signal: AbortSignal,
+): Promise<{ outcome: "committed" | "restored"; contentDigest: string | null }> {
+  const state = publicationState(handle),
+    receipt = loadPublication(state),
+    preparation = preparationState(state.context);
+  const terminal = receipt.outcome === "committed" || receipt.outcome === "restored";
+  if (terminal && (decision === "commit") !== (receipt.outcome === "committed"))
+    throw Error("Integration transaction already settled with a different decision");
+  if (!terminal && !state.lock)
+    throw Error("Integration transaction has no original component lock");
+  const workspace = checkedWorkspace(preparation);
+  let guard: AnchoredDirectory | undefined;
+  try {
+    try {
+      mkdirSync(workspace.name("settlement-writer"), { mode: 0o700 });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST")
+        throw Error("Integration settlement is busy");
+      throw error;
+    }
+    guard = workspace.directory("settlement-writer");
+    const target = resolveInstallTarget(preparation.rootDir, receipt.integrationId);
+    const removeOwned = (
+      name: string,
+      expected: { dev: string; ino: string },
+      expectedDigest: string | null,
+      verifyDigest: boolean,
+    ) => {
+      let current: import("node:fs").BigIntStats;
+      try {
+        current = lstatSync(workspace.name(name), { bigint: true });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+        throw error;
+      }
+      if (
+        !current.isDirectory() ||
+        String(current.dev) !== expected.dev ||
+        String(current.ino) !== expected.ino
+      )
+        throw Error("Integration transaction directory changed");
+      if (
+        verifyDigest &&
+        fingerprintPreparedDirectory(workspace.name(name), signal, false).contentDigest !==
+          expectedDigest
+      )
+        throw Error("Integration transaction bytes changed");
+      rmSync(workspace.name(name), { recursive: true, force: false });
+      fsyncSync(workspace.fd);
+    };
+    if (terminal) {
+      if (receipt.outcome === "restored") {
+        removeOwned(
+          "rejected",
+          receipt.preparation.content,
+          receipt.preparation.contentDigest,
+          false,
+        );
+        removeOwned(
+          "content",
+          receipt.preparation.content,
+          receipt.preparation.contentDigest,
+          false,
+        );
+      }
+      if (state.lock) {
+        releaseIntegrationComponentLock(state.lock!);
+        state.lock = null;
+      }
+      return {
+        outcome: receipt.outcome as "committed" | "restored",
+        contentDigest:
+          receipt.outcome === "committed"
+            ? receipt.preparation.contentDigest
+            : receipt.previousContentDigest,
+      };
+    }
+    if (decision === "commit") {
+      if (receipt.outcome === "restore-requested")
+        throw Error("Integration transaction was restored");
+      requirePublishedTarget(state, signal);
+      const wasRequested = receipt.outcome === "commit-requested";
+      receipt.outcome = "commit-requested";
+      writePublication(state.context, receipt);
+      if (receipt.previousIdentity)
+        removeOwned(
+          "previous",
+          receipt.previousIdentity,
+          receipt.previousContentDigest,
+          !wasRequested,
+        );
+      receipt.outcome = "committed";
+      writePublication(state.context, receipt);
+      releaseIntegrationComponentLock(state.lock!);
+      state.lock = null;
+      return { outcome: "committed", contentDigest: receipt.preparation.contentDigest };
+    }
+    if (receipt.outcome === "commit-requested")
+      throw Error("Integration transaction was committed");
+    {
+      if (receipt.outcome !== "restore-requested") {
+        if (receipt.outcome === "prepared" || receipt.outcome === "previous-moved") {
+          const current = currentIntegrationFingerprint(
+            preparation.rootDir,
+            receipt.integrationId,
+            signal,
+          );
+          const newTarget =
+            current &&
+            sameDirectory(current.identity, receipt.preparation.content) &&
+            current.contentDigest === receipt.preparation.contentDigest;
+          if (!newTarget) {
+            if (
+              current &&
+              (!receipt.previousIdentity ||
+                !sameDirectory(current.identity, receipt.previousIdentity) ||
+                current.contentDigest !== receipt.previousContentDigest)
+            )
+              throw Error("Integration destination changed before restoration");
+            const original = workspace.directory("content", false, true);
+            try {
+              if (
+                !sameDirectory(
+                  { dev: String(original.stat.dev), ino: String(original.stat.ino) },
+                  receipt.preparation.content,
+                ) ||
+                fingerprintPreparedDirectory(workspace.name("content"), signal).contentDigest !==
+                  receipt.preparation.contentDigest
+              )
+                throw Error("Prepared integration changed before restoration");
+            } finally {
+              original.close();
+            }
+          }
+        } else requirePublishedTarget(state, signal);
+        receipt.outcome = "restore-requested";
+        writePublication(state.context, receipt);
+      }
+      const current = currentIntegrationFingerprint(
+        preparation.rootDir,
+        receipt.integrationId,
+        signal,
+      );
+      if (
+        current &&
+        sameDirectory(current.identity, receipt.preparation.content) &&
+        current.contentDigest === receipt.preparation.contentDigest
+      ) {
+        renameSync(target, workspace.name("rejected"));
+        fsyncSync(workspace.fd);
+      } else if (
+        current &&
+        (!receipt.previousIdentity ||
+          !sameDirectory(current.identity, receipt.previousIdentity) ||
+          current.contentDigest !== receipt.previousContentDigest)
+      )
+        throw Error("Integration destination changed during restore");
+      const after = currentIntegrationFingerprint(
+        preparation.rootDir,
+        receipt.integrationId,
+        signal,
+      );
+      if (!after && receipt.previousIdentity) {
+        const previous = workspace.directory("previous", false, false);
+        try {
+          if (
+            String(previous.stat.dev) !== receipt.previousIdentity.dev ||
+            String(previous.stat.ino) !== receipt.previousIdentity.ino ||
+            fingerprintPreparedDirectory(workspace.name("previous"), signal, false)
+              .contentDigest !== receipt.previousContentDigest
+          )
+            throw Error("Original integration backup changed");
+        } finally {
+          previous.close();
+        }
+        renameSync(workspace.name("previous"), target);
+        fsyncSync(workspace.fd);
+      }
+      const restored = currentIntegrationFingerprint(
+        preparation.rootDir,
+        receipt.integrationId,
+        signal,
+      );
+      if (
+        (restored?.contentDigest ?? null) !== receipt.previousContentDigest ||
+        (restored &&
+          receipt.previousIdentity &&
+          !sameDirectory(restored.identity, receipt.previousIdentity))
+      )
+        throw Error("Integration restoration is not proven");
+      const root = new AnchoredDirectory(customDir(preparation.rootDir));
+      try {
+        fsyncSync(root.fd);
+      } finally {
+        root.close();
+      }
+      receipt.outcome = "restored";
+      writePublication(state.context, receipt);
+    }
+    removeOwned("rejected", receipt.preparation.content, receipt.preparation.contentDigest, false);
+    removeOwned("content", receipt.preparation.content, receipt.preparation.contentDigest, false);
+    releaseIntegrationComponentLock(state.lock!);
+    state.lock = null;
+    return { outcome: "restored", contentDigest: receipt.previousContentDigest };
+  } finally {
+    if (guard) {
+      const identity = { dev: String(guard.stat.dev), ino: String(guard.stat.ino) };
+      guard.close();
+      workspace.removeDirectory("settlement-writer", identity);
+    }
+    workspace.close();
   }
-  if (isAbsolute(linkPath) || /^[A-Za-z]:/.test(linkPath)) {
-    throw new Error(`Artifact link target is not relative: ${rawLinkPath}`);
-  }
-  return linkPath;
-}
-
-function resolveSymlinkTarget(
-  base: string,
-  linkPath: string,
-  rawLinkPath: string,
-): { raw: string; resolved: string } {
-  const raw = assertSafeLinkText(rawLinkPath);
-  assertArchivePathStructure(normalize(raw), "Artifact link target");
-  const resolved = resolve(dirname(linkPath), raw);
-  if (resolved !== base && !resolved.startsWith(`${base}${sep}`)) {
-    throw new Error(`Artifact symlink target escapes extraction directory: ${rawLinkPath}`);
-  }
-  return { raw, resolved };
-}
-
-function validateHardlinkTarget(base: string, rawLinkPath: string): string {
-  const linkPath = assertSafeLinkText(rawLinkPath);
-  const safePath = safeArchivePath(linkPath);
-  assertArchivePathStructure(safePath, "Artifact link target");
-  const resolved = resolve(base, safePath);
-  if (resolved !== base && !resolved.startsWith(`${base}${sep}`)) {
-    throw new Error(`Artifact hardlink target escapes extraction directory: ${rawLinkPath}`);
-  }
-  return safePath;
-}
-
-function resolveHardlinkTarget(base: string, rawLinkPath: string): string {
-  const safePath = validateHardlinkTarget(base, rawLinkPath);
-  const resolved = resolve(base, safePath);
-  assertPathNotThroughSymlink(base, resolved);
-  if (!existsSync(resolved)) {
-    throw new Error(`Artifact hardlink target is missing: ${rawLinkPath}`);
-  }
-  return resolved;
 }
 
 export interface RemoveOptions {
@@ -895,8 +1778,30 @@ function validateIntegrationRollbackBackup(
   return { target, backupDirectory };
 }
 
-/** Copy an installed artifact aside while leaving the active files available. */
 export function backupInstalledIntegration(
+  rootDir: string,
+  id: string,
+): IntegrationRollbackBackup | null {
+  const lock = acquireIntegrationComponentLock({ rootDir, id });
+  try {
+    return backupInstalledIntegrationUnlocked(rootDir, id);
+  } finally {
+    releaseIntegrationComponentLock(lock);
+  }
+}
+export function restoreInstalledIntegration(
+  rootDir: string,
+  backup: IntegrationRollbackBackup,
+): void {
+  const lock = acquireIntegrationComponentLock({ rootDir, id: backup.id });
+  try {
+    restoreInstalledIntegrationUnlocked(rootDir, backup);
+  } finally {
+    releaseIntegrationComponentLock(lock);
+  }
+}
+/** Copy an installed artifact aside while leaving the active files available. */
+function backupInstalledIntegrationUnlocked(
   rootDir: string,
   id: string,
 ): IntegrationRollbackBackup | null {
@@ -915,7 +1820,7 @@ export function backupInstalledIntegration(
 }
 
 /** Restore the exact artifact snapshot after a failed multi-component update. */
-export function restoreInstalledIntegration(
+function restoreInstalledIntegrationUnlocked(
   rootDir: string,
   backup: IntegrationRollbackBackup,
 ): void {
@@ -924,7 +1829,10 @@ export function restoreInstalledIntegration(
   const restoreStage = createStagePath(rootDir, `restore-${backup.id}`);
   try {
     cpSync(backupDirectory, restoreStage, { recursive: true, errorOnExist: true, force: false });
-    if (existsSync(target)) rmSync(target, { recursive: true, force: true });
+    if (existsSync(target))
+      throw Error(
+        "Historical integration rollback lacks a publication ownership receipt; preserve the current integration and reconcile the original journal",
+      );
     renameSync(restoreStage, target);
   } catch (error) {
     rmSync(restoreStage, { recursive: true, force: true });
@@ -941,7 +1849,7 @@ export function discardInstalledIntegrationBackup(
   rmSync(backupDirectory, { recursive: true, force: true });
 }
 
-export function removeIntegration(opts: RemoveOptions): { directory: string } {
+function removeIntegrationUnlocked(opts: RemoveOptions): { directory: string } {
   const target = resolveInstallTarget(opts.rootDir, opts.id);
   if (!existsSync(target)) {
     throw new Error(
@@ -1201,7 +2109,7 @@ function validateArtifactMetadata(directory: string, manifest: Record<string, un
 
   let value: unknown;
   try {
-    value = JSON.parse(readFileSync(metadataPath, "utf-8")) as unknown;
+    value = readBoundedJson(metadataPath, 8 * 1024 * 1024);
   } catch {
     throw new Error(`${ARTIFACT_METADATA_FILE} is not valid JSON`);
   }
@@ -1313,4 +2221,13 @@ function buildArtifactLicenses(
   if (notices.length === 0) return null;
   onLog?.(`license manifest → dist/licenses.json (${notices.length} entries)`, "stdout");
   return `${JSON.stringify({ integrationId: manifest.id, notices }, null, 2)}\n`;
+}
+
+export function removeIntegration(opts: RemoveOptions): { directory: string } {
+  const lock = acquireIntegrationComponentLock({ rootDir: opts.rootDir, id: opts.id });
+  try {
+    return removeIntegrationUnlocked(opts);
+  } finally {
+    releaseIntegrationComponentLock(lock);
+  }
 }

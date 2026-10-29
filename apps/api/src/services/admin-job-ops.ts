@@ -1023,6 +1023,17 @@ export async function cancelAdminJobOperations(
   else if (backend === "already_terminal" || latestBackend === "already_terminal")
     outcomes.push("already_terminal");
   if (hasUnsettledHardlinks(result)) return "pending";
+  const standaloneResult = options.context?.checkpointResult ?? result;
+  if (
+    standaloneResult &&
+    typeof standaloneResult === "object" &&
+    "_standalone" in standaloneResult
+  ) {
+    const { hasVerifiedStandaloneRestoration } = await import(
+      "./standalone-integrations/settlement-checkpoint"
+    );
+    if (await hasVerifiedStandaloneRestoration(standaloneResult, options.jobId)) return "canceled";
+  }
   if (outcomes.includes("contained")) return "canceled";
   return outcomes.every((outcome) => outcome === "succeeded") ? "completed" : "already_terminal";
 }

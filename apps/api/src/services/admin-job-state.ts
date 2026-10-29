@@ -44,7 +44,9 @@ export function hasUnsettledManagedOperation(result: unknown): boolean {
     } | null
   )?.opsProjection;
   const data = (result as { _dataExecutions?: unknown } | null)?._dataExecutions;
+  const standalone = result as { _standalone?: unknown; _standaloneSettled?: unknown } | null;
   return (
+    (standalone?._standalone !== undefined && standalone._standaloneSettled !== true) ||
     (p?.version === 3 && Object.values(p.operations ?? {}).some((o) => o.terminal !== true)) ||
     (data !== undefined &&
       (!Array.isArray(data) ||
@@ -61,7 +63,7 @@ export function hasUnsettledManagedOperation(result: unknown): boolean {
   );
 }
 export function noUnsettledManagedOperation() {
-  return sql`NOT (coalesce(${adminJob.result}->'opsProjection'->>'version','') = '3' AND EXISTS(SELECT 1 FROM jsonb_each(coalesce(${adminJob.result}->'opsProjection'->'operations','{}'::jsonb)) AS active_entry WHERE coalesce(active_entry.value->>'terminal','false') <> 'true')) AND CASE WHEN ${adminJob.result}->'_dataExecutions' IS NULL THEN true WHEN jsonb_typeof(${adminJob.result}->'_dataExecutions') <> 'array' THEN false ELSE NOT EXISTS(SELECT 1 FROM jsonb_array_elements(${adminJob.result}->'_dataExecutions') AS backend_entry WHERE backend_entry->>'state' IS DISTINCT FROM 'terminal' OR coalesce(backend_entry->>'publication','unknown') NOT IN ('not_started','committed') OR coalesce(backend_entry->>'status','') NOT IN ('ok','partial','error','canceled','interrupted') OR coalesce(backend_entry->>'id','') !~ '^[a-f0-9-]{36}$' OR coalesce(backend_entry->>'operationKey','') !~ '^opk1_[A-Za-z0-9_-]{16,64}$' OR coalesce(backend_entry->>'fingerprint','') !~ '^[a-f0-9]{64}$') END`;
+  return sql`(${adminJob.result}->'_standalone' IS NULL OR ${adminJob.result}->'_standaloneSettled' = 'true'::jsonb) AND NOT (coalesce(${adminJob.result}->'opsProjection'->>'version','') = '3' AND EXISTS(SELECT 1 FROM jsonb_each(coalesce(${adminJob.result}->'opsProjection'->'operations','{}'::jsonb)) AS active_entry WHERE coalesce(active_entry.value->>'terminal','false') <> 'true')) AND CASE WHEN ${adminJob.result}->'_dataExecutions' IS NULL THEN true WHEN jsonb_typeof(${adminJob.result}->'_dataExecutions') <> 'array' THEN false ELSE NOT EXISTS(SELECT 1 FROM jsonb_array_elements(${adminJob.result}->'_dataExecutions') AS backend_entry WHERE backend_entry->>'state' IS DISTINCT FROM 'terminal' OR coalesce(backend_entry->>'publication','unknown') NOT IN ('not_started','committed') OR coalesce(backend_entry->>'status','') NOT IN ('ok','partial','error','canceled','interrupted') OR coalesce(backend_entry->>'id','') !~ '^[a-f0-9-]{36}$' OR coalesce(backend_entry->>'operationKey','') !~ '^opk1_[A-Za-z0-9_-]{16,64}$' OR coalesce(backend_entry->>'fingerprint','') !~ '^[a-f0-9]{64}$') END`;
 }
 export function noPendingReceiptDelivery() {
   return sql`NOT (coalesce(${adminJob.result}->'opsProjection'->>'version','') = '3' AND EXISTS (SELECT 1 FROM jsonb_each(coalesce(${adminJob.result}->'opsProjection'->'operations','{}'::jsonb)) AS receipt_entry WHERE receipt_entry.value->'receiptDelivery'->>'state' = 'pending'))`;

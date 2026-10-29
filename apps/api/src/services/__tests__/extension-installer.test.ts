@@ -24,11 +24,13 @@ vi.mock("@openmapx/integration-framework/installer", () => ({
     backupDirectory: "/safe/mock-integration-backup",
   })),
   discardInstalledIntegrationBackup: vi.fn(),
+  settleIntegrationPublication: vi.fn(async () => ({ outcome: "restored", contentDigest: null })),
   installIntegration: vi.fn(async (opts: { source: string }) => ({
     // The installer asserts the artifact reports the declared component id.
     id: /intg-[a-z0-9-]+/.exec(opts.source)?.[0] ?? "intg-one",
     directory: "/safe/mock-integration",
     replaced: false,
+    publication: Object.freeze({ fixture: "mocked filesystem transaction port" }),
   })),
   removeIntegration: vi.fn(),
   restoreInstalledIntegration: vi.fn(),
@@ -74,6 +76,7 @@ vi.mock("../extension-install-journal", () => ({
     data: { schemaVersion: 1, extensionId, targetManifest, integrations: [] },
   })),
   appendIntegrationJournalEntry: vi.fn(),
+  recordIntegrationPublicationPrepared: vi.fn(),
   markIntegrationJournalEntryInstalled: vi.fn(),
   markExtensionInstallJournalRestoring: vi.fn(),
   reconcileExtensionInstallJournal: vi.fn().mockResolvedValue(undefined),
@@ -111,6 +114,7 @@ import {
   installIntegration,
   removeIntegration,
   restoreInstalledIntegration,
+  settleIntegrationPublication,
 } from "@openmapx/integration-framework/installer";
 import { reloadIntegrations } from "../../integration-host";
 import { dockerComposeAction } from "../../utils/docker-compose";
@@ -835,10 +839,13 @@ describe("installExtension", () => {
       installExtension(makeCtx(), { manifest: INTEGRATION_ONLY, sourceTrust: "community" }),
     ).rejects.toThrow(/reload-fail/);
 
-    expect(dbRemoveMock).toHaveBeenCalledWith(
-      expect.objectContaining({ rootDir: expect.any(String), id: "intg-one" }),
+    expect(settleIntegrationPublication).toHaveBeenCalledWith(
+      expect.anything(),
+      "restore",
+      expect.any(AbortSignal),
     );
-    expect(dbMock.db.delete).toHaveBeenCalled(); // installedIntegration cleanup
+    expect(dbRemoveMock).not.toHaveBeenCalled();
+    expect(dbMock.db.delete).not.toHaveBeenCalled(); // no bookkeeping rows existed to delete
     // Pipeline reload (threw) + rollback reload.
     expect(reloadMock).toHaveBeenCalledTimes(2);
     // The reload threw before the bookkeeping transaction, so no rows to leak.
@@ -853,11 +860,13 @@ describe("installExtension", () => {
       installExtension(makeCtx(), { manifest: INTEGRATION_ONLY, sourceTrust: "community" }),
     ).rejects.toThrow(/reload-fail/);
 
-    expect(integrationBackupMock).toHaveBeenCalledWith(expect.any(String), "intg-one");
-    expect(integrationRestoreMock).toHaveBeenCalledWith(expect.any(String), {
-      id: "intg-one",
-      backupDirectory: "/safe/mock-integration-backup",
-    });
+    expect(integrationBackupMock).not.toHaveBeenCalled();
+    expect(integrationRestoreMock).not.toHaveBeenCalled();
+    expect(settleIntegrationPublication).toHaveBeenCalledWith(
+      expect.anything(),
+      "restore",
+      expect.any(AbortSignal),
+    );
     expect(dbRemoveMock).not.toHaveBeenCalled();
     expect(integrationBackupDiscardMock).not.toHaveBeenCalled();
     expect(reloadMock).toHaveBeenCalledTimes(2);
@@ -872,10 +881,12 @@ describe("installExtension", () => {
     });
 
     expect(result).toEqual({ id: "bundle-x", components: 1 });
-    expect(integrationBackupDiscardMock).toHaveBeenCalledWith(expect.any(String), {
-      id: "intg-one",
-      backupDirectory: "/safe/mock-integration-backup",
-    });
+    expect(integrationBackupDiscardMock).not.toHaveBeenCalled();
+    expect(reconcileInstallJournalMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(Function),
+    );
     expect(dbMock.db.delete).toHaveBeenCalledTimes(1);
 
     // Inserts: [0]=installedIntegration, [1]=installedExtension, [2]=component.

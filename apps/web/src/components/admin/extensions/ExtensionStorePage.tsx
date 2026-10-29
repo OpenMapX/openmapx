@@ -67,6 +67,8 @@ import { useAdminToast } from "../shared/AdminToast";
 import { TableSearchField, TableToolbar } from "../shared/TableToolbar";
 import { useClientPagination } from "../shared/tableHooks";
 
+import { StandaloneInstallDialog } from "./StandaloneInstallDialog";
+
 type Trust = AdminExtensionInstallPreview["sourceTrust"];
 
 function TrustChip({ trust }: { trust?: Trust }) {
@@ -923,6 +925,9 @@ function ExtensionStoreContent() {
         title="Extensions"
         subtitle="Browse, install, and manage community extensions — integrations and services."
       />
+      <Box>
+        <StandaloneInstallDialog />
+      </Box>
       <Tabs value={tab} onChange={(_, v) => setTab(v)} aria-label="Extension management">
         <Tab label="Browse" />
         <Tab label="Installed" />

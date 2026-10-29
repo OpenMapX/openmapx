@@ -710,6 +710,12 @@ jobRunner.register("integration.reload", async (ctx) => {
   return result as Record<string, unknown>;
 });
 
+jobRunner.register("standalone.preview", async (ctx) =>
+  (await import("./services/standalone-integrations/install")).handleStandalonePreview(ctx),
+);
+jobRunner.register("standalone.install", async (ctx) =>
+  (await import("./services/standalone-integrations/install")).handleStandaloneInstall(ctx),
+);
 jobRunner.register("extension.install", handleExtensionInstallJob);
 jobRunner.register("extension.remove", handleExtensionRemoveJob);
 

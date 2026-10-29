@@ -461,6 +461,15 @@ export async function installAdminExtensionRequest<T>(
 ): Promise<T> {
   return installAdminExtensionBound<T>(url, options);
 }
+const installAdminStandaloneIntegrationBound = bindAdminOperation(
+  "installAdminStandaloneIntegration",
+);
+export async function installAdminStandaloneIntegrationRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return installAdminStandaloneIntegrationBound<T>(url, options);
+}
 const inviteAdminAccountBound = bindAdminOperation("inviteAdminAccount");
 export async function inviteAdminAccountRequest<T>(
   url: string,
@@ -683,6 +692,15 @@ export async function previewAdminOperationRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return previewAdminOperationBound<T>(url, options);
+}
+const previewAdminStandaloneIntegrationBound = bindAdminOperation(
+  "previewAdminStandaloneIntegration",
+);
+export async function previewAdminStandaloneIntegrationRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return previewAdminStandaloneIntegrationBound<T>(url, options);
 }
 const previewAdminTransitCredentialsBound = bindAdminOperation("previewAdminTransitCredentials");
 export async function previewAdminTransitCredentialsRequest<T>(
