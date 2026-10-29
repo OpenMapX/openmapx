@@ -3,6 +3,10 @@ import { OPS_RESULT_SCHEMAS } from "../../../ops/contract";
 import { adminCountSchema, adminTimestampSchema } from "../admin";
 import { adminServiceIdListSchema } from "./common";
 
+export const adminServiceDataQuerySchema = z.strictObject({
+  osmLimit: z.coerce.number().int().min(1).max(500).optional(),
+  osmOffset: z.coerce.number().int().min(0).max(1000000).optional(),
+});
 export const adminServiceDataSchema = OPS_RESULT_SCHEMAS["data.inspect"].extend({
   fetchedAt: adminTimestampSchema,
 });

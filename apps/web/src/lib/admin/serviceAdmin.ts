@@ -73,10 +73,10 @@ export function serviceAdminQueries(client: ApiClient, apiUrl: string) {
         queryKey: [...key, "backups"],
         queryFn: ({ signal }) => serviceOrThrow(sdk.listAdminServiceBackups(options(signal))),
       }),
-    data: () =>
+    data: (page: { osmLimit?: number; osmOffset?: number } = {}) =>
       queryOptions({
-        queryKey: [...key, "data"],
-        queryFn: ({ signal }) => serviceOrThrow(sdk.getAdminServiceData(options(signal))),
+        queryKey: [...key, "data", String(page.osmLimit ?? 50), String(page.osmOffset ?? 0)],
+        queryFn: ({ signal }) => serviceOrThrow(sdk.getAdminServiceData(page, options(signal))),
       }),
     policy: () =>
       queryOptions({

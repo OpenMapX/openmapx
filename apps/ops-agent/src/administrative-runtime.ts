@@ -1893,7 +1893,7 @@ export function createAdministrativeRuntime(
     }
     return { backupId: operation.backupId };
   };
-  runtime["data.inspect"] = async () => inspectDataInventory(options.rootDir);
+  runtime["data.inspect"] = async (operation) => inspectDataInventory(options.rootDir, operation);
   async function runMatchingDataCommand(
     operation: import("@openmapx/core/ops").OpsOperation,
     context: import("./runtime").OpsExecutionContext,

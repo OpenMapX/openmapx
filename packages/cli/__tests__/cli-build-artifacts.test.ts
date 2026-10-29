@@ -97,6 +97,43 @@ afterEach(() => {
 });
 
 describe("build bundles", () => {
+  it("retains imported source provenance with fresh local output identities", async () => {
+    seedOsrmBuild(buildHost);
+    const { artifactFingerprint } = await import("@openmapx/core/build-artifacts");
+    const initial = await exportBuildBundle({
+      serviceId: "osrm",
+      bundle: join(tmp, "first.tar"),
+      rootDir: buildHost,
+    });
+    const sourceFingerprints = [{ id: "a".repeat(64), sha256: "b".repeat(64), sizeBytes: 3 }];
+    writeBuildRecord(
+      {
+        ...osrmRecord(),
+        schemaVersion: 2,
+        sourceFingerprints,
+        artifactFingerprint: artifactFingerprint(initial.files),
+      },
+      buildHost,
+    );
+    const path = join(tmp, "v2.tar");
+    await exportBuildBundle({ serviceId: "osrm", bundle: path, rootDir: buildHost });
+    await importBuildBundle({ bundle: path, rootDir: serveHost, runningServices: noneRunning });
+    expect(readBuildRecord("osrm", serveHost)).toMatchObject({
+      schemaVersion: 2,
+      sourceFingerprints,
+    });
+    const evidence = JSON.parse(
+      readFileSync(join(dataDir(serveHost), ".openmapx-builds/osrm.evidence.json"), "utf8"),
+    );
+    expect(evidence.record.sourceFingerprints).toEqual(sourceFingerprints);
+    expect(
+      evidence.files.find((file: { path: string }) => file.path === "osrm-graph/region.osrm"),
+    ).toMatchObject({
+      sizeBytes: 5,
+      inode: String(lstatSync(join(dataDir(serveHost), "osrm-graph/region.osrm")).ino),
+    });
+  });
+
   it("round-trips a build to another host, dropping staged inputs and recording provenance", async () => {
     seedOsrmBuild(buildHost);
     const bundle = join(tmp, "osrm.tar");

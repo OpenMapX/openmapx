@@ -23,6 +23,7 @@ import {
   adminServiceBackupParamsSchema,
   adminServiceBackupRestoreSchema,
   adminServiceBackupsSchema,
+  adminServiceDataQuerySchema,
   adminServiceDataSchema,
   adminServiceSelectionSchema,
   adminServiceSelectionSetSchema,
@@ -221,6 +222,7 @@ export const serviceAdminOperations = {
     method: "GET",
     path: "/api/admin/services/data",
     auth: "admin",
+    request: { query: adminServiceDataQuerySchema },
     responses: { ...adminCommonResponses, 200: adminJson(adminServiceDataSchema) },
   },
   getAdminServiceSelection: {

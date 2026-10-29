@@ -283,6 +283,26 @@ source builds. This is a sized preparation workload, not a boot-time task. See t
 [global publication runbook](../developer/ambient-places-publication.md#planet-preparation-restart-and-deployment)
 for ordered commands, persistent checkpoints, resource budgets and recovery.
 
+## Inspecting prepared data
+
+**Services → Data workflows** lists every local OSM extract with pagination,
+its recorded region, size and source fingerprint. Downloads record SHA-256
+evidence during their checksum pass. Builds and imports record their output
+hashes and local file identities; refreshing this page does not hash datasets.
+
+Prepared service data distinguishes **ready**, **missing**, **incomplete**,
+**stale** and **unknown**. Empty directories do not establish readiness. A
+changed source or output invalidates its recorded evidence, including a
+replacement with the same byte size. Legacy build records without source hashes
+remain unknown until rebuilt or imported with current evidence. MOTIS also
+requires its candidate manifest and imported outputs.
+
+These checks describe prepared artifacts, rather than live routing or database
+health. Services such as Valhalla, Pelias, Nominatim, Photon and Overpass remain
+unknown when authoritative runtime evidence is unavailable. An inspection or
+permission failure is shown as unavailable; it is never presented as an empty
+successful inventory.
+
 ## Sharing data with hardlinks
 
 Several services consume the same files. Rather than copy a multi-gigabyte extract

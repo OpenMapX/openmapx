@@ -9,6 +9,7 @@ import {
   type OpsOperation,
   type OpsRole,
   opsResourceId,
+  parseBoundedOpsResult,
   parseOpsRequest,
   parseOpsResult,
   redactedOpsError,
@@ -585,7 +586,7 @@ describe("ops contract", () => {
     ).toBe("release-1");
   });
 
-  it("keeps data inventory kind-only and validates its bounded typed result", () => {
+  it("accepts bounded data inventory paging and validates its typed result", () => {
     expect(parseOpsRequest(request({ kind: "data.inspect" }), { role: "api" }).operation).toEqual({
       kind: "data.inspect",
     });
@@ -598,13 +599,35 @@ describe("ops contract", () => {
     }
     const inventory = {
       osm: {
-        found: true,
-        filename: "germany-latest.osm.pbf",
-        sizeBytes: 42,
-        modifiedAt: "2026-08-23T18:00:00.000Z",
-        region: "germany",
+        items: [
+          {
+            artifactId: "a".repeat(64),
+            filename: "synthetic.osm.pbf",
+            region: "test",
+            sizeBytes: 42,
+            modifiedAt: "2026-08-23T18:00:00.000Z",
+            sourceFingerprint: null,
+            fingerprintState: "missing",
+          },
+        ],
+        total: 1,
+        limit: 50,
+        offset: 0,
+        unavailable: false,
       },
-      builds: [{ target: "valhalla", built: true, builtAt: "2026-08-23T18:00:00.000Z" }],
+      builds: [
+        {
+          target: "valhalla",
+          built: false,
+          readiness: "unknown",
+          reason: "Synthetic readiness unavailable",
+          sizeBytes: null,
+          sourceFingerprints: [],
+          buildRecordVersion: null,
+          region: null,
+          runtimeImages: {},
+        },
+      ],
       motisTransitous: {
         configFound: false,
         datasetCount: 0,
@@ -647,6 +670,25 @@ describe("ops contract", () => {
       },
     };
     expect(parseOpsResult("data.inspect", inventory)).toEqual(inventory);
+    const fullPage = {
+      ...inventory,
+      osm: {
+        items: Array.from({ length: 500 }, (_, i) => ({
+          artifactId: i.toString(16).padStart(64, "0"),
+          filename: "f".repeat(220) + ".osm.pbf",
+          region: "r".repeat(220),
+          sizeBytes: 42,
+          modifiedAt: "2026-08-23T18:00:00.000Z",
+          sourceFingerprint: "a".repeat(64),
+          fingerprintState: "verified",
+        })),
+        total: 500,
+        offset: 0,
+        limit: 500,
+        unavailable: false,
+      },
+    };
+    expect(() => parseBoundedOpsResult("data.inspect", fullPage)).not.toThrow();
     expect(() =>
       parseOpsResult("data.inspect", { ...inventory, dataRoot: "/host/data" }),
     ).toThrow();

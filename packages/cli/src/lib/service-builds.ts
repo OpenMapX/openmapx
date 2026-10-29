@@ -1,5 +1,12 @@
 import { statSync } from "node:fs";
-import { basename } from "node:path";
+import { basename, join, relative } from "node:path";
+import {
+  capturePreparedBuildEvidence,
+  hashDataFile,
+  inspectDataFile,
+  osmArtifactId,
+  sameDataFile,
+} from "@openmapx/core/build-artifacts";
 import {
   compareServiceBuildOrder,
   createServiceBatchResult,
@@ -16,8 +23,9 @@ import {
 import { assertCliControlForward } from "./control-context";
 import { runningComposeServices } from "./docker";
 import { resolveBuildRegion } from "./env-defaults";
-import { assertCliExecutionAvailable } from "./execution-deadline";
+import { assertCliExecutionAvailable, cliAcquisitionOptions } from "./execution-deadline";
 import { buildMotisData, importMotisData } from "./motis-data";
+import { resolveOsmPbf } from "./osm-pbf";
 import { buildOsrmGraph } from "./osrm-graph";
 import { buildOtpGraph } from "./otp-graph";
 import { log } from "./output";
@@ -217,7 +225,7 @@ const BUILT_IN_SERVICE_BUILD_HANDLERS: Record<string, ServiceBuildHandler> = {
       summary: `Built TileServer MBTiles → ${result.mbtilesPath}`,
       artifact: {
         sourcePbf: result.sourcePbf,
-        runtimeImages: {},
+        runtimeImages: { tileserver: serviceImage(service) },
         toolImages: { planetiler: image },
       },
     };
@@ -229,28 +237,79 @@ async function recordBuild(
   serviceId: string,
   region: string | undefined,
   artifact: ServiceBuildArtifact,
+  input?: { path: string; evidence: Awaited<ReturnType<typeof hashDataFile>> },
 ): Promise<void> {
   assertCliExecutionAvailable();
   assertCliControlForward();
   const revision = await currentRevision(rootDir);
   assertCliExecutionAvailable();
   assertCliControlForward();
-  writeBuildRecord(
-    {
-      schemaVersion: 1,
-      service: serviceId,
-      ...(region ? { region } : {}),
-      sourcePbf: {
-        name: basename(artifact.sourcePbf),
-        sizeBytes: statSync(artifact.sourcePbf).size,
-      },
-      builtAt: new Date().toISOString(),
-      ...(revision ? { revision } : {}),
-      runtimeImages: artifact.runtimeImages,
-      toolImages: artifact.toolImages,
+  const record: BuildRecord = {
+    schemaVersion: 1,
+    service: serviceId,
+    ...(region ? { region } : {}),
+    sourcePbf: { name: basename(artifact.sourcePbf), sizeBytes: statSync(artifact.sourcePbf).size },
+    builtAt: new Date().toISOString(),
+    ...(revision ? { revision } : {}),
+    runtimeImages: artifact.runtimeImages,
+    toolImages: artifact.toolImages,
+  };
+  if (!input) {
+    writeBuildRecord(record, rootDir);
+    return;
+  }
+  if (input.path !== artifact.sourcePbf) throw Error("Build source differs from captured input");
+  const dataRoot = join(repoPaths(rootDir).infraDir, "data"),
+    path = relative(dataRoot, input.path),
+    now = inspectDataFile(dataRoot, path);
+  if (
+    now.device !== input.evidence.device ||
+    now.inode !== input.evidence.inode ||
+    now.sizeBytes !== input.evidence.sizeBytes ||
+    now.modifiedAtMs !== input.evidence.modifiedAtMs
+  )
+    throw Error("Build source changed while preparing outputs");
+  let evidence = input.evidence;
+  if (
+    !sameDataFile(now, {
+      device: evidence.device,
+      inode: evidence.inode,
+      sizeBytes: evidence.sizeBytes,
+      modifiedAtMs: evidence.modifiedAtMs,
+      changedAtMs: evidence.changedAtMs,
+    })
+  ) {
+    const checked = await hashDataFile(input.path, cliAcquisitionOptions().signal);
+    if (checked.sha256 !== evidence.sha256)
+      throw Error("Build source hash changed while preparing outputs");
+    evidence = checked;
+  }
+  const sha256 = evidence.sha256,
+    sourceFingerprints = [
+      { id: osmArtifactId(basename(input.path)), sha256, sizeBytes: evidence.sizeBytes },
+    ];
+  const version2 = await capturePreparedBuildEvidence({
+    dataRoot,
+    record: {
+      ...record,
+      schemaVersion: 2,
+      sourceFingerprints,
+      artifactFingerprint: "0".repeat(64),
     },
-    rootDir,
-  );
+    signal: cliAcquisitionOptions().signal,
+    inputs: [
+      {
+        path,
+        sha256,
+        device: evidence.device,
+        inode: evidence.inode,
+        sizeBytes: evidence.sizeBytes,
+        modifiedAtMs: evidence.modifiedAtMs,
+        changedAtMs: evidence.changedAtMs,
+      },
+    ],
+  });
+  writeBuildRecord(version2, rootDir);
 }
 
 function getServiceBuildHandlers(
@@ -405,6 +464,15 @@ export async function buildServices(
           `${item.id}: using region "${resolvedRegion.value}" from $${resolvedRegion.sourceEnv}`,
         );
       }
+      const sourcePath = opts.handlers?.[item.id]
+        ? null
+        : resolveOsmPbf(join(repoPaths(rootDir).infraDir, "data"), resolvedRegion.value, item.id);
+      const input = sourcePath
+        ? {
+            path: sourcePath,
+            evidence: await hashDataFile(sourcePath, cliAcquisitionOptions().signal),
+          }
+        : undefined;
       attempted = true;
       const built = await item.handler({
         rootDir,
@@ -417,7 +485,7 @@ export async function buildServices(
         log.warn(`${item.id}: ${warning}`);
       }
       if (built.artifact) {
-        await recordBuild(rootDir, item.id, resolvedRegion.value, built.artifact);
+        await recordBuild(rootDir, item.id, resolvedRegion.value, built.artifact, input);
       }
       log.ok(built.summary);
       completedIds.push(item.id);

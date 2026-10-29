@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
-import { createReadStream, mkdirSync, statSync } from "node:fs";
+import { mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { type DataFileIdentity, hashDataFile } from "@openmapx/core/build-artifacts";
 import { execa } from "execa";
 import type { DatasetMetadata, StateStore } from "../state.js";
 import {
@@ -8,6 +8,7 @@ import {
   type CurlAtomicResult,
   curlAtomicWithResult,
 } from "./atomic-download.js";
+import { publishOsmFingerprint } from "./osm-fingerprints.js";
 
 export function resolveOsmUrl(region: string): string {
   if (!region) throw new Error("region is required");
@@ -49,16 +50,6 @@ export function osmPbfName(region: string): string {
  */
 export function resolveOsmMd5Url(osmUrl: string): string {
   return `${osmUrl}.md5`;
-}
-
-function computeMd5(filePath: string, signal?: AbortSignal): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const hash = createHash("md5");
-    const stream = createReadStream(filePath, { signal });
-    stream.on("data", (chunk) => hash.update(chunk));
-    stream.on("end", () => resolve(hash.digest("hex")));
-    stream.on("error", reject);
-  });
 }
 
 async function fetchExpectedMd5(url: string, signal?: AbortSignal): Promise<string | null> {
@@ -115,6 +106,8 @@ export async function downloadOsm(opts: DownloadOsmOptions): Promise<DownloadOsm
   const targetPath = join(targetDir, fileName);
 
   let md5: string | undefined;
+  let sha256: string | undefined;
+  let source: DataFileIdentity | undefined;
   const expected =
     opts.verifyChecksum === false
       ? null
@@ -124,10 +117,21 @@ export async function downloadOsm(opts: DownloadOsmOptions): Promise<DownloadOsm
     signal: opts.signal,
     publication: "data-output",
     onProgress: opts.onProgress,
-    withPublishLock: opts.withPublishLock,
+    withPublishLock: async (publish) => {
+      const commit = () => {
+        publish();
+        if (!sha256 || !source) throw Error("OSM source checksum missing");
+        publishOsmFingerprint(targetPath, opts.region, sha256, source, true);
+      };
+      if (opts.withPublishLock) await opts.withPublishLock(commit);
+      else commit();
+    },
     beforePublish: async (tempPath) => {
+      const checksums = await hashDataFile(tempPath, opts.signal);
+      sha256 = checksums.sha256;
+      source = checksums;
       if (expected) {
-        const actual = await computeMd5(tempPath, opts.signal);
+        const actual = checksums.md5;
         if (actual !== expected) {
           throw new Error(
             `OSM PBF checksum mismatch for ${opts.region}: expected ${expected}, got ${actual}. The download is corrupt — re-run to retry.`,
@@ -140,14 +144,20 @@ export async function downloadOsm(opts: DownloadOsmOptions): Promise<DownloadOsm
 
   // A 304 has no temp file to validate, so retain the previous behavior of
   // verifying the already-published target against the current sidecar.
-  if (!result.published && expected) {
-    const actual = await computeMd5(targetPath, opts.signal);
-    if (actual !== expected) {
+  if (!result.published) {
+    const checksums = await hashDataFile(targetPath, opts.signal);
+    const actual = checksums.md5;
+    sha256 = checksums.sha256;
+    if (expected && actual !== expected) {
       throw new Error(
         `OSM PBF checksum mismatch for ${opts.region}: expected ${expected}, got ${actual}. The download is corrupt — re-run to retry.`,
       );
     }
-    md5 = actual;
+    if (expected) md5 = actual;
+    const record = () =>
+      publishOsmFingerprint(targetPath, opts.region, checksums.sha256, checksums);
+    if (opts.withPublishLock) await opts.withPublishLock(record);
+    else record();
   }
 
   const sizeBytes = statSync(targetPath).size;

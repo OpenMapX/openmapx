@@ -118,13 +118,35 @@ const dawarich = {
 };
 const data = {
   osm: {
-    found: true,
-    filename: "synthetic.osm.pbf",
-    sizeBytes: 42,
-    modifiedAt: at,
-    region: "test",
+    items: [
+      {
+        artifactId: "a".repeat(64),
+        filename: "synthetic.osm.pbf",
+        region: "test",
+        sizeBytes: 42,
+        modifiedAt: at,
+        sourceFingerprint: null,
+        fingerprintState: "missing",
+      },
+    ],
+    total: 1,
+    limit: 50,
+    offset: 0,
+    unavailable: false,
   },
-  builds: [{ target: "motis", built: true, builtAt: at }],
+  builds: [
+    {
+      target: "motis",
+      built: false,
+      readiness: "unknown",
+      reason: "Synthetic readiness unavailable",
+      sizeBytes: null,
+      sourceFingerprints: [],
+      buildRecordVersion: null,
+      region: null,
+      runtimeImages: {},
+    },
+  ],
   motisTransitous: {
     configFound: true,
     datasetCount: 1,

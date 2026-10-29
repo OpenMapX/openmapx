@@ -772,11 +772,11 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   });
 
   // GET /admin/services/data — data inventory (OSM, builds, MOTIS health)
-  registerServiceAdminRoute(app, "getAdminServiceData", async () => {
+  registerServiceAdminRoute(app, "getAdminServiceData", async (request) => {
     const inventory = await executeAndWait(
       createApiOpsClient(),
-      { kind: "data.inspect" },
-      createDurableOpsKey("admin.data.inspect", "current"),
+      { kind: "data.inspect", ...request.query },
+      createDurableOpsKey("admin.data.inspect", JSON.stringify(request.query)),
       { signal: AbortSignal.timeout(30_000) },
     );
     return {

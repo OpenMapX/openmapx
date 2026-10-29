@@ -49834,6 +49834,28 @@
     "/api/admin/services/data": {
       "get": {
         "operationId": "getAdminServiceData",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            },
+            "in": "query",
+            "name": "osmLimit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "in": "query",
+            "name": "osmOffset",
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -49845,32 +49867,100 @@
                     "osm": {
                       "type": "object",
                       "properties": {
-                        "found": {
-                          "type": "boolean"
+                        "items": {
+                          "maxItems": 500,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "artifactId": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "filename": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 255,
+                                "pattern": "^[^/\\\\]+$"
+                              },
+                              "region": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "maxLength": 512
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "sizeBytes": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "modifiedAt": {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                              },
+                              "sourceFingerprint": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "fingerprintState": {
+                                "type": "string",
+                                "enum": [
+                                  "verified",
+                                  "missing",
+                                  "stale"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "artifactId",
+                              "filename",
+                              "region",
+                              "sizeBytes",
+                              "modifiedAt",
+                              "sourceFingerprint",
+                              "fingerprintState"
+                            ],
+                            "additionalProperties": false
+                          }
                         },
-                        "filename": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 255,
-                          "pattern": "^[^/\\\\]+$"
-                        },
-                        "sizeBytes": {
+                        "total": {
                           "type": "integer",
                           "minimum": 0,
                           "maximum": 9007199254740991
                         },
-                        "modifiedAt": {
-                          "type": "string",
-                          "format": "date-time",
-                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                        "limit": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 500
                         },
-                        "region": {
-                          "type": "string",
-                          "maxLength": 2048
+                        "offset": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "unavailable": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
-                        "found"
+                        "items",
+                        "total",
+                        "limit",
+                        "offset",
+                        "unavailable"
                       ],
                       "additionalProperties": false
                     },
@@ -49902,11 +49992,118 @@
                             "type": "string",
                             "format": "date-time",
                             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                          },
+                          "readiness": {
+                            "type": "string",
+                            "enum": [
+                              "ready",
+                              "missing",
+                              "incomplete",
+                              "stale",
+                              "unknown"
+                            ]
+                          },
+                          "reason": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "maxLength": 2048
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "sizeBytes": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "sourceFingerprints": {
+                            "maxItems": 10000,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "maxLength": 2048
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "sha256"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "buildRecordVersion": {
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "number",
+                                    "enum": [
+                                      1
+                                    ]
+                                  },
+                                  {
+                                    "type": "number",
+                                    "enum": [
+                                      2
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "region": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "maxLength": 2048
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "runtimeImages": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string",
+                              "maxLength": 64
+                            },
+                            "additionalProperties": {
+                              "type": "string",
+                              "maxLength": 2048
+                            }
                           }
                         },
                         "required": [
                           "target",
-                          "built"
+                          "built",
+                          "readiness",
+                          "reason",
+                          "sizeBytes",
+                          "sourceFingerprints",
+                          "buildRecordVersion",
+                          "region",
+                          "runtimeImages"
                         ],
                         "additionalProperties": false
                       }

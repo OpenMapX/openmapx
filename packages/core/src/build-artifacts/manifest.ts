@@ -79,6 +79,10 @@ const v2 = {
   credentialRequirements: z.array(string).optional(),
   runtimeMaterialization: z.literal("motis-target-credentials").optional(),
 };
+export const buildRecordSchema = z.discriminatedUnion("schemaVersion", [
+  z.strictObject({ schemaVersion: z.literal(1), ...common }),
+  z.strictObject({ schemaVersion: z.literal(2), ...common, ...v2 }),
+]);
 const layout = {
   dirs: z.array(string),
   directories: z.array(string),

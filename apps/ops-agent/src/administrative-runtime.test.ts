@@ -457,41 +457,44 @@ describe("administrative data runtime", () => {
     expect(calls.flat()).not.toContain("transitous-fixed-v1");
   });
 
-  it.runIf(process.platform === "linux")(
-    "returns bounded data inventory from the agent-owned root without a host path",
-    async () => {
-      const rootDir = temporaryRoot();
-      const dataRoot = join(rootDir, "infra", "docker", "data");
-      mkdirSync(join(dataRoot, "osm"), { recursive: true });
-      mkdirSync(join(dataRoot, "valhalla"), { recursive: true });
-      writeFileSync(join(dataRoot, "osm", "germany-latest.osm.pbf"), "pbf", { mode: 0o600 });
-      const runtime = createUnavailableRuntime();
-      createAdministrativeRuntime(runtime, {
-        rootDir,
-        runFixedCli: async () => undefined,
-      });
+  it("returns bounded data inventory from the agent-owned root without a host path", async () => {
+    const rootDir = temporaryRoot();
+    const dataRoot = join(rootDir, "infra", "docker", "data");
+    mkdirSync(join(dataRoot, "osm"), { recursive: true });
+    mkdirSync(join(dataRoot, "valhalla"), { recursive: true });
+    writeFileSync(join(dataRoot, "osm", "germany-latest.osm.pbf"), "pbf", { mode: 0o600 });
+    const runtime = createUnavailableRuntime();
+    createAdministrativeRuntime(runtime, {
+      rootDir,
+      runFixedCli: async () => undefined,
+    });
 
-      const result = await dispatchOpsOperation(
-        runtime,
-        { kind: "data.inspect" },
-        context("data.inspect"),
-      );
-      expect(result.osm).toMatchObject({
-        found: true,
-        filename: "germany-latest.osm.pbf",
-        sizeBytes: 3,
-        region: "germany",
-      });
-      expect(result.builds).toContainEqual(
-        expect.objectContaining({ target: "valhalla", built: true }),
-      );
-      expect(result.motisTransitous).toMatchObject({
-        configFound: false,
-        capabilityState: "missing",
-      });
-      expect(JSON.stringify(result)).not.toContain(rootDir);
-    },
-  );
+    const result = await dispatchOpsOperation(
+      runtime,
+      { kind: "data.inspect" },
+      context("data.inspect"),
+    );
+    expect(result.osm).toMatchObject({
+      items: [
+        {
+          filename: "germany-latest.osm.pbf",
+          sizeBytes: 3,
+          region: null,
+          fingerprintState: "missing",
+        },
+      ],
+      total: 1,
+      unavailable: false,
+    });
+    expect(result.builds).toContainEqual(
+      expect.objectContaining({ target: "valhalla", built: false, readiness: "unknown" }),
+    );
+    expect(result.motisTransitous).toMatchObject({
+      configFound: false,
+      capabilityState: "missing",
+    });
+    expect(JSON.stringify(result)).not.toContain(rootDir);
+  });
 });
 
 describe("administrative build runtime", () => {

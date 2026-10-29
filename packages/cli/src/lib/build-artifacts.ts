@@ -8,7 +8,6 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
-  writeFileSync,
 } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { Writable } from "node:stream";
@@ -18,10 +17,13 @@ import {
   type BuildRecordV2,
   type BundleManifest,
   buildArtifactSpec,
+  buildRecordSchema,
+  capturePreparedBuildEvidence,
   DEFAULT_ARTIFACT_ARCHIVE_LIMITS,
   safeArtifactPath,
   runtimeImageMismatches as sharedRuntimeImageMismatches,
   validateBuildBundle,
+  withDataDirectory,
   writeBuildBundle,
 } from "@openmapx/core/build-artifacts";
 import { execa } from "execa";
@@ -56,8 +58,16 @@ function buildRecordPath(dataRoot: string, serviceId: string): string {
 
 export function writeBuildRecord(record: BuildRecord | BuildRecordV2, rootDir?: string): string {
   const path = buildRecordPath(dataRootFor(rootDir), record.service);
-  mkdirSync(join(dataRootFor(rootDir), BUILD_RECORD_DIR), { recursive: true });
-  writeFileSync(path, `${JSON.stringify(record, null, 2)}\n`, "utf-8");
+  const checked = buildRecordSchema.parse(record);
+  mkdirSync(dataRootFor(rootDir), { recursive: true });
+  withDataDirectory(dataRootFor(rootDir), "", (root) => {
+    const directory = root.directory(BUILD_RECORD_DIR, true);
+    try {
+      directory.write(`${checked.service}.json`, `${JSON.stringify(checked)}\n`);
+    } finally {
+      directory.close();
+    }
+  });
   return path;
 }
 
@@ -184,6 +194,13 @@ export async function importBuildBundle(opts: ImportBuildBundleOptions): Promise
     assertCliExecutionAvailable();
     promoteStagedBuildDirs(swaps);
     const { dirs: _dirs, directories: _directories, files: _files, ...record } = manifest;
+    if (record.schemaVersion === 2)
+      await capturePreparedBuildEvidence({
+        dataRoot,
+        record,
+        verifiedFiles: manifest.files,
+        signal: cliAcquisitionOptions().signal,
+      });
     writeBuildRecord(record, opts.rootDir);
     return manifest;
   } finally {

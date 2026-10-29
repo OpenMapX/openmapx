@@ -137,6 +137,7 @@ export {
   verifyPublishedDataConfigurationFencePrepared,
 } from "./data-configuration-fence-witness";
 export { retainedDataDatabaseTimestamp } from "./data-database-time";
+export * from "./data-evidence";
 export {
   assertDataTransitCandidateForExecution,
   assertOwnedDataTransitCandidate,
@@ -204,6 +205,7 @@ export {
   inspectDataExecutionAdmission,
   verifiedParentForArtifactDelegation,
 } from "./peer-admission";
+export * from "./prepared-evidence";
 export {
   controlRetentionPreparationState,
   recordStagedCoordinatorRetentionCheck,

@@ -548,6 +548,23 @@ describe("actual service producers through final exported SDK", () => {
       await close();
     }
   });
+  it("forwards only bounded OSM pagination through the actual route and generated SDK", async () => {
+    const { options, close } = await wire();
+    try {
+      const result = await sdk.getAdminServiceData({ osmLimit: 2, osmOffset: 50 }, options);
+      expect(result.status).toBe(200);
+      expect(execute).toHaveBeenLastCalledWith(
+        expect.objectContaining({ kind: "data.inspect", osmLimit: 2, osmOffset: 50 }),
+        expect.anything(),
+      );
+      const before = execute.mock.calls.length;
+      expect((await sdk.getAdminServiceData({ osmLimit: 501 }, options)).status).toBe(400);
+      expect(execute.mock.calls.length).toBe(before);
+    } finally {
+      await close();
+    }
+  });
+
   it("preserves complete manifests, omitted defaults, configuration, timestamps and inventory", async () => {
     const { options, close } = await wire();
     try {
@@ -577,7 +594,7 @@ describe("actual service producers through final exported SDK", () => {
           ],
         },
       });
-      expect(await sdk.getAdminServiceData(options)).toMatchObject({
+      expect(await sdk.getAdminServiceData(undefined, options)).toMatchObject({
         status: 200,
         data: { ...serviceDataFixture, fetchedAt: expect.any(String) },
       });
@@ -929,7 +946,7 @@ it("retains structured domain failures and retained credential jobs through SDK 
       data: { code: "DAWARICH_CREDENTIAL_MANAGED", error: expect.any(String) },
     });
     execute.mockRejectedValueOnce(Error("synthetic-secret must be redacted"));
-    const failed = await sdk.getAdminServiceData(options);
+    const failed = await sdk.getAdminServiceData(undefined, options);
     expect(failed).toMatchObject({ status: 500, data: { error: "Service administration failed" } });
     expect(() => sdk.unwrapAdminResponse(failed)).toThrow("API request failed with status 500");
     expect(JSON.stringify(failed)).not.toContain("synthetic-secret");

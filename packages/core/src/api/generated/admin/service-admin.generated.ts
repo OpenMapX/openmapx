@@ -137,6 +137,7 @@ import type {
   GetAdminServiceData415,
   GetAdminServiceData429,
   GetAdminServiceData500,
+  GetAdminServiceDataParams,
   GetAdminServiceSelection200,
   GetAdminServiceSelection400,
   GetAdminServiceSelection401,
@@ -1980,17 +1981,33 @@ export type getAdminServiceDataResponse =
   | getAdminServiceDataResponseSuccess
   | getAdminServiceDataResponseError;
 
-export const getGetAdminServiceDataUrl = () => {
-  return `/api/admin/services/data`;
+export const getGetAdminServiceDataUrl = (params?: GetAdminServiceDataParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : String(value));
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/services/data?${stringifiedParams}`
+    : `/api/admin/services/data`;
 };
 
 export const getAdminServiceData = async (
+  params?: GetAdminServiceDataParams,
   options?: Parameters<typeof getAdminServiceDataRequest>[1],
 ): Promise<getAdminServiceDataResponse> => {
-  return getAdminServiceDataRequest<getAdminServiceDataResponse>(getGetAdminServiceDataUrl(), {
-    ...options,
-    method: "GET",
-  });
+  return getAdminServiceDataRequest<getAdminServiceDataResponse>(
+    getGetAdminServiceDataUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
 };
 
 export type getAdminServiceSelectionResponse200 = {

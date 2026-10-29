@@ -36,13 +36,35 @@ const at = "2026-10-21T10:00:00.000Z";
 const inventory = {
   fetchedAt: at,
   osm: {
-    found: true,
-    filename: "synthetic.osm.pbf",
-    sizeBytes: 42,
-    modifiedAt: at,
-    region: "test",
+    items: [
+      {
+        artifactId: "a".repeat(64),
+        filename: "synthetic.osm.pbf",
+        region: "test",
+        sizeBytes: 42,
+        modifiedAt: at,
+        sourceFingerprint: null,
+        fingerprintState: "missing",
+      },
+    ],
+    total: 1,
+    limit: 50,
+    offset: 0,
+    unavailable: false,
   },
-  builds: [{ target: "motis", built: true, builtAt: at }],
+  builds: [
+    {
+      target: "motis",
+      built: false,
+      readiness: "unknown",
+      reason: "Synthetic readiness unavailable",
+      sizeBytes: null,
+      sourceFingerprints: [],
+      buildRecordVersion: null,
+      region: null,
+      runtimeImages: {},
+    },
+  ],
   motisTransitous: {
     configFound: true,
     datasetCount: 1,
@@ -142,7 +164,7 @@ class Boundary extends Component<{ children: ReactNode }, { crashed: boolean }> 
 function InventoryStatus() {
   const { client, apiUrl } = useActivityClient();
   const { data } = useQuery(serviceAdminQueries(client, apiUrl).data());
-  return <output>{data?.osm.region}</output>;
+  return <output>{data?.osm.items[0]?.region}</output>;
 }
 function setup(
   handler?: (url: URL, init: RequestInit) => Response | Promise<Response> | undefined,
@@ -618,7 +640,13 @@ describe("accepted jobs refresh concrete workflows", () => {
         if (url.pathname.endsWith("/services/data"))
           return Response.json({
             ...inventory,
-            osm: { ...inventory.osm, region: `generation-${done.size}` },
+            osm: {
+              ...inventory.osm,
+              items: inventory.osm.items.map((item) => ({
+                ...item,
+                region: `generation-${done.size}`,
+              })),
+            },
           });
         return undefined;
       });
@@ -684,7 +712,13 @@ describe("accepted jobs refresh concrete workflows", () => {
         if (url.pathname.endsWith("/services/data"))
           return Response.json({
             ...inventory,
-            osm: { ...inventory.osm, region: changed ? "should-not-refresh" : "original" },
+            osm: {
+              ...inventory.osm,
+              items: inventory.osm.items.map((item) => ({
+                ...item,
+                region: changed ? "should-not-refresh" : "original",
+              })),
+            },
           });
         return undefined;
       });
@@ -715,7 +749,13 @@ describe("accepted jobs refresh concrete workflows", () => {
       if (url.pathname.endsWith("/services/data"))
         return Response.json({
           ...inventory,
-          osm: { ...inventory.osm, region: done ? "refreshed" : "original" },
+          osm: {
+            ...inventory.osm,
+            items: inventory.osm.items.map((item) => ({
+              ...item,
+              region: done ? "refreshed" : "original",
+            })),
+          },
         });
       return undefined;
     });
@@ -744,7 +784,13 @@ describe("accepted jobs refresh concrete workflows", () => {
     const calls = setup((url) => {
       if (url.pathname.endsWith("/run")) return deferred.promise;
       if (url.pathname.endsWith("/services/data"))
-        return Response.json({ ...inventory, osm: { ...inventory.osm, region: url.origin } });
+        return Response.json({
+          ...inventory,
+          osm: {
+            ...inventory.osm,
+            items: inventory.osm.items.map((item) => ({ ...item, region: url.origin })),
+          },
+        });
       return undefined;
     });
     const { view, rerender } = mount(
@@ -930,7 +976,7 @@ describe("wire intent, validation, polling and policy", () => {
     });
     const { qc } = mount(<DataWorkflowsPage />);
     await screen.findByText("1 schedule dataset(s)");
-    expect(qc.getQueryData(["admin", "services", apiUrl, "data"])).toEqual(inventory);
+    expect(qc.getQueryData(["admin", "services", apiUrl, "data", "50", "0"])).toEqual(inventory);
     expect(await screen.findByText(/called motis; skipped fallback/)).toBeInTheDocument();
     const toggle = screen.getAllByLabelText("Fan-out rollback")[0] as HTMLElement;
     expect(toggle).not.toBeChecked();
@@ -947,7 +993,13 @@ describe("wire intent, validation, polling and policy", () => {
       let reads = 0;
       setup((url) =>
         url.pathname.endsWith("/services/data")
-          ? Response.json({ ...inventory, osm: { ...inventory.osm, region: `poll-${++reads}` } })
+          ? Response.json({
+              ...inventory,
+              osm: {
+                ...inventory.osm,
+                items: inventory.osm.items.map((item) => ({ ...item, region: `poll-${++reads}` })),
+              },
+            })
           : undefined,
       );
       mount(<DataWorkflowsPage />);

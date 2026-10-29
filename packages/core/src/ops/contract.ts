@@ -247,7 +247,7 @@ export const OPS_KIND_POLICIES = {
   "serviceConfig.apply": asyncEffect("api", 2 * 60_000),
   "integrationConfig.apply": asyncEffect("api", 2 * 60_000),
   "vault.apply": asyncEffect("api", 2 * 60_000),
-  "data.inspect": sync("api", 30_000, 256 * 1024),
+  "data.inspect": sync("api", 30_000, OPS_MAX_RESULT_BYTES),
   "data.downloadOsm": asyncEffect("api", 24 * 3600_000),
   "data.downloadFonts": asyncEffect("api", 24 * 3600_000),
   "data.update": asyncEffect("api", 24 * 3600_000),
@@ -521,7 +521,11 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   serviceConfigApplyOperationSchema,
   integrationConfigApplyOperationSchema,
   vaultApplyOperationSchema,
-  kindOnly("data.inspect"),
+  z.strictObject({
+    kind: z.literal("data.inspect"),
+    osmLimit: z.number().int().min(1).max(500).optional(),
+    osmOffset: z.number().int().min(0).max(1000000).optional(),
+  }),
   z.strictObject({ kind: z.literal("data.downloadOsm"), regionId: regionIdSchema.optional() }),
   kindOnly("data.downloadFonts"),
   z.strictObject({
@@ -1245,16 +1249,30 @@ export const OPS_RESULT_SCHEMAS = {
   "vault.apply": revision,
   "data.inspect": z.strictObject({
     osm: z.strictObject({
-      found: z.boolean(),
-      filename: z
-        .string()
-        .min(1)
-        .max(255)
-        .regex(/^[^/\\]+$/)
-        .optional(),
-      sizeBytes: nonnegativeSafeInteger.optional(),
-      modifiedAt: timestampSchema.optional(),
-      region: boundedInventoryString.optional(),
+      items: z
+        .array(
+          z.strictObject({
+            artifactId: z.string().regex(/^[a-f0-9]{64}$/),
+            filename: z
+              .string()
+              .min(1)
+              .max(255)
+              .regex(/^[^/\\]+$/),
+            region: z.string().max(512).nullable(),
+            sizeBytes: nonnegativeSafeInteger,
+            modifiedAt: timestampSchema,
+            sourceFingerprint: z
+              .string()
+              .regex(/^[a-f0-9]{64}$/)
+              .nullable(),
+            fingerprintState: z.enum(["verified", "missing", "stale"]),
+          }),
+        )
+        .max(500),
+      total: nonnegativeSafeInteger,
+      limit: z.number().int().min(1).max(500),
+      offset: nonnegativeSafeInteger,
+      unavailable: z.boolean(),
     }),
     builds: z
       .array(
@@ -1273,6 +1291,20 @@ export const OPS_RESULT_SCHEMAS = {
           ]),
           built: z.boolean(),
           builtAt: timestampSchema.optional(),
+          readiness: z.enum(["ready", "missing", "incomplete", "stale", "unknown"]),
+          reason: boundedInventoryString.nullable(),
+          sizeBytes: nonnegativeSafeInteger.nullable(),
+          sourceFingerprints: z
+            .array(
+              z.strictObject({
+                id: boundedInventoryString,
+                sha256: z.string().regex(/^[a-f0-9]{64}$/),
+              }),
+            )
+            .max(10000),
+          buildRecordVersion: z.union([z.literal(1), z.literal(2)]).nullable(),
+          region: boundedInventoryString.nullable(),
+          runtimeImages: z.record(z.string().max(64), boundedInventoryString),
         }),
       )
       .max(10),
