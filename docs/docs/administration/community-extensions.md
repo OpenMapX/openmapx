@@ -97,6 +97,22 @@ for reconciliation. Closing the dialog only stops observation. Cancellation can
 remain pending until restoration is confirmed. Retrying the same request observes
 its existing job instead of installing twice.
 
+In **Local integrations**, the inventory includes CLI-installed directories,
+standalone owners, invalid legacy content and missing local files, independently
+of catalog availability. **Adopt** records the reviewed content under a community
+owner. Without authenticated provenance, its source remains `legacy_unknown`;
+adoption does not invent a repository URL or grant verified trust.
+
+**Remove** requires confirmation of the reviewed content digest. The agent keeps
+the original directory in quarantine until reload and ownership bookkeeping
+complete. If CLI already removed the files, removal verifies their absence under
+the same component lock before cleaning up the remaining standalone records.
+A changed directory or foreign/catalog owner blocks the action. Invalid executable
+legacy entries stay inert and require host inspection rather than privileged
+execution or automatic deletion. Pending transactions show their original
+Activity reference; an unknown result keeps the component held for reconciliation.
+Standalone parents use this view rather than bundle update/uninstall controls.
+
 The same operations are available on the CLI:
 
 ```bash

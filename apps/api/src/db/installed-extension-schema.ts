@@ -45,7 +45,7 @@ export const installedExtension = pgTable(
     ),
     check(
       "installed_extension_standalone_provenance_check",
-      sql`${table.installationKind} <> 'standalone' or coalesce((${table.sourceTrust} = 'community' and ${table.id} ~ '^local-[0-9a-f-]{36}$' and jsonb_typeof(${table.provenance}) = 'object' and ${table.provenance}->>'kind' in ('artifact','source','uploaded-artifact') and ${table.provenance}->>'contentDigest' ~ '^[a-f0-9]{64}$'),false)`,
+      sql`${table.installationKind} <> 'standalone' or coalesce((${table.sourceTrust} = 'community' and ${table.id} ~ '^local-[0-9a-f-]{36}$' and jsonb_typeof(${table.provenance}) = 'object' and ${table.provenance}->>'kind' in ('artifact','source','uploaded-artifact','legacy_unknown') and ${table.provenance}->>'contentDigest' ~ '^[a-f0-9]{64}$'),false)`,
     ),
   ],
 );

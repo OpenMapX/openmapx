@@ -17,6 +17,13 @@ export { type ApiJobChildAttempt, apiJobChildAttemptSchema } from "@openmapx/cor
 import type { ApiJobChildAttempt } from "@openmapx/core/ops";
 
 function parentJobBudget(ctx: JobContext, kind: OpsOperationKind): number {
+  if (ctx.jobType === "standalone.adopt" || ctx.jobType === "standalone.remove")
+    return (
+      opsExecutionBudget("integration.inspectOwnership").processMs +
+      opsExecutionBudget("integration.remove").processMs +
+      opsExecutionBudget("integration.settle").processMs +
+      60000
+    );
   if (ctx.jobType === "standalone.install")
     return (
       opsExecutionBudget("integration.install").processMs +

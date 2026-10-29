@@ -2064,6 +2064,7 @@ export function retainControlEffectReceipt(
         // published install still holds its component lock until API bookkeeping
         // selects the separate commit/restore operation.
         (s.kind === "integration.install" && result.outcome === "published") ||
+        (s.kind === "integration.remove" && result.outcome === "removed") ||
         (s.kind === "integration.settle" && result.outcome === "restored")
       ) {
         outcome = "committed";

@@ -57,6 +57,7 @@ export const standaloneInstallInspectionSchema = z.strictObject({
   denials: z.array(z.string().max(512)).max(64),
 });
 export const standaloneIntegrationProvenanceSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("legacy_unknown"), contentDigest: digest }),
   z.strictObject({
     kind: z.literal("artifact"),
     url: remote,
@@ -84,7 +85,55 @@ export const standaloneInstallReceiptSchema = z.strictObject({
   contentDigest: digest,
   outcome: z.literal("published"),
 });
+export const standaloneFilesystemEntrySchema = z.strictObject({
+  integrationId: component,
+  version: z.string().max(128).nullable(),
+  contentDigest: digest.nullable(),
+  valid: z.boolean(),
+  denialReason: z.string().max(256).nullable(),
+  pendingTransactionId: z.uuid().optional(),
+});
+export type StandaloneFilesystemEntry = z.infer<typeof standaloneFilesystemEntrySchema>;
+export const standaloneInventoryEntrySchema = standaloneFilesystemEntrySchema
+  .omit({ valid: true })
+  .extend({
+    ownership: z.enum(["extension", "standalone", "unmanaged", "conflict"]),
+    extensionId: z.string().max(128).nullable(),
+    provenance: z.enum(["artifact", "source", "uploaded-artifact", "legacy_unknown"]),
+    adoptable: z.boolean(),
+    removable: z.boolean(),
+  });
+export type StandaloneInventoryEntry = z.infer<typeof standaloneInventoryEntrySchema>;
+export const standaloneOwnershipInspectionSchema = z.discriminatedUnion("allowed", [
+  z.strictObject({
+    allowed: z.literal(true),
+    transactionId: z.uuid(),
+    integrationId: component,
+    contentDigest: digest.nullable(),
+    version: z.string().max(128).nullable(),
+    expiresAt: z.iso.datetime(),
+  }),
+  z.strictObject({
+    allowed: z.literal(false),
+    transactionId: z.uuid(),
+    integrationId: component,
+    reason: z.string().max(256),
+  }),
+]);
 export const standaloneIntegrationOperationSchemas = [
+  z.strictObject({ kind: z.literal("integration.inventory") }),
+  z.strictObject({
+    kind: z.literal("integration.inspectOwnership"),
+    integrationId: component,
+    expectedContentDigest: digest.nullable(),
+    ownerId: owner,
+    operationId: z.uuid(),
+  }),
+  z.strictObject({
+    kind: z.literal("integration.remove"),
+    transactionId: z.uuid(),
+    expectedContentDigest: digest.nullable(),
+  }),
   z.strictObject({
     kind: z.literal("integration.inspectInstall"),
     source: standaloneInstallSourceSchema,
@@ -101,10 +150,20 @@ export const standaloneIntegrationOperationSchemas = [
     kind: z.literal("integration.settle"),
     transactionId: z.uuid(),
     decision: z.enum(["commit", "restore"]),
-    expectedContentDigest: digest,
+    expectedContentDigest: digest.nullable(),
   }),
 ] as const;
 export const standaloneIntegrationResultSchemas = {
+  "integration.inventory": z.strictObject({
+    entries: z.array(standaloneFilesystemEntrySchema).max(1024),
+  }),
+  "integration.inspectOwnership": standaloneOwnershipInspectionSchema,
+  "integration.remove": z.strictObject({
+    transactionId: z.uuid(),
+    integrationId: component,
+    contentDigest: digest.nullable(),
+    outcome: z.literal("removed"),
+  }),
   "integration.inspectInstall": standaloneInstallInspectionSchema,
   "integration.install": standaloneInstallReceiptSchema,
   "integration.settle": z.strictObject({

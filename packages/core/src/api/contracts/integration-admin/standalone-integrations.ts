@@ -1,5 +1,8 @@
 import z from "zod/v4";
-import { standaloneInstallSourceSchema } from "../../../ops/standalone-integrations";
+import {
+  standaloneInstallSourceSchema,
+  standaloneInventoryEntrySchema,
+} from "../../../ops/standalone-integrations";
 import { type AdminOperation, adminCommonResponses, adminJson, httpErrorSchema } from "../admin";
 import { adminIntegrationIdempotencyHeadersSchema } from "./common";
 export const standaloneInstallRequestSchema = z.strictObject({
@@ -19,7 +22,49 @@ const responses = {
   409: adminJson(httpErrorSchema),
   503: adminJson(httpErrorSchema),
 };
+export const standaloneOwnershipParamsSchema = z.strictObject({
+  id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+});
+export const standaloneOwnershipRequestSchema = z.strictObject({
+  expectedContentDigest: z.string().regex(/^[a-f0-9]{64}$/),
+});
+const standaloneRemovalRequestSchema = standaloneOwnershipRequestSchema.extend({
+  expectedContentDigest: standaloneOwnershipRequestSchema.shape.expectedContentDigest.nullable(),
+});
 export const standaloneIntegrationAdminOperations = {
+  listAdminStandaloneIntegrations: {
+    method: "GET",
+    path: "/api/admin/standalone-integrations",
+    auth: "admin",
+    responses: {
+      ...adminCommonResponses,
+      200: adminJson(
+        z.strictObject({ entries: z.array(standaloneInventoryEntrySchema).max(2048) }),
+      ),
+    },
+  },
+  adoptAdminStandaloneIntegration: {
+    method: "POST",
+    path: "/api/admin/standalone-integrations/:id/adopt",
+    auth: "admin",
+    request: {
+      params: standaloneOwnershipParamsSchema,
+      body: standaloneOwnershipRequestSchema,
+      headers: adminIntegrationIdempotencyHeadersSchema,
+    },
+    responses,
+  },
+  removeAdminStandaloneIntegration: {
+    method: "POST",
+    path: "/api/admin/standalone-integrations/:id/remove",
+    auth: "admin",
+    request: {
+      params: standaloneOwnershipParamsSchema,
+      body: standaloneRemovalRequestSchema,
+      headers: adminIntegrationIdempotencyHeadersSchema,
+    },
+    responses,
+  },
   previewAdminStandaloneIntegration: {
     method: "POST",
     path: "/api/admin/standalone-integrations/preview",
@@ -46,6 +91,8 @@ export const standaloneIntegrationAdminOperations = {
 export {
   type StandaloneInstallInspection,
   type StandaloneInstallSource,
+  type StandaloneInventoryEntry,
   standaloneInstallInspectionSchema,
   standaloneInstallSourceSchema,
+  standaloneInventoryEntrySchema,
 } from "../../../ops/standalone-integrations";

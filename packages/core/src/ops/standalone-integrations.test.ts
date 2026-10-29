@@ -24,3 +24,11 @@ it("admits only the finite API-owned standalone inspection/install/settlement op
   expect(() => parseOpsRequest(request, { role: "api" })).not.toThrow();
   expect(() => parseOpsRequest(request, { role: "data-manager" })).toThrow();
 });
+it("exposes finite legacy inventory/ownership/removal operations", () => {
+  for (const kind of [
+    "integration.inventory",
+    "integration.inspectOwnership",
+    "integration.remove",
+  ])
+    expect(OPS_OPERATION_KINDS).toContain(kind);
+});

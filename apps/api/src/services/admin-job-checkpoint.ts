@@ -72,7 +72,8 @@ export async function checkpointOwnedAdminJob(
       if (Object.keys(old.steps).length >= 64 || Object.keys(old.operations).length >= 64)
         return { capacity: true as const, result: current };
       const standaloneSettlement =
-        row.type === "standalone.install" && operation.operation?.kind === "integration.settle";
+        ["standalone.install", "standalone.adopt", "standalone.remove"].includes(row.type) &&
+        operation.operation?.kind === "integration.settle";
       if (standaloneSettlement)
         await assertStandaloneSettlementCheckpoint(row, operation.operation!, tx);
       if (row.status !== "running" && !standaloneSettlement) throw new JobOwnershipLost();

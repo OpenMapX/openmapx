@@ -11,6 +11,9 @@ beforeEach(() =>
 afterEach(() => vi.unstubAllGlobals());
 const at = "2026-10-20T12:00:00.000Z";
 const inventory = [
+  ["listAdminStandaloneIntegrations", "GET", "/api/admin/standalone-integrations"],
+  ["adoptAdminStandaloneIntegration", "POST", "/api/admin/standalone-integrations/:id/adopt"],
+  ["removeAdminStandaloneIntegration", "POST", "/api/admin/standalone-integrations/:id/remove"],
   ["previewAdminStandaloneIntegration", "POST", "/api/admin/standalone-integrations/preview"],
   ["installAdminStandaloneIntegration", "POST", "/api/admin/standalone-integrations/install"],
   ["listAdminIntegrations", "GET", "/api/admin/integrations"],
@@ -176,7 +179,11 @@ const detail = {
 function success(
   id: Exclude<
     keyof typeof contracts.integrationAdminOperations,
-    "previewAdminStandaloneIntegration" | "installAdminStandaloneIntegration"
+    | "previewAdminStandaloneIntegration"
+    | "installAdminStandaloneIntegration"
+    | "listAdminStandaloneIntegrations"
+    | "adoptAdminStandaloneIntegration"
+    | "removeAdminStandaloneIntegration"
   >,
   value: unknown,
 ) {
@@ -186,7 +193,7 @@ function success(
   return contract.schema.parse(value);
 }
 describe("integration administration canonical producer contracts", () => {
-  it("binds exactly the 24 approved operation IDs, methods, paths and admin auth", () => {
+  it("binds exactly the 27 approved operation IDs, methods, paths and admin auth", () => {
     expect(contracts).toHaveProperty("integrationAdminOperations");
     expect(
       Object.entries(contracts.integrationAdminOperations).map(([id, op]) => [

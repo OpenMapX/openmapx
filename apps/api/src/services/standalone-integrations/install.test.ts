@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
@@ -43,7 +43,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     let apiUrl: string, agent: ReturnType<typeof buildOpsAgentServer>, store: ArtifactTransferStore;
     let dropInstallResponse = false,
       installPosts = 0,
-      cancelIntegrationId: string | null = null;
+      cancelIntegrationId: string | null = null,
+      cancelOwnershipId: string | null = null,
+      raceOwnershipId: string | null = null;
     let jobRunner: typeof import("../job-runner").jobRunner;
     beforeAll(async () => {
       state.fixture = await createMigratedPostgresFixture();
@@ -118,6 +120,53 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             await jobRunner.cancel(job.id);
           }
         }
+        if (cancelOwnershipId && request.method === "GET" && typeof payload === "string") {
+          const status = JSON.parse(payload).result;
+          if (
+            status?.state === "succeeded" &&
+            status.kind === "integration.remove" &&
+            status.result?.integrationId === cancelOwnershipId
+          ) {
+            const id = cancelOwnershipId;
+            cancelOwnershipId = null;
+            const rows = await state.fixture.db
+              .select()
+              .from(schema.adminJob)
+              .where(eq(schema.adminJob.type, "standalone.remove"));
+            const job = rows.find((row) => {
+              const body = (row.result as { _standalone?: { body?: string } } | null)?._standalone
+                ?.body;
+              return (
+                row.status === "running" && body && JSON.parse(body).request?.integrationId === id
+              );
+            });
+            if (!job) throw Error("Missing original quarantined removal job");
+            await jobRunner.cancel(job.id);
+          }
+        }
+        if (raceOwnershipId && request.method === "GET" && typeof payload === "string") {
+          const status = JSON.parse(payload).result;
+          if (
+            status?.state === "succeeded" &&
+            status.kind === "integration.inspectOwnership" &&
+            status.result?.integrationId === raceOwnershipId
+          ) {
+            const id = raceOwnershipId;
+            raceOwnershipId = null;
+            await state.fixture.db.transaction(async (tx) => {
+              const [row] = await tx
+                .select()
+                .from(schema.installedIntegration)
+                .where(eq(schema.installedIntegration.id, id))
+                .for("update");
+              if (!row) throw Error("Missing exact metadata race source");
+              await tx
+                .delete(schema.installedIntegration)
+                .where(eq(schema.installedIntegration.id, id));
+              await tx.insert(schema.installedIntegration).values(row);
+            });
+          }
+        }
         return payload;
       });
       cleanups.push(async () => {
@@ -140,6 +189,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       ({ jobRunner } = await import("../job-runner"));
       jobRunner.register("standalone.preview", handlers.handleStandalonePreview);
       jobRunner.register("standalone.install", handlers.handleStandaloneInstall);
+      const ownership = await import("./ownership");
+      jobRunner.register("standalone.adopt", ownership.handleStandaloneOwnership);
+      jobRunner.register("standalone.remove", ownership.handleStandaloneOwnership);
       apiUrl = await app.listen({ host: "127.0.0.1", port: 0 });
     }, 120000);
     afterAll(async () => {
@@ -409,5 +461,298 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           .where(eq(schema.installedIntegration.id, "standalone-cancel")),
       ).toEqual([]);
     }, 150000);
+    it("inventories and explicitly adopts local CLI bytes, then removes through quarantine/reload/bookkeeping", async () => {
+      const id = "legacy-cli-managed",
+        directory = join(state.host.root, "custom_integrations", id);
+      const staging = join(state.host.root, "custom_integrations/.staging");
+      mkdirSync(staging, { recursive: true });
+      chmodSync(staging, 0o755);
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(
+        join(directory, "manifest.json"),
+        JSON.stringify({
+          id,
+          name: "Legacy CLI",
+          version: "1.0.0",
+          platform: "1.0",
+          quality: "community",
+          domains: ["map-overlay"],
+        }),
+      );
+      const response = await fetch(`${apiUrl}/api/admin/standalone-integrations`, {
+        headers: { "x-openmapx-local-admin": "standalone-local-fixture" },
+      });
+      expect(response.status).toBe(200);
+      const entry = (await response.json()).entries.find(
+        (row: { integrationId: string }) => row.integrationId === id,
+      );
+      expect(entry).toMatchObject({
+        ownership: "unmanaged",
+        adoptable: true,
+        provenance: "legacy_unknown",
+      });
+      const body = { expectedContentDigest: entry.contentDigest },
+        key = randomUUID();
+      const accepted = await post(`${id}/adopt`, body, key);
+      expect(accepted.status).toBe(202);
+      const adopted = await completed(accepted.body.jobId);
+      expect(adopted.status, adopted.error ?? JSON.stringify(adopted.result)).toBe("success");
+      expect(await post(`${id}/adopt`, body, key)).toEqual(accepted);
+      const [parent] = await state.fixture.db
+        .select()
+        .from(schema.installedExtension)
+        .where(eq(schema.installedExtension.id, `local-${accepted.body.operationId}`));
+      expect(parent).toMatchObject({
+        manifest: null,
+        sourceUrl: null,
+        installationKind: "standalone",
+        sourceTrust: "community",
+        provenance: { kind: "legacy_unknown", contentDigest: entry.contentDigest },
+      });
+      const remove = await post(`${id}/remove`, body, randomUUID());
+      expect(remove.status).toBe(202);
+      const done = await completed(remove.body.jobId);
+      expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("success");
+      expect(existsSync(directory)).toBe(false);
+      expect(
+        await state.fixture.db
+          .select()
+          .from(schema.installedIntegration)
+          .where(eq(schema.installedIntegration.id, id)),
+      ).toHaveLength(0);
+      expect(
+        await state.fixture.db
+          .select()
+          .from(schema.installedExtension)
+          .where(eq(schema.installedExtension.id, parent!.id)),
+      ).toHaveLength(0);
+      const { getIntegration } = await import("../../integration-host");
+      expect(getIntegration(id)).toBeUndefined();
+    }, 120000);
+
+    it("restores quarantined bytes and exact ownership when a real database delete rolls back", async () => {
+      const id = "legacy-remove-rollback",
+        directory = join(state.host.root, "custom_integrations", id);
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(
+        join(directory, "manifest.json"),
+        JSON.stringify({
+          id,
+          name: "Legacy rollback",
+          version: "1.0.0",
+          platform: "1.0",
+          quality: "community",
+          domains: ["map-overlay"],
+        }),
+      );
+      const inventory = await (
+        await fetch(`${apiUrl}/api/admin/standalone-integrations`, {
+          headers: { "x-openmapx-local-admin": "standalone-local-fixture" },
+        })
+      ).json();
+      const body = {
+        expectedContentDigest: inventory.entries.find(
+          (row: { integrationId: string }) => row.integrationId === id,
+        ).contentDigest,
+      };
+      const adopt = await post(`${id}/adopt`, body, randomUUID());
+      expect((await completed(adopt.body.jobId)).status).toBe("success");
+      const before = await state.fixture
+        .sql`select xmin::text as xmin from installed_integration where id=${id}`;
+      await state.fixture
+        .sql`create table fixture_legacy_remove_hold (id text primary key references installed_integration(id))`;
+      await state.fixture.sql`insert into fixture_legacy_remove_hold(id) values(${id})`;
+      try {
+        const rejected = await post(`${id}/remove`, body, randomUUID()),
+          done = await completed(rejected.body.jobId);
+        expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("failed");
+        expect(done.result).toMatchObject({ outcome: "restored" });
+        expect(existsSync(directory)).toBe(true);
+        expect(
+          await state.fixture
+            .sql`select xmin::text as xmin from installed_integration where id=${id}`,
+        ).toEqual(before);
+        const { getIntegration } = await import("../../integration-host");
+        expect(getIntegration(id)?.manifest.version).toBe("1.0.0");
+      } finally {
+        await state.fixture.sql`drop table fixture_legacy_remove_hold`;
+      }
+      const retry = await post(`${id}/remove`, body, randomUUID()),
+        done = await completed(retry.body.jobId);
+      expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("success");
+      expect(existsSync(directory)).toBe(false);
+    }, 120000);
+
+    it("cleans standalone bookkeeping only after the agent verifies files removed by CLI are absent", async () => {
+      const id = "legacy-cli-removed",
+        directory = join(state.host.root, "custom_integrations", id);
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(
+        join(directory, "manifest.json"),
+        JSON.stringify({
+          id,
+          name: "CLI removed",
+          version: "1.0.0",
+          platform: "1.0",
+          quality: "community",
+          domains: ["map-overlay"],
+        }),
+      );
+      const inventory = async () =>
+        await (
+          await fetch(`${apiUrl}/api/admin/standalone-integrations`, {
+            headers: { "x-openmapx-local-admin": "standalone-local-fixture" },
+          })
+        ).json();
+      const first = (await inventory()).entries.find(
+        (row: { integrationId: string }) => row.integrationId === id,
+      );
+      const adopt = await post(
+        `${id}/adopt`,
+        { expectedContentDigest: first.contentDigest },
+        randomUUID(),
+      );
+      expect((await completed(adopt.body.jobId)).status).toBe("success");
+      const { removeIntegration } = await import("@openmapx/integration-framework/installer");
+      removeIntegration({ rootDir: state.host.root, id });
+      const missing = (await inventory()).entries.find(
+        (row: { integrationId: string }) => row.integrationId === id,
+      );
+      expect(missing).toMatchObject({
+        ownership: "standalone",
+        contentDigest: null,
+        adoptable: false,
+        removable: true,
+      });
+      const accepted = await post(`${id}/remove`, { expectedContentDigest: null }, randomUUID());
+      expect(accepted.status).toBe(202);
+      const done = await completed(accepted.body.jobId);
+      expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("success");
+      expect(
+        (await inventory()).entries.some(
+          (row: { integrationId: string }) => row.integrationId === id,
+        ),
+      ).toBe(false);
+    }, 120000);
+    it("keeps canceled removal pending until its exact quarantined component is restored", async () => {
+      const id = "legacy-remove-cancel",
+        directory = join(state.host.root, "custom_integrations", id);
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(
+        join(directory, "manifest.json"),
+        JSON.stringify({
+          id,
+          name: "Cancel removal",
+          version: "1.0.0",
+          platform: "1.0",
+          quality: "community",
+          domains: ["map-overlay"],
+        }),
+      );
+      const inventory = await (
+        await fetch(`${apiUrl}/api/admin/standalone-integrations`, {
+          headers: { "x-openmapx-local-admin": "standalone-local-fixture" },
+        })
+      ).json();
+      const body = {
+        expectedContentDigest: inventory.entries.find(
+          (row: { integrationId: string }) => row.integrationId === id,
+        ).contentDigest,
+      };
+      cancelOwnershipId = id;
+      const accepted = await post(`${id}/remove`, body, randomUUID());
+      for (let i = 0; i < 200 && cancelOwnershipId; i++) await delay(25);
+      expect(cancelOwnershipId).toBeNull();
+      await delay(1000);
+      const [pending] = await state.fixture.db
+        .select()
+        .from(schema.adminJob)
+        .where(eq(schema.adminJob.id, String(accepted.body.jobId)));
+      if (pending!.status === "cancel_pending") {
+        expect(pending!.finishedAt).toBeNull();
+        expect(existsSync(directory)).toBe(false);
+        await delay(61000);
+        await jobRunner.reconcile();
+      }
+      const done = await completed(accepted.body.jobId, true);
+      expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("canceled");
+      expect(existsSync(directory)).toBe(true);
+      const { hasVerifiedStandaloneRestoration } = await import("./settlement-checkpoint");
+      expect(await hasVerifiedStandaloneRestoration(done.result, done.id)).toBe(true);
+      const forged = structuredClone(done.result) as { _standalone: { mac: string } };
+      forged._standalone.mac = "0".repeat(64);
+      expect(await hasVerifiedStandaloneRestoration(forged, done.id)).toBe(false);
+    }, 180000);
+    it("preserves a delete/reinsert ownership race instead of deleting the replacement row", async () => {
+      const id = "legacy-row-reinsert",
+        directory = join(state.host.root, "custom_integrations", id);
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(
+        join(directory, "manifest.json"),
+        JSON.stringify({
+          id,
+          name: "Ownership race",
+          version: "1.0.0",
+          platform: "1.0",
+          quality: "community",
+          domains: ["map-overlay"],
+        }),
+      );
+      const inventory = await (
+          await fetch(`${apiUrl}/api/admin/standalone-integrations`, {
+            headers: { "x-openmapx-local-admin": "standalone-local-fixture" },
+          })
+        ).json(),
+        body = {
+          expectedContentDigest: inventory.entries.find(
+            (row: { integrationId: string }) => row.integrationId === id,
+          ).contentDigest,
+        };
+      const adopted = await post(`${id}/adopt`, body, randomUUID());
+      expect((await completed(adopted.body.jobId)).status).toBe("success");
+      const before = await state.fixture
+        .sql`select xmin::text as xmin from installed_integration where id=${id}`;
+      raceOwnershipId = id;
+      const accepted = await post(`${id}/remove`, body, randomUUID());
+      let held: typeof schema.adminJob.$inferSelect | undefined;
+      for (let i = 0; i < 2400; i++) {
+        const [row] = await state.fixture.db
+          .select()
+          .from(schema.adminJob)
+          .where(eq(schema.adminJob.id, String(accepted.body.jobId)));
+        const result = row?.result as {
+          _standalone?: { body: string };
+          observation?: { reason: string };
+        } | null;
+        if (
+          result?._standalone &&
+          JSON.parse(result._standalone.body).phase === "persist_attempted" &&
+          result.observation?.reason === "recovery_required"
+        ) {
+          held = row;
+          break;
+        }
+        await delay(25);
+      }
+      expect(raceOwnershipId).toBeNull();
+      expect(held?.finishedAt).toBeNull();
+      expect(held?.status).toBe("running");
+      const after = await state.fixture
+        .sql`select xmin::text as xmin from installed_integration where id=${id}`;
+      expect(after).toHaveLength(1);
+      expect(after[0]!.xmin).not.toBe(before[0]!.xmin);
+      const heldInventory = await (
+        await fetch(`${apiUrl}/api/admin/standalone-integrations`, {
+          headers: { "x-openmapx-local-admin": "standalone-local-fixture" },
+        })
+      ).json();
+      expect(
+        heldInventory.entries.find((row: { integrationId: string }) => row.integrationId === id),
+      ).toMatchObject({
+        pendingTransactionId: accepted.body.operationId,
+        adoptable: false,
+        removable: false,
+      });
+    }, 120000);
   },
 );

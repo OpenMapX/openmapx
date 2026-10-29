@@ -66,8 +66,8 @@ import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { useAdminToast } from "../shared/AdminToast";
 import { TableSearchField, TableToolbar } from "../shared/TableToolbar";
 import { useClientPagination } from "../shared/tableHooks";
-
 import { StandaloneInstallDialog } from "./StandaloneInstallDialog";
+import { StandaloneIntegrationsPanel } from "./StandaloneIntegrationsPanel";
 
 type Trust = AdminExtensionInstallPreview["sourceTrust"];
 
@@ -932,10 +932,12 @@ function ExtensionStoreContent() {
         <Tab label="Browse" />
         <Tab label="Installed" />
         <Tab label="Sources" />
+        <Tab label="Local integrations" />
       </Tabs>
       {tab === 0 && <BrowseTab />}
       {tab === 1 && <InstalledTab />}
       {tab === 2 && <SourcesTab />}
+      {tab === 3 && <StandaloneIntegrationsPanel />}
     </Stack>
   );
 }

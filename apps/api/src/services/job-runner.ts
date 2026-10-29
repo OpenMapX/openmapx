@@ -107,6 +107,8 @@ function cancellationReceiptContext(job: typeof adminJob.$inferSelect): JobConte
 type JobHandler = (ctx: JobContext) => Promise<Record<string, unknown> | undefined>;
 
 export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
+  "standalone.adopt",
+  "standalone.remove",
   "standalone.preview",
   "standalone.install",
   "backup.operation",
@@ -190,7 +192,7 @@ function hasRetainedStandalone(job: { type: string; result: unknown }) {
     _standaloneSettled?: unknown;
   } | null;
   return (
-    job.type === "standalone.install" &&
+    ["standalone.install", "standalone.adopt", "standalone.remove"].includes(job.type) &&
     value?._standaloneSettled !== true &&
     typeof value?._standalone?.body === "string" &&
     typeof value._standalone.mac === "string"
@@ -228,7 +230,7 @@ class AdminJobRunner {
 
   /** Two fixed standalone producers share actor/key serialization and immutable request identity. */
   async enqueueStandalone(
-    type: "standalone.preview" | "standalone.install",
+    type: "standalone.preview" | "standalone.install" | "standalone.adopt" | "standalone.remove",
     payload: Record<string, unknown>,
     actorId: string,
     key: string,

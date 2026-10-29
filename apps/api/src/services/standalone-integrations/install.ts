@@ -228,7 +228,7 @@ async function bookkeeping(
         operationId: state.operationId,
       });
     const now = new Date(),
-      repository = source.kind === "uploaded-artifact" ? null : source.url;
+      repository = "url" in source ? source.url : null;
     await tx
       .insert(installedExtension)
       .values({

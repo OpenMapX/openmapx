@@ -66,6 +66,19 @@ const transferClaim = {
   bytes: 4,
 };
 const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
+  "integration.inventory": { kind: "integration.inventory" },
+  "integration.inspectOwnership": {
+    kind: "integration.inspectOwnership",
+    integrationId: "fixture",
+    expectedContentDigest: "a".repeat(64),
+    ownerId: "admin",
+    operationId: "81a78b3e-208b-4ba4-9ddf-870fbdf1da22",
+  },
+  "integration.remove": {
+    kind: "integration.remove",
+    transactionId: "81a78b3e-208b-4ba4-9ddf-870fbdf1da22",
+    expectedContentDigest: "a".repeat(64),
+  },
   "integration.inspectInstall": {
     kind: "integration.inspectInstall",
     ownerId: "admin",

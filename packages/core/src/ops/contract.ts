@@ -69,6 +69,9 @@ export const OPS_MAX_BACKUP_ID_LENGTH = 128;
 export const OPS_MAX_BACKUP_INVENTORY_ENTRIES = 128;
 
 export const OPS_OPERATION_KINDS = [
+  "integration.inventory",
+  "integration.inspectOwnership",
+  "integration.remove",
   "integration.inspectInstall",
   "integration.install",
   "integration.settle",
@@ -210,6 +213,9 @@ const asyncEffect = (
 const LIFECYCLE_TIMEOUT_MS = 10 * 60_000 + 30_000;
 
 export const OPS_KIND_POLICIES = {
+  "integration.inventory": sync("api", 60_000, 1024 * 1024),
+  "integration.inspectOwnership": asyncEffect("api", 10 * 60_000),
+  "integration.remove": asyncEffect("api", 10 * 60_000),
   "integration.inspectInstall": asyncEffect("api", 10 * 60_000),
   "integration.install": asyncEffect("api", 10 * 60_000),
   "integration.settle": asyncEffect("api", 60_000),

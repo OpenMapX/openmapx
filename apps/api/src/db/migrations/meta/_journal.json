@@ -351,6 +351,13 @@
       "when": 1793271038219,
       "tag": "0049_admin_integration_ownership",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1793275863684,
+      "tag": "0050_admin_legacy_integration_adoption",
+      "breakpoints": true
     }
   ]
 }

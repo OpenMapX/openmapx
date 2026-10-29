@@ -1088,6 +1088,99 @@ function restoreComponentLock(state: ComponentLockState): IntegrationComponentLo
   componentLocks.set(lock, state);
   return lock;
 }
+/** Server-local receipt; HTTP callers cannot choose lock identities or paths. */
+export function describeIntegrationComponentLock(
+  lock: IntegrationComponentLock,
+): ComponentLockState {
+  const state = componentLocks.get(lock);
+  if (!state) throw Error("Unverified integration component lock");
+  const opened = componentLockDirectory(state);
+  opened.directory.close();
+  opened.locks.close();
+  opened.root.close();
+  return structuredClone(state);
+}
+export function restoreIntegrationComponentLock(
+  state: ComponentLockState,
+): IntegrationComponentLock {
+  return restoreComponentLock(state);
+}
+export function inspectOptionalLockedIntegrationComponent(
+  lock: IntegrationComponentLock,
+  signal: AbortSignal,
+) {
+  const state = describeIntegrationComponentLock(lock);
+  try {
+    lstatSync(resolveInstallTarget(state.rootDir, state.id));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  return inspectLockedIntegrationComponent(lock, signal);
+}
+export function inspectLockedIntegrationComponent(
+  lock: IntegrationComponentLock,
+  signal: AbortSignal,
+): { contentDigest: string; version: string; identity: { dev: string; ino: string } } {
+  const state = describeIntegrationComponentLock(lock);
+  const fingerprint = currentIntegrationFingerprint(state.rootDir, state.id, signal);
+  if (!fingerprint) throw Error("Integration directory is missing");
+  const manifest = validatePreparedIntegration(
+    resolveInstallTarget(state.rootDir, state.id),
+    state.rootDir,
+  );
+  if (manifest.id !== state.id) throw Error("Integration directory and manifest identity differ");
+  describeIntegrationComponentLock(lock);
+  return { ...fingerprint, version: String(manifest.version) };
+}
+export function inspectDeclarativeIntegrationDirectory(
+  directory: string,
+  rootDir: string,
+  signal: AbortSignal,
+) {
+  const stat = lstatSync(directory, { bigint: true });
+  if (!stat.isDirectory() || stat.isSymbolicLink()) throw Error("Unsafe integration directory");
+  const manifest = validatePreparedIntegration(directory, rootDir),
+    value = fingerprintPreparedDirectory(directory, signal, false),
+    after = lstatSync(directory, { bigint: true });
+  if (stat.dev !== after.dev || stat.ino !== after.ino)
+    throw Error("Integration directory changed");
+  return {
+    ...value,
+    id: String(manifest.id),
+    version: String(manifest.version),
+    identity: { dev: String(stat.dev), ino: String(stat.ino) },
+  };
+}
+/** Finish only the original terminal lock; a later writer is never released. */
+export function finishIntegrationComponentLock(state: ComponentLockState): void {
+  const root = new AnchoredDirectory(customDir(state.rootDir));
+  let locks: AnchoredDirectory | undefined, directory: AnchoredDirectory | undefined;
+  try {
+    locks = root.directory(".installation-locks", false, true);
+    try {
+      directory = locks.directory(state.id, false, true);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw error;
+    }
+    if (
+      String(directory.stat.dev) !== state.identity.dev ||
+      String(directory.stat.ino) !== state.identity.ino
+    )
+      return;
+    if (directory.listBounded(2).length === 0) {
+      directory.close();
+      locks.removeDirectory(state.id, state.identity);
+      return;
+    }
+  } finally {
+    directory?.close();
+    locks?.close();
+    root.close();
+  }
+  releaseIntegrationComponentLock(restoreComponentLock(state));
+}
 function currentIntegrationFingerprint(
   rootDir: string,
   id: string,

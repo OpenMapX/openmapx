@@ -710,6 +710,12 @@ jobRunner.register("integration.reload", async (ctx) => {
   return result as Record<string, unknown>;
 });
 
+jobRunner.register("standalone.adopt", async (ctx) =>
+  (await import("./services/standalone-integrations/ownership")).handleStandaloneOwnership(ctx),
+);
+jobRunner.register("standalone.remove", async (ctx) =>
+  (await import("./services/standalone-integrations/ownership")).handleStandaloneOwnership(ctx),
+);
 jobRunner.register("standalone.preview", async (ctx) =>
   (await import("./services/standalone-integrations/install")).handleStandalonePreview(ctx),
 );

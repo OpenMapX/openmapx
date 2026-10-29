@@ -74,7 +74,10 @@
       "dawarich.provisioning.inspect",
       "docker.status",
       "integration.inspectInstall",
+      "integration.inspectOwnership",
       "integration.install",
+      "integration.inventory",
+      "integration.remove",
       "integration.settle",
       "integrationConfig.apply",
       "release.apply",
@@ -414,6 +417,15 @@
         "apps/ops-agent/src/standalone-integration-runtime.ts#installStandaloneIntegrationRuntime"
       ],
       "typedKinds": ["integration.inspectInstall", "integration.install", "integration.settle"]
+    },
+    {
+      "id": "api.standalone-integration-ownership",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/standalone-integrations/ownership.ts#handleStandaloneOwnership",
+        "apps/ops-agent/src/standalone-ownership-runtime.ts#installStandaloneOwnershipRuntime"
+      ],
+      "typedKinds": ["integration.inventory", "integration.inspectOwnership", "integration.remove"]
     }
   ],
   "mounts": [

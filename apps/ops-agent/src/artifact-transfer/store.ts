@@ -49,8 +49,10 @@ import z from "zod/v4";
 import type { OpsExecutionContext } from "../runtime";
 import {
   type StandaloneInspectionRecord,
+  type StandaloneOwnershipRecord,
   type StandaloneTransactionRecord,
   standaloneInspectionRecordSchema,
+  standaloneOwnershipRecordSchema,
   standaloneTransactionRecordSchema,
 } from "../standalone-integration-records";
 import { ArtifactTransferError } from "./errors";
@@ -698,9 +700,14 @@ export class ArtifactTransferStore {
       canonicalJson(authority.execution) !== canonicalJson(context.execution) ||
       authority.kind !== operation.kind ||
       opsOperationFingerprint(operation) !== authority.execution.operationFingerprint ||
-      !["integration.inspectInstall", "integration.install", "integration.settle"].includes(
-        operation.kind,
-      )
+      ![
+        "integration.inspectInstall",
+        "integration.install",
+        "integration.settle",
+        "integration.inventory",
+        "integration.inspectOwnership",
+        "integration.remove",
+      ].includes(operation.kind)
     )
       throw Error("Integration execution authority does not match the retained operation");
     return operation;
@@ -855,6 +862,126 @@ export class ArtifactTransferStore {
         if (canonicalJson(old) !== canonicalJson(next))
           throw Error("Immutable standalone transaction changed");
         if (!publication) throw Error("Standalone transaction already exists");
+      }
+      this.writeIntegrationRecord(name, record, previous === null);
+    });
+  }
+  standalonePendingInventory() {
+    return this.lock(() => {
+      const entries: Array<{
+        integrationId: string;
+        version: string | null;
+        contentDigest: string | null;
+        valid: boolean;
+        denialReason: string;
+        pendingTransactionId: string;
+      }> = [];
+      for (const name of this.integrationRecords.listBounded(2048)) {
+        if (/^ownership-[a-f0-9-]{36}\.json$/.test(name)) {
+          const record = this.readIntegrationRecord(name, standaloneOwnershipRecordSchema);
+          if (!["committed", "restored"].includes(record.phase))
+            entries.push({
+              integrationId: record.integrationId,
+              version: record.componentVersion,
+              contentDigest: record.contentDigest,
+              valid: false,
+              pendingTransactionId: record.transactionId,
+              denialReason: `Transaction ${record.transactionId} holds this component. Reconcile its original Activity job.`,
+            });
+        } else if (/^transaction-[a-f0-9-]{36}\.json$/.test(name)) {
+          const record = this.readIntegrationRecord(name, standaloneTransactionRecordSchema);
+          if (
+            !record.publication ||
+            !["committed", "restored"].includes(record.publication.outcome)
+          )
+            entries.push({
+              integrationId: record.inspection.inspection.integrationId,
+              version: record.inspection.inspection.version,
+              contentDigest: record.inspection.inspection.contentDigest,
+              valid: false,
+              pendingTransactionId: record.transactionId,
+              denialReason: `Transaction ${record.transactionId} holds this component. Reconcile its original Activity job.`,
+            });
+        }
+      }
+      return entries;
+    });
+  }
+  readStandaloneOwnership(
+    context: OpsExecutionContext,
+    transactionId: string,
+  ): StandaloneOwnershipRecord {
+    const installationId = this.standaloneInstallationId(context),
+      op = this.integrationContext(context);
+    if (
+      (op.kind !== "integration.inspectOwnership" || op.operationId !== transactionId) &&
+      (op.kind !== "integration.remove" || op.transactionId !== transactionId) &&
+      (op.kind !== "integration.settle" || op.transactionId !== transactionId)
+    )
+      throw Error("Ownership execution mismatch");
+    return this.lock(() => {
+      const record = this.readIntegrationRecord(
+        `ownership-${id.parse(transactionId)}.json`,
+        standaloneOwnershipRecordSchema,
+      );
+      if (
+        record.installationId !== installationId ||
+        (op.kind === "integration.inspectOwnership" && record.ownerId !== op.ownerId)
+      )
+        throw Error("Ownership installation or actor mismatch");
+      return record;
+    });
+  }
+  retainStandaloneOwnership(context: OpsExecutionContext, input: StandaloneOwnershipRecord): void {
+    const record = standaloneOwnershipRecordSchema.parse(input),
+      installationId = this.standaloneInstallationId(context),
+      op = this.integrationContext(context);
+    if (record.installationId !== installationId) throw Error("Ownership installation mismatch");
+    if (op.kind === "integration.inspectOwnership") {
+      if (
+        op.operationId !== record.transactionId ||
+        op.integrationId !== record.integrationId ||
+        op.ownerId !== record.ownerId ||
+        op.expectedContentDigest !== record.contentDigest ||
+        canonicalJson(context.execution) !== canonicalJson(record.inspectionExecution) ||
+        record.phase !== "inspected"
+      )
+        throw Error("Ownership inspection producer mismatch");
+    } else if (op.kind === "integration.remove") {
+      if (
+        op.transactionId !== record.transactionId ||
+        op.expectedContentDigest !== record.contentDigest ||
+        canonicalJson(context.execution) !== canonicalJson(record.removeExecution) ||
+        !["remove_requested", "removed"].includes(record.phase)
+      )
+        throw Error("Removal producer mismatch");
+    } else if (
+      op.kind !== "integration.settle" ||
+      op.transactionId !== record.transactionId ||
+      op.expectedContentDigest !== record.contentDigest ||
+      op.decision !== record.decision
+    )
+      throw Error("Ownership settlement producer mismatch");
+    this.lock(() => {
+      const name = `ownership-${record.transactionId}.json`;
+      let previous: StandaloneOwnershipRecord | null = null;
+      try {
+        previous = this.readIntegrationRecord(name, standaloneOwnershipRecordSchema);
+      } catch (error) {
+        if (!absent(error)) throw error;
+      }
+      if (previous) {
+        const { phase: _p, decision: _d, removeExecution: _e, ...before } = previous,
+          { phase: _n, decision: _nd, removeExecution: _ne, ...after } = record;
+        if (
+          canonicalJson(before) !== canonicalJson(after) ||
+          (previous.removeExecution &&
+            canonicalJson(previous.removeExecution) !== canonicalJson(record.removeExecution)) ||
+          (previous.decision && previous.decision !== record.decision) ||
+          (["committed", "restored"].includes(previous.phase) &&
+            canonicalJson(previous) !== canonicalJson(record))
+        )
+          throw Error("Immutable ownership transaction changed");
       }
       this.writeIntegrationRecord(name, record, previous === null);
     });

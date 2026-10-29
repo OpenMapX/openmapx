@@ -21,11 +21,11 @@ import {
 import type z from "zod/v4";
 import type { ArtifactTransferStore } from "./artifact-transfer/store";
 import type { OpsRuntime } from "./runtime";
-
 import {
   standaloneInspectionRecordSchema as inspectionRecordSchema,
   standaloneTransactionRecordSchema as transactionRecordSchema,
 } from "./standalone-integration-records";
+import { installStandaloneOwnershipRuntime } from "./standalone-ownership-runtime";
 
 function missing(error: unknown) {
   return (error as NodeJS.ErrnoException).code === "ENOENT";
@@ -217,4 +217,6 @@ export function installStandaloneIntegrationRuntime(
     store().retainStandaloneTransaction(context, record, publication);
     return { transactionId: record.transactionId, ...result };
   };
+  if (options.store)
+    installStandaloneOwnershipRuntime(runtime, { ...options, store: options.store });
 }

@@ -264,7 +264,7 @@ it.each(["normal", "upload-mutated", "forged-completion"] as const)(
     await expect(
       store.deleteStage({ stageId: stage.stageId, ownerId: "fixture-admin" }),
     ).rejects.toMatchObject({ statusCode: 409 });
-    const replacement = createUnavailableRuntime();
+    let replacement = createUnavailableRuntime();
     installStandaloneIntegrationRuntime(replacement, { rootDir: root, store });
     const settle: OpsOperation = {
       kind: "integration.settle",
@@ -297,5 +297,113 @@ it.each(["normal", "upload-mutated", "forged-completion"] as const)(
         makeContext({ ...settle, decision: "restore" }),
       ),
     ).rejects.toThrow(/different decision/);
+    const inventoryOperation: OpsOperation = { kind: "integration.inventory" };
+    const inventory = await dispatchOpsOperation(
+      replacement,
+      inventoryOperation,
+      makeContext(inventoryOperation),
+    );
+    expect(inventory.entries).toContainEqual(
+      expect.objectContaining({
+        integrationId: "upload-fixture",
+        valid: true,
+        contentDigest: inspection.contentDigest,
+      }),
+    );
+    for (const decision of ["restore", "commit"] as const) {
+      const transactionId = randomUUID(),
+        own: OpsOperation = {
+          kind: "integration.inspectOwnership",
+          ownerId: "fixture-admin",
+          integrationId: "upload-fixture",
+          operationId: transactionId,
+          expectedContentDigest: inspection.contentDigest,
+        };
+      const checked = await dispatchOpsOperation(replacement, own, makeContext(own));
+      expect(checked).toMatchObject({ allowed: true, transactionId, version: "1.0.0" });
+      const remove: OpsOperation = {
+        kind: "integration.remove",
+        transactionId,
+        expectedContentDigest: inspection.contentDigest,
+      };
+      expect(await dispatchOpsOperation(replacement, remove, makeContext(remove))).toMatchObject({
+        outcome: "removed",
+      });
+      expect(existsSync(join(root, "custom_integrations/upload-fixture"))).toBe(false);
+      store.close();
+      store = new ArtifactTransferStore({
+        dataRoot: join(root, "stages"),
+        privateRoot: join(root, "stage-meta"),
+        token: "fixture-test-token",
+        capacity: () => ({ bytes: 2 * 1024 ** 3, inodes: 100000 }),
+      });
+      replacement = createUnavailableRuntime();
+      installStandaloneIntegrationRuntime(replacement, { rootDir: root, store });
+
+      const settling: OpsOperation = {
+          kind: "integration.settle",
+          transactionId,
+          decision,
+          expectedContentDigest: inspection.contentDigest,
+        },
+        ctx = makeContext(settling);
+      expect(await dispatchOpsOperation(replacement, settling, ctx)).toMatchObject({
+        outcome: decision === "commit" ? "committed" : "restored",
+      });
+      expect(await dispatchOpsOperation(replacement, settling, ctx)).toMatchObject({
+        outcome: decision === "commit" ? "committed" : "restored",
+      });
+      expect(existsSync(join(root, "custom_integrations/upload-fixture"))).toBe(
+        decision === "restore",
+      );
+    }
+
+    {
+      const directory = join(root, "custom_integrations/upload-fixture");
+      mkdirSync(directory);
+      writeFileSync(
+        join(directory, "manifest.json"),
+        JSON.stringify({
+          id: "upload-fixture",
+          name: "Uploaded",
+          version: "1.0.0",
+          platform: "1.0",
+          quality: "community",
+          domains: ["map-overlay"],
+        }),
+      );
+      const checkedInventory = await dispatchOpsOperation(
+          replacement,
+          inventoryOperation,
+          makeContext(inventoryOperation),
+        ),
+        entry = checkedInventory.entries.find((x) => x.integrationId === "upload-fixture");
+      if (!entry?.contentDigest) throw Error("Missing real inventory digest");
+      const transactionId = randomUUID(),
+        own: OpsOperation = {
+          kind: "integration.inspectOwnership",
+          integrationId: "upload-fixture",
+          operationId: transactionId,
+          ownerId: "fixture-admin",
+          expectedContentDigest: entry.contentDigest,
+        };
+      expect(await dispatchOpsOperation(replacement, own, makeContext(own))).toMatchObject({
+        allowed: true,
+      });
+      renameSync(directory, join(root, "original-directory"));
+      mkdirSync(directory);
+      writeFileSync(join(directory, "foreign.txt"), "preserve this foreign replacement");
+      const remove: OpsOperation = {
+        kind: "integration.remove",
+        transactionId,
+        expectedContentDigest: entry.contentDigest,
+      };
+      await expect(dispatchOpsOperation(replacement, remove, makeContext(remove))).rejects.toThrow(
+        /manifest|changed/,
+      );
+      expect(readFileSync(join(directory, "foreign.txt"), "utf8")).toBe(
+        "preserve this foreign replacement",
+      );
+    }
   },
 );

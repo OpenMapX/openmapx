@@ -9,6 +9,8 @@ import {
 } from "../../db/schema";
 import { readProjection } from "../admin-job-projection";
 import { JobOwnershipLost } from "../admin-job-state";
+import { assertOwnershipSettlementCheckpoint } from "./ownership-checkpoint";
+import { readOwnershipState } from "./ownership-state";
 import { readStandaloneState } from "./state";
 /** A cancellation can finalize only its own published component. No forward install admission. */
 export async function assertStandaloneSettlementCheckpoint(
@@ -16,6 +18,8 @@ export async function assertStandaloneSettlementCheckpoint(
   operation: OpsOperation,
   connection: Pick<typeof db, "execute" | "select">,
 ): Promise<void> {
+  if (row.type === "standalone.adopt" || row.type === "standalone.remove")
+    return assertOwnershipSettlementCheckpoint(row, operation, connection);
   if (row.type !== "standalone.install" || operation.kind !== "integration.settle")
     throw new JobOwnershipLost();
   const current = row.result as Record<string, unknown> | null,
@@ -128,6 +132,32 @@ export async function hasVerifiedStandaloneRestoration(
       !Number.isFinite(Date.parse(value._cancelRequestedAt))
     )
       return false;
+    let ownership: Awaited<ReturnType<typeof readOwnershipState>> | undefined;
+    try {
+      ownership = await readOwnershipState(value._standalone);
+    } catch {}
+    if (ownership) {
+      if (
+        ownership.jobId !== jobId ||
+        ownership.phase !== "complete" ||
+        ownership.outcome !== "restored"
+      )
+        return false;
+      const children = Object.values(readProjection(value).operations),
+        restores = children.filter(
+          (x) =>
+            x.operation?.kind === "integration.settle" &&
+            x.operation.transactionId === ownership.operationId &&
+            x.operation.decision === "restore",
+        );
+      return (
+        children.every((x) => x.terminal && x.receiptDelivery?.state === "confirmed") &&
+        restores.length === 1 &&
+        restores[0]?.receiptDelivery?.terminalReceipt.state === "succeeded" &&
+        (restores[0].receiptDelivery.terminalReceipt.result as { outcome?: string }).outcome ===
+          "restored"
+      );
+    }
     const state = await readStandaloneState(value._standalone);
     if (state.jobId !== jobId || state.phase !== "complete" || state.outcome !== "restored")
       return false;
