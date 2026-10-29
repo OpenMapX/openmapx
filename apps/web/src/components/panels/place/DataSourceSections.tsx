@@ -323,51 +323,55 @@ export function DataSourceSections({ detail, domain }: Props) {
       )}
       {/* Operator */}
       {detail.operator && (
-        <Box sx={{ display: "flex", gap: 2, alignItems: "center", py: 1.25, px: 2 }}>
-          {detail.branding ? (
-            <BrandMark branding={detail.branding} fallbackName={detail.operator.name} size={34} />
-          ) : (
-            <Box sx={{ color: BRAND, flexShrink: 0, display: "flex" }}>
-              <BusinessIcon />
+        <Box sx={{ py: 1.25, px: 2 }}>
+          <BrandMark
+            branding={detail.branding}
+            fallbackName={detail.operator.name}
+            size={34}
+            fallbackMark={
+              <Box sx={{ color: BRAND, flexShrink: 0, display: "flex" }}>
+                <BusinessIcon />
+              </Box>
+            }
+          >
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              {detail.operator.url ? (
+                <Link
+                  href={safeHref(detail.operator.url)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  underline="hover"
+                  variant="body2"
+                  sx={{
+                    color: "text.primary",
+                    fontWeight: 600,
+                  }}
+                >
+                  {detail.operator.name}
+                </Link>
+              ) : (
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: 600,
+                  }}
+                >
+                  {detail.operator.name}
+                </Typography>
+              )}
+              {operatorLegalName && (
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "text.secondary",
+                    display: "block",
+                  }}
+                >
+                  {operatorLegalName}
+                </Typography>
+              )}
             </Box>
-          )}
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            {detail.operator.url ? (
-              <Link
-                href={safeHref(detail.operator.url)}
-                target="_blank"
-                rel="noopener noreferrer"
-                underline="hover"
-                variant="body2"
-                sx={{
-                  color: "text.primary",
-                  fontWeight: 600,
-                }}
-              >
-                {detail.operator.name}
-              </Link>
-            ) : (
-              <Typography
-                variant="body2"
-                sx={{
-                  fontWeight: 600,
-                }}
-              >
-                {detail.operator.name}
-              </Typography>
-            )}
-            {operatorLegalName && (
-              <Typography
-                variant="caption"
-                sx={{
-                  color: "text.secondary",
-                  display: "block",
-                }}
-              >
-                {operatorLegalName}
-              </Typography>
-            )}
-          </Box>
+          </BrandMark>
         </Box>
       )}
       {/* Usage info */}

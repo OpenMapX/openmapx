@@ -33,6 +33,7 @@ import { isI18nToken } from "@openmapx/integration-framework/strings";
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
 import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSourceI18nResolver";
+import { AttributionDetailsGroup } from "@/components/ui/AttributionDetailsGroup";
 import { ResultItemName, ResultList, ResultListItem } from "@/components/ui/ResultListItem";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
@@ -334,40 +335,47 @@ export function DataSourceFilterContent() {
                 </IconButton>
               )}
             </Box>
-            <ResultList
-              items={sortedResults}
-              getKey={(result) => result.id}
-              renderItem={(result) => (
-                <ResultListItem
-                  onClick={() => {
-                    if (!activeSource) return;
-                    selectItem(activeSource, result.id);
-                    setSelectedPlace(
-                      createPlace({
-                        primaryScheme: activeSource,
-                        ids: { [activeSource]: result.id },
-                        name: titleOf(result),
-                        address: titleOf(result),
-                        coordinates: result.coordinates,
-                        category: sourceMeta?.placeCategory,
-                        rawCategory: sourceMeta?.placeCategoryRaw,
-                      }),
-                    );
-                    useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
-                  }}
-                  onMouseEnter={() => setHoveredItemId(result.id)}
-                  onMouseLeave={onHoverEnd}
-                  selected={hoveredItemId === result.id}
-                  hoverBg="var(--omx-hover-bg)"
-                >
-                  <Box sx={{ display: "flex", gap: 1.25, alignItems: "flex-start" }}>
-                    {result.branding && (
-                      <BrandMark
-                        branding={result.branding}
-                        fallbackName={result.operator ?? titleOf(result)}
-                        size={26}
-                      />
+            <AttributionDetailsGroup placement="footer">
+              <ResultList
+                items={sortedResults}
+                getKey={(result) => result.id}
+                renderItem={(result) => (
+                  <BrandMark
+                    branding={result.branding}
+                    fallbackName={result.operator ?? titleOf(result)}
+                    size={26}
+                    renderRow={({ content, credits }) => (
+                      <>
+                        <ResultListItem
+                          onClick={() => {
+                            if (!activeSource) return;
+                            selectItem(activeSource, result.id);
+                            setSelectedPlace(
+                              createPlace({
+                                primaryScheme: activeSource,
+                                ids: { [activeSource]: result.id },
+                                name: titleOf(result),
+                                address: titleOf(result),
+                                coordinates: result.coordinates,
+                                category: sourceMeta?.placeCategory,
+                                rawCategory: sourceMeta?.placeCategoryRaw,
+                              }),
+                            );
+                            useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
+                          }}
+                          onMouseEnter={() => setHoveredItemId(result.id)}
+                          onMouseLeave={onHoverEnd}
+                          selected={hoveredItemId === result.id}
+                          hoverBg="var(--omx-hover-bg)"
+                        >
+                          {content}
+                        </ResultListItem>
+                        {credits && (
+                          <Box sx={{ px: 2, pb: 1, "&:empty": { display: "none" } }}>{credits}</Box>
+                        )}
+                      </>
                     )}
+                  >
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <ResultItemName>{titleOf(result)}</ResultItemName>
                       {shouldShowOperatorCaption(result) && (
@@ -435,10 +443,10 @@ export function DataSourceFilterContent() {
                         )}
                       </Box>
                     </Box>
-                  </Box>
-                </ResultListItem>
-              )}
-            />
+                  </BrandMark>
+                )}
+              />
+            </AttributionDetailsGroup>
           </Box>
         )}
       </Box>
