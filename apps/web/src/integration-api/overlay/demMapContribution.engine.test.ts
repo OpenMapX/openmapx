@@ -33,7 +33,12 @@ describe("installed MapLibre DEM acquisition receipt", () => {
     );
     Object.assign(source, {
       tiles: ["https://test/{z}/{x}/{y}"],
-      map: { getPixelRatio: () => 1, _requestManager: {}, _refreshExpiredTiles: false },
+      map: {
+        getPixelRatio: () => 1,
+        _requestManager: {},
+        _refreshExpiredTiles: false,
+        style: { projection: { worldCoordinateHelper: {} } },
+      },
       readImageNow: async () => ({ width: 1, height: 1, data: new Uint8Array(4) }),
     });
     const sources = new Map<string, RasterDEMTileSource>();

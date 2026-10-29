@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.20
 
-FROM node:24.22.1-alpine@sha256:6a1c190e17215d844926b0677f4bf87273ff7d5e54db06d3b5b5863ab0b09a3d AS base
+FROM node:24.22.2-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS base
 COPY package.json /tmp/package.json
 RUN corepack enable && \
     corepack prepare "$(node -e "console.log(require('/tmp/package.json').packageManager)")" --activate && \
@@ -88,7 +88,7 @@ RUN node scripts/copy-runtime-packages.mjs /tmp/runtime-packages.json /app /runt
 # The runner needs no package manager: starting from the plain Node image keeps
 # the pnpm that corepack prepared for the build stages, and its bundled
 # dependencies, out of the shipped image.
-FROM node:24.22.1-alpine@sha256:6a1c190e17215d844926b0677f4bf87273ff7d5e54db06d3b5b5863ab0b09a3d AS runner
+FROM node:24.22.2-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS runner
 WORKDIR /app
 # The pinned base predates Alpine's OpenSSL fix for CVE-2026-14456. curl and
 # libcurl 8.23.0-r0 fix CVE-2026-92392.

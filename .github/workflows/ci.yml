@@ -238,7 +238,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
-      image: node:24.22.1-bookworm@sha256:6449e19d8184d84062525b6a7524def03146c2cb04a7f08b076680d0e8e4240a
+      image: node:24.22.2-bookworm@sha256:e7add2a490bb17d97b485b8641bd88455fff7839ade0f5eba493c3508124d413
       # The runner's own uid, which owns the checked-out workspace. --init
       # reaps orphans as tini does in the agent's image: the job container's
       # own PID 1 never would, and the contained-process tests wait for a
@@ -352,7 +352,7 @@ jobs:
       postgis:
         # Match the production PostGIS line and pin the reviewed multi-arch
         # manifest rather than trusting a mutable registry tag.
-        image: ghcr.io/baosystems/postgis:18-3.6@sha256:8784f86b3e0e046859c96ea25eb8b10f0b801fd891b99a82b82f28ac4a643db8
+        image: ghcr.io/baosystems/postgis:18-3.6@sha256:dd7515b7d8b8b8bac3516a9c3e12584df5890b0864c29295c1b934ecd1db81a7
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -624,7 +624,7 @@ jobs:
         env:
           TRIVY_IMAGE_SRC: docker
         with:
-          version: v0.75.0
+          version: v0.76.1
           image-ref: openmapx-ci:${{ matrix.app }}
           format: table
           scanners: vuln
@@ -696,4 +696,4 @@ jobs:
       contents: read
       packages: write
       security-events: write
-    uses: ./.github/workflows/docker.yml
+    uses: ./.github/workflows/docker.yml # zizmor: ignore[self-repository] actionlint 1.7.12 rejects the $/ form

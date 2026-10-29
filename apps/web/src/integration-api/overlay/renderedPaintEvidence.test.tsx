@@ -57,6 +57,7 @@ function bridge() {
   Object.defineProperty(fake.map, "style", {
     configurable: true,
     value: {
+      projection: { worldCoordinateHelper: {} },
       tileManagers: {
         data: {
           getVisibleCoordinates: () => coordinates.map((key) => ({ key })),

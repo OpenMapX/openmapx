@@ -26,17 +26,17 @@
     "generate:jurisdiction": "tsx src/jurisdiction/generate.ts"
   },
   "dependencies": {
+    "@openmapx/mobility-core": "workspace:*",
     "@turf/boolean-point-in-polygon": "^7.4.0",
-    "zod": "^4.6.7",
-    "@openmapx/mobility-core": "workspace:*"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "esbuild": "^0.28.2",
     "shapefile": "0.6.6",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.5"
   }
 }

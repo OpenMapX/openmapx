@@ -79,7 +79,7 @@ export function addAttributedRasterSource(
     retainTile(state, tile);
     let assignedTexture = false;
     let assignedDem = false;
-    // MapLibre 6.13 writes texture (including pooled/reused objects), uploads
+    // MapLibre 6.16 writes texture (including pooled/reused objects), uploads
     // content, then writes state="loaded" synchronously in this invocation.
     // Observe that exact public commit, not Promise completion or newest start:
     // concurrent older requests can overwrite newer content. Forward all reads
@@ -161,7 +161,7 @@ function hasEvaluatedPaint(
 }
 
 /**
- * Host-only MapLibre 6.13 bridge to the same retained coordinates/texture used
+ * Host-only MapLibre 6.16 bridge to the same retained coordinates/texture used
  * by drawRaster. Source settled/success-event history cannot distinguish
  * offscreen cache entries or eviction, nor failed initial acquisitions.
  * Keep this engine coupling here: no private underscore fields or style casts.
@@ -185,7 +185,7 @@ export function rasterMapContributors(
     if (!diagnosed.has(map)) {
       diagnosed.add(map);
       console.warn(
-        "[map-attribution] Raster contribution tracking unavailable: expected the MapLibre 6.13 retained-tile adapter.",
+        "[map-attribution] Raster contribution tracking unavailable: expected the MapLibre 6.16 retained-tile adapter.",
       );
     }
     return [];
@@ -195,8 +195,7 @@ export function rasterMapContributors(
   const state = receiptState(map, sourceId, []);
   if (!state) return [];
   const receipts: Attribution[][] = [];
-  const noFade =
-    paint.get("raster-fade-duration") === 0 || !!map.painter?.frameRenderContext?.terrain;
+  const noFade = paint.get("raster-fade-duration") === 0 || !!map.terrain;
   for (const coordinate of manager.getVisibleCoordinates()) {
     const tile = manager.getTile(coordinate);
     if (!tile) continue;

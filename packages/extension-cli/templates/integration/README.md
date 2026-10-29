@@ -4,7 +4,7 @@ Declarative OpenMapX integration for the `__DOMAIN__` domain. Fill in `manifest.
 
 ## Install the authoring tools
 
-Use Node.js 24.22.1 or newer. Once the matching CLI version is published:
+Use Node.js 24.22.2 or newer. Once the matching CLI version is published:
 
 ```sh
 npm install --ignore-scripts

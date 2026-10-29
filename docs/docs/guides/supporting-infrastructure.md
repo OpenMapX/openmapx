@@ -97,7 +97,7 @@ for version checks, erasure-journal validation, retention, and restore isolation
 
 ## Valkey {/* #valkey--the-cache */}
 
-The `redis` service runs Valkey `9.1.2-alpine`, pinned by digest. It retains the
+The `redis` service runs Valkey `9.1.3-alpine`, pinned by digest. It retains the
 Redis-compatible service ID and protocol.
 
 | Property          | Current manifest value                            |
@@ -147,7 +147,7 @@ second unrelated password manually.
 
 ## Traefik {/* #traefik--the-reverse-proxy */}
 
-Bundled Traefik `v3.7.14` is digest pinned. It publishes TCP 80/443 and UDP 443,
+Bundled Traefik `v3.7.16` is digest pinned. It publishes TCP 80/443 and UDP 443,
 terminates TLS, and routes requests by hostname and path. Most other published
 ports bind only to loopback; review community-service exposure independently.
 

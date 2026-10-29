@@ -17,8 +17,8 @@ requirements.
 | -------------- | ------------------------------------------------------------------- |
 | Docker Engine  | A current supported release with access to the local Docker socket  |
 | Docker Compose | Compose v2 (`docker compose`)                                       |
-| Node.js        | `>=24.22.1`, as declared in the root `package.json`                 |
-| pnpm           | The version in the root `packageManager` field, currently `12.11.2` |
+| Node.js        | `>=24.22.2`, as declared in the root `package.json`                 |
+| pnpm           | The version in the root `packageManager` field, currently `12.16.1` |
 | Git            | Needed for the checkout and community service repositories          |
 | OpenSSL        | Used in the setup examples to generate random secrets               |
 

@@ -19,7 +19,7 @@ const root = mkdtempSync(join(tmpdir(), "openmapx-privacy-backup-fixture-"));
 chmodSync(root, 0o755);
 const databaseContainer = `openmapx-privacy-backup-${randomBytes(8).toString("hex")}`;
 const databaseImage =
-  "ghcr.io/baosystems/postgis:18-3.6@sha256:8784f86b3e0e046859c96ea25eb8b10f0b801fd891b99a82b82f28ac4a643db8";
+  "ghcr.io/baosystems/postgis:18-3.6@sha256:dd7515b7d8b8b8bac3516a9c3e12584df5890b0864c29295c1b934ecd1db81a7";
 const dawarichImage =
   "freikin/dawarich@sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498";
 const databasePassword = "isolated-backup-fixture";

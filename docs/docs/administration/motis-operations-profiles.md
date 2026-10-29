@@ -91,17 +91,17 @@ gate. With Docker running and the pinned MOTIS and nginx images available, run
 it from the repository root after pulling the test images:
 
 ```bash
-docker pull ghcr.io/motis-project/motis:2.11.3
-docker pull nginx:1.31.6-alpine
+docker pull ghcr.io/motis-project/motis:2.11.4
+docker pull nginx:1.31.8-alpine
 OPENMAPX_E9_LIVE_MOTIS=true pnpm exec vitest run pipeline-live-motis
 ```
 
 The workflow `.github/workflows/e9-live-motis.yml` runs weekly, on demand and
-for changes to the MOTIS constants pin. Inspect its actual image preparation:
-the current workflow pre-pulls MOTIS `2.10.2` and nginx `1.27-alpine`, while the
-canary uses MOTIS `2.11.3` and nginx `1.31.6-alpine`. The MOTIS source pin in
-`packages/transitous-core/src/constants.ts` is also `2.11.3`. A successful pull of the
-older image does not qualify the current pin. The canary can skip when its exact MOTIS image is missing. Confirm it actually ran with the intended images, with no prerequisite skip, and record their digests before treating the gate as passed. The canary imports deterministic GTFS fixtures,
+for changes to the MOTIS constants pin. It pre-pulls the images the canary
+uses, MOTIS `2.11.4` and nginx `1.31.8-alpine`, which match the MOTIS source pin
+in `packages/transitous-core/src/constants.ts`. Keep the pre-pull step, the
+canary and the pin aligned when MOTIS moves: a successful pull of an older
+image does not qualify the current pin. The canary can skip when its exact MOTIS image is missing. Confirm it actually ran with the intended images, with no prerequisite skip, and record their digests before treating the gate as passed. The canary imports deterministic GTFS fixtures,
 queries stops, departures, route details, geometry, platforms, and a local
 civil-day timetable, verifies epoch rollover and stale-ID rejection, and proves
 a failed candidate preserves the active epoch and source manifest.

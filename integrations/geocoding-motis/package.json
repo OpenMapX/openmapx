@@ -6,7 +6,7 @@
   "type": "module",
   "dependencies": {
     "@hey-api/client-fetch": "workspace:*",
-    "@motis-project/motis-client": "^2.11.3",
+    "@motis-project/motis-client": "^2.11.4",
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/integration-geocoding": "workspace:^"

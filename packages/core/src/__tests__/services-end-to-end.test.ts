@@ -561,10 +561,10 @@ describe.skipIf(!manifestsPresent)(
           "traefik",
         ]);
         expect(compose.services["dawarich-postgis"]?.image).toBe(
-          "ghcr.io/baosystems/postgis:18-3.6@sha256:8784f86b3e0e046859c96ea25eb8b10f0b801fd891b99a82b82f28ac4a643db8",
+          "ghcr.io/baosystems/postgis:18-3.6@sha256:dd7515b7d8b8b8bac3516a9c3e12584df5890b0864c29295c1b934ecd1db81a7",
         );
         expect(compose.services["dawarich-redis"]?.image).toBe(
-          "redis:7.4-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499",
+          "redis:7.4-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f",
         );
         expect(compose.services["dawarich-app"]?.image).toBe(
           "freikin/dawarich:1.15.3@sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498",
