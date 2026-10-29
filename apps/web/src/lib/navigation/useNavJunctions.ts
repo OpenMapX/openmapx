@@ -21,6 +21,7 @@ import {
 } from "@openmapx/core";
 import { useEffect, useMemo } from "react";
 import { useStreetLevelProviders } from "@/integration-api/components/useStreetLevelProviders";
+import { JUNCTION_VIEW_ENABLED } from "./junctionAvailability";
 import {
   type CarriedJunctionState,
   type JunctionPhotoState,
@@ -102,7 +103,7 @@ const PHOTO_SEARCH_LIMIT = 20;
 export function useNavJunctions(): void {
   const route = useNavigationStore((s) => s.route);
   const currentStepIndex = useNavigationStore((s) => s.progress?.currentStepIndex);
-  const junctionPhotos = useSettingsStore((s) => s.junctionPhotos);
+  const junctionPhotos = useSettingsStore((s) => JUNCTION_VIEW_ENABLED && s.junctionPhotos);
   // Subscribed, not read on demand: coming back online or switching the view
   // on mid-step must start the lookups at once. A motorway step can run tens
   // of kilometres and ends at the exit, so waiting for it to advance would

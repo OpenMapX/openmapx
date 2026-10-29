@@ -123,6 +123,15 @@ contract and exposing the same routes under
 
 ### During navigation
 
+:::warning Temporarily hidden
+
+Junction photos and their lane guidance are currently hidden while their quality
+is improved. Navigation does not acquire these photos. The implementation described
+below is retained for future restoration. Street-level imagery elsewhere on the map
+is unaffected.
+
+:::
+
 While driving, the [junction view](./directions.md#turn-by-turn-navigation) can
 show a recent street-level image of an exit's approach, taken 30–200 m upstream
 and facing along the road — preferably where OpenStreetMap says the exit lanes

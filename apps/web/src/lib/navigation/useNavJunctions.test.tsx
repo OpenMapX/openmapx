@@ -3,6 +3,16 @@ import { useNavigationStore, useSettingsStore } from "@openmapx/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const availability = vi.hoisted(() => ({ enabled: true }));
+vi.mock("./junctionAvailability", () => ({
+  get JUNCTION_VIEW_ENABLED() {
+    return availability.enabled;
+  },
+}));
+beforeEach(() => {
+  availability.enabled = true;
+});
+
 const fetchJunctionLookups = vi.fn();
 const searchStreetLevelImages = vi.fn();
 const prepareJunctionPhoto = vi.hoisted(() => vi.fn());
@@ -322,6 +332,17 @@ describe("useNavJunctions gantry fetch", () => {
     renderHook(() => useNavJunctions());
     await flush();
     expect(fetchJunctionLookups).not.toHaveBeenCalled();
+  });
+
+  it("acquires no photos while unavailable but retains lane lookups for the green banner", async () => {
+    availability.enabled = false;
+    fetchJunctionLookups.mockResolvedValue(fixtureResponse);
+    start();
+    renderHook(() => useNavJunctions());
+    await flush();
+    expect(fetchJunctionLookups).toHaveBeenCalledTimes(1);
+    expect(searchStreetLevelImages).not.toHaveBeenCalled();
+    expect(prepareJunctionPhoto).not.toHaveBeenCalled();
   });
 
   it("fetches nothing when junctionView is off", async () => {

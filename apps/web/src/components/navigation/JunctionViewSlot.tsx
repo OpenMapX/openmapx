@@ -10,6 +10,7 @@ import {
 } from "@openmapx/core";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
 import { OSM_ATTRIBUTION } from "@/lib/map";
+import { JUNCTION_VIEW_ENABLED } from "@/lib/navigation/junctionAvailability";
 import { useNavJunctionStore } from "@/lib/navigation/junctionStore";
 import { JunctionViewPanel } from "./junction/JunctionViewPanel";
 
@@ -64,6 +65,7 @@ export function JunctionViewSlot() {
     geometry;
 
   const visible =
+    JUNCTION_VIEW_ENABLED &&
     junctionView &&
     !!point &&
     (status === "navigating" || status === "rerouting") &&

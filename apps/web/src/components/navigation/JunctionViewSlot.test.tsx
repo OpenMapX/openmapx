@@ -4,6 +4,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const availability = vi.hoisted(() => ({ enabled: true }));
+vi.mock("@/lib/navigation/junctionAvailability", () => ({
+  get JUNCTION_VIEW_ENABLED() {
+    return availability.enabled;
+  },
+}));
+
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
 const { JunctionViewSlot } = await import("./JunctionViewSlot");
@@ -56,6 +63,7 @@ function mount() {
 
 describe("JunctionViewSlot", () => {
   beforeEach(() => {
+    availability.enabled = true;
     useSettingsStore.setState({ junctionView: true, junctionPhotos: true });
     useNavJunctionStore.getState().reset();
     populateStore();
@@ -65,6 +73,16 @@ describe("JunctionViewSlot", () => {
     cleanup();
     useNavigationStore.getState().stopNavigation();
     useNavJunctionStore.getState().reset();
+  });
+
+  it("hides cached junction content in the shipped configuration despite saved opt-in", async () => {
+    const shipped = await vi.importActual<typeof import("@/lib/navigation/junctionAvailability")>(
+      "@/lib/navigation/junctionAvailability",
+    );
+    availability.enabled = shipped.JUNCTION_VIEW_ENABLED;
+    setState();
+    const view = mount();
+    expect(view.queryByTestId("junction-view-panel")).toBeNull();
   });
 
   it("renders the panel inside the approach window before the exit", () => {

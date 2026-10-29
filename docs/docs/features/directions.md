@@ -322,6 +322,17 @@ reads as a place, and an **arrow on the map** traces the route through the split
 Both revert automatically after the maneuver, and a pinch or drag during the
 approach is never interrupted.
 
+:::warning Temporarily hidden
+
+The additional blue destination boards, schematic junction view and junction photos
+are currently hidden, including their settings controls. Their implementation is
+retained for further improvements. The green maneuver banner and its lane arrows
+remain available; junction lane lookups still supply those arrows, but navigation
+no longer searches for or prepares junction photos. The description below documents
+the retained implementation, not currently available UI.
+
+:::
+
 For motorway and expressway exits, forks, and splits while driving, a **junction view** card
 appears under the banner. It shows destination boards for the upcoming split,
 including connected outgoing roads' destinations.
