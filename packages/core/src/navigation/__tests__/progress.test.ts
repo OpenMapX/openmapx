@@ -32,6 +32,43 @@ const route = {
 } as unknown as Route;
 
 describe("computeProgress", () => {
+  it("uses the physical maneuver boundary despite longer engine step distances", () => {
+    const physical: Route = {
+      ...route,
+      distance: 2640,
+      duration: 120,
+      geometry: [
+        [0, 0],
+        [0.00899320363724538, 0],
+        [0.01798640727449076, 0],
+      ],
+      steps: [
+        {
+          instruction: "a",
+          distance: 1320,
+          duration: 60,
+          coordinates: [
+            [0, 0],
+            [0.00899320363724538, 0],
+          ],
+        },
+        {
+          instruction: "b",
+          distance: 1320,
+          duration: 60,
+          coordinates: [
+            [0.00899320363724538, 0],
+            [0.01798640727449076, 0],
+          ],
+        },
+      ],
+    };
+    const p = computeProgress(physical, 700);
+    expect(p.distanceToNextManeuver).toBeCloseTo(300, 2);
+    expect(p.distanceRemaining).toBeCloseTo(1716, 2);
+    expect(p.durationRemaining).toBeCloseTo(78, 3);
+    expect(computeProgress(physical, 1010).currentStepIndex).toBe(1);
+  });
   it("locates the current step from along-distance", () => {
     const p = computeProgress(route, 150);
     expect(p.currentStepIndex).toBe(1);

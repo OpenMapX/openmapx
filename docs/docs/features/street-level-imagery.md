@@ -108,14 +108,12 @@ or the instance disables that provider.
 
 ### During navigation
 
-The [junction view](./directions.md#turn-by-turn-navigation) can show an available
-approach photo while driving. Only providers permitted for navigation are
-searched, currently Panoramax. The caption retains author, license, and capture
-month. An old photo is not evidence of current lane layout or road conditions.
-
-Junction photos can be disabled in navigation settings. Where no suitable image
-exists, navigation keeps its schematic junction view. This is separate from
-opening the imagery viewer to browse photos.
+Junction photos and their lane guidance are temporarily hidden while their quality
+is improved. Navigation does not search for, download or prepare these photos;
+the additional destination boards and schematic junction view are hidden too.
+The green maneuver banner and lane arrows remain available. The implementation
+is retained for future restoration. This does not affect opening the imagery
+viewer to browse photos elsewhere on the map.
 
 ### Navigation arrows
 

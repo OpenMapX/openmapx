@@ -82,6 +82,9 @@ jobs:
         # advisories are narrowly versioned and expire for explicit review.
         run: pnpm check-production-audits
 
+      - name: Validate junction reference provenance
+        run: pnpm junction-eval:validate
+
       - name: Probe patched image parsers
         # Keep the child-process timeout visible as a dedicated security gate.
         run: pnpm check-image-size-dos

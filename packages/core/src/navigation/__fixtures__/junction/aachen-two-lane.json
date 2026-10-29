@@ -1,0 +1,102 @@
+{
+  "geometry": [
+    [
+      6.161293,
+      50.803963
+    ],
+    [
+      6.161443,
+      50.804013
+    ],
+    [
+      6.161603,
+      50.804057
+    ],
+    [
+      6.161786,
+      50.804102
+    ],
+    [
+      6.161951,
+      50.804138
+    ],
+    [
+      6.162165,
+      50.804179
+    ],
+    [
+      6.16307,
+      50.804351
+    ],
+    [
+      6.163522,
+      50.804389
+    ],
+    [
+      6.163732,
+      50.804403
+    ],
+    [
+      6.163941,
+      50.804413
+    ],
+    [
+      6.164337,
+      50.80443
+    ],
+    [
+      6.165061,
+      50.80445
+    ],
+    [
+      6.166053,
+      50.804446
+    ]
+  ],
+  "point": {
+    "stepIndex": 4,
+    "kind": "exit",
+    "side": "left",
+    "point": [
+      6.165061,
+      50.80445
+    ],
+    "alongMeters": 272.7962379375422,
+    "approachBearing": 83.97804325998715,
+    "divergenceDeg": 3,
+    "activeLanes": [],
+    "sign": {
+      "exitBranches": [
+        "A 44"
+      ],
+      "exitToward": [
+        "Düsseldorf"
+      ]
+    }
+  },
+  "image": {
+    "id": "813947a9-77f7-4031-8f51-939b2aa6e295",
+    "providerId": "panoramax",
+    "lngLat": [
+      6.1636288,
+      50.8045121
+    ],
+    "heading": 87,
+    "capturedAt": "2024-08-08T13:10:06+00:00",
+    "isPano": true,
+    "fovDeg": 360,
+    "aspectRatio": 2,
+    "sequenceId": "24b1553e-850a-4bfd-8242-93df8a7ab76a",
+    "assets": {
+      "thumb": "https://panoramax.openstreetmap.fr/derivates/81/39/47/a9/77f7-4031-8f51-939b2aa6e295/thumb.jpg",
+      "sd": "https://panoramax.openstreetmap.fr/derivates/81/39/47/a9/77f7-4031-8f51-939b2aa6e295/sd.jpg",
+      "hd": "https://panoramax.openstreetmap.fr/images/81/39/47/a9/77f7-4031-8f51-939b2aa6e295.jpg"
+    },
+    "author": "Bastian Greshake Tzovaras",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "pageUrl": "https://panoramax.xyz/#focus=pic&pic=813947a9-77f7-4031-8f51-939b2aa6e295"
+  },
+  "width": 1024,
+  "height": 512
+}

@@ -2,7 +2,13 @@
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { type ManeuverSign, signHeadline, visibleToward } from "@openmapx/core";
+import {
+  cleanSignTexts,
+  exitNumberLabel,
+  type ManeuverSign,
+  signHeadline,
+  visibleToward,
+} from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { RouteShield } from "./RouteShield";
 import { signPalette } from "./signPalette";
@@ -24,9 +30,10 @@ interface Props {
  */
 export function ExitSignStrip({ sign, country, size = "banner", hideHeadline = false }: Props) {
   const t = useTranslations("navigation");
-  const exitNumber = sign.exitNumbers?.[0];
-  const shields = visibleToward(sign.exitBranches ?? [], 3);
+  const exitNumber = exitNumberLabel(sign.exitNumbers?.[0]);
+  const shields = cleanSignTexts(sign.exitBranches ?? [], true).slice(0, 3);
   const headline = hideHeadline ? [] : visibleToward(signHeadline(sign));
+
   const palette = signPalette(country ?? null);
   if (!exitNumber && shields.length === 0 && headline.length === 0) return null;
   return (

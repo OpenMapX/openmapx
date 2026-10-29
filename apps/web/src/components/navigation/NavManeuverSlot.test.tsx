@@ -12,17 +12,22 @@ vi.mock("@openmapx/core", async (importOriginal) => ({
 }));
 
 const { NavManeuverSlot } = await import("./NavManeuverSlot");
+const { useNavJunctionStore } = await import("@/lib/navigation/junctionStore");
 
 const route = {
+  distance: 1500,
+  duration: 110,
+  legs: [],
   mode: "driving",
   geometry: [
     [6.67, 51.17],
     [6.68, 51.18],
   ],
   steps: [
-    { instruction: "Drive on", distance: 1000, duration: 60 },
+    { instruction: "Drive on", distance: 1000, duration: 60, coordinates: [] },
     {
       instruction: "Take exit 20 toward Neuss-Zentrum",
+      coordinates: [],
       distance: 400,
       duration: 30,
       maneuver: { type: "turn", modifier: "right" },
@@ -32,7 +37,7 @@ const route = {
         exitToward: ["Neuss-Zentrum"],
       },
     },
-    { instruction: "Arrive", distance: 100, duration: 20 },
+    { instruction: "Arrive", distance: 100, duration: 20, coordinates: [] },
   ],
 } as unknown as Route;
 
@@ -70,12 +75,60 @@ describe("NavManeuverSlot", () => {
   afterEach(() => {
     cleanup();
     useNavigationStore.getState().stopNavigation();
+    useNavJunctionStore.getState().reset();
   });
 
   it("passes the upcoming step's sign to the banner", () => {
     const view = mount();
     expect(view.getByTestId("exit-sign-strip")).toBeTruthy();
     expect(view.container.textContent).toContain("Neuss-Zentrum");
+  });
+  it("does not paint the previous route's lane choice during the reroute render", () => {
+    useNavJunctionStore.setState({
+      routeIdentity: route,
+      gantryByStep: new Map([
+        [
+          1,
+          {
+            laneCount: 2,
+            activeLanes: [0],
+            panels: [],
+            source: "osm",
+            laneGuidance: {
+              lanes: [
+                { indications: ["through"], valid: true, preferred: true },
+                { indications: ["right"], valid: false },
+              ],
+              usableLanes: [0],
+              preferredLanes: [0],
+              state: "known",
+            },
+          },
+        ],
+      ]),
+    });
+    useNavigationStore.setState({
+      route: {
+        ...route,
+        steps: route.steps.map((step, i) =>
+          i === 1
+            ? {
+                ...step,
+                lanes: [
+                  { indications: ["through"], valid: false },
+                  { indications: ["right"], valid: true, preferred: true },
+                ],
+              }
+            : step,
+        ),
+      },
+    });
+    const view = mount();
+    expect(
+      [...view.container.querySelectorAll("[data-lane-state]")].map((cell) =>
+        cell.getAttribute("data-lane-state"),
+      ),
+    ).toEqual(["rejected", "preferred"]);
   });
 
   it("colours the sign by the country the exit stands in, not the origin's", () => {

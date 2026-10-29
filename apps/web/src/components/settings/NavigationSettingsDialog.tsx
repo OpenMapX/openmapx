@@ -21,6 +21,7 @@ import {
   useFullScreenOnMobile,
 } from "@/integration-api/runtime/useFullScreenOnMobile";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
+import { JUNCTION_VIEW_ENABLED } from "@/lib/navigation/junctionAvailability";
 import { speakOnce, useAvailableVoices } from "@/lib/navigation/useNavigationVoice";
 import { Section, SettingRow, SwitchControl } from "./settingsPrimitives";
 
@@ -151,18 +152,22 @@ export function NavigationSettingsDialog({
             <SwitchControl checked={speedCameraAlerts} onChange={setSpeedCameraAlerts} />
           </SettingRow>
           {hint(ts("speedCameraAlertsHint"))}
-          <SettingRow label={ts("junctionView")}>
-            <SwitchControl checked={junctionView} onChange={setJunctionView} />
-          </SettingRow>
-          {hint(ts("junctionViewHint"))}
-          <SettingRow label={ts("junctionPhotos")} disabled={!junctionView}>
-            <SwitchControl
-              checked={junctionView && junctionPhotos}
-              onChange={setJunctionPhotos}
-              disabled={!junctionView}
-            />
-          </SettingRow>
-          {hint(ts("junctionPhotosHint"))}
+          {JUNCTION_VIEW_ENABLED && (
+            <>
+              <SettingRow label={ts("junctionView")}>
+                <SwitchControl checked={junctionView} onChange={setJunctionView} />
+              </SettingRow>
+              {hint(ts("junctionViewHint"))}
+              <SettingRow label={ts("junctionPhotos")} disabled={!junctionView}>
+                <SwitchControl
+                  checked={junctionView && junctionPhotos}
+                  onChange={setJunctionPhotos}
+                  disabled={!junctionView}
+                />
+              </SettingRow>
+              {hint(ts("junctionPhotosHint"))}
+            </>
+          )}
         </Section>
 
         <Section title={tn("sectionRouting")}>

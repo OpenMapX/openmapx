@@ -174,4 +174,81 @@ describe("selectJunctionPhoto on the A57 fixture", () => {
     const noHeading = images.map((image) => ({ ...image, heading: undefined }));
     expect(selectJunctionPhoto(noHeading, a57Point, NOW)).toBeNull();
   });
+  it("selects the forward slice of a full sphere regardless of its centre heading", () => {
+    const road = straightRoad(90, 300);
+    const point: JunctionDecisionPoint = {
+      ...a57Point,
+      point: road.at(-1)!,
+      alongMeters: 300,
+      approachBearing: 90,
+    };
+    const image: StreetLevelImage = {
+      ...images[0],
+      lngLat: pointAlong(road, 220),
+      heading: 300,
+      isPano: true,
+    };
+    expect(selectJunctionPhoto([image], point, NOW, { geometry: road })?.id).toBe(image.id);
+    expect(
+      selectJunctionPhoto([{ ...image, isPano: false }], point, NOW, { geometry: road }),
+    ).toBeNull();
+  });
+
+  it("withholds surface imagery when the matched approach is a tunnel", () => {
+    const road = straightRoad(90, 300);
+    const point: JunctionDecisionPoint = {
+      ...a57Point,
+      point: road.at(-1)!,
+      alongMeters: 300,
+      approachBearing: 90,
+    };
+    const image: StreetLevelImage = { ...images[0], lngLat: pointAlong(road, 220), heading: 90 };
+    expect(
+      selectJunctionPhoto([image], point, NOW, {
+        geometry: road,
+        approachWay: {
+          wayId: 1,
+          highway: "motorway",
+          bearing: 90,
+          endDistanceMeters: 0,
+          startDistanceMeters: 300,
+          tags: {},
+          geometry: road,
+          tunnel: true,
+          layer: -1,
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects a surface frame above the tunnel interval upstream of a surface split", () => {
+    const road = straightRoad(90, 300);
+    const point = { ...a57Point, point: road.at(-1)!, alongMeters: 300, approachBearing: 90 };
+    const image = { ...images[0], lngLat: pointAlong(road, 220), heading: 90 };
+    const ways = [
+      {
+        wayId: 1,
+        highway: "motorway",
+        bearing: 90,
+        endDistanceMeters: 20,
+        startDistanceMeters: 300,
+        tags: { lanes: 2 },
+        geometry: road.slice(0, 28),
+        tunnel: true,
+        layer: -1,
+      },
+      {
+        wayId: 2,
+        highway: "motorway",
+        bearing: 90,
+        endDistanceMeters: 0,
+        startDistanceMeters: 20,
+        tags: { lanes: 3 },
+        geometry: road.slice(28),
+      },
+    ];
+    expect(
+      selectJunctionPhoto([image], point, NOW, { geometry: road, approachWays: ways }),
+    ).toBeNull();
+  });
 });

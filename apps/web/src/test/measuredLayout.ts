@@ -3,13 +3,35 @@ import { vi } from "vitest";
 /** Deterministic DOM geometry and resize delivery for measured-layout regressions. */
 export function installMeasuredLayout(rectFor: (element: HTMLElement) => DOMRect) {
   const observers = new Set<Observer>();
-  class Observer {
-    constructor(readonly callback: () => void) {
+  class Observer implements ResizeObserver {
+    readonly targets = new Set<Element>();
+    constructor(readonly callback: ResizeObserverCallback) {
       observers.add(this);
     }
-    observe() {}
-    unobserve() {}
+    observe(target: Element) {
+      this.targets.add(target);
+    }
+    unobserve(target: Element) {
+      this.targets.delete(target);
+    }
+    deliver() {
+      const entries: ResizeObserverEntry[] = [];
+      for (const target of this.targets) {
+        if (!(target instanceof HTMLElement)) continue;
+        const contentRect = rectFor(target);
+        const size = { inlineSize: contentRect.width, blockSize: contentRect.height };
+        entries.push({
+          target,
+          contentRect,
+          contentBoxSize: [size],
+          borderBoxSize: [size],
+          devicePixelContentBoxSize: [size],
+        });
+      }
+      this.callback(entries, this);
+    }
     disconnect() {
+      this.targets.clear();
       observers.delete(this);
     }
   }
@@ -21,7 +43,7 @@ export function installMeasuredLayout(rectFor: (element: HTMLElement) => DOMRect
     });
   return {
     resize: () => {
-      for (const observer of [...observers]) observer.callback();
+      for (const observer of [...observers]) observer.deliver();
     },
     restore: () => {
       rectSpy.mockRestore();

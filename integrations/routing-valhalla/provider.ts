@@ -320,11 +320,18 @@ function laneFlagIndication(flag: number | undefined, directions: string[]): str
 /** Lane guidance from a Valhalla maneuver, when present. Exported for testing. */
 export function valhallaLanes(maneuver: ValhallaManeuver): ManeuverLane[] | undefined {
   if (!maneuver.lanes || maneuver.lanes.length === 0) return undefined;
+  // Valhalla serializes nonzero lane states only. Once this maneuver reports
+  // guidance, omitted flags on its other lanes represent zero, not unknown.
+  const reported = maneuver.lanes.some(
+    (lane) => lane.valid !== undefined || lane.active !== undefined,
+  );
+  const preferredReported = maneuver.lanes.some((lane) => lane.active !== undefined);
   return maneuver.lanes.map((l) => {
     const indications = laneDirections(l.directions);
     const lane: ManeuverLane = {
       indications,
-      valid: laneFlagSet(l.valid) || laneFlagSet(l.active),
+      ...(reported ? { valid: laneFlagSet(l.valid) || laneFlagSet(l.active) } : {}),
+      ...(preferredReported ? { preferred: laneFlagSet(l.active) } : {}),
     };
     const active =
       laneFlagIndication(l.active, indications) ?? laneFlagIndication(l.valid, indications);

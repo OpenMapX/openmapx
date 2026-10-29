@@ -257,12 +257,12 @@ approach is never interrupted. Small speed changes keep the same maneuver in
 focus; the emphasis resets when the maneuver passes, the route changes, or you
 move back far enough to leave its approach.
 
-A junction view can appear for driving exits, forks, and splits. It uses engine
-and available OpenStreetMap lane/sign information, with fallback estimates when
-complete lane data is absent. With coverage, a Panoramax approach photo can also
-appear with author, license, and capture date. Mapillary is excluded from
-navigation imagery. Both junction view and photos can be disabled in navigation
-settings. Treat the road's actual signs and markings as authoritative.
+The additional junction destination boards, schematic lane view and junction photos
+are temporarily hidden while their quality is improved. Their settings controls are
+also hidden. The green maneuver banner and its lane arrows remain available.
+Junction lane lookups continue to supply those arrows, but navigation does not
+search for, download or prepare junction photos. The implementation and saved
+preferences are retained for future restoration.
 
 Navigation also speaks instructions aloud (voice guidance can be toggled off) and
 offers a **keep-screen-on** option that holds a wake lock so the display does not

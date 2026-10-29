@@ -241,6 +241,44 @@ describe("projectRoutePath", () => {
     }
   });
 
+  it("places a flat photo against its optical heading instead of the road tangent", () => {
+    const geometry = road(400);
+    const path = projectRoutePath(
+      geometry,
+      decisionPoint(geometry, 300, 0),
+      camera(geometry, 200, { heading: 110 }),
+    );
+    expect(path.visible).toBe(true);
+    // tan(-20°) / tan(35°), through the known 70° horizontal field of view.
+    expect(path.points[0].xPercent).toBeCloseTo(24.01, 1);
+    // Camera depth is the forward component of the ray, not route arc-length.
+    expect(path.points[0].yPercent).toBeCloseTo(82.93, 0);
+  });
+
+  it("withholds a flat-photo ribbon when the optical heading is unknown", () => {
+    const geometry = road(400);
+    const path = projectRoutePath(
+      geometry,
+      decisionPoint(geometry, 300, 0),
+      camera(geometry, 200, { heading: undefined }),
+    );
+    expect(path.visible).toBe(false);
+  });
+
+  it("projects the physical ribbon edges through a skewed camera separately", () => {
+    const geometry = road(400);
+    const path = projectRoutePath(
+      geometry,
+      decisionPoint(geometry, 300, 0),
+      camera(geometry, 200, { heading: 110 }),
+    );
+    const near = path.points[0];
+    expect(near.left?.xPercent).toBeCloseTo(6.57, 0);
+    expect(near.right?.xPercent).toBeCloseTo(39.09, 0);
+    expect(near.left?.yPercent).toBeCloseTo(85.51, 0);
+    expect(near.right?.yPercent).toBeCloseTo(80.7, 0);
+  });
+
   it("draws nothing over a panorama whose heading is unknown", () => {
     const geometry = road(400);
     const { heading: _unknown, ...noHeading } = camera(geometry, 200, {
@@ -351,7 +389,8 @@ describe("projectRoutePath on the A57 fixture", () => {
     expect(path.points.length).toBeGreaterThan(5);
     const [nearest] = path.points;
     const farthest = path.points[path.points.length - 1];
-    expect(nearest.xPercent).toBeCloseTo(50, 0);
+    // The photographed heading is 282°, just left of the approach's ~283° bearing.
+    expect(nearest.xPercent).toBeCloseTo(51.3, 0);
     expect(farthest.xPercent).toBeGreaterThan(nearest.xPercent);
     for (const projected of path.points) {
       expect(projected.xPercent).toBeGreaterThanOrEqual(0);
