@@ -109,7 +109,7 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   "artifactTransfer.settle": {
     kind: "artifactTransfer.settle",
     claim: transferClaim,
-    settlement: { kind: "unknown", receiptId: "retained" },
+    settlement: { outcome: "unknown", receiptId: "retained" },
   },
   "controlRetention.acknowledge": {
     kind: "controlRetention.acknowledge",

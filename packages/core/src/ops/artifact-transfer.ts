@@ -63,12 +63,12 @@ export const artifactStageClaimSchema = z.strictObject({
   sha256: digest,
   bytes: count,
 });
-export const stageClaimSettlementSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("validated"), inspection: stageInspectionBindingSchema }),
-  z.strictObject({ kind: z.literal("released"), evidence: z.enum(["no_effect", "restored"]) }),
-  z.strictObject({ kind: z.literal("consumed"), receiptId: z.string().min(1).max(256) }),
-  z.strictObject({ kind: z.literal("failed"), receiptId: z.string().min(1).max(256) }),
-  z.strictObject({ kind: z.literal("unknown"), receiptId: z.string().min(1).max(256) }),
+export const stageClaimSettlementSchema = z.discriminatedUnion("outcome", [
+  z.strictObject({ outcome: z.literal("validated"), inspection: stageInspectionBindingSchema }),
+  z.strictObject({ outcome: z.literal("released"), evidence: z.enum(["no_effect", "restored"]) }),
+  z.strictObject({ outcome: z.literal("consumed"), receiptId: z.string().min(1).max(256) }),
+  z.strictObject({ outcome: z.literal("failed"), receiptId: z.string().min(1).max(256) }),
+  z.strictObject({ outcome: z.literal("unknown"), receiptId: z.string().min(1).max(256) }),
 ]);
 export const createTransferStageSchema = z.strictObject({
   purpose: transferPurposeSchema,
