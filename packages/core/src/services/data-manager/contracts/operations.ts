@@ -19,7 +19,11 @@ import * as h from "./headers";
 import * as i from "./indexes";
 import * as f from "./offline";
 import * as o from "./overture";
-import { trafficApplicationSnapshotSchema } from "./traffic";
+import {
+  plannedTrafficClosuresQuerySchema,
+  plannedTrafficClosuresSchema,
+  trafficApplicationSnapshotSchema,
+} from "./traffic";
 import * as t from "./transit";
 
 const service = "service" as const;
@@ -339,6 +343,18 @@ export const dataManagerOperations = {
       ...serviceErrors,
       200: json(trafficApplicationSnapshotSchema, h.uncachedResponseHeadersSchema),
       501: json(httpErrorSchema),
+    },
+  },
+  getPlannedTrafficClosures: {
+    method: "GET",
+    path: "/traffic/conditions/closures",
+    auth: service,
+    request: { query: plannedTrafficClosuresQuerySchema },
+    responses: {
+      ...serviceErrors,
+      200: json(plannedTrafficClosuresSchema, h.uncachedResponseHeadersSchema),
+      501: json(httpErrorSchema),
+      503: json(httpErrorSchema),
     },
   },
   getCoverageEvidence: {

@@ -211,6 +211,16 @@ import type {
   GetOvertureStatus415,
   GetOvertureStatus429,
   GetOvertureStatus500,
+  GetPlannedTrafficClosures200,
+  GetPlannedTrafficClosures400,
+  GetPlannedTrafficClosures401,
+  GetPlannedTrafficClosures413,
+  GetPlannedTrafficClosures415,
+  GetPlannedTrafficClosures429,
+  GetPlannedTrafficClosures500,
+  GetPlannedTrafficClosures501,
+  GetPlannedTrafficClosures503,
+  GetPlannedTrafficClosuresParams,
   GetSearchIndexStatus200,
   GetSearchIndexStatus400,
   GetSearchIndexStatus401,
@@ -411,6 +421,7 @@ import {
   getOfflinePackageJobRequest,
   getOfflinePackageManifestRequest,
   getOvertureStatusRequest,
+  getPlannedTrafficClosuresRequest,
   getSearchIndexStatusRequest,
   getStatusRequest,
   getTransitCatalogRequest,
@@ -2926,6 +2937,100 @@ export const getAppliedTrafficConditions = async (
 ): Promise<getAppliedTrafficConditionsResponse> => {
   return getAppliedTrafficConditionsRequest<getAppliedTrafficConditionsResponse>(
     getGetAppliedTrafficConditionsUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export type getPlannedTrafficClosuresResponse200 = {
+  data: GetPlannedTrafficClosures200;
+  status: 200;
+};
+
+export type getPlannedTrafficClosuresResponse400 = {
+  data: GetPlannedTrafficClosures400;
+  status: 400;
+};
+
+export type getPlannedTrafficClosuresResponse401 = {
+  data: GetPlannedTrafficClosures401;
+  status: 401;
+};
+
+export type getPlannedTrafficClosuresResponse413 = {
+  data: GetPlannedTrafficClosures413;
+  status: 413;
+};
+
+export type getPlannedTrafficClosuresResponse415 = {
+  data: GetPlannedTrafficClosures415;
+  status: 415;
+};
+
+export type getPlannedTrafficClosuresResponse429 = {
+  data: GetPlannedTrafficClosures429;
+  status: 429;
+};
+
+export type getPlannedTrafficClosuresResponse500 = {
+  data: GetPlannedTrafficClosures500;
+  status: 500;
+};
+
+export type getPlannedTrafficClosuresResponse501 = {
+  data: GetPlannedTrafficClosures501;
+  status: 501;
+};
+
+export type getPlannedTrafficClosuresResponse503 = {
+  data: GetPlannedTrafficClosures503;
+  status: 503;
+};
+
+export type getPlannedTrafficClosuresResponseSuccess = getPlannedTrafficClosuresResponse200 & {
+  headers: Headers;
+};
+export type getPlannedTrafficClosuresResponseError = (
+  | getPlannedTrafficClosuresResponse400
+  | getPlannedTrafficClosuresResponse401
+  | getPlannedTrafficClosuresResponse413
+  | getPlannedTrafficClosuresResponse415
+  | getPlannedTrafficClosuresResponse429
+  | getPlannedTrafficClosuresResponse500
+  | getPlannedTrafficClosuresResponse501
+  | getPlannedTrafficClosuresResponse503
+) & {
+  headers: Headers;
+};
+
+export type getPlannedTrafficClosuresResponse =
+  | getPlannedTrafficClosuresResponseSuccess
+  | getPlannedTrafficClosuresResponseError;
+
+export const getGetPlannedTrafficClosuresUrl = (params: GetPlannedTrafficClosuresParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : String(value));
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/traffic/conditions/closures?${stringifiedParams}`
+    : `/traffic/conditions/closures`;
+};
+
+export const getPlannedTrafficClosures = async (
+  params: GetPlannedTrafficClosuresParams,
+  options?: Parameters<typeof getPlannedTrafficClosuresRequest>[1],
+): Promise<getPlannedTrafficClosuresResponse> => {
+  return getPlannedTrafficClosuresRequest<getPlannedTrafficClosuresResponse>(
+    getGetPlannedTrafficClosuresUrl(params),
     {
       ...options,
       method: "GET",

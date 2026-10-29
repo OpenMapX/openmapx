@@ -660,8 +660,20 @@ export function buildTrafficRequestExtras(
   return extras;
 }
 
+/**
+ * How far from a directed exclusion's heading an edge may run and still be
+ * excluded. The opposite carriageway or direction runs about 180 degrees off;
+ * a bend within a sampled edge stays well inside this.
+ */
+const DIRECTED_EXCLUSION_TOLERANCE_DEG = 45;
+
 type ValhallaExclusions = {
-  exclude_locations?: Array<{ lon: number; lat: number }>;
+  exclude_locations?: Array<{
+    lon: number;
+    lat: number;
+    heading?: number;
+    heading_tolerance?: number;
+  }>;
   exclude_polygons?: Array<Array<[number, number]>>;
 };
 
@@ -673,12 +685,22 @@ type ValhallaExclusions = {
 export function buildExclusions(options: RoutingOptions): ValhallaExclusions {
   const sanitized = sanitizeValhallaExclusions({
     points: options.excludeLocations as ValhallaLngLat[] | undefined,
+    directed: options.directedExclusions,
     polygons: options.excludePolygons as ValhallaLngLat[][] | undefined,
   });
   const result: ValhallaExclusions = {};
-  if (sanitized.points.length) {
-    result.exclude_locations = sanitized.points.map(([lon, lat]) => ({ lon, lat }));
-  }
+  // Valhalla correlates a heading-bearing exclusion only to edges running
+  // within the tolerance of it, so the opposite direction keeps routing.
+  const locations = [
+    ...sanitized.points.map(([lon, lat]) => ({ lon, lat })),
+    ...sanitized.directed.map(({ point: [lon, lat], heading }) => ({
+      lon,
+      lat,
+      heading,
+      heading_tolerance: DIRECTED_EXCLUSION_TOLERANCE_DEG,
+    })),
+  ];
+  if (locations.length) result.exclude_locations = locations;
   if (sanitized.polygons.length) {
     result.exclude_polygons = sanitized.polygons;
   }
@@ -782,6 +804,7 @@ export const valhallaService: RoutingProvider = {
   supportedModes: ["walking", "cycling", "driving", "motorcycle"] as TravelMode[],
   supportsTimeAware: true,
   supportsExclusions: true,
+  supportsDirectedExclusions: true,
   temporal: {
     tripDepartAt: "native",
     tripArriveBy: "native",

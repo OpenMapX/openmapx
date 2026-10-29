@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { readBoundedResponseText } from "@openmapx/core";
+import type { PlannedTrafficClosures } from "@openmapx/core/data-manager-contracts";
 import { envInt, envString } from "@openmapx/core/server-env";
 import { feedState } from "@openmapx/db-schema";
 import {
@@ -53,6 +54,7 @@ import {
 import { readTrafficGraphState } from "./jobs/traffic/graph-generation.js";
 import { createLiveTrafficWriter } from "./jobs/traffic/live-writer-client.js";
 import { openConditionsHeaders } from "./jobs/traffic/openconditions-auth.js";
+import { plannedClosures } from "./jobs/traffic/planned-closures.js";
 import { fetchTrafficPolicy, type TrafficPolicy } from "./jobs/traffic/policy.js";
 import { buildTrafficReceipts, type TrafficApplicationSnapshot } from "./jobs/traffic/receipts.js";
 import {
@@ -407,6 +409,15 @@ export interface CronHandles {
    * point exclusions exist only for closures.
    */
   getTrafficConditionsApplied: () => TrafficApplicationSnapshot;
+  /**
+   * The bound closures a car trip at `travelAt` must route around, from the
+   * last good conditions set under the last policy lease; null when either is
+   * stale or absent, so a caller never routes on lapsed evidence.
+   */
+  getPlannedClosures: (
+    bbox: readonly [number, number, number, number],
+    travelAt: number,
+  ) => PlannedTrafficClosures | null;
   /** Test seam: directly invoke the predicted-traffic bake as if the cron fired. */
   runTrafficPredictedNow: () => Promise<void>;
   /** Test seam: directly invoke the auto-bump handler as if the cron fired. */
@@ -1182,6 +1193,8 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     observationIds: [],
     resolverVersion: null,
   };
+  // The last policy lease a cycle read, for request-time planned closures.
+  let lastPolicy: TrafficPolicy | null = null;
   let lastMissingWaysRefreshAt = 0;
   const MISSING_WAYS_REFRESH_MIN_INTERVAL_MS = 3_600_000;
 
@@ -1305,7 +1318,9 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       let policy: TrafficPolicy | null = null;
       try {
         policy = await (options.fetchTrafficPolicy ?? fetchTrafficPolicy)();
+        lastPolicy = policy;
       } catch {
+        lastPolicy = null;
         log.warn("traffic-live: policy authority unavailable; withholding road-event effects");
       }
       let waysToEdges = new Map<number, WayEdge[]>();
@@ -1694,6 +1709,34 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       Date.parse(trafficConditionsApplied.validUntil) > Date.now()
         ? trafficConditionsApplied
         : { ...trafficConditionsApplied, observationIds: [], receipts: [] },
+    getPlannedClosures: (bbox, travelAt) => {
+      const now = Date.now();
+      const conditionsUntil = lastConditions ? lastConditions.fetchedAt + conditionsStaleMs : 0;
+      const policyUntil = lastPolicy ? Date.parse(lastPolicy.validUntil) : Number.NaN;
+      if (!lastConditions || !lastPolicy || !(conditionsUntil > now) || !(policyUntil > now))
+        return null;
+      const { closures, unrepresentable } = plannedClosures(lastConditions.conditions, {
+        bbox,
+        travelAt,
+        evaluatedAt: now,
+        disallowedSources: new Set(lastPolicy.disallowedSourceIds),
+      });
+      const validUntil = Math.min(
+        conditionsUntil,
+        policyUntil,
+        ...closures.map((c) => Date.parse(c.validUntil)),
+      );
+      return {
+        schemaVersion: 1,
+        mode: roadConditionsMode,
+        evaluatedAt: new Date(now).toISOString(),
+        at: new Date(travelAt).toISOString(),
+        policyRevision: lastPolicy.revision,
+        validUntil: new Date(validUntil).toISOString(),
+        closures,
+        unrepresentable,
+      };
+    },
     runTrafficPredictedNow: runTrafficPredicted,
     runAutoBumpNow: runAutoBump,
     // `activeJobId` is exposed indirectly through singleFlight.getInflight()

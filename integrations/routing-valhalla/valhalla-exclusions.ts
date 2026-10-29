@@ -7,7 +7,7 @@
  * callers such as the EV planner that construct RoutingOptions directly.
  */
 
-import type { LngLat } from "@openmapx/core";
+import type { DirectedExclusion, LngLat } from "@openmapx/core";
 import { RoutingProviderError } from "@openmapx/integration-framework";
 
 export type { LngLat } from "@openmapx/core";
@@ -43,6 +43,8 @@ export interface ExclusionSanitizationStats {
 
 export interface SanitizedValhallaExclusions {
   points: LngLat[];
+  /** Kept whole: dropping one would reopen a closed carriageway, so too many is an error. */
+  directed: DirectedExclusion[];
   polygons: LngLat[][];
   stats: ExclusionSanitizationStats;
 }
@@ -233,11 +235,23 @@ function capPolygonBudget(polygons: LngLat[][]): LngLat[][] {
 
 export function sanitizeValhallaExclusions(input: {
   points?: LngLat[];
+  directed?: DirectedExclusion[];
   polygons?: LngLat[][];
 }): SanitizedValhallaExclusions {
+  const directed = (input.directed ?? []).map((exclusion, index) => {
+    const point = validPoint(exclusion.point, `directed exclusion ${index}`);
+    if (!Number.isFinite(exclusion.heading) || exclusion.heading < 0 || exclusion.heading >= 360)
+      throw new ValhallaExclusionError(`Invalid directed exclusion ${index} heading`);
+    return { point, heading: exclusion.heading };
+  });
+  if (directed.length > MAX_VALHALLA_EXCLUDE_LOCATIONS) {
+    throw new ValhallaExclusionError(
+      `Valhalla exclusion request contains ${directed.length} directed points; maximum safe count is ${MAX_VALHALLA_EXCLUDE_LOCATIONS}`,
+    );
+  }
   const rawPoints = input.points ?? [];
   const points = rawPoints.map((point, index) => validPoint(point, `exclusion point ${index}`));
-  const boundedPoints = subsampleEvenly(points, MAX_VALHALLA_EXCLUDE_LOCATIONS);
+  const boundedPoints = subsampleEvenly(points, MAX_VALHALLA_EXCLUDE_LOCATIONS - directed.length);
 
   const rawPolygons = input.polygons ?? [];
   const polygons = rawPolygons.map((ring, index) => normalizeRing(ring, index));
@@ -245,6 +259,7 @@ export function sanitizeValhallaExclusions(input: {
 
   return {
     points: boundedPoints,
+    directed,
     polygons: boundedPolygons,
     stats: {
       inputPointCount: points.length,
