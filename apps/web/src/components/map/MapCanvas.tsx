@@ -123,7 +123,11 @@ export function MapCanvas() {
   const followTrack = useSheetFollowTrack();
   const footerBox = useMapFooterBox();
   const scaleFollow = followTrack ? planAboveFooter(followTrack, footerBox, 12, 102) : null;
+  // Turn-by-turn guidance has no use for a distance scale, and its speed-limit
+  // badge sits over the same corner.
+  const groundNavigating = useNavigationStore((s) => s.status !== "idle" && s.kind === "ground");
   const scaleVisible =
+    !groundNavigating &&
     (viewportHeight === 0 || viewportHeight - insets.top - scaleBottom >= 24) &&
     (viewportWidth === 0 || viewportWidth - scaleLeft - 12 >= 100);
 

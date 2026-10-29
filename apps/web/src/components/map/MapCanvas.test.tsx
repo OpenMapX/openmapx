@@ -408,6 +408,26 @@ describe("MapCanvas", () => {
     }
   });
 
+  it("hides the scale during ground navigation only", async () => {
+    maplibreTest.reset();
+    mapStyleTest.reset();
+    vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
+    const view = render(<MapCanvas />);
+    try {
+      await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
+      const scale = view.container.querySelector<HTMLElement>(".maplibregl-ctrl-scale");
+      expect(getComputedStyle(scale as HTMLElement).display).toBe("block");
+      act(() => useNavigationStore.setState({ status: "navigating", kind: "ground" }));
+      expect(getComputedStyle(scale as HTMLElement).display).toBe("none");
+      act(() => useNavigationStore.setState({ status: "navigating", kind: "transit" }));
+      expect(getComputedStyle(scale as HTMLElement).display).toBe("block");
+      act(() => useNavigationStore.setState({ status: "idle", kind: "ground" }));
+      expect(getComputedStyle(scale as HTMLElement).display).toBe("block");
+    } finally {
+      view.unmount();
+    }
+  });
+
   it("keeps the scale on the live footer rather than a sheet's settled extent", async () => {
     maplibreTest.reset();
     mapStyleTest.reset();
