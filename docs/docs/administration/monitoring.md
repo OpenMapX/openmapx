@@ -357,8 +357,11 @@ produced no edge under one `skipped` cause:
   traced to no edges.
 
 `withheld` names why no condition was classified at all this cycle:
-`policy_unavailable`, `policy_lease_ending`, `conditions_unavailable` or
-`conditions_stale`; it is `null` when classification ran.
+`graph_unattested` (the engine's graph and traffic extract are not attested,
+for example after Valhalla was restarted outside coordinated maintenance; the
+extract guard rebuilds and re-attests them), `policy_unavailable`,
+`policy_lease_ending`, `conditions_unavailable` or `conditions_stale`; it is
+`null` when classification ran.
 `endingBeforeRenewal` counts conditions left out because they end before the
 next lease renewal.
 

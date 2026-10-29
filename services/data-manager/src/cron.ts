@@ -1324,6 +1324,8 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         log.warn("traffic-live: policy authority unavailable; withholding road-event effects");
       }
       let waysToEdges = new Map<number, WayEdge[]>();
+      // Set when the engine's graph cannot be attested: every live effect waits.
+      let graphUnattested = false;
       let engineGeneration: string | undefined;
       let engineBootId: string | undefined;
       const captureGraphState = async () => {
@@ -1359,6 +1361,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         );
         waysToEdges = new Map();
         policy = null;
+        graphUnattested = true;
         csv = "way_id,dir,current_kph,free_flow_kph,los\n";
         scheduleGraphMaintenanceCheck();
       }
@@ -1391,15 +1394,17 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       });
       // Why no condition was classified at all this cycle, so a quiet cycle
       // never reads as "nothing to close".
-      const withheld = !policy
-        ? "policy_unavailable"
-        : !(Date.parse(policy.validUntil) > renewBy)
-          ? "policy_lease_ending"
-          : conditionsDeadline === null
-            ? "conditions_unavailable"
-            : !(conditionsDeadline > renewBy)
-              ? "conditions_stale"
-              : null;
+      const withheld = graphUnattested
+        ? "graph_unattested"
+        : !policy
+          ? "policy_unavailable"
+          : !(Date.parse(policy.validUntil) > renewBy)
+            ? "policy_lease_ending"
+            : conditionsDeadline === null
+              ? "conditions_unavailable"
+              : !(conditionsDeadline > renewBy)
+                ? "conditions_stale"
+                : null;
       try {
         mapped = conditionsToEdges(withheld === null ? lasting : [], waysToEdges, spans?.resolved, {
           disallowedSources: new Set(policy?.disallowedSourceIds ?? []),
