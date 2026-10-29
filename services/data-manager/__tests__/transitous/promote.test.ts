@@ -616,7 +616,7 @@ describe("promote stage", () => {
 
   it("preserves staging directory permissions for the next import", async () => {
     const fx = setupFixture({ staging: true, current: true });
-    chmodSync(fx.stagingDir, 0o777);
+    chmodSync(fx.stagingDir, 0o750);
     globalThis.fetch = vi.fn(async (input: unknown) => {
       const url = typeof input === "string" ? input : (input as Request | URL).toString();
       return jsonResponse(successfulBody(url));
@@ -630,7 +630,16 @@ describe("promote stage", () => {
     );
 
     expect(result.status).toBe("ok");
-    expect(statSync(fx.stagingDir).mode & 0o777).toBe(0o777);
+    expect(statSync(fx.stagingDir).mode & 0o777).toBe(0o750);
+  });
+
+  it("rejects a world-writable candidate before any host effect", async () => {
+    const fx = setupFixture({ staging: true, current: true });
+    chmodSync(fx.stagingDir, 0o777);
+    const runner = vi.fn(async () => {});
+    const result = await promoteRun(makeCtx({ dataDir: fx.dataDir, runner }));
+    expect(result.status).toBe("error");
+    expect(runner).not.toHaveBeenCalled();
   });
 
   it("rejects a candidate whose epoch duplicates the active dataset", async () => {

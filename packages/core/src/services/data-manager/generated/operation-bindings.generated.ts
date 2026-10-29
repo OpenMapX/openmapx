@@ -268,6 +268,13 @@ export async function ingestOvertureRequest<T>(
 ): Promise<T> {
   return ingestOvertureBound<T>(url, options);
 }
+const inspectCatalogReviewBound = bindDataManagerOperation("inspectCatalogReview");
+export async function inspectCatalogReviewRequest<T>(
+  url: string,
+  options?: DataManagerRequestOptions,
+): Promise<T> {
+  return inspectCatalogReviewBound<T>(url, options);
+}
 const inspectDataConfigurationFenceBound = bindDataManagerOperation(
   "inspectDataConfigurationFence",
 );

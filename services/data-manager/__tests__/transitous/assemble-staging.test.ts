@@ -217,6 +217,15 @@ function makeCtx(dataDir: string) {
 // ---------------------------------------------------------------------------
 
 describe("assemble-staging run()", () => {
+  it("keeps candidate metadata immutable when the producer rewrites its next config", async () => {
+    const fx = setupFixture({ withConfig: true, feeds: ["feed.gtfs.zip"] });
+    expect((await run(makeCtx(fx.dataDir))).status).toBe("ok");
+    for (const name of ["config.yml", "license.json", TRANSIT_SOURCE_MANIFEST_FILENAME]) {
+      const original = readFileSync(join(fx.stagingDir, name));
+      writeFileSync(join(fx.outDir, name), "next producer generation");
+      expect(readFileSync(join(fx.stagingDir, name))).toEqual(original);
+    }
+  });
   it("returns status 'skipped' when config.yml is absent from outDir", async () => {
     const fx = setupFixture({});
     const result = await run(makeCtx(fx.dataDir));

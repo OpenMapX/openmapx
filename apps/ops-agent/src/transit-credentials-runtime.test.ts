@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -95,6 +95,8 @@ async function fixture() {
     catalogRevisionId: readCatalogPinSet(root)!.generationId,
   };
   let environment: Record<string, string> = {};
+  let running = false;
+  let consumer: Record<string, unknown> = { Config: { Env: [] }, Mounts: [] };
   const runtime = createUnavailableRuntime();
   installTransitCredentialsRuntime(runtime, {
     rootDir: root,
@@ -104,8 +106,26 @@ async function fixture() {
       composePath: join(infraDir, "docker-compose.generated.yml"),
       composeReleasePath: join(infraDir, "docker-compose.release.yml"),
     },
-    ownedServices: { inspectOwnedServices: async () => [] },
+    ownedServices: {
+      inspectOwnedServices: async () =>
+        running
+          ? [
+              {
+                serviceId: "data-manager",
+                containerId: "dm-owned",
+                state: "running",
+                provenance: {
+                  project: "fixture",
+                  composeWorkingDirectory: infraDir,
+                  composeConfigFiles: [],
+                  imageId: "sha256:" + "a".repeat(64),
+                },
+              },
+            ]
+          : [],
+    },
     execFile: async (_file, args) => {
+      if (args[0] === "container") return { stdout: JSON.stringify(consumer), stderr: "" };
       expect(args).toContain("config");
       return {
         stdout: JSON.stringify({ services: { "data-manager": { environment } } }),
@@ -129,6 +149,10 @@ async function fixture() {
     root,
     local,
     inspect,
+    setConsumer: (value: Record<string, unknown>) => {
+      running = true;
+      consumer = value;
+    },
     setEnv: (value: Record<string, string>) => {
       environment = value;
     },
@@ -169,4 +193,39 @@ it("refuses malformed existing files rather than treating the vault as unset", a
   const f = await fixture();
   writeFileSync(join(f.local, "api-keys.json"), '{"key":"first","key":"last"}', { mode: 0o600 });
   await expect(f.inspect()).rejects.toThrow();
+}, 60_000);
+
+it("binds the host credential revision only to the running consumer's exact read-only mount", async () => {
+  const f = await fixture();
+  writeFileSync(join(f.local, "api-keys.json"), '{"de/A":"private"}', { mode: 0o600 });
+  const own = {
+    Config: { Env: [] },
+    Mounts: [{ Source: f.local, Destination: "/config/transitous", RW: false }],
+  };
+  f.setConsumer(own);
+  const observed = await f.inspect();
+  expect(observed).toMatchObject({
+    owner: "file",
+    consumedCredentialsRevision: observed.hostCredentialsRevision,
+  });
+  expect(observed.consumedCredentialsRevision).toMatch(/^[a-f0-9]{64}$/);
+  f.setConsumer({
+    ...own,
+    Mounts: [{ Source: f.local, Destination: "/config/transitous", RW: true }],
+  });
+  expect((await f.inspect()).consumedCredentialsRevision).toBeNull();
+  f.setConsumer({ ...own, Config: { Env: ["TRANSITOUS_API_KEYS_PATH=/other/map.json"] } });
+  expect((await f.inspect()).consumedCredentialsRevision).toBeNull();
+}, 60_000);
+
+it("invalidates the host source version after an identical atomic template replacement", async () => {
+  const f = await fixture(),
+    target = join(f.local, "api-keys.json"),
+    bytes = '{"de/A":"private"}';
+  writeFileSync(target, bytes, { mode: 0o600 });
+  const before = await f.inspect();
+  writeFileSync(target + ".next", bytes, { mode: 0o600 });
+  renameSync(target + ".next", target);
+  const after = await f.inspect();
+  expect(after.hostCredentialsRevision).not.toBe(before.hostCredentialsRevision);
 }, 60_000);

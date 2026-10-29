@@ -1,6 +1,6 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { verifyCandidateManifest } from "./candidate.js";
+import { verifyCandidateManifestAsync } from "./candidate.js";
 import { IMPORT_MARKER_FILE } from "./internal.js";
 import { STAGING_CONTAINER as STAGING_CONTAINER_NAME } from "./motis-containers.js";
 import { assertTransitForward, preserveTransitPending, runTransitOwnedPhase } from "./owned-ops.js";
@@ -58,21 +58,13 @@ export const run: StageFn = async (ctx) => {
         message: `staging config not generated at ${expectedConfig}`,
       } satisfies StageResult;
     }
-    const manifest = verifyCandidateManifest(ctx.motisStagingDataDir);
+    const manifest = await verifyCandidateManifestAsync(ctx.motisStagingDataDir, ctx.abortSignal);
 
-    // Re-run the staging container's import+serve entrypoint against the freshly
-    // assembled config. `docker restart` covers every state the container can be
-    // in: running (re-import the new data), stopped (start it), or blocked in its
-    // wait-for-config loop (the restart picks up the now-present config.yml). The
-    // import itself is owned by the container entrypoint; completion is verified
-    // downstream by motis-health, so we return as soon as the restart is issued.
-    //
-    // Creating the container is NOT our job: motis-staging is part of the
-    // rendered stack (plain bind-mount, pinned container name), brought up by the
-    // deploy step. A missing container is an operator/selection error we surface
-    // rather than paper over with `docker compose up` — the data-manager image
-    // ships only a static docker CLI (no compose plugin), so that path can't run
-    // here anyway.
+    // Recreate the staging container against the newly selected inactive slot.
+    // Docker resolves a bind source once at container creation: a restart would
+    // retain an old slot after a previous promotion changed the staging alias.
+    // The agent uses the existing rendered service and --no-deps so this cannot
+    // start the control plane or dependency containers.
     try {
       // Restarting a container is host authority; the agent owns the name.
       await runTransitOwnedPhase(ctx, "restart-staging");

@@ -3,6 +3,27 @@
 
 export type StartDataExecutionBodyInput =
   | {
+      kind: "catalog.validate";
+      /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+      proposalId: string;
+      /**
+       * @maxItems 256
+       * @items.pattern ^[A-Za-z]{2,3}$
+       */
+      countries: string[];
+    }
+  | {
+      kind: "catalog.activate";
+      /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+      proposalId: string;
+      /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+      validationId: string;
+      expectedGenerationId: string | null;
+      /** @pattern ^[a-f0-9]{64}$ */
+      diffDigest: string;
+      acknowledgeLicenseChanges: boolean;
+    }
+  | {
       kind: "download-osm";
       /**
        * @minLength 1

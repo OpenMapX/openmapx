@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createCatalogPinSet } from "../catalog-pins/generation";
 import {
   authorizeOpsOperation,
   OPS_KIND_POLICIES,
@@ -297,9 +298,27 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   "transitousLock.inspect": { kind: "transitousLock.inspect" },
   "transitousLock.propose": {
     kind: "transitousLock.propose",
-    ref: `main@${"a".repeat(40)}`,
-    submodules: { "transitland-atlas": "b".repeat(40) },
-    lockedBy: "fixture-actor",
+    proposalId: "00000000-0000-4000-8000-000000000001",
+    baseGenerationId: null,
+    pins: createCatalogPinSet(
+      {
+        ref: `main@${"a".repeat(40)}`,
+        submodules: { "transitland-atlas": "b".repeat(40) },
+        lockedAt: issuedAt,
+        lockedBy: "fixture-actor",
+      },
+      {
+        schemaVersion: 1,
+        source: "mobilitydata-gbfs",
+        commit: "c".repeat(40),
+        url: `https://raw.githubusercontent.com/MobilityData/gbfs/${"c".repeat(40)}/systems.csv`,
+        sha256: "d".repeat(64),
+        lockedAt: issuedAt,
+        lockedBy: "fixture-actor",
+      },
+    ),
+    diffDigest: "e".repeat(64),
+    sourcePolicyRevision: "f".repeat(64),
   },
   "transitousLock.approve": {
     kind: "transitousLock.approve",

@@ -40,6 +40,10 @@ import {
   updateCurrentSearchIndexFingerprint,
 } from "../search-index/state.js";
 import { verifyTransitPreflightBinding } from "../transitous/admin-preflight.js";
+import { runCatalogActivation } from "../transitous/catalog-activation.js";
+import { runCatalogValidation } from "../transitous/catalog-validation.js";
+import { publishCatalogValidationCurrent } from "../transitous/catalog-validation-current.js";
+import { isolateOwnedTransitProducer } from "../transitous/isolate-producer.js";
 import {
   type MotisOperationsPolicy,
   transitAllowedCountries,
@@ -171,6 +175,13 @@ export function createDataExecutionDispatcher(deps: {
           jobChildLogger({ job: "transit-sync", jobId: context.execution.executionId }),
         );
         try {
+          await publishDataChange(() =>
+            publishCatalogValidationCurrent(context.authority, context.targetAuthority),
+          );
+          await isolateOwnedTransitProducer(
+            context,
+            deps.operationsPolicy.resourceEnvelope.minimumDiskGb * 1024 ** 3,
+          );
           await publishOwnedTransitSourceMutation(
             input,
             context,
@@ -216,6 +227,47 @@ export function createDataExecutionDispatcher(deps: {
             sourceRevision,
             countries: input.countries,
           };
+        } finally {
+          deps.singleFlight.markSyncFinished(context.execution.executionId);
+        }
+      }
+      case "catalog.validate": {
+        if (!deps.singleFlight.reserveOwned(context.execution.executionId))
+          throw Error("Transit reservation is busy");
+        try {
+          const validation = await runCatalogValidation({
+            context,
+            dataDir: deps.dataDir,
+            store: deps.state,
+            operationsPolicy: deps.operationsPolicy,
+          });
+          finish(context.execution.executionId, {
+            event: "done",
+            ok: validation.status === "passed",
+            proposalId: validation.proposalId,
+            validationId: validation.validationId,
+          });
+          return {
+            kind: input.kind,
+            proposalId: validation.proposalId,
+            validationId: validation.validationId,
+            status: validation.status,
+            expiresAt: validation.expiresAt,
+          };
+        } finally {
+          deps.singleFlight.markSyncFinished(context.execution.executionId);
+        }
+      }
+      case "catalog.activate": {
+        if (!deps.singleFlight.reserveOwned(context.execution.executionId))
+          throw Error("Transit reservation is busy");
+        try {
+          return await runCatalogActivation({
+            context,
+            dataDir: deps.dataDir,
+            store: deps.state,
+            operationsPolicy: deps.operationsPolicy,
+          });
         } finally {
           deps.singleFlight.markSyncFinished(context.execution.executionId);
         }

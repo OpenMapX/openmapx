@@ -1,3 +1,9 @@
+import {
+  catalogProposalInputSchema,
+  catalogProposalSchema,
+  catalogProposalSummarySchema,
+} from "../catalog-pins/proposal-schemas";
+import { catalogRuntimeInputsSchema } from "../catalog-pins/review-schemas";
 import { catalogPinSetSchema } from "../catalog-pins/schemas";
 import { platformConfigurationSchema } from "../services/platform-configuration";
 import {
@@ -263,7 +269,7 @@ export const OPS_KIND_POLICIES = {
   "postgis.capacity.inspect": sync("data-manager", 30_000),
   "transitCredentials.inspect": sync("api", 120_000, 768 * 1024),
   "catalogPins.inspect": sync("api", 30_000, 768 * 1024),
-  "transitousLock.inspect": sync("data-manager", 30_000),
+  "transitousLock.inspect": sync("data-manager", 30_000, 768 * 1024),
   "transitousLock.propose": sync("data-manager", 30_000),
   "transitousLock.approve": asyncEffect("data-manager", 120_000, 4096),
   "gbfsCatalogLock.inspect": sync("data-manager", 30_000),
@@ -550,15 +556,17 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   kindOnly("catalogPins.inspect"),
   z.strictObject({
     kind: z.literal("transitCredentials.inspect"),
+    proposalId: z.uuid().optional(),
     catalogRevisionId: z.string().regex(/^[a-f0-9]{64}$/),
   }),
-  kindOnly("transitousLock.inspect"),
+  z.strictObject({
+    kind: z.literal("transitousLock.inspect"),
+    proposalId: z.uuid().optional(),
+    offset: z.number().int().min(0).max(4096).optional(),
+  }),
   z.strictObject({
     kind: z.literal("transitousLock.propose"),
-    ref: transitousRefSchema,
-    submodules: transitousSubmodulesSchema,
-    lockedBy: actorLabelSchema,
-    comment: z.string().min(1).max(512).optional(),
+    ...catalogProposalInputSchema.shape,
   }),
   pairedPinApprovalInputSchema,
   kindOnly("gbfsCatalogLock.inspect"),
@@ -1289,6 +1297,11 @@ export const OPS_RESULT_SCHEMAS = {
   "valhalla.traffic.refreshWaysToEdges": changed,
   "postgis.capacity.inspect": z.strictObject({ availableBytes: z.number().int().nonnegative() }),
   "transitCredentials.inspect": z.strictObject({
+    consumedCredentialsRevision: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .nullable()
+      .optional(),
     catalogRevisionId: z.string().regex(/^[a-f0-9]{64}$/),
     requiredKeys: z.array(z.string().min(1).max(1024)).max(1000),
     hostCredentialsRevision: z
@@ -1320,8 +1333,23 @@ export const OPS_RESULT_SCHEMAS = {
   "transitousLock.inspect": z.strictObject({
     active: transitousLockRecordSchema.nullable(),
     proposed: transitousLockRecordSchema.nullable(),
+    proposal: catalogProposalSchema.nullable().optional(),
+    validationInputs: catalogRuntimeInputsSchema.optional(),
+    validationBlocker: z.string().max(1024).optional(),
+    page: z
+      .strictObject({
+        proposals: z.array(catalogProposalSummarySchema).max(100),
+        total: z.number().int().min(0).max(4096),
+        offset: z.number().int().min(0).max(4096),
+        nextOffset: z.number().int().min(0).max(4096).nullable(),
+      })
+      .optional(),
   }),
-  "transitousLock.propose": z.strictObject({ ref: transitousRefSchema, proposed: z.literal(true) }),
+  "transitousLock.propose": z.strictObject({
+    proposalId: z.uuid(),
+    catalogRevisionId: z.string().regex(/^[a-f0-9]{64}$/),
+    proposed: z.literal(true),
+  }),
   "transitousLock.approve": pairedPinApprovalResultSchema,
   "gbfsCatalogLock.inspect": z.strictObject({
     commit: z.string().regex(/^[0-9a-f]{40}$/),

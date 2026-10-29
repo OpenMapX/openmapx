@@ -5,6 +5,8 @@ export type StartDataExecution202Kind =
   (typeof StartDataExecution202Kind)[keyof typeof StartDataExecution202Kind];
 
 export const StartDataExecution202Kind = {
+  catalogvalidate: "catalog.validate",
+  catalogactivate: "catalog.activate",
   "download-osm": "download-osm",
   "download-fonts": "download-fonts",
   "convert-overpass": "convert-overpass",

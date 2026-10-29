@@ -54,30 +54,44 @@ function restored(key: string): Reviewed | null {
     return null;
   }
 }
-export function TransitCredentialsSection() {
+export function TransitCredentialsSection({ proposalId }: { proposalId?: string } = {}) {
   const { apiUrl, actorId } = useAccountAdmin();
   return (
     <TransitCredentialView
-      key={JSON.stringify([apiUrl, actorId])}
+      key={JSON.stringify([apiUrl, actorId, proposalId ?? null])}
       apiUrl={apiUrl}
       actorId={actorId}
+      proposalId={proposalId}
     />
   );
 }
-function TransitCredentialView({ apiUrl, actorId }: { apiUrl: string; actorId: string }) {
+function TransitCredentialView({
+  apiUrl,
+  actorId,
+  proposalId,
+}: {
+  apiUrl: string;
+  actorId: string;
+  proposalId?: string;
+}) {
   const client = useMemo(
     () => createApiClient({ baseUrl: browserAdminApiBase(apiUrl), credentials: "include" }),
     [apiUrl],
   );
   const queryClient = useQueryClient(),
     query = useQuery({
-      queryKey: ["admin", "transit", "credentials", apiUrl, actorId],
+      queryKey: ["admin", "transit", "credentials", apiUrl, actorId, proposalId ?? "active"],
       queryFn: async ({ signal }) =>
-        sdk.unwrapAdminResponse(await sdk.getAdminTransitCredentials({ client, signal })),
+        sdk.unwrapAdminResponse(
+          await sdk.getAdminTransitCredentials(proposalId ? { proposalId } : undefined, {
+            client,
+            signal,
+          }),
+        ),
       gcTime: 0,
       enabled: Boolean(actorId),
     });
-  const storageKey = `openmapx-transit-credential-preview:${JSON.stringify([apiUrl, actorId])}`;
+  const storageKey = `openmapx-transit-credential-preview:${JSON.stringify(proposalId ? [apiUrl, actorId, proposalId] : [apiUrl, actorId])}`;
   const [drafts, setDrafts] = useState<Record<string, string>>({}),
     [deletions, setDeletions] = useState<string[]>([]),
     [deleting, setDeleting] = useState<string | null>(null),
@@ -126,6 +140,7 @@ function TransitCredentialView({ apiUrl, actorId }: { apiUrl: string; actorId: s
     const operationKey = `opk1_${crypto.randomUUID().replaceAll("-", "")}`;
     const body = {
       catalogRevisionId: data.catalogRevisionId,
+      ...(proposalId ? { proposalId } : {}),
       expectedCredentialsRevision: data.credentialsRevision,
       expectedCurrentRevisionId: data.configurationRevisionId,
       changes,
@@ -158,6 +173,7 @@ function TransitCredentialView({ apiUrl, actorId }: { apiUrl: string; actorId: s
     if (
       !current.editable ||
       selected.preview.catalogRevisionId !== current.catalogRevisionId ||
+      selected.preview.proposalId !== current.proposalId ||
       selected.preview.credentialsRevision !== current.credentialsRevision ||
       selected.preview.expectedCurrentRevisionId !== current.configurationRevisionId ||
       Date.parse(selected.preview.expiresAt) <= Date.now()
@@ -187,7 +203,7 @@ function TransitCredentialView({ apiUrl, actorId }: { apiUrl: string; actorId: s
       if (identity !== epoch.current) return;
       setSuccess(
         result.configuration.outcome === "committed" && result.configuration.followUp === "complete"
-          ? "Feed credentials applied."
+          ? "Credential map applied to Data Manager. Validate the proposal or sync the active pins to refresh feed routing."
           : "Credential application needs attention. Inspect the original operation in Activity.",
       );
       setReviewed(null);
@@ -196,7 +212,12 @@ function TransitCredentialView({ apiUrl, actorId }: { apiUrl: string; actorId: s
       } catch {
         /* No secret is stored; private drafts still clear. */
       }
-      await queryClient.invalidateQueries({ queryKey: ["admin", "transit"] });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["admin", "transit", "credentials", apiUrl, actorId],
+        }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "transit", "pins", apiUrl, actorId] }),
+      ]);
     } catch {
       if (identity === epoch.current) {
         setError(
@@ -222,6 +243,7 @@ function TransitCredentialView({ apiUrl, actorId }: { apiUrl: string; actorId: s
       reviewed &&
       data &&
       (reviewed.preview.catalogRevisionId !== data.catalogRevisionId ||
+        reviewed.preview.proposalId !== data.proposalId ||
         reviewed.preview.credentialsRevision !== data.credentialsRevision ||
         reviewed.preview.expectedCurrentRevisionId !== data.configurationRevisionId ||
         Date.parse(reviewed.preview.expiresAt) <= Date.now());
@@ -233,7 +255,8 @@ function TransitCredentialView({ apiUrl, actorId }: { apiUrl: string; actorId: s
         <Typography variant="h6">Transit feed credentials</Typography>
         <Typography variant="body2">
           Values stay masked. Blank inputs keep the existing value; deletion is a separate,
-          confirmed action. Changes use the selected catalog pins.
+          confirmed action. Changes use the selected catalog pins. Validation requires credentials
+          only for its selected countries and enabled sources.
         </Typography>
         {query.isLoading && <CircularProgress size={24} />}
         {query.isError && (

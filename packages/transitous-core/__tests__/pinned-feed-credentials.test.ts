@@ -109,3 +109,52 @@ it.each(["oversize", "symlink"])("refuses %s repository content before checkout"
   ).rejects.toThrow(/unavailable/);
   expect(checkouts).toBe(0);
 });
+
+it("inspects a newly fetched Atlas pin in a shallow cache without moving either shared HEAD", async () => {
+  const f = fixture(),
+    atlas = join(f.root, "transitland-atlas"),
+    remote = join(f.root, "atlas-remote.git"),
+    work = join(f.root, "atlas-work");
+  run(f.root, ["clone", "--bare", atlas, remote]);
+  run(f.root, ["clone", remote, work]);
+  writeFileSync(
+    join(work, "feeds/a.dmfr.json"),
+    JSON.stringify({
+      feeds: [
+        { id: "auth", authorization: { type: "api-key" }, license: { name: "New pinned terms" } },
+      ],
+    }),
+  );
+  run(work, ["add", "."]);
+  run(work, ["commit", "-m", "Atlas B"]);
+  const next = run(work, ["rev-parse", "HEAD"]);
+  run(work, ["push", "origin", "HEAD"]);
+  run(atlas, ["fetch", "--depth=1", "--no-tags", remote, next]);
+  run(f.root, ["update-index", "--cacheinfo", `160000,${next},transitland-atlas`]);
+  run(f.root, ["commit", "-m", "New Atlas pin"]);
+  const head = run(f.root, ["rev-parse", "HEAD"]),
+    atlasHead = run(atlas, ["rev-parse", "HEAD"]);
+  const failures: Array<{ args: readonly string[]; stderr: string }> = [];
+  try {
+    expect(
+      await inspectPinnedFeedCredentialKeys({
+        catalogDir: f.root,
+        transitousCommit: head,
+        atlasCommit: next,
+        git: async (args, cwd) => {
+          try {
+            return run(cwd, args);
+          } catch (error) {
+            failures.push({ args, stderr: String((error as { stderr?: unknown }).stderr ?? "") });
+            throw error;
+          }
+        },
+      }),
+    ).toEqual(["de/B"]);
+  } catch (error) {
+    console.info("Synthetic Git failure only", JSON.stringify(failures));
+    throw error;
+  }
+  expect(run(f.root, ["rev-parse", "HEAD"])).toBe(head);
+  expect(run(atlas, ["rev-parse", "HEAD"])).toBe(atlasHead);
+});

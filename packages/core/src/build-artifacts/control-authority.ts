@@ -2056,7 +2056,11 @@ export function retainControlEffectReceipt(
         verifyDataUpdateCompletionSource(authority, actual);
       }
       const result = receipt.result as { outcome?: string };
-      if (!result.outcome || ["applied", "unchanged", "committed"].includes(result.outcome)) {
+      if (
+        !result.outcome ||
+        ["applied", "unchanged", "committed"].includes(result.outcome) ||
+        (s.kind === "transitousLock.approve" && result.outcome === "activated")
+      ) {
         outcome = "committed";
         publication = "committed";
       }

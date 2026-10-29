@@ -5,6 +5,8 @@ export type CancelDataExecution200Kind =
   (typeof CancelDataExecution200Kind)[keyof typeof CancelDataExecution200Kind];
 
 export const CancelDataExecution200Kind = {
+  catalogvalidate: "catalog.validate",
+  catalogactivate: "catalog.activate",
   "download-osm": "download-osm",
   "download-fonts": "download-fonts",
   "convert-overpass": "convert-overpass",

@@ -5,6 +5,8 @@ export type LookupDataExecution200Kind =
   (typeof LookupDataExecution200Kind)[keyof typeof LookupDataExecution200Kind];
 
 export const LookupDataExecution200Kind = {
+  catalogvalidate: "catalog.validate",
+  catalogactivate: "catalog.activate",
   "download-osm": "download-osm",
   "download-fonts": "download-fonts",
   "convert-overpass": "convert-overpass",

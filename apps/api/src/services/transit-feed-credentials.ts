@@ -33,6 +33,7 @@ export async function applyFeedCredentialChanges(input: {
     patch = await prepareFeedCredentialImportPatch({
       actorId: input.actorId,
       catalogRevisionId: p.preview.catalogRevisionId,
+      ...(p.preview.proposalId ? { proposalId: p.preview.proposalId } : {}),
       expectedCredentialsRevision: p.preview.credentialsRevision,
       expectedCurrentRevisionId: p.preview.expectedCurrentRevisionId,
       changes: p.changes,

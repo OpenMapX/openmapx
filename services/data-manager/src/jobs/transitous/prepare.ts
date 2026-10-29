@@ -3,6 +3,7 @@ import { parseCatalogPinSet } from "@openmapx/core/catalog-pins";
 import { ensureCatalog } from "@openmapx/transitous-core";
 import { runOpsOperation } from "../../ops-client.js";
 import { parseRefShaPair, type TransitousLock } from "../../transitous-lock.js";
+import { selectedCatalogPins } from "./catalog-selection.js";
 import {
   DEFAULT_TRANSITOUS_REPO_URL,
   ensureTransitousWorkdirs,
@@ -22,15 +23,19 @@ export const run: StageFn = async (ctx) => {
   const startedAt = ctx.now();
   const start = Date.now();
   try {
-    if (ctx.useProposedLock)
+    if (ctx.useProposedLock && !ctx.reviewedCatalog)
       throw Error("Paired proposal validation requires the reviewed activation workflow");
-    const pins = await runOpsOperation({ kind: "catalogPins.inspect" });
-    if (!pins.active || pins.catalogRevisionId !== pins.active.generationId)
-      throw Error("Paired catalog pins are unavailable");
-    try {
-      ctx.state.catalogPins = parseCatalogPinSet(pins.active);
-    } catch {
-      throw Error("Paired catalog pin response is invalid");
+    if (ctx.reviewedCatalog) {
+      ctx.state.catalogPins = selectedCatalogPins(ctx);
+    } else {
+      const pins = await runOpsOperation({ kind: "catalogPins.inspect" });
+      if (!pins.active || pins.catalogRevisionId !== pins.active.generationId)
+        throw Error("Paired catalog pins are unavailable");
+      try {
+        ctx.state.catalogPins = parseCatalogPinSet(pins.active);
+      } catch {
+        throw Error("Paired catalog pin response is invalid");
+      }
     }
     mkdirSync(ctx.dataDir, { recursive: true });
 

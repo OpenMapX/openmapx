@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createCatalogPinSet } from "@openmapx/core/catalog-pins";
 import { OpsClient } from "@openmapx/core/ops";
 import { expect, it } from "vitest";
 import { resetOpsClient, runOpsOperation } from "../src/ops-client.js";
@@ -12,9 +13,27 @@ it("refuses an unowned synchronous proposal before the actual client POST", asyn
   let posts = 0;
   const operation = {
     kind: "transitousLock.propose" as const,
-    ref: `main@${"a".repeat(40)}`,
-    submodules: { "transitland-atlas": "b".repeat(40) },
-    lockedBy: "public-fixture",
+    proposalId: "00000000-0000-4000-8000-000000000001",
+    baseGenerationId: null,
+    diffDigest: "d".repeat(64),
+    sourcePolicyRevision: "e".repeat(64),
+    pins: createCatalogPinSet(
+      {
+        ref: `main@${"a".repeat(40)}`,
+        submodules: { "transitland-atlas": "b".repeat(40) },
+        lockedAt: "2026-10-23T00:00:00.000Z",
+        lockedBy: "fixture",
+      },
+      {
+        schemaVersion: 1,
+        source: "mobilitydata-gbfs",
+        commit: "c".repeat(40),
+        sha256: "d".repeat(64),
+        url: `https://raw.githubusercontent.com/MobilityData/gbfs/${"c".repeat(40)}/systems.csv`,
+        lockedAt: "2026-10-23T00:00:00.000Z",
+        lockedBy: "fixture",
+      },
+    ),
   };
   resetOpsClient(
     new OpsClient({
@@ -37,7 +56,11 @@ it("refuses an unowned synchronous proposal before the actual client POST", asyn
           result: {
             execution: "sync",
             kind: operation.kind,
-            value: { ref: operation.ref, proposed: true },
+            value: {
+              proposalId: operation.proposalId,
+              catalogRevisionId: operation.pins.generationId,
+              proposed: true,
+            },
           },
         });
       },

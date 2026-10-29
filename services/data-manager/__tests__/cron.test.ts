@@ -291,15 +291,12 @@ describe("setupCron", () => {
         key: "autoBumpCron",
         configure: (work) => ({
           autoBumpCronExpression: everySecond,
-          resolveBumpCandidate: async () => {
-            await work();
-            return {
-              branch: "main",
-              ref: `main@${"a".repeat(40)}`,
-              transitousSha: "a".repeat(40),
-              transitlandAtlasSha: "b".repeat(40),
-            };
-          },
+          catalogReview: {
+            resolveCatalogProposal: async () => {
+              await work();
+              return { proposalId: "00000000-0000-4000-8000-000000000001" };
+            },
+          } as unknown as CronSetupOptions["catalogReview"],
         }),
       },
       {
@@ -697,13 +694,36 @@ describe("setupCron", () => {
       handles.stop();
     });
 
-    it("retains the proposal without running a canary or unvalidated activation", async () => {
+    it("creates a paired proposal even when the Transitous SHA is unchanged, and never activates", async () => {
       seedLocks();
-      const runBumpPipeline = vi.fn(async (_jobId: string) => ({
-        jobId: "j",
-        results: [],
-        finalStatus: "ok" as const,
-      }));
+      const resolveCatalogProposal = vi.fn(async () => ({
+        proposalId: "00000000-0000-4000-8000-000000000001",
+      })) as unknown as NonNullable<CronSetupOptions["catalogReview"]>["resolveCatalogProposal"];
+      const handles = setupCron({
+        dataDir,
+        countries: [],
+        store: {} as never,
+        singleFlight: makeController(),
+        logger: { info: () => {}, warn: () => {}, error: () => {} },
+        syncCronExpression: "disabled",
+        feedProxyReloadCronExpression: "disabled",
+        stalenessCheckCronExpression: "disabled",
+        autoBumpCronExpression: "0 0 1 1 *",
+        catalogReview: { resolveCatalogProposal },
+      });
+      try {
+        const { runOpsOperation } = await import("../src/ops-client.js");
+        vi.mocked(runOpsOperation).mockClear();
+        await handles.runAutoBumpNow();
+        expect(resolveCatalogProposal).toHaveBeenCalledOnce();
+        expect(runOpsOperation).not.toHaveBeenCalled();
+        expect(activeLock().ref).toBe(`main@${ACTIVE}`);
+      } finally {
+        handles.stop();
+      }
+    });
+    it("refuses scheduled proposals when the installed paired resolver is unavailable", async () => {
+      seedLocks();
       const handles = setupCron({
         dataDir,
         countries: [],
@@ -716,71 +736,12 @@ describe("setupCron", () => {
         autoBumpCronExpression: "0 0 1 1 *",
         resolveBumpCandidate: async () => newCandidate,
       });
-      await handles.runAutoBumpNow();
-      expect(runBumpPipeline).not.toHaveBeenCalled();
-      const active = activeLock();
-      expect(active.ref).toBe(`main@${ACTIVE}`);
-      expect(active.submodules["transitland-atlas"]).toBe(ATLAS_OLD);
-      expect(proposalExists()).toBe(true);
-      handles.stop();
-    });
-
-    it("keeps the current pin and proposal while validation-bound activation is unavailable", async () => {
-      seedLocks();
-      const createIssue = vi.fn(async (_t: string, _b: string) => "https://x/issues/1");
-      const runBumpPipeline = vi.fn(async (_jobId: string) => {
-        throw new Error('motis-health probe "rentals" failed: empty');
-      });
-      const handles = setupCron({
-        dataDir,
-        countries: [],
-        store: {} as never,
-        singleFlight: makeController(),
-        logger: { info: () => {}, warn: () => {}, error: () => {} },
-        syncCronExpression: "disabled",
-        feedProxyReloadCronExpression: "disabled",
-        stalenessCheckCronExpression: "disabled",
-        autoBumpCronExpression: "0 0 1 1 *",
-        resolveBumpCandidate: async () => newCandidate,
-
-        githubIssueSink: { findOpenIssueByTitle: async () => null, createIssue },
-      });
-      await handles.runAutoBumpNow();
-      expect(activeLock().ref).toBe(`main@${ACTIVE}`);
-      expect(proposalExists()).toBe(true);
-      expect(runBumpPipeline).not.toHaveBeenCalled();
-      expect(createIssue).not.toHaveBeenCalled();
-      handles.stop();
-    });
-
-    it("does nothing when the active pin already matches upstream", async () => {
-      seedLocks();
-      const runBumpPipeline = vi.fn(async (_jobId: string) => ({
-        jobId: "j",
-        results: [],
-        finalStatus: "ok" as const,
-      }));
-      const handles = setupCron({
-        dataDir,
-        countries: [],
-        store: {} as never,
-        singleFlight: makeController(),
-        logger: { info: () => {}, warn: () => {}, error: () => {} },
-        syncCronExpression: "disabled",
-        feedProxyReloadCronExpression: "disabled",
-        stalenessCheckCronExpression: "disabled",
-        autoBumpCronExpression: "0 0 1 1 *",
-        resolveBumpCandidate: async () => ({
-          branch: "main",
-          ref: `main@${ACTIVE}`,
-          transitousSha: ACTIVE,
-          transitlandAtlasSha: ATLAS_OLD,
-        }),
-      });
-      await handles.runAutoBumpNow();
-      expect(runBumpPipeline).not.toHaveBeenCalled();
-      expect(proposalExists()).toBe(false);
-      handles.stop();
+      try {
+        await expect(handles.runAutoBumpNow()).rejects.toThrow(/paired catalog resolver/i);
+        expect(proposalExists()).toBe(false);
+      } finally {
+        handles.stop();
+      }
     });
   });
 

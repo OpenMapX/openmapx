@@ -6,7 +6,8 @@ import {
   openControlInstallation,
   provisionControlInstallation,
 } from "@openmapx/core/build-artifacts";
-import { initializeManagedCatalogPins } from "@openmapx/core/catalog-pins";
+import { createCatalogPinSet, initializeManagedCatalogPins } from "@openmapx/core/catalog-pins";
+import { opsOperationSchema } from "@openmapx/core/ops";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { testExecution } from "./__fixtures__/execution";
 import { createUnavailableRuntime, dispatchOpsOperation } from "./runtime";
@@ -57,6 +58,92 @@ afterEach(async () => {
 });
 
 describe("agent-owned Transitous catalog lock", () => {
+  it("retains a paired GBFS-only proposal without changing active pins", async () => {
+    const rootDir = root(),
+      infra = join(rootDir, "infra/docker");
+    mkdirSync(join(infra, "data"), { mode: 0o700 });
+    await provisionControlInstallation(infra);
+    const pins = createCatalogPinSet(
+      {
+        ref: REF,
+        submodules: { "transitland-atlas": "c".repeat(40) },
+        lockedAt: "2026-08-25T00:00:00.000Z",
+        lockedBy: "fixture",
+      },
+      {
+        schemaVersion: 1,
+        source: "mobilitydata-gbfs",
+        commit: "d".repeat(40),
+        url: `https://raw.githubusercontent.com/MobilityData/gbfs/${"d".repeat(40)}/systems.csv`,
+        sha256: "e".repeat(64),
+        lockedAt: "2026-08-25T00:00:00.000Z",
+        lockedBy: "fixture",
+      },
+    );
+    const operation = opsOperationSchema.parse({
+      kind: "transitousLock.propose",
+      proposalId: "00000000-0000-4000-8000-000000000001",
+      baseGenerationId: null,
+      pins,
+      diffDigest: "f".repeat(64),
+      sourcePolicyRevision: "a".repeat(64),
+    });
+    const result = await dispatchOpsOperation(runtimeFor(rootDir), operation, context());
+    expect(result).toMatchObject({
+      proposalId: "00000000-0000-4000-8000-000000000001",
+      proposed: true,
+      catalogRevisionId: pins.generationId,
+    });
+    expect(existsSync(lockPath(rootDir))).toBe(false);
+    const retained = JSON.parse(
+      readFileSync(
+        join(infra, "catalog-pins/proposals/00000000-0000-4000-8000-000000000001.json"),
+        "utf8",
+      ),
+    );
+    expect(retained.payload.proposal.pins.gbfs.commit).toBe("d".repeat(40));
+    expect(retained.signature).toMatch(/^[A-Za-z0-9_-]{86}$/);
+    const originalBytes = readFileSync(
+      join(infra, "catalog-pins/proposals/00000000-0000-4000-8000-000000000001.json"),
+      "utf8",
+    );
+    await expect(dispatchOpsOperation(runtimeFor(rootDir), operation, context())).resolves.toEqual(
+      result,
+    );
+    const changedPins = createCatalogPinSet(pins.transitous, {
+      ...pins.gbfs,
+      commit: "f".repeat(40),
+      url: `https://raw.githubusercontent.com/MobilityData/gbfs/${"f".repeat(40)}/systems.csv`,
+    });
+    await expect(
+      dispatchOpsOperation(
+        runtimeFor(rootDir),
+        opsOperationSchema.parse({ ...operation, pins: changedPins }),
+        context(),
+      ),
+    ).rejects.toThrow(/Immutable catalog proposal changed/);
+    expect(
+      readFileSync(
+        join(infra, "catalog-pins/proposals/00000000-0000-4000-8000-000000000001.json"),
+        "utf8",
+      ),
+    ).toBe(originalBytes);
+    await expect(
+      dispatchOpsOperation(
+        runtimeFor(rootDir),
+        opsOperationSchema.parse({
+          ...operation,
+          proposalId: "00000000-0000-4000-8000-000000000002",
+          baseGenerationId: "b".repeat(64),
+        }),
+        context(),
+      ),
+    ).rejects.toThrow(/base changed/);
+    expect(
+      existsSync(join(infra, "catalog-pins/proposals/00000000-0000-4000-8000-000000000002.json")),
+    ).toBe(false);
+  });
+
   it("reports both slots as absent on a fresh checkout", async () => {
     const rootDir = root();
     await expect(
@@ -64,36 +151,20 @@ describe("agent-owned Transitous catalog lock", () => {
     ).resolves.toEqual({ active: null, proposed: null });
   });
 
-  it("writes a proposal without activating anything", async () => {
-    const rootDir = root();
-    const result = await dispatchOpsOperation(
-      runtimeFor(rootDir),
-      {
+  it("refuses legacy one-pin proposal bodies", () => {
+    expect(
+      opsOperationSchema.safeParse({
         kind: "transitousLock.propose",
         ref: REF,
         submodules: { "transitland-atlas": "c".repeat(40) },
         lockedBy: "auto-bump",
-      },
-      context(),
-    );
-
-    expect(result).toEqual({ ref: REF, proposed: true });
-    // A proposal must never become the active pin on its own.
-    expect(existsSync(lockPath(rootDir))).toBe(false);
-    expect(JSON.parse(readFileSync(proposedPath(rootDir), "utf-8"))).toMatchObject({
-      ref: REF,
-      lockedBy: "auto-bump",
-    });
+      }).success,
+    ).toBe(false);
   });
 
   it("keeps approval closed until durable paired-pin publication is installed", async () => {
     const rootDir = root();
     const runtime = runtimeFor(rootDir);
-    await dispatchOpsOperation(
-      runtime,
-      { kind: "transitousLock.propose", ref: REF, submodules: {}, lockedBy: "auto-bump" },
-      context(),
-    );
     for (const proposalId of [
       "00000000-0000-4000-8000-000000000001",
       "00000000-0000-4000-8000-000000000002",
@@ -113,7 +184,7 @@ describe("agent-owned Transitous catalog lock", () => {
         ),
       ).rejects.toThrow(/paired-pin/);
     expect(existsSync(lockPath(rootDir))).toBe(false);
-    expect(existsSync(proposedPath(rootDir))).toBe(true);
+    expect(existsSync(proposedPath(rootDir))).toBe(false);
   });
 
   it("reads back an existing active lock", async () => {

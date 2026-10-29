@@ -11,7 +11,17 @@ import {
   symlinkSync,
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import z from "zod/v4";
 import { atomicWriteJsonSync } from "../../utils/atomic-write.js";
+
+const rollbackRecordSchema = z.strictObject({
+  proposalId: z.uuid(),
+  validationId: z.uuid(),
+  slot: z.enum(["A", "B"]),
+  epoch: z.string().min(1).max(512),
+  manifestHash: z.string().regex(/^[a-f0-9]{64}$/),
+  filesDigest: z.string().regex(/^[a-f0-9]{64}$/),
+});
 
 export type MotisSlot = "A" | "B";
 
@@ -19,6 +29,14 @@ export interface MotisSlotRecord {
   schemaVersion: 1;
   activeSlot: MotisSlot;
   previousHealthySlot?: MotisSlot;
+  retainedRollback?: {
+    proposalId: string;
+    validationId: string;
+    slot: MotisSlot;
+    epoch: string;
+    manifestHash: string;
+    filesDigest: string;
+  };
   datasetEpoch?: string;
   manifestHash?: string;
   imageDigest?: string;
@@ -38,10 +56,14 @@ const other = (slot: MotisSlot): MotisSlot => (slot === "A" ? "B" : "A");
 
 function readRecord(path: string): MotisSlotRecord | null {
   if (!existsSync(path)) return null;
+  if (statSync(path).size > 64 * 1024) throw Error("MOTIS slot state exceeds size limit");
   const parsed = JSON.parse(readFileSync(path, "utf-8")) as MotisSlotRecord;
   if (parsed.schemaVersion !== 1 || !["A", "B"].includes(parsed.activeSlot)) {
     throw new Error(`malformed MOTIS slot state at ${path}`);
   }
+  if (parsed.previousHealthySlot !== undefined && !["A", "B"].includes(parsed.previousHealthySlot))
+    throw Error("Malformed previous healthy slot");
+  if (parsed.retainedRollback !== undefined) rollbackRecordSchema.parse(parsed.retainedRollback);
   return parsed;
 }
 
@@ -131,6 +153,7 @@ export function commitMotisSlotActivation(
     schemaVersion: 1,
     activeSlot: next.activeSlot,
     previousHealthySlot: layout.record.activeSlot,
+    ...(layout.record.retainedRollback ? { retainedRollback: layout.record.retainedRollback } : {}),
     datasetEpoch: next.datasetEpoch,
     manifestHash: next.manifestHash,
     imageDigest: next.imageDigest,

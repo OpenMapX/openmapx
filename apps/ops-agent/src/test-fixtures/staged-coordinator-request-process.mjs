@@ -7,8 +7,10 @@ import { closeControlInstallation, openControlInstallation } from "@openmapx/cor
 import { services } from "@openmapx/core/server";
 import { CommunityRepositoryStore } from "../community-repositories.ts";
 import { configurationPolicyRevision } from "../configured-resource-authority.ts";
+import { createDataTransitTrustedOpsDataSource } from "../data-transit-resource-source.ts";
 import { openOpsJobJournal } from "../journal.ts";
 import { createProductionRegistryResourceClaimer } from "../policy.ts";
+import { safeProcessDiagnostic } from "../process-output.ts";
 import { createProductionOpsRuntime, productionOwnedServices } from "../production-runtime.ts";
 import { buildOpsAgentServer } from "../server.ts";
 import { createFileTrustedOpsDataSource } from "../trusted-config-source.ts";
@@ -131,6 +133,22 @@ const runtime = await createProductionOpsRuntime({
     },
   },
 });
+// Observe the original handler; all authority checks and results remain native.
+if (input.catalogFault) {
+  const approve = runtime["transitousLock.approve"];
+  runtime["transitousLock.approve"] = async (...args) => {
+    try {
+      return await approve(...args);
+    } catch (error) {
+      console.error(
+        safeProcessDiagnostic(
+          error instanceof Error ? (error.stack ?? error.message) : String(error),
+        ),
+      );
+      throw error;
+    }
+  };
+}
 const policyAuthority = async () => {
   const a = await loadAuthority();
   return {
@@ -152,22 +170,51 @@ const installation = openControlInstallation({
   serviceIds: input.serviceIds,
 });
 const journal = await openOpsJobJournal(join(input.infraDir, "data/ops-agent/jobs-v1.json"));
+if (["pointer", "cancel-pointer", "before-pointer"].includes(input.catalogFault)) {
+  const rename = fs.renameSync;
+  let stopped = false;
+  fs.renameSync = (from, to) => {
+    let matching = false;
+    if (String(to).endsWith("/current.json")) {
+      const actual = fs.statSync(dirname(String(to)));
+      const expected = fs.statSync(join(input.infraDir, "catalog-pins"));
+      matching = actual.dev === expected.dev && actual.ino === expected.ino;
+    }
+    if (matching && !stopped && input.catalogFault === "before-pointer") {
+      stopped = true;
+      fs.writeSync(1, JSON.stringify({ event: "catalog-pointer-before-commit" }) + "\n");
+      process.kill(process.pid, "SIGSTOP");
+    }
+    const result = rename(from, to);
+    if (matching && !stopped) {
+      stopped = true;
+      fs.writeSync(1, JSON.stringify({ event: "catalog-pointer-committed" }) + "\n");
+      process.kill(process.pid, "SIGSTOP");
+    }
+    return result;
+  };
+  syncBuiltinESMExports();
+}
+
 const app = buildOpsAgentServer({
   runtime,
   journal,
   controlInstallation: installation,
-  operationTimeoutMs: 180000,
+  operationTimeoutMs: input.operationTimeoutMs ?? 180000,
   tokens: { api: input.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
   resourceClaimer: createProductionRegistryResourceClaimer({
     services: authority.services,
     integrationIds: authority.integrationIds,
     loadAuthority: policyAuthority,
-    trustedData: createFileTrustedOpsDataSource({
-      directory: input.queue,
-      token: input.token,
-      allowedUids: [fs.statSync(input.queue).uid],
-      expectedGid: fs.statSync(input.queue).gid,
-    }),
+    trustedData: createDataTransitTrustedOpsDataSource(
+      installation,
+      createFileTrustedOpsDataSource({
+        directory: input.queue,
+        token: input.token,
+        allowedUids: [fs.statSync(input.queue).uid],
+        expectedGid: fs.statSync(input.queue).gid,
+      }),
+    ),
     ownedServices: productionOwnedServices(runtime),
     enabledServiceIds: (ss) =>
       services.readAppliedServiceIds(
@@ -196,9 +243,15 @@ app.addHook("onSend", async (request, reply, payload) => {
         ...(reply.statusCode >= 400 ? { errorClass: JSON.parse(payload).error?.class } : {}),
       }) + "\n",
     );
+  if (
+    ["pointer", "cancel-pointer", "before-pointer"].includes(input.catalogFault) &&
+    kind === "transitousLock.approve" &&
+    reply.statusCode === 202
+  )
+    request.raw.socket.destroy();
   return payload;
 });
-const url = await app.listen({ host: "127.0.0.1", port: 0 });
+const url = await app.listen({ host: "127.0.0.1", port: input.listenPort ?? 0 });
 const owned = await productionOwnedServices(runtime).inspectOwnedServices(
   new AbortController().signal,
 );

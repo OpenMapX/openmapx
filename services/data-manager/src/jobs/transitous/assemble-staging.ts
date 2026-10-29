@@ -9,7 +9,7 @@ import {
   rmSync,
 } from "node:fs";
 import { join } from "node:path";
-import { CANDIDATE_PROXY_DIRNAME, createCandidateManifest } from "./candidate.js";
+import { CANDIDATE_PROXY_DIRNAME, createCandidateManifestAsync } from "./candidate.js";
 import { GTFS_ARCHIVE_RE } from "./internal.js";
 import { readTransitSourceManifest, TRANSIT_SOURCE_MANIFEST_FILENAME } from "./source-manifest.js";
 import type { StageFn, StageResult } from "./types.js";
@@ -47,6 +47,12 @@ function linkOrCopy(src: string, dest: string): void {
   } catch {
     copyFileSync(src, dest);
   }
+}
+
+/** Metadata is rewritten in place by catalog tools; it must never share candidate inodes. */
+function copyMetadata(src: string, dest: string): void {
+  if (existsSync(dest)) rmSync(dest, { force: true });
+  copyFileSync(src, dest);
 }
 
 /** Extract the GTFS archive filenames + OSM extract a MOTIS `config.yml` references. */
@@ -92,7 +98,7 @@ export const run: StageFn = async (ctx) => {
     mkdirSync(stagingDir, { recursive: true });
 
     // config.yml — the import-time entrypoint.
-    linkOrCopy(configSrc, join(stagingDir, "config.yml"));
+    copyMetadata(configSrc, join(stagingDir, "config.yml"));
 
     // GTFS/NeTEx archives the config references — hardlinked from the build output.
     const linkedFeeds: string[] = [];
@@ -148,10 +154,10 @@ export const run: StageFn = async (ctx) => {
     if (!existsSync(licenseSrc)) {
       return finish("error", `required attribution artifact missing at ${licenseSrc}`);
     }
-    linkOrCopy(licenseSrc, join(stagingDir, "license.json"));
+    copyMetadata(licenseSrc, join(stagingDir, "license.json"));
     const sourceIndexSrc = join(outDir, "gbfs-source-index.json");
     if (existsSync(sourceIndexSrc)) {
-      linkOrCopy(sourceIndexSrc, join(stagingDir, "gbfs-source-index.json"));
+      copyMetadata(sourceIndexSrc, join(stagingDir, "gbfs-source-index.json"));
     }
     const transitSourceManifest = join(outDir, TRANSIT_SOURCE_MANIFEST_FILENAME);
     if (!existsSync(transitSourceManifest)) {
@@ -160,7 +166,7 @@ export const run: StageFn = async (ctx) => {
         `required transit source manifest missing at ${transitSourceManifest}`,
       );
     }
-    linkOrCopy(transitSourceManifest, join(stagingDir, TRANSIT_SOURCE_MANIFEST_FILENAME));
+    copyMetadata(transitSourceManifest, join(stagingDir, TRANSIT_SOURCE_MANIFEST_FILENAME));
 
     const proxyCandidateSrc = join(outDir, CANDIDATE_PROXY_DIRNAME);
     if (!existsSync(proxyCandidateSrc)) {
@@ -205,11 +211,12 @@ export const run: StageFn = async (ctx) => {
       );
     }
 
-    const manifest = createCandidateManifest(
+    const manifest = await createCandidateManifestAsync(
       stagingDir,
       ctx.jobId,
       ctx.now(),
       ctx.operationsPolicy,
+      ctx.abortSignal,
     );
 
     const status = missingFeeds.length > 0 || osmSource === "missing" ? "partial" : "ok";

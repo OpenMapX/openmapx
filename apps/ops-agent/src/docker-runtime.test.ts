@@ -1067,8 +1067,17 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     });
     await dispatchOpsOperation(runtime, { kind: "motis.staging.restart" }, context());
     await dispatchOpsOperation(runtime, { kind: "motis.primary.stop" }, context());
-    expect(calls).toEqual([
-      ["restart", "motis-staging"],
+    await dispatchOpsOperation(runtime, { kind: "motis.primary.restart" }, context());
+    expect(calls.at(-1)!.slice(-5)).toEqual(["up", "-d", "--force-recreate", "--no-deps", "motis"]);
+    expect(calls[0]).toContain("compose");
+    expect(calls[0]!.slice(-5)).toEqual([
+      "up",
+      "-d",
+      "--force-recreate",
+      "--no-deps",
+      "motis-staging",
+    ]);
+    expect(calls.slice(1, -1)).toEqual([
       ["container", "ls", "-a", "--filter", "name=^/motis$", "--format", "{{.Names}}\t{{.State}}"],
       ["stop", "motis"],
       ["container", "ls", "-a", "--filter", "name=^/motis$", "--format", "{{.Names}}\t{{.State}}"],

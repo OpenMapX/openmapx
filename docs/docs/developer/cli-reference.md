@@ -269,19 +269,21 @@ probe.
 
 ## `transitous`
 
-Manage the pin of the [Transitous](https://github.com/public-transport/transitous)
-GTFS catalog that the data-manager consumes, recorded in
-`infra/docker/transitous.lock.json`.
+Manage the paired [Transitous](https://github.com/public-transport/transitous),
+Transitland Atlas and MobilityData GBFS catalog pins used by the data-manager.
+The managed pair is selected atomically under `infra/docker/catalog-pins/`.
 
-| Command           | Description                                                                                                                                                |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `transitous show` | Print the current lockfile contents.                                                                                                                       |
-| `transitous bump` | Fetch the catalog, summarize the feed changes, and update the lockfile. Flags: `--yes` (skip the confirmation prompt), `--branch <name>` (default `main`). |
+| Command           | Description                                                                                                                                                      |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `transitous show` | Print the currently selected pair, including its generation ID.                                                                                                  |
+| `transitous bump` | Ask the installed data-manager to resolve a paired proposal. Flags: `--yes` (skip confirmation), `--branch <name>` (default `main`). Active pins stay unchanged. |
 
-`transitous bump` reads from a catalog clone the data-manager maintains, so run a
-transit sync once (`pnpm openmapx data sync`) before the first bump.
-After bumping, restart the data-manager to pick up the new ref, or wait for the
-next scheduled sync.
+Review the proposal in **Admin → Transit → Catalog pins**. Inspect the source,
+country, URL and licensing changes; configure any newly required feed credentials;
+then validate the inactive MOTIS slot. Activation requires passing, unexpired
+validation, acknowledgement of the exact diff and final confirmation. It promotes
+the tested dataset and selects its pair under the same retained operation.
+Scheduled auto-bumps also create proposals and cannot approve them.
 
 ## `transit-registry`
 

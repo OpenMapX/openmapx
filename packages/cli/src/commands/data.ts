@@ -889,11 +889,13 @@ export function registerDataCommands(program: Command): void {
       "--output <path>",
       "Override output path (default: services/motis/tools/transitous/api-keys.json)",
     )
-    .action(async (options: { output?: string }) => {
+    .option("--proposal <id>", "Use this retained paired proposal instead of active pins")
+    .action(async (options: { output?: string; proposal?: string }) => {
       try {
         log.dim("Reading pinned Transitous catalog and scanning feeds that require API keys...");
         const result = await generateTransitousApiKeys({
           outputPath: options.output,
+          proposalId: options.proposal,
         });
         const preserved =
           result.preservedCount > 0

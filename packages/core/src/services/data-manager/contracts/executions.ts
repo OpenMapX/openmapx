@@ -15,6 +15,15 @@ const regional = <K extends string>(kind: K) =>
   z.strictObject({ kind: z.literal(kind), region: regionSchema });
 const countries = z.array(z.string().regex(/^[A-Za-z]{2,3}$/)).max(256);
 const ordinaryInputs = [
+  z.strictObject({ kind: z.literal("catalog.validate"), proposalId: z.uuid(), countries }),
+  z.strictObject({
+    kind: z.literal("catalog.activate"),
+    proposalId: z.uuid(),
+    validationId: z.uuid(),
+    expectedGenerationId: dataFingerprintSchema.nullable(),
+    diffDigest: dataFingerprintSchema,
+    acknowledgeLicenseChanges: z.boolean(),
+  }),
   regional("download-osm"),
   z.strictObject({ kind: z.literal("download-fonts") }),
   regional("convert-overpass"),
@@ -69,7 +78,7 @@ export function normalizeDataExecutionInput(value: unknown): DataExecutionInput 
       ),
       { statusCode: 413 },
     );
-  return input.kind === "transit-sync"
+  return input.kind === "transit-sync" || input.kind === "catalog.validate"
     ? {
         ...input,
         countries: [...new Set(input.countries.map((country) => country.toLowerCase()))].sort(),
@@ -95,6 +104,21 @@ const metricsResult = <K extends string>(kind: K) =>
   });
 export const dataExecutionResultSchema = z
   .discriminatedUnion("kind", [
+    z.strictObject({
+      kind: z.literal("catalog.validate"),
+      proposalId: z.uuid(),
+      validationId: z.uuid(),
+      status: z.enum(["passed", "failed"]),
+      expiresAt: z.iso.datetime({ offset: true }),
+    }),
+    z.strictObject({
+      kind: z.literal("catalog.activate"),
+      proposalId: z.uuid(),
+      validationId: z.uuid(),
+      outcome: z.enum(["activated", "not_activated", "unknown"]),
+      generationId: dataFingerprintSchema.nullable(),
+      reason: z.string().max(1024).nullable(),
+    }),
     regional("download-osm").extend({
       sizeBytes: dataEpochSchema,
       md5: z
@@ -140,6 +164,8 @@ export const dataExecutionStatusSchema = z
     admittedAt: dataEpochSchema,
     deadlineAt: dataEpochSchema,
     kind: z.enum([
+      "catalog.validate",
+      "catalog.activate",
       "download-osm",
       "download-fonts",
       "convert-overpass",

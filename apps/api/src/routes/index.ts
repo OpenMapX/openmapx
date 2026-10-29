@@ -15,6 +15,7 @@ import { adminServicesRoute } from "./admin-services";
 import { adminSettingsRoute } from "./admin-settings";
 import { adminSystemRoute } from "./admin-system";
 import { adminTransitCredentialsRoute } from "./admin-transit-credentials";
+import { adminTransitPinsRoute } from "./admin-transit-pins";
 import { ambientPlacesRoute } from "./ambient-places";
 import { attributionRoute } from "./attribution";
 import { authRoute } from "./auth";
@@ -119,6 +120,7 @@ export async function registerCoreRoutes(
   await server.register(adminRoute, { prefix: "/api" });
   await server.register(adminServicesRoute, { prefix: "/api" });
   await server.register(adminTransitCredentialsRoute, { prefix: "/api" });
+  await server.register(adminTransitPinsRoute, { prefix: "/api" });
   await server.register(adminOperationsRoute, { prefix: "/api" });
   await server.register(adminCoverageRoute, { prefix: "/api" });
   await server.register(adminActivityRoute, { prefix: "/api" });

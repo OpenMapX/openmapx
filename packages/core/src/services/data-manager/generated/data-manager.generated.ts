@@ -330,6 +330,16 @@ import type {
   IngestOverture500,
   IngestOverture503,
   IngestOvertureBody,
+  InspectCatalogReview200,
+  InspectCatalogReview400,
+  InspectCatalogReview401,
+  InspectCatalogReview409,
+  InspectCatalogReview413,
+  InspectCatalogReview415,
+  InspectCatalogReview429,
+  InspectCatalogReview500,
+  InspectCatalogReview503,
+  InspectCatalogReviewParams,
   InspectDataConfigurationFence200,
   InspectDataConfigurationFence400,
   InspectDataConfigurationFence401,
@@ -580,6 +590,7 @@ import {
   headOfflineGlyphRequest,
   headOfflinePackageArchiveRequest,
   ingestOvertureRequest,
+  inspectCatalogReviewRequest,
   inspectDataConfigurationFenceRequest,
   inspectTransitSyncPreflightRequest,
   linkRequest,
@@ -5700,6 +5711,98 @@ export const restartMotis = async (
     ...options,
     method: "POST",
   });
+};
+
+export type inspectCatalogReviewResponse200 = {
+  data: InspectCatalogReview200;
+  status: 200;
+};
+
+export type inspectCatalogReviewResponse400 = {
+  data: InspectCatalogReview400;
+  status: 400;
+};
+
+export type inspectCatalogReviewResponse401 = {
+  data: InspectCatalogReview401;
+  status: 401;
+};
+
+export type inspectCatalogReviewResponse409 = {
+  data: InspectCatalogReview409;
+  status: 409;
+};
+
+export type inspectCatalogReviewResponse413 = {
+  data: InspectCatalogReview413;
+  status: 413;
+};
+
+export type inspectCatalogReviewResponse415 = {
+  data: InspectCatalogReview415;
+  status: 415;
+};
+
+export type inspectCatalogReviewResponse429 = {
+  data: InspectCatalogReview429;
+  status: 429;
+};
+
+export type inspectCatalogReviewResponse500 = {
+  data: InspectCatalogReview500;
+  status: 500;
+};
+
+export type inspectCatalogReviewResponse503 = {
+  data: InspectCatalogReview503;
+  status: 503;
+};
+
+export type inspectCatalogReviewResponseSuccess = inspectCatalogReviewResponse200 & {
+  headers: Headers;
+};
+export type inspectCatalogReviewResponseError = (
+  | inspectCatalogReviewResponse400
+  | inspectCatalogReviewResponse401
+  | inspectCatalogReviewResponse409
+  | inspectCatalogReviewResponse413
+  | inspectCatalogReviewResponse415
+  | inspectCatalogReviewResponse429
+  | inspectCatalogReviewResponse500
+  | inspectCatalogReviewResponse503
+) & {
+  headers: Headers;
+};
+
+export type inspectCatalogReviewResponse =
+  | inspectCatalogReviewResponseSuccess
+  | inspectCatalogReviewResponseError;
+
+export const getInspectCatalogReviewUrl = (params?: InspectCatalogReviewParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : String(value));
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/transit/pins?${stringifiedParams}` : `/transit/pins`;
+};
+
+export const inspectCatalogReview = async (
+  params?: InspectCatalogReviewParams,
+  options?: Parameters<typeof inspectCatalogReviewRequest>[1],
+): Promise<inspectCatalogReviewResponse> => {
+  return inspectCatalogReviewRequest<inspectCatalogReviewResponse>(
+    getInspectCatalogReviewUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
 };
 
 export type proposeTransitBumpResponse200 = {

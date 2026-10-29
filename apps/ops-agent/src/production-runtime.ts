@@ -10,6 +10,8 @@ import {
   type FixedCliRunner,
 } from "./administrative-runtime";
 import { isTerminalHandoff, readAgentHandoff } from "./agent-handoff";
+import { installCatalogApprovalRuntime } from "./catalog-approval-runtime";
+import { installCatalogValidationInputsRuntime } from "./catalog-validation-inputs";
 import {
   type CommunityRepositoryStore,
   installCommunityRepositoryRuntime,
@@ -237,6 +239,13 @@ export async function createProductionOpsRuntime(
     ownedServices: owned,
     execFile: options.docker?.execFile,
   });
+  installCatalogValidationInputsRuntime(runtime, {
+    rootDir: options.rootDir,
+    stack: options.stack,
+    ownedServices: owned,
+    execFile: options.docker?.execFile,
+  });
+  installCatalogApprovalRuntime(runtime, { rootDir: options.rootDir });
   createAdministrativeRuntime(runtime, {
     rootDir: options.rootDir,
     runFixedCli,

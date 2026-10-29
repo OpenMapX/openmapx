@@ -148,11 +148,12 @@ const { motisLocalInstance, motisLocalReachabilityInstance } = createTransitMoti
 const FEED_PROXY_SERVICE = "motis-feed-proxy";
 const GBFS_FIXTURE_SERVICE = "gbfs-fixture";
 const GBFS_FIXTURE_PORT = 18_083;
+
 // The existing human-readable XML is the source of this 400-byte PBF. MOTIS
 // 2.11's street importer accepts OSM PBF only; keeping the tiny generated
 // artifact as base64 avoids committing an opaque binary fixture.
-const BERLIN_TINY_OSM_PBF_BASE64 =
-  "AAAADQoJT1NNSGVhZGVyGFUQSBpReJzjkuJoWLR3RbJAw7I37SkSDd9OHW5nVmjY8nlyO7MSn39xbnByRmpuom6YgZ6ZEpdLal5xql9+SmpxEyNvfnFuZmmuvqGeoaWeAQAnRhqIAAAACwoHT1NNRGF0YRhoENcBGmN4nONi4WLgYhA6xyh0mpFLgAkK2KC0VhSXACMaEBJgQANSGCJKGCJaAkxoIk5iC7Z//cIM5f3/wAJleRk2TJ9T37BVYsE/rgfbeA/M4gGiBe/5Hxzl+H85Eat4EIZ1APJ9I7YAAAAMCgdPU01EYXRhGJ0BEOgBGpcBeJzjyuBi4GLPyEzPKE+s5GLJS8xN5eIuSi3OTEnNK8lMzOHid7VU8MsvKslQCC4pSk0tASoHCQXnlyKEBIEC4anFJQrO+Xl5qckl+UVgIddEZCGhGikFjlQhJkYmKSZmFiUuDkYBBgkGBQYNVicOJigAqkiDqmBDVSEGUyHFkQ5VwY6igolNBCiXAZXjQJXjEwEA2NEpHA==";
+import { BERLIN_TINY_OSM_PBF_BASE64 } from "./fixtures/tiny-osm";
+
 // Generous wall-clock ceiling for the whole lifecycle scenario. It performs a
 // successful promotion, imports a deliberately rejected candidate, and then
 // performs a second successful promotion, so a tight budget would flake on a

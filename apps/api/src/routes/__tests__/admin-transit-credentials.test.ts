@@ -12,6 +12,7 @@ import { mockAdminSession } from "../../test/auth";
 
 const mocks = vi.hoisted(() => ({
   session: null as unknown,
+  proposalId: "00000000-0000-4000-8000-000000000001",
   inspect: vi.fn(),
   preview: vi.fn(),
   bind: vi.fn(),
@@ -31,7 +32,10 @@ vi.mock("../../services/job-runner", () => ({
 vi.mock("../../services/ops-client", () => ({
   createApiOpsClient: () => ({}),
   createDurableOpsKey: () => `opk1_${"a".repeat(32)}`,
-  executeAndWait: async () => ({ catalogRevisionId: "a".repeat(64) }),
+  executeAndWait: async (_client: unknown, operation: { kind: string }) =>
+    operation.kind === "transitousLock.inspect"
+      ? { proposal: { proposalId: mocks.proposalId, pins: { generationId: "e".repeat(64) } } }
+      : { catalogRevisionId: "a".repeat(64) },
 }));
 
 import { ADMIN_REAUTH_COOKIE_NAME } from "../../account/admin-reauthentication";
@@ -95,7 +99,9 @@ afterEach(async () => {
   vi.unstubAllEnvs();
 });
 it("uses the generated SDK over real HTTP and serializes only masked metadata and reviewed key actions", async () => {
-  expect(unwrapAdminResponse(await getAdminTransitCredentials({ client }))).toMatchObject({
+  expect(
+    unwrapAdminResponse(await getAdminTransitCredentials(undefined, { client })),
+  ).toMatchObject({
     configurationRevisionId: null,
     owner: "unset",
   });
@@ -228,4 +234,15 @@ it("bounds the actual parser and shared per-admin mutation rate", async () => {
       })
     ).statusCode,
   ).toBe(429);
+});
+
+it("selects credentials for the exact verified proposed pair before activation", async () => {
+  const response = await fetch(
+    `http://127.0.0.1:${(app.server.address() as import("node:net").AddressInfo).port}/api/admin/transit/credentials?proposalId=${mocks.proposalId}`,
+  );
+  expect(response.status).toBe(200);
+  expect(mocks.inspect).toHaveBeenCalledWith({
+    catalogRevisionId: "e".repeat(64),
+    proposalId: mocks.proposalId,
+  });
 });

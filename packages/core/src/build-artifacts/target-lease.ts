@@ -1255,6 +1255,14 @@ export function verifyFiniteControlEdge(
   recipient: ControlRecipient,
 ): string[] {
   if (role === "data-manager") {
+    if (kind === "catalog.validate") {
+      if (
+        recipient !== "ops-agent" ||
+        !["stop-staging", "restart-staging", "proxy-stage", "proxy-restore"].includes(phase)
+      )
+        throw Error("Unauthorized catalog validation child edge");
+      return [];
+    }
     if (
       !["transit-sync", "catalog.activate", "transit-maintenance"].includes(kind) ||
       recipient !== "ops-agent" ||
@@ -2028,6 +2036,95 @@ export function inspectArtifactTargetLeaseChildSettlement(
       throw Error("Shared child execution changed");
     return child.settlement;
   });
+}
+
+/** Observe an original owned child's signed settlement after its root released
+ * physical locks. This returns data only: no lease/issuer/forward capability. */
+function retainedOwnedTargetState(authority: VerifiedExecutionAuthority) {
+  const owner = executionAuthorityState(authority),
+    reference = z
+      .strictObject({ leaseId: uuid, certificateDigest: digest })
+      .parse(
+        readPrivateRecord(
+          owner.installation,
+          "execution-leases",
+          `${owner.execution.operationKey}.json`,
+        ),
+      ),
+    saved = z
+      .strictObject({
+        certificate: signedCertificateSchema,
+        privateKey: z.string(),
+        executionReceiptDigest: digest,
+      })
+      .parse(readPrivateRecord(owner.installation, "leases", `${reference.leaseId}.json`)),
+    s = openState(owner.installation.dataRoot, reference.leaseId, owner.installation, true);
+  try {
+    if (
+      controlDigest(s.execution) !== controlDigest(owner.execution) ||
+      controlDigest(s.certificateEnvelope) !== reference.certificateDigest ||
+      controlDigest(saved.certificate) !== reference.certificateDigest ||
+      saved.executionReceiptDigest !== owner.receiptDigest ||
+      !sameControlOrigin(owner.origin, s.certificate.origin)
+    )
+      throw Error("Original retained target owner changed");
+    return s;
+  } catch (error) {
+    closeState(s);
+    throw error;
+  }
+}
+/** Fixed terminal-only source check for a recovered catalog activation. */
+export function assertRetainedCatalogActivationChildrenSettled(
+  authority: VerifiedExecutionAuthority,
+): void {
+  const owner = executionAuthorityState(authority);
+  if (owner.kind !== "catalog.activate" || owner.installation.installation.role !== "data-manager")
+    throw Error("Original catalog activation owner required");
+  const s = retainedOwnedTargetState(authority);
+  try {
+    guarded(
+      s,
+      () => {
+        const current = tree(s);
+        for (const grant of current.grants.values()) {
+          const child = current.children.get(grant.delegationId);
+          if (child?.phase !== "settled" || !knownOutcome(child.settlement))
+            throw Error("Catalog child tree remains unsettled");
+        }
+      },
+      !s.slots?.release,
+    );
+  } finally {
+    closeState(s);
+  }
+}
+export function inspectRetainedOwnedArtifactTargetChildSettlement(
+  authority: VerifiedExecutionAuthority,
+  execution: ExecutionRef,
+): ChildSettlement | null {
+  const s = retainedOwnedTargetState(authority);
+  try {
+    return guarded(
+      s,
+      () => {
+        const current = tree(s),
+          grants = [...current.grants.values()].filter(
+            (grant) =>
+              grant.parentNode === null && controlDigest(grant.child) === controlDigest(execution),
+          );
+        if (grants.length !== 1) throw Error("Exact original child grant required");
+        const child = current.children.get(grants[0]!.delegationId);
+        if (!child || child.phase !== "settled" || !knownOutcome(child.settlement)) return null;
+        if (controlDigest(child.execution) !== controlDigest(execution))
+          throw Error("Original child identity changed");
+        return child.settlement;
+      },
+      !s.slots?.release,
+    );
+  } finally {
+    closeState(s);
+  }
 }
 /** Source-only observation of the original held maintenance root. It creates
  * no forward authority, lease, grant or renewed deadline. */

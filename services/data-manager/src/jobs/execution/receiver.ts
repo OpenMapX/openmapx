@@ -34,7 +34,7 @@ export function createDataExecutionReceiver(deps: {
   const validate = (value: Parameters<DataExecutionRuntime["admit"]>[0]) => {
     const input = normalizeDataExecutionInput(value);
     if (
-      input.kind === "transit-sync" &&
+      (input.kind === "transit-sync" || input.kind === "catalog.validate") &&
       deps.operationsPolicy.profile !== "planet" &&
       (input.countries.length === 0 ||
         input.countries.some(

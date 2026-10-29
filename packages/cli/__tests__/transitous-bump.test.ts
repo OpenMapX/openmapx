@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -58,6 +59,46 @@ describe("Transitous combined catalog bump", () => {
     expect(Object.fromEntries(result.countryCounts)).toEqual({ de: 1, at: 1 });
   });
 
+  it("includes same-name endpoint and attribution changes in the review", () => {
+    const oldFeeds = new Map([
+      [
+        "de",
+        {
+          sources: [
+            {
+              name: "BVG",
+              url: "https://old.test/feed",
+              attribution: { text: "Original operator" },
+            },
+          ],
+        },
+      ],
+    ]);
+    const newFeeds = new Map([
+      [
+        "de",
+        {
+          sources: [
+            { name: "BVG", url: "https://new.test/feed", attribution: { text: "New operator" } },
+          ],
+        },
+      ],
+    ]);
+    expect(diffFeedFiles(oldFeeds, newFeeds).modifiedRegions).toEqual(["de"]);
+  });
+
+  it("bounds upstream commit metadata before it can become a proposal", async () => {
+    const fetchStub = async (input: string | URL | Request) =>
+      String(input).includes("api.github.com")
+        ? new Response(" ".repeat(65536) + JSON.stringify({ sha: "e".repeat(40) }))
+        : new Response(
+            "Country Code,Name,Location,System ID,URL,Auto-Discovery URL,Supported Versions,Authentication Info URL\n",
+          );
+    await expect(resolveGbfsCandidate("fixture", fetchStub as typeof fetch)).rejects.toThrow(
+      /byte limit/,
+    );
+  });
+
   it("detects a no-op only when both compatible pins match", () => {
     expect(combinedPinsAreCurrent(TRANSITOUS, GBFS, "a".repeat(40), "c".repeat(40))).toBe(true);
     expect(combinedPinsAreCurrent(TRANSITOUS, GBFS, "a".repeat(40), "f".repeat(40))).toBe(false);
@@ -105,22 +146,62 @@ describe("Transitous combined catalog bump", () => {
     expect(summary.licenseChanges).toEqual([{ region: "de", source: "BVG" }]);
   });
 
-  it("writes paired proposals without changing active pins", () => {
+  it("refuses obsolete unsigned proposal file writes", () => {
     temporaryRoot = mkdtempSync(join(tmpdir(), "openmapx-bump-proposal-"));
     const directory = join(temporaryRoot, "infra", "docker");
     mkdirSync(directory, { recursive: true });
     writeFileSync(join(directory, "transitous.lock.json"), "active-transitous\n");
     writeFileSync(join(directory, "gbfs-catalog.lock.json"), "active-gbfs\n");
-    writeCombinedCatalogLockProposal(temporaryRoot, TRANSITOUS, GBFS);
+    expect(() => writeCombinedCatalogLockProposal(temporaryRoot!, TRANSITOUS, GBFS)).toThrow(
+      /installed paired review/,
+    );
     expect(readFileSync(join(directory, "transitous.lock.json"), "utf-8")).toBe(
       "active-transitous\n",
     );
     expect(readFileSync(join(directory, "gbfs-catalog.lock.json"), "utf-8")).toBe("active-gbfs\n");
-    expect(readFileSync(join(directory, "transitous.lock.proposed.json"), "utf-8")).toContain(
-      TRANSITOUS.ref,
-    );
-    expect(readFileSync(join(directory, "gbfs-catalog.lock.proposed.json"), "utf-8")).toContain(
-      GBFS.commit,
+  });
+});
+
+it("delegates a CLI bump to the actual paired proposal HTTP operation", async () => {
+  const calls: Array<{ url: string; body: unknown }> = [];
+  const server = createServer(async (request, response) => {
+    let body = "";
+    for await (const bytes of request) body += bytes;
+    calls.push({ url: request.url!, body: JSON.parse(body) });
+    response.setHeader("content-type", "application/json");
+    response.end(
+      JSON.stringify({
+        ok: true,
+        unchanged: false,
+        proposed: true,
+        proposalId: "00000000-0000-4000-8000-000000000001",
+        catalogRevisionId: "e".repeat(64),
+        ref: TRANSITOUS.ref,
+        previousRef: TRANSITOUS.ref,
+        submoduleSha: TRANSITOUS.submodules["transitland-atlas"],
+        lockedAt: TRANSITOUS.lockedAt,
+        lockedBy: "catalog-review",
+      }),
     );
   });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as import("node:net").AddressInfo).port;
+  const previous = process.env.DATA_MANAGER_URL;
+  process.env.DATA_MANAGER_URL = `http://127.0.0.1:${port}`;
+  try {
+    const { proposeReviewedCatalog } = await import("../src/commands/transitous-bump");
+    const result = await proposeReviewedCatalog("main");
+    expect(result).toMatchObject({
+      proposed: true,
+      proposalId: "00000000-0000-4000-8000-000000000001",
+    });
+    expect(calls).toEqual([{ url: "/transit/bump", body: { branch: "main" } }]);
+  } finally {
+    if (previous === undefined) delete process.env.DATA_MANAGER_URL;
+    else process.env.DATA_MANAGER_URL = previous;
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
 });

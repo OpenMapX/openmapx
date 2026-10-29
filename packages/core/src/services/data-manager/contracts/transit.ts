@@ -241,6 +241,7 @@ const safeGitRef = z
 export const transitBumpRequestSchema = z
   .strictObject({
     branch: safeGitRef.optional(),
+    proposalId: z.uuid().optional(),
     force: z.boolean().optional(),
     lockedBy: z.string().optional(),
   })
@@ -256,6 +257,8 @@ export const transitBumpResultSchema = z.union([
     ok: z.literal(true),
     unchanged: z.literal(false),
     proposed: z.literal(true),
+    proposalId: z.uuid(),
+    catalogRevisionId: z.string().regex(/^[a-f0-9]{64}$/),
     ref: z.string(),
     previousRef: z.string().nullable(),
     submoduleSha: z.string(),

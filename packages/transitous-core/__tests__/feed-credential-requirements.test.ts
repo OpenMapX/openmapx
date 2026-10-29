@@ -53,3 +53,32 @@ it("refuses missing, malformed or linked catalog inputs rather than erasing requ
   symlinkSync(join(root, "transitland-atlas/feeds/a.dmfr.json"), join(root, "feeds/de.json"));
   expect(() => collectRequiredFeedCredentialKeys(root)).toThrow(/Catalog/);
 });
+it("checks enabled validation countries without losing the complete template inventory", () => {
+  const root = catalog();
+  writeFileSync(
+    join(root, "feeds/de.json"),
+    JSON.stringify({
+      sources: [
+        { name: "A", "transitland-atlas-id": "auth" },
+        { name: "C", "transitland-atlas-id": "auth", skip: true },
+      ],
+    }),
+  );
+  writeFileSync(
+    join(root, "feeds/at.json"),
+    JSON.stringify({ sources: [{ name: "B", "transitland-atlas-id": "auth" }] }),
+  );
+  expect(collectRequiredFeedCredentialKeys(root)).toEqual(["at/B", "de/A", "de/C"]);
+  expect(collectRequiredFeedCredentialKeys(root, { countries: ["de"], patches: [] })).toEqual([
+    "de/A",
+  ]);
+  expect(
+    collectRequiredFeedCredentialKeys(root, {
+      countries: ["de"],
+      patches: [
+        { sourceId: "catalog:de:A", skip: true },
+        { sourceId: "catalog:de:C", skip: false },
+      ],
+    }),
+  ).toEqual(["de/C"]);
+});

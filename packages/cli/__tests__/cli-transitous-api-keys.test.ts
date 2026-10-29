@@ -7,7 +7,12 @@ import {
   openControlInstallation,
   provisionControlInstallation,
 } from "@openmapx/core/build-artifacts";
-import { initializeManagedCatalogPins } from "@openmapx/core/catalog-pins";
+import {
+  createCatalogPinSet,
+  initializeManagedCatalogPins,
+  readCatalogPinSet,
+  retainCatalogProposal,
+} from "@openmapx/core/catalog-pins";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   type CommandRunner,
@@ -202,4 +207,42 @@ it("uses actual active pin A while upstream is B and preserves unrelated credent
   expect(readFileSync(output, "utf8")).toBe(malformed);
   writeFileSync(output, valid);
   await expect(generateTransitousApiKeys(options)).resolves.toMatchObject({ droppedCount: 0 });
+  const proposedSha = git(upstream, ["rev-parse", "HEAD"]);
+  git(cache, ["fetch", "origin", proposedSha]);
+  const agent = openControlInstallation({
+    infraDir: infra,
+    role: "ops-agent",
+    serviceIds: ["motis"],
+  });
+  const proposalId = "00000000-0000-4000-8000-000000000003";
+  const active = readCatalogPinSet(tmp)!;
+  const pins = createCatalogPinSet(
+    { ...active.transitous, ref: `main@${proposedSha}` },
+    active.gbfs,
+  );
+  try {
+    await retainCatalogProposal({
+      rootDir: tmp,
+      installation: agent,
+      proposal: {
+        proposalId,
+        baseGenerationId: active.generationId,
+        pins,
+        diffDigest: "e".repeat(64),
+        sourcePolicyRevision: "f".repeat(64),
+      },
+    });
+  } finally {
+    closeControlInstallation(agent);
+  }
+  await expect(generateTransitousApiKeys({ ...options, proposalId })).resolves.toMatchObject({
+    catalogRevisionId: pins.generationId,
+    droppedCount: 0,
+  });
+  const proposedValues = JSON.parse(readFileSync(output, "utf8"));
+  expect(proposedValues).toHaveProperty("de/UpstreamB", "");
+  expect(proposedValues).toHaveProperty("de/PinnedA", "");
+  expect(proposedValues["retained/orphan"]).toBe("  exact value\n");
+  expect(readCatalogPinSet(tmp)?.generationId).toBe(active.generationId);
+  expect(git(cache, ["rev-parse", "HEAD"])).toBe(sha);
 }, 45000);

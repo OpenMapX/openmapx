@@ -1,11 +1,14 @@
+import { createHash } from "node:crypto";
+import * as fs from "node:fs";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CANDIDATE_PROXY_DIRNAME,
   createCandidateManifest,
   parseMotisConfigExpectations,
+  sha256File,
   verifyCandidateManifest,
 } from "../../src/jobs/transitous/candidate.js";
 import { resolveOperationsProfile } from "../../src/jobs/transitous/operations-profile.js";
@@ -97,4 +100,18 @@ describe("candidate manifest", () => {
     writeFileSync(join(dir, "license.json"), '[{"changed":true}]\n');
     expect(() => verifyCandidateManifest(dir)).toThrow(/hash mismatch: license\.json/);
   });
+});
+
+vi.mock("node:fs", async (original) => {
+  const actual = await original<typeof import("node:fs")>();
+  return { ...actual, readFileSync: vi.fn(actual.readFileSync) };
+});
+it("hashes datasets without loading a whole file into one buffer", () => {
+  tmp = mkdtempSync(join(tmpdir(), "omx-candidate-stream-"));
+  const file = join(tmp, "large.gtfs.zip"),
+    bytes = Buffer.alloc(8 * 1024 * 1024, 7);
+  writeFileSync(file, bytes);
+  vi.mocked(fs.readFileSync).mockClear();
+  expect(sha256File(file).sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
+  expect(fs.readFileSync).not.toHaveBeenCalledWith(file);
 });

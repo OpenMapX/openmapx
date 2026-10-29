@@ -38,6 +38,7 @@ export const feedCredentialChangeSchema = z.discriminatedUnion("action", [
 ]);
 export const feedCredentialPreviewInputSchema = z.strictObject({
   catalogRevisionId: revision,
+  proposalId: z.uuid().optional(),
   expectedCredentialsRevision: revision,
   expectedCurrentRevisionId: currentRevision,
   operationKey,
@@ -57,6 +58,7 @@ export const feedCredentialPreviewSchema = z.strictObject({
   previewId: z.uuid(),
   intentFingerprint: revision,
   catalogRevisionId: revision,
+  proposalId: z.uuid().optional(),
   credentialsRevision: revision,
   expectedCurrentRevisionId: currentRevision,
   expiresAt: z.iso.datetime(),
@@ -66,6 +68,7 @@ export const feedCredentialPreviewSchema = z.strictObject({
 });
 export const transitCredentialsSchema = z.strictObject({
   catalogRevisionId: revision,
+  proposalId: z.uuid().optional(),
   credentialsRevision: revision,
   configurationRevisionId: currentRevision,
   owner: z.enum(["vault", "file", "environment", "unset"]),
@@ -90,6 +93,7 @@ export const feedCredentialApplyResultSchema = z.strictObject({
 });
 const responses = {
   ...adminCommonResponses,
+  404: adminJson(httpErrorSchema),
   409: adminJson(httpErrorSchema),
   503: adminJson(httpErrorSchema),
 };
@@ -98,6 +102,7 @@ export const transitCredentialOperations = {
     method: "GET",
     path: "/api/admin/transit/credentials",
     auth: "admin",
+    request: { query: z.object({ proposalId: z.uuid().optional() }) },
     responses: { ...responses, 200: adminJson(transitCredentialsSchema) },
   },
   previewAdminTransitCredentials: {

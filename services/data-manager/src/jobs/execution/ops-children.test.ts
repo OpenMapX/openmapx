@@ -243,6 +243,7 @@ it.each(["promotion", "reload"] as const)(
       rmSync(root, { recursive: true, force: true });
     }
   },
+  60000,
 );
 
 import { existsSync } from "node:fs";

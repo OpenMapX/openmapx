@@ -30,6 +30,7 @@ import { reconcileOrphanedJobs } from "./jobs/reconcile.js";
 import { createNotablePlacesOperationLock } from "./jobs/search-index/operation-lock.js";
 import { bakePredicted } from "./jobs/traffic/bake-predicted.js";
 import { fetchCoveredWayIds } from "./jobs/traffic/covered-ways.js";
+import { createCatalogReviewService } from "./jobs/transitous/catalog-review.js";
 import {
   resolveOperationsProfileFromEnv,
   transitAllowedCountries,
@@ -96,6 +97,13 @@ const executionStore = createPostgresDataExecutionStore(rawSql, {
   controlJournal: executionJournal,
   configurationFence,
 });
+const catalogReview = controlStartup.installation
+  ? createCatalogReviewService({
+      dataDir,
+      installation: controlStartup.installation,
+      operationsPolicy,
+    })
+  : undefined;
 const dispatcher = createDataExecutionDispatcher({
   dataDir,
   state: dataState,
@@ -119,6 +127,7 @@ if (controlStartup.installation && configurationFence)
   });
 
 registerApi(app, {
+  catalogReview,
   executionReceiver,
   searchIndexRuntimeState: dispatcher.searchIndexRuntimeState,
   dataDir,
@@ -209,6 +218,7 @@ async function start(): Promise<void> {
     reconcileJobs: reconcileOrphanedJobs,
     setupCronSchedulers: () =>
       setupCron({
+        catalogReview,
         dataDir,
         executionReceiver,
         countries,

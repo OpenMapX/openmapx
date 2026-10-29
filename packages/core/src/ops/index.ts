@@ -9,7 +9,10 @@ export * from "./control-retention-receipt";
 export * from "./control-root-key";
 export * from "./coordinator-lifecycle-records";
 export * from "./execution-identity";
-export { canonicalFeedCredentialMap } from "./feed-credential-map";
+export {
+  canonicalFeedCredentialMap,
+  TRANSIT_CREDENTIALS_ABSENT_REVISION,
+} from "./feed-credential-map";
 export * from "./fingerprint";
 export * from "./job-evidence";
 export * from "./privacy-backup";

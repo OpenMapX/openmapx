@@ -17,6 +17,7 @@ export interface FeedCredentialChangePreview {
   previewId: string;
   intentFingerprint: string;
   catalogRevisionId: string;
+  proposalId?: string;
   credentialsRevision: string;
   expectedCurrentRevisionId: string | null;
   expiresAt: string;
@@ -35,6 +36,7 @@ export function feedCredentialIntent(input: {
   previewId: string;
   actorId: string;
   catalogRevisionId: string;
+  proposalId?: string;
   credentialsRevision: string;
   expectedCurrentRevisionId: string | null;
   changes: readonly FeedCredentialChange[];
@@ -46,6 +48,7 @@ export function feedCredentialIntent(input: {
         previewId: input.previewId,
         actorId: input.actorId,
         catalogRevisionId: input.catalogRevisionId,
+        ...(input.proposalId ? { proposalId: input.proposalId } : {}),
         credentialsRevision: input.credentialsRevision,
         expectedCurrentRevisionId: input.expectedCurrentRevisionId,
         changes: input.changes
@@ -84,6 +87,7 @@ function decoded(row: typeof transitCredentialPreview.$inferSelect): PrivateFeed
 export async function retainFeedCredentialPreview(
   input: Omit<PrivateFeedCredentialPreview, "version" | "preview"> & {
     catalogRevisionId: string;
+    proposalId?: string;
     credentialsRevision: string;
     expectedCurrentRevisionId: string | null;
     preservedCount: number;
@@ -109,12 +113,14 @@ export async function retainFeedCredentialPreview(
         existing.expiresAt <= new Date() ||
         canonicalJson({
           catalogRevisionId: value.preview.catalogRevisionId,
+          ...(value.preview.proposalId ? { proposalId: value.preview.proposalId } : {}),
           credentialsRevision: value.preview.credentialsRevision,
           expectedCurrentRevisionId: value.preview.expectedCurrentRevisionId,
           changes: value.changes,
         }) !==
           canonicalJson({
             catalogRevisionId: input.catalogRevisionId,
+            ...(input.proposalId ? { proposalId: input.proposalId } : {}),
             credentialsRevision: input.credentialsRevision,
             expectedCurrentRevisionId: input.expectedCurrentRevisionId,
             changes: input.changes,
@@ -137,6 +143,7 @@ export async function retainFeedCredentialPreview(
       previewId,
       intentFingerprint: feedCredentialIntent({ ...input, previewId }),
       catalogRevisionId: input.catalogRevisionId,
+      ...(input.proposalId ? { proposalId: input.proposalId } : {}),
       credentialsRevision: input.credentialsRevision,
       expectedCurrentRevisionId: input.expectedCurrentRevisionId,
       expiresAt,

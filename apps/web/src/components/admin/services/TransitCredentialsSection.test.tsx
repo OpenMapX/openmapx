@@ -138,7 +138,7 @@ it("does not apply a completed proof after the observed map changes while the pr
   fireEvent.click(
     await screen.findByRole("button", { name: "Confirm administrator sign-in and apply" }),
   );
-  query.setQueryData(["admin", "transit", "credentials", mocks.apiUrl, mocks.actorId], {
+  query.setQueryData(["admin", "transit", "credentials", mocks.apiUrl, mocks.actorId, "active"], {
     ...view,
     credentialsRevision: "e".repeat(64),
   });

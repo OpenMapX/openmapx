@@ -36,6 +36,7 @@ export function inspectControlAdmission(
       case "motis.primary.stop":
       case "motis.primary.restart":
       case "motis.primary.promote":
+      case "transitousLock.approve":
         return ["motis"];
       case "motis.staging.stop":
       case "motis.staging.restart":
@@ -67,6 +68,11 @@ export function inspectControlAdmission(
     inspected.execution.executor !== installation.role
   )
     throw Error("Signed immutable admission mismatch");
+  if (
+    operation.kind === "transitousLock.approve" &&
+    (inspected.phase !== "paired-pin-commit" || inspected.owner.executor !== "data-manager")
+  )
+    throw Error("Original paired activation leaf required");
   if (targets.some((id) => !state.registeredTargets.has(id) || !inspected.serviceIds.includes(id)))
     throw Error("Grant does not contain operation-derived target closure");
   const peer = verifyControlPeer(installation, {

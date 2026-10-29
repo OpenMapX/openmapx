@@ -13,7 +13,7 @@ import type { FreshDataChildReservation } from "../execution/store.js";
 import {
   CANDIDATE_MANIFEST_FILENAME,
   CANDIDATE_PROXY_DIRNAME,
-  verifyCandidateManifest,
+  verifyCandidateManifestAsync,
 } from "./candidate.js";
 import {
   assertTransitForward,
@@ -185,7 +185,7 @@ export const run: StageFn = async (ctx) => {
     if (!existsSync(join(ctx.motisStagingDataDir, CANDIDATE_MANIFEST_FILENAME))) {
       return finish("skipped", "no assembled MOTIS candidate; feed-proxy transaction not needed");
     }
-    const manifest = verifyCandidateManifest(ctx.motisStagingDataDir);
+    const manifest = await verifyCandidateManifestAsync(ctx.motisStagingDataDir, ctx.abortSignal);
     const candidateRoot = join(ctx.motisStagingDataDir, CANDIDATE_PROXY_DIRNAME);
     const candidateConfigPath = join(candidateRoot, CONFIG_RELATIVE_PATH);
     const candidateVarsPath = join(candidateRoot, VARS_FILENAME);

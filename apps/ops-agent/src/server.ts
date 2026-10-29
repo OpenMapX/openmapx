@@ -95,6 +95,7 @@ import {
 } from "@openmapx/core/ops";
 import Fastify, { type FastifyInstance } from "fastify";
 import { inspectConfigurationGenerationNonCommit } from "../../../packages/core/src/build-artifacts/control-authority";
+import { readCommittedCatalogApproval } from "./catalog-approval-runtime";
 import { prepareConfigurationHardlinksAdmission } from "./configuration-hardlinks-runtime";
 import {
   configurationMaintenanceAdmissionState,
@@ -742,6 +743,30 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       }
       const lease = controlLeases.get(job.operationId);
       const authority = controlAuthorities.get(job.operationId);
+      if (
+        authority &&
+        lease &&
+        job.operation.kind === "transitousLock.approve" &&
+        ["succeeded", "failed", "timed_out"].includes(state)
+      ) {
+        const published = await readCommittedCatalogApproval(
+          runtime,
+          authority,
+          lease,
+          job.operation,
+        );
+        if (published) {
+          state = "succeeded";
+          updatedAt = new Date(published.terminalAt).toISOString();
+          updates = {
+            ...updates,
+            result: published.result,
+            terminalAt: published.terminalAt,
+            errorClass: undefined,
+            failureResult: undefined,
+          };
+        }
+      }
       let releaseUnstartedRoot = false;
       if (authority && state === "termination_pending") cancelControlExecution(authority);
       if (lease && state === "termination_pending") await cancelArtifactTargetLease(lease);
@@ -1735,6 +1760,44 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             );
             controlLeases.set(job.operationId, lease);
             controlAuthorities.set(job.operationId, authority);
+            if (job.operation.kind === "transitousLock.approve") {
+              const published = await readCommittedCatalogApproval(
+                runtime,
+                authority,
+                lease,
+                job.operation,
+              );
+              if (published) {
+                retainControlEffectReceipt(authority, {
+                  outcome: "committed",
+                  publication: "committed",
+                  receipt: { kind: "ops-result", result: published.result },
+                });
+                const restored: JobRecord = {
+                  ...job,
+                  state: "succeeded",
+                  result: published.result,
+                  errorClass: undefined,
+                  failureResult: undefined,
+                  terminalAt: published.terminalAt,
+                  updatedAt: new Date(published.terminalAt).toISOString(),
+                };
+                // A previously sealed, different canonical tuple refuses here;
+                // an unknown secondary journal never overrides that source.
+                restored.terminalAt = retainControlTerminalCommitment(
+                  authority,
+                  statusFor(restored, 2, true),
+                  published.terminalAt,
+                );
+                await journal.replace(
+                  [...jobsById.values()].map((value) =>
+                    persisted(value === job ? restored : value),
+                  ),
+                );
+                Object.assign(job, restored);
+                changed = true;
+              }
+            }
             await settleArtifactTargetLeaseChild(
               lease,
               verifyControlEffectSettlement(options.controlInstallation, execution),
@@ -1839,898 +1902,920 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       await reconcileControlRetention(options.controlInstallation).catch(() => undefined);
   });
 
-  app.post("/v1/operations", async (request, reply) => {
-    const startedAt = Date.now();
-    const requestId = requestIdFromBody(request.body);
-    const role = resolveRole(request.headers.authorization, options.tokens);
-    if (!role) return reply.code(401).send(redactedOpsError(requestId, "authentication"));
-    let kind = operationKindFromBody(request.body);
-    let resourceId: string = kind;
-    try {
-      const parsed = parseOpsRequest(request.body, { role });
-      const operation = immutableSnapshot(parsed.operation);
-      kind = operation.kind;
-      resourceId = opsResourceId(operation);
-      const nowMs = now().getTime();
-      const timing = validateTiming(parsed.issuedAt, parsed.expiresAt, nowMs);
-      replay.accept(parsed.requestId, timing.expiresAtMs, nowMs);
-      const policy = OPS_KIND_POLICIES[operation.kind];
-      // Read-only historical records can neither reserve a fresh normal key
-      // nor turn an unresolved old effect into permission for another writer.
-      if (
-        historicalPulls.some((job) => job.role === role && job.operationKey === parsed.operationKey)
-      )
-        throw new RequestGuardError("conflict", 409);
-      if (
-        opsKindRequiresControlAuthority(operation.kind) &&
-        historicalPulls.some(
-          (job) =>
-            ["queued", "running", "termination_pending"].includes(job.state) ||
-            job.errorClass === "recovery_required",
-        )
-      )
-        throw new RequestGuardError("recovery_required", 409);
-      const operationFingerprint = opsOperationFingerprint(operation);
-      if (operation.kind === "controlRetention.acknowledge") {
-        if (role !== "api" || !options.controlInstallation)
-          throw new RequestGuardError("authorization", 403);
-        try {
-          const existing = jobsByKey.get(`api:${operation.operationKey}`);
-          if (
-            existing &&
-            controlTerminalReceiptDigest(statusFor(existing, 2)) !== operation.terminalDigest
+  app.post(
+    "/v1/operations",
+    { bodyLimit: options.bodyLimit ?? 772 * 1024 },
+    async (request, reply) => {
+      const startedAt = Date.now();
+      const requestId = requestIdFromBody(request.body);
+      const role = resolveRole(request.headers.authorization, options.tokens);
+      if (!role) return reply.code(401).send(redactedOpsError(requestId, "authentication"));
+      let kind = operationKindFromBody(request.body);
+      let resourceId: string = kind;
+      try {
+        const parsed = parseOpsRequest(request.body, { role });
+        const requestLimit =
+          parsed.operation.kind === "transitousLock.propose"
+            ? 772 * 1024
+            : (options.bodyLimit ?? DEFAULT_BODY_LIMIT);
+        if (Buffer.byteLength(JSON.stringify(request.body), "utf8") > requestLimit)
+          throw new RequestGuardError("validation", 413);
+        const operation = immutableSnapshot(parsed.operation);
+        kind = operation.kind;
+        resourceId = opsResourceId(operation);
+        const nowMs = now().getTime();
+        const timing = validateTiming(parsed.issuedAt, parsed.expiresAt, nowMs);
+        replay.accept(parsed.requestId, timing.expiresAtMs, nowMs);
+        const policy = OPS_KIND_POLICIES[operation.kind];
+        // Read-only historical records can neither reserve a fresh normal key
+        // nor turn an unresolved old effect into permission for another writer.
+        if (
+          historicalPulls.some(
+            (job) => job.role === role && job.operationKey === parsed.operationKey,
           )
-            throw Error("Current terminal digest conflict");
-          const phase =
-            existing &&
-            (isTrustedConfigurationApplyOperation(existing.operation) ||
-              existing.operation.kind === "configuration.hardlinks.apply" ||
-              existing.operation.kind === "service.recreate" ||
-              existing.operation.kind === "service.recreateIsolated") &&
-            existing.operation.maintenanceId;
-          if (phase && existing.terminalAt !== undefined)
-            recordOwnedConfigurationMaintenanceStepTerminal(
-              options.controlInstallation,
-              existing.operation,
-              executionFor(existing),
-              statusFor(existing, 2),
-              existing.terminalAt,
-            );
-          const value = phase
-            ? acknowledgeConfigurationMaintenanceStep(
+        )
+          throw new RequestGuardError("conflict", 409);
+        if (
+          opsKindRequiresControlAuthority(operation.kind) &&
+          historicalPulls.some(
+            (job) =>
+              ["queued", "running", "termination_pending"].includes(job.state) ||
+              job.errorClass === "recovery_required",
+          )
+        )
+          throw new RequestGuardError("recovery_required", 409);
+        const operationFingerprint = opsOperationFingerprint(operation);
+        if (operation.kind === "controlRetention.acknowledge") {
+          if (role !== "api" || !options.controlInstallation)
+            throw new RequestGuardError("authorization", 403);
+          try {
+            const existing = jobsByKey.get(`api:${operation.operationKey}`);
+            if (
+              existing &&
+              controlTerminalReceiptDigest(statusFor(existing, 2)) !== operation.terminalDigest
+            )
+              throw Error("Current terminal digest conflict");
+            const phase =
+              existing &&
+              (isTrustedConfigurationApplyOperation(existing.operation) ||
+                existing.operation.kind === "configuration.hardlinks.apply" ||
+                existing.operation.kind === "service.recreate" ||
+                existing.operation.kind === "service.recreateIsolated") &&
+              existing.operation.maintenanceId;
+            if (phase && existing.terminalAt !== undefined)
+              recordOwnedConfigurationMaintenanceStepTerminal(
                 options.controlInstallation,
-                operation,
-                options.tokens.api,
-              )
-            : operation.originRootKey !== operation.operationKey &&
-                (existing?.operation.kind === "configurationMaintenance.decide" ||
-                  existing?.operation.kind === "configurationMaintenance.settle")
-              ? acknowledgeConfigurationMaintenanceControl(
+                existing.operation,
+                executionFor(existing),
+                statusFor(existing, 2),
+                existing.terminalAt,
+              );
+            const value = phase
+              ? acknowledgeConfigurationMaintenanceStep(
                   options.controlInstallation,
                   operation,
                   options.tokens.api,
                 )
-              : acknowledgeControlRetention(
-                  options.controlInstallation,
-                  operation,
-                  options.tokens.api,
-                );
-          return reply
-            .code(200)
-            .send(opsSuccess(parsed.requestId, { execution: "sync", kind: operation.kind, value }));
-        } catch {
-          throw new RequestGuardError("recovery_required", 409);
-        }
-      }
-      if (
-        operation.kind === "service.pull" &&
-        operation.serviceId === "data-manager" &&
-        !operation.candidateId
-      )
-        throw new OpsExecutionFailure("configuration_prerequisite", {});
-      let parent: VerifiedParentExecution | undefined;
-      let configurationMaintenanceControl:
-        | import("./configuration-maintenance-store").ConfigurationMaintenanceControlOwner
-        | undefined;
-      let maintenanceStepAdmission:
-        | Awaited<ReturnType<typeof prepareOwnedConfigurationMaintenanceStepAdmission>>
-        | undefined;
-      let controlAdmission:
-        | ReturnType<typeof inspectControlAdmission>
-        | Awaited<ReturnType<typeof prepareOwnedConfigurationMaintenanceStepAdmission>>
-        | undefined;
-      const parentHeader = request.headers["x-openmapx-parent-execution"];
-      const delegationHeader = request.headers["x-openmapx-control-delegation"];
-      // Approval is exclusively a borrowed activation leaf. Installing its
-      // future validation runtime must never enable a bearer-only root path.
-      if (operation.kind === "transitousLock.approve" && delegationHeader === undefined)
-        throw new RequestGuardError("authorization", 403);
-      try {
-        readControlHeaders(request.raw.rawHeaders);
-      } catch {
-        throw new RequestGuardError("authorization", 403);
-      }
-      if (delegationHeader !== undefined) {
-        if (
-          !options.controlInstallation ||
-          role !== "data-manager" ||
-          parsed.version !== 2 ||
-          parentHeader !== undefined
-        )
-          throw new RequestGuardError("authorization", 403);
-        try {
-          controlAdmission = inspectControlAdmission(options.controlInstallation, {
-            rawHeaders: request.raw.rawHeaders,
-            transportPrincipal: "data-manager",
-            kind,
-            operation,
-            operationKey: parsed.operationKey,
-            operationFingerprint,
-            requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
-          });
-          parent = controlAdmission.parent;
-        } catch {
-          throw new RequestGuardError("authorization", 403);
-        }
-      }
-      if (parsed.version === 1 && (parentHeader !== undefined || delegationHeader !== undefined))
-        throw new RequestGuardError("authorization", 403);
-      if (parentHeader !== undefined) {
-        if (role !== "api" || typeof parentHeader !== "string")
-          throw new RequestGuardError("authorization", 403);
-        try {
-          parent = verifyApiJobParentExecution(parentHeader, options.tokens.api, {
-            operationKey: parsed.operationKey,
-            operationFingerprint,
-            requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
-          });
-        } catch {
-          throw new RequestGuardError("authorization", 403);
-        }
-      }
-      if (
-        operation.kind === "configurationMaintenance.inspect" ||
-        operation.kind === "configurationMaintenance.decide" ||
-        operation.kind === "configurationMaintenance.settle"
-      ) {
-        if (!options.controlInstallation || !parent)
-          throw new RequestGuardError("authorization", 403);
-        try {
-          configurationMaintenanceControl = admitConfigurationMaintenanceControlOwner(
-            options.controlInstallation,
-            operation,
-            parent,
-            {
-              operationKey: parsed.operationKey,
-              requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
-            },
-          );
-        } catch (error) {
-          if (error instanceof ConfigurationMaintenanceControlUnauthorized)
-            throw new RequestGuardError("authorization", 403);
-          throw new RequestGuardError(
-            (error as NodeJS.ErrnoException).code === "ENOENT" ? "not_found" : "recovery_required",
-            (error as NodeJS.ErrnoException).code === "ENOENT" ? 404 : 409,
-          );
-        }
-      }
-      if (
-        (isTrustedConfigurationApplyOperation(operation) ||
-          operation.kind === "configuration.hardlinks.apply" ||
-          operation.kind === "service.recreate" ||
-          operation.kind === "service.recreateIsolated") &&
-        operation.maintenanceId
-      ) {
-        if (
-          !options.controlInstallation ||
-          role !== "api" ||
-          !parent ||
-          typeof parentHeader !== "string"
-        )
-          throw new RequestGuardError("authorization", 403);
-        try {
-          maintenanceStepAdmission = await prepareOwnedConfigurationMaintenanceStepAdmission(
-            runtime,
-            options.controlInstallation,
-            operation,
-            parent,
-            {
-              operationKey: parsed.operationKey,
-              requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
-              parentAssertion: parentHeader,
-              signal: AbortSignal.timeout(15000),
-            },
-          );
-          controlAdmission = maintenanceStepAdmission;
-          parent = maintenanceStepAdmission.parent;
-        } catch (error) {
-          if (error instanceof ConfigurationMaintenanceControlUnauthorized)
-            throw new RequestGuardError("authorization", 403);
-          if (error instanceof ConfigurationMaintenanceControlConflict)
+              : operation.originRootKey !== operation.operationKey &&
+                  (existing?.operation.kind === "configurationMaintenance.decide" ||
+                    existing?.operation.kind === "configurationMaintenance.settle")
+                ? acknowledgeConfigurationMaintenanceControl(
+                    options.controlInstallation,
+                    operation,
+                    options.tokens.api,
+                  )
+                : acknowledgeControlRetention(
+                    options.controlInstallation,
+                    operation,
+                    options.tokens.api,
+                  );
+            return reply
+              .code(200)
+              .send(
+                opsSuccess(parsed.requestId, { execution: "sync", kind: operation.kind, value }),
+              );
+          } catch {
             throw new RequestGuardError("recovery_required", 409);
+          }
+        }
+        if (
+          operation.kind === "service.pull" &&
+          operation.serviceId === "data-manager" &&
+          !operation.candidateId
+        )
+          throw new OpsExecutionFailure("configuration_prerequisite", {});
+        let parent: VerifiedParentExecution | undefined;
+        let configurationMaintenanceControl:
+          | import("./configuration-maintenance-store").ConfigurationMaintenanceControlOwner
+          | undefined;
+        let maintenanceStepAdmission:
+          | Awaited<ReturnType<typeof prepareOwnedConfigurationMaintenanceStepAdmission>>
+          | undefined;
+        let controlAdmission:
+          | ReturnType<typeof inspectControlAdmission>
+          | Awaited<ReturnType<typeof prepareOwnedConfigurationMaintenanceStepAdmission>>
+          | undefined;
+        const parentHeader = request.headers["x-openmapx-parent-execution"];
+        const delegationHeader = request.headers["x-openmapx-control-delegation"];
+        // Approval is exclusively a borrowed activation leaf. Installing its
+        // future validation runtime must never enable a bearer-only root path.
+        if (operation.kind === "transitousLock.approve" && delegationHeader === undefined)
+          throw new RequestGuardError("authorization", 403);
+        try {
+          readControlHeaders(request.raw.rawHeaders);
+        } catch {
+          throw new RequestGuardError("authorization", 403);
+        }
+        if (delegationHeader !== undefined) {
+          if (
+            !options.controlInstallation ||
+            role !== "data-manager" ||
+            parsed.version !== 2 ||
+            parentHeader !== undefined
+          )
+            throw new RequestGuardError("authorization", 403);
+          try {
+            controlAdmission = inspectControlAdmission(options.controlInstallation, {
+              rawHeaders: request.raw.rawHeaders,
+              transportPrincipal: "data-manager",
+              kind,
+              operation,
+              operationKey: parsed.operationKey,
+              operationFingerprint,
+              requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
+            });
+            parent = controlAdmission.parent;
+          } catch {
+            throw new RequestGuardError("authorization", 403);
+          }
+        }
+        if (parsed.version === 1 && (parentHeader !== undefined || delegationHeader !== undefined))
+          throw new RequestGuardError("authorization", 403);
+        if (parentHeader !== undefined) {
+          if (role !== "api" || typeof parentHeader !== "string")
+            throw new RequestGuardError("authorization", 403);
+          try {
+            parent = verifyApiJobParentExecution(parentHeader, options.tokens.api, {
+              operationKey: parsed.operationKey,
+              operationFingerprint,
+              requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
+            });
+          } catch {
+            throw new RequestGuardError("authorization", 403);
+          }
+        }
+        if (
+          operation.kind === "configurationMaintenance.inspect" ||
+          operation.kind === "configurationMaintenance.decide" ||
+          operation.kind === "configurationMaintenance.settle"
+        ) {
+          if (!options.controlInstallation || !parent)
+            throw new RequestGuardError("authorization", 403);
+          try {
+            configurationMaintenanceControl = admitConfigurationMaintenanceControlOwner(
+              options.controlInstallation,
+              operation,
+              parent,
+              {
+                operationKey: parsed.operationKey,
+                requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
+              },
+            );
+          } catch (error) {
+            if (error instanceof ConfigurationMaintenanceControlUnauthorized)
+              throw new RequestGuardError("authorization", 403);
+            throw new RequestGuardError(
+              (error as NodeJS.ErrnoException).code === "ENOENT"
+                ? "not_found"
+                : "recovery_required",
+              (error as NodeJS.ErrnoException).code === "ENOENT" ? 404 : 409,
+            );
+          }
+        }
+        if (
+          (isTrustedConfigurationApplyOperation(operation) ||
+            operation.kind === "configuration.hardlinks.apply" ||
+            operation.kind === "service.recreate" ||
+            operation.kind === "service.recreateIsolated") &&
+          operation.maintenanceId
+        ) {
+          if (
+            !options.controlInstallation ||
+            role !== "api" ||
+            !parent ||
+            typeof parentHeader !== "string"
+          )
+            throw new RequestGuardError("authorization", 403);
+          try {
+            maintenanceStepAdmission = await prepareOwnedConfigurationMaintenanceStepAdmission(
+              runtime,
+              options.controlInstallation,
+              operation,
+              parent,
+              {
+                operationKey: parsed.operationKey,
+                requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
+                parentAssertion: parentHeader,
+                signal: AbortSignal.timeout(15000),
+              },
+            );
+            controlAdmission = maintenanceStepAdmission;
+            parent = maintenanceStepAdmission.parent;
+          } catch (error) {
+            if (error instanceof ConfigurationMaintenanceControlUnauthorized)
+              throw new RequestGuardError("authorization", 403);
+            if (error instanceof ConfigurationMaintenanceControlConflict)
+              throw new RequestGuardError("recovery_required", 409);
+            throw error;
+          }
+        }
+        const normalize = (
+          originalAdmittedAt: number,
+          deploymentBudgetMs = Math.min(
+            policy.timeoutMs,
+            options.operationTimeoutMs ?? policy.timeoutMs,
+          ),
+        ) => {
+          try {
+            if (maintenanceStepAdmission)
+              return {
+                admittedAt: maintenanceStepAdmission.boundAt,
+                deadlineAt: maintenanceStepAdmission.execution.deadlineAt,
+                fingerprint: maintenanceStepAdmission.execution.fingerprint,
+              };
+            if (
+              operation.kind === "configurationMaintenance.inspect" &&
+              configurationMaintenanceControl
+            )
+              return normalizeConfigurationMaintenanceInspection(
+                configurationMaintenanceControl,
+                operation,
+                parsed.operationKey,
+                originalAdmittedAt,
+                deploymentBudgetMs,
+              );
+            if (
+              configurationMaintenanceControl &&
+              (operation.kind === "configurationMaintenance.settle" ||
+                (operation.kind === "configurationMaintenance.decide" &&
+                  operation.decision === "abandon"))
+            )
+              return normalizeConfigurationMaintenanceRecoveryControl(
+                configurationMaintenanceControl,
+                operation,
+                parsed.operationKey,
+                originalAdmittedAt,
+                deploymentBudgetMs,
+              );
+            return normalizeExecutionAdmission({
+              kind,
+              operationKey: parsed.operationKey,
+              operationFingerprint,
+              admittedAt: originalAdmittedAt,
+              requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
+              parent,
+              deploymentBudgetMs,
+            });
+          } catch {
+            throw new RequestGuardError("validation", 400);
+          }
+        };
+        let normalized: ReturnType<typeof normalize>;
+        const fingerprint = operationFingerprint; // Existing sealed claims bind the body, never execution timing.
+        const matchesRetained = (job: JobRecord): boolean => {
+          try {
+            return job.executionVersion === 2
+              ? job.fingerprint ===
+                  normalize(job.admittedAt as number, job.deploymentBudgetMs).fingerprint
+              : job.fingerprint === operationFingerprint &&
+                  parsed.execution === undefined &&
+                  !parent;
+          } catch {
+            return false;
+          }
+        };
+        if (policy.execution === "async") {
+          await pruneJobs(nowMs);
+          const ownerKey = `${role}:${parsed.operationKey}`;
+          const existing = jobsByKey.get(ownerKey);
+          if (existing) {
+            if (!matchesRetained(existing)) throw new RequestGuardError("conflict", 409);
+            return reply
+              .code(202)
+              .send(opsSuccess(parsed.requestId, admissionFor(existing, parsed.version)));
+          }
+          if (options.controlInstallation) {
+            try {
+              await reconcileControlRetention(options.controlInstallation, { maxFamilies: 1 });
+            } catch {
+              throw new RequestGuardError("recovery_required", 409);
+            }
+          }
+          if (jobsById.size + historicalPulls.length >= maxJobEntries) {
+            throw new RequestGuardError("busy", 429);
+          }
+          // A resumed agent update re-attaches above; nothing new may start.
+          if (operation.kind !== "agent.update" && options.replacementInProgress?.()) {
+            throw new RequestGuardError("busy", 409);
+          }
+        }
+        if (options.releaseRecovery?.ready === false && !RELEASE_RECOVERY_READ_KINDS.has(kind))
+          throw new RequestGuardError("recovery_required", 409);
+        if (
+          opsKindRequiresControlAuthority(operation.kind) &&
+          !controlAdmission &&
+          !configurationMaintenanceControl
+        ) {
+          if (!options.controlInstallation) throw new RequestGuardError("recovery_required", 409);
+          try {
+            const key = parseControlRootOperationKey(parsed.operationKey);
+            if (key.notAfter !== parsed.execution?.requestedDeadlineAt) throw Error();
+          } catch {
+            throw new RequestGuardError("control_upgrade_required", 409);
+          }
+          try {
+            assertFreshControlRoot(
+              options.controlInstallation,
+              parsed.operationKey,
+              parsed.execution?.requestedDeadlineAt,
+            );
+          } catch {
+            throw new RequestGuardError("recovery_required", 409);
+          }
+        }
+        normalized = normalize(nowMs);
+        if (active >= maxConcurrency) throw new RequestGuardError("busy", 429);
+        active += 1;
+        const claimController = new AbortController();
+        const claimExecution = Promise.resolve().then(() =>
+          resourceClaimer.claim(operation, fingerprint, claimController.signal, {
+            role,
+            operationKey: parsed.operationKey,
+            ...(maintenanceStepAdmission ? { maintenanceStep: maintenanceStepAdmission } : {}),
+          }),
+        );
+        let claimTimer: ReturnType<typeof setTimeout> | undefined;
+        let claim: Awaited<ReturnType<OpsResourceClaimer["claim"]>>;
+        try {
+          claim = await Promise.race([
+            claimExecution,
+            new Promise<never>((_resolve, reject) => {
+              claimTimer = setTimeout(() => {
+                claimController.abort();
+                reject(new RequestGuardError("timeout", 504));
+              }, options.claimTimeoutMs ?? DEFAULT_CLAIM_TIMEOUT_MS);
+            }),
+          ]);
+          if (claimTimer !== undefined) clearTimeout(claimTimer);
+        } catch (error) {
+          if (claimTimer !== undefined) clearTimeout(claimTimer);
+          if (error instanceof RequestGuardError && error.errorClass === "timeout") {
+            void claimExecution.then(
+              (lateClaim) => {
+                void lateClaim?.admission?.rollback().catch(() => undefined);
+                active -= 1;
+                audit(role, kind, resourceId, "late_completion", startedAt, "timeout");
+              },
+              () => {
+                active -= 1;
+                audit(role, kind, resourceId, "terminated", startedAt, "timeout");
+              },
+            );
+            audit(role, kind, resourceId, "timeout", startedAt, "timeout");
+            return reply.code(504).send(redactedOpsError(parsed.requestId, "timeout"));
+          }
+          active -= 1;
           throw error;
         }
-      }
-      const normalize = (
-        originalAdmittedAt: number,
-        deploymentBudgetMs = Math.min(
-          policy.timeoutMs,
-          options.operationTimeoutMs ?? policy.timeoutMs,
-        ),
-      ) => {
+        let claimAdmission: OpsTrustedClaim["admission"];
+        let coordinatorCapture: CoordinatorPullOwnershipObservation | undefined;
         try {
-          if (maintenanceStepAdmission)
-            return {
-              admittedAt: maintenanceStepAdmission.boundAt,
-              deadlineAt: maintenanceStepAdmission.execution.deadlineAt,
-              fingerprint: maintenanceStepAdmission.execution.fingerprint,
-            };
           if (
-            operation.kind === "configurationMaintenance.inspect" &&
-            configurationMaintenanceControl
-          )
-            return normalizeConfigurationMaintenanceInspection(
-              configurationMaintenanceControl,
-              operation,
-              parsed.operationKey,
-              originalAdmittedAt,
-              deploymentBudgetMs,
-            );
-          if (
-            configurationMaintenanceControl &&
-            (operation.kind === "configurationMaintenance.settle" ||
-              (operation.kind === "configurationMaintenance.decide" &&
-                operation.decision === "abandon"))
-          )
-            return normalizeConfigurationMaintenanceRecoveryControl(
-              configurationMaintenanceControl,
-              operation,
-              parsed.operationKey,
-              originalAdmittedAt,
-              deploymentBudgetMs,
-            );
-          return normalizeExecutionAdmission({
-            kind,
-            operationKey: parsed.operationKey,
-            operationFingerprint,
-            admittedAt: originalAdmittedAt,
-            requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
-            parent,
-            deploymentBudgetMs,
+            !claim ||
+            claim.fingerprint !== fingerprint ||
+            opsOperationFingerprint(claim.operation as OpsOperation) !== fingerprint ||
+            !claim.capability ||
+            !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(claim.capability.revisionId) ||
+            !claim.capability.values ||
+            typeof claim.capability.values !== "object" ||
+            Array.isArray(claim.capability.values) ||
+            Object.keys(claim.capability.values).length > 64 ||
+            Object.entries(claim.capability.values).some(
+              ([key, value]) =>
+                !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(key) ||
+                (value !== null && !["string", "number", "boolean"].includes(typeof value)) ||
+                (typeof value === "number" && !Number.isFinite(value)),
+            ) ||
+            Buffer.byteLength(JSON.stringify(claim.capability), "utf8") > 512 * 1024
+          ) {
+            throw new OpsContractError("authorization", "Operation resource is not permitted");
+          }
+          if (operation.kind === "service.pull" && operation.candidateId)
+            coordinatorCapture = consumeCoordinatorPullOwnershipCapture(claim, {
+              operationFingerprint: fingerprint,
+              candidateId: operation.candidateId,
+              policyRevision: claim.capability.revisionId,
+            });
+          claimAdmission = claim.admission;
+          claim = immutableSnapshot({
+            fingerprint: claim.fingerprint,
+            operation: claim.operation,
+            source: claim.source,
+            capability: claim.capability,
           });
         } catch {
-          throw new RequestGuardError("validation", 400);
-        }
-      };
-      let normalized: ReturnType<typeof normalize>;
-      const fingerprint = operationFingerprint; // Existing sealed claims bind the body, never execution timing.
-      const matchesRetained = (job: JobRecord): boolean => {
-        try {
-          return job.executionVersion === 2
-            ? job.fingerprint ===
-                normalize(job.admittedAt as number, job.deploymentBudgetMs).fingerprint
-            : job.fingerprint === operationFingerprint && parsed.execution === undefined && !parent;
-        } catch {
-          return false;
-        }
-      };
-      if (policy.execution === "async") {
-        await pruneJobs(nowMs);
-        const ownerKey = `${role}:${parsed.operationKey}`;
-        const existing = jobsByKey.get(ownerKey);
-        if (existing) {
-          if (!matchesRetained(existing)) throw new RequestGuardError("conflict", 409);
-          return reply
-            .code(202)
-            .send(opsSuccess(parsed.requestId, admissionFor(existing, parsed.version)));
-        }
-        if (options.controlInstallation) {
-          try {
-            await reconcileControlRetention(options.controlInstallation, { maxFamilies: 1 });
-          } catch {
-            throw new RequestGuardError("recovery_required", 409);
-          }
-        }
-        if (jobsById.size + historicalPulls.length >= maxJobEntries) {
-          throw new RequestGuardError("busy", 429);
-        }
-        // A resumed agent update re-attaches above; nothing new may start.
-        if (operation.kind !== "agent.update" && options.replacementInProgress?.()) {
-          throw new RequestGuardError("busy", 409);
-        }
-      }
-      if (options.releaseRecovery?.ready === false && !RELEASE_RECOVERY_READ_KINDS.has(kind))
-        throw new RequestGuardError("recovery_required", 409);
-      if (
-        opsKindRequiresControlAuthority(operation.kind) &&
-        !controlAdmission &&
-        !configurationMaintenanceControl
-      ) {
-        if (!options.controlInstallation) throw new RequestGuardError("recovery_required", 409);
-        try {
-          const key = parseControlRootOperationKey(parsed.operationKey);
-          if (key.notAfter !== parsed.execution?.requestedDeadlineAt) throw Error();
-        } catch {
-          throw new RequestGuardError("control_upgrade_required", 409);
-        }
-        try {
-          assertFreshControlRoot(
-            options.controlInstallation,
-            parsed.operationKey,
-            parsed.execution?.requestedDeadlineAt,
-          );
-        } catch {
-          throw new RequestGuardError("recovery_required", 409);
-        }
-      }
-      normalized = normalize(nowMs);
-      if (active >= maxConcurrency) throw new RequestGuardError("busy", 429);
-      active += 1;
-      const claimController = new AbortController();
-      const claimExecution = Promise.resolve().then(() =>
-        resourceClaimer.claim(operation, fingerprint, claimController.signal, {
-          role,
-          operationKey: parsed.operationKey,
-          ...(maintenanceStepAdmission ? { maintenanceStep: maintenanceStepAdmission } : {}),
-        }),
-      );
-      let claimTimer: ReturnType<typeof setTimeout> | undefined;
-      let claim: Awaited<ReturnType<OpsResourceClaimer["claim"]>>;
-      try {
-        claim = await Promise.race([
-          claimExecution,
-          new Promise<never>((_resolve, reject) => {
-            claimTimer = setTimeout(() => {
-              claimController.abort();
-              reject(new RequestGuardError("timeout", 504));
-            }, options.claimTimeoutMs ?? DEFAULT_CLAIM_TIMEOUT_MS);
-          }),
-        ]);
-        if (claimTimer !== undefined) clearTimeout(claimTimer);
-      } catch (error) {
-        if (claimTimer !== undefined) clearTimeout(claimTimer);
-        if (error instanceof RequestGuardError && error.errorClass === "timeout") {
-          void claimExecution.then(
-            (lateClaim) => {
-              void lateClaim?.admission?.rollback().catch(() => undefined);
-              active -= 1;
-              audit(role, kind, resourceId, "late_completion", startedAt, "timeout");
-            },
-            () => {
-              active -= 1;
-              audit(role, kind, resourceId, "terminated", startedAt, "timeout");
-            },
-          );
-          audit(role, kind, resourceId, "timeout", startedAt, "timeout");
-          return reply.code(504).send(redactedOpsError(parsed.requestId, "timeout"));
-        }
-        active -= 1;
-        throw error;
-      }
-      let claimAdmission: OpsTrustedClaim["admission"];
-      let coordinatorCapture: CoordinatorPullOwnershipObservation | undefined;
-      try {
-        if (
-          !claim ||
-          claim.fingerprint !== fingerprint ||
-          opsOperationFingerprint(claim.operation as OpsOperation) !== fingerprint ||
-          !claim.capability ||
-          !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(claim.capability.revisionId) ||
-          !claim.capability.values ||
-          typeof claim.capability.values !== "object" ||
-          Array.isArray(claim.capability.values) ||
-          Object.keys(claim.capability.values).length > 64 ||
-          Object.entries(claim.capability.values).some(
-            ([key, value]) =>
-              !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(key) ||
-              (value !== null && !["string", "number", "boolean"].includes(typeof value)) ||
-              (typeof value === "number" && !Number.isFinite(value)),
-          ) ||
-          Buffer.byteLength(JSON.stringify(claim.capability), "utf8") > 512 * 1024
-        ) {
+          await claim?.admission?.rollback().catch(() => undefined);
+          active -= 1;
           throw new OpsContractError("authorization", "Operation resource is not permitted");
         }
-        if (operation.kind === "service.pull" && operation.candidateId)
-          coordinatorCapture = consumeCoordinatorPullOwnershipCapture(claim, {
-            operationFingerprint: fingerprint,
-            candidateId: operation.candidateId,
-            policyRevision: claim.capability.revisionId,
-          });
-        claimAdmission = claim.admission;
-        claim = immutableSnapshot({
-          fingerprint: claim.fingerprint,
-          operation: claim.operation,
-          source: claim.source,
-          capability: claim.capability,
-        });
-      } catch {
-        await claim?.admission?.rollback().catch(() => undefined);
-        active -= 1;
-        throw new OpsContractError("authorization", "Operation resource is not permitted");
-      }
 
-      if (policy.execution === "async") {
-        const ownerKey = `${role}:${parsed.operationKey}`;
-        const admission = await withAdmissionLock(async () => {
-          const retained = jobsByKey.get(ownerKey);
-          if (retained) {
-            if (!matchesRetained(retained)) {
-              throw new RequestGuardError("conflict", 409);
+        if (policy.execution === "async") {
+          const ownerKey = `${role}:${parsed.operationKey}`;
+          const admission = await withAdmissionLock(async () => {
+            const retained = jobsByKey.get(ownerKey);
+            if (retained) {
+              if (!matchesRetained(retained)) {
+                throw new RequestGuardError("conflict", 409);
+              }
+              return { type: "retained", job: retained } as const;
             }
-            return { type: "retained", job: retained } as const;
-          }
-          if (jobsById.size + historicalPulls.length >= maxJobEntries)
-            throw new RequestGuardError("busy", 429);
-          if (normalized.deadlineAt <= now().getTime()) throw new RequestGuardError("timeout", 504);
-          const timestamp = new Date(normalized.admittedAt).toISOString();
-          let operationId: string | undefined = controlAdmission?.execution.executionId;
-          if (operationId && jobsById.has(operationId))
-            throw new RequestGuardError("conflict", 409);
-          try {
-            for (let attempt = 0; !operationId && attempt < MAX_JOB_ID_ATTEMPTS; attempt += 1) {
-              const candidate = `job1_${Buffer.from(randomBytes(18)).toString("base64url")}`;
-              if (OPERATION_ID_PATTERN.test(candidate) && !jobsById.has(candidate)) {
-                operationId = candidate;
-                break;
+            if (jobsById.size + historicalPulls.length >= maxJobEntries)
+              throw new RequestGuardError("busy", 429);
+            if (normalized.deadlineAt <= now().getTime())
+              throw new RequestGuardError("timeout", 504);
+            const timestamp = new Date(normalized.admittedAt).toISOString();
+            let operationId: string | undefined = controlAdmission?.execution.executionId;
+            if (operationId && jobsById.has(operationId))
+              throw new RequestGuardError("conflict", 409);
+            try {
+              for (let attempt = 0; !operationId && attempt < MAX_JOB_ID_ATTEMPTS; attempt += 1) {
+                const candidate = `job1_${Buffer.from(randomBytes(18)).toString("base64url")}`;
+                if (OPERATION_ID_PATTERN.test(candidate) && !jobsById.has(candidate)) {
+                  operationId = candidate;
+                  break;
+                }
+              }
+            } catch {
+              throw new RequestGuardError("runtime", 500);
+            }
+            if (!operationId) throw new RequestGuardError("busy", 429);
+            const job: JobRecord = {
+              ...(controlAdmission
+                ? {
+                    controlAdoption: {
+                      leaseId: controlAdmission.leaseId,
+                      delegationId: controlAdmission.delegationId,
+                      phase: "pending-adoption" as const,
+                    },
+                  }
+                : {}),
+              role,
+              operation,
+              operationId,
+              operationKey: parsed.operationKey,
+              executionVersion: 2,
+              requestVersion: parsed.version,
+              ...normalized,
+              operationFingerprint,
+              requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
+              parent,
+              deploymentBudgetMs: maintenanceStepAdmission
+                ? opsExecutionBudget(operation.kind).processMs
+                : Math.min(policy.timeoutMs, options.operationTimeoutMs ?? policy.timeoutMs),
+              resourceId,
+              state: "queued",
+              submittedAt: timestamp,
+              updatedAt: timestamp,
+              cursor: 0,
+              events: [],
+              eventBytes: 0,
+              eventsTruncated: false,
+            };
+            if (
+              configurationMaintenanceControl &&
+              operation.kind === "configurationMaintenance.decide"
+            ) {
+              try {
+                if (
+                  job.admittedAt === undefined ||
+                  job.requestedDeadlineAt === undefined ||
+                  typeof parentHeader !== "string"
+                )
+                  throw new ConfigurationMaintenanceControlUnauthorized(
+                    "Actual decision request source required",
+                  );
+                const continueObservation =
+                  operation.decision === "continue"
+                    ? await prepareMaintenanceContinueObservation(
+                        runtime,
+                        configurationMaintenanceControlOwnerState(
+                          configurationMaintenanceControl,
+                          operation,
+                          job.operationKey,
+                        ).authority,
+                        AbortSignal.any([
+                          claimController.signal,
+                          AbortSignal.timeout(Math.max(1, job.deadlineAt! - Date.now())),
+                        ]),
+                      )
+                    : undefined;
+                retainConfigurationMaintenanceDecisionControl(
+                  configurationMaintenanceControl,
+                  operation,
+                  executionFor(job),
+                  {
+                    admittedAt: job.admittedAt,
+                    requestedDeadlineAt: job.requestedDeadlineAt,
+                    parentAssertion: parentHeader,
+                    requestVersion: job.requestVersion!,
+                    deploymentBudgetMs: job.deploymentBudgetMs!,
+                  },
+                  continueObservation,
+                );
+                maintenanceControls.set(job.operationId, configurationMaintenanceControl);
+              } catch (error) {
+                if (error instanceof ConfigurationMaintenanceControlUnauthorized)
+                  throw new RequestGuardError("authorization", 403);
+                if (error instanceof ConfigurationMaintenanceControlConflict)
+                  throw new RequestGuardError("conflict", 409);
+                throw error;
               }
             }
-          } catch {
-            throw new RequestGuardError("runtime", 500);
-          }
-          if (!operationId) throw new RequestGuardError("busy", 429);
-          const job: JobRecord = {
-            ...(controlAdmission
-              ? {
-                  controlAdoption: {
-                    leaseId: controlAdmission.leaseId,
-                    delegationId: controlAdmission.delegationId,
-                    phase: "pending-adoption" as const,
+            if (
+              configurationMaintenanceControl &&
+              operation.kind === "configurationMaintenance.settle"
+            ) {
+              try {
+                if (
+                  job.admittedAt === undefined ||
+                  job.requestedDeadlineAt === undefined ||
+                  typeof parentHeader !== "string"
+                )
+                  throw new ConfigurationMaintenanceControlUnauthorized(
+                    "Actual settlement request source required",
+                  );
+                retainConfigurationMaintenanceSettleControl(
+                  configurationMaintenanceControl,
+                  operation,
+                  executionFor(job),
+                  {
+                    admittedAt: job.admittedAt,
+                    requestedDeadlineAt: job.requestedDeadlineAt,
+                    parentAssertion: parentHeader,
+                    requestVersion: job.requestVersion!,
+                    deploymentBudgetMs: job.deploymentBudgetMs!,
                   },
-                }
-              : {}),
-            role,
-            operation,
-            operationId,
-            operationKey: parsed.operationKey,
-            executionVersion: 2,
-            requestVersion: parsed.version,
-            ...normalized,
-            operationFingerprint,
-            requestedDeadlineAt: parsed.execution?.requestedDeadlineAt,
-            parent,
-            deploymentBudgetMs: maintenanceStepAdmission
-              ? opsExecutionBudget(operation.kind).processMs
-              : Math.min(policy.timeoutMs, options.operationTimeoutMs ?? policy.timeoutMs),
-            resourceId,
-            state: "queued",
-            submittedAt: timestamp,
-            updatedAt: timestamp,
-            cursor: 0,
-            events: [],
-            eventBytes: 0,
-            eventsTruncated: false,
-          };
-          if (
-            configurationMaintenanceControl &&
-            operation.kind === "configurationMaintenance.decide"
-          ) {
-            try {
-              if (
-                job.admittedAt === undefined ||
-                job.requestedDeadlineAt === undefined ||
-                typeof parentHeader !== "string"
-              )
-                throw new ConfigurationMaintenanceControlUnauthorized(
-                  "Actual decision request source required",
                 );
-              const continueObservation =
-                operation.decision === "continue"
-                  ? await prepareMaintenanceContinueObservation(
-                      runtime,
-                      configurationMaintenanceControlOwnerState(
-                        configurationMaintenanceControl,
-                        operation,
-                        job.operationKey,
-                      ).authority,
-                      AbortSignal.any([
-                        claimController.signal,
-                        AbortSignal.timeout(Math.max(1, job.deadlineAt! - Date.now())),
-                      ]),
+                maintenanceControls.set(job.operationId, configurationMaintenanceControl);
+              } catch (error) {
+                if (error instanceof ConfigurationMaintenanceControlUnauthorized)
+                  throw new RequestGuardError("authorization", 403);
+                if (error instanceof ConfigurationMaintenanceControlConflict)
+                  throw new RequestGuardError("conflict", 409);
+                throw error;
+              }
+            }
+            let coordinatorBaseline:
+              | Awaited<ReturnType<typeof prepareCoordinatorPullBaseline>>
+              | undefined;
+            if (job.operation.kind === "service.pull" && job.operation.candidateId) {
+              if (!options.controlInstallation || !coordinatorCapture)
+                throw new RequestGuardError("authorization", 403);
+              try {
+                coordinatorBaseline = await prepareCoordinatorPullBaseline(
+                  runtime,
+                  options.controlInstallation,
+                  {
+                    operation: job.operation,
+                    execution: executionFor(job),
+                    parent: job.parent,
+                    requestedDeadlineAt: job.requestedDeadlineAt,
+                  },
+                  coordinatorCapture,
+                );
+              } catch {
+                throw new RequestGuardError("authorization", 403);
+              }
+            }
+            await journal.replace([...jobsById.values()].map(persisted).concat(persisted(job)));
+            jobsById.set(job.operationId, job);
+            jobsByKey.set(ownerKey, job);
+            if (
+              !controlAdmission &&
+              !configurationMaintenanceControl &&
+              opsKindRequiresControlAuthority(operation.kind)
+            ) {
+              try {
+                if (!options.controlInstallation || job.admittedAt === undefined)
+                  throw Error("Control trust unavailable");
+                const maintenanceAdmission =
+                  job.operation.kind === "configurationMaintenance.prepare"
+                    ? await prepareConfigurationMaintenanceAdmission(runtime, {
+                        installation: options.controlInstallation,
+                        execution: executionFor(job),
+                        operation: job.operation,
+                        apiParent:
+                          job.parent ??
+                          (() => {
+                            throw Error("Original retained API maintenance parent required");
+                          })(),
+                        signal: claimController.signal,
+                      })
+                    : undefined;
+                const maintenancePlan =
+                  maintenanceAdmission &&
+                  configurationMaintenanceAdmissionState(maintenanceAdmission).plan;
+                const targets =
+                  maintenancePlan?.serviceIds ??
+                  ("serviceId" in operation &&
+                  ![
+                    "service.start",
+                    "service.recreate",
+                    "service.recreateIsolated",
+                    "service.update",
+                  ].includes(operation.kind)
+                    ? [operation.serviceId]
+                    : controlRegisteredServiceIds(options.controlInstallation));
+                const fixedDataPlan = isFixedSingleDataCommand(job.operation.kind)
+                  ? planFixedSingleDataCommand(
+                      executionFor(job),
+                      job.operation,
+                      targets,
+                      "regionId" in job.operation && job.operation.regionId === undefined
+                        ? resolveDataDefaultRegion(runtime)
+                        : undefined,
                     )
                   : undefined;
-              retainConfigurationMaintenanceDecisionControl(
-                configurationMaintenanceControl,
-                operation,
-                executionFor(job),
-                {
-                  admittedAt: job.admittedAt,
-                  requestedDeadlineAt: job.requestedDeadlineAt,
-                  parentAssertion: parentHeader,
-                  requestVersion: job.requestVersion!,
-                  deploymentBudgetMs: job.deploymentBudgetMs!,
-                },
-                continueObservation,
-              );
-              maintenanceControls.set(job.operationId, configurationMaintenanceControl);
-            } catch (error) {
-              if (error instanceof ConfigurationMaintenanceControlUnauthorized)
-                throw new RequestGuardError("authorization", 403);
-              if (error instanceof ConfigurationMaintenanceControlConflict)
-                throw new RequestGuardError("conflict", 409);
-              throw error;
-            }
-          }
-          if (
-            configurationMaintenanceControl &&
-            operation.kind === "configurationMaintenance.settle"
-          ) {
-            try {
-              if (
-                job.admittedAt === undefined ||
-                job.requestedDeadlineAt === undefined ||
-                typeof parentHeader !== "string"
-              )
-                throw new ConfigurationMaintenanceControlUnauthorized(
-                  "Actual settlement request source required",
-                );
-              retainConfigurationMaintenanceSettleControl(
-                configurationMaintenanceControl,
-                operation,
-                executionFor(job),
-                {
-                  admittedAt: job.admittedAt,
-                  requestedDeadlineAt: job.requestedDeadlineAt,
-                  parentAssertion: parentHeader,
-                  requestVersion: job.requestVersion!,
-                  deploymentBudgetMs: job.deploymentBudgetMs!,
-                },
-              );
-              maintenanceControls.set(job.operationId, configurationMaintenanceControl);
-            } catch (error) {
-              if (error instanceof ConfigurationMaintenanceControlUnauthorized)
-                throw new RequestGuardError("authorization", 403);
-              if (error instanceof ConfigurationMaintenanceControlConflict)
-                throw new RequestGuardError("conflict", 409);
-              throw error;
-            }
-          }
-          let coordinatorBaseline:
-            | Awaited<ReturnType<typeof prepareCoordinatorPullBaseline>>
-            | undefined;
-          if (job.operation.kind === "service.pull" && job.operation.candidateId) {
-            if (!options.controlInstallation || !coordinatorCapture)
-              throw new RequestGuardError("authorization", 403);
-            try {
-              coordinatorBaseline = await prepareCoordinatorPullBaseline(
-                runtime,
-                options.controlInstallation,
-                {
-                  operation: job.operation,
+                const dataUpdatePlan =
+                  job.operation.kind === "data.update"
+                    ? prepareDataUpdateAdmission(runtime, executionFor(job), job.operation, targets)
+                    : undefined;
+                const hardlinksPlan =
+                  job.operation.kind === "configuration.hardlinks.apply"
+                    ? prepareConfigurationHardlinksAdmission(
+                        runtime,
+                        executionFor(job),
+                        job.operation,
+                        targets,
+                      )
+                    : undefined;
+                const lifecyclePlan =
+                  job.operation.kind === "service.update"
+                    ? prepareServiceUpdateAdmission(
+                        runtime,
+                        executionFor(job),
+                        job.operation,
+                        targets,
+                      )
+                    : undefined;
+                const authority = retainAdmittedControlExecution(options.controlInstallation, {
                   execution: executionFor(job),
-                  parent: job.parent,
+                  operation: job.operation,
+                  kind: job.operation.kind,
+                  admittedAt: job.admittedAt,
                   requestedDeadlineAt: job.requestedDeadlineAt,
-                },
-                coordinatorCapture,
-              );
-            } catch {
-              throw new RequestGuardError("authorization", 403);
-            }
-          }
-          await journal.replace([...jobsById.values()].map(persisted).concat(persisted(job)));
-          jobsById.set(job.operationId, job);
-          jobsByKey.set(ownerKey, job);
-          if (
-            !controlAdmission &&
-            !configurationMaintenanceControl &&
-            opsKindRequiresControlAuthority(operation.kind)
-          ) {
-            try {
-              if (!options.controlInstallation || job.admittedAt === undefined)
-                throw Error("Control trust unavailable");
-              const maintenanceAdmission =
-                job.operation.kind === "configurationMaintenance.prepare"
-                  ? await prepareConfigurationMaintenanceAdmission(runtime, {
-                      installation: options.controlInstallation,
-                      execution: executionFor(job),
-                      operation: job.operation,
-                      apiParent:
-                        job.parent ??
-                        (() => {
-                          throw Error("Original retained API maintenance parent required");
-                        })(),
-                      signal: claimController.signal,
-                    })
-                  : undefined;
-              const maintenancePlan =
-                maintenanceAdmission &&
-                configurationMaintenanceAdmissionState(maintenanceAdmission).plan;
-              const targets =
-                maintenancePlan?.serviceIds ??
-                ("serviceId" in operation &&
-                ![
-                  "service.start",
-                  "service.recreate",
-                  "service.recreateIsolated",
-                  "service.update",
-                ].includes(operation.kind)
-                  ? [operation.serviceId]
-                  : controlRegisteredServiceIds(options.controlInstallation));
-              const fixedDataPlan = isFixedSingleDataCommand(job.operation.kind)
-                ? planFixedSingleDataCommand(
-                    executionFor(job),
-                    job.operation,
-                    targets,
-                    "regionId" in job.operation && job.operation.regionId === undefined
-                      ? resolveDataDefaultRegion(runtime)
-                      : undefined,
-                  )
-                : undefined;
-              const dataUpdatePlan =
-                job.operation.kind === "data.update"
-                  ? prepareDataUpdateAdmission(runtime, executionFor(job), job.operation, targets)
-                  : undefined;
-              const hardlinksPlan =
-                job.operation.kind === "configuration.hardlinks.apply"
-                  ? prepareConfigurationHardlinksAdmission(
-                      runtime,
-                      executionFor(job),
-                      job.operation,
-                      targets,
-                    )
-                  : undefined;
-              const lifecyclePlan =
-                job.operation.kind === "service.update"
-                  ? prepareServiceUpdateAdmission(
-                      runtime,
-                      executionFor(job),
-                      job.operation,
-                      targets,
-                    )
-                  : undefined;
-              const authority = retainAdmittedControlExecution(options.controlInstallation, {
-                execution: executionFor(job),
-                operation: job.operation,
-                kind: job.operation.kind,
-                admittedAt: job.admittedAt,
-                requestedDeadlineAt: job.requestedDeadlineAt,
-                parent: job.parent,
-                serviceIds: targets,
-                ...(fixedDataPlan ? { reservations: [fixedDataPlan.rootReservation] } : {}),
-                ...(dataUpdatePlan
-                  ? {
-                      reservations: [
-                        dataUpdatePlan.dataReservation,
-                        dataUpdatePlan.finalizationReservation,
-                      ],
-                    }
-                  : {}),
-                ...(hardlinksPlan
-                  ? { reservations: hardlinksPlan.reservation ? [hardlinksPlan.reservation] : [] }
-                  : {}),
-                ...(lifecyclePlan ? { reservations: [lifecyclePlan.rootReservation] } : {}),
-                ...(maintenancePlan ? { reservations: maintenancePlan.reservations } : {}),
-                ...(coordinatorBaseline ? { coordinatorPullBaseline: coordinatorBaseline } : {}),
-              });
-              if (fixedDataPlan) retainFixedSingleDataPlan(authority, fixedDataPlan);
-              if (dataUpdatePlan) retainDataUpdatePlan(authority, dataUpdatePlan);
-              if (hardlinksPlan) retainGenerationHardlinksOwnerPlan(authority, hardlinksPlan);
-              if (lifecyclePlan) retainFixedServiceLifecyclePlan(authority, lifecyclePlan);
-              requireControlJournalRetention(authority);
-              controlAuthorities.set(job.operationId, authority);
-              if (
-                [
-                  "configurationMaintenance.prepare",
-                  "stack.start",
-                  "coreService.restart",
-                  "service.start",
-                  "service.recreate",
-                  "service.recreateIsolated",
-                  "service.update",
-                  "configuration.hardlinks.apply",
-                  "valhalla.traffic.maintain",
-                  "valhalla.traffic.refreshWaysToEdges",
-                ].includes(job.operation.kind)
-              ) {
-                const lease = await acquireArtifactTargetLease({
-                  dataRoot: controlInstallationDataRoot(options.controlInstallation),
-                  serviceIds:
-                    maintenancePlan ||
-                    hardlinksPlan ||
-                    lifecyclePlan ||
-                    [
-                      "stack.start",
-                      "service.start",
-                      "coreService.restart",
-                      "service.recreate",
-                      "service.recreateIsolated",
-                    ].includes(job.operation.kind)
-                      ? targets
-                      : ["valhalla"],
-                  owner: authority,
+                  parent: job.parent,
+                  serviceIds: targets,
+                  ...(fixedDataPlan ? { reservations: [fixedDataPlan.rootReservation] } : {}),
+                  ...(dataUpdatePlan
+                    ? {
+                        reservations: [
+                          dataUpdatePlan.dataReservation,
+                          dataUpdatePlan.finalizationReservation,
+                        ],
+                      }
+                    : {}),
+                  ...(hardlinksPlan
+                    ? { reservations: hardlinksPlan.reservation ? [hardlinksPlan.reservation] : [] }
+                    : {}),
+                  ...(lifecyclePlan ? { reservations: [lifecyclePlan.rootReservation] } : {}),
+                  ...(maintenancePlan ? { reservations: maintenancePlan.reservations } : {}),
+                  ...(coordinatorBaseline ? { coordinatorPullBaseline: coordinatorBaseline } : {}),
                 });
-                controlLeases.set(job.operationId, lease);
-                if (maintenanceAdmission) {
-                  retainOwnedConfigurationMaintenance(authority, lease, maintenanceAdmission);
-                  publishConfigurationSettlementReservationProjection(
+                if (fixedDataPlan) retainFixedSingleDataPlan(authority, fixedDataPlan);
+                if (dataUpdatePlan) retainDataUpdatePlan(authority, dataUpdatePlan);
+                if (hardlinksPlan) retainGenerationHardlinksOwnerPlan(authority, hardlinksPlan);
+                if (lifecyclePlan) retainFixedServiceLifecyclePlan(authority, lifecyclePlan);
+                requireControlJournalRetention(authority);
+                controlAuthorities.set(job.operationId, authority);
+                if (
+                  [
+                    "configurationMaintenance.prepare",
+                    "stack.start",
+                    "coreService.restart",
+                    "service.start",
+                    "service.recreate",
+                    "service.recreateIsolated",
+                    "service.update",
+                    "configuration.hardlinks.apply",
+                    "valhalla.traffic.maintain",
+                    "valhalla.traffic.refreshWaysToEdges",
+                  ].includes(job.operation.kind)
+                ) {
+                  const lease = await acquireArtifactTargetLease({
+                    dataRoot: controlInstallationDataRoot(options.controlInstallation),
+                    serviceIds:
+                      maintenancePlan ||
+                      hardlinksPlan ||
+                      lifecyclePlan ||
+                      [
+                        "stack.start",
+                        "service.start",
+                        "coreService.restart",
+                        "service.recreate",
+                        "service.recreateIsolated",
+                      ].includes(job.operation.kind)
+                        ? targets
+                        : ["valhalla"],
+                    owner: authority,
+                  });
+                  controlLeases.set(job.operationId, lease);
+                  if (maintenanceAdmission) {
+                    retainOwnedConfigurationMaintenance(authority, lease, maintenanceAdmission);
+                    publishConfigurationSettlementReservationProjection(
+                      authority,
+                      maintenancePlan!.operation.maintenanceId,
+                    );
+                  }
+                }
+              } catch (error) {
+                forceRecoveryRequired(job);
+                await journal.replace([...jobsById.values()].map(persisted));
+                throw error;
+              }
+            }
+            if (controlAdmission) {
+              const adoption = {
+                leaseId: controlAdmission.leaseId,
+                delegationId: controlAdmission.delegationId,
+              };
+              try {
+                if (!options.controlInstallation || job.admittedAt === undefined)
+                  throw Error("Missing durable control admission context");
+                const lease = await controlAdmission.adopt(executionFor(job));
+                const authority = retainAdmittedControlExecution(options.controlInstallation, {
+                  execution: executionFor(job),
+                  kind: job.operation.kind,
+                  operation: job.operation,
+                  admittedAt: job.admittedAt,
+                  requestedDeadlineAt: job.requestedDeadlineAt,
+                  parent: job.parent,
+                  serviceIds: lease.serviceIds,
+                  ...(maintenanceStepAdmission
+                    ? { reservations: maintenanceStepAdmission.reservations }
+                    : {}),
+                });
+                if (maintenanceStepAdmission) bindBorrowedControlExecution(lease, authority);
+                if (
+                  maintenanceStepAdmission &&
+                  job.operation.kind === "configuration.hardlinks.apply"
+                )
+                  retainGenerationHardlinksOwnerPlan(
                     authority,
-                    maintenancePlan!.operation.maintenanceId,
+                    prepareConfigurationHardlinksAdmission(
+                      runtime,
+                      executionFor(job),
+                      job.operation,
+                      lease.serviceIds,
+                    ),
+                  );
+                requireControlJournalRetention(authority);
+                controlLeases.set(job.operationId, lease);
+                controlAuthorities.set(job.operationId, authority);
+                job.controlAdoption = { ...adoption, phase: "ready" };
+                await journal.replace([...jobsById.values()].map(persisted));
+              } catch (error) {
+                // The receiver may already have adopted. This identity remains
+                // observable as recovery-required and is never dispatched again.
+                job.controlAdoption = { ...adoption, phase: "recovery_required" };
+                forceRecoveryRequired(job);
+                try {
+                  await journal.replace([...jobsById.values()].map(persisted));
+                } catch (persistence) {
+                  throw new AggregateError(
+                    [error, persistence],
+                    "Control adoption requires reconciliation",
                   );
                 }
+                throw error;
               }
-            } catch (error) {
-              forceRecoveryRequired(job);
-              await journal.replace([...jobsById.values()].map(persisted));
-              throw error;
             }
+            return { type: "new", job } as const;
+          }).catch(async (error) => {
+            await claimAdmission?.rollback().catch(() => undefined);
+            active -= 1;
+            throw error instanceof RequestGuardError
+              ? error
+              : new RequestGuardError("runtime", 500);
+          });
+          if (admission.type === "retained") {
+            await claimAdmission?.rollback().catch(() => undefined);
+            active -= 1;
+            return reply
+              .code(202)
+              .send(opsSuccess(parsed.requestId, admissionFor(admission.job, parsed.version)));
           }
-          if (controlAdmission) {
-            const adoption = {
-              leaseId: controlAdmission.leaseId,
-              delegationId: controlAdmission.delegationId,
-            };
-            try {
-              if (!options.controlInstallation || job.admittedAt === undefined)
-                throw Error("Missing durable control admission context");
-              const lease = await controlAdmission.adopt(executionFor(job));
-              const authority = retainAdmittedControlExecution(options.controlInstallation, {
-                execution: executionFor(job),
-                kind: job.operation.kind,
-                operation: job.operation,
-                admittedAt: job.admittedAt,
-                requestedDeadlineAt: job.requestedDeadlineAt,
-                parent: job.parent,
-                serviceIds: lease.serviceIds,
-                ...(maintenanceStepAdmission
-                  ? { reservations: maintenanceStepAdmission.reservations }
-                  : {}),
-              });
-              if (maintenanceStepAdmission) bindBorrowedControlExecution(lease, authority);
-              if (
-                maintenanceStepAdmission &&
-                job.operation.kind === "configuration.hardlinks.apply"
-              )
-                retainGenerationHardlinksOwnerPlan(
-                  authority,
-                  prepareConfigurationHardlinksAdmission(
-                    runtime,
-                    executionFor(job),
-                    job.operation,
-                    lease.serviceIds,
-                  ),
-                );
-              requireControlJournalRetention(authority);
-              controlLeases.set(job.operationId, lease);
-              controlAuthorities.set(job.operationId, authority);
-              job.controlAdoption = { ...adoption, phase: "ready" };
-              await journal.replace([...jobsById.values()].map(persisted));
-            } catch (error) {
-              // The receiver may already have adopted. This identity remains
-              // observable as recovery-required and is never dispatched again.
-              job.controlAdoption = { ...adoption, phase: "recovery_required" };
-              forceRecoveryRequired(job);
-              try {
-                await journal.replace([...jobsById.values()].map(persisted));
-              } catch (persistence) {
-                throw new AggregateError(
-                  [error, persistence],
-                  "Control adoption requires reconciliation",
-                );
-              }
-              throw error;
-            }
+          const { job } = admission;
+          try {
+            if (normalized.deadlineAt <= now().getTime())
+              throw new RequestGuardError("timeout", 504);
+            await claimAdmission?.commit();
+          } catch {
+            stickyRecoveryRequired.add(job.operationId);
+            await transition(job, "failed", {
+              result: undefined,
+              errorClass: "recovery_required",
+              terminalAt: now().getTime(),
+            }).catch(() => forceRecoveryRequired(job));
+            await claimAdmission?.release().catch(() => undefined);
+            active -= 1;
+            throw new RequestGuardError("runtime", 500);
           }
-          return { type: "new", job } as const;
-        }).catch(async (error) => {
-          await claimAdmission?.rollback().catch(() => undefined);
-          active -= 1;
-          throw error instanceof RequestGuardError ? error : new RequestGuardError("runtime", 500);
-        });
-        if (admission.type === "retained") {
-          await claimAdmission?.rollback().catch(() => undefined);
-          active -= 1;
+          await runAsync(job, startedAt, claim, claimAdmission);
           return reply
             .code(202)
-            .send(opsSuccess(parsed.requestId, admissionFor(admission.job, parsed.version)));
+            .send(opsSuccess(parsed.requestId, admissionFor(job, parsed.version)));
         }
-        const { job } = admission;
+        const controller = new AbortController();
         try {
           if (normalized.deadlineAt <= now().getTime()) throw new RequestGuardError("timeout", 504);
           await claimAdmission?.commit();
         } catch {
-          stickyRecoveryRequired.add(job.operationId);
-          await transition(job, "failed", {
-            result: undefined,
-            errorClass: "recovery_required",
-            terminalAt: now().getTime(),
-          }).catch(() => forceRecoveryRequired(job));
-          await claimAdmission?.release().catch(() => undefined);
           active -= 1;
           throw new RequestGuardError("runtime", 500);
         }
-        await runAsync(job, startedAt, claim, claimAdmission);
-        return reply
-          .code(202)
-          .send(opsSuccess(parsed.requestId, admissionFor(job, parsed.version)));
-      }
-      const controller = new AbortController();
-      try {
-        if (normalized.deadlineAt <= now().getTime()) throw new RequestGuardError("timeout", 504);
-        await claimAdmission?.commit();
-      } catch {
-        active -= 1;
-        throw new RequestGuardError("runtime", 500);
-      }
-      const timeoutMs = Math.max(0, normalized.deadlineAt - now().getTime());
-      const execution = Promise.resolve().then(() => {
-        if (normalized.deadlineAt <= now().getTime()) throw new RequestGuardError("timeout", 504);
-        return dispatch(operation, runtime, {
-          signal: controller.signal,
-          ...(configurationMaintenanceControl ? { configurationMaintenanceControl } : {}),
-          execution: Object.freeze({
-            executor: "ops-agent",
-            principal: role,
-            executionId: `job1_${Buffer.from(randomBytes(18)).toString("base64url")}`,
-            operationKey: parsed.operationKey,
-            operationFingerprint,
-            fingerprint: normalized.fingerprint,
-            deadlineAt: normalized.deadlineAt,
-          }),
-          emitLog: () => undefined,
-          claim,
+        const timeoutMs = Math.max(0, normalized.deadlineAt - now().getTime());
+        const execution = Promise.resolve().then(() => {
+          if (normalized.deadlineAt <= now().getTime()) throw new RequestGuardError("timeout", 504);
+          return dispatch(operation, runtime, {
+            signal: controller.signal,
+            ...(configurationMaintenanceControl ? { configurationMaintenanceControl } : {}),
+            execution: Object.freeze({
+              executor: "ops-agent",
+              principal: role,
+              executionId: `job1_${Buffer.from(randomBytes(18)).toString("base64url")}`,
+              operationKey: parsed.operationKey,
+              operationFingerprint,
+              fingerprint: normalized.fingerprint,
+              deadlineAt: normalized.deadlineAt,
+            }),
+            emitLog: () => undefined,
+            claim,
+          });
         });
-      });
-      let timeout: ReturnType<typeof setTimeout> | undefined;
-      try {
-        const timeoutResult = new Promise<never>((_resolve, reject) => {
-          timeout = setTimeout(() => {
-            controller.abort();
-            reject(new RequestGuardError("timeout", 504));
-          }, timeoutMs);
-        });
-        const rawResult = await Promise.race([execution, timeoutResult]);
-        clearTimeout(timeout);
-        const value = parseBoundedOpsResult(operation.kind, rawResult);
-        audit(role, kind, resourceId, "success", startedAt);
-        const envelope = opsSuccess(parsed.requestId, { execution: "sync", kind, value });
-        if (Buffer.byteLength(JSON.stringify(envelope), "utf8") > OPS_MAX_HTTP_RESPONSE_BYTES) {
-          throw new RequestGuardError("runtime", 500);
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        try {
+          const timeoutResult = new Promise<never>((_resolve, reject) => {
+            timeout = setTimeout(() => {
+              controller.abort();
+              reject(new RequestGuardError("timeout", 504));
+            }, timeoutMs);
+          });
+          const rawResult = await Promise.race([execution, timeoutResult]);
+          clearTimeout(timeout);
+          const value = parseBoundedOpsResult(operation.kind, rawResult);
+          audit(role, kind, resourceId, "success", startedAt);
+          const envelope = opsSuccess(parsed.requestId, { execution: "sync", kind, value });
+          if (Buffer.byteLength(JSON.stringify(envelope), "utf8") > OPS_MAX_HTTP_RESPONSE_BYTES) {
+            throw new RequestGuardError("runtime", 500);
+          }
+          active -= 1;
+          return reply.code(200).send(envelope);
+        } catch (error) {
+          if (timeout !== undefined) clearTimeout(timeout);
+          if (error instanceof RequestGuardError && error.errorClass === "timeout") {
+            void execution.then(
+              () => {
+                active -= 1;
+                audit(role, kind, resourceId, "late_completion", startedAt, "timeout");
+              },
+              () => {
+                active -= 1;
+                audit(role, kind, resourceId, "terminated", startedAt, "timeout");
+              },
+            );
+            audit(role, kind, resourceId, "timeout", startedAt, "timeout");
+            return reply.code(504).send(redactedOpsError(parsed.requestId, "timeout"));
+          }
+          active -= 1;
+          throw error;
         }
-        active -= 1;
-        return reply.code(200).send(envelope);
       } catch (error) {
-        if (timeout !== undefined) clearTimeout(timeout);
-        if (error instanceof RequestGuardError && error.errorClass === "timeout") {
-          void execution.then(
-            () => {
-              active -= 1;
-              audit(role, kind, resourceId, "late_completion", startedAt, "timeout");
-            },
-            () => {
-              active -= 1;
-              audit(role, kind, resourceId, "terminated", startedAt, "timeout");
-            },
-          );
-          audit(role, kind, resourceId, "timeout", startedAt, "timeout");
-          return reply.code(504).send(redactedOpsError(parsed.requestId, "timeout"));
-        }
-        active -= 1;
-        throw error;
+        const classification = classify(error);
+        audit(
+          role,
+          kind,
+          resourceId,
+          classification.errorClass === "authorization" ? "denied" : "error",
+          startedAt,
+          classification.errorClass,
+        );
+        return reply
+          .code(classification.statusCode)
+          .send(redactedOpsError(requestId, classification.errorClass, error));
       }
-    } catch (error) {
-      const classification = classify(error);
-      audit(
-        role,
-        kind,
-        resourceId,
-        classification.errorClass === "authorization" ? "denied" : "error",
-        startedAt,
-        classification.errorClass,
-      );
-      return reply
-        .code(classification.statusCode)
-        .send(redactedOpsError(requestId, classification.errorClass, error));
-    }
-  });
+    },
+  );
 
   app.get("/v1/operation-keys/:operationKey", async (request, reply) => {
     const requestId = validRequestId(request.headers["x-ops-request-id"]);

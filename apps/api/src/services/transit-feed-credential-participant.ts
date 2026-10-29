@@ -65,10 +65,19 @@ export function withTransitCredentialProofContext<T>(
 ) {
   return proofContexts.run(context, run);
 }
-async function inspect(catalogRevisionId: string, identity: string, signal?: AbortSignal) {
+async function inspect(
+  catalogRevisionId: string,
+  identity: string,
+  signal?: AbortSignal,
+  proposalId?: string,
+) {
   return executeAndWait(
     createApiOpsClient(),
-    { kind: "transitCredentials.inspect", catalogRevisionId },
+    {
+      kind: "transitCredentials.inspect",
+      catalogRevisionId,
+      ...(proposalId ? { proposalId } : {}),
+    },
     createDurableOpsKey("transit.credentials.inspect", identity),
     { signal },
   );
@@ -81,12 +90,14 @@ function values(row: typeof serviceSecret.$inferSelect | undefined) {
 }
 export async function inspectFeedCredentials(input: {
   catalogRevisionId: string;
+  proposalId?: string;
   signal?: AbortSignal;
 }) {
   const host = await inspect(
     input.catalogRevisionId,
     `read:${input.catalogRevisionId}`,
     input.signal,
+    input.proposalId,
   );
   const current = await executeAndWait(
     createApiOpsClient(),
@@ -108,6 +119,7 @@ export async function inspectFeedCredentials(input: {
     );
     return {
       catalogRevisionId: input.catalogRevisionId,
+      ...(input.proposalId ? { proposalId: input.proposalId } : {}),
       credentialsRevision:
         host.owner === "file" ? (host.hostCredentialsRevision ?? revision) : revision,
       configurationRevisionId: current.revisionId,
@@ -128,6 +140,7 @@ export async function inspectFeedCredentials(input: {
 interface ChangeInput {
   actorId: string;
   catalogRevisionId: string;
+  proposalId?: string;
   expectedCredentialsRevision: string;
   expectedCurrentRevisionId: string | null;
   changes: FeedCredentialChange[];
@@ -135,7 +148,12 @@ interface ChangeInput {
   signal?: AbortSignal;
 }
 async function validateInput(input: ChangeInput) {
-  const host = await inspect(input.catalogRevisionId, input.operationKey, input.signal);
+  const host = await inspect(
+    input.catalogRevisionId,
+    input.operationKey,
+    input.signal,
+    input.proposalId,
+  );
   if (!host.editable) throw new TransitCredentialConflict("TRANSIT_CREDENTIALS_HOST_OWNED");
   return withAdministrativeConfigurationRead({}, async (read) => {
     const row = rowFrom(read),
@@ -175,6 +193,7 @@ export interface PreparedFeedCredentialPatch {
   readonly serviceId: typeof SERVICE;
   readonly key: typeof KEY;
   readonly catalogRevisionId: string;
+  readonly proposalId?: string;
   readonly expectedCredentialsRevision: string;
   readonly expectedCurrentRevisionId: string | null;
   readonly importPreviewId: string;
@@ -215,6 +234,7 @@ export async function prepareFeedCredentialImportPatch(
     serviceId: SERVICE,
     key: KEY,
     catalogRevisionId: input.catalogRevisionId,
+    ...(input.proposalId ? { proposalId: input.proposalId } : {}),
     expectedCredentialsRevision: input.expectedCredentialsRevision,
     expectedCurrentRevisionId: input.expectedCurrentRevisionId,
     importPreviewId: input.importPreviewId,
@@ -291,6 +311,7 @@ export async function authorizePreparedFeedCredentialPatch(input: {
     !context ||
     context.actorId !== state.input.actorId ||
     input.preview.catalogRevisionId !== state.input.catalogRevisionId ||
+    input.preview.proposalId !== state.input.proposalId ||
     input.preview.credentialsRevision !== state.input.expectedCredentialsRevision ||
     input.preview.expectedCurrentRevisionId !== state.input.expectedCurrentRevisionId ||
     (input.authorization.kind === "direct"
@@ -362,6 +383,7 @@ export function transitCredentialParticipation(
       patch.catalogRevisionId,
       writer.operationKey,
       administrativeConfigurationState(writer).job.signal,
+      state.input.proposalId,
     );
     if (!current.editable) throw new TransitCredentialConflict("TRANSIT_CREDENTIALS_HOST_OWNED");
     await withAdministrativeConfigurationRead({}, async (read) => {

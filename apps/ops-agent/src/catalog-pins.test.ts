@@ -24,7 +24,7 @@ it("serializes the largest legal paired pins through the actual HTTP server/clie
     ref: `${"a".repeat(215)}@${"b".repeat(40)}`,
     submodules: Object.fromEntries(
       Array.from({ length: 128 }, (_, n) => [
-        `${"x".repeat(253)}${String(n).padStart(3, "0")}`,
+        n === 0 ? "transitland-atlas" : `${"x".repeat(253)}${String(n).padStart(3, "0")}`,
         "c".repeat(40),
       ]),
     ),
@@ -82,15 +82,52 @@ it("serializes the largest legal paired pins through the actual HTTP server/clie
         await expect(
           client.execute({
             kind: "transitousLock.propose",
-            ref: t.ref,
-            submodules: {},
-            lockedBy: "fixture",
+            proposalId: "00000000-0000-4000-8000-000000000001",
+            baseGenerationId: expected.generationId,
+            pins: expected,
+            diffDigest: "e".repeat(64),
+            sourcePolicyRevision: "f".repeat(64),
           }),
         ).rejects.toMatchObject({ errorClass: "authorization" });
-      else
+      else {
         await expect(client.execute({ kind: "configuration.inspect" })).rejects.toMatchObject({
           errorClass: "authorization",
         });
+        const changedCommit = "f".repeat(40),
+          candidate = createCatalogPinSet(t, {
+            ...g,
+            commit: changedCommit,
+            url: `https://raw.githubusercontent.com/MobilityData/gbfs/${changedCommit}/systems.csv`,
+          });
+        const proposalId = "00000000-0000-4000-8000-000000000002";
+        const retained = await client.execute({
+          kind: "transitousLock.propose",
+          proposalId,
+          baseGenerationId: expected.generationId,
+          pins: candidate,
+          diffDigest: "e".repeat(64),
+          sourcePolicyRevision: "f".repeat(64),
+        });
+        expect(retained).toMatchObject({
+          execution: "sync",
+          value: { proposalId, proposed: true, catalogRevisionId: candidate.generationId },
+        });
+        const reviewed = await client.execute({
+          kind: "transitousLock.inspect",
+          proposalId,
+          offset: 0,
+        });
+        expect(reviewed).toMatchObject({
+          execution: "sync",
+          value: {
+            proposal: { proposalId, state: "proposed", pins: candidate },
+            page: { total: 1, nextOffset: null },
+          },
+        });
+        expect(await client.execute({ kind: "catalogPins.inspect" })).toMatchObject({
+          value: { active: expected },
+        });
+      }
     }
     expect(existsSync(join(infra, "transitous.lock.proposed.json"))).toBe(false);
   } finally {

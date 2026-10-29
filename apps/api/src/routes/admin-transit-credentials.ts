@@ -49,8 +49,21 @@ export async function adminTransitCredentialsRoute(app: FastifyInstance) {
           ? "Credential application is pending reconciliation; inspect Activity before retrying"
           : "Transit credential administration is unavailable",
   });
-  register(app, "getAdminTransitCredentials", async (_request, reply) => {
+  register(app, "getAdminTransitCredentials", async (request, reply) => {
     try {
+      if (request.query.proposalId) {
+        const selected = await executeAndWait(
+          createApiOpsClient(),
+          { kind: "transitousLock.inspect", proposalId: request.query.proposalId, offset: 0 },
+          createDurableOpsKey("transit.credentials.proposal", request.query.proposalId),
+        );
+        if (!selected.proposal)
+          return reply.code(404).send({ error: "Catalog proposal is unavailable" });
+        return await inspectFeedCredentials({
+          catalogRevisionId: selected.proposal.pins.generationId,
+          proposalId: selected.proposal.proposalId,
+        });
+      }
       const pair = await executeAndWait(
         createApiOpsClient(),
         { kind: "catalogPins.inspect" },

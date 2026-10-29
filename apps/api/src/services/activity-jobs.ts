@@ -175,7 +175,7 @@ function dataManagerSelect(filter?: ActivityJobFilter) {
       startedAt: dataManagerJobs.startedAt,
       finishedAt: dataManagerJobs.finishedAt,
       cancelable:
-        sql<boolean>`${dataManagerJobs.executionVersion}=2 AND (${dataManagerJobs.status} IN ('queued','running','cancel_pending') OR ${dataManagerRecoveryPending()}) AND ${dataManagerJobs.kind} IN ('download-osm','download-fonts','convert-overpass','transit-sync','overture-pull','overture-ingest','overture-extract','overture-conflate','overture-sync','search-index-build','notable-places-build','generation-hardlinks','transit-maintenance') AND ${dataManagerJobs.operationKey} IS NOT NULL AND ${dataManagerJobs.executionFingerprint} IS NOT NULL`.as(
+        sql<boolean>`${dataManagerJobs.executionVersion}=2 AND (${dataManagerJobs.status} IN ('queued','running','cancel_pending') OR ${dataManagerRecoveryPending()}) AND ${dataManagerJobs.kind} IN ('download-osm','download-fonts','convert-overpass','transit-sync','overture-pull','overture-ingest','overture-extract','overture-conflate','overture-sync','search-index-build','notable-places-build','generation-hardlinks','transit-maintenance','catalog.validate','catalog.activate') AND ${dataManagerJobs.operationKey} IS NOT NULL AND ${dataManagerJobs.executionFingerprint} IS NOT NULL`.as(
           "cancelable",
         ),
     })

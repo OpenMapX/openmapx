@@ -30,7 +30,9 @@ import {
   isDataExecutionTerminal,
 } from "@openmapx/core/data-manager-contracts";
 import type { ExecutionRef, VerifiedParentExecution } from "@openmapx/core/ops";
+import { jobChildLogger } from "../../logger.js";
 import { cancelAndSettleRetainedTransitousScripts } from "../transitous/script-runner.js";
+import { dataExecutionDiagnostic } from "./diagnostics.js";
 import {
   cancelAndSettleOwnedDataOpsChildren,
   type DataOpsChildAttempt,
@@ -87,7 +89,7 @@ export interface DataExecutionRuntime {
   close(): Promise<void>;
 }
 export function dataExecutionTargetIds(input: DataExecutionInput): string[] {
-  return input.kind === "transit-sync"
+  return ["transit-sync", "catalog.validate", "catalog.activate"].includes(input.kind)
     ? ["data-manager", "motis", "motis-feed-proxy", "motis-staging"]
     : input.kind === "transit-maintenance"
       ? input.action === "restart-primary"
@@ -350,6 +352,15 @@ export function createDataExecutionRuntime(deps: {
                 return result;
               },
               async (error) => {
+                const diagnostic = dataExecutionDiagnostic(
+                  error instanceof Error ? error.message : "Data worker failed",
+                );
+                await context.checkpoint({
+                  diagnostics: {
+                    tail: [{ stream: "stderr", message: diagnostic.message }],
+                    truncated: diagnostic.truncated,
+                  },
+                });
                 await settleChildren();
                 throw error;
               },
@@ -373,21 +384,31 @@ export function createDataExecutionRuntime(deps: {
             throw Error("Dispatcher result kind mismatch");
           const canceled = current.status.cancellationRequestedAt !== null;
           const status = result
-            ? result.kind === "transit-sync"
-              ? result.finalStatus
-              : contained.partial
-                ? "partial"
-                : "ok"
+            ? result.kind === "catalog.validate" && result.status === "failed"
+              ? "error"
+              : result.kind === "catalog.activate" && result.outcome !== "activated"
+                ? "error"
+                : result.kind === "transit-sync"
+                  ? result.finalStatus
+                  : contained.partial
+                    ? "partial"
+                    : "ok"
             : canceled
               ? "canceled"
               : "error";
           const patch: DataExecutionPatch = {
             status,
-            publication: result ? "committed" : current.status.publication,
+            publication: contained.publication,
             ...(result ? { result } : {}),
             progress: result ? 1 : current.status.progress,
           };
-          if (patch.publication === "unknown") return { record: current, value: undefined };
+          if (patch.publication === "unknown") {
+            const saved = await store.checkpoint(current.status.id, current.version, {
+              publication: "unknown",
+            });
+            if (!saved) throw new DataExecutionOwnershipLost("Data unknown-outcome CAS lost");
+            return { record: saved, value: undefined };
+          }
           const saved = await store.finalize(
             current.status.id,
             current.version,
@@ -410,9 +431,22 @@ export function createDataExecutionRuntime(deps: {
           } else if (record.input.kind === "generation-hardlinks")
             await owner.publishContainedTerminal(record.execution);
         }
-      } catch {
+      } catch (error) {
         // An I/O/CAS/containment gap is not a terminal receipt or permission to
         // release. Keep original identities and reconcile by observation only.
+        jobChildLogger({ job: "data-execution", jobId: record.status.id }).error(
+          {
+            reason: dataExecutionDiagnostic(
+              error instanceof Error ? error.message : "Unknown containment failure",
+            ).message,
+            trace: dataExecutionDiagnostic(
+              error instanceof Error
+                ? (error.stack ?? error.message)
+                : "Unknown containment failure",
+            ).message,
+          },
+          "Data execution requires original receipt reconciliation",
+        );
         try {
           await context.checkpoint({ publication: "unknown" });
         } catch {}
@@ -529,7 +563,22 @@ export function createDataExecutionRuntime(deps: {
           // Recover authentic observation authority without assuming that the
           // killed local producer ever reached worker completion publication.
           observation = observationContext(record);
-          recovered = await owner.restoreCompletion(record.execution);
+          try {
+            recovered = await owner.restoreCompletion(record.execution);
+          } catch (error) {
+            if (
+              record.input.kind !== "catalog.activate" ||
+              (error as NodeJS.ErrnoException).code !== "ENOENT"
+            )
+              throw error;
+            // Final approval is the fixed graph's last effect. Reconcile only
+            // its original address and authenticated, fully settled child tree.
+            cancelControlExecution(observation.authority);
+            await cancelArtifactTargetLease(observation.targetAuthority);
+            if ((await cancelAndSettleOwnedDataOpsChildren(observation)) !== "settled") throw error;
+            await owner.repairCommittedCatalogActivation(record.execution);
+            recovered = await owner.restoreCompletion(record.execution);
+          }
           cancelControlExecution(recovered.authority);
           await cancelArtifactTargetLease(recovered.lease);
           const context = observation;
@@ -541,11 +590,15 @@ export function createDataExecutionRuntime(deps: {
           const current = await context.record(),
             result = recovered.result,
             status = result
-              ? result.kind === "transit-sync"
-                ? result.finalStatus
-                : recovered.partial
-                  ? "partial"
-                  : "ok"
+              ? result.kind === "catalog.validate" && result.status === "failed"
+                ? "error"
+                : result.kind === "catalog.activate" && result.outcome !== "activated"
+                  ? "error"
+                  : result.kind === "transit-sync"
+                    ? result.finalStatus
+                    : recovered.partial
+                      ? "partial"
+                      : "ok"
               : current.status.cancellationRequestedAt
                 ? "canceled"
                 : "error";
@@ -570,7 +623,18 @@ export function createDataExecutionRuntime(deps: {
             await owner.publishContainedTerminal(record.execution);
           } else if (record.input.kind === "generation-hardlinks")
             await owner.publishContainedTerminal(record.execution);
-        } catch {
+        } catch (error) {
+          jobChildLogger({ job: "data-execution-recovery", jobId: record.status.id }).warn(
+            {
+              reason: dataExecutionDiagnostic(
+                error instanceof Error ? error.message : "Original recovery evidence unavailable",
+              ).message,
+              trace: dataExecutionDiagnostic(
+                error instanceof Error ? (error.stack ?? error.message) : "",
+              ).message,
+            },
+            "Original execution remains fenced",
+          );
           try {
             const latest = await store.inspect(record.status.id);
             if (latest && !isDataExecutionTerminal(latest.status)) {

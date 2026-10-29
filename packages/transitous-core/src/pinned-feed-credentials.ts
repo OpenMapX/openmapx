@@ -1,15 +1,19 @@
-/** Local read-only clone of two content-addressed cached repositories. No fetch,
- * reset, pull or submodule mutation of the shared active working tree. */
+/** Read two content-addressed cached repositories using disposable checkouts.
+ * No upstream fetch, reset, pull or submodule mutation of the shared cache. */
 import { lstatSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { collectRequiredFeedCredentialKeys } from "./feed-credential-requirements";
+import {
+  collectRequiredFeedCredentialKeys,
+  type FeedCredentialRequirementScope,
+} from "./feed-credential-requirements";
 export type PinnedCredentialGitRunner = (args: readonly string[], cwd: string) => Promise<string>;
 export async function inspectPinnedFeedCredentialKeys(input: {
   catalogDir: string;
   transitousCommit: string;
   atlasCommit: string;
   git: PinnedCredentialGitRunner;
+  scope?: FeedCredentialRequirementScope;
 }): Promise<string[]> {
   const unavailable = () => new Error("Pinned catalog credential requirements are unavailable");
   if (!/^[a-f0-9]{40}$/.test(input.transitousCommit) || !/^[a-f0-9]{40}$/.test(input.atlasCommit))
@@ -21,10 +25,36 @@ export async function inspectPinnedFeedCredentialKeys(input: {
   const root = mkdtempSync(join(tmpdir(), "openmapx-feed-credential-inspect-")),
     checkout = join(root, "catalog");
   try {
+    const ensureCachedObject = async (repository: string, source: string, commit: string) => {
+      // A shallow local clone may omit a fetched-but-not-checked-out pin. Copy
+      // that exact existing object through the local Git transport, never a
+      // configured upstream URL or a mutable branch. Only the scratch changes.
+      await input.git(["-C", source, "cat-file", "-e", `${commit}^{commit}`], root);
+      try {
+        await input.git(["-C", repository, "cat-file", "-e", `${commit}^{commit}`], root);
+      } catch {
+        await input.git(
+          [
+            "-C",
+            repository,
+            "-c",
+            "protocol.file.allow=always",
+            "fetch",
+            "--no-tags",
+            "--depth=1",
+            "--",
+            source,
+            commit,
+          ],
+          root,
+        );
+      }
+    };
     await input.git(
       ["clone", "--shared", "--no-hardlinks", "--no-checkout", "--", input.catalogDir, checkout],
       root,
     );
+    await ensureCachedObject(checkout, input.catalogDir, input.transitousCommit);
     let bytes = 0,
       files = 0;
     const checkTree = async (repository: string, commit: string) => {
@@ -68,6 +98,7 @@ export async function inspectPinnedFeedCredentialKeys(input: {
       ],
       root,
     );
+    await ensureCachedObject(atlas, join(input.catalogDir, "transitland-atlas"), input.atlasCommit);
     await checkTree(atlas, input.atlasCommit);
     await input.git(
       ["-C", checkout, "checkout", "--detach", "--force", input.transitousCommit],
@@ -81,7 +112,7 @@ export async function inspectPinnedFeedCredentialKeys(input: {
     await input.git(["-C", atlas, "checkout", "--detach", "--force", input.atlasCommit], root);
     if ((await input.git(["-C", atlas, "rev-parse", "HEAD"], root)).trim() !== input.atlasCommit)
       throw unavailable();
-    return collectRequiredFeedCredentialKeys(checkout);
+    return collectRequiredFeedCredentialKeys(checkout, input.scope);
   } catch {
     throw unavailable();
   } finally {

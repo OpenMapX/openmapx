@@ -3,10 +3,15 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
+import {
+  pairedPinApprovalInputSchema,
+  pairedPinApprovalResultSchema,
+} from "../ops/catalog-pin-approval";
 import { type ExecutionRef, executionRefSchema } from "../ops/execution-ref";
 import {
   type DataExecutionResult,
   type DataExecutionStatus,
+  dataExecutionInputSchema,
   dataExecutionResultSchema,
   dataExecutionStatusSchema,
   generationHardlinksPlanSchema,
@@ -19,6 +24,7 @@ import {
 import {
   beginControlEffect,
   type ControlInstallation,
+  cancelControlExecution,
   controlDigest,
   executionAuthorityState,
   installationState,
@@ -51,10 +57,13 @@ import {
   completeFamilyJournal,
   markFamilyTerminal,
   publishFamilyCanonicalTerminal,
+  verifyFamilyOwnedRecord,
 } from "./retention-family";
 import {
+  assertRetainedCatalogActivationChildrenSettled,
   closeArtifactTargetLeaseHandle,
   inspectArtifactTargetLeaseChildSettlement,
+  inspectRetainedOwnedArtifactTargetChildSettlement,
   restoreArtifactTargetLeaseForSettlement,
   restoreGenerationHardlinksLeaseForSettlement,
   type TargetLeaseAuthority,
@@ -92,7 +101,7 @@ const workerSchema = z
     admissionDigest: z.string().regex(/^[a-f0-9]{64}$/),
     workerId: z.uuid(),
     containedAt: z.number().int().positive().safe(),
-    outcome: z.enum(["returned", "partial", "failed"]),
+    outcome: z.enum(["returned", "partial", "failed", "catalog-activation-committed"]),
     publication: z.enum(["not_started", "committed", "unknown"]),
     childrenDigest: z
       .string()
@@ -267,8 +276,7 @@ export function createDataExecutionControlJournal(
     );
     const intent = recoveryIntent(authority);
     let required = intent !== null || children.some((child) => child.phase === "proxy-restore");
-    let lease: TargetLeaseAuthority | undefined;
-    try {
+    {
       for (const child of children.filter((child) =>
         ["proxy-stage", "proxy-commit", "proxy-restore"].includes(child.phase),
       )) {
@@ -285,8 +293,10 @@ export function createDataExecutionControlJournal(
         )
           throw Error("Original proxy phase changed");
         if (child.state !== "terminal" || !child.execution) continue;
-        lease ??= restoreArtifactTargetLeaseForSettlement(authority);
-        const shared = inspectArtifactTargetLeaseChildSettlement(lease, child.execution);
+        const shared = inspectRetainedOwnedArtifactTargetChildSettlement(
+          authority,
+          child.execution,
+        );
         const canonical = verifyFeedProxyCanonicalTerminal(authority, child.execution);
         if (
           restore &&
@@ -312,8 +322,7 @@ export function createDataExecutionControlJournal(
         child.execution.operationKey !== restore.execution.operationKey
       )
         throw Error("Original proxy restore obligation remains pending");
-      lease ??= restoreArtifactTargetLeaseForSettlement(authority);
-      const shared = inspectArtifactTargetLeaseChildSettlement(lease, child.execution),
+      const shared = inspectRetainedOwnedArtifactTargetChildSettlement(authority, child.execution),
         canonical = verifyFeedProxyCanonicalTerminal(authority, child.execution);
       const result = z
         .strictObject({ candidateId: z.string(), reloaded: z.literal(true) })
@@ -330,9 +339,107 @@ export function createDataExecutionControlJournal(
       )
         throw Error("Original successful proxy restore is not proved");
       return "settled";
-    } finally {
-      if (lease) closeArtifactTargetLeaseHandle(lease);
     }
+  }
+  /** Only the final fixed paired leaf can close a killed activation worker.
+   * Its untrusted result is accepted solely by the exact signed physical receipt.
+   * No phase is dispatched and no public status alone proves completion. */
+  async function catalogActivationCompletion(authority: VerifiedExecutionAuthority) {
+    const state = executionAuthorityState(authority),
+      value = await load(state.execution);
+    const input = dataExecutionInputSchema.parse(value.row.execution_input);
+    if (
+      state.kind !== "catalog.activate" ||
+      input.kind !== "catalog.activate" ||
+      !input.acknowledgeLicenseChanges ||
+      controlDigest(input) !== state.execution.operationFingerprint ||
+      !state.origin
+    )
+      throw Error("Original reviewed catalog activation required");
+    assertRetainedCatalogActivationChildrenSettled(authority);
+    const children = value.row.execution_children.map((raw) =>
+      z
+        .object({
+          phase: z.string(),
+          ordinal: z.number(),
+          state: z.literal("terminal"),
+          operationKey: z.string(),
+          operationFingerprint: z.string(),
+          parentExecution: executionRefSchema,
+          execution: executionRefSchema,
+          operation: z.unknown(),
+          approvalResult: z.unknown().optional(),
+        })
+        .passthrough()
+        .parse(raw),
+    );
+    for (const child of children) {
+      const slot = state.reservations.find(
+        (slot) => slot.phase === child.phase && slot.ordinal === child.ordinal,
+      );
+      if (
+        !slot ||
+        slot.execution.operationKey !== child.operationKey ||
+        slot.operationFingerprint !== child.operationFingerprint ||
+        controlDigest(child.operation) !== child.operationFingerprint ||
+        controlDigest(child.parentExecution) !== controlDigest(state.execution) ||
+        !inspectRetainedOwnedArtifactTargetChildSettlement(authority, child.execution)
+      )
+        throw Error("Original settled activation child required");
+    }
+    const matches = children.filter(
+      (child) => child.phase === "paired-pin-commit" && child.ordinal === 0,
+    );
+    if (matches.length !== 1) throw Error("Original paired approval required");
+    const child = matches[0]!,
+      operation = pairedPinApprovalInputSchema.parse(child.operation),
+      result = pairedPinApprovalResultSchema.parse(child.approvalResult);
+    const physical = inspectRetainedOwnedArtifactTargetChildSettlement(authority, child.execution);
+    if (
+      !physical ||
+      physical.outcome !== "committed" ||
+      physical.publication !== "committed" ||
+      physical.terminalReceiptDigest !== controlDigest({ kind: "ops-result", result }) ||
+      operation.proposalId !== input.proposalId ||
+      operation.validationId !== input.validationId ||
+      operation.diffDigest !== input.diffDigest ||
+      operation.expectedGenerationId !== input.expectedGenerationId ||
+      !operation.acknowledgeLicenseChanges ||
+      result.proposalId !== input.proposalId ||
+      result.validationId !== input.validationId ||
+      result.previousGenerationId !== input.expectedGenerationId
+    )
+      throw Error("Actual committed paired approval evidence required");
+    const recovery = await assertOwnedProxyRecoverySettled(state.execution),
+      stamp = Date.parse(result.committedAt),
+      digest = controlDigest({
+        execution: state.execution,
+        approval: child.execution,
+        receipt: physical.terminalReceiptDigest,
+      });
+    if (stamp < value.status.admittedAt || stamp > Date.now())
+      throw Error("Original catalog commit time changed");
+    return workerSchema.parse({
+      version: 1,
+      installationId: installation.installationId,
+      origin: state.origin,
+      execution: state.execution,
+      admissionDigest: state.receiptDigest,
+      workerId: `${digest.slice(0, 8)}-${digest.slice(8, 12)}-4${digest.slice(13, 16)}-8${digest.slice(17, 20)}-${digest.slice(20, 32)}`,
+      containedAt: stamp,
+      outcome: "catalog-activation-committed",
+      publication: "committed",
+      childrenDigest: controlDigest(value.row.execution_children),
+      proxyRecovery: recovery,
+      result: {
+        kind: "catalog.activate",
+        proposalId: input.proposalId,
+        validationId: input.validationId,
+        outcome: "activated",
+        generationId: result.generationId,
+        reason: null,
+      },
+    });
   }
   function readProof(authority: VerifiedExecutionAuthority) {
     const s = executionAuthorityState(authority);
@@ -559,7 +666,11 @@ export function createDataExecutionControlJournal(
     },
     pendingRunnerAttempts(authority: VerifiedExecutionAuthority) {
       const state = executionAuthorityState(authority);
-      if (state.installation !== local || state.kind !== "transit-sync" || !state.origin)
+      if (
+        state.installation !== local ||
+        !["transit-sync", "catalog.validate"].includes(state.kind) ||
+        !state.origin
+      )
         throw Error("Original transit worker required");
       try {
         const saved = verifyControl(
@@ -584,7 +695,11 @@ export function createDataExecutionControlJournal(
     retainRunnerAttempt(authority: VerifiedExecutionAuthority, request: unknown): void {
       const state = executionAuthorityState(authority),
         body = transitousRunnerRequestSchema.parse(request);
-      if (state.installation !== local || state.kind !== "transit-sync" || !state.origin)
+      if (
+        state.installation !== local ||
+        !["transit-sync", "catalog.validate"].includes(state.kind) ||
+        !state.origin
+      )
         throw Error("Original transit worker required");
       withPrivateEffectWriter(state, () => {
         const name = `runners-${state.execution.operationKey}.json`;
@@ -815,20 +930,25 @@ export function createDataExecutionControlJournal(
         error = Error("Remote runner containment remains unknown");
       }
       if (!state.origin) throw Error("Dated contained worker origin required");
-      const proof = workerSchema.parse({
-        version: 1,
-        installationId: installation.installationId,
-        origin: state.origin,
-        execution: state.execution,
-        admissionDigest: state.receiptDigest,
-        workerId,
-        containedAt: Date.now(),
-        outcome: result ? (partial ? "partial" : "returned") : "failed",
-        publication,
-        childrenDigest,
-        proxyRecovery: recovery,
-        ...(result ? { result } : {}),
-      });
+      const proof =
+        state.kind === "catalog.activate" &&
+        result?.kind === "catalog.activate" &&
+        result.outcome === "activated"
+          ? await catalogActivationCompletion(authority)
+          : workerSchema.parse({
+              version: 1,
+              installationId: installation.installationId,
+              origin: state.origin,
+              execution: state.execution,
+              admissionDigest: state.receiptDigest,
+              workerId,
+              containedAt: Date.now(),
+              outcome: result ? (partial ? "partial" : "returned") : "failed",
+              publication,
+              childrenDigest,
+              proxyRecovery: recovery,
+              ...(result ? { result } : {}),
+            });
       // Only the live producer, after awaiting the actual dispatcher promise,
       // creates this immutable completion. Recovery only reads its signature.
       writePrivateRecord(
@@ -842,7 +962,7 @@ export function createDataExecutionControlJournal(
       const completion = Object.freeze({ [completionBrand]: true as const });
       completions.set(completion, {
         authority,
-        workerId,
+        workerId: proof.workerId,
         publication,
         childrenDigest,
         partial,
@@ -850,7 +970,34 @@ export function createDataExecutionControlJournal(
         error,
         ...(lease ? { lease } : {}),
       });
-      return { completion, result, error, partial };
+      return { completion, result, error, partial, publication };
+    },
+    async repairCommittedCatalogActivation(execution: ExecutionRef): Promise<void> {
+      const authority = restoreAdmittedControlExecution(installation, execution),
+        state = executionAuthorityState(authority);
+      if (state.kind !== "catalog.activate" || !state.origin)
+        throw Error("Original catalog activation owner required");
+      // This closes all future issuance under the original owner, even when its
+      // deadline passed. Every already-issued physical child must be settled.
+      cancelControlExecution(authority);
+      const proof = await catalogActivationCompletion(authority),
+        name = `worker-${execution.operationKey}.json`;
+      const signed = signControl(local.privateKey, "openmapx-data-worker-contained-v1", proof);
+      try {
+        const retained = readPrivateRecord(local, "observations", name, 65536);
+        if (canonicalJson(retained) !== canonicalJson(signed))
+          throw Error("Original worker completion already differs");
+        verifyFamilyOwnedRecord(
+          local,
+          state.origin,
+          { scope: "private", namespace: "observations", name, container: "" },
+          canonicalJson(retained),
+        );
+        return;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      writePrivateRecord(local, "observations", name, signed, true, state.origin);
     },
     async restoreCompletion(execution: ExecutionRef) {
       const value = await load(execution),
@@ -862,6 +1009,20 @@ export function createDataExecutionControlJournal(
         readPrivateRecord(local, "observations", `worker-${execution.operationKey}.json`, 65536),
         workerSchema,
       );
+      if (proof.outcome === "catalog-activation-committed") {
+        if (
+          !state.origin ||
+          canonicalJson(proof) !== canonicalJson(await catalogActivationCompletion(authority))
+        )
+          throw Error("Original final approval completion changed");
+        const name = `worker-${execution.operationKey}.json`;
+        verifyFamilyOwnedRecord(
+          local,
+          state.origin,
+          { scope: "private", namespace: "observations", name, container: "" },
+          canonicalJson(readPrivateRecord(local, "observations", name, 65536)),
+        );
+      }
       if (
         proof.installationId !== installation.installationId ||
         proof.admissionDigest !== state.receiptDigest ||
@@ -923,8 +1084,9 @@ export function createDataExecutionControlJournal(
         throw Error("Contained worker/current child union changed");
       if (
         !s.origin ||
+        owned.publication === "unknown" ||
+        terminal.publication !== owned.publication ||
         !isDataExecutionTerminal(terminal) ||
-        terminal.publication === "unknown" ||
         terminal.id !== value.status.id ||
         terminal.operationKey !== value.status.operationKey ||
         terminal.fingerprint !== value.status.fingerprint ||
@@ -943,11 +1105,15 @@ export function createDataExecutionControlJournal(
       if (
         owned.result &&
         terminal.status !==
-          (owned.result.kind === "transit-sync"
-            ? owned.result.finalStatus
-            : owned.partial
-              ? "partial"
-              : "ok")
+          (owned.result.kind === "catalog.validate" && owned.result.status === "failed"
+            ? "error"
+            : owned.result.kind === "catalog.activate" && owned.result.outcome !== "activated"
+              ? "error"
+              : owned.result.kind === "transit-sync"
+                ? owned.result.finalStatus
+                : owned.partial
+                  ? "partial"
+                  : "ok")
       )
         throw Error("Terminal status differs from actual dispatcher outcome");
       if (terminal.status === "ok" && owned.error !== undefined)

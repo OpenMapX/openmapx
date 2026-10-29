@@ -15,7 +15,7 @@ import {
   CANDIDATE_MANIFEST_FILENAME,
   type MotisCandidateManifest,
   readCandidateManifest,
-  verifyCandidateManifest,
+  verifyCandidateManifestAsync,
 } from "./candidate.js";
 import { recordPromotedSource } from "./feed-state-writer.js";
 import { runFunctionalProbes, verifyCapabilitySnapshot } from "./functional-probes.js";
@@ -144,10 +144,8 @@ function assertCandidateEpochIsNew(
 
   const liveManifestPath = join(currentDir, CANDIDATE_MANIFEST_FILENAME);
   if (!existsSync(liveManifestPath)) return;
-  // Read (not hash-verify) the live manifest: live artifacts are hardlinks
-  // into out/, which the next run rewrites in place, so re-hashing the live
-  // dir would fail exactly when a source set legitimately changed. Only the
-  // epoch matters here.
+  // This guard compares generation identities. Candidate integrity is checked
+  // separately; producer inputs are detached before a build can rewrite them.
   const liveManifest = readCandidateManifest(currentDir);
   if (liveManifest.epoch === candidateEpoch) {
     throw new Error(`Candidate epoch ${candidateEpoch} duplicates the active dataset epoch`);
@@ -456,7 +454,7 @@ export const run: StageFn = async (ctx) => {
       } satisfies StageResult;
     }
 
-    const manifest = verifyCandidateManifest(stagingDir);
+    const manifest = await verifyCandidateManifestAsync(stagingDir, ctx.abortSignal);
     await retainTransitPhaseCandidate(ctx, "promote-primary");
     assertCandidateEpochIsNew(ctx, currentDir, manifest.epoch);
     const sourceManifest = readTransitSourceManifest(

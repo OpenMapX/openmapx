@@ -11,7 +11,9 @@ import {
 } from "node:fs";
 import { join, sep } from "node:path";
 import { z } from "zod";
+import { readCatalogProposalFile, readCatalogValidationFile } from "../catalog-pins/record-files";
 import { canonicalJson } from "../ops/canonical-json";
+import { pairedPinApprovalInputSchema } from "../ops/catalog-pin-approval";
 import { type OpsJobStatus, type OpsOperation, parseOpsJobStatus } from "../ops/contract";
 import { controlTerminalReceiptDigest } from "../ops/control-retention-receipt";
 import { retainedParentExecutionSchema } from "../ops/execution-identity";
@@ -54,6 +56,13 @@ const schema = z.strictObject({
   execution: executionRefSchema,
   phase: z.enum(["promote-primary", "proxy-stage", "proxy-commit", "proxy-restore"]),
   ordinal: z.number().int().min(0).max(31),
+  catalogActivation: z
+    .strictObject({
+      proposalId: z.uuid(),
+      validationId: z.uuid(),
+      validationDigest: z.string().regex(/^[a-f0-9]{64}$/),
+    })
+    .optional(),
   candidateId: z.string(),
   directory: z.strictObject({ dev: z.string(), ino: z.string() }),
   consumer: z
@@ -226,6 +235,98 @@ function proxyConsumer(
     mounted.close();
   }
 }
+function catalogRecordSource(state: ReturnType<typeof installationState>) {
+  return {
+    dataRoot: state.dataRoot,
+    installationId: state.installation.installationId,
+    dataManagerPublicKey: state.publicKeys["data-manager"],
+    agentPublicKey: state.publicKeys["ops-agent"],
+  };
+}
+function catalogActivationCandidate(s: ReturnType<typeof executionAuthorityState>) {
+  if (s.kind !== "catalog.activate") return undefined;
+  const raw = readPrivateRecord(
+      s.installation,
+      "executions",
+      `${s.execution.operationKey}.json`,
+      65536,
+    ),
+    admitted = verifyControl(
+      s.installation.installation.publicKey,
+      originRecordDomain("openmapx-control-execution", raw),
+      raw,
+      z
+        .object({
+          kind: z.literal("catalog.activate"),
+          operation: z.record(z.string(), z.unknown()),
+        })
+        .passthrough(),
+    );
+  if (
+    controlDigest(raw) !== s.receiptDigest ||
+    controlDigest(admitted.operation) !== s.execution.operationFingerprint ||
+    admitted.operation.kind !== "catalog.activate"
+  )
+    throw Error("Original activation body required");
+  const input = pairedPinApprovalInputSchema.parse({
+    ...admitted.operation,
+    kind: "transitousLock.approve",
+  });
+  const validation = readCatalogValidationFile(
+    catalogRecordSource(s.installation),
+    input.proposalId,
+    input.validationId,
+  );
+  if (
+    validation.validation.status !== "passed" ||
+    validation.validation.diffDigest !== input.diffDigest ||
+    !input.acknowledgeLicenseChanges
+  )
+    throw Error("Passing reviewed validation required");
+  return {
+    proposalId: input.proposalId,
+    validationId: input.validationId,
+    validationDigest: controlDigest(validation),
+  };
+}
+function verifyCatalogActivationCandidate(
+  installation: ControlInstallation,
+  candidate: z.infer<typeof schema>,
+) {
+  const selected = candidate.catalogActivation;
+  if (!selected) return candidate.execution.executionId;
+  const validation = readCatalogValidationFile(
+      catalogRecordSource(installationState(installation)),
+      selected.proposalId,
+      selected.validationId,
+    ),
+    proposal = readCatalogProposalFile(
+      catalogRecordSource(installationState(installation)),
+      selected.proposalId,
+    );
+  if (
+    !proposal ||
+    validation.validation.status !== "passed" ||
+    controlDigest(validation) !== selected.validationDigest ||
+    controlDigest(proposal) !== validation.proposalDigest ||
+    validation.validation.pinDigest !== proposal.pins.generationId ||
+    controlDigest({
+      kind: "catalog.activate",
+      proposalId: selected.proposalId,
+      validationId: selected.validationId,
+      expectedGenerationId: proposal.baseGenerationId,
+      diffDigest: proposal.diffDigest,
+      acknowledgeLicenseChanges: true,
+    }) !== candidate.execution.operationFingerprint
+  )
+    throw Error("Activation candidate differs from its original validation/proposal/body");
+  if (
+    candidate.phase === "promote-primary" &&
+    candidate.files[0]?.sha256 !== validation.validation.manifestHash
+  )
+    throw Error("Promotion manifest differs from its passed validation");
+  return selected.validationId;
+}
 function snapshot(
   authority: VerifiedExecutionAuthority,
   phase: ControlChildPhase,
@@ -239,9 +340,12 @@ function snapshot(
   if (
     !slot ||
     s.installation.installation.role !== "data-manager" ||
-    !["transit-sync", "transit-maintenance"].includes(s.kind)
+    !["transit-sync", "transit-maintenance", "catalog.validate", "catalog.activate"].includes(
+      s.kind,
+    )
   )
     throw Error("Original data candidate reservation required");
+  const activation = catalogActivationCandidate(s);
   const proxy = ["proxy-stage", "proxy-commit", "proxy-restore"].includes(phase);
   if (!proxy && phase !== "promote-primary") return null;
   const relative = proxy ? "motis-feed-proxy" : `motis/${preparing ? "staging" : "live"}`;
@@ -269,15 +373,20 @@ function snapshot(
       execution: s.execution,
       phase,
       ordinal,
+      ...(activation ? { catalogActivation: activation } : {}),
       candidateId: proxy
         ? `ctrl-${createHash("sha256").update(`openmapx-transit-candidate-v1\0${s.execution.operationKey}\0${phase}\0${ordinal}`).digest("hex").slice(0, 32)}`
-        : s.execution.executionId,
+        : (activation?.validationId ?? s.execution.executionId),
       directory: identity(directory.stat),
       files: retainedFiles.map(({ name, inode, sha256 }) => ({ name, inode, sha256 })),
       consumer: proxy ? proxyConsumer(directory, retainedFiles[0]!) : null,
       artifactsDigest: proxy
         ? null
-        : candidateArtifacts(directory, retainedFiles[0]!.bytes, s.execution.executionId),
+        : candidateArtifacts(
+            directory,
+            retainedFiles[0]!.bytes,
+            activation?.validationId ?? s.execution.executionId,
+          ),
     };
   } finally {
     directory.close();
@@ -464,12 +573,13 @@ export function inspectDataTransitCandidate(
       candidate.execution.executor !== "data-manager"
     )
       throw Error("Original candidate parent/phase/body changed");
+    const expectedEpoch = verifyCatalogActivationCandidate(installation, candidate);
     const promotion = operation.kind === "motis.primary.promote";
     if (
       promotion
         ? candidate.phase !== "promote-primary" ||
           candidate.candidateId !== operation.preparedRunId ||
-          candidate.candidateId !== candidate.execution.executionId ||
+          candidate.candidateId !== expectedEpoch ||
           canonicalJson(proof.serviceIds) !== canonicalJson(["motis"])
         : !["proxy-stage", "proxy-commit", "proxy-restore"].includes(candidate.phase) ||
           candidate.candidateId !== operation.candidateId ||
@@ -509,8 +619,7 @@ export function inspectDataTransitCandidate(
         if (
           !manifestBytes ||
           candidate.consumer !== null ||
-          candidateArtifacts(confined, manifestBytes, candidate.execution.executionId) !==
-            candidate.artifactsDigest
+          candidateArtifacts(confined, manifestBytes, expectedEpoch) !== candidate.artifactsDigest
         )
           throw Error("Prepared candidate artifacts changed");
       } else if (

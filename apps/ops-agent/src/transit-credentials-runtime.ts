@@ -2,8 +2,14 @@
 import { createHmac } from "node:crypto";
 import { lstatSync, realpathSync } from "node:fs";
 import { join } from "node:path";
-import { catalogRevisionId, readCatalogPinSet } from "@openmapx/core/catalog-pins";
-import type { OpsResultFor } from "@openmapx/core/ops";
+import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
+import {
+  type CatalogPinSet,
+  catalogRevisionId,
+  readCatalogPinSet,
+  readCatalogProposal,
+} from "@openmapx/core/catalog-pins";
+import { type OpsResultFor, TRANSIT_CREDENTIALS_ABSENT_REVISION } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { inspectPinnedFeedCredentialKeys, TRANSITOUS_CATALOG_DIR } from "@openmapx/transitous-core";
 import { parseFeedCredentialMapJson } from "@openmapx/transitous-core/feed-credentials";
@@ -14,6 +20,27 @@ import { OpsAgentBusyError, OpsNotWiredError, type OpsRuntime } from "./runtime"
 
 const MANAGED = "/run/secrets/TRANSITOUS_API_KEYS";
 const DEFAULT = "/config/transitous/api-keys.json";
+export function inspectAgentPinnedCredentialKeys(
+  infraDir: string,
+  pins: CatalogPinSet,
+  signal: AbortSignal,
+  scope?: Parameters<typeof inspectPinnedFeedCredentialKeys>[0]["scope"],
+) {
+  return inspectPinnedFeedCredentialKeys({
+    catalogDir: join(infraDir, "data", TRANSITOUS_CATALOG_DIR),
+    transitousCommit: pins.transitous.ref.split("@").at(-1)!,
+    atlasCommit: pins.transitous.submodules["transitland-atlas"]!,
+    scope,
+    git: async (args, cwd) =>
+      (
+        await runContainedProcess("git", ["-C", cwd, ...args], {
+          signal,
+          timeout: 30000,
+          maxBuffer: 5 * 1024 * 1024,
+        })
+      ).stdout,
+  });
+}
 export function installTransitCredentialsRuntime(
   runtime: OpsRuntime,
   options: {
@@ -30,22 +57,35 @@ export function installTransitCredentialsRuntime(
     if (inspecting) throw new OpsAgentBusyError();
     inspecting = true;
     try {
-      const pair = readCatalogPinSet(options.rootDir);
+      const select = () => {
+        const active = readCatalogPinSet(options.rootDir);
+        if (!operation.proposalId) return { pair: active, base: active?.generationId ?? null };
+        const installation = openControlInstallation({
+          infraDir: options.stack.infraDir,
+          role: "ops-agent",
+        });
+        try {
+          const proposal = readCatalogProposal({
+            rootDir: options.rootDir,
+            installation,
+            proposalId: operation.proposalId,
+          });
+          if (!proposal || proposal.baseGenerationId !== (active?.generationId ?? null))
+            throw new OpsNotWiredError();
+          return { pair: proposal.pins, base: proposal.baseGenerationId };
+        } finally {
+          closeControlInstallation(installation);
+        }
+      };
+      const selected = select(),
+        pair = selected.pair;
       if (!pair || catalogRevisionId(pair) !== operation.catalogRevisionId)
         throw new OpsNotWiredError();
-      const requiredKeys = await inspectPinnedFeedCredentialKeys({
-        catalogDir: join(options.stack.infraDir, "data", TRANSITOUS_CATALOG_DIR),
-        transitousCommit: pair.transitous.ref.split("@").at(-1)!,
-        atlasCommit: pair.transitous.submodules["transitland-atlas"]!,
-        git: async (args, cwd) =>
-          (
-            await runContainedProcess("git", ["-C", cwd, ...args], {
-              signal: context.signal,
-              timeout: 30_000,
-              maxBuffer: 5 * 1024 * 1024,
-            })
-          ).stdout,
-      });
+      const requiredKeys = await inspectAgentPinnedCredentialKeys(
+        options.stack.infraDir,
+        pair,
+        context.signal,
+      );
       // Configuration is collected through the existing fixed Compose argument builder.
       const config = JSON.parse(
         (
@@ -84,11 +124,25 @@ export function installTransitCredentialsRuntime(
         const parents = components.slice(0, -1),
           file = components.at(-1)!;
         return withDirectory(parents, (directory) => {
+          const before = lstatSync(directory.name(file), { bigint: true });
           const bytes = directory.read(file, 1024 * 1024, false);
+          const after = lstatSync(directory.name(file), { bigint: true });
+          const fields = ["dev", "ino", "size", "mtimeNs", "ctimeNs"] as const;
+          if (fields.some((field) => before[field] !== after[field])) throw new OpsNotWiredError();
           if (!options.sourceToken) throw new OpsNotWiredError();
           hostCredentialsRevision = createHmac("sha256", options.sourceToken)
             .update("openmapx-host-transit-credentials-v1\0")
             .update(JSON.stringify(components))
+            .update("\0")
+            .update(
+              JSON.stringify([
+                String(after.dev),
+                String(after.ino),
+                String(after.size),
+                String(after.mtimeNs),
+                String(after.ctimeNs),
+              ]),
+            )
             .update("\0")
             .update(bytes)
             .digest("hex");
@@ -207,8 +261,79 @@ export function installTransitCredentialsRuntime(
           owner = "unset";
         }
       }
-      const current = readCatalogPinSet(options.rootDir);
-      if (!current || catalogRevisionId(current) !== operation.catalogRevisionId)
+      let consumedCredentialsRevision: string | null =
+        owner === "vault" ? appliedCredentialsRevision : null;
+      if (owner === "file" || owner === "unset") {
+        const initialHostRevision = hostCredentialsRevision;
+        const owned = (await options.ownedServices.inspectOwnedServices(context.signal)).filter(
+          (service) => service.serviceId === "data-manager" && service.state === "running",
+        );
+        if (owned.length === 1) {
+          const observed = JSON.parse(
+            (
+              await docker(
+                "docker",
+                ["container", "inspect", "--format", "{{json .}}", owned[0]!.containerId],
+                { signal: context.signal, timeout: 15000, maxBuffer: 256 * 1024 },
+              )
+            ).stdout,
+          );
+          const environment: string[] = observed?.Config?.Env ?? [],
+            mounts: { Source?: string; Destination?: string; RW?: boolean }[] =
+              observed?.Mounts ?? [];
+          const matches = mounts.filter(
+            (mount) =>
+              mount.Destination === "/config/transitous" &&
+              mount.RW === false &&
+              typeof mount.Source === "string",
+          );
+          if (
+            matches.length === 1 &&
+            !environment.some(
+              (value) =>
+                value.startsWith("TRANSITOUS_API_KEYS_PATH=") &&
+                value !== "TRANSITOUS_API_KEYS_PATH=",
+            ) &&
+            !environment.some(
+              (value) =>
+                value.startsWith("TRANSITOUS_API_KEYS_FILE=") &&
+                value !== "TRANSITOUS_API_KEYS_FILE=" &&
+                value !== `TRANSITOUS_API_KEYS_FILE=${DEFAULT}`,
+            )
+          ) {
+            const components = ["services", "motis", "tools", "transitous"],
+              expectedDirectory = join(options.rootDir, ...components),
+              mountedDirectory = matches[0]!.Source!;
+            const source = lstatSync(expectedDirectory),
+              target = lstatSync(mountedDirectory);
+            if (
+              source.isDirectory() &&
+              target.isDirectory() &&
+              !target.isSymbolicLink() &&
+              source.dev === target.dev &&
+              source.ino === target.ino &&
+              realpathSync(expectedDirectory) === realpathSync(mountedDirectory)
+            ) {
+              if (owner === "file") {
+                readMap([...components, "api-keys.json"]);
+                if (hostCredentialsRevision === initialHostRevision)
+                  consumedCredentialsRevision = hostCredentialsRevision;
+              } else if (
+                !withDirectory(components, (directory) => directory.listBounded(1024)).includes(
+                  "api-keys.json",
+                )
+              )
+                consumedCredentialsRevision = TRANSIT_CREDENTIALS_ABSENT_REVISION;
+            }
+          }
+        }
+      }
+      const current = select();
+      if (
+        !current.pair ||
+        catalogRevisionId(current.pair) !== operation.catalogRevisionId ||
+        current.base !== selected.base
+      )
         throw new OpsNotWiredError();
       return {
         catalogRevisionId: operation.catalogRevisionId,
@@ -219,6 +344,7 @@ export function installTransitCredentialsRuntime(
         configuredKeys,
         retainedKeys,
         appliedCredentialsRevision,
+        consumedCredentialsRevision,
         hostCredentialsRevision: owner === "file" ? hostCredentialsRevision : null,
       };
     } catch (error) {

@@ -5,6 +5,8 @@ export type GetDataExecution200Kind =
   (typeof GetDataExecution200Kind)[keyof typeof GetDataExecution200Kind];
 
 export const GetDataExecution200Kind = {
+  catalogvalidate: "catalog.validate",
+  catalogactivate: "catalog.activate",
   "download-osm": "download-osm",
   "download-fonts": "download-fonts",
   "convert-overpass": "convert-overpass",

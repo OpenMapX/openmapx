@@ -14,3 +14,7 @@ export function canonicalFeedCredentialMap(
     throw Error("Feed credential map exceeds its format or budget");
   }
 }
+
+/** Identity of no managed row, never a digest of a secret. */
+export const TRANSIT_CREDENTIALS_ABSENT_REVISION =
+  "7f1e896e62b3c13fa40bcc4df28f107dab28409a292d5796d1bc91388af92c07";

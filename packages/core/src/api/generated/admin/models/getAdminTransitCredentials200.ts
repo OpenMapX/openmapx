@@ -6,6 +6,8 @@ import type { GetAdminTransitCredentials200Owner } from "./getAdminTransitCreden
 export type GetAdminTransitCredentials200 = {
   /** @pattern ^[a-f0-9]{64}$ */
   catalogRevisionId: string;
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  proposalId?: string;
   /** @pattern ^[a-f0-9]{64}$ */
   credentialsRevision: string;
   configurationRevisionId: string | null;

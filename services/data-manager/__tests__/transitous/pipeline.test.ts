@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createCatalogPinSet } from "@openmapx/core/catalog-pins";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildJobContext, runTransitousPipeline } from "../../src/jobs/transitous/pipeline.js";
 import type { StageName, StageResult } from "../../src/jobs/transitous/types.js";
@@ -17,6 +18,18 @@ const PINNED_LOCK = {
 };
 vi.mock("../../src/ops-client.js", () => ({
   runOpsOperation: vi.fn(async (operation: { kind: string }) => {
+    if (operation.kind === "catalogPins.inspect") {
+      const pins = createCatalogPinSet(PINNED_LOCK, {
+        schemaVersion: 1,
+        source: "mobilitydata-gbfs",
+        commit: "b".repeat(40),
+        url: `https://raw.githubusercontent.com/MobilityData/gbfs/${"b".repeat(40)}/systems.csv`,
+        sha256: "c".repeat(64),
+        lockedAt: PINNED_LOCK.lockedAt,
+        lockedBy: "fixture",
+      });
+      return { active: pins, catalogRevisionId: pins.generationId };
+    }
     if (operation.kind === "transitousLock.inspect") {
       return { active: PINNED_LOCK, proposed: null };
     }
@@ -59,6 +72,23 @@ const ORDERED_STAGES: StageName[] = [
 ];
 
 describe("runTransitousPipeline orchestrator", () => {
+  it("refuses a skipped critical stage when validating a reviewed catalog", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-catalog-critical-"));
+    const ctx = buildJobContext({
+      dataDir: tmp,
+      store: new StateStore(tmp),
+      countries: ["de"],
+      runner: async () => {},
+    });
+    await expect(
+      runTransitousPipeline(ctx, {
+        startAt: "assemble-staging",
+        stopAt: "motis-health",
+        requireCompleteStages: true,
+      }),
+    ).rejects.toThrow(/assemble-staging.*skipped/);
+  });
+
   it("stops at a failed owner checkpoint before the next stage can mutate", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-pipeline-owner-"));
     mkdirSync(join(tmp, ".transitous-catalog", ".git"), { recursive: true });

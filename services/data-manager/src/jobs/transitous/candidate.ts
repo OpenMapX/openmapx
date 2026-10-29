@@ -1,10 +1,25 @@
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
 import { basename, join } from "node:path";
 import {
   type MotisConfigExpectations,
   parseMotisConfigExpectations,
 } from "@openmapx/transitous-core";
+import { hashArtifactFile } from "../../../../../packages/core/src/build-artifacts/copy-tree";
+import { AnchoredDirectory } from "../../../../../packages/core/src/build-artifacts/filesystem";
+import { safeArtifactPath } from "../../../../../packages/core/src/build-artifacts/manifest";
 import { atomicWriteJsonSync } from "../../utils/atomic-write.js";
 import { GTFS_ARCHIVE_RE } from "./internal.js";
 import type { MotisOperationsPolicy } from "./operations-profile.js";
@@ -56,12 +71,42 @@ export interface MotisCandidateManifest {
 export { parseMotisConfigExpectations } from "@openmapx/transitous-core";
 
 export function sha256File(path: string, relativeTo?: string): CandidateArtifactHash {
-  const bytes = readFileSync(path);
-  return {
-    path: relativeTo ? path.slice(relativeTo.length + 1) : basename(path),
-    sha256: createHash("sha256").update(bytes).digest("hex"),
-    sizeBytes: bytes.byteLength,
-  };
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const before = fstatSync(fd, { bigint: true });
+    if (!before.isFile() || before.size > BigInt(Number.MAX_SAFE_INTEGER))
+      throw Error("Regular bounded candidate artifact required");
+    const hash = createHash("sha256"),
+      buffer = Buffer.alloc(1024 * 1024);
+    let total = 0;
+    for (;;) {
+      const count = readSync(fd, buffer, 0, buffer.length, null);
+      if (!count) break;
+      total += count;
+      if (BigInt(total) > before.size) throw Error("Candidate artifact changed while hashing");
+      hash.update(buffer.subarray(0, count));
+    }
+    const after = fstatSync(fd, { bigint: true }),
+      named = lstatSync(path, { bigint: true });
+    if (
+      BigInt(total) !== before.size ||
+      before.dev !== after.dev ||
+      before.ino !== after.ino ||
+      before.size !== after.size ||
+      before.mtimeNs !== after.mtimeNs ||
+      before.ctimeNs !== after.ctimeNs ||
+      named.dev !== before.dev ||
+      named.ino !== before.ino
+    )
+      throw Error("Candidate artifact changed while hashing");
+    return {
+      path: relativeTo ? path.slice(relativeTo.length + 1) : basename(path),
+      sha256: hash.digest("hex"),
+      sizeBytes: total,
+    };
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function parseFloatSetting(name: string, fallback: number): number {
@@ -107,12 +152,18 @@ export function resolveCandidateCanary(): MotisCandidateManifest["canary"] {
   return canary;
 }
 
-export function createCandidateManifest(
+function createCandidateManifestWithHashes(
   stagingDir: string,
   epoch: string,
   createdAt: string,
-  operationsPolicy?: MotisOperationsPolicy,
+  operationsPolicy: MotisOperationsPolicy | undefined,
+  hashes: ReadonlyMap<string, CandidateArtifactHash>,
 ): MotisCandidateManifest {
+  const hash = (path: string, _relativeTo: string) => {
+    const result = hashes.get(path);
+    if (!result) throw Error("Candidate artifact hash missing");
+    return result;
+  };
   const configPath = join(stagingDir, "config.yml");
   const licensePath = join(stagingDir, "license.json");
   const proxyRoot = join(stagingDir, CANDIDATE_PROXY_DIRNAME);
@@ -126,7 +177,7 @@ export function createCandidateManifest(
   const datasets = readdirSync(stagingDir)
     .filter((entry) => GTFS_ARCHIVE_RE.test(entry))
     .sort()
-    .map((entry) => sha256File(join(stagingDir, entry), stagingDir));
+    .map((entry) => hash(join(stagingDir, entry), stagingDir));
   if (datasets.length === 0) throw new Error("Candidate contains no timetable datasets");
   const sourceIndexPath = join(stagingDir, "gbfs-source-index.json");
   const sourceManifestPath = join(stagingDir, TRANSIT_SOURCE_MANIFEST_FILENAME);
@@ -141,15 +192,13 @@ export function createCandidateManifest(
     expectations: parseMotisConfigExpectations(readFileSync(configPath, "utf-8")),
     canary: resolveCandidateCanary(),
     artifacts: {
-      config: sha256File(configPath, stagingDir),
-      license: sha256File(licensePath, stagingDir),
-      proxyConfig: sha256File(proxyConfigPath, stagingDir),
-      proxyVars: sha256File(proxyVarsPath, stagingDir),
+      config: hash(configPath, stagingDir),
+      license: hash(licensePath, stagingDir),
+      proxyConfig: hash(proxyConfigPath, stagingDir),
+      proxyVars: hash(proxyVarsPath, stagingDir),
       datasets,
-      ...(existsSync(sourceIndexPath)
-        ? { sourceIndex: sha256File(sourceIndexPath, stagingDir) }
-        : {}),
-      sourceManifest: sha256File(sourceManifestPath, stagingDir),
+      ...(existsSync(sourceIndexPath) ? { sourceIndex: hash(sourceIndexPath, stagingDir) } : {}),
+      sourceManifest: hash(sourceManifestPath, stagingDir),
     },
   };
   const output = join(stagingDir, CANDIDATE_MANIFEST_FILENAME);
@@ -157,9 +206,81 @@ export function createCandidateManifest(
   return manifest;
 }
 
+function candidateArtifactPaths(stagingDir: string): string[] {
+  const required = [
+    "config.yml",
+    "license.json",
+    `${CANDIDATE_PROXY_DIRNAME}/conf/default.conf`,
+    `${CANDIDATE_PROXY_DIRNAME}/feed-proxy-vars.json`,
+    TRANSIT_SOURCE_MANIFEST_FILENAME,
+  ];
+  for (const name of required)
+    if (!existsSync(join(stagingDir, name)) || !statSync(join(stagingDir, name)).isFile())
+      throw Error(`Required candidate artifact missing: ${name}`);
+  if (statSync(join(stagingDir, "config.yml")).size > 32 * 1024 * 1024)
+    throw Error("Candidate configuration exceeds its byte budget");
+  const datasets = readdirSync(stagingDir)
+    .filter((entry) => GTFS_ARCHIVE_RE.test(entry))
+    .sort();
+  if (!datasets.length || datasets.length > 16384)
+    throw Error("Candidate contains no timetable datasets or exceeds its entry budget");
+  return [
+    ...required,
+    ...datasets,
+    ...(existsSync(join(stagingDir, "gbfs-source-index.json")) ? ["gbfs-source-index.json"] : []),
+  ];
+}
+export function createCandidateManifest(
+  stagingDir: string,
+  epoch: string,
+  createdAt: string,
+  operationsPolicy?: MotisOperationsPolicy,
+): MotisCandidateManifest {
+  const hashes = new Map(
+    candidateArtifactPaths(stagingDir).map((name) => [
+      join(stagingDir, name),
+      sha256File(join(stagingDir, name), stagingDir),
+    ]),
+  );
+  return createCandidateManifestWithHashes(stagingDir, epoch, createdAt, operationsPolicy, hashes);
+}
+export async function createCandidateManifestAsync(
+  stagingDir: string,
+  epoch: string,
+  createdAt: string,
+  operationsPolicy?: MotisOperationsPolicy,
+  signal?: AbortSignal,
+): Promise<MotisCandidateManifest> {
+  const root = new AnchoredDirectory(realpathSync(stagingDir));
+  try {
+    const hashes = new Map<string, CandidateArtifactHash>();
+    for (const name of candidateArtifactPaths(stagingDir))
+      hashes.set(join(stagingDir, name), await hashArtifactFile(root, name, signal));
+    signal?.throwIfAborted();
+    return createCandidateManifestWithHashes(
+      stagingDir,
+      epoch,
+      createdAt,
+      operationsPolicy,
+      hashes,
+    );
+  } finally {
+    root.close();
+  }
+}
 export function readCandidateManifest(stagingDir: string): MotisCandidateManifest {
-  const path = join(stagingDir, CANDIDATE_MANIFEST_FILENAME);
-  const manifest = JSON.parse(readFileSync(path, "utf-8")) as MotisCandidateManifest;
+  const path = join(stagingDir, CANDIDATE_MANIFEST_FILENAME),
+    root = new AnchoredDirectory(realpathSync(stagingDir));
+  let manifest: MotisCandidateManifest;
+  try {
+    manifest = JSON.parse(
+      root.read(CANDIDATE_MANIFEST_FILENAME, 32 * 1024 * 1024, false).toString("utf8"),
+    );
+  } catch {
+    throw Error("Unsupported or malformed candidate manifest");
+  } finally {
+    root.close();
+  }
   if (
     manifest.schemaVersion !== 1 ||
     !manifest.epoch ||
@@ -189,4 +310,39 @@ export function verifyCandidateManifest(stagingDir: string): MotisCandidateManif
     }
   }
   return manifest;
+}
+
+export async function verifyCandidateManifestAsync(
+  stagingDir: string,
+  signal?: AbortSignal,
+): Promise<MotisCandidateManifest> {
+  const manifest = readCandidateManifest(stagingDir),
+    root = new AnchoredDirectory(realpathSync(stagingDir));
+  try {
+    if (
+      !Array.isArray(manifest.artifacts.datasets) ||
+      manifest.artifacts.datasets.length === 0 ||
+      manifest.artifacts.datasets.length > 16384
+    )
+      throw Error("Candidate dataset inventory is invalid");
+    const artifacts = [
+      manifest.artifacts.config,
+      manifest.artifacts.license,
+      manifest.artifacts.proxyConfig,
+      manifest.artifacts.proxyVars,
+      ...manifest.artifacts.datasets,
+      ...(manifest.artifacts.sourceIndex ? [manifest.artifacts.sourceIndex] : []),
+      manifest.artifacts.sourceManifest,
+    ];
+    for (const expected of artifacts) {
+      if (!expected || typeof expected.path !== "string" || !safeArtifactPath(expected.path))
+        throw Error("Candidate artifact path is invalid");
+      const current = await hashArtifactFile(root, expected.path, signal);
+      if (current.sha256 !== expected.sha256 || current.sizeBytes !== expected.sizeBytes)
+        throw Error(`Candidate artifact hash mismatch: ${expected.path}`);
+    }
+    return manifest;
+  } finally {
+    root.close();
+  }
 }

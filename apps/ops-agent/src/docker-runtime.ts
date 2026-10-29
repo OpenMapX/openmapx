@@ -1069,10 +1069,13 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   };
 
   runtime["motis.staging.restart"] = (_operation, context) =>
-    changed(["restart", "motis-staging"], context);
+    changed(
+      [...composePrefix(), "up", "-d", "--force-recreate", "--no-deps", "motis-staging"],
+      context,
+    );
   runtime["motis.staging.stop"] = (_operation, context) => stopMotis("motis-staging", context);
   runtime["motis.primary.restart"] = (_operation, context) =>
-    changed(["restart", "motis"], context);
+    changed([...composePrefix(), "up", "-d", "--force-recreate", "--no-deps", "motis"], context);
   runtime["motis.primary.promote"] = async (operation, context) => {
     assertTransitCandidateEffect(operation, context);
     // Recreate rather than restart: Docker resolves a bind-mount symlink when

@@ -14,7 +14,14 @@ import { isWellFormedFeedCredentialText } from "./feed-credentials";
 
 const unavailable = () => new Error("Catalog credential requirements are unavailable");
 const decoder = new TextDecoder("utf-8", { fatal: true });
-export function collectRequiredFeedCredentialKeys(catalogDir: string): string[] {
+export interface FeedCredentialRequirementScope {
+  countries: readonly string[];
+  patches: readonly { sourceId: string; skip: boolean }[];
+}
+export function collectRequiredFeedCredentialKeys(
+  catalogDir: string,
+  scope?: FeedCredentialRequirementScope,
+): string[] {
   let bytes = 0,
     files = 0;
   const directory = (path: string) => {
@@ -114,6 +121,17 @@ export function collectRequiredFeedCredentialKeys(catalogDir: string): string[] 
           !isWellFormedFeedCredentialText(source.name)
         )
           throw unavailable();
+        if (scope) {
+          const region = entry.name.slice(0, -5),
+            country = region.split("-")[0]!.toLowerCase();
+          if (scope.countries.length && !scope.countries.includes(country)) continue;
+          const sourceId =
+            typeof source["openmapx-source-id"] === "string"
+              ? source["openmapx-source-id"]
+              : `catalog:${region}:${source.name}`;
+          const patch = scope.patches.find((patch) => patch.sourceId === sourceId);
+          if (patch?.skip ?? source.skip === true) continue;
+        }
         required.add(`${entry.name.slice(0, -5)}/${source.name}`);
       }
     }

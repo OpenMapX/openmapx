@@ -53,6 +53,7 @@ import {
   transitStateSummarySchema,
 } from "./transit";
 import { transitCredentialOperations } from "./transit-credentials";
+import { transitPinOperations } from "./transit-pins";
 
 const service = "service" as const;
 const admin = "admin" as const;
@@ -93,6 +94,7 @@ const ambientUpdated = {
 /** Application API operations. Service credentials, private acquisition and internal endpoints are not browser contracts. */
 export const dataManagerAdminOperations = {
   ...transitCredentialOperations,
+  ...transitPinOperations,
   getApiDataManagerRoadConditionsPolicy: {
     method: "GET",
     path: "/api/data-manager/road-conditions/policy",

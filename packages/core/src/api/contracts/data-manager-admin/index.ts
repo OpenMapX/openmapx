@@ -10,3 +10,4 @@ export * from "./providers";
 export * from "./transit";
 
 export * from "./transit-credentials";
+export * from "./transit-pins";

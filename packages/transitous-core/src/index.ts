@@ -5,6 +5,24 @@ export {
   safeDirArgs,
 } from "./catalog.js";
 export {
+  type CatalogFeedDiff,
+  type CatalogSourceChange,
+  catalogCompilerSettings,
+  catalogDiffPage,
+  catalogReviewInputDigests,
+  diffCatalogFeeds,
+  parseCatalogFeedFile,
+  readAtlasFeedSnapshot,
+  readCatalogFeedSnapshot,
+  reviewCatalogPair,
+} from "./catalog-diff";
+export {
+  fetchPinnedGbfsCatalog,
+  parseCatalogGbfsRows,
+  type ResolvedGbfsCatalogPin,
+  resolveGbfsCatalogCandidate,
+} from "./catalog-resolution";
+export {
   DEFAULT_TRANSITOUS_REPO_URL,
   GTFSCLEAN_COMMIT,
   MOBILITYDATA_GBFS_CATALOG_COMMIT,
@@ -53,6 +71,17 @@ export {
   type MotisConfigExpectations,
   parseMotisConfigExpectations,
 } from "./motis-config.js";
+export {
+  isTransitousHostname,
+  MOTIS_OPERATIONS_PROFILES,
+  type MotisOperationsPolicy,
+  type MotisOperationsProfileName,
+  publicOperationsPolicy,
+  type ResolveOperationsProfileInput,
+  resolveOperationsProfile,
+  resolveOperationsProfileFromEnv,
+  transitAllowedCountries,
+} from "./operations-profile";
 export {
   inspectPinnedFeedCredentialKeys,
   type PinnedCredentialGitRunner,

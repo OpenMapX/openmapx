@@ -1,6 +1,7 @@
 import z from "zod/v4";
 import { dataManagerCoverageEvidencePageSchema } from "../../../coverage/schemas";
 import * as a from "./ambient";
+import * as cr from "./catalog-review";
 import {
   acceptedSchema,
   type DataManagerOperation,
@@ -430,6 +431,13 @@ export const dataManagerOperations = {
       200: json(z.strictObject({ ok: z.literal(true), status: z.literal("restart-initiated") })),
       503: json(httpErrorSchema),
     },
+  },
+  inspectCatalogReview: {
+    method: "GET",
+    path: "/transit/pins",
+    auth: service,
+    request: { query: cr.catalogReviewQuerySchema },
+    responses: { ...dataMutationErrors, 200: json(cr.catalogReviewSnapshotSchema) },
   },
   proposeTransitBump: {
     method: "POST",

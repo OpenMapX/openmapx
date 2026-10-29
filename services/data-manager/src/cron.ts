@@ -77,11 +77,7 @@ import {
   type WriteLiveTrafficDeps,
   type WriteLiveTrafficResult,
 } from "./jobs/traffic/write-live.js";
-import {
-  type CatalogBumpCandidate,
-  lockFromCandidate,
-  resolveCatalogBumpCandidate,
-} from "./jobs/transitous/catalog-bump.js";
+import type { CatalogBumpCandidate } from "./jobs/transitous/catalog-bump.js";
 import { fetchWithTimeout } from "./jobs/transitous/motis-probe.js";
 import type { MotisOperationsPolicy } from "./jobs/transitous/operations-profile.js";
 import type { SingleFlightController } from "./jobs/transitous/single-flight.js";
@@ -156,6 +152,10 @@ export interface CronLogger {
 }
 
 export interface CronSetupOptions {
+  catalogReview?: Pick<
+    ReturnType<typeof import("./jobs/transitous/catalog-review.js").createCatalogReviewService>,
+    "resolveCatalogProposal"
+  >;
   executionReceiver?: DataExecutionReceiver;
   dataDir: string;
   countries: string[];
@@ -542,40 +542,14 @@ export function setupCron(options: CronSetupOptions): CronHandles {
 
   const runStalenessCheck = options.runStalenessCheck ?? defaultStalenessCheck;
 
-  const catalogDir = join(options.dataDir, ".transitous-catalog");
-  const resolveBumpCandidate =
-    options.resolveBumpCandidate ?? ((o) => resolveCatalogBumpCandidate(o));
-
-  /**
-   * Auto-bump the pinned Transitous catalog behind the pipeline's own canary.
-   * Resolve upstream → propose the candidate → build it into the staging slot
-   * and run the functional-probe canary → activate the pin only if the whole
-   * pipeline (incl. the live promote) succeeds. On rejection the active pin is
-   * untouched, the proposal is retained for review, and a failure alert fires.
-   */
+  /** Scheduled checks create paired proposals only. Activation always requires review. */
   const runAutoBump = async (): Promise<void> => {
-    await withLegacyDataMutation("transit-proposal", async () => {
-      const candidate = await resolveBumpCandidate({
-        catalogDir,
-        branch: process.env.TRANSITOUS_AUTO_BUMP_BRANCH ?? "master",
-      });
-      const { active } = await runOpsOperation({ kind: "transitousLock.inspect" });
-      if (active?.ref === candidate.ref) return;
-      const lock = lockFromCandidate(
-        candidate,
-        "data-manager-auto-bump",
-        "Proposed by the scheduled catalog check; validation-bound activation is required",
-      );
-      await runOpsOperation({
-        kind: "transitousLock.propose",
-        ref: lock.ref,
-        submodules: lock.submodules,
-        lockedBy: lock.lockedBy,
-        ...(lock.comment ? { comment: lock.comment } : {}),
-      });
-      log.info(
-        "transitous-auto-bump: proposal retained; validation-bound activation is unavailable",
-      );
+    if (!options.catalogReview) throw Error("Installed paired catalog resolver is unavailable");
+    const proposal = await options.catalogReview.resolveCatalogProposal({
+      branch: process.env.TRANSITOUS_AUTO_BUMP_BRANCH ?? "master",
+    });
+    log.info("transitous-auto-bump: paired proposal retained for administrator review", {
+      proposalId: proposal.proposalId,
     });
   };
 

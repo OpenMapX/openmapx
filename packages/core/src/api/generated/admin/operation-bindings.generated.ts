@@ -7,6 +7,13 @@ import {
   bindAdminStreamOperation,
 } from "../../admin-sdk-transport";
 
+const activateAdminTransitPinsBound = bindAdminOperation("activateAdminTransitPins");
+export async function activateAdminTransitPinsRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return activateAdminTransitPinsBound<T>(url, options);
+}
 const addAdminExtensionSourceBound = bindAdminOperation("addAdminExtensionSource");
 export async function addAdminExtensionSourceRequest<T>(
   url: string,
@@ -34,6 +41,13 @@ export async function cancelAdminActivityJobRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return cancelAdminActivityJobBound<T>(url, options);
+}
+const cancelAdminTransitPinExecutionBound = bindAdminOperation("cancelAdminTransitPinExecution");
+export async function cancelAdminTransitPinExecutionRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return cancelAdminTransitPinExecutionBound<T>(url, options);
 }
 const changeAdminAccountRoleBound = bindAdminOperation("changeAdminAccountRole");
 export async function changeAdminAccountRoleRequest<T>(
@@ -273,6 +287,20 @@ export async function getAdminTransitCredentialsRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return getAdminTransitCredentialsBound<T>(url, options);
+}
+const getAdminTransitPinExecutionBound = bindAdminOperation("getAdminTransitPinExecution");
+export async function getAdminTransitPinExecutionRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return getAdminTransitPinExecutionBound<T>(url, options);
+}
+const getAdminTransitPinsBound = bindAdminOperation("getAdminTransitPins");
+export async function getAdminTransitPinsRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return getAdminTransitPinsBound<T>(url, options);
 }
 const getApiAdminAmbientPlacesStatusBound = bindAdminOperation("getApiAdminAmbientPlacesStatus");
 export async function getApiAdminAmbientPlacesStatusRequest<T>(
@@ -615,6 +643,13 @@ export async function previewAdminTransitCredentialsRequest<T>(
 ): Promise<T> {
   return previewAdminTransitCredentialsBound<T>(url, options);
 }
+const proposeAdminTransitPinsBound = bindAdminOperation("proposeAdminTransitPins");
+export async function proposeAdminTransitPinsRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return proposeAdminTransitPinsBound<T>(url, options);
+}
 const provisionAdminDawarichBound = bindAdminOperation("provisionAdminDawarich");
 export async function provisionAdminDawarichRequest<T>(
   url: string,
@@ -812,6 +847,13 @@ export async function updateAdminServiceConfigRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return updateAdminServiceConfigBound<T>(url, options);
+}
+const validateAdminTransitPinsBound = bindAdminOperation("validateAdminTransitPins");
+export async function validateAdminTransitPinsRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return validateAdminTransitPinsBound<T>(url, options);
 }
 const verifyAdminAccountBound = bindAdminOperation("verifyAdminAccount");
 export async function verifyAdminAccountRequest<T>(

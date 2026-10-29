@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
-import { readCatalogPinSet } from "@openmapx/core/catalog-pins";
+import { readCatalogPinSet, readCatalogProposal } from "@openmapx/core/catalog-pins";
 import { createControlRootOperationKey, executionFingerprint } from "@openmapx/core/ops";
 import { fsyncDirectory } from "@openmapx/core/release-files";
 import {
@@ -39,6 +39,7 @@ export interface GenerateTransitousApiKeysOptions {
   transitousRepoUrl?: string;
   outputPath?: string;
   runner?: CommandRunner;
+  proposalId?: string;
 }
 export interface GenerateTransitousApiKeysResult {
   outputPath: string;
@@ -159,6 +160,26 @@ export async function generateTransitousApiKeys(
     throw Error(
       "Active paired catalog pins are required; initialize the instance before generating credentials",
     );
+  const activeGenerationId = pins.generationId;
+  if (options.proposalId) {
+    const reader = control.openControlInstallation({
+      infraDir: paths.infraDir,
+      role: "host-cli",
+      serviceIds: ["motis"],
+    });
+    try {
+      const proposal = readCatalogProposal({
+        rootDir: paths.root,
+        installation: reader,
+        proposalId: options.proposalId,
+      });
+      if (!proposal || proposal.baseGenerationId !== activeGenerationId)
+        throw Error("Proposal is missing or based on different active pins");
+      pins = proposal.pins;
+    } finally {
+      control.closeControlInstallation(reader);
+    }
+  }
   const sha = pins.transitous.ref.split("@").at(-1),
     atlas = pins.transitous.submodules["transitland-atlas"];
   if (!sha || !atlas) throw Error("Exact Transitous and atlas pins are required");
@@ -225,7 +246,12 @@ export async function generateTransitousApiKeys(
       serviceIds: ["motis"],
       owner: authority,
     });
-    if (readCatalogPinSet(paths.root)?.generationId !== pins.generationId)
+    if (
+      readCatalogPinSet(paths.root)?.generationId !== activeGenerationId ||
+      (options.proposalId &&
+        readCatalogProposal({ rootDir: paths.root, installation, proposalId: options.proposalId })
+          ?.pins.generationId !== pins.generationId)
+    )
       throw Error("Catalog pins changed; inspect the new pin before retrying");
     if (existingSnapshot(outputPath)?.identity !== before?.identity)
       throw Error("Credential file changed; review before retrying");

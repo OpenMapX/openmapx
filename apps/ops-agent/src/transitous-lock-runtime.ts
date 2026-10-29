@@ -1,18 +1,13 @@
-import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
 import {
-  closeSync,
-  constants,
-  existsSync,
-  fsyncSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
-import { dirname, join } from "node:path";
-import { catalogRevisionId, readCatalogPinSet } from "@openmapx/core/catalog-pins";
+  catalogRevisionId,
+  listCatalogProposals,
+  readCatalogPinSet,
+  readCatalogProposal,
+  retainCatalogProposal,
+} from "@openmapx/core/catalog-pins";
 import type { OpsResultFor } from "@openmapx/core/ops";
 import { OpsNotWiredError, type OpsRuntime } from "./runtime";
 
@@ -54,33 +49,6 @@ function readLockAt(path: string): LockRecord {
   } as LockRecord;
 }
 
-/** Write-then-rename so a reader never observes a half-written lock. */
-function atomicWriteJson(path: string, value: unknown): void {
-  mkdirSync(dirname(path), { recursive: true });
-  const temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
-  const descriptor = openSync(
-    temporary,
-    constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW,
-    0o600,
-  );
-  try {
-    writeFileSync(descriptor, `${JSON.stringify(value, null, 2)}\n`, "utf-8");
-    fsyncSync(descriptor);
-  } finally {
-    closeSync(descriptor);
-  }
-  try {
-    renameSync(temporary, path);
-  } catch (error) {
-    try {
-      unlinkSync(temporary);
-    } catch {
-      // The rename already failed; surface that, not the cleanup.
-    }
-    throw error;
-  }
-}
-
 export interface TransitousLockRuntimeOptions {
   rootDir: string;
   now?: () => Date;
@@ -115,10 +83,34 @@ export function createTransitousLockRuntime(
     const active = pair();
     return { active, catalogRevisionId: active ? catalogRevisionId(active) : null };
   };
-  runtime["transitousLock.inspect"] = async () => ({
-    active: pair()?.transitous ?? null,
-    proposed: readLockAt(proposedPath),
-  });
+  runtime["transitousLock.inspect"] = async (operation) => {
+    const base = { active: pair()?.transitous ?? null, proposed: readLockAt(proposedPath) };
+    if (operation.proposalId === undefined && operation.offset === undefined) return base;
+    const installation = openControlInstallation({
+      infraDir: join(options.rootDir, "infra/docker"),
+      role: "ops-agent",
+    });
+    try {
+      return {
+        ...base,
+        proposal: operation.proposalId
+          ? readCatalogProposal({
+              rootDir: options.rootDir,
+              installation,
+              proposalId: operation.proposalId,
+            })
+          : null,
+        page: listCatalogProposals({
+          rootDir: options.rootDir,
+          installation,
+          offset: operation.offset,
+        }),
+      };
+    } finally {
+      closeControlInstallation(installation);
+    }
+  };
+
   runtime["gbfsCatalogLock.inspect"] = async () => {
     const active = pair();
     if (!active) throw new OpsNotWiredError();
@@ -126,15 +118,27 @@ export function createTransitousLockRuntime(
     return { commit, url, sha256, lockedAt, lockedBy };
   };
 
-  runtime["transitousLock.propose"] = async (operation) => {
-    atomicWriteJson(proposedPath, {
-      ref: operation.ref,
-      submodules: operation.submodules,
-      lockedAt: now().toISOString(),
-      lockedBy: operation.lockedBy,
-      ...(operation.comment ? { comment: operation.comment } : {}),
+  runtime["transitousLock.propose"] = async ({ kind: _kind, ...proposal }, context) => {
+    const installation = openControlInstallation({
+      infraDir: join(options.rootDir, "infra/docker"),
+      role: "ops-agent",
     });
-    return { ref: operation.ref, proposed: true as const };
+    try {
+      const retained = await retainCatalogProposal({
+        rootDir: options.rootDir,
+        installation,
+        proposal,
+        now: now(),
+        signal: context.signal,
+      });
+      return {
+        proposalId: retained.proposalId,
+        catalogRevisionId: retained.pins.generationId,
+        proposed: true as const,
+      };
+    } finally {
+      closeControlInstallation(installation);
+    }
   };
 
   // The legacy ref-only approval cannot prove paired generation/pointer ownership.

@@ -5,6 +5,8 @@ export type StartGenerationHardlinksExecution202Kind =
   (typeof StartGenerationHardlinksExecution202Kind)[keyof typeof StartGenerationHardlinksExecution202Kind];
 
 export const StartGenerationHardlinksExecution202Kind = {
+  catalogvalidate: "catalog.validate",
+  catalogactivate: "catalog.activate",
   "download-osm": "download-osm",
   "download-fonts": "download-fonts",
   "convert-overpass": "convert-overpass",

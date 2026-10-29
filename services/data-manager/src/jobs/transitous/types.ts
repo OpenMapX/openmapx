@@ -141,6 +141,7 @@ export interface ProxyTransactionState {
 
 export interface JobContext {
   executionContext?: import("../execution/runtime.js").DataExecutionContext;
+  reviewedCatalog?: import("./catalog-selection.js").ReviewedCatalogSelection;
   /** ULID/UUID */
   jobId: string;
   /** Absolute path, typically `infra/docker/data`. */

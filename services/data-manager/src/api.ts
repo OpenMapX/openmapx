@@ -13,7 +13,8 @@ import {
   normalizeDataExecutionInput,
   type TransitDesiredSourceMutation,
 } from "@openmapx/core/data-manager-contracts";
-import { feedState } from "@openmapx/db-schema";
+import { feedState, jobs } from "@openmapx/db-schema";
+import { and, desc, sql as drizzleSql, eq, inArray } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type postgres from "postgres";
 import { type CoverageApiOptions, registerCoverageEvidenceRoute } from "./coverage/api.js";
@@ -39,12 +40,7 @@ import {
 import { createSearchIndexRuntimeState, getSearchIndexStatus } from "./jobs/search-index/state.js";
 import type { BakePredictedResult } from "./jobs/traffic/bake-predicted.js";
 import { createTransitPreflightController } from "./jobs/transitous/admin-preflight.js";
-import {
-  CatalogBumpError,
-  candidateMatchesLock,
-  lockFromCandidate,
-  resolveCatalogBumpCandidate,
-} from "./jobs/transitous/catalog-bump.js";
+import { CatalogBumpError } from "./jobs/transitous/catalog-bump.js";
 import { resolveTransitOverlayPath } from "./jobs/transitous/internal.js";
 import {
   type MotisOperationsPolicy,
@@ -90,6 +86,10 @@ import {
 } from "./transit-sources.js";
 
 export interface ApiOptions {
+  catalogReview?: Pick<
+    ReturnType<typeof import("./jobs/transitous/catalog-review.js").createCatalogReviewService>,
+    "resolveCatalogProposal" | "reviewState"
+  >;
   executionReceiver?: DataExecutionReceiver;
   dataDir?: string;
   /**
@@ -1070,55 +1070,72 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     return undefined;
   });
 
+  registerDataManagerRoute(app, "inspectCatalogReview", async (req, reply) => {
+    if (!opts.catalogReview || !opts.executionReceiver)
+      return reply.code(503).send({ error: "Durable catalog review is unavailable" });
+    const proposalId = req.query.proposalId;
+    const matching = proposalId
+      ? and(
+          eq(jobs.executionVersion, 2),
+          drizzleSql`${jobs.executionInput}->>'proposalId' = ${proposalId}`,
+        )
+      : undefined;
+    const [executions, validations] = proposalId
+      ? await Promise.all([
+          db
+            .select({ id: jobs.id })
+            .from(jobs)
+            .where(and(matching, inArray(jobs.kind, ["catalog.validate", "catalog.activate"])))
+            .orderBy(desc(jobs.startedAt), desc(jobs.id))
+            .limit(1),
+          db
+            .select({ id: jobs.id })
+            .from(jobs)
+            .where(and(matching, eq(jobs.kind, "catalog.validate")))
+            .orderBy(desc(jobs.startedAt), desc(jobs.id))
+            .limit(1),
+        ])
+      : [[], []];
+    const latestValidation = validations[0],
+      latest = executions[0];
+    const snapshot = await opts.catalogReview.reviewState({
+      ...req.query,
+      ...(latestValidation ? { validationId: latestValidation.id } : {}),
+    });
+    return {
+      ...snapshot,
+      execution: latest ? await opts.executionReceiver.inspect(latest.id) : null,
+    };
+  });
+
   // POST /transit/bump — propose a new pin set. It never activates the lock;
   // operators must review diffs/build the inactive slot before approval.
   registerDataManagerRoute(app, "proposeTransitBump", async (req, reply) => {
-    const branch = req.body?.branch?.trim() || "main";
-    const force = req.body?.force === true;
-    const lockedBy = req.body?.lockedBy?.trim() || "api";
-
-    const catalogDir = join(dataDir, ".transitous-catalog");
-
+    if (!opts.catalogReview)
+      return reply.code(503).send({ error: "Paired catalog resolver is unavailable" });
     try {
-      return await withLegacyDataMutation("transit-proposal", async () => {
-        const candidate = await resolveCatalogBumpCandidate({ catalogDir, branch });
-        const { active: existing } = await runOpsOperation({ kind: "transitousLock.inspect" });
-        if (candidateMatchesLock(candidate, existing) && !force)
-          return {
-            ok: true,
-            unchanged: true,
-            ref: candidate.ref,
-            previousRef: existing?.ref ?? null,
-          };
-        const lock = lockFromCandidate(
-          candidate,
-          lockedBy,
-          "Pinned commit of public-transport/transitous consumed by services/data-manager. Bumped via POST /transit/bump.",
-        );
-        await runOpsOperation({
-          kind: "transitousLock.propose",
-          ref: lock.ref,
-          submodules: lock.submodules,
-          lockedBy: lock.lockedBy,
-          ...(lock.comment ? { comment: lock.comment } : {}),
-        });
-        return {
-          ok: true,
-          unchanged: false,
-          proposed: true,
-          ref: lock.ref,
-          previousRef: existing?.ref ?? null,
-          submoduleSha: candidate.transitlandAtlasSha,
-          lockedAt: lock.lockedAt,
-          lockedBy: lock.lockedBy,
-        };
+      const previous = await runOpsOperation({ kind: "catalogPins.inspect" });
+      const proposal = await opts.catalogReview.resolveCatalogProposal({
+        branch: req.body?.branch?.trim() || "main",
+        proposalId: req.body?.proposalId,
       });
+      return {
+        ok: true,
+        unchanged: false,
+        proposed: true,
+        proposalId: proposal.proposalId,
+        catalogRevisionId: proposal.pins.generationId,
+        ref: proposal.pins.transitous.ref,
+        previousRef: previous.active?.transitous.ref ?? null,
+        submoduleSha: proposal.pins.transitous.submodules["transitland-atlas"]!,
+        lockedAt: proposal.pins.transitous.lockedAt,
+        lockedBy: proposal.pins.transitous.lockedBy,
+      };
     } catch (err) {
       if (err instanceof CatalogBumpError) {
         const status =
           err.code === "catalog-not-cloned" ? 409 : err.code === "git-fetch-failed" ? 502 : 500;
-        reply.code(status);
-        return { ok: false, error: err.code, message: err.message };
+        return reply.code(status).send({ error: err.code });
       }
       throw err;
     }

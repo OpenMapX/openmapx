@@ -17,6 +17,7 @@
     "services/data-manager/src/jobs/transitous/catalog-bump.ts|runner|1|git|transitous-runner|transitous.catalog-status",
     "services/data-manager/src/jobs/transitous/catalog-bump.ts|runner|2|git|transitous-runner|transitous.catalog-diff",
     "services/data-manager/src/jobs/transitous/catalog-bump.ts|runner|3|git|transitous-runner|transitous.catalog-proposal",
+    "services/data-manager/src/jobs/transitous/catalog-review.ts|execa|1|git|transitous-runner|transitous.catalog-diff",
     "services/data-manager/src/jobs/transitous/internal.ts|execa|1|command|transitous-runner|transitous.fixed-runner",
     "services/data-manager/src/jobs/transitous/internal.ts|execa|2|git|transitous-runner|transitous.git-read",
     "services/data-manager/src/jobs/transitous/prepare.ts|runner|1|git|transitous-runner|transitous.checkout-fetch",

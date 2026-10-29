@@ -10,8 +10,10 @@ import {
   executionRefSchema,
   type OpsOperation,
   opsOperationFingerprint,
+  pairedPinApprovalResultSchema,
 } from "@openmapx/core/ops";
 import z from "zod/v4";
+import { retainCatalogActivationRecord } from "../transitous/catalog-activation-record.js";
 export const DATA_EFFECT_KINDS = [
   "motis.primary.stop",
   "motis.staging.stop",
@@ -119,6 +121,7 @@ export const dataOpsChildAttemptSchema = z
       ...attempted,
       state: z.literal("terminal"),
       acceptedId: receiverId,
+      approvalResult: pairedPinApprovalResultSchema.optional(),
       publication: z.enum(["not_started", "committed"]),
       settlement: z.strictObject({
         outcome: z.enum(["contained", "committed", "failed_without_effect"]),
@@ -133,6 +136,15 @@ export const dataOpsChildAttemptSchema = z
     }),
   ])
   .superRefine((child, ctx) => {
+    if (
+      child.state === "terminal" &&
+      child.approvalResult &&
+      child.operation.kind !== "transitousLock.approve"
+    )
+      ctx.addIssue({
+        code: "custom",
+        message: "Only paired approval retains its bounded committed result",
+      });
     if (child.proxyRecovery && child.phase !== "proxy-restore")
       ctx.addIssue({
         code: "custom",
@@ -199,7 +211,90 @@ export function reserveTransitChildOperations(
 ): DataOpsChildReserved[] {
   const entries: Array<{ phase: DataOpsChildPhase; operation: OpsOperation; targets: string[] }> =
     [];
-  if (input.kind === "transit-sync") {
+  if (input.kind === "catalog.validate") {
+    entries.push(
+      {
+        phase: "stop-staging",
+        operation: { kind: "motis.staging.stop" },
+        targets: ["motis-staging"],
+      },
+      {
+        phase: "restart-staging",
+        operation: { kind: "motis.staging.restart" },
+        targets: ["motis-staging"],
+      },
+      {
+        phase: "proxy-stage",
+        operation: {
+          kind: "feedProxy.validateAndReload",
+          candidateId: transitChildCandidateId(execution, "proxy-stage", 2),
+        },
+        targets: ["motis-feed-proxy"],
+      },
+      {
+        phase: "proxy-restore",
+        operation: {
+          kind: "feedProxy.validateAndReload",
+          candidateId: transitChildCandidateId(execution, "proxy-restore", 3),
+        },
+        targets: ["motis-feed-proxy"],
+      },
+      {
+        phase: "stop-staging",
+        operation: { kind: "motis.staging.stop" },
+        targets: ["motis-staging"],
+      },
+    );
+  } else if (input.kind === "catalog.activate") {
+    entries.push(
+      {
+        phase: "paired-pin-commit",
+        operation: {
+          kind: "transitousLock.approve",
+          proposalId: input.proposalId,
+          validationId: input.validationId,
+          expectedGenerationId: input.expectedGenerationId,
+          diffDigest: input.diffDigest,
+          acknowledgeLicenseChanges: input.acknowledgeLicenseChanges,
+        },
+        targets: ["motis"],
+      },
+      { phase: "stop-primary", operation: { kind: "motis.primary.stop" }, targets: ["motis"] },
+      {
+        phase: "promote-primary",
+        operation: { kind: "motis.primary.promote", preparedRunId: input.validationId },
+        targets: ["motis"],
+      },
+      {
+        phase: "recover-primary",
+        operation: { kind: "motis.primary.restart" },
+        targets: ["motis"],
+      },
+    );
+    for (const phase of ["proxy-stage", "proxy-commit", "proxy-restore"] as const) {
+      const ordinal = entries.length;
+      entries.push({
+        phase,
+        operation: {
+          kind: "feedProxy.validateAndReload",
+          candidateId: transitChildCandidateId(execution, phase, ordinal),
+        },
+        targets: ["motis-feed-proxy"],
+      });
+    }
+    entries.push(
+      {
+        phase: "stop-staging",
+        operation: { kind: "motis.staging.stop" },
+        targets: ["motis-staging"],
+      },
+      {
+        phase: "restart-staging",
+        operation: { kind: "motis.staging.restart" },
+        targets: ["motis-staging"],
+      },
+    );
+  } else if (input.kind === "transit-sync") {
     entries.push(
       { phase: "stop-primary", operation: { kind: "motis.primary.stop" }, targets: ["motis"] },
       {
@@ -401,6 +496,9 @@ async function observeChild(
           state: "terminal",
           acceptedId: status.operationId,
           publication: evidence.publication,
+          ...(child.operation.kind === "transitousLock.approve" && status.state === "succeeded"
+            ? { approvalResult: pairedPinApprovalResultSchema.parse(status.result) }
+            : {}),
           settlement: {
             outcome: evidence.outcome,
             terminalReceiptDigest: evidence.terminalReceiptDigest,
@@ -463,8 +561,6 @@ export async function runOwnedDataOpsOperation<K extends DataEffectKind>(
     canonicalJson(slot.serviceIds) !== canonicalJson(options.serviceIds)
   )
     throw Error("Operation differs from original data phase reservation");
-  if (operation.kind === "transitousLock.approve")
-    throw Error("Paired pin approval requires the validation-bound activation runtime");
   let child: DataOpsChildAttempt | undefined = record.children.find(
     (value) => value.operationKey === slot.operationKey,
   );
@@ -497,6 +593,8 @@ export async function runOwnedDataOpsOperation<K extends DataEffectKind>(
       await context.checkpointChild(bound);
       child = bound;
       context.assertForward();
+      if (operation.kind === "transitousLock.approve")
+        await retainCatalogActivationRecord(context, exact.execution);
       if (assertOwnedDataTransitCandidate(context.authority, slot) !== candidateDigest)
         throw Error("Owned candidate changed before grant");
       const issued = await issueControlChildPhase(context.authority, {
