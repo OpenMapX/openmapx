@@ -382,12 +382,15 @@ class AdminJobRunner {
         "./prospective-configuration"
       ),
       integrationIds = await retainedConfigurationIntegrationIds(ctx, actorId, operationKey),
-      result = await withAdministrativeConfigurationJob(ctx, () =>
+      originalResult = await withAdministrativeConfigurationJob(ctx, () =>
         withAdministrativeConfigurationWriter(
           { actorId, operationKey, integrationIds, signal: ctx.signal },
           () => resumeRetainedConfigurationCandidate(),
         ),
-      );
+      ),
+      result = await (
+        await import("./transit-credential-recovery")
+      ).recoveredTransitCredentialResult(ctx, originalResult);
     const [canceled] = await db
       .select()
       .from(adminJob)
@@ -585,6 +588,50 @@ class AdminJobRunner {
         };
       },
       (result) => integrationApplyReceiptSchema.parse(result.integrationApplication),
+    );
+  }
+
+  applyImmediateTransitCredentials(options: {
+    actorId: string;
+    previewId: string;
+    intentFingerprint: string;
+    operationKey: string;
+    signal?: AbortSignal;
+  }) {
+    return this.immediate(
+      {
+        ...options,
+        type: "configuration.apply",
+        intent: {
+          purpose: "transit-credentials",
+          previewId: options.previewId,
+          intentFingerprint: options.intentFingerprint,
+        },
+      },
+      async (ctx) => {
+        const { runTransitCredentialChange } = await import("./transit-credential-application");
+        const value = await runTransitCredentialChange(ctx, options);
+        return {
+          value,
+          result: { configuration: value.configuration, transitCredentials: value },
+          failed: !completeTrustedConfigurationApply(value.configuration),
+        };
+      },
+      (result) => {
+        const value = result.transitCredentials as
+          | { credentialsRevision?: unknown; configuration?: unknown }
+          | undefined;
+        if (
+          !value ||
+          typeof value.credentialsRevision !== "string" ||
+          !/^[a-f0-9]{64}$/.test(value.credentialsRevision)
+        )
+          throw new JobObservationPending("recovery_required");
+        return {
+          credentialsRevision: value.credentialsRevision,
+          configuration: parseTrustedConfigurationApplyOutcome(value.configuration),
+        };
+      },
     );
   }
 

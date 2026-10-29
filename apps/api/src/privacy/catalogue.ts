@@ -427,6 +427,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     locators: [
       { type: "updater_id", field: "integration_secret.updated_by" },
       { type: "updater_id", field: "service_secret.updated_by" },
+      { type: "actor_id", field: "transit_credential_preview.actor_id" },
     ],
     purposes: ["service-provisioning", "security-and-abuse-prevention"],
     legalBases: ["contract", "legitimate-interest"],

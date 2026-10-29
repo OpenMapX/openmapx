@@ -202,6 +202,7 @@ const RELEASE_RECOVERY_READ_KINDS = new Set<OpsOperationKind>([
   "valhalla.traffic.inspect",
   "postgis.capacity.inspect",
   "catalogPins.inspect",
+  "transitCredentials.inspect",
   "transitousLock.inspect",
   "gbfsCatalogLock.inspect",
 ]);

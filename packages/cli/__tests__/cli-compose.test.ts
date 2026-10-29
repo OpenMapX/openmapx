@@ -619,7 +619,7 @@ describe("renderComposeForRepo and what the admin panel applied", () => {
   };
 
   /** An admin apply that saved config and a vault secret for ingest without enabling it. */
-  async function adminApply() {
+  async function adminApply(transitCredentialsRevision?: string) {
     writeManifest("alpha", { ...baseManifest, id: "alpha" });
     writeManifest("ingest", ingest);
     const registry = new coreServices.ServiceRegistry({ rootDir: tmp });
@@ -629,6 +629,7 @@ describe("renderComposeForRepo and what the admin panel applied", () => {
       services: registry.list(),
       input: {
         domain: "example.com",
+        ...(transitCredentialsRevision ? { transitCredentialsRevision } : {}),
         selectedRoots: ["alpha"],
         serviceConfigs: [{ serviceId: "ingest", values: { MODE: "saved" } }],
         integrationConfigs: [],
@@ -639,6 +640,15 @@ describe("renderComposeForRepo and what the admin panel applied", () => {
 
   afterEach(() => {
     delete process.env.SERVICE_INGEST_MODE;
+  });
+
+  it("preserves the opaque transit credential version during the actual CLI render", async () => {
+    const revision = "c".repeat(64);
+    await adminApply(revision);
+    await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] });
+    expect(coreServices.readAppliedTransitCredentialsRevision(join(tmp, "infra/docker"))).toBe(
+      revision,
+    );
   });
 
   it("keeps saved config and vault secrets, also for a service it enables later", async () => {

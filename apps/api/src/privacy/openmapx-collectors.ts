@@ -43,6 +43,7 @@ import {
   session,
   shareLink,
   systemSettings,
+  transitCredentialPreview,
   twoFactor,
   user,
   verification,
@@ -1010,6 +1011,27 @@ export async function* streamOpenMapxRegistrationRecords(
           )
           .orderBy(asc(serviceSecret.id)),
         { policyCodes: ["secret-value-redacted"] },
+      );
+      yield* emit(
+        database
+          .select({
+            id: transitCredentialPreview.id,
+            createdAt: transitCredentialPreview.createdAt,
+            expiresAt: transitCredentialPreview.expiresAt,
+            consumedAt: transitCredentialPreview.consumedAt,
+          })
+          .from(transitCredentialPreview)
+          .where(
+            and(
+              eq(transitCredentialPreview.actorId, context.userId),
+              lte(transitCredentialPreview.createdAt, cutoff),
+            ),
+          )
+          .orderBy(asc(transitCredentialPreview.id)),
+        {
+          policyCodes: ["secret-value-redacted"],
+          map: ({ id, ...row }) => ({ ...row, proposalDigest: pseudonymousIdentifier(id) }),
+        },
       );
       return;
     case "system-setting-attribution":

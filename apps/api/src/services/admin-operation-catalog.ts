@@ -23,7 +23,6 @@ export type AdminOperationId =
   | "convert-overpass"
   | "link"
   | "clean"
-  | "generate-api-keys"
   | "overture-sync"
   | "overture-conflate"
   | "search-index-build"
@@ -106,8 +105,6 @@ const requiredRegionField = (helpText: string): AdminOperationField => ({
 
 const withRegion = (label: string, regionId: string | undefined) =>
   regionId ? `${label} ${regionId}` : `${label} (configured default region)`;
-
-const TRANSITOUS_API_KEY_CATALOG_REVISION = "transitous-fixed-v1";
 
 export const ADMIN_OPERATIONS: readonly AnyAdminOperationDefinition[] = [
   defineOperation({
@@ -239,24 +236,6 @@ export const ADMIN_OPERATIONS: readonly AnyAdminOperationDefinition[] = [
     preview: (input) => [
       `Remove local data files for target ${input.target}`,
       "Services depending on that data need a rebuild afterwards",
-    ],
-  }),
-  defineOperation({
-    id: "generate-api-keys",
-    version: 1,
-    group: "transit",
-    title: "Generate Transitous API-Key Template",
-    description: "Writes the API-key template for the pinned Transitous catalog revision.",
-    risk: "normal",
-    input: z.strictObject({}),
-    fields: [],
-    defaults: {},
-    effect: () => ({
-      kind: "data.generateApiKeys",
-      catalogRevisionId: TRANSITOUS_API_KEY_CATALOG_REVISION,
-    }),
-    preview: () => [
-      `Generate the API-key template for catalog revision ${TRANSITOUS_API_KEY_CATALOG_REVISION}`,
     ],
   }),
   defineOperation({

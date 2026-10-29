@@ -134,6 +134,7 @@ export const OPS_OPERATION_KINDS = [
   "valhalla.traffic.refreshWaysToEdges",
   "postgis.capacity.inspect",
   "catalogPins.inspect",
+  "transitCredentials.inspect",
   "transitousLock.inspect",
   "transitousLock.propose",
   "transitousLock.approve",
@@ -260,6 +261,7 @@ export const OPS_KIND_POLICIES = {
   "valhalla.traffic.maintain": asyncEffect("data-manager", 30 * 60_000),
   "valhalla.traffic.refreshWaysToEdges": asyncEffect("data-manager", 30 * 60_000),
   "postgis.capacity.inspect": sync("data-manager", 30_000),
+  "transitCredentials.inspect": sync("api", 120_000, 768 * 1024),
   "catalogPins.inspect": sync("api", 30_000, 768 * 1024),
   "transitousLock.inspect": sync("data-manager", 30_000),
   "transitousLock.propose": sync("data-manager", 30_000),
@@ -546,6 +548,10 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   // The catalog lock lives under the repository's `infra/docker/`, which only
   // the operations agent may write. Callers name a pinned ref, never a path.
   kindOnly("catalogPins.inspect"),
+  z.strictObject({
+    kind: z.literal("transitCredentials.inspect"),
+    catalogRevisionId: z.string().regex(/^[a-f0-9]{64}$/),
+  }),
   kindOnly("transitousLock.inspect"),
   z.strictObject({
     kind: z.literal("transitousLock.propose"),
@@ -600,6 +606,8 @@ const opsRequestSchema = z
 export type OpsRequest = z.infer<typeof opsRequestSchema>;
 
 export function authorizeOpsOperation(role: OpsRole, kind: OpsOperationKind): boolean {
+  // Decode retained historical records, but never admit a new remote file writer.
+  if (kind === "data.generateApiKeys") return false;
   return (
     OPS_KIND_POLICIES[kind].role === role ||
     (role === "data-manager" && kind === "catalogPins.inspect")
@@ -1280,6 +1288,23 @@ export const OPS_RESULT_SCHEMAS = {
   }),
   "valhalla.traffic.refreshWaysToEdges": changed,
   "postgis.capacity.inspect": z.strictObject({ availableBytes: z.number().int().nonnegative() }),
+  "transitCredentials.inspect": z.strictObject({
+    catalogRevisionId: z.string().regex(/^[a-f0-9]{64}$/),
+    requiredKeys: z.array(z.string().min(1).max(1024)).max(1000),
+    hostCredentialsRevision: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .nullable(),
+    owner: z.enum(["vault", "file", "environment", "unset"]),
+    editable: z.boolean(),
+    reason: z.string().max(512).nullable(),
+    configuredKeys: z.array(z.string().min(1).max(1024)).max(10000),
+    retainedKeys: z.array(z.string().min(1).max(1024)).max(10000),
+    appliedCredentialsRevision: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .nullable(),
+  }),
   "catalogPins.inspect": z
     .strictObject({
       active: catalogPinSetSchema.nullable(),

@@ -20,7 +20,8 @@ const runAdminOperationMock = vi.hoisted(() =>
 // Stub the heavy import chain so the argv-guard tests don't bring in the real
 // service registry, postgres client, or CLI runner. We only exercise pure
 // validation helpers.
-vi.mock("@openmapx/core/server", () => ({
+vi.mock("@openmapx/core/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@openmapx/core/server")>()),
   findRepoRoot: () => "/repo",
 }));
 vi.mock("@openmapx/core", () => ({
@@ -335,16 +336,12 @@ describe("admin job handlers", () => {
             },
           }),
         ),
-      ).rejects.toThrow(/Invalid input/);
+      ).rejects.toThrow();
       expect(runAdminOperationMock).not.toHaveBeenCalled();
 
       const ctx = dataCtx({ operation: "generate-api-keys", version: 1, input: {} });
-      await handleDataOperationJob(ctx);
-      expect(runAdminOperationMock).toHaveBeenCalledWith(
-        ctx,
-        { kind: "data.generateApiKeys", catalogRevisionId: "transitous-fixed-v1" },
-        "admin-job.data.generate-api-keys",
-      );
+      await expect(handleDataOperationJob(ctx)).rejects.toThrow();
+      expect(runAdminOperationMock).not.toHaveBeenCalled();
     });
   });
 

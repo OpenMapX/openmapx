@@ -1,6 +1,13 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  closeControlInstallation,
+  openControlInstallation,
+  provisionControlInstallation,
+} from "@openmapx/core/build-artifacts";
+import { initializeManagedCatalogPins } from "@openmapx/core/catalog-pins";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   type CommandRunner,
@@ -58,114 +65,141 @@ afterEach(() => {
 });
 
 describe("generateTransitousApiKeys", () => {
-  it("clones the Transitous catalog and preserves existing filled keys", async () => {
-    const outputPath = join(tmp, "services", "motis", "tools", "transitous", "api-keys.json");
-    writeFileSync(
-      outputPath,
-      JSON.stringify(
-        {
-          "us-ca/NeedsKey": "preserved-secret",
-          "legacy/no-longer-needed": "stale-value",
+  it("requires active paired pins without refreshing upstream or changing existing values", async () => {
+    const output = join(tmp, "services/motis/tools/transitous/api-keys.json"),
+      before = JSON.stringify({ "retained/orphan": "  exact value\n" });
+    writeFileSync(output, before);
+    let calls = 0;
+    await expect(
+      generateTransitousApiKeys({
+        rootDir: tmp,
+        runner: async () => {
+          calls++;
         },
-        null,
-        2,
-      ),
-      "utf-8",
-    );
-
-    const catalogDir = join(tmp, "infra", "docker", "data", ".transitous-catalog");
-    const calls: Array<{ command: string; args: string[]; cwd?: string }> = [];
-    const runner: CommandRunner = async (command, args, opts) => {
-      calls.push({ command, args, cwd: opts.cwd });
-      if (command === "git" && args.includes("clone")) {
-        const targetDir = args.at(-1);
-        if (typeof targetDir === "string") {
-          writeTransitousCatalog(targetDir);
-        }
-      }
-    };
-
-    const result = await generateTransitousApiKeys({ rootDir: tmp, runner });
-
-    expect(result.requiredCount).toBe(2);
-    expect(result.preservedCount).toBe(1);
-    expect(result.droppedCount).toBe(1);
-    expect(result.outputPath).toBe(outputPath);
-    expect(JSON.parse(readFileSync(outputPath, "utf-8")) as Record<string, string>).toStrictEqual({
-      "ca-qc/QuebecAgency": "",
-      "us-ca/NeedsKey": "preserved-secret",
-    });
-    expect(calls).toEqual([
-      {
-        command: "git",
-        args: [
-          "-c",
-          `safe.directory=${catalogDir}`,
-          "clone",
-          "--depth",
-          "1",
-          "--recurse-submodules",
-          "--shallow-submodules",
-          "--",
-          DEFAULT_TRANSITOUS_REPO_URL,
-          catalogDir,
-        ],
-        cwd: join(tmp, "infra", "docker", "data"),
-      },
-    ]);
+      }),
+    ).rejects.toThrow(/pins/);
+    expect(calls).toBe(0);
+    expect(readFileSync(output, "utf8")).toBe(before);
   });
-
-  it("uses an existing cached catalog and continues when git pull fails", async () => {
-    const catalogDir = join(tmp, "infra", "docker", "data", ".transitous-catalog");
-    mkdirSync(join(catalogDir, ".git"), { recursive: true });
-    writeTransitousCatalog(catalogDir);
-
-    const safe = `safe.directory=${catalogDir}`;
-    const calls: Array<{ command: string; args: string[]; cwd?: string }> = [];
-    const runner: CommandRunner = async (command, args, opts) => {
-      calls.push({ command, args, cwd: opts.cwd });
-      if (command === "git" && args.includes("pull")) {
-        throw new Error("network unavailable");
-      }
-    };
-
-    const result = await generateTransitousApiKeys({ rootDir: tmp, runner });
-
-    expect(result.requiredCount).toBe(2);
-    expect(result.preservedCount).toBe(0);
-    expect(result.droppedCount).toBe(0);
-    const outputPath = join(tmp, "services", "motis", "tools", "transitous", "api-keys.json");
-    expect(JSON.parse(readFileSync(outputPath, "utf-8")) as Record<string, string>).toStrictEqual({
-      "ca-qc/QuebecAgency": "",
-      "us-ca/NeedsKey": "",
-    });
-    expect(calls).toEqual([
-      {
-        command: "git",
-        args: ["-c", safe, "-C", catalogDir, "reset", "--hard", "HEAD"],
-        cwd: catalogDir,
-      },
-      {
-        command: "git",
-        args: ["-c", safe, "-C", catalogDir, "pull", "--ff-only"],
-        cwd: join(tmp, "infra", "docker", "data"),
-      },
-      {
-        command: "git",
-        args: [
-          "-c",
-          safe,
-          "-C",
-          catalogDir,
-          "submodule",
-          "update",
-          "--init",
-          "--checkout",
-          "--depth",
-          "1",
-        ],
-        cwd: join(tmp, "infra", "docker", "data"),
-      },
-    ]);
+  it("refuses mutable repository overrides before any acquisition or output", async () => {
+    let calls = 0;
+    await expect(
+      generateTransitousApiKeys({
+        rootDir: tmp,
+        transitousRepoUrl: "https://example.test/upstream",
+        runner: async () => {
+          calls++;
+        },
+      }),
+    ).rejects.toThrow(/overrides/);
+    expect(calls).toBe(0);
   });
 });
+
+it("uses actual active pin A while upstream is B and preserves unrelated credential bytes", async () => {
+  const git = (cwd: string, args: string[]) =>
+    execFileSync("git", ["-c", "protocol.file.allow=always", ...args], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: "OpenMapX fixture",
+        GIT_AUTHOR_EMAIL: "fixture@example.test",
+        GIT_COMMITTER_NAME: "OpenMapX fixture",
+        GIT_COMMITTER_EMAIL: "fixture@example.test",
+      },
+    }).trim();
+  const upstream = join(tmp, "upstream"),
+    cache = join(tmp, "infra/docker/data/.transitous-catalog");
+  mkdirSync(upstream);
+  writeTransitousCatalog(upstream);
+  git(upstream, ["init"]);
+  const atlas = join(upstream, "transitland-atlas");
+  git(atlas, ["init"]);
+  git(atlas, ["add", "."]);
+  git(atlas, ["commit", "-m", "Atlas A"]);
+  const atlasSha = git(atlas, ["rev-parse", "HEAD"]);
+  writeFileSync(
+    join(upstream, ".gitmodules"),
+    `[submodule "transitland-atlas"]\npath = transitland-atlas\nurl = ${atlas}\n`,
+  );
+  writeFileSync(
+    join(upstream, "feeds/de.json"),
+    JSON.stringify({ sources: [{ name: "PinnedA", "transitland-atlas-id": "atlas-auth-1" }] }),
+  );
+  git(upstream, ["add", "feeds", ".gitmodules"]);
+  git(upstream, ["update-index", "--add", "--cacheinfo", `160000,${atlasSha},transitland-atlas`]);
+  git(upstream, ["commit", "-m", "Catalog A"]);
+  const sha = git(upstream, ["rev-parse", "HEAD"]);
+  mkdirSync(join(tmp, "infra/docker/data"), { recursive: true });
+  git(tmp, ["clone", "--recurse-submodules", "--", upstream, cache]);
+  const infra = join(tmp, "infra/docker");
+  writeFileSync(
+    join(infra, "transitous.lock.json"),
+    JSON.stringify({
+      ref: `main@${sha}`,
+      submodules: { "transitland-atlas": atlasSha },
+      lockedAt: "2026-10-23T00:00:00.000Z",
+      lockedBy: "fixture",
+    }),
+  );
+  writeFileSync(
+    join(infra, "gbfs-catalog.lock.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      source: "mobilitydata-gbfs",
+      commit: "a".repeat(40),
+      url: `https://raw.githubusercontent.com/MobilityData/gbfs/${"a".repeat(40)}/systems.csv`,
+      sha256: "b".repeat(64),
+      lockedAt: "2026-10-23T00:00:00.000Z",
+      lockedBy: "fixture",
+    }),
+  );
+  await provisionControlInstallation(infra);
+  const installation = openControlInstallation({
+    infraDir: infra,
+    role: "host-cli",
+    serviceIds: ["motis"],
+  });
+  try {
+    await initializeManagedCatalogPins({ rootDir: tmp, installation });
+  } finally {
+    closeControlInstallation(installation);
+  }
+  writeFileSync(
+    join(upstream, "feeds/de.json"),
+    JSON.stringify({ sources: [{ name: "UpstreamB", "transitland-atlas-id": "atlas-auth-1" }] }),
+  );
+  git(upstream, ["add", "feeds"]);
+  git(upstream, ["commit", "-m", "Catalog B"]);
+  const output = join(tmp, "services/motis/tools/transitous/api-keys.json");
+  writeFileSync(output, JSON.stringify({ "retained/orphan": "  exact value\n" }));
+  const options = {
+    rootDir: tmp,
+    runner: async (command: string, args: string[], options: { cwd?: string }) => {
+      expect(command).toBe("git");
+      git(options.cwd ?? tmp, args);
+    },
+  };
+  const result = await generateTransitousApiKeys(options);
+  expect(result).toMatchObject({
+    requiredCount: 3,
+    preservedCount: 1,
+    droppedCount: 0,
+    orphanedKeys: ["retained/orphan"],
+  });
+  expect(lstatSync(output).mode & 0o777).toBe(0o600);
+  const values = JSON.parse(readFileSync(output, "utf8"));
+  expect(values).toHaveProperty("de/PinnedA", "");
+  expect(values).not.toHaveProperty("de/UpstreamB");
+  expect(values["retained/orphan"]).toBe("  exact value\n");
+  expect(git(cache, ["rev-parse", "HEAD"])).toBe(sha);
+  const valid = readFileSync(output, "utf8"),
+    malformed = '{"key":"one","key":"two"}';
+  writeFileSync(output, malformed);
+  await expect(generateTransitousApiKeys(options)).rejects.toThrow(/Feed credential/);
+  expect(readFileSync(output, "utf8")).toBe(malformed);
+  writeFileSync(output, valid);
+  await expect(generateTransitousApiKeys(options)).resolves.toMatchObject({ droppedCount: 0 });
+}, 45000);

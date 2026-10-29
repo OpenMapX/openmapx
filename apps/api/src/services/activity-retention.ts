@@ -6,6 +6,7 @@ import {
   withPreservationRetentionLock,
 } from "../privacy/preservation.js";
 import { noPendingReceiptDelivery, noUnsettledManagedOperation } from "./admin-job-state";
+import { pruneTransitCredentialPreviews } from "./transit-credential-retention";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -67,8 +68,9 @@ export async function pruneCompletedJobs(days: number): Promise<number> {
   }
   const cutoff = new Date(Date.now() - days * MS_PER_DAY);
   // adminJobLog has ON DELETE CASCADE so deleting parent rows clears logs.
-  const result = await withPreservationRetentionLock(db, (tx) =>
-    tx
+  const result = await withPreservationRetentionLock(db, async (tx) => {
+    await pruneTransitCredentialPreviews(tx);
+    return tx
       .delete(adminJob)
       .where(
         and(
@@ -83,8 +85,8 @@ export async function pruneCompletedJobs(days: number): Promise<number> {
           }),
         ),
       )
-      .returning({ id: adminJob.id }),
-  );
+      .returning({ id: adminJob.id });
+  });
   return result.length;
 }
 

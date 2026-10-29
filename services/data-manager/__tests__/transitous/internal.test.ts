@@ -373,3 +373,27 @@ describe("pruneUnresolvableSources", () => {
     expect(readSources(catalogDir).find((s) => s.name === "MBTA")?.skip).toBeUndefined();
   });
 });
+
+describe("canonical credential overlay consumption", () => {
+  it("preserves the exact configured value rather than trimming it", () => {
+    const catalog = makeCatalog([{ name: "A", "transitland-atlas-id": "auth" }]);
+    const file = join(catalog, "keys.json");
+    writeFileSync(file, JSON.stringify({ "us/A": "  exact secret  " }));
+    expect(applyApiKeysOverlay(catalog, file)).toBe(1);
+    expect(
+      JSON.parse(readFileSync(join(catalog, "feeds/us.json"), "utf8")).sources[0]["api-key"],
+    ).toBe("  exact secret  ");
+  });
+  it.each(['{"us/A":"one","us/A":"two"}', '{"us/A":42}', "[]", "{broken"])(
+    "rejects malformed maps without changing any feed: %s",
+    (bytes) => {
+      const catalog = makeCatalog([{ name: "A", "transitland-atlas-id": "auth" }]);
+      const file = join(catalog, "keys.json"),
+        feed = join(catalog, "feeds/us.json"),
+        before = readFileSync(feed, "utf8");
+      writeFileSync(file, bytes);
+      expect(() => applyApiKeysOverlay(catalog, file)).toThrow();
+      expect(readFileSync(feed, "utf8")).toBe(before);
+    },
+  );
+});

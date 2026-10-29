@@ -41,13 +41,18 @@ export class AdminActionReauthentication {
     private readonly database: AuthDatabase = currentAuthDatabase(),
     private readonly now: () => Date = () => new Date(),
   ) {}
-  private async live(sessionId: string, tx: AuthDatabase, requireAssurance = true) {
-    const [row] = await tx
+  private async live(
+    sessionId: string,
+    tx: AuthDatabase,
+    requireAssurance = true,
+    lockRows = true,
+  ) {
+    const sessionQuery = tx
       .select({ session: sessions, user })
       .from(sessions)
       .innerJoin(user, eq(sessions.userId, user.id))
-      .where(eq(sessions.id, sessionId))
-      .for("share");
+      .where(eq(sessions.id, sessionId));
+    const [row] = await (lockRows ? sessionQuery.for("share") : sessionQuery);
     if (
       !row ||
       row.session.expiresAt <= this.now() ||
@@ -56,11 +61,11 @@ export class AdminActionReauthentication {
       row.user.banned === true
     )
       deny();
-    const [assurance] = await tx
+    const assuranceQuery = tx
       .select()
       .from(sessionAuthAssurance)
-      .where(eq(sessionAuthAssurance.sessionId, sessionId))
-      .for("share");
+      .where(eq(sessionAuthAssurance.sessionId, sessionId));
+    const [assurance] = await (lockRows ? assuranceQuery.for("share") : assuranceQuery);
     if (
       requireAssurance &&
       (!assurance || assurance.userId !== row.user.id || assurance.authenticatedAt > this.now())
@@ -68,10 +73,12 @@ export class AdminActionReauthentication {
       deny();
     return { ...row, assurance };
   }
-  private async policy(tx: AuthDatabase) {
+  private async policy(tx: AuthDatabase, lockRows = true) {
     // The table lock also protects the not-yet-activated singleton from an INSERT.
-    await tx.execute(sql`LOCK TABLE auth_policy_state IN SHARE MODE`);
-    await tx.select().from(authPolicyState).where(eq(authPolicyState.id, 1)).for("share");
+    if (lockRows) {
+      await tx.execute(sql`LOCK TABLE auth_policy_state IN SHARE MODE`);
+      await tx.select().from(authPolicyState).where(eq(authPolicyState.id, 1)).for("share");
+    }
     return loadAuthPolicy(tx);
   }
   async start(input: {
@@ -185,6 +192,7 @@ export class AdminActionReauthentication {
     sessionId: string,
     tx: AuthDatabase,
     states: ReadonlyArray<string>,
+    lockRows = true,
   ) {
     if (
       !row ||
@@ -194,7 +202,7 @@ export class AdminActionReauthentication {
       row.startingSessionId === sessionId
     )
       deny();
-    const live = await this.live(sessionId, tx),
+    const live = await this.live(sessionId, tx, true, lockRows),
       a = live.assurance;
     if (!a || live.user.id !== row.actorId || a.authenticatedAt <= row.createdAt) deny();
     const proof: ReauthenticationSession = {
@@ -208,7 +216,7 @@ export class AdminActionReauthentication {
     if (
       row.purpose === "platform.domain.apply" &&
       (!isDomainRecoveryAssuranceSufficient(proof, a.originIndependentPasswordLogin) ||
-        (await this.policy(tx)).revision !== row.authPolicyRevision)
+        (await this.policy(tx, lockRows)).revision !== row.authPolicyRevision)
     )
       deny();
     return proof;
@@ -257,16 +265,20 @@ export class AdminActionReauthentication {
       const purposes = new Set(input.proofs.map((p) => p.purpose));
       if (!purposes.has("credentials.import") || !purposes.has("transit.credentials")) deny();
     }
-    await this.live(input.sessionId, tx);
+    await this.live(input.sessionId, tx, true, consume);
     for (const ref of [...input.proofs].sort((a, b) =>
       a.challengeId.localeCompare(b.challengeId),
     )) {
-      const [row] = await tx
-        .select()
-        .from(challenge)
-        .where(eq(challenge.id, ref.challengeId))
-        .for("update");
-      const proof = await this.validate(row, input.nonce, input.sessionId, tx, ["completed"]);
+      const query = tx.select().from(challenge).where(eq(challenge.id, ref.challengeId));
+      const [row] = await (consume ? query.for("update") : query);
+      const proof = await this.validate(
+        row,
+        input.nonce,
+        input.sessionId,
+        tx,
+        ["completed"],
+        consume,
+      );
       if (
         !row ||
         row.completedSessionId !== input.sessionId ||

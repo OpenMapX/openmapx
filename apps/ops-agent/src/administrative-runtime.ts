@@ -1961,12 +1961,10 @@ export function createAdministrativeRuntime(
     });
     return { completed: true, resourceId: operation.dataTypeId };
   };
-  runtime["data.generateApiKeys"] = async (_operation, context) => {
-    await runFixedCli(["data", "generate-api-keys"], {
-      ...context,
-      operationKind: context.claim.operation.kind,
-    });
-    return { completed: true };
+  // Historical decoding is retained; remote admission is forbidden. Never run
+  // the host-owned file command from a browser/job, including old pending work.
+  runtime["data.generateApiKeys"] = async () => {
+    throw new OpsNotWiredError();
   };
   runtime["data.overtureSync"] = async (operation, context) => {
     await runMatchingDataCommand(operation, context);

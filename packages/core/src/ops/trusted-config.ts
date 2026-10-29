@@ -127,6 +127,11 @@ export const trustedConfigurationPayloadSchema = z
   .strictObject({
     domain,
     platform: platformConfigurationSchema.optional(),
+    // Opaque encrypted-row identity, never a digest of a credential value.
+    transitCredentialsRevision: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     // A new selection, carried by `serviceSelection.apply` only; every other
     // apply renders the operator's selection as it stands.
     selectedRoots: z.array(serviceId).max(256).optional(),

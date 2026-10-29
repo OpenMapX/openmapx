@@ -1,6 +1,7 @@
 import { APIError } from "better-auth/api";
-import { eq } from "drizzle-orm";
-import { accountAdminGuard, user } from "../db/schema";
+import { and, eq, or, sql } from "drizzle-orm";
+import { accountAdminGuard, adminJob, user } from "../db/schema";
+import { noPendingReceiptDelivery, noUnsettledManagedOperation } from "../services/admin-job-state";
 import { currentAccountMutation } from "./account-context";
 import { type AuthDatabase, currentAuthDatabase } from "./auth-database";
 export function isActiveFullAdmin(value: { role: string | null; banned: boolean | null }) {
@@ -43,6 +44,34 @@ export async function assertAccountDeletionAllowed(targetId: string) {
   if (context.targetId !== null && context.targetId !== targetId)
     throw Error("Account deletion target changed");
   await assertAdminCapacity(context.database, targetId, { deleted: true });
+  // That existing guard holds the target user FOR UPDATE. New actor-attributed
+  // job inserts need the FK's KEY SHARE lock, so none can slip past this check
+  // before deletion commits. Pending private input must survive cancellation.
+  const [pending] = await context.database
+    .select({ id: adminJob.id })
+    .from(adminJob)
+    .where(
+      and(
+        or(
+          eq(adminJob.createdBy, targetId),
+          sql`${adminJob.result}->>'_immediateActorId' = ${targetId}`,
+        ),
+        or(
+          sql`${adminJob.status} NOT IN ('success','failed','canceled')`,
+          sql`${adminJob.finishedAt} IS NULL`,
+          sql`NOT (${noPendingReceiptDelivery()})`,
+          sql`NOT (${noUnsettledManagedOperation()})`,
+          sql`${adminJob.result}->'_configurationCandidate' IS NOT NULL AND coalesce(${adminJob.result}->'_configurationCandidate'->>'phase','unknown') NOT IN ('settled','discarded')`,
+        ),
+      ),
+    )
+    .limit(1);
+  if (pending)
+    throw new APIError("CONFLICT", {
+      code: "ADMIN_OPERATION_IN_PROGRESS",
+      message:
+        "Finish or cancel this administrator's instance operations in Activity before deleting the account",
+    });
 }
 export function mapAccountConstraint(error: unknown): never {
   let current = error;

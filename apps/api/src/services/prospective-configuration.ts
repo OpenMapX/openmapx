@@ -1793,7 +1793,13 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
         ? coordinator !== undefined ||
           operation.serviceId !== "data-manager" ||
           record.apiFollowUp !== "service-apply" ||
-          overlay.purpose !== "service-secret" ||
+          !["service-secret", "transit-credentials"].includes(overlay.purpose) ||
+          (overlay.purpose === "transit-credentials" &&
+            (overlay.coordinatorMode !== "require-running" ||
+              overlay.changes.length !== 1 ||
+              overlay.changes[0]?.kind !== "service-secret" ||
+              overlay.changes[0].key !== "TRANSITOUS_API_KEYS" ||
+              overlay.changes[0].action !== "set")) ||
           overlay.changes.some(
             (change) => change.kind !== "service-secret" || change.serviceId !== "data-manager",
           )
@@ -1993,6 +1999,19 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
         sealedBytes: inspected.sealed.length,
         affectedServiceIds: Object.freeze([...record.affectedServiceIds]),
       }) as ValidatedConfigurationCandidate;
+    if (saved && overlay.purpose === "transit-credentials") {
+      const { assertSavedTransitCredentialCandidate } = await import(
+        "./transit-credential-recovery"
+      );
+      await assertSavedTransitCredentialCandidate({
+        actorId: writer.actorId,
+        operationKey: writer.operationKey,
+        candidateId: record.candidateId,
+        revision: payload.transitCredentialsRevision,
+        overlay,
+        connection: tx,
+      });
+    }
     freeze(record);
     freeze(overlay);
     freeze(payload);
@@ -2127,6 +2146,13 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
         integrationSecretRows: read.integrationSecretRows,
       };
       recoveredPreRootCandidates.add(candidate);
+    } else if (preRoot && overlay.purpose === "transit-credentials") {
+      if (Object.keys(projection.operations).length || result._dataExecutions !== undefined)
+        throw new JobObservationPending("recovery_required");
+      candidates.set(candidate, state);
+      candidateStages.set(candidate, "recovered_unissued");
+      checkpoint = result;
+      return candidate;
     } else if (preRoot) {
       const original = record.privateMaintenancePreparation!,
         fixed = record.coordinatorPrerequisite,
@@ -2968,12 +2994,18 @@ async function mergeOverlay(
       row.config = { ...row.config, ...change.set };
       for (const key of change.unset) delete row.config[key];
     } else if (change.kind === "service-secret") {
+      const managedPrior =
+        change.serviceId === "data-manager" && change.key === "TRANSITOUS_API_KEYS"
+          ? rows.serviceSecretRows.find(
+              (row) => row.serviceId === change.serviceId && row.key === change.key,
+            )
+          : undefined;
       rows.serviceSecretRows = rows.serviceSecretRows.filter(
         (row) => row.serviceId !== change.serviceId || row.key !== change.key,
       );
       if (change.action === "set")
         rows.serviceSecretRows.push({
-          id: randomUUID(),
+          id: managedPrior?.id ?? randomUUID(),
           serviceId: change.serviceId,
           key: change.key,
           ...encrypt(change.value),
@@ -3022,6 +3054,12 @@ export async function prepareProspectiveConfiguration(input: {
     : null;
   input.signal?.throwIfAborted();
   const overlay = overlaySchema.parse(input.overlay);
+  if (overlay.purpose === "transit-credentials") {
+    const { assertTransitCredentialOverlay } = await import(
+      "./transit-feed-credential-participant"
+    );
+    assertTransitCredentialOverlay(writer, overlay);
+  }
   validateOverlay(overlay, writer);
   if (
     coordinator &&
@@ -3328,6 +3366,7 @@ export async function prepareProspectiveConfiguration(input: {
         );
         await retainPreparedTrustedConfigurationCandidate(publisher, record);
         const state = validatedConfigurationCandidateState(candidate);
+        let preflightStage: "preview" | "coordinator" | "capacity" = "preview";
         try {
           state.preview = await executeAndWait(
             createApiOpsClient(),
@@ -3342,9 +3381,12 @@ export async function prepareProspectiveConfiguration(input: {
             createDurableOpsKey("configuration.hardlinks.preview", input.operationKey),
             { signal: input.signal },
           );
+          preflightStage = "coordinator";
           if (
             overlay.coordinatorMode === "require-running" &&
-            (state.preview.entries || coordinator) &&
+            (state.preview.entries ||
+              coordinator ||
+              (maintenanceId && input.followUp === "service-apply")) &&
             state.preview.coordinatorState !== "running"
           )
             throw Error("Configuration coordinator prerequisite unavailable");
@@ -3356,6 +3398,7 @@ export async function prepareProspectiveConfiguration(input: {
               !["running", "stopped"].includes(state.preview.coordinatorState))
           )
             throw Error("Configuration coordinator prerequisite unavailable");
+          preflightStage = "capacity";
           assertMaintenanceIntentCapacity(state, owner.job.checkpointResult);
         } catch (error) {
           if (coordinator?.action === "update")
@@ -3374,6 +3417,11 @@ export async function prepareProspectiveConfiguration(input: {
           }
           throw new AdminJobFailure("Configuration candidate preflight failed", {
             errorCode: "configuration_preflight_failed",
+            configurationPreflight: {
+              stage: preflightStage,
+              coordinatorState: state.preview?.coordinatorState ?? null,
+              errorClass: error instanceof ApiOpsError ? error.errorClass : "local_validation",
+            },
           });
         }
         candidateStages.set(candidate, "prepared");
@@ -3603,7 +3651,11 @@ async function readSavedRowVersions(
   return receipts;
 }
 
-async function persistOverlay(tx: ConfigurationWriteTransaction, state: CandidateState) {
+async function persistOverlay(
+  tx: ConfigurationWriteTransaction,
+  state: CandidateState,
+  candidate: ValidatedConfigurationCandidate,
+) {
   if (!state.rows || !state.sourceRows) throw Error("Original prospective desired state required");
   const version = (row: { id: string } | undefined) => {
     const value = (row as { _rowVersion?: unknown } | undefined)?._rowVersion;
@@ -3670,8 +3722,15 @@ async function persistOverlay(tx: ConfigurationWriteTransaction, state: Candidat
         owner.participant?.managedServiceSecretKeys.some(
           (entry) => entry.serviceId === change.serviceId && entry.key === change.key,
         )
-      )
+      ) {
+        const { transitParticipantPatch } = await import("./transit-feed-credential-participant");
+        await persistPreparedFeedCredentialPatch({
+          patch: transitParticipantPatch(owner.participant, state.writer),
+          candidate,
+          writer: state.writer,
+        });
         continue;
+      }
       const prior = state.sourceRows.serviceSecretRows.find(
         (row) => row.serviceId === change.serviceId && row.key === change.key,
       );
@@ -3769,7 +3828,8 @@ async function verifyCurrentPreview(
   if (
     preview.previewDigest !== state.preview?.previewDigest ||
     (state.overlay.coordinatorMode === "require-running" &&
-      preview.entries &&
+      (preview.entries ||
+        (state.record.maintenanceId && state.record.apiFollowUp === "service-apply")) &&
       preview.coordinatorState !== "running")
   )
     rejectUnissuedCandidate(candidate, "Configuration preview changed");
@@ -4084,7 +4144,7 @@ export async function commitProspectiveConfigurationMaintenance(
       )
         throw Error("Original prepared maintenance preflight changed");
       await owner.participant?.commit(candidate, state.writer, tx);
-      const rowVersions = await persistOverlay(tx, state),
+      const rowVersions = await persistOverlay(tx, state, candidate),
         body = {
           kind: "configurationMaintenance.decide" as const,
           maintenanceId: record.maintenanceId!,
@@ -4206,7 +4266,15 @@ export async function persistAndApplyProspectiveConfiguration(
     owner.participant?.mode === "preview"
   )
     throw Error("Configuration candidate persistence refused");
-  if (["migration", "transit-credentials"].includes(state.overlay.purpose) && !owner.participant)
+  if (
+    ["migration", "transit-credentials"].includes(state.overlay.purpose) &&
+    !owner.participant &&
+    !(
+      state.overlay.purpose === "transit-credentials" &&
+      stage === "committed" &&
+      recoveredCommittedCandidates.has(candidate)
+    )
+  )
     throw Error("Configuration commit participant unavailable");
   if (!state.record.maintenanceId && stage === "committed")
     return applyCommittedOrdinaryCandidate(candidate, options.signal);
@@ -4443,7 +4511,7 @@ export async function persistAndApplyProspectiveConfiguration(
       await verifyConfigurationCommitParticipant(candidate, state.writer);
       await verifyCurrentPreview(candidate, state, options.signal);
       await owner.participant?.commit(candidate, state.writer, tx);
-      rowVersions = await persistOverlay(tx, state);
+      rowVersions = await persistOverlay(tx, state, candidate);
       const rows = await tx
         .update(schema.adminJob)
         .set({
@@ -5751,4 +5819,18 @@ export async function completeIntegrationActivation(
   }
   await retireSettledProspectiveConfiguration(candidate);
   return integrationApplyReceiptSchema.parse(receipt);
+}
+
+/** Fixed managed-key dispatch over THIS producer's nominal candidate, inside its original transaction. */
+export async function persistPreparedFeedCredentialPatch(input: {
+  patch: import("./transit-feed-credential-participant").PreparedFeedCredentialPatch;
+  candidate: ValidatedConfigurationCandidate;
+  writer: AdministrativeConfigurationWriter;
+}): Promise<{ credentialsRevision: string }> {
+  const state = validatedConfigurationCandidateState(input.candidate);
+  if (state.writer !== input.writer) throw Error("Original transit credential candidate required");
+  const { persistPreparedFeedCredentialRow } = await import(
+    "./transit-feed-credential-participant"
+  );
+  return persistPreparedFeedCredentialRow({ ...input, candidateState: state });
 }

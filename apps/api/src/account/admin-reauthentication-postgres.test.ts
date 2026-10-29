@@ -109,6 +109,23 @@ dbDescribe("durable purpose-bound administrator action proof", () => {
     await fixture.db.update(user).set({ twoFactorEnabled: true }).where(eq(user.id, c.actorId));
     await expect(finish(c)).rejects.toThrow();
   });
+  it("checks a purpose proof inside a real read-only candidate snapshot without consuming or locking it", async () => {
+    const c = await ceremony(),
+      input = await finish(c);
+    await fixture.db.transaction((tx) => service.check(input, tx), {
+      isolationLevel: "repeatable read",
+      accessMode: "read only",
+    });
+    const [row] = await fixture.db
+      .select()
+      .from(adminActionReauthentication)
+      .where(eq(adminActionReauthentication.id, c.proof.challengeId));
+    expect(row?.state).toBe("completed");
+    await fixture.db.transaction((tx) => service.consume(input, tx));
+    await expect(
+      fixture.db.transaction((tx) => service.check(input, tx), { accessMode: "read only" }),
+    ).rejects.toThrow();
+  });
   it("consumes once and binds nonce, purpose and target", async () => {
     const c = await ceremony(),
       input = await finish(c);

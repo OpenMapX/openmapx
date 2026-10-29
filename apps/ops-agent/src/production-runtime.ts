@@ -43,6 +43,7 @@ import {
   installServicePullRuntime,
 } from "./service-pull-runtime";
 import { resolveBootstrapEnabledServiceIds } from "./startup-authority";
+import { installTransitCredentialsRuntime } from "./transit-credentials-runtime";
 import { createTransitousLockRuntime } from "./transitous-lock-runtime";
 import {
   installTrustedConfigurationRuntime,
@@ -229,6 +230,13 @@ export async function createProductionOpsRuntime(
     createDefaultReleaseEffects(options.rootDir, runFixedCli),
   );
   createTransitousLockRuntime(runtime, { rootDir: options.rootDir });
+  installTransitCredentialsRuntime(runtime, {
+    rootDir: options.rootDir,
+    sourceToken: options.candidateSource?.token,
+    stack: options.stack,
+    ownedServices: owned,
+    execFile: options.docker?.execFile,
+  });
   createAdministrativeRuntime(runtime, {
     rootDir: options.rootDir,
     runFixedCli,

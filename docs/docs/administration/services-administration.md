@@ -330,3 +330,27 @@ health snapshots and the running job log, see [Monitoring](./monitoring.md).
   styles, and the build/link pipeline behind the data inventory.
 - **[Configuration](../install/configuration.md)** — the `.env` file, secrets,
   and how the admin config forms relate to environment variables.
+
+## Transit feed credentials
+
+Use **Transit → Transit feed credentials** to manage the encrypted
+`data-manager/TRANSITOUS_API_KEYS` map. The panel displays key names and whether
+values are configured, required by the active catalog, or retained as orphaned
+entries. It never returns existing values. A blank input preserves the existing
+value; deletion is a separate confirmed action.
+
+Review changes before confirming a fresh administrator sign-in. The review is
+bound to the current catalog pins, credential revision and configuration. If any
+changes, prepare a new review. The complete operation saves the map and updates
+the running Data Manager's credential mount under one maintenance reservation.
+A pending-application warning means the running mount has not been verified; use
+Activity to inspect the original operation. A retry observes the retained work
+rather than applying it twice. Finish or cancel an administrator's unresolved
+instance operations before deleting their account; those operations retain the
+private inputs needed for recovery.
+
+File and environment overrides remain host-owned. The panel explains that
+ownership and does not silently adopt their values. The host-local
+`openmapx data generate-api-keys` command creates or updates a template from the
+active pins while preserving all existing values and orphaned keys. The previous
+browser generator operation is no longer available.

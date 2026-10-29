@@ -8,9 +8,11 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import {
   accountAdminGuard,
   adminAuditLog,
+  adminJob,
   authPolicyApplication,
   authPolicyState,
   session,
+  transitCredentialPreview,
   user,
 } from "../db/schema";
 import { authRoute } from "../routes/auth";
@@ -105,6 +107,7 @@ dbDescribe("atomic last administrator protection", () => {
       .select()
       .from(user)
       .where(and(eq(user.role, "admin"), eq(user.banned, false)));
+
   it("persists a successful creation audit in the same transaction", async () => {
     const rows = await fixture.db
       .select()
@@ -443,4 +446,64 @@ dbDescribe("atomic last administrator protection", () => {
     expect(after.requests).toHaveLength(before.requests.length + 1);
     expect(after.completedReceiptIds.size).toBe(before.completedReceiptIds.size);
   });
+  it("keeps a running administrator's private credential input until its operation settles", async () => {
+    const owner = await actor("pending-credential-owner"),
+      deleter = await actor("credential-eraser"),
+      jobId = randomUUID(),
+      previewId = randomUUID(),
+      operationKey = `opk1_${randomUUID().replaceAll("-", "")}`;
+    vi.stubEnv("OPENMAPX_SECRETS_KEY", "73".repeat(32));
+    const { encrypt } = await import("../services/secrets"),
+      encrypted = encrypt("synthetic private proposal");
+    await fixture.db.insert(adminJob).values({
+      id: jobId,
+      type: "configuration.apply",
+      status: "running",
+      createdBy: owner.id,
+      payload: { operationKey },
+      result: { _immediateActorId: owner.id },
+    });
+    await fixture.db.insert(transitCredentialPreview).values({
+      id: previewId,
+      actorId: owner.id,
+      operationKey,
+      intentFingerprint: "a".repeat(64),
+      ...encrypted,
+      expiresAt: new Date(Date.now() + 600000),
+    });
+    const journalBefore = readFileSync(journal, "utf8"),
+      response = await app.inject({
+        method: "POST",
+        url: "/api/auth/admin/remove-user",
+        headers: headers(deleter.cookie),
+        payload: { userId: owner.id },
+      });
+    expect(response.statusCode).toBe(409);
+    expect(response.json().code).toBe("ADMIN_OPERATION_IN_PROGRESS");
+    expect(readFileSync(journal, "utf8")).toBe(journalBefore);
+    expect(await fixture.db.select().from(user).where(eq(user.id, owner.id))).toHaveLength(1);
+    expect(
+      await fixture.db
+        .select()
+        .from(transitCredentialPreview)
+        .where(eq(transitCredentialPreview.id, previewId)),
+    ).toHaveLength(1);
+    await fixture.db
+      .update(adminJob)
+      .set({ status: "failed", finishedAt: new Date() })
+      .where(eq(adminJob.id, jobId));
+    const settled = await app.inject({
+      method: "POST",
+      url: "/api/auth/admin/remove-user",
+      headers: headers(deleter.cookie),
+      payload: { userId: owner.id },
+    });
+    expect(settled.statusCode).toBe(200);
+    expect(
+      await fixture.db
+        .select()
+        .from(transitCredentialPreview)
+        .where(eq(transitCredentialPreview.id, previewId)),
+    ).toHaveLength(0);
+  }, 30000);
 });

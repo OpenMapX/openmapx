@@ -79,6 +79,29 @@ function input(overrides: Partial<ConfigurationInput> = {}): ConfigurationInput 
 }
 
 describe("configuration generations", () => {
+  it("carries opaque managed credential revision through unrelated CLI renders", async () => {
+    const { infraDir } = checkout();
+    const revision = "b".repeat(64);
+    await commitConfigurationGeneration({
+      infraDir,
+      services,
+      input: input({ transitCredentialsRevision: revision } as Partial<ConfigurationInput>),
+    });
+    expect(readAppliedConfiguration(infraDir)).toHaveProperty(
+      "transitCredentialsRevision",
+      revision,
+    );
+    await commitConfigurationGeneration({
+      infraDir,
+      services,
+      input: input(readAppliedConfiguration(infraDir)),
+    });
+    expect(readAppliedConfiguration(infraDir)).toHaveProperty(
+      "transitCredentialsRevision",
+      revision,
+    );
+  });
+
   it("gives each application a fresh identity even when content repeats", async () => {
     const { root, infraDir } = checkout();
     const first = await commitConfigurationGeneration({ infraDir, services, input: input() });

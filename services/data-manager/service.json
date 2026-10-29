@@ -23,7 +23,7 @@
       "PORT": "4000",
       "HOST": "0.0.0.0",
       "LOG_LEVEL": "${LOG_LEVEL:-}",
-      "DATA_MANAGER_AUTH_TOKEN": "${DATA_MANAGER_AUTH_TOKEN:?DATA_MANAGER_AUTH_TOKEN must be set — generate with: openssl rand -hex 32}",
+      "DATA_MANAGER_AUTH_TOKEN": "${DATA_MANAGER_AUTH_TOKEN:?DATA_MANAGER_AUTH_TOKEN must be set \u2014 generate with: openssl rand -hex 32}",
       "DATABASE_URL": "postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgis:5432/openmapx",
       "OPS_AGENT_URL": "${OPS_AGENT_URL:-http://ops-agent:4300}",
       "OPS_AGENT_TOKEN_FILE": "/run/secrets/ops-agent-data-manager-token",
@@ -227,5 +227,16 @@
   },
   "ui": {
     "category": "infrastructure"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "TRANSITOUS_API_KEYS": {
+        "type": "string",
+        "title": "Transit feed credentials",
+        "description": "Managed by the dedicated Transit credentials page.",
+        "x-openmapx-secret": true
+      }
+    }
   }
 }

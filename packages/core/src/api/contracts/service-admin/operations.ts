@@ -8,7 +8,6 @@ export const adminOperationIdSchema = z.enum([
   "convert-overpass",
   "link",
   "clean",
-  "generate-api-keys",
   "overture-sync",
   "overture-conflate",
   "search-index-build",

@@ -139,6 +139,7 @@ export async function ownedDataManager(options: {
     },
     get settlementResponseStatuses(){return [...settlementResponseStatuses];},
     get hardlinkResponseStatuses() { return replies.map(reply => reply.status); },
+    get hardlinkResponses() { return structuredClone(replies); },
     reconcileRetention: () => reconcileControlRetention(installation, { maxFamilies: 64 }),
     async diagnostics() { return { maintenanceReplies, replies: replies.map(reply => ({ status: reply.status, error: (reply.body as { error?: unknown } | null)?.error })),
       executions: await Promise.all([...keys].map(async key => { const value = await store.lookup(key); return value && { status: value.status.status, publication: value.status.publication, diagnostics: value.status.diagnostics }; })) }; },

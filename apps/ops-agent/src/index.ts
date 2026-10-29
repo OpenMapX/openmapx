@@ -262,8 +262,7 @@ async function main(): Promise<void> {
               loadConfiguredResourceAuthority().countries.has(countryCode),
             allowDataType: async (dataTypeId) =>
               inspectDataTypeAuthority((await authorityLoader()).services, dataTypeId),
-            allowCatalogRevision: (kind, revisionId) =>
-              kind === "data.generateApiKeys" && revisionId === "transitous-fixed-v1",
+            allowCatalogRevision: () => false,
             allowRelease: (_kind, releaseId) => inspectReleaseAuthority(config.rootDir, releaseId),
             allowUpdateJobId: (updateJobId) =>
               /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(updateJobId),

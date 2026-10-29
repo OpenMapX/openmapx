@@ -69,6 +69,7 @@ export {
   hasRetainedControlOrigin,
   inspectConfigurationPreEffectRefusal,
   loadControlStartup,
+  localFeedCredentialTemplateMac,
   markFeedProxyReloadAttempted,
   observeCoordinatorPullForMaintenance,
   observedCoordinatorPullBaseline,

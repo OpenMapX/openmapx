@@ -7,6 +7,12 @@ import {
 } from "./control-child-records";
 import { dataUpdatePlanSchema } from "./data-update-records";
 import { dataUpdateSourcesDigest } from "./data-update-sources";
+import {
+  LOCAL_CREDENTIAL_TEMPLATE_KIND,
+  localCredentialTemplateFileMac,
+  localCredentialTemplateOperationSchema,
+  localCredentialTemplateReceiptSchema,
+} from "./local-credential-template";
 
 export {
   type ControlChildPhase,
@@ -1046,6 +1052,7 @@ export function retainAdmittedControlExecution(
       "catalog.activate",
       "catalog.validate",
       "catalog-pins.initialize",
+      LOCAL_CREDENTIAL_TEMPLATE_KIND,
       "artifactTransfer.import",
       "artifactTransfer.export",
       "artifactTransfer.validate",
@@ -1118,6 +1125,20 @@ export function retainAdmittedControlExecution(
       controlDigest(input.operation) !== controlDigest({ kind: "catalog-pins.initialize" }))
   )
     throw Error("Fixed local catalog bootstrap only");
+  if (input.kind === LOCAL_CREDENTIAL_TEMPLATE_KIND) {
+    localCredentialTemplateOperationSchema.parse(input.operation);
+    if (
+      state.fixedChildId ||
+      input.parent ||
+      plan.length ||
+      reservations.length ||
+      installation.role !== "host-cli" ||
+      execution.principal !== "host-cli" ||
+      serviceIds.length !== 1 ||
+      serviceIds[0] !== "motis"
+    )
+      throw Error("Fixed local host credential template only");
+  }
   const budget = (() => {
     try {
       return opsExecutionMaximumMs(input.kind);
@@ -1131,6 +1152,7 @@ export function retainAdmittedControlExecution(
       )
         return 3600000;
       if (input.kind === "catalog-pins.initialize") return 60000;
+      if (input.kind === LOCAL_CREDENTIAL_TEMPLATE_KIND) return 300000;
       if (
         ["configuration-maintenance.prepare", "configuration-maintenance.settle"].includes(
           input.kind,
@@ -1527,6 +1549,7 @@ const settlementSchema = z.strictObject({
   terminalReceiptDigest: digest,
 });
 const effectObservationSchema = z.discriminatedUnion("kind", [
+  localCredentialTemplateReceiptSchema,
   z.strictObject({ kind: z.literal("catalog-pins-initialized"), generationId: digest.nullable() }),
   z.strictObject({
     kind: z.literal("configuration-generation-not-committed"),
@@ -1973,6 +1996,46 @@ export function retainControlEffectReceipt(
         source.generationId !== receipt.generationId
       )
         throw Error("Catalog initialization source mismatch");
+      outcome = "committed";
+      publication = "committed";
+    } else if (receipt.kind === "feed-credential-template-written") {
+      if (
+        s.kind !== LOCAL_CREDENTIAL_TEMPLATE_KIND ||
+        !s.origin ||
+        s.installation.fixedChildId ||
+        s.installation.installation.role !== "host-cli"
+      )
+        throw Error("Original local credential template required");
+      const name = `${s.execution.operationKey}.json`,
+        started = readPrivateRecord(s.installation, "effect-started", name);
+      if (
+        !started ||
+        controlDigest((started as { execution: unknown }).execution) !==
+          controlDigest(s.execution) ||
+        (started as { receiptDigest: unknown }).receiptDigest !== s.receiptDigest
+      )
+        throw Error("Original started credential template required");
+      verifyFamilyOwnedRecord(
+        s.installation,
+        s.origin,
+        { scope: "private", namespace: "effect-started", container: "", name },
+        canonicalJson(started),
+      );
+      const admitted = readPrivateRecord(s.installation, "executions", name, 65536) as {
+        payload: { operation: unknown };
+      };
+      verifyFamilyOwnedRecord(
+        s.installation,
+        s.origin,
+        { scope: "private", namespace: "executions", container: "", name },
+        canonicalJson(admitted),
+      );
+      const operation = localCredentialTemplateOperationSchema.parse(admitted.payload.operation);
+      if (
+        receipt.fileMac !== operation.fileMac ||
+        localCredentialTemplateFileMac(s.installation, operation) !== operation.fileMac
+      )
+        throw Error("Credential template file evidence changed");
       outcome = "committed";
       publication = "committed";
     } else if (receipt.kind === "ops-result") {
@@ -2896,6 +2959,7 @@ export function publishConfigurationMaintenanceForwardWitness(
       parentFingerprint: receipt.parentFingerprint,
       parentDeadlineAt: receipt.parentDeadlineAt,
       planDigest: receipt.planDigest,
+      ...(owner.plan.coordinatorImage ? { coordinatorImage: owner.plan.coordinatorImage } : {}),
       serviceIds: receipt.serviceIds,
       steps: receipt.steps,
     });
@@ -3093,6 +3157,7 @@ export function verifyConfigurationMaintenanceGenerationWitness(
       candidateRecordDigest: "0".repeat(64),
       sourceAuthorityRevision: "not-shared",
       previewDigest: "0".repeat(64),
+      ...(graph.coordinatorImage ? { coordinatorImage: graph.coordinatorImage } : {}),
       hardlinkPlan: request.plan,
       serviceIds: root.serviceIds,
       recreateServiceIds: graph.steps.flatMap((step) =>
@@ -5302,4 +5367,13 @@ function verifyDataUpdateCompletionSource(
         throw Error("Actual Full Update hardlink completion required");
     }
   }
+}
+
+/** Opaque local file version, never a public hash of a credential value. */
+export function localFeedCredentialTemplateMac(
+  installation: ControlInstallation,
+  operation: unknown,
+  contents?: string,
+) {
+  return localCredentialTemplateFileMac(installationState(installation), operation, contents);
 }

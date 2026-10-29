@@ -4,6 +4,7 @@ import { configurationMaintenanceReceiptSchema } from "../ops/configuration-main
 import { type OpsJobStatus, parseOpsJobStatus } from "../ops/contract";
 import { executionRefSchema } from "../ops/execution-ref";
 import { configurationMaintenanceDecisionCommitmentSchema } from "./configuration-maintenance-owner-records";
+import { fixedConfigurationMaintenancePlanSchema } from "./fixed-configuration-maintenance";
 
 export const configurationMaintenanceForwardDomain =
   "openmapx-configuration-maintenance-forward-v1";
@@ -21,6 +22,7 @@ export const configurationMaintenanceForwardGraphSchema = z.strictObject({
   parentFingerprint: digest,
   parentDeadlineAt: z.number().int().positive().safe(),
   planDigest: digest,
+  coordinatorImage: z.lazy(() => fixedConfigurationMaintenancePlanSchema.shape.coordinatorImage),
   serviceIds: z.lazy(() => configurationMaintenanceReceiptSchema.shape.serviceIds),
   steps: z.lazy(() => configurationMaintenanceReceiptSchema.shape.steps),
 });

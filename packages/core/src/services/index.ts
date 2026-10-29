@@ -43,6 +43,7 @@ export {
   readAppliedConfiguration,
   readAppliedPlatformConfiguration,
   readAppliedServiceIds,
+  readAppliedTransitCredentialsRevision,
   renderConfiguration,
   retainedContainerComposeFile,
   withConfigurationGenerationWriter,
@@ -71,6 +72,7 @@ export {
 export {
   CONFIGURATION_GENERATIONS,
   CURRENT_CONFIGURATION,
+  configurationGenerationBasePath,
   currentConfigurationFile,
   type DesiredSelection,
   type DesiredSelectionSource,

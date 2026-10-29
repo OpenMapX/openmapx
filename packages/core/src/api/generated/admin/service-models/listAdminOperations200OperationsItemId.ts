@@ -11,7 +11,6 @@ export const ListAdminOperations200OperationsItemId = {
   "convert-overpass": "convert-overpass",
   link: "link",
   clean: "clean",
-  "generate-api-keys": "generate-api-keys",
   "overture-sync": "overture-sync",
   "overture-conflate": "overture-conflate",
   "search-index-build": "search-index-build",

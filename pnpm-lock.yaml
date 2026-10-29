@@ -2536,6 +2536,9 @@ importers:
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../mobility-core
+      '@openmapx/transitous-core':
+        specifier: workspace:^
+        version: link:../transitous-core
       '@tanstack/react-query':
         specifier: ^5.104.1
         version: 5.104.1(react@19.3.0)

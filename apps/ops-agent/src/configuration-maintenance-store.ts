@@ -961,7 +961,7 @@ export async function assertPlannedCoordinatorConfigurationWrite(
     !overlay ||
     typeof overlay !== "object" ||
     Array.isArray(overlay) ||
-    overlay.purpose !== "service-secret" ||
+    !["service-secret", "transit-credentials"].includes(String(overlay.purpose)) ||
     !Array.isArray(overlay.changes) ||
     !overlay.changes.length ||
     !overlay.changes.every(
@@ -974,6 +974,26 @@ export async function assertPlannedCoordinatorConfigurationWrite(
     )
   )
     throw Error("Fixed planned DM recreation producer required");
+  if (overlay.purpose === "transit-credentials") {
+    const change = overlay.changes[0] as Record<string, unknown> | undefined;
+    if (
+      original.coordinatorMode !== "require-running" ||
+      overlay.changes.length !== 1 ||
+      change?.key !== "TRANSITOUS_API_KEYS" ||
+      change.action !== "set" ||
+      typeof change.value !== "string" ||
+      candidate.payload.serviceSecrets.find((entry) => entry.serviceId === "data-manager")?.values
+        .TRANSITOUS_API_KEYS !== change.value ||
+      !candidate.payload.transitCredentialsRevision
+    )
+      throw Error("Fixed managed transit credential producer required");
+  } else if (
+    overlay.changes.some(
+      (change) => (change as Record<string, unknown>).key === "TRANSITOUS_API_KEYS",
+    )
+  ) {
+    throw Error("Managed transit credential producer required");
+  }
 }
 /** Actual publication is stricter than the read-only planned eligibility. */
 export async function assertOwnedCoordinatorConfigurationWrite(

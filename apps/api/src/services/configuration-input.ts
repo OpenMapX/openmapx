@@ -17,6 +17,7 @@ import {
 import { projectIntegrationConfig } from "./integration-config-projection";
 import { resolveAllServiceConfigsStrict } from "./service-config-resolver";
 import { resolveServiceVaultSecretsStrict } from "./service-secrets";
+import { transitCredentialRevision } from "./transit-credential-revision";
 
 /**
  * Everything a render needs from the database, for every registered service:
@@ -86,5 +87,16 @@ export async function buildConfigurationInput(
     }),
     integrationConfigs,
     serviceSecrets,
+    ...(context.serviceSecretRows.some(
+      (row) => row.serviceId === "data-manager" && row.key === "TRANSITOUS_API_KEYS",
+    )
+      ? {
+          transitCredentialsRevision: transitCredentialRevision(
+            context.serviceSecretRows.find(
+              (row) => row.serviceId === "data-manager" && row.key === "TRANSITOUS_API_KEYS",
+            ),
+          ),
+        }
+      : {}),
   });
 }

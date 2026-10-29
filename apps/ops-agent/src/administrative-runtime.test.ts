@@ -438,12 +438,15 @@ describe("administrative data runtime", () => {
         await expect(
           dispatchOpsOperation(runtime, operation, context(operation.kind)),
         ).rejects.toThrow("Host update required");
+      else if (operation.kind === "data.generateApiKeys")
+        await expect(
+          dispatchOpsOperation(runtime, operation, context(operation.kind)),
+        ).rejects.toThrow("Typed adapter is not wired");
       else await dispatchOpsOperation(runtime, operation, context(operation.kind));
     }
     expect(calls).toEqual([
       ["data", "link"],
       ["data", "clean", "osm"],
-      ["data", "generate-api-keys"],
     ]);
     expect(calls.flat()).not.toContain("transitous-fixed-v1");
   });

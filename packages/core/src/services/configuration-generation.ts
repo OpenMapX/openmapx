@@ -700,6 +700,7 @@ export function readAppliedConfiguration(
     serviceConfigs?: ConfigurationInput["serviceConfigs"];
     integrationConfigs?: ConfigurationInput["integrationConfigs"];
     platform?: PlatformConfiguration;
+    transitCredentialsRevision?: string;
   };
   const serviceSecrets: ConfigurationInput["serviceSecrets"] = [];
   const secretsRoot = join(generation, GENERATED_SECRETS_DIRNAME);
@@ -716,10 +717,27 @@ export function readAppliedConfiguration(
     serviceConfigs: resolved.serviceConfigs ?? [],
     integrationConfigs: resolved.integrationConfigs ?? [],
     serviceSecrets,
+    ...(resolved.transitCredentialsRevision
+      ? { transitCredentialsRevision: resolved.transitCredentialsRevision }
+      : {}),
     ...(resolved.platform
       ? { platform: platformConfigurationSchema.parse(resolved.platform) }
       : {}),
   };
+}
+
+/** Non-secret encrypted-row revision of the applied managed map. */
+export function readAppliedTransitCredentialsRevision(infraDir: string): string | null {
+  const active = currentConfigurationGeneration(infraDir);
+  if (!active) return null;
+  const resolved = JSON.parse(
+    readFileSync(join(infraDir, CONFIGURATION_GENERATIONS, active, RESOLVED_CONFIG_FILE), "utf8"),
+  );
+  return resolved.transitCredentialsRevision === undefined
+    ? null
+    : (trustedConfigurationPayloadSchema.shape.transitCredentialsRevision.parse(
+        resolved.transitCredentialsRevision,
+      ) ?? null);
 }
 
 /** Read only non-secret platform metadata, never service secret files. */
@@ -1208,6 +1226,9 @@ async function commitOwnedConfigurationGeneration(
       `${JSON.stringify({
         serviceConfigs: input.serviceConfigs,
         integrationConfigs: input.integrationConfigs,
+        ...(input.transitCredentialsRevision
+          ? { transitCredentialsRevision: input.transitCredentialsRevision }
+          : {}),
         ...(input.platform ? { platform: platformConfigurationSchema.parse(input.platform) } : {}),
       })}\n`,
       0o600,

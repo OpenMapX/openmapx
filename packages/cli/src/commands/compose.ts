@@ -306,6 +306,9 @@ export async function renderComposeWithWriter(
         overrides: opts.domain === undefined ? {} : { domain: opts.domain },
       }).values.domain,
       ...(saved.platform ? { platform: saved.platform } : {}),
+      ...(saved.transitCredentialsRevision
+        ? { transitCredentialsRevision: saved.transitCredentialsRevision }
+        : {}),
       selectedRoots: applied.requestedIds,
       serviceConfigs,
       integrationConfigs: saved.integrationConfigs.filter((entry) =>

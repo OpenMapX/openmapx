@@ -141,3 +141,40 @@ it.each(["body", "source", "parent", "foreign-target", "protected-target", "capa
     expect(() => buildFixedConfigurationMaintenancePlan(source)).toThrow();
   },
 );
+
+it("retains the frozen coordinator image in the cross-role graph used to reconstruct nonempty hardlinks", async () => {
+  const { configurationMaintenanceForwardGraphSchema } = await import(
+    "./configuration-maintenance-forward-records"
+  );
+  const source = input();
+  const coordinatorImage = {
+    action: "apply" as const,
+    noDeps: false,
+    imageReference: "example/data-manager:1",
+    imageId: `sha256:${"e".repeat(64)}`,
+    releaseSelectionDigest: "f".repeat(64),
+    pullSubmissionDigest: null,
+  };
+  const plan = buildFixedConfigurationMaintenancePlan({ ...source, coordinatorImage });
+  const { kind: _kind, ...binding } = plan.operation;
+  const graph = configurationMaintenanceForwardGraphSchema.parse({
+    version: 1,
+    binding,
+    prepare: plan.prepare,
+    apiJobId: plan.apiParent.apiJobId,
+    parentOperationKey: plan.apiParent.operationKey,
+    parentFingerprint: plan.apiParent.fingerprint,
+    parentDeadlineAt: plan.apiParent.deadlineAt,
+    planDigest: plan.planDigest,
+    serviceIds: plan.serviceIds,
+    steps: plan.steps,
+    coordinatorImage,
+  });
+  expect(graph.coordinatorImage).toEqual(coordinatorImage);
+  const rebuilt = buildFixedConfigurationMaintenancePlan({
+    ...source,
+    coordinatorImage: graph.coordinatorImage,
+  });
+  expect(rebuilt.planDigest).toBe(plan.planDigest);
+  expect(rebuilt.steps).toEqual(plan.steps);
+});

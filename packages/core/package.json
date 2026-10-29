@@ -249,6 +249,7 @@
     "@openmapx/air-quality": "workspace:*",
     "@openmapx/extension-contracts": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
+    "@openmapx/transitous-core": "workspace:^",
     "@tanstack/react-query": "^5.104.1",
     "@turf/helpers": "^7.4.0",
     "@turf/nearest-point-on-line": "^7.4.0",

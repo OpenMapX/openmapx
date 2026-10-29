@@ -290,6 +290,10 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   "valhalla.traffic.refreshWaysToEdges": { kind: "valhalla.traffic.refreshWaysToEdges" },
   "postgis.capacity.inspect": { kind: "postgis.capacity.inspect" },
   "catalogPins.inspect": { kind: "catalogPins.inspect" },
+  "transitCredentials.inspect": {
+    kind: "transitCredentials.inspect",
+    catalogRevisionId: "a".repeat(64),
+  },
   "transitousLock.inspect": { kind: "transitousLock.inspect" },
   "transitousLock.propose": {
     kind: "transitousLock.propose",
@@ -362,6 +366,10 @@ describe("ops contract", () => {
       // Take the role from the policy table rather than re-deriving it from a
       // kind prefix: a prefix list silently omits every kind added later.
       const role: OpsRole = OPS_KIND_POLICIES[operation.kind].role;
+      if (operation.kind === "data.generateApiKeys") {
+        expect(() => parseOpsRequest(request(operation), { role })).toThrow(/not permitted/);
+        continue;
+      }
       expect(() => parseOpsRequest(request(operation), { role }), operation.kind).not.toThrow();
       expect(parseOpsRequest(request(operation), { role }).operation).toEqual(operation);
     }

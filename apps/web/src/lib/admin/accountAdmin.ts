@@ -22,6 +22,8 @@ const messages: Record<string, string> = {
   ACCOUNT_ACTION_CONFLICT: "This request changed. Refresh before trying again.",
   REAUTHENTICATION_REQUIRED: "Confirm a fresh administrator sign-in for this action.",
   AUTH_POLICY_CONFLICT: "The active policy changed. Reload before applying your changes.",
+  ADMIN_OPERATION_IN_PROGRESS:
+    "Finish or cancel this administrator’s instance operations in Activity before deleting the account.",
   LAST_ADMIN_REQUIRED: "At least one active administrator must remain.",
   ROLE_VERSION_CONFLICT: "This account changed. Refresh before changing its role.",
   INVALID_PASSWORD: "The password does not meet the instance policy.",

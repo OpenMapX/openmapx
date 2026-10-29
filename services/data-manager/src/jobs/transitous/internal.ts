@@ -5,6 +5,7 @@ import {
   fchmodSync,
   fstatSync,
   ftruncateSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readdirSync,
@@ -28,6 +29,10 @@ import {
   type TransitousFeedFile,
   type TransitousFeedSource,
 } from "@openmapx/transitous-core";
+import {
+  canonicalFeedCredentialMap,
+  parseFeedCredentialMapJson,
+} from "@openmapx/transitous-core/feed-credentials";
 import { execa } from "execa";
 import { dataWorkerSignal } from "../execution/worker-scope.js";
 import type { TransitousScriptRunner } from "./script-runner.js";
@@ -65,7 +70,12 @@ export const DEFAULT_TRANSITOUS_API_KEYS_PATH = "/config/transitous/api-keys.jso
 export function resolveTransitousApiKeysPath(explicit?: string): string {
   // `||`, not `??`: compose renders an unset variable as "", which must fall
   // through to the mounted default.
-  return explicit || process.env.TRANSITOUS_API_KEYS_PATH || DEFAULT_TRANSITOUS_API_KEYS_PATH;
+  return (
+    explicit ||
+    process.env.TRANSITOUS_API_KEYS_PATH ||
+    process.env.TRANSITOUS_API_KEYS_FILE ||
+    DEFAULT_TRANSITOUS_API_KEYS_PATH
+  );
 }
 
 /**
@@ -210,16 +220,43 @@ export function writePrivateCatalogFile(feedPath: string, content: string): void
 
 export function applyApiKeysOverlay(catalogDir: string, overlayPath: string): number {
   if (!existsSync(overlayPath)) return 0;
-  let overlay: Record<string, string>;
+  const before = lstatSync(overlayPath);
+  if (!before.isFile() || before.isSymbolicLink() || before.size > 65536)
+    throw Error("Invalid feed credential map");
+  const descriptor = openSync(
+    overlayPath,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+  );
+  let overlay: Readonly<Record<string, string>>;
   try {
-    overlay = JSON.parse(readFileSync(overlayPath, "utf-8")) as Record<string, string>;
-  } catch {
-    return 0;
+    const opened = fstatSync(descriptor);
+    if (
+      !opened.isFile() ||
+      opened.dev !== before.dev ||
+      opened.ino !== before.ino ||
+      opened.size > 65536
+    )
+      throw Error("Feed credential map changed");
+    overlay = canonicalFeedCredentialMap(
+      parseFeedCredentialMapJson(readFileSync(descriptor, "utf8")),
+    ).values;
+    const after = fstatSync(descriptor),
+      current = lstatSync(overlayPath);
+    if (
+      opened.dev !== current.dev ||
+      opened.ino !== current.ino ||
+      opened.size !== after.size ||
+      opened.mtimeMs !== after.mtimeMs ||
+      opened.ctimeMs !== after.ctimeMs
+    )
+      throw Error("Feed credential map changed");
+  } finally {
+    closeSync(descriptor);
   }
 
   let applied = 0;
   for (const [keyPath, rawValue] of Object.entries(overlay)) {
-    const apiKey = rawValue.trim();
+    const apiKey = rawValue;
     if (!apiKey) continue;
     const slashIndex = keyPath.indexOf("/");
     if (slashIndex <= 0) continue;

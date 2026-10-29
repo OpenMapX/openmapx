@@ -86,6 +86,7 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
       "session.user_id:c",
       "session_auth_assurance.user_id:n",
       "share_link.user_id:c",
+      "transit_credential_preview.actor_id:c",
       "two_factor.user_id:c",
     ]);
   });

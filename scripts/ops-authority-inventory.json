@@ -94,6 +94,7 @@
       "system.diagnostics",
       "system.inspect",
       "system.update",
+      "transitCredentials.inspect",
       "vault.apply"
     ],
     "data-manager": [
@@ -139,7 +140,6 @@
       "convert-overpass",
       "link",
       "clean",
-      "generate-api-keys",
       "overture-sync",
       "overture-conflate",
       "search-index-build",
@@ -180,7 +180,6 @@
         "data.convertOverpass",
         "data.link",
         "data.clean",
-        "data.generateApiKeys",
         "data.overtureSync",
         "data.overtureConflate",
         "data.searchIndexBuild",
@@ -354,6 +353,24 @@
         "configurationMaintenance.decide",
         "configurationMaintenance.settle"
       ]
+    },
+    {
+      "id": "api.transit-credentials",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/transit-feed-credential-participant.ts#inspect",
+        "apps/ops-agent/src/transit-credentials-runtime.ts#installTransitCredentialsRuntime"
+      ],
+      "typedKinds": ["transitCredentials.inspect"]
+    },
+    {
+      "id": "ops.retired-feed-credential-generator",
+      "callSiteIds": [],
+      "semanticSources": [
+        "packages/core/src/ops/contract.ts#authorizeOpsOperation",
+        "apps/ops-agent/src/administrative-runtime.ts#createAdministrativeRuntime"
+      ],
+      "typedKinds": ["data.generateApiKeys"]
     }
   ],
   "mounts": [

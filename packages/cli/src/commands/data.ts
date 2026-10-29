@@ -885,16 +885,14 @@ export function registerDataCommands(program: Command): void {
     .description(
       "Generate Transitous API-key template at services/motis/tools/transitous/api-keys.json",
     )
-    .option("--repo-url <url>", "Override Transitous catalog git URL")
     .option(
       "--output <path>",
       "Override output path (default: services/motis/tools/transitous/api-keys.json)",
     )
-    .action(async (options: { repoUrl?: string; output?: string }) => {
+    .action(async (options: { output?: string }) => {
       try {
-        log.dim("Syncing Transitous catalog and scanning feeds that require API keys...");
+        log.dim("Reading pinned Transitous catalog and scanning feeds that require API keys...");
         const result = await generateTransitousApiKeys({
-          transitousRepoUrl: options.repoUrl,
           outputPath: options.output,
         });
         const preserved =

@@ -117,6 +117,7 @@ export {
   type PersonalTimelineConnectionRow,
   personalTimelineConnection,
 } from "./timeline-connection-schema";
+export { transitCredentialPreview } from "./transit-credential-preview-schema";
 // Personal vehicle garage and parked-location state
 export {
   type ParkedLocationRow,
