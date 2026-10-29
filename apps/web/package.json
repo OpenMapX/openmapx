@@ -34,6 +34,7 @@
     "@mui/icons-material": "^9.5.0",
     "@mui/material": "^9.5.0",
     "@mui/material-nextjs": "^9.5.0",
+    "@mui/x-date-pickers": "^9.16.0",
     "@openmapx/command-palette": "workspace:^",
     "@openmapx/core": "workspace:^",
     "@openmapx/ev-charge-planner": "workspace:^",
@@ -54,6 +55,7 @@
     "@turf/length": "^7.4.0",
     "@turf/line-slice-along": "^7.4.0",
     "better-auth": "1.7.7",
+    "dayjs": "^1.11.23",
     "emoji-mart": "^5.6.0",
     "fflate": "0.8.3",
     "hls.js": "^1.7.3",
@@ -62,6 +64,7 @@
     "maplibre-theme": "^1.0.0",
     "next": "^16.4.1",
     "next-intl": "^4.14.9",
+    "p-map": "7.1.1",
     "papaparse": "5.7.0",
     "pure-web-bottom-sheet": "1.1.1",
     "qrcode": "^1.5.4",
@@ -71,8 +74,7 @@
     "react-window": "^2.3.4",
     "recharts": "^3.10.1",
     "serwist": "^9.5.13",
-    "zustand": "^5.0.15",
-    "p-map": "7.1.1"
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@mapbox/maki": "^8.2.0",

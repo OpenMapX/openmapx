@@ -3396,7 +3396,7 @@
     "ohTimeKindPoint": "Zeitpunkt",
     "ohStartTime": "Von",
     "ohEndTime": "Bis",
-    "ohPointTypeClock": "Uhrzeit (HH:MM)",
+    "ohPointTypeClock": "Uhrzeit",
     "ohPointTypeSolar": "Sonnenstand",
     "ohSolarDawn": "Morgendämmerung (dawn)",
     "ohSolarSunrise": "Sonnenaufgang (sunrise)",

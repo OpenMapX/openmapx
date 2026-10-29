@@ -216,6 +216,22 @@ describe("OpeningHoursControl", () => {
     );
   });
 
+  it("edits times on the clock field and keeps a past-midnight end on the next day", async () => {
+    render(<Harness currentOpeningHours="Fr 18:00-26:30" />);
+
+    const [startHours, endHours] = await screen.findAllByRole("spinbutton", { name: /hours/i });
+    if (!startHours || !endHours) throw new Error("expected start and end hour sections");
+    expect(endHours.textContent).toBe("02");
+
+    await userEvent.click(endHours);
+    await userEvent.keyboard("{ArrowUp}");
+    expect(screen.getByTestId("opening-hours-live-preview").textContent).toBe("Fr 18:00-27:30");
+
+    await userEvent.click(startHours);
+    await userEvent.keyboard("{ArrowDown}");
+    expect(screen.getByTestId("opening-hours-live-preview").textContent).toBe("Fr 17:00-27:30");
+  });
+
   it("supports explicit removal and undo via RemoveToggle", async () => {
     render(<Harness currentOpeningHours="Mo-Fr 09:00-17:00" />);
 
