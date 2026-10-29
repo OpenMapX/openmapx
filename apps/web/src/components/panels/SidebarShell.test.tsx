@@ -78,39 +78,53 @@ describe("SidebarShell on desktop", () => {
   });
 
   describe("search-bar clearance", () => {
-    it("reserves the strip with an opaque band by default, leaving content nothing to offset", () => {
+    function scrollRail(fade: HTMLElement, top: number) {
+      const rail = fade.parentElement as HTMLElement;
+      rail.scrollTop = top;
+      fireEvent.scroll(rail);
+    }
+
+    it("reserves the strip by default, leaving content nothing to offset", () => {
       isMobileRef.current = false;
       render(
         <SidebarShell>
           <ClearanceProbe />
         </SidebarShell>,
       );
-      expect(screen.getByTestId("probe").textContent).toBe("none");
-      const band = screen.getByTestId("search-bar-band");
-      expect(band).toHaveStyle({ position: "sticky", height: SEARCH_BAR_CLEARANCE });
-      expect(band).not.toHaveStyle({ opacity: "0" });
+      const probe = screen.getByTestId("probe");
+      expect(probe.textContent).toBe("none");
+      expect(probe.previousElementSibling).toHaveStyle({ height: SEARCH_BAR_CLEARANCE });
     });
 
-    it("hands the inset to content under the bar and fills the band in once the rail scrolls", () => {
+    it("hands the inset to content that lays itself out under the bar", () => {
       isMobileRef.current = false;
       render(
         <SidebarShell searchBarClearance="content">
           <ClearanceProbe />
         </SidebarShell>,
       );
-      expect(screen.getByTestId("probe").textContent).toBe(SEARCH_BAR_CLEARANCE);
-      const band = screen.getByTestId("search-bar-band");
-      expect(band).toHaveStyle({ opacity: "0", pointerEvents: "none" });
-
-      const rail = band.parentElement as HTMLElement;
-      rail.scrollTop = 120;
-      fireEvent.scroll(rail);
-      expect(band).toHaveStyle({ opacity: "1" });
-
-      rail.scrollTop = 0;
-      fireEvent.scroll(rail);
-      expect(band).toHaveStyle({ opacity: "0" });
+      const probe = screen.getByTestId("probe");
+      expect(probe.textContent).toBe(SEARCH_BAR_CLEARANCE);
+      expect(probe.previousElementSibling).toBe(screen.getByTestId("search-bar-fade"));
     });
+
+    it.each(["shell", "content"] as const)(
+      "fades scrolled %s content out under the bar only once the rail scrolls",
+      (mode) => {
+        isMobileRef.current = false;
+        render(
+          <SidebarShell searchBarClearance={mode}>
+            <ClearanceProbe />
+          </SidebarShell>,
+        );
+        const fade = screen.getByTestId("search-bar-fade");
+        expect(fade).toHaveStyle({ position: "sticky", opacity: "0", pointerEvents: "none" });
+        scrollRail(fade, 120);
+        expect(fade).toHaveStyle({ opacity: "1" });
+        scrollRail(fade, 0);
+        expect(fade).toHaveStyle({ opacity: "0" });
+      },
+    );
 
     it("reserves nothing for a panel that hides the bar", () => {
       isMobileRef.current = false;
@@ -119,8 +133,10 @@ describe("SidebarShell on desktop", () => {
           <ClearanceProbe />
         </SidebarShell>,
       );
-      expect(screen.getByTestId("probe").textContent).toBe("none");
-      expect(screen.queryByTestId("search-bar-band")).toBeNull();
+      const probe = screen.getByTestId("probe");
+      expect(probe.textContent).toBe("none");
+      expect(probe.previousElementSibling).toBeNull();
+      expect(screen.queryByTestId("search-bar-fade")).toBeNull();
     });
   });
 });

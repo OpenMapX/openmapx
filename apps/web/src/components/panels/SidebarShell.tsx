@@ -100,8 +100,9 @@ function DesktopSidebar({
           transition: "transform 0.25s ease",
         })}
       >
-        {searchBarClearance !== "none" && (
-          <SearchBarBand overlay={searchBarClearance === "content"} visible={scrolled} />
+        {searchBarClearance !== "none" && <SearchBarFade visible={scrolled} />}
+        {searchBarClearance === "shell" && (
+          <Box aria-hidden sx={{ height: SEARCH_BAR_CLEARANCE }} />
         )}
         <SearchBarClearanceContext.Provider
           value={searchBarClearance === "content" ? SEARCH_BAR_CLEARANCE : null}
@@ -113,32 +114,41 @@ function DesktopSidebar({
   );
 }
 
+/** How far below the reserved strip scrolled content takes to fade out. */
+const FADE_LENGTH = 24;
+
 /**
- * The strip of the rail behind the floating search bar, pinned so content
- * scrolls beneath it rather than showing around the bar's edges. For a "shell"
- * panel it is also the spacer that holds the content below the bar. A
- * "content" panel lays out under the bar (a photo can fill the strip), so the
- * band overlays it and only fills in once the panel scrolls.
+ * A pinned wash of the rail's background behind the floating search bar, so
+ * content scrolling up dissolves beneath the bar instead of showing around its
+ * edges or being cut at a hard line. Solid through the reserved strip, so
+ * nothing peeks out between the bar and a header pinned below it (the place
+ * tabs), then fading out. It only appears once the rail scrolls, so a photo
+ * laid out under the bar stays fully visible at rest.
  */
-function SearchBarBand({ overlay, visible }: { overlay: boolean; visible: boolean }) {
+function SearchBarFade({ visible }: { visible: boolean }) {
+  const height = `calc(${SEARCH_BAR_CLEARANCE} + ${FADE_LENGTH}px)`;
+  const fade = (color: string) =>
+    `linear-gradient(to bottom, ${color} calc(100% - ${FADE_LENGTH}px), transparent)`;
   return (
     <Box
       aria-hidden
-      data-testid="search-bar-band"
-      sx={{
+      data-testid="search-bar-fade"
+      sx={(theme) => ({
         position: "sticky",
         top: 0,
-        // Above the content's own sticky parts, such as the place tab strip.
-        zIndex: 2,
-        height: SEARCH_BAR_CLEARANCE,
-        bgcolor: "inherit",
-        ...(overlay && {
-          mb: `calc(-1 * ${SEARCH_BAR_CLEARANCE})`,
-          opacity: visible ? 1 : 0,
-          transition: "opacity 0.15s",
-          pointerEvents: visible ? "auto" : "none",
+        // Under sticky parts that come later with the same z-index, such as the
+        // place tab strip, which pins over the fading part and stays crisp.
+        zIndex: 1,
+        height,
+        mb: `calc(-1 * ${height})`,
+        background: fade((theme.vars ?? theme).palette.background.paper),
+        ...theme.applyStyles("dark", {
+          background: fade((theme.vars ?? theme).palette.background.default),
         }),
-      }}
+        opacity: visible ? 1 : 0,
+        transition: "opacity 0.15s",
+        pointerEvents: "none",
+      })}
     />
   );
 }
