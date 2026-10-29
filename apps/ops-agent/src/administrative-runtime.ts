@@ -110,7 +110,7 @@ const BACKUP_STORE_LOCK_NAME = ".backup-store.lock";
 const MAX_RELEASE_STORE_BYTES = MAX_RELEASE_STORE_ENTRIES * MAX_RELEASE_MANIFEST_BYTES;
 const BACKUP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const SERVICE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
-const REGION_ID = /^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*$/;
+const _REGION_ID = /^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*$/;
 const DATA_TYPE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const DATA_TYPE_ALIASES: Readonly<Record<string, readonly string[]>> = {
   osm: ["osm-pbf"],
@@ -1967,6 +1967,18 @@ export function createAdministrativeRuntime(
     throw new OpsNotWiredError();
   };
   runtime["data.overtureSync"] = async (operation, context) => {
+    await runMatchingDataCommand(operation, context);
+    return { completed: true, resourceId: operation.regionId };
+  };
+  runtime["data.overturePull"] = async (operation, context) => {
+    await runMatchingDataCommand(operation, context);
+    return { completed: true, resourceId: operation.regionId };
+  };
+  runtime["data.overtureIngest"] = async (operation, context) => {
+    await runMatchingDataCommand(operation, context);
+    return { completed: true, resourceId: operation.regionId };
+  };
+  runtime["data.overtureExtract"] = async (operation, context) => {
     await runMatchingDataCommand(operation, context);
     return { completed: true, resourceId: operation.regionId };
   };

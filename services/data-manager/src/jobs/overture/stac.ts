@@ -499,3 +499,5 @@ export function readOverturePullContract(
   }
   return assertPullContract(parsed, dataDir, release, region);
 }
+
+export { assertPullContract as validateOverturePullContract };

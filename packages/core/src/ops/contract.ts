@@ -125,6 +125,9 @@ export const OPS_OPERATION_KINDS = [
   "data.clean",
   "data.generateApiKeys",
   "data.overtureSync",
+  "data.overturePull",
+  "data.overtureIngest",
+  "data.overtureExtract",
   "data.overtureConflate",
   "data.searchIndexBuild",
   "data.notablePlacesBuild",
@@ -253,6 +256,9 @@ export const OPS_KIND_POLICIES = {
   "data.clean": asyncEffect("api", 10 * 60_000),
   "data.generateApiKeys": asyncEffect("api", 10 * 60_000),
   "data.overtureSync": asyncEffect("api", 24 * 3600_000),
+  "data.overturePull": asyncEffect("api", 24 * 3600_000),
+  "data.overtureIngest": asyncEffect("api", 24 * 3600_000),
+  "data.overtureExtract": asyncEffect("api", 24 * 3600_000),
   "data.overtureConflate": asyncEffect("api", 24 * 3600_000),
   "data.searchIndexBuild": asyncEffect("api", 24 * 3600_000),
   "data.notablePlacesBuild": asyncEffect("api", 24 * 3600_000),
@@ -529,6 +535,9 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("data.clean"), dataTypeId: stableIdSchema }),
   z.strictObject({ kind: z.literal("data.generateApiKeys"), catalogRevisionId: stableIdSchema }),
   z.strictObject({ kind: z.literal("data.overtureSync"), regionId: regionIdSchema }),
+  z.strictObject({ kind: z.literal("data.overturePull"), regionId: regionIdSchema }),
+  z.strictObject({ kind: z.literal("data.overtureIngest"), regionId: regionIdSchema }),
+  z.strictObject({ kind: z.literal("data.overtureExtract"), regionId: regionIdSchema }),
   z.strictObject({
     kind: z.literal("data.overtureConflate"),
     regionId: regionIdSchema,
@@ -806,6 +815,9 @@ export async function authorizeOpsResources(
       return true;
     }
     case "data.overtureSync":
+    case "data.overturePull":
+    case "data.overtureIngest":
+    case "data.overtureExtract":
     case "data.overtureConflate":
     case "data.searchIndexBuild":
       return allowed(policy.allowRegion?.(operation.kind, operation.regionId));
@@ -1274,6 +1286,9 @@ export const OPS_RESULT_SCHEMAS = {
   "data.clean": data,
   "data.generateApiKeys": data,
   "data.overtureSync": data,
+  "data.overturePull": data,
+  "data.overtureIngest": data,
+  "data.overtureExtract": data,
   "data.overtureConflate": data,
   "data.searchIndexBuild": data,
   "data.notablePlacesBuild": data,

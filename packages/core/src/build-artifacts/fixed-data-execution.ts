@@ -34,6 +34,9 @@ const fixedDataKinds = [
   "data.downloadFonts",
   "data.convertOverpass",
   "data.overtureSync",
+  "data.overturePull",
+  "data.overtureIngest",
+  "data.overtureExtract",
   "data.overtureConflate",
   "data.searchIndexBuild",
   "data.notablePlacesBuild",
@@ -67,6 +70,12 @@ export function fixedDataCommandInput(
       return ordinaryDataExecutionInputSchema.parse({ kind: "convert-overpass", region });
     case "data.overtureSync":
       return ordinaryDataExecutionInputSchema.parse({ kind: "overture-sync", region });
+    case "data.overturePull":
+      return ordinaryDataExecutionInputSchema.parse({ kind: "overture-pull", region });
+    case "data.overtureIngest":
+      return ordinaryDataExecutionInputSchema.parse({ kind: "overture-ingest", region });
+    case "data.overtureExtract":
+      return ordinaryDataExecutionInputSchema.parse({ kind: "overture-extract", region });
     case "data.overtureConflate":
       return ordinaryDataExecutionInputSchema.parse({
         kind: "overture-conflate",

@@ -318,6 +318,15 @@ export async function getApiDataManagerNotablePlacesStatusRequest<T>(
 ): Promise<T> {
   return getApiDataManagerNotablePlacesStatusBound<T>(url, options);
 }
+const getApiDataManagerOvertureRecoveryBound = bindAdminOperation(
+  "getApiDataManagerOvertureRecovery",
+);
+export async function getApiDataManagerOvertureRecoveryRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return getApiDataManagerOvertureRecoveryBound<T>(url, options);
+}
 const getApiDataManagerOvertureStatusBound = bindAdminOperation("getApiDataManagerOvertureStatus");
 export async function getApiDataManagerOvertureStatusRequest<T>(
   url: string,

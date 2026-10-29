@@ -135,3 +135,50 @@ describe("GET /data-manager/notable-places/status", () => {
     expect(absent.statusCode).toBe(404);
   });
 });
+
+describe("GET /data-manager/overture/recovery", () => {
+  it("keeps operator prerequisites unavailable to service tokens", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/data-manager/overture/recovery?region=europe/germany",
+      headers: { authorization: "Bearer service-token" },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it("proxies the exact region through the generated service contract without caching", async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({
+        region: "europe/germany",
+        busy: false,
+        osmAvailable: false,
+        downloadedRelease: null,
+        installedRelease: null,
+        actions: Object.fromEntries(
+          [
+            "overture-pull",
+            "overture-ingest",
+            "overture-extract",
+            "overture-conflate",
+            "overture-restart",
+          ].map((id) => [
+            id,
+            {
+              allowed: id === "overture-pull",
+              reason: id === "overture-pull" ? null : "Missing inputs",
+            },
+          ]),
+        ),
+      }),
+    );
+    const response = await app.inject({
+      method: "GET",
+      url: "/data-manager/overture/recovery?region=europe/germany",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      "https://data-manager.test:4000/overture/recovery?region=europe%2Fgermany",
+    );
+  });
+});

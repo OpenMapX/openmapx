@@ -263,6 +263,9 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     catalogRevisionId: "catalog_20260823",
   },
   "data.overtureSync": { kind: "data.overtureSync", regionId: "europe/germany" },
+  "data.overturePull": { kind: "data.overturePull", regionId: "europe/germany" },
+  "data.overtureIngest": { kind: "data.overtureIngest", regionId: "europe/germany" },
+  "data.overtureExtract": { kind: "data.overtureExtract", regionId: "europe/germany" },
   "data.overtureConflate": {
     kind: "data.overtureConflate",
     regionId: "europe/germany",

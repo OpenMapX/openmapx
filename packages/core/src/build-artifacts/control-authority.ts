@@ -4870,6 +4870,12 @@ export function fixedCliArguments(operation: import("../ops/contract").OpsOperat
       return ["data", "convert", "overpass", ...(operation.regionId ? [operation.regionId] : [])];
     case "data.overtureSync":
       return ["data", "overture-sync", operation.regionId];
+    case "data.overturePull":
+      return ["data", "overture-pull", operation.regionId];
+    case "data.overtureIngest":
+      return ["data", "overture-ingest", operation.regionId];
+    case "data.overtureExtract":
+      return ["data", "overture-extract", operation.regionId];
     case "data.searchIndexBuild":
       return ["data", "search-index", "build", operation.regionId];
     case "data.notablePlacesBuild":

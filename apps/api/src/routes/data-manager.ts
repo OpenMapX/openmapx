@@ -552,6 +552,21 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     },
   );
 
+  registerDataManagerAdminRoute(app, "getApiDataManagerOvertureRecovery", async (req, reply) => {
+    const auth = await authenticateDataManager(req);
+    if (auth.kind === "token")
+      return reply
+        .code(403)
+        .send({ error: "Overture recovery inspection requires an admin session" });
+    const response = await dm.getOvertureRecovery(
+      { region: req.query.region },
+      dataManagerOptions(),
+    );
+    reply.header("cache-control", "no-store");
+    reply.code(response.status);
+    return response.data;
+  });
+
   registerDataManagerAdminRoute(app, "getApiDataManagerOvertureStatus", async (req, reply) => {
     const auth = await authenticateDataManager(req);
     if (auth.kind === "token") {

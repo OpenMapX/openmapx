@@ -11,6 +11,7 @@ import {
 import { assertOverturePostgresCapacity, estimateOvertureIngestBytes } from "./capacity.js";
 import { duckDbSqlLiteral, runDuckDbScript } from "./duckdb.js";
 import { validateOvertureQuality } from "./eval/quality-gate.js";
+import { inspectOvertureLocalInputs } from "./local-inputs.js";
 import { regionSlug, resolveOvertureRelease } from "./pull.js";
 import { assertValidOvertureSchema, buildPlacesIndexesDDL, buildSchemaDDL } from "./schema.js";
 import { readOverturePullContract } from "./stac.js";
@@ -138,7 +139,13 @@ export async function activateOvertureStagingSchema(
 }
 
 export async function ingestOverture(opts: IngestOvertureOptions): Promise<void> {
-  const release = await resolveOvertureRelease(opts.release);
+  const localRelease =
+    opts.release ?? inspectOvertureLocalInputs(opts.dataDir, opts.region).downloadedRelease;
+  if (!localRelease)
+    throw Error(
+      "Download a completed local Overture partition for this region before ingesting it.",
+    );
+  const release = await resolveOvertureRelease(localRelease);
   const slug = regionSlug(opts.region);
   const parquetPath = join(opts.dataDir, "overture", release, `${slug}.parquet`);
   const schema = "overture_places";

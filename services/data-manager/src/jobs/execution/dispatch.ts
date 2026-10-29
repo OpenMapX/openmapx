@@ -24,6 +24,7 @@ import {
   getOvertureConflationState,
   rebuildOvertureLinksUnlocked,
 } from "../overture/rebuild-links.js";
+import { assertOvertureRecoveryInputs } from "../overture/recovery.js";
 import {
   finalizeOvertureReleaseFiles,
   overtureReleaseRetentionFromEnv,
@@ -273,20 +274,39 @@ export function createDataExecutionDispatcher(deps: {
         }
       }
       case "overture-pull": {
-        const path = await pullOverture({ ...common, region: input.region });
+        const path = await withOvertureOperationLock(() =>
+          pullOverture({ ...common, region: input.region }),
+        );
         finish(context.execution.executionId, { event: "done", ok: true, path });
         return { kind: input.kind, region: input.region, metrics: {} };
       }
       case "overture-ingest":
-        await withOvertureOperationLock(() => ingestOverture({ ...common, region: input.region }));
+        await withOvertureOperationLock(async () => {
+          const release = await assertOvertureRecoveryInputs(
+            deps.dataDir,
+            input.region,
+            "overture-ingest",
+          );
+          if (!release) throw Error("Completed local Overture release required");
+          await ingestOverture({ ...common, region: input.region, release });
+        });
         finish(context.execution.executionId, { event: "done", ok: true });
         return { kind: input.kind, region: input.region, metrics: {} };
       case "overture-extract":
-        await withOvertureOperationLock(() => extractOsmPois({ ...common, region: input.region }));
+        await withOvertureOperationLock(async () => {
+          await assertOvertureRecoveryInputs(deps.dataDir, input.region, "overture-extract");
+          await extractOsmPois({ ...common, region: input.region });
+        });
         finish(context.execution.executionId, { event: "done", ok: true });
         return { kind: input.kind, region: input.region, metrics: {} };
       case "overture-conflate": {
         const result = await withOvertureOperationLock(async () => {
+          await assertOvertureRecoveryInputs(
+            deps.dataDir,
+            input.region,
+            "overture-conflate",
+            input.restart === true,
+          );
           const installed = await getOvertureConflationState();
           if (!installed) throw Error("No installed Overture release");
           const result = await rebuildOvertureLinksUnlocked({

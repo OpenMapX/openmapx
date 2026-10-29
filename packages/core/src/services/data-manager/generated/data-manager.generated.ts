@@ -265,6 +265,15 @@ import type {
   GetOfflinePackageManifest429,
   GetOfflinePackageManifest500,
   GetOfflinePackageManifest503,
+  GetOvertureRecovery200,
+  GetOvertureRecovery400,
+  GetOvertureRecovery401,
+  GetOvertureRecovery413,
+  GetOvertureRecovery415,
+  GetOvertureRecovery429,
+  GetOvertureRecovery500,
+  GetOvertureRecovery503,
+  GetOvertureRecoveryParams,
   GetOvertureStatus200,
   GetOvertureStatus400,
   GetOvertureStatus401,
@@ -580,6 +589,7 @@ import {
   getOfflinePackageCapabilityRequest,
   getOfflinePackageJobRequest,
   getOfflinePackageManifestRequest,
+  getOvertureRecoveryRequest,
   getOvertureStatusRequest,
   getSearchIndexStatusRequest,
   getStatusRequest,
@@ -4956,6 +4966,94 @@ export const pullOverture = async (
     headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
     body: JSON.stringify(pullOvertureBody),
   });
+};
+
+export type getOvertureRecoveryResponse200 = {
+  data: GetOvertureRecovery200;
+  status: 200;
+};
+
+export type getOvertureRecoveryResponse400 = {
+  data: GetOvertureRecovery400;
+  status: 400;
+};
+
+export type getOvertureRecoveryResponse401 = {
+  data: GetOvertureRecovery401;
+  status: 401;
+};
+
+export type getOvertureRecoveryResponse413 = {
+  data: GetOvertureRecovery413;
+  status: 413;
+};
+
+export type getOvertureRecoveryResponse415 = {
+  data: GetOvertureRecovery415;
+  status: 415;
+};
+
+export type getOvertureRecoveryResponse429 = {
+  data: GetOvertureRecovery429;
+  status: 429;
+};
+
+export type getOvertureRecoveryResponse500 = {
+  data: GetOvertureRecovery500;
+  status: 500;
+};
+
+export type getOvertureRecoveryResponse503 = {
+  data: GetOvertureRecovery503;
+  status: 503;
+};
+
+export type getOvertureRecoveryResponseSuccess = getOvertureRecoveryResponse200 & {
+  headers: Headers;
+};
+export type getOvertureRecoveryResponseError = (
+  | getOvertureRecoveryResponse400
+  | getOvertureRecoveryResponse401
+  | getOvertureRecoveryResponse413
+  | getOvertureRecoveryResponse415
+  | getOvertureRecoveryResponse429
+  | getOvertureRecoveryResponse500
+  | getOvertureRecoveryResponse503
+) & {
+  headers: Headers;
+};
+
+export type getOvertureRecoveryResponse =
+  | getOvertureRecoveryResponseSuccess
+  | getOvertureRecoveryResponseError;
+
+export const getGetOvertureRecoveryUrl = (params: GetOvertureRecoveryParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : String(value));
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/overture/recovery?${stringifiedParams}`
+    : `/overture/recovery`;
+};
+
+export const getOvertureRecovery = async (
+  params: GetOvertureRecoveryParams,
+  options?: Parameters<typeof getOvertureRecoveryRequest>[1],
+): Promise<getOvertureRecoveryResponse> => {
+  return getOvertureRecoveryRequest<getOvertureRecoveryResponse>(
+    getGetOvertureRecoveryUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
 };
 
 export type getOvertureStatusResponse200 = {

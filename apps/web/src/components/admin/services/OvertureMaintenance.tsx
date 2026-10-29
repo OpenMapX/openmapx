@@ -1,8 +1,12 @@
 "use client";
 
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import MergeIcon from "@mui/icons-material/Merge";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SyncIcon from "@mui/icons-material/Sync";
+import Accordion from "@mui/material/Accordion";
+import AccordionDetails from "@mui/material/AccordionDetails";
+import AccordionSummary from "@mui/material/AccordionSummary";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -14,18 +18,47 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { createApiClient } from "@openmapx/core";
 import * as sdk from "@openmapx/core/api-admin-sdk";
-import type { OvertureStatus } from "@openmapx/core/api-contracts";
+import type { OvertureRecoveryStatus, OvertureStatus } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { SERVICE_READ_TIMEOUT_MS } from "@/lib/admin/serviceAdmin";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
-import { runAdminOperation } from "../operations/adminOperationsApi";
+import {
+  type AdminOperationFormValues,
+  previewAdminOperation,
+  runAdminOperation,
+} from "../operations/adminOperationsApi";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 
-type Operation = "overture-sync" | "overture-conflate";
+type Operation =
+  | "overture-sync"
+  | "overture-conflate"
+  | "overture-restart"
+  | "overture-pull"
+  | "overture-ingest"
+  | "overture-extract";
+const operationLabels: Record<Operation, string> = {
+  "overture-sync": "Full sync",
+  "overture-conflate": "Resume links",
+  "overture-restart": "Restart links from scratch",
+  "overture-pull": "Download release partition",
+  "overture-ingest": "Ingest downloaded partition",
+  "overture-extract": "Extract OSM features",
+};
+function operationRequest(name: Operation, region: string) {
+  return {
+    id: name === "overture-restart" ? "overture-conflate" : name,
+    input: {
+      region,
+      ...(["overture-restart", "overture-conflate"].includes(name)
+        ? { restart: name === "overture-restart" }
+        : {}),
+    } as AdminOperationFormValues,
+  };
+}
 
 export function overtureProgress(
   status:
@@ -107,7 +140,13 @@ function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
     [apiUrl],
   );
   const [region, setRegion] = useState("");
-  const [confirmOperation, setConfirmOperation] = useState<Operation | null>(null);
+  const [prepared, setPrepared] = useState<{
+    name: Operation;
+    region: string;
+    input: AdminOperationFormValues;
+    preview: Awaited<ReturnType<typeof previewAdminOperation>>;
+  } | null>(null);
+  const confirmOperation = prepared?.name ?? null;
 
   const statusQuery = useQuery<OvertureStatus | null>({
     queryKey: overtureStatusQueryKey(apiUrl),
@@ -123,7 +162,38 @@ function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
     refetchInterval: (query) => (query.state.data?.status === "running" ? 10_000 : 60_000),
   });
 
+  const regionValid =
+    /^[a-z][a-z0-9_-]*(?:\/[a-z][a-z0-9_-]*)*$/.test(region.trim()) && region.trim().length <= 512;
+  const recoveryQuery = useQuery<OvertureRecoveryStatus>({
+    queryKey: [...overtureStatusQueryKey(apiUrl), "recovery", region.trim()],
+    enabled: regionValid,
+    queryFn: async ({ signal }) =>
+      sdk.unwrapAdminResponse(
+        await sdk.getApiDataManagerOvertureRecovery(
+          { region: region.trim() },
+          { client, signal, timeoutMs: SERVICE_READ_TIMEOUT_MS },
+        ),
+      ),
+    refetchInterval: (query) => (query.state.data?.busy ? 10000 : 30000),
+  });
+
   const owner = useAdminMutationOwner(client, JSON.stringify([region, confirmOperation]));
+  const prepare = useMutation({
+    retry: false,
+    mutationFn: async (name: Operation) => {
+      const scope = owner,
+        selectedRegion = region.trim(),
+        request = operationRequest(name, selectedRegion);
+      try {
+        const preview = await previewAdminOperation(client, request.id, request.input);
+        if (scope.active)
+          setPrepared({ name, region: selectedRegion, input: request.input, preview });
+      } catch (error) {
+        if (scope.active)
+          showToast(error instanceof Error ? error.message : "Preview failed", "error");
+      }
+    },
+  });
   const operation = useMutation({
     retry: false,
     mutationFn: async (operationName: Operation) => {
@@ -133,11 +203,14 @@ function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
         refreshKeys: [overtureStatusQueryKey(apiUrl)],
       } as const;
       try {
-        const jobId = await runAdminOperation(client, operationName, { region: region.trim() });
+        if (!prepared || prepared.name !== operationName || prepared.region !== region.trim())
+          throw Error("The operation preview changed. Review it again.");
+        const request = operationRequest(operationName, prepared.region);
+        const jobId = await runAdminOperation(client, request.id, prepared.input);
         register({ client, apiUrl, jobId, effect });
         if (execution.active) {
           showToast(`Queued ${operationName} (${jobId})`);
-          setConfirmOperation(null);
+          setPrepared(null);
         }
       } catch (error) {
         if (execution.active)
@@ -149,6 +222,21 @@ function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
 
   const status = statusQuery.data;
   const progress = overtureProgress(status);
+  const recovery = recoveryQuery.data;
+  const busy = recovery?.busy === true || (status?.status === "running" && !status.stalled);
+  const pending = operation.isPending || prepare.isPending;
+  const canRun = (name: Operation) =>
+    regionValid &&
+    !pending &&
+    !busy &&
+    Boolean(recovery) &&
+    (name === "overture-sync" || recovery?.actions?.[name]?.allowed === true);
+  const leaseReason = recovery?.busy
+    ? "Another Overture operation holds the workspace lease."
+    : status?.status === "running" && !status.stalled
+      ? "The Overture link worker is still running."
+      : null;
+
   const visiblePhase =
     status?.status === "completed" && status.phase === "complete" ? undefined : status?.phase;
 
@@ -174,7 +262,13 @@ function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
             durable OSM↔GERS link index.
           </Typography>
         </Box>
-        <Button startIcon={<RefreshIcon />} onClick={() => statusQuery.refetch()}>
+        <Button
+          startIcon={<RefreshIcon />}
+          onClick={() => {
+            void statusQuery.refetch();
+            if (regionValid) void recoveryQuery.refetch();
+          }}
+        >
           Refresh
         </Button>
         <Button component={Link} href="/admin/activity" variant="text">
@@ -255,34 +349,104 @@ function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
         <Button
           variant="contained"
           startIcon={<SyncIcon />}
-          disabled={!region.trim() || operation.isPending || status?.status === "running"}
-          onClick={() => setConfirmOperation("overture-sync")}
+          disabled={!canRun("overture-sync")}
+          onClick={() => prepare.mutate("overture-sync")}
         >
           Full sync
         </Button>
         <Button
           variant="outlined"
           startIcon={<MergeIcon />}
-          disabled={!canResumeOvertureLinks(status, region, operation.isPending)}
-          onClick={() => setConfirmOperation("overture-conflate")}
+          disabled={
+            !canRun("overture-conflate") || !canResumeOvertureLinks(status, region, pending)
+          }
+          onClick={() => prepare.mutate("overture-conflate")}
         >
           Resume links
         </Button>
       </Stack>
 
+      {leaseReason && (
+        <Alert severity="info" sx={{ mt: 1 }}>
+          {leaseReason}
+        </Alert>
+      )}
+      {regionValid && recoveryQuery.isError && (
+        <Alert severity="error" sx={{ mt: 1 }}>
+          Prerequisite inspection is unavailable. Restore connectivity and refresh before queuing
+          work.
+        </Alert>
+      )}
+      <Button
+        sx={{ mt: 1 }}
+        color="warning"
+        variant="outlined"
+        disabled={!canRun("overture-restart")}
+        onClick={() => prepare.mutate("overture-restart")}
+      >
+        Restart links from scratch
+      </Button>
+      {regionValid && !busy && recovery?.actions?.["overture-conflate"]?.reason && (
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          {recovery.actions["overture-conflate"].reason}
+        </Typography>
+      )}
+      <Accordion sx={{ mt: 2 }}>
+        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+          <Typography>Advanced recovery</Typography>
+        </AccordionSummary>
+        <AccordionDetails>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            Run an individual recovery step. Full sync remains the usual workflow. Inputs are
+            checked again under the existing workspace lease.
+          </Typography>
+          {recovery && (
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              Completed local partition: {recovery.downloadedRelease ?? "none"} · OSM PBF:{" "}
+              {recovery.osmAvailable ? "available" : "missing"} · Installed release:{" "}
+              {recovery.installedRelease ?? "none"}
+            </Typography>
+          )}
+          <Stack spacing={1}>
+            {(["overture-pull", "overture-ingest", "overture-extract"] as const).map((name) => (
+              <Box key={name}>
+                <Button
+                  variant="outlined"
+                  disabled={!canRun(name)}
+                  onClick={() => prepare.mutate(name)}
+                >
+                  {operationLabels[name]}
+                </Button>
+                {!busy && recovery?.actions?.[name]?.reason && (
+                  <Typography variant="caption" sx={{ display: "block" }}>
+                    {recovery.actions[name].reason}
+                  </Typography>
+                )}
+              </Box>
+            ))}
+          </Stack>
+        </AccordionDetails>
+      </Accordion>
+
       <ConfirmDialog
-        open={confirmOperation !== null}
+        open={prepared !== null && prepared.region === region.trim()}
         title={
-          confirmOperation === "overture-sync" ? "Sync Overture Places" : "Resume Overture links"
+          prepared?.preview.confirmation?.title ??
+          (confirmOperation ? operationLabels[confirmOperation] : "Review Overture operation")
         }
-        message={
-          confirmOperation === "overture-sync"
-            ? `Download and atomically ingest the current Overture release for "${region}", then begin the durable link rebuild? This is a long-running, network- and disk-intensive job.`
-            : `Resume the durable OSM↔GERS link workflow for "${region}" from its saved phase?`
+        message={[prepared?.preview.confirmation?.message, ...(prepared?.preview.preview ?? [])]
+          .filter(Boolean)
+          .join(" · ")}
+        confirmLabel={
+          confirmOperation === "overture-restart"
+            ? "Restart links"
+            : confirmOperation === "overture-conflate"
+              ? "Resume"
+              : "Run operation"
         }
-        confirmLabel={confirmOperation === "overture-sync" ? "Start full sync" : "Resume"}
+        confirmColor={prepared?.preview.risk === "destructive" ? "warning" : "primary"}
         loading={operation.isPending}
-        onCancel={() => setConfirmOperation(null)}
+        onCancel={() => setPrepared(null)}
         onConfirm={() => {
           if (confirmOperation) operation.mutate(confirmOperation);
         }}

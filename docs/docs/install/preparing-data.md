@@ -270,10 +270,10 @@ pnpm openmapx data notable-places status
 # Regional or planet Overture Places synchronization and conflation
 pnpm openmapx data overture-sync [region]     # end-to-end pull, ingest, and conflation
 pnpm openmapx data overture-pull [region]     # pull Parquet partitions from STAC catalog
-pnpm openmapx data overture-ingest [region]   # ingest raw Places into database staging
+pnpm openmapx data overture-ingest [region]   # ingest the newest completed local partition
 pnpm openmapx data overture-conflate [region] # rebuild OSM <-> Overture GERS entity links
 pnpm openmapx data overture-status            # inspect active and staging Overture snapshots
-pnpm openmapx data overture-extract           # extract regional boundaries from OSM PBF
+pnpm openmapx data overture-extract [region]  # extract regional POIs from OSM PBF
 ```
 
 For global ambient maps, explicitly prepare `planet` with the OSM download,

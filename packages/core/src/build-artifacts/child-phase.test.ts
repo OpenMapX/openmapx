@@ -503,7 +503,7 @@ it("binds one same-slot identity across actual filesystem processes", async () =
       const lines = createInterface({ input: process.stdout }),
         next = lines[Symbol.asyncIterator]().next(),
         exited = new Promise<void>((resolve) => process.once("close", () => resolve()));
-      process.stdin.end(JSON.stringify({ root: f.root, execution: f.execution }) + "\n");
+      process.stdin.end(`${JSON.stringify({ root: f.root, execution: f.execution })}\n`);
       const result = await next;
       await exited;
       lines.close();
@@ -621,7 +621,9 @@ it.each(["cell", "aggregate"] as const)(
   30000,
 );
 
-async function deadlineFixture() {
+async function deadlineFixture(
+  operation: import("../ops/contract").OpsOperation = { kind: "data.downloadFonts" },
+) {
   const root = mkdtempSync(join(tmpdir(), "omx-fixed-phase-ancestry-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
   await control.provisionControlInstallation(root);
@@ -636,7 +638,6 @@ async function deadlineFixture() {
       role: "data-manager",
       serviceIds: services,
     }),
-    operation = { kind: "data.downloadFonts" as const },
     operationFingerprint = opsOperationFingerprint(operation),
     deadlineAt = Date.now() + 60000,
     execution: ExecutionRef = {
@@ -705,6 +706,7 @@ async function deadlineFixture() {
     authority,
     execution,
     cliAuthority,
+    cliExecution: bound.execution,
     slot: plan.cliReservations[0]!,
     close() {
       control.closeControlInstallation(cli);
@@ -769,6 +771,44 @@ it.each(["cancel-first", "grant-first"] as const)(
       }
     } finally {
       vi.restoreAllMocks();
+      f.close();
+    }
+  },
+  30000,
+);
+
+it.each(["Pull", "Ingest", "Extract"] as const)(
+  "binds Overture %s to one original fixed CLI/data command and rejects substitution",
+  async (suffix) => {
+    const operation = { kind: `data.overture${suffix}` as const, regionId: "europe/germany" };
+    const f = await deadlineFixture(operation);
+    try {
+      expect(control.fixedCliArguments(operation)).toEqual([
+        "data",
+        `overture-${suffix.toLowerCase()}`,
+        "europe/germany",
+      ]);
+      const original = await control.bindControlChildPhase(f.cliAuthority, f.slot);
+      expect(original.execution.operationFingerprint).toBe(
+        control.fixedDataBodyFingerprint(control.fixedDataCommandInput(operation)),
+      );
+      expect(() =>
+        control.readFixedCliSpawnIntent(f.cli, f.cliExecution, [
+          "data",
+          "overture-sync",
+          "europe/france",
+        ]),
+      ).toThrow();
+      const issued = await control.issueControlChildPhase(f.cliAuthority, {
+        ...f.slot,
+        childPublicKey: f.dm.publicKey,
+      });
+      control.consumeControlChildDispatch(issued.dispatchTicket);
+      expect(() => control.consumeControlChildDispatch(issued.dispatchTicket)).toThrow();
+      expect(control.lookupControlChildPhaseAttempt(f.cliAuthority, f.slot)?.execution).toEqual(
+        original.execution,
+      );
+    } finally {
       f.close();
     }
   },

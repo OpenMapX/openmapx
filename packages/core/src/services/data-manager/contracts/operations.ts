@@ -272,6 +272,17 @@ export const dataManagerOperations = {
       200: ndjson(i.notablePlacesEventSchema, h.ndjsonResponseHeadersSchema),
     },
   },
+  getOvertureRecovery: {
+    method: "GET",
+    path: "/overture/recovery",
+    auth: service,
+    request: { query: regionBodySchema },
+    responses: {
+      ...serviceErrors,
+      200: json(o.overtureRecoverySchema),
+      503: json(httpErrorSchema),
+    },
+  },
   getOvertureStatus: {
     method: "GET",
     path: "/overture/status",

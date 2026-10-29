@@ -198,6 +198,13 @@ export async function getOfflinePackageManifestRequest<T>(
 ): Promise<T> {
   return getOfflinePackageManifestBound<T>(url, options);
 }
+const getOvertureRecoveryBound = bindDataManagerOperation("getOvertureRecovery");
+export async function getOvertureRecoveryRequest<T>(
+  url: string,
+  options?: DataManagerRequestOptions,
+): Promise<T> {
+  return getOvertureRecoveryBound<T>(url, options);
+}
 const getOvertureStatusBound = bindDataManagerOperation("getOvertureStatus");
 export async function getOvertureStatusRequest<T>(
   url: string,

@@ -26,3 +26,14 @@ export async function withOvertureOperationLock<T>(operation: () => Promise<T>):
     }
   }
 }
+
+/** Read the existing two-key lease without acquiring it or creating a worker. */
+export async function overtureOperationBusy(): Promise<boolean> {
+  const [row] = await sql.unsafe<{ busy: boolean }[]>(
+    `SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype='advisory'
+       AND database=(SELECT oid FROM pg_database WHERE datname=current_database())
+       AND classid::bigint=$1::bigint AND objid::bigint=$2::bigint AND objsubid=2 AND granted) AS busy`,
+    [OVERTURE_LOCK_NAMESPACE, OVERTURE_LOCK_KEY],
+  );
+  return row?.busy === true;
+}

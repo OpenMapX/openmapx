@@ -421,6 +421,9 @@ describe("administrative data runtime", () => {
       { kind: "data.clean", dataTypeId: "osm" },
       { kind: "data.generateApiKeys", catalogRevisionId: "transitous-fixed-v1" },
       { kind: "data.overtureSync", regionId: "europe/germany" },
+      { kind: "data.overturePull", regionId: "europe/germany" },
+      { kind: "data.overtureIngest", regionId: "europe/germany" },
+      { kind: "data.overtureExtract", regionId: "europe/germany" },
       { kind: "data.overtureConflate", regionId: "europe/germany", restart: true },
       { kind: "data.searchIndexBuild", regionId: "europe/germany" },
     ];
@@ -430,6 +433,9 @@ describe("administrative data runtime", () => {
       "data.update",
       "data.convertOverpass",
       "data.overtureSync",
+      "data.overturePull",
+      "data.overtureIngest",
+      "data.overtureExtract",
       "data.overtureConflate",
       "data.searchIndexBuild",
     ]);

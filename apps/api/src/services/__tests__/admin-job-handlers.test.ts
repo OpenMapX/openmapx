@@ -214,7 +214,11 @@ describe("admin job handlers", () => {
         });
         expect(response.statusCode).toBe(200);
         const payload = enqueue.mock.calls[0][1];
-        expect(payload).toEqual({ operation: id, version: 1, input: raw });
+        expect(payload).toEqual({
+          operation: id,
+          version: id === "overture-conflate" ? 2 : 1,
+          input: raw,
+        });
         const ctx = dataCtx(payload);
         await handleDataOperationJob(ctx);
         expect(runAdminOperationMock.mock.calls).toEqual([[ctx, effect, `admin-job.data.${id}`]]);
@@ -301,13 +305,44 @@ describe("admin job handlers", () => {
       runAdminOperationMock.mockClear();
       await expect(
         handleDataOperationJob(
-          dataCtx({ operation: "overture-conflate", version: 1, input: { region: "../etc" } }),
+          dataCtx({ operation: "overture-conflate", version: 2, input: { region: "../etc" } }),
         ),
       ).rejects.toThrow(/region/);
       await expect(
         handleDataOperationJob(dataCtx({ operation: "search-index-build", version: 1, input: {} })),
       ).rejects.toThrow(/region/);
       expect(runAdminOperationMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects old conflation jobs and forwards both reviewed version2 modes exactly", async () => {
+      runAdminOperationMock.mockClear();
+      await expect(
+        handleDataOperationJob(
+          dataCtx({
+            operation: "overture-conflate",
+            version: 1,
+            input: { region: "europe/germany", restart: true },
+          }),
+        ),
+      ).rejects.toThrow(/catalog version 1; current is 2/);
+      expect(runAdminOperationMock).not.toHaveBeenCalled();
+      for (const restart of [false, true]) {
+        const ctx = dataCtx({
+          operation: "overture-conflate",
+          version: 2,
+          input: { region: "europe/germany", restart },
+        });
+        await handleDataOperationJob(ctx);
+        expect(runAdminOperationMock).toHaveBeenLastCalledWith(
+          ctx,
+          {
+            kind: "data.overtureConflate",
+            regionId: "europe/germany",
+            ...(restart ? { restart: true } : {}),
+          },
+          "admin-job.data.overture-conflate",
+        );
+      }
     });
 
     it("rejects unknown operations and stale catalog versions", async () => {

@@ -5,13 +5,20 @@ import {
   ambientPlacesStatusSchema,
   ambientRegionSchema,
 } from "../../../services/data-manager/contracts/ambient";
-import { acceptedSchema, okSchema } from "../../../services/data-manager/contracts/common";
+import {
+  acceptedSchema,
+  okSchema,
+  regionBodySchema,
+} from "../../../services/data-manager/contracts/common";
 import { uncachedResponseHeadersSchema } from "../../../services/data-manager/contracts/headers";
 import {
   notablePlacesStatusSchema,
   searchIndexStatusSchema,
 } from "../../../services/data-manager/contracts/indexes";
-import { overtureStatusSchema } from "../../../services/data-manager/contracts/overture";
+import {
+  overtureRecoverySchema,
+  overtureStatusSchema,
+} from "../../../services/data-manager/contracts/overture";
 import {
   addTransitSourceRequestSchema,
   transitBumpResultSchema,
@@ -27,7 +34,6 @@ import {
   transitSourcesQuerySchema,
   transitSyncAcceptedSchema,
   transitSyncPreflightSchema,
-  transitSyncRequestSchema,
 } from "../../../services/data-manager/contracts/transit";
 import {
   adminCommonResponses as common,
@@ -261,6 +267,13 @@ export const dataManagerAdminOperations = {
       409: json(httpErrorSchema),
       502: json(httpErrorSchema),
     },
+  },
+  getApiDataManagerOvertureRecovery: {
+    method: "GET",
+    path: "/api/data-manager/overture/recovery",
+    auth: admin,
+    request: { query: regionBodySchema },
+    responses: { ...common, 200: json(overtureRecoverySchema), 503: json(httpErrorSchema) },
   },
   getApiDataManagerOvertureStatus: {
     method: "GET",

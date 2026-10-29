@@ -70655,6 +70655,633 @@
         "x-openmapx-auth": "admin"
       }
     },
+    "/api/data-manager/overture/recovery": {
+      "get": {
+        "operationId": "getApiDataManagerOvertureRecovery",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512,
+              "pattern": "^[a-z][a-z0-9_-]*(?:\\/[a-z][a-z0-9_-]*)*$"
+            },
+            "in": "query",
+            "name": "region",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "region": {
+                      "type": "string"
+                    },
+                    "busy": {
+                      "type": "boolean"
+                    },
+                    "osmAvailable": {
+                      "type": "boolean"
+                    },
+                    "downloadedRelease": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "installedRelease": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "actions": {
+                      "type": "object",
+                      "properties": {
+                        "overture-pull": {
+                          "type": "object",
+                          "properties": {
+                            "allowed": {
+                              "type": "boolean"
+                            },
+                            "reason": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "allowed",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "overture-ingest": {
+                          "type": "object",
+                          "properties": {
+                            "allowed": {
+                              "type": "boolean"
+                            },
+                            "reason": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "allowed",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "overture-extract": {
+                          "type": "object",
+                          "properties": {
+                            "allowed": {
+                              "type": "boolean"
+                            },
+                            "reason": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "allowed",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "overture-conflate": {
+                          "type": "object",
+                          "properties": {
+                            "allowed": {
+                              "type": "boolean"
+                            },
+                            "reason": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "allowed",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "overture-restart": {
+                          "type": "object",
+                          "properties": {
+                            "allowed": {
+                              "type": "boolean"
+                            },
+                            "reason": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "allowed",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "overture-pull",
+                        "overture-ingest",
+                        "overture-extract",
+                        "overture-conflate",
+                        "overture-restart"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "region",
+                    "busy",
+                    "osmAvailable",
+                    "downloadedRelease",
+                    "installedRelease",
+                    "actions"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Response",
+            "headers": {
+              "retry-after": {
+                "schema": {
+                  "type": "string",
+                  "pattern": "^\\d+$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "retryAfter": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "retryAfter"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "data-manager-admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
     "/api/data-manager/overture/status": {
       "get": {
         "operationId": "getApiDataManagerOvertureStatus",

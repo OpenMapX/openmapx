@@ -783,13 +783,7 @@ export function registerDataCommands(program: Command): void {
       const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/germany/berlin";
       try {
         log.dim(`Pulling Overture places for "${resolvedRegion}"…`);
-        await dm.pullOvertureWithProgress(
-          { region: resolvedRegion },
-          {
-            onProgress: ({ message }) => log.dim(message),
-            transport,
-          },
-        );
+        await runCliDataStep({ kind: "overture-pull", region: resolvedRegion }, transport);
         log.ok(`Overture pull complete for "${resolvedRegion}"`);
       } catch (err) {
         log.err(`overture-pull failed: ${(err as Error).message}`);
@@ -800,19 +794,13 @@ export function registerDataCommands(program: Command): void {
 
   data
     .command("overture-ingest [region]")
-    .description("Ingest Overture places parquet into PostGIS for a region")
+    .description("Ingest the latest completed local Overture partition into PostGIS for a region")
     .action(async (region: string | undefined) => {
       const transport = createCliTransport();
       const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/germany/berlin";
       try {
         log.dim(`Ingesting Overture places for "${resolvedRegion}"…`);
-        await dm.ingestOvertureWithProgress(
-          { region: resolvedRegion },
-          {
-            onProgress: ({ message }) => log.dim(message),
-            transport,
-          },
-        );
+        await runCliDataStep({ kind: "overture-ingest", region: resolvedRegion }, transport);
         log.ok(`Overture ingest complete for "${resolvedRegion}"`);
       } catch (err) {
         log.err(`overture-ingest failed: ${(err as Error).message}`);
@@ -865,13 +853,7 @@ export function registerDataCommands(program: Command): void {
       const resolvedRegion = region || process.env.OPENMAPX_REGION || "europe/germany/berlin";
       try {
         log.dim(`Extracting OSM POIs for "${resolvedRegion}"…`);
-        await dm.extractOvertureWithProgress(
-          { region: resolvedRegion },
-          {
-            onProgress: ({ message }) => log.dim(message),
-            transport,
-          },
-        );
+        await runCliDataStep({ kind: "overture-extract", region: resolvedRegion }, transport);
         log.ok(`OSM POI extraction complete for "${resolvedRegion}"`);
       } catch (err) {
         log.err(`overture-extract failed: ${(err as Error).message}`);

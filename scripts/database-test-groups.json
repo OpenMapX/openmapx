@@ -58,6 +58,7 @@
     "services/data-manager/__tests__/offline-package-postgres-accounting.test.ts",
     "services/data-manager/__tests__/overture/global-conflation-postgres.test.ts",
     "services/data-manager/__tests__/overture/runtime-postgres.test.ts",
+    "services/data-manager/__tests__/overture/recovery-postgres.test.ts",
     "services/data-manager/__tests__/overture/schema-postgres.test.ts",
     "services/data-manager/__tests__/search-index/build-postgres.test.ts",
     "services/data-manager/__tests__/search-index/schema-postgres.test.ts",

@@ -106,6 +106,16 @@ import type {
   GetApiDataManagerNotablePlacesStatus415,
   GetApiDataManagerNotablePlacesStatus429,
   GetApiDataManagerNotablePlacesStatus500,
+  GetApiDataManagerOvertureRecovery200,
+  GetApiDataManagerOvertureRecovery400,
+  GetApiDataManagerOvertureRecovery401,
+  GetApiDataManagerOvertureRecovery403,
+  GetApiDataManagerOvertureRecovery413,
+  GetApiDataManagerOvertureRecovery415,
+  GetApiDataManagerOvertureRecovery429,
+  GetApiDataManagerOvertureRecovery500,
+  GetApiDataManagerOvertureRecovery503,
+  GetApiDataManagerOvertureRecoveryParams,
   GetApiDataManagerOvertureStatus200,
   GetApiDataManagerOvertureStatus400,
   GetApiDataManagerOvertureStatus401,
@@ -404,6 +414,7 @@ import {
   getAdminTransitPinsRequest,
   getApiAdminAmbientPlacesStatusRequest,
   getApiDataManagerNotablePlacesStatusRequest,
+  getApiDataManagerOvertureRecoveryRequest,
   getApiDataManagerOvertureStatusRequest,
   getApiDataManagerProvidersIdRequest,
   getApiDataManagerProvidersRequest,
@@ -2159,6 +2170,103 @@ export const getApiDataManagerNotablePlacesStatus = async (
 ): Promise<getApiDataManagerNotablePlacesStatusResponse> => {
   return getApiDataManagerNotablePlacesStatusRequest<getApiDataManagerNotablePlacesStatusResponse>(
     getGetApiDataManagerNotablePlacesStatusUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export type getApiDataManagerOvertureRecoveryResponse200 = {
+  data: GetApiDataManagerOvertureRecovery200;
+  status: 200;
+};
+
+export type getApiDataManagerOvertureRecoveryResponse400 = {
+  data: GetApiDataManagerOvertureRecovery400;
+  status: 400;
+};
+
+export type getApiDataManagerOvertureRecoveryResponse401 = {
+  data: GetApiDataManagerOvertureRecovery401;
+  status: 401;
+};
+
+export type getApiDataManagerOvertureRecoveryResponse403 = {
+  data: GetApiDataManagerOvertureRecovery403;
+  status: 403;
+};
+
+export type getApiDataManagerOvertureRecoveryResponse413 = {
+  data: GetApiDataManagerOvertureRecovery413;
+  status: 413;
+};
+
+export type getApiDataManagerOvertureRecoveryResponse415 = {
+  data: GetApiDataManagerOvertureRecovery415;
+  status: 415;
+};
+
+export type getApiDataManagerOvertureRecoveryResponse429 = {
+  data: GetApiDataManagerOvertureRecovery429;
+  status: 429;
+};
+
+export type getApiDataManagerOvertureRecoveryResponse500 = {
+  data: GetApiDataManagerOvertureRecovery500;
+  status: 500;
+};
+
+export type getApiDataManagerOvertureRecoveryResponse503 = {
+  data: GetApiDataManagerOvertureRecovery503;
+  status: 503;
+};
+
+export type getApiDataManagerOvertureRecoveryResponseSuccess =
+  getApiDataManagerOvertureRecoveryResponse200 & {
+    headers: Headers;
+  };
+export type getApiDataManagerOvertureRecoveryResponseError = (
+  | getApiDataManagerOvertureRecoveryResponse400
+  | getApiDataManagerOvertureRecoveryResponse401
+  | getApiDataManagerOvertureRecoveryResponse403
+  | getApiDataManagerOvertureRecoveryResponse413
+  | getApiDataManagerOvertureRecoveryResponse415
+  | getApiDataManagerOvertureRecoveryResponse429
+  | getApiDataManagerOvertureRecoveryResponse500
+  | getApiDataManagerOvertureRecoveryResponse503
+) & {
+  headers: Headers;
+};
+
+export type getApiDataManagerOvertureRecoveryResponse =
+  | getApiDataManagerOvertureRecoveryResponseSuccess
+  | getApiDataManagerOvertureRecoveryResponseError;
+
+export const getGetApiDataManagerOvertureRecoveryUrl = (
+  params: GetApiDataManagerOvertureRecoveryParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : String(value));
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/data-manager/overture/recovery?${stringifiedParams}`
+    : `/api/data-manager/overture/recovery`;
+};
+
+export const getApiDataManagerOvertureRecovery = async (
+  params: GetApiDataManagerOvertureRecoveryParams,
+  options?: Parameters<typeof getApiDataManagerOvertureRecoveryRequest>[1],
+): Promise<getApiDataManagerOvertureRecoveryResponse> => {
+  return getApiDataManagerOvertureRecoveryRequest<getApiDataManagerOvertureRecoveryResponse>(
+    getGetApiDataManagerOvertureRecoveryUrl(params),
     {
       ...options,
       method: "GET",

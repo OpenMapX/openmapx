@@ -208,6 +208,17 @@ Discard saved progress and deliberately restart from OSM extraction with:
 pnpm openmapx data overture-conflate europe/germany/berlin --restart
 ```
 
+The admin panel offers the same controls under **Services → Data workflows →
+Overture Places**. **Full sync** remains the usual workflow. **Resume links** and
+**Restart links from scratch** show a server preview before confirmation;
+restart discards the selected resumable workspace, preserving published Places.
+**Advanced recovery** exposes download, ingest and OSM extraction individually.
+Ingest selects the newest completed local partition for the selected region,
+without discovering a newer upstream release. Extraction and restart require
+that region's installed Places and OSM PBF. The panel shows missing prerequisites
+and disables conflicting actions while the shared Overture lease is held.
+Workers check these inputs again under the same lease when they execute.
+
 Inspect the installed release, phase, cursors, counts, timings, heartbeat age,
 and last error with:
 

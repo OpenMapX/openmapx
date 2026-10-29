@@ -33,6 +33,7 @@ import {
   type NotablePlacesRuntimeState,
 } from "./jobs/notable-places/state.js";
 import { getOvertureConflationState } from "./jobs/overture/rebuild-links.js";
+import { inspectOvertureRecovery } from "./jobs/overture/recovery.js";
 import {
   createNotablePlacesOperationLock,
   type SearchIndexOperationLock,
@@ -941,6 +942,16 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   registerDataManagerRoute(app, "pullOverture", async (req, reply) => {
     const admitted = await admitLegacyData({ kind: "overture-pull", region: req.body.region });
     await observeLegacyData(admitted, reply, "pullOverture");
+  });
+
+  registerDataManagerRoute(app, "getOvertureRecovery", async (req, reply) => {
+    reply.header("cache-control", "no-store");
+    try {
+      return await inspectOvertureRecovery(dataDir, req.query.region);
+    } catch {
+      reply.code(503);
+      return { ok: false, error: "Overture prerequisite inspection is unavailable" };
+    }
   });
 
   registerDataManagerRoute(app, "getOvertureStatus", async (_req, reply) => {

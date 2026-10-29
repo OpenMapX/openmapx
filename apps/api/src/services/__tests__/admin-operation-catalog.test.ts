@@ -46,8 +46,10 @@ describe("validateAdminOperationCatalog", () => {
       "convert-overpass",
       "link",
       "clean",
-      "generate-api-keys",
       "overture-sync",
+      "overture-pull",
+      "overture-ingest",
+      "overture-extract",
       "overture-conflate",
       "search-index-build",
       "notable-places-build",
@@ -133,11 +135,6 @@ describe("shipped operation effects", () => {
     ["link", {}, { kind: "data.link" }],
     ["clean", { target: "osm" }, { kind: "data.clean", dataTypeId: "osm" }],
     [
-      "generate-api-keys",
-      {},
-      { kind: "data.generateApiKeys", catalogRevisionId: "transitous-fixed-v1" },
-    ],
-    [
       "overture-sync",
       { region: "europe/germany" },
       { kind: "data.overtureSync", regionId: "europe/germany" },
@@ -175,7 +172,6 @@ describe("shipped operation effects", () => {
     ["search-index-build", { region: "Europe/Germany" }],
     ["notable-places-build", { endpoint: "https://attacker.example/sparql" }],
     ["download-fonts", { region: "europe/germany" }],
-    ["generate-api-keys", { repoUrl: "https://attacker.example", output: "/etc/passwd" }],
     ["update", { region: "europe/germany", argv: ["--privileged"] }],
   ])("%s rejects %j", (id, raw) => {
     const operation = getAdminOperation(id);
@@ -210,4 +206,38 @@ describe("describeAdminOperationCatalog", () => {
     const clean = contract.find((entry) => entry.id === "clean");
     expect(clean?.defaults).toEqual({ target: "all" });
   });
+});
+
+describe("guarded Overture recovery catalogue", () => {
+  it("requires destructive confirmation and a new version for both link modes", () => {
+    expect(getAdminOperation("overture-conflate")).toMatchObject({
+      version: 2,
+      risk: "destructive",
+      confirmation: { title: expect.any(String), message: expect.any(String) },
+    });
+  });
+  it.each([
+    ["overture-pull", "data.overturePull"],
+    ["overture-ingest", "data.overtureIngest"],
+    ["overture-extract", "data.overtureExtract"],
+  ])("offers the fixed %s command without caller paths or releases", (id, kind) => {
+    const operation = getAdminOperation(id);
+    expect(operation).toBeDefined();
+    if (!operation) return;
+    const parsed = parseAdminOperationInput(operation, { region: "europe/germany" });
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok)
+      expect(operation.effect(parsed.input)).toEqual({ kind, regionId: "europe/germany" });
+    expect(
+      parseAdminOperationInput(operation, {
+        region: "europe/germany",
+        path: "/tmp/x",
+        releaseUrl: "https://example.test/x",
+      }).ok,
+    ).toBe(false);
+  });
+});
+
+it("keeps remote credential-template generation retired", () => {
+  expect(getAdminOperation("generate-api-keys")).toBeUndefined();
 });
