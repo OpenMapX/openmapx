@@ -21,32 +21,88 @@ describe("usesTwelveHourClock", () => {
 describe("ClockTimeField", () => {
   afterEach(() => useSettingsStore.setState({ timeFormat: "auto" }));
 
-  function sectionText(name: RegExp): string | null {
-    return screen.getByRole("spinbutton", { name }).textContent;
-  }
-
-  it("shows the time and reports a typed change", async () => {
-    useSettingsStore.setState({ timeFormat: "24h" });
+  function renderField(hours: number, minutes: number) {
     const onChange = vi.fn();
     render(
-      <ClockTimeField label="Opens" hours={9} minutes={30} disabled={false} onChange={onChange} />,
+      <ClockTimeField
+        label="Opens"
+        hours={hours}
+        minutes={minutes}
+        disabled={false}
+        onChange={onChange}
+      />,
     );
+    return onChange;
+  }
 
-    expect(sectionText(/hours/i)).toBe("09");
-    expect(sectionText(/minutes/i)).toBe("30");
+  async function openPicker() {
+    await userEvent.click(screen.getByRole("textbox", { name: /ohTimePickerOpen/ }));
+    return screen.getByRole("dialog");
+  }
 
-    await userEvent.click(screen.getByRole("spinbutton", { name: /hours/i }));
+  it("sets hours and minutes on the dial and applies them on OK", async () => {
+    useSettingsStore.setState({ timeFormat: "24h" });
+    const onChange = renderField(9, 30);
+    expect(screen.getByDisplayValue("09:30")).toBeTruthy();
+
+    await openPicker();
+    const dial = screen.getByRole("slider", { name: "osmContributions.ohTimePickerHours" });
+    dial.focus();
     await userEvent.keyboard("{ArrowUp}");
-    expect(onChange).toHaveBeenLastCalledWith(10, 30);
+    expect(dial.getAttribute("aria-valuenow")).toBe("10");
+
+    await userEvent.click(screen.getByRole("button", { name: /ohTimePickerMinutes/ }));
+    const minuteDial = screen.getByRole("slider", { name: "osmContributions.ohTimePickerMinutes" });
+    minuteDial.focus();
+    await userEvent.keyboard("{ArrowDown}");
+
+    await userEvent.click(screen.getByRole("button", { name: "osmContributions.ohTimePickerOk" }));
+    expect(onChange).toHaveBeenCalledWith(10, 29);
   });
 
-  it("offers the clock dial", async () => {
+  it("discards the dial on cancel", async () => {
     useSettingsStore.setState({ timeFormat: "24h" });
-    render(
-      <ClockTimeField label="Opens" hours={9} minutes={0} disabled={false} onChange={vi.fn()} />,
-    );
+    const onChange = renderField(9, 30);
 
-    await userEvent.click(screen.getByRole("button", { name: /choose time/i }));
-    expect(await screen.findByRole("listbox", { name: /select hours/i })).toBeTruthy();
+    await openPicker();
+    screen.getByRole("slider").focus();
+    await userEvent.keyboard("{ArrowUp}");
+    await userEvent.click(screen.getByRole("button", { name: "osmContributions.cancel" }));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("accepts typed hours and minutes", async () => {
+    useSettingsStore.setState({ timeFormat: "24h" });
+    const onChange = renderField(9, 30);
+
+    await openPicker();
+    await userEvent.click(
+      screen.getByRole("button", { name: "osmContributions.ohTimePickerToKeyboard" }),
+    );
+    const hour = screen.getByRole("textbox", { name: "osmContributions.ohTimePickerHour" });
+    const minute = screen.getByRole("textbox", { name: "osmContributions.ohTimePickerMinute" });
+    const ok = screen.getByRole("button", { name: "osmContributions.ohTimePickerOk" });
+
+    await userEvent.clear(hour);
+    await userEvent.type(hour, "25");
+    expect(ok.hasAttribute("disabled")).toBe(true);
+
+    await userEvent.clear(hour);
+    await userEvent.type(hour, "7");
+    await userEvent.clear(minute);
+    await userEvent.type(minute, "45");
+    await userEvent.click(ok);
+    expect(onChange).toHaveBeenCalledWith(7, 45);
+  });
+
+  it("switches between AM and PM in 12-hour format", async () => {
+    useSettingsStore.setState({ timeFormat: "12h" });
+    const onChange = renderField(9, 0);
+    expect(screen.getByDisplayValue("9:00 AM")).toBeTruthy();
+
+    await openPicker();
+    await userEvent.click(screen.getByRole("button", { name: "PM" }));
+    await userEvent.click(screen.getByRole("button", { name: "osmContributions.ohTimePickerOk" }));
+    expect(onChange).toHaveBeenCalledWith(21, 0);
   });
 });

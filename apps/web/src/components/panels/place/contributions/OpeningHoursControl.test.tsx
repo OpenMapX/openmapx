@@ -219,16 +219,21 @@ describe("OpeningHoursControl", () => {
   it("edits times on the clock field and keeps a past-midnight end on the next day", async () => {
     render(<Harness currentOpeningHours="Fr 18:00-26:30" />);
 
-    const [startHours, endHours] = await screen.findAllByRole("spinbutton", { name: /hours/i });
-    if (!startHours || !endHours) throw new Error("expected start and end hour sections");
-    expect(endHours.textContent).toBe("02");
+    const fields = screen.getAllByRole("textbox", { name: /ohTimePickerOpen/ });
+    async function nudgeHour(field: HTMLElement | undefined, key: string) {
+      if (!field) throw new Error("expected a time field");
+      await userEvent.click(field);
+      screen.getByRole("slider").focus();
+      await userEvent.keyboard(key);
+      await userEvent.click(
+        screen.getByRole("button", { name: "osmContributions.ohTimePickerOk" }),
+      );
+    }
 
-    await userEvent.click(endHours);
-    await userEvent.keyboard("{ArrowUp}");
+    await nudgeHour(fields[1], "{ArrowUp}");
     expect(screen.getByTestId("opening-hours-live-preview").textContent).toBe("Fr 18:00-27:30");
 
-    await userEvent.click(startHours);
-    await userEvent.keyboard("{ArrowDown}");
+    await nudgeHour(fields[0], "{ArrowDown}");
     expect(screen.getByTestId("opening-hours-live-preview").textContent).toBe("Fr 17:00-27:30");
   });
 

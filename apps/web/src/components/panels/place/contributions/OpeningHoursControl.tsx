@@ -51,9 +51,9 @@ import {
   parseOsmOpeningHours,
   serializeOsmOpeningHours,
 } from "@openmapx/core";
-import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { ClockTimeField } from "./ClockTimeField";
 import type { OsmContributionEvent, OsmDraft } from "./osmContributionDraft";
 
 const WEEKDAY_LABEL_KEY: Record<OsmWeekday, string> = {
@@ -84,16 +84,6 @@ function withPosition<T>(
     position,
     slotKey: `${prefix}-${position}`,
   }));
-}
-
-// The picker and its date adapter load with the opening-hours editor, not the place panel.
-const ClockTimeField = dynamic(() => import("./ClockTimeField").then((m) => m.ClockTimeField), {
-  ssr: false,
-  loading: ClockTimeFieldPlaceholder,
-});
-
-function ClockTimeFieldPlaceholder() {
-  return <TextField size="small" disabled sx={{ maxWidth: 140 }} />;
 }
 
 function formatNthEntries(entries?: OsmNthEntry[]): string {
