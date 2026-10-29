@@ -1,5 +1,6 @@
 "use client";
 
+import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
@@ -69,6 +70,7 @@ function DesktopSidebar({
   const collapsed = useSidebarStore((s) => s.collapsed);
   const toggleCollapsed = useSidebarStore((s) => s.toggleCollapsed);
   const [el, setEl] = useState<HTMLDivElement | null>(null);
+  const [scrolled, setScrolled] = useState(false);
   useMobilePanelHeightTracker("sidebar", el);
   useMapObstruction("sidebar", "left", collapsed ? null : PANEL_WIDTH);
 
@@ -78,6 +80,7 @@ function DesktopSidebar({
       <Paper
         ref={setEl}
         elevation={0}
+        onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 0)}
         sx={(theme) => ({
           position: "absolute",
           top: 0,
@@ -95,9 +98,11 @@ function DesktopSidebar({
           zIndex: 9,
           transform: collapsed ? "translateX(-100%)" : "translateX(0)",
           transition: "transform 0.25s ease",
-          ...(searchBarClearance === "shell" && { pt: SEARCH_BAR_CLEARANCE }),
         })}
       >
+        {searchBarClearance !== "none" && (
+          <SearchBarBand overlay={searchBarClearance === "content"} visible={scrolled} />
+        )}
         <SearchBarClearanceContext.Provider
           value={searchBarClearance === "content" ? SEARCH_BAR_CLEARANCE : null}
         >
@@ -105,5 +110,35 @@ function DesktopSidebar({
         </SearchBarClearanceContext.Provider>
       </Paper>
     </>
+  );
+}
+
+/**
+ * The strip of the rail behind the floating search bar, pinned so content
+ * scrolls beneath it rather than showing around the bar's edges. For a "shell"
+ * panel it is also the spacer that holds the content below the bar. A
+ * "content" panel lays out under the bar (a photo can fill the strip), so the
+ * band overlays it and only fills in once the panel scrolls.
+ */
+function SearchBarBand({ overlay, visible }: { overlay: boolean; visible: boolean }) {
+  return (
+    <Box
+      aria-hidden
+      data-testid="search-bar-band"
+      sx={{
+        position: "sticky",
+        top: 0,
+        // Above the content's own sticky parts, such as the place tab strip.
+        zIndex: 2,
+        height: SEARCH_BAR_CLEARANCE,
+        bgcolor: "inherit",
+        ...(overlay && {
+          mb: `calc(-1 * ${SEARCH_BAR_CLEARANCE})`,
+          opacity: visible ? 1 : 0,
+          transition: "opacity 0.15s",
+          pointerEvents: visible ? "auto" : "none",
+        }),
+      }}
+    />
   );
 }

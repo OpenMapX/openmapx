@@ -1,5 +1,5 @@
 import { useSidebarStore } from "@openmapx/core";
-import { act } from "@testing-library/react";
+import { act, fireEvent } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SEARCH_BAR_CLEARANCE } from "@/lib/layout";
 import { getMapObstructionInsets, publishMapObstruction } from "@/lib/mapObstructions";
@@ -78,28 +78,38 @@ describe("SidebarShell on desktop", () => {
   });
 
   describe("search-bar clearance", () => {
-    it("pads the rail below the bar by default, leaving content nothing to offset", () => {
+    it("reserves the strip with an opaque band by default, leaving content nothing to offset", () => {
       isMobileRef.current = false;
       render(
         <SidebarShell>
           <ClearanceProbe />
         </SidebarShell>,
       );
-      const probe = screen.getByTestId("probe");
-      expect(probe.textContent).toBe("none");
-      expect(probe.parentElement).toHaveStyle({ paddingTop: SEARCH_BAR_CLEARANCE });
+      expect(screen.getByTestId("probe").textContent).toBe("none");
+      const band = screen.getByTestId("search-bar-band");
+      expect(band).toHaveStyle({ position: "sticky", height: SEARCH_BAR_CLEARANCE });
+      expect(band).not.toHaveStyle({ opacity: "0" });
     });
 
-    it("hands the inset to content that lays itself out under the bar", () => {
+    it("hands the inset to content under the bar and fills the band in once the rail scrolls", () => {
       isMobileRef.current = false;
       render(
         <SidebarShell searchBarClearance="content">
           <ClearanceProbe />
         </SidebarShell>,
       );
-      const probe = screen.getByTestId("probe");
-      expect(probe.textContent).toBe(SEARCH_BAR_CLEARANCE);
-      expect(probe.parentElement).not.toHaveStyle({ paddingTop: SEARCH_BAR_CLEARANCE });
+      expect(screen.getByTestId("probe").textContent).toBe(SEARCH_BAR_CLEARANCE);
+      const band = screen.getByTestId("search-bar-band");
+      expect(band).toHaveStyle({ opacity: "0", pointerEvents: "none" });
+
+      const rail = band.parentElement as HTMLElement;
+      rail.scrollTop = 120;
+      fireEvent.scroll(rail);
+      expect(band).toHaveStyle({ opacity: "1" });
+
+      rail.scrollTop = 0;
+      fireEvent.scroll(rail);
+      expect(band).toHaveStyle({ opacity: "0" });
     });
 
     it("reserves nothing for a panel that hides the bar", () => {
@@ -109,9 +119,8 @@ describe("SidebarShell on desktop", () => {
           <ClearanceProbe />
         </SidebarShell>,
       );
-      const probe = screen.getByTestId("probe");
-      expect(probe.textContent).toBe("none");
-      expect(probe.parentElement).not.toHaveStyle({ paddingTop: SEARCH_BAR_CLEARANCE });
+      expect(screen.getByTestId("probe").textContent).toBe("none");
+      expect(screen.queryByTestId("search-bar-band")).toBeNull();
     });
   });
 });

@@ -6,8 +6,8 @@ import { createContext, useContext } from "react";
  * How a sidebar panel keeps its content out from under the floating search bar,
  * which overlaps the top of the desktop rail:
  *
- * - `"shell"`: the shell pads the rail by `SEARCH_BAR_CLEARANCE`, so the panel
- *   lays out as if the bar were not there. The default for every panel.
+ * - `"shell"`: the shell reserves `SEARCH_BAR_CLEARANCE` above the content, so
+ *   the panel lays out as if the bar were not there. The default for every panel.
  * - `"content"`: the panel runs under the bar (a full-bleed photo, a layout
  *   sized to the viewport) and offsets its own parts with
  *   `useSearchBarClearance()`.
