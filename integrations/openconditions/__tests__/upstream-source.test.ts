@@ -47,6 +47,7 @@ it("projects a historical upstream source's complete capture instead of the curr
   expect(results).toEqual([
     {
       sourceId: "historic-native",
+      modified: true,
       name: "Historical product",
       url: "https://historical.example/data",
       licensing,

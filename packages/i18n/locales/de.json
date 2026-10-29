@@ -273,7 +273,8 @@
     "showLess": "Weniger anzeigen",
     "panelAriaLabel": "Panel",
     "resultsPanelAriaLabel": "Suchergebnisse",
-    "detailsPanelAriaLabel": "Ortsdetails"
+    "detailsPanelAriaLabel": "Ortsdetails",
+    "dataModified": "Daten verändert"
   },
   "timePicker": {
     "select": "Uhrzeit auswählen",

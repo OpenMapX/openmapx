@@ -1133,6 +1133,12 @@
           },
           "notes": {
             "type": "string"
+          },
+          "modified": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
           }
         },
         "required": [
@@ -1591,6 +1597,12 @@
           },
           "notes": {
             "type": "string"
+          },
+          "modified": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
           }
         },
         "required": [
@@ -2049,6 +2061,12 @@
           },
           "notes": {
             "type": "string"
+          },
+          "modified": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
           }
         },
         "required": [
@@ -2503,6 +2521,12 @@
           },
           "notes": {
             "type": "string"
+          },
+          "modified": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
           }
         },
         "required": [
@@ -2957,6 +2981,12 @@
           },
           "notes": {
             "type": "string"
+          },
+          "modified": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
           }
         },
         "required": [
@@ -3411,6 +3441,12 @@
           },
           "notes": {
             "type": "string"
+          },
+          "modified": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
           }
         },
         "required": [
@@ -4024,6 +4060,12 @@
           },
           "notes": {
             "type": "string"
+          },
+          "modified": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
           }
         },
         "required": [

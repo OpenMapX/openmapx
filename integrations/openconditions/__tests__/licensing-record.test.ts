@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import {
+  CROWD,
   credit,
   NO_SOURCES,
   readingCredits,
@@ -35,6 +36,7 @@ it("keeps distinct captured terms and required notices for the same upstream pub
   expect(credits).toEqual([
     {
       sourceId: "feed",
+      modified: true,
       name: "Feed – Town",
       publisher: { name: "Town" },
       attributionText: "Credit A",
@@ -42,6 +44,7 @@ it("keeps distinct captured terms and required notices for the same upstream pub
     },
     {
       sourceId: "feed",
+      modified: true,
       name: "Feed – Town",
       publisher: { name: "Town" },
       attributionText: "Credit B",
@@ -125,4 +128,14 @@ it("projects fused captures from every original supplier without crediting the s
   ).toEqual([]);
   reading.provenance.mergedSources[0]!.attribution.provider = "Later terms";
   expect(credits[0]?.attributionText).toBe("Feed A");
+});
+
+it("credits a feed's data as modified, since OpenConditions normalises every record, but not the instance's own crowd reports", () => {
+  const feed = credit({ id: "feed", attribution: { name: "Feed" }, upstream: [] }, NO_SOURCES);
+  expect(feed.modified).toBe(true);
+  const crowd = credit(
+    { id: CROWD, attribution: { name: "Contributors" }, upstream: [] },
+    NO_SOURCES,
+  );
+  expect(crowd).not.toHaveProperty("modified");
 });

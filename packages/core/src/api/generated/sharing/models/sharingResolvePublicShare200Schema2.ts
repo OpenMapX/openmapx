@@ -14,4 +14,5 @@ export interface SharingResolvePublicShare200Schema2 {
   publisher?: SharingResolvePublicShare200Schema2Publisher;
   retrievedAt?: string;
   notes?: string;
+  modified?: true;
 }

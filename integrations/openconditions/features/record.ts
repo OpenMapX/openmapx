@@ -323,6 +323,11 @@ function capturedCreditLicensing(captured: Rec): Licensing | undefined {
 }
 
 /** A source's credit; without a link of its own it takes the source's link from `sources`. */
+/**
+ * A feed's credit. OpenConditions normalises every record into its model, so
+ * what it serves is changed from what the feed published: the credit says so,
+ * as change-notice licences require.
+ */
 export function credit(source: RecordSource, sources: CreditSources): Attribution {
   const a = source.attribution;
   const url = str(a.url) ?? sources.link(source.id);
@@ -341,6 +346,8 @@ export function credit(source: RecordSource, sources: CreditSources): Attributio
         }
       : {}),
     ...(str(a.provider) ? { attributionText: str(a.provider) } : {}),
+    // Crowd reports are the instance's own; nothing was taken and changed.
+    ...(source.id === CROWD ? {} : { modified: true as const }),
   };
 }
 
@@ -381,6 +388,7 @@ export function upstreamCredits(
         ...(licensing ? { licensing } : {}),
         publisher: { name: publisher },
         ...(str(u.attribution) ? { attributionText: str(u.attribution) } : {}),
+        modified: true,
       });
     }
   }
@@ -444,6 +452,8 @@ export function locationTableCredits(record: Rec, sourceId: string | undefined):
       ...(url ? { url } : {}),
       ...(licensing ? { licensing } : {}),
       attributionText: notice,
+      // The table's codes are resolved into the record's geometry and names.
+      modified: true,
     },
   ];
 }

@@ -87,6 +87,18 @@ credits. Put required wording in `attribution`, or in the relevant binding's
 `notice`/`conditions`. A captured receipt's own `notes` is reserved for supplied
 credit or modification notices and remains available in Credits.
 
+Set `modified: true` on a receipt whose data the result shows changed from what
+the source published: normalised into another model, combined with other data,
+or derived from it (a route shaped by a source's closures). Many licences
+require that a changed version's credit say so: CC BY's "indicate if You
+modified the Licensed Material", the Datenlizenz Deutschland's and GeoNutzV's
+"Veränderungshinweis", NLOD's "indicate that changes have been made".
+`buildAttributionPresentation` then adds the viewer's wording ("data
+modified") beside that source's credit, in both the compact notice and the
+full credit; it is a fact about the data, so it is set wherever data was
+changed, whatever the licence. A modified receipt and an unchanged receipt of
+the same source stay separate credits.
+
 `parseLicensing` validates and copies the complete bounded structure. Unknown
 versions, malformed expressions, undefined custom references and unsafe licence
 URLs are rejected. `parseContributors`, snapshot/union helpers, field receipts,

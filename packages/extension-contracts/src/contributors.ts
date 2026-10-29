@@ -46,6 +46,10 @@ export function parseContributors(value: unknown): Attribution[] | undefined {
         if (url) receipt.url = url;
       } else receipt[field] = raw[field];
     }
+    if (raw.modified !== undefined) {
+      if (raw.modified !== true) return undefined;
+      receipt.modified = true;
+    }
     if (raw.licensing !== undefined) {
       const licensing = parseLicensing(raw.licensing);
       if (!licensing) return undefined;
@@ -87,6 +91,7 @@ export function contributorKey(receipt: Attribution): string {
     receipt.publisher?.name,
     receipt.publisher?.url,
     receipt.notes,
+    receipt.modified,
   ]);
 }
 

@@ -10,6 +10,7 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { useTranslations } from "next-intl";
 import { AttributionDetails } from "@/components/ui/AttributionDetails";
 import { AttributionNotices } from "@/components/ui/AttributionNotices";
+import { useAttributionLabels } from "@/lib/attributionLabels";
 
 /**
  * Shared look of every credits strip in the app: 10px/13px, near-black on an
@@ -43,8 +44,9 @@ interface MapCreditsProps {
 /** Shared permanent map notices and complete one-action details, including minimaps. */
 export function MapCredits({ attributions, sx }: MapCreditsProps) {
   const t = useTranslations("footer");
+  const labels = useAttributionLabels();
   const presentation = projectAttributionPresentations(
-    attributions.map((attr) => buildAttributionPresentation(attr, "map")),
+    attributions.map((attr) => buildAttributionPresentation(attr, "map", labels)),
   );
   if (presentation.fullHtml.length === 0) return null;
   return (

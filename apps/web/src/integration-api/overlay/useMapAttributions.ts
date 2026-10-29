@@ -4,6 +4,7 @@ import { buildAttributionPresentation, buildRuntimeAttributionHtml } from "@open
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { contributorKey } from "@openmapx/mobility-core/contributors";
 import { useEffect, useId } from "react";
+import { useAttributionLabels } from "@/lib/attributionLabels";
 import { useMapAttributionStore } from "./mapAttributionStore";
 
 /** Render one captured receipt with the shared safe runtime HTML builder. */
@@ -22,6 +23,7 @@ export function useMapAttributions(layerKey: string, attributions: Attribution[]
   // Even reused readable keys cannot let one component clear another's credits.
   const instance = useId();
   const owner = `${layerKey}::${instance}`;
+  const labels = useAttributionLabels();
   const setLayer = useMapAttributionStore((s) => s.setLayer);
   const clearLayer = useMapAttributionStore((s) => s.clearLayer);
 
@@ -37,8 +39,8 @@ export function useMapAttributions(layerKey: string, attributions: Attribution[]
     else
       setLayer(
         owner,
-        attributions.map((attr) => buildAttributionPresentation(attr, "map")),
+        attributions.map((attr) => buildAttributionPresentation(attr, "map", labels)),
       );
     return () => clearLayer(owner);
-  }, [owner, memoKey, setLayer, clearLayer]);
+  }, [owner, memoKey, labels, setLayer, clearLayer]);
 }

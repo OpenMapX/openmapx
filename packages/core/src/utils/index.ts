@@ -7,6 +7,7 @@ export {
 export { isCityOrSmaller } from "./administrativePlace";
 export {
   type AttributionDetail,
+  type AttributionLabels,
   type AttributionPresentation,
   buildAttributionHtml,
   buildAttributionPresentation,

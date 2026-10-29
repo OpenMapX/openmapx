@@ -1,10 +1,12 @@
 import {
+  type AttributionLabels,
   type AttributionPresentation,
   buildAttributionPresentation,
 } from "@openmapx/core/attribution";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { parseContributors } from "@openmapx/mobility-core/contributors";
 import type { MapGeoJSONFeature, Map as MapLibreMap } from "maplibre-gl";
+import { useAttributionLabelStore } from "@/lib/attributionLabels";
 import {
   rasterMapContributors,
   updateRasterAcquisitionContributors,
@@ -92,6 +94,8 @@ class RenderedMapAttributionTracker {
   private lastQueryAt = Number.NEGATIVE_INFINITY;
   private groups = new ContentCache<readonly AttributionPresentation[]>();
   private presentations = new ContentCache<AttributionPresentation>();
+  private labels: AttributionLabels = useAttributionLabelStore.getState().labels;
+  private unsubscribeLabels: (() => void) | undefined;
 
   private onIdle = () => this.schedule();
   private onRender = () => this.schedule();
@@ -101,6 +105,10 @@ class RenderedMapAttributionTracker {
     if (this.subscriptions.size === 0) {
       this.map.on("render", this.onRender);
       this.map.on("idle", this.onIdle);
+      this.setLabels(useAttributionLabelStore.getState().labels);
+      this.unsubscribeLabels = useAttributionLabelStore.subscribe((state) =>
+        this.setLabels(state.labels),
+      );
     }
     this.captureRaster(subscription);
     this.subscriptions.set(owner, subscription);
@@ -111,11 +119,22 @@ class RenderedMapAttributionTracker {
       if (this.subscriptions.size === 0) {
         this.map.off("render", this.onRender);
         this.map.off("idle", this.onIdle);
+        this.unsubscribeLabels?.();
+        this.unsubscribeLabels = undefined;
         if (this.timer !== undefined) clearTimeout(this.timer);
         this.timer = undefined;
         trackers.delete(this.map);
       }
     };
+  }
+
+  /** The viewer's wording for what presentations add; a change re-projects every credit. */
+  private setLabels(labels: AttributionLabels): void {
+    if (this.labels.modified === labels.modified) return;
+    this.labels = labels;
+    this.groups = new ContentCache<readonly AttributionPresentation[]>();
+    this.presentations = new ContentCache<AttributionPresentation>();
+    if (this.subscriptions.size > 0) this.schedule();
   }
 
   update(owner: string, subscription: Subscription): void {
@@ -183,7 +202,7 @@ class RenderedMapAttributionTracker {
         const receiptKey = JSON.stringify(receipt);
         let entry = presentationsThisRefresh.get(receiptKey) ?? this.presentations.get(receiptKey);
         if (entry === undefined) {
-          entry = buildAttributionPresentation(receipt, "map");
+          entry = buildAttributionPresentation(receipt, "map", this.labels);
           this.presentations.set(receiptKey, entry);
         }
         presentationsThisRefresh.set(receiptKey, entry);

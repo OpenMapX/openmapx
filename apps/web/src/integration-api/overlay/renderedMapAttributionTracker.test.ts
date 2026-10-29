@@ -2,6 +2,7 @@ import * as presentations from "@openmapx/core/attribution";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useAttributionLabelStore } from "@/lib/attributionLabels";
 import { createFakeMap, type FakeMap } from "@/test";
 import { flowFeatureContributorKey, flowFeatureContributors } from "./flowContributors";
 import { renderedMapAttributionTracker } from "./renderedMapAttributionTracker";
@@ -271,5 +272,28 @@ describe("rendered credit work scales with distinct receipts", () => {
     expect(result).toHaveLength(1);
     expect(result[0]?.visibleHtml).toBe("Visible provider notice");
     stop();
+  });
+});
+
+describe("rendered credits in the viewer's language", () => {
+  it("re-projects a modified source's credit when the viewer's wording changes", () => {
+    const changed = JSON.stringify([{ ...receipt, modified: true }]);
+    fake.setRenderedFeatures("flow", [feature(changed)]);
+    let result: presentations.AttributionPresentation[] = [];
+    const stop = renderedMapAttributionTracker(fake.map).subscribe("area", {
+      kind: "geometry",
+      layerIds: ["flow"],
+      publish: (entries) => {
+        result = entries;
+      },
+    });
+    refresh();
+    expect(result[0]?.fullHtml).toContain("data modified");
+    useAttributionLabelStore.setState({ labels: { modified: "Daten verändert" } });
+    refresh();
+    expect(result[0]?.fullHtml).toContain("Daten verändert");
+    expect(result[0]?.fullHtml).not.toContain("data modified");
+    stop();
+    useAttributionLabelStore.setState({ labels: { modified: "data modified" } });
   });
 });

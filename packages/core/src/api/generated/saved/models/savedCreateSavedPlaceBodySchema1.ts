@@ -14,4 +14,5 @@ export interface SavedCreateSavedPlaceBodySchema1 {
   publisher?: SavedCreateSavedPlaceBodySchema1Publisher;
   retrievedAt?: string;
   notes?: string;
+  modified?: true;
 }

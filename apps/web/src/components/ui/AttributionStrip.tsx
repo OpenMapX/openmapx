@@ -23,6 +23,7 @@ import {
 } from "@openmapx/mobility-core/licensing";
 import { useTranslations } from "next-intl";
 import { type JSX, useState } from "react";
+import { useAttributionLabels } from "@/lib/attributionLabels";
 import { AttributionDetails } from "./AttributionDetails";
 import { AttributionNotices } from "./AttributionNotices";
 import { useGroupedAttributionDetails } from "./attributionGroupContext";
@@ -134,12 +135,13 @@ export function AttributionStrip({
   color,
 }: AttributionStripProps): JSX.Element | null {
   const tc = useTranslations("common");
+  const labels = useAttributionLabels();
   const [expanded, setExpanded] = useState(false);
   const items = dedupeForDisplay(attributions ?? []);
 
   const isPanelHeader = variant === "panel-header";
   const isPlain = variant === "plain";
-  const presentations = items.map((attr) => buildAttributionPresentation(attr, surface));
+  const presentations = items.map((attr) => buildAttributionPresentation(attr, surface, labels));
   const group = presentations.length
     ? projectAttributionPresentations(presentations)
     : { details: [], visible: [] };

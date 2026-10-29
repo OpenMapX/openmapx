@@ -14,4 +14,5 @@ export interface SavedListSavedLabels200Schema1 {
   publisher?: SavedListSavedLabels200Schema1Publisher;
   retrievedAt?: string;
   notes?: string;
+  modified?: true;
 }

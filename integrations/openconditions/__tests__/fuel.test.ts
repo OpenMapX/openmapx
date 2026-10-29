@@ -173,6 +173,7 @@ describe("fuel-stations-openconditions", () => {
     expect(station!.attributions).toEqual([
       {
         sourceId: "de-tankerkoenig-fuel",
+        modified: true,
         name: "Tankerkönig (MTS-K), CC BY 4.0 – https://creativecommons.tankerkoenig.de",
         attributionText: "Tankerkönig (MTS-K), CC BY 4.0 – https://creativecommons.tankerkoenig.de",
         licensing: {
@@ -192,6 +193,7 @@ describe("fuel-stations-openconditions", () => {
       },
       {
         sourceId: "osm-fuel",
+        modified: true,
         name: "© OpenStreetMap contributors",
         attributionText: "© OpenStreetMap contributors",
         licensing: {
