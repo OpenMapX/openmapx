@@ -1,6 +1,18 @@
 /** Shared layout constants for the sidebar panels. */
 export const PANEL_WIDTH = 400;
 
+/** Offset of the floating search bar from the top and left edges of the map. */
+export const SEARCH_BAR_INSET = 12;
+/** Height of the floating search bar's input row. */
+export const SEARCH_BAR_HEIGHT = 48;
+
+/**
+ * Top strip of the desktop sidebar that the floating search bar covers, plus
+ * the same breathing room below the bar as above it. Panels keep their content
+ * out of this strip; see `searchBarClearance` in the panels directory.
+ */
+export const SEARCH_BAR_CLEARANCE = `calc(${SEARCH_BAR_INSET * 2 + SEARCH_BAR_HEIGHT}px + var(--omx-safe-top))`;
+
 /**
  * Width of the left-hand nav-chrome column on wide viewports (desktop and
  * phone-landscape, both above the `sm` breakpoint). Both the driving and transit

@@ -336,11 +336,7 @@ export function CategoryResultsContent() {
   return (
     // Tapping the collapsed sheet opens it to mid — at peek height only the
     // top of the results list is visible, so any tap should reveal the rest.
-    <Box
-      ref={scrollRef}
-      onClick={expandOnBackgroundTap}
-      sx={{ flex: 1, overflowY: "auto", pt: { xs: 0, sm: "64px" } }}
-    >
+    <Box ref={scrollRef} onClick={expandOnBackgroundTap} sx={{ flex: 1, overflowY: "auto" }}>
       <AttributionDetailsGroup placement="footer">
         <BrandHeaderCard />
         {(anchor || activeCategory || isViewportText || headerCount !== null) && (

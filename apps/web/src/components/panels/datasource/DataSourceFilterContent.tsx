@@ -218,7 +218,7 @@ export function DataSourceFilterContent() {
   return (
     <>
       {/* Filter sections + results */}
-      <Box sx={{ flex: 1, overflowY: "auto", pt: { xs: 2, sm: "72px" }, px: 2, pb: 1.5 }}>
+      <Box sx={{ flex: 1, overflowY: "auto", pt: { xs: 2, sm: 0 }, px: 2, pb: 1.5 }}>
         {/* Clear all filters chip */}
         {hasActiveFilters && (
           <Box sx={{ mb: 1.5 }}>

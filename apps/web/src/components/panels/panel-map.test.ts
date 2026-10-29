@@ -12,8 +12,13 @@ describe("panel-map", () => {
     }
   });
 
-  it("SIDEBAR_PANELS.saved carries the panel chrome padding override", () => {
-    expect(SIDEBAR_PANELS.saved.contentSx).toBeDefined();
+  it("leaves search-bar clearance to the shell except where the panel handles the bar itself", () => {
+    const overrides = Object.fromEntries(
+      Object.entries(SIDEBAR_PANELS)
+        .filter(([, entry]) => entry.searchBarClearance !== undefined)
+        .map(([id, entry]) => [id, entry.searchBarClearance]),
+    );
+    expect(overrides).toEqual({ place: "content", directions: "none" });
   });
 
   it("place and directions carry their own mobile sheet detents", () => {
