@@ -1,51 +1,43 @@
 ---
 title: Data-source integrations
-description: Writing a mobility data-source provider — the MobilityDataSourceProvider contract, multi-source merging, and how attribution and freshness reach the map.
+description: "Implement a mobility map category with MobilityDataSourceProvider, partial-result handling and captured attribution."
 sidebar_position: 6
 ---
 
 # Data-source integrations
 
-A **data-source integration** plots live points of interest on the map: EV
-chargers colored by availability, fuel stations with per-grade prices, parking
-with free-space counts, shared bikes and scooters, car-sharing vehicles, and
-traffic webcams. From the user's side these are described in
-[Mobility & live data](../features/mobility-data.md); this page is the code-side
-contract for building one.
+A data-source integration supplies a map category such as EV charging, fuel,
+parking, shared mobility or webcams. It implements `MobilityDataSourceProvider`
+and registers through `ctx.registerMobilityDataSource` in the `data-source`
+domain. The generic `data-source` integration provides HTTP routes and the web
+layer that renders its results.
 
-Every such integration declares the `data-source` domain and registers one
-`MobilityDataSourceProvider`. The shared generic `data-source` integration owns
-the orchestration, the HTTP routes, and the frontend layer that turns provider
-output into markers — so a new category is a small integration that answers four
-questions about a map viewport, and inherits consistent rendering, caching, and
-attribution for free. If you have not read the
-[integration system](./integration-system.md) reference yet, start there: it
-covers the manifest, the `IntegrationContext`, and the loader lifecycle this page
-builds on. For the end-to-end mechanics of a manifest and `setup(ctx)`, see
-[Writing an integration](./writing-an-integration.md).
+Read the [integration system](./integration-system.md) for manifests and host
+lifecycle, then [Writing an integration](./writing-an-integration.md) for the
+in-tree setup workflow. This runtime contract is for trusted built-ins;
+installed declarative artifacts cannot register providers. The user-facing
+categories are listed in [Mobility & live data](../features/mobility-data.md).
 
 ## What a data-source provider is
 
-The `data-source` domain orchestrator is **merge-all**. When a user switches on a
-category, the orchestrator finds the provider for it, queries the visible
-bounding box, and renders the returned points; for categories that aggregate
-several upstream feeds, the _provider itself_ fans out to those feeds in parallel
-and merges them into one set. There is no priority ranking between providers of
-different categories — each category is its own provider, selected by id.
+The generic orchestrator selects one category provider by ID. When a user
+enables that category, its provider searches the requested bounding box. A
+category that aggregates upstreams performs the fan-out inside its own provider.
+There is no fallback or priority ranking between different categories.
 
 A provider answers four kinds of question for a viewport:
 
-- **Search** — given a bounding box and any active filters, return the points to
+- **Search**: given a bounding box and any active filters, return the points to
   plot.
-- **Detail** — given one point's id, return the rich content for the place panel.
-- **Filters** — describe the filter controls to offer (connector type, fuel
+- **Detail**: given one point's id, return the rich content for the place panel.
+- **Filters**: describe the filter controls to offer (connector type, fuel
   grade, available-only, and so on).
-- **Map context** _(optional)_ — return shaded zones that belong with the
+- **Map context** _(optional)_: return shaded zones that belong with the
   points, such as a scooter operator's no-parking areas.
 
 Search and detail return their payload wrapped in a `MobilityResult<T>`, so
-**attribution and freshness travel with every response** and reach the UI without
-the provider wiring them through by hand.
+attribution and freshness travel with each response. The provider must still
+capture per-record receipts and preserve them through mapping.
 
 ## The contract
 
@@ -83,7 +75,7 @@ interface DataSourceSearchResult extends MobilityResult<DataSourceResult[]> {
 }
 ```
 
-A few things to note up front:
+Observe these constraints:
 
 - `isAvailable()` is asked every time the sources are listed. A source that
   answers `false` is left out of the list, so the web app offers no chip or
@@ -103,14 +95,14 @@ A few things to note up front:
   times, while the view stays put. Only for `"area"` does the list suggest
   zooming in.
 
-- `id` is the stable provider id (`"fuel"`, `"ev-charging"`). It must match the
-  manifest's `frontend.searchCategory.id` so the orchestrator can connect the
-  category chip to the provider.
-- `attribution` is the integration-level credit list — typically derived from the
+- `id` is the stable provider ID (`"fuel"`, `"ev-charging"`). Keep it aligned
+  with the integration manifest ID and `frontend.searchCategory.id`. Listing
+  uses the manifest ID, while search/detail resolve the provider ID.
+- `attribution` is the integration-level credit list: typically derived from the
   manifest rather than hand-written (see [Attribution](#attribution-and-freshness)).
 - `bbox` is a `BoundingBox` object `{ south, west, north, east }` (not a tuple),
   re-exported from `@openmapx/core` along with the `DataSource*` result types.
-- `filters` is an open `Record<string, unknown>` — the active filter values
+- `filters` is an open `Record<string, unknown>`: the active filter values
   keyed by the filter ids from `getFilters()`. There is no dedicated filter type.
 
 ### `meta` — how points render
@@ -134,16 +126,17 @@ export interface DataSourceMeta {
 colors a dot per result `variant` using `variantColors`; `type: "icon"` draws an
 SVG glyph from `iconPath` with a text label. `osmFilters` lets the place resolver
 enrich a clicked fixed installation by snapping to the matching OpenStreetMap node
-instead of a plain reverse-geocode — omit it for sources with no reliable OSM
+instead of a plain reverse-geocode. Omit it for sources with no reliable OSM
 equivalent (webcams, free-floating scooters).
 
 ### Result and detail shapes
 
-`search` returns a list of `DataSourceResult` — the lightweight shape that becomes
-a marker:
+`search` returns lightweight `DataSourceResult` records for markers:
 
 ```ts
 export interface DataSourceResult {
+  contributors?: readonly Attribution[]; // acquisition-time record receipt
+  fieldContributors?: FieldContributors; // ownership of mixed displayed fields
   id: string; // globally unique; usually "<sourceId>/<upstreamId>"
   name: string;
   coordinates: LngLat; // [lng, lat]
@@ -154,14 +147,16 @@ export interface DataSourceResult {
   summary?: I18nToken; // short localized label under the marker
   operator?: string;
   kind?: "station" | "vehicle"; // fixed vs free-floating; gates OSM snapping
-  attributions?: DataSourceAttribution[]; // per-record runtime credit
+  attributions?: Attribution[]; // legacy per-record compatibility credit
   sortValues?: Record<string, number>; // for client-side sorting
 }
 ```
 
-The `source` (or `sources`) field is load-bearing: it names which manifest
-`dataSource` credited _this_ point, which is how the per-view attribution strip
-shows only the feeds that actually contributed.
+The `source` and `sources` fields identify suppliers for policy and adapter
+resolution. Capture their metadata before acquisition and retain the resulting
+`contributors`; IDs alone cannot reconstruct historical notices from a later
+manifest. Mixed records also need field ownership so the rendered view can
+project only the suppliers of displayed values.
 
 `getDetail` returns the richer `DataSourceDetail`, which drives the place panel:
 an address, an operator, opening hours, structured `sections` (tables, pricing
@@ -196,68 +191,56 @@ Two registrations happen here. `ctx.registerMobilityDataSource` adds the provide
 to the `data-source` domain list (the typed registrar described in the
 [integration system](./integration-system.md#registering-capabilities)).
 `registerPlaceResolver` plugs the provider into the place-id system so that
-clicking a marker resolves to a full place card — `createDataSourceResolver`
+clicking a marker resolves to a full place card: `createDataSourceResolver`
 wraps the provider's `getDetail` for that.
 
-The provider itself implements the contract. Trimmed to the load-bearing parts:
+The provider uses `wrapSiteResult` (aliased as `wrap`), `siteAttributions`,
+`toBBox` and `withinZoom` from `@openmapx/integration-framework`. This excerpt
+shows its search/detail methods; the complete implementation is
+`integrations/fuel/data-source.ts`:
 
 ```ts
-export function createFuelDataSource(ctx: IntegrationContext): MobilityDataSourceProvider {
-  // Every registered FuelStationProvider behind one search and one read by id
-  // (`createSiteOrchestrator` from the integration framework).
-  const stations = createFuelStationOrchestrator(ctx);
-  return {
-    id: "fuel",
-    meta: META, // minZoom, icon markerStyle, placeCategory…
-    searchCacheTtl: 120,
-    detailCacheTtl: 120,
-    attribution: [], // the manifest declares no sources; credits travel per station
+// Inside createFuelDataSource; stations, requestedGrades, sells, hasPrice,
+// META and the mappers are local to integrations/fuel/data-source.ts.
+const methods: Pick<MobilityDataSourceProvider, "search" | "getDetail"> = {
+  async search(bbox, filters) {
+    if (!withinZoom(bbox, META.minZoom)) return wrap([], []);
+    const grades = requestedGrades(filters);
+    const pricesOnly = filters?.pricesOnly === true;
+    const query = {
+      ...(pricesOnly ? { pricesOnly } : {}),
+      ...(grades.length > 0 ? { grades } : {}),
+    };
+    const found = await stations.search(toBBox(bbox), query);
+    const kept = found.sites.filter(
+      (s) => (grades.length === 0 || sells(s, grades)) && (!pricesOnly || hasPrice(s)),
+    );
+    const result = wrap(kept.map(mapFuelStationToResult), siteAttributions(kept));
+    return found.partial ? { ...result, partial: found.partial } : result;
+  },
 
-    async getFilters() {
-      return [{ id: "fuelType", label: "Fuel Type", type: "multi-select", options: [/* … */] }];
-    },
-
-    async search(bbox, filters) {
-      const pricesOnly = filters?.pricesOnly === true;
-      // Every covering FuelStationProvider in parallel; failures are tolerated.
-      const { sites } = await stations.search([bbox.west, bbox.south, bbox.east, bbox.north], {
-        pricesOnly,
-      });
-      const kept = sites.filter(
-        (s) => !pricesOnly || s.products.some((p) => p.available !== false && p.price),
-      );
-      return withAttribution(
-        kept.map(mapFuelStationToResult), // each result carries its station's credits
-        kept.flatMap((s) => s.attributions), // deduplicated by sourceId in the real code
-        freshnessNow({ hasRealtimeData: false }),
-      );
-    },
-
-    async getDetail(itemId) {
-      // The provider that holds the station answers; no preceding search needed.
-      const station = await stations.find(itemId);
-      return withAttribution(
-        station ? mapFuelStationToDetail(station) : null,
-        station?.attributions ?? [],
-        freshnessNow({ hasRealtimeData: false }),
-      );
-    },
-  };
-}
+  async getDetail(itemId) {
+    const station = await stations.find(itemId);
+    if (!station) return wrap(null, []);
+    return wrap(mapFuelStationToDetail(station), station.attributions);
+  },
+};
 ```
 
-The data source concatenates the providers' stations in registration order —
-each provider dedups its own — and re-applies the filters it pushed down
-(`fuelType` and `pricesOnly`; the sketch shows only the latter), so a provider
-that ignores them cannot widen the answer. `getFilters` declares a single
-`fuelType` multi-select that the orchestrator caches and the frontend renders
-into the filter panel.
+The data source concatenates providers' stations in registration order. Each
+provider deduplicates its own results. The category reapplies `fuelType` and
+`pricesOnly` after acquisition, so a provider that ignores them cannot widen
+the answer. `getFilters` declares a
+`fuelType` multi-select. The generic source list calls `getFilters` on every
+request, without a shared filter cache, so upgrades cannot retain obsolete
+controls. A provider that acquires filters upstream owns its own cache.
 
 Because `fuel` aggregates providers rather than reading feeds itself, its
 manifest declares no `dataSources`. Credits come from each station's
-`attributions`, which the mapper turns into the per-record
-`DataSourceResult.attributions` / `DataSourceDetail.attributions` that the map
-strip and the place card render (see [Attribution and freshness](#attribution-and-freshness)).
+canonical `contributors`, captured before cache/aggregation and preserved by
+mapping. Older per-record `attributions` remain a compatibility format; do not
+round-trip canonical receipts through their text-only shape (see
+[Attribution and freshness](#attribution-and-freshness)).
 
 ## Multi-source merging
 
@@ -277,14 +260,15 @@ async search(bbox, filters) {
 }
 ```
 
-A failing or rate-limited provider is dropped rather than failing the whole
-search, and the result is marked `partial` so the host does not cache it. Each
+When a provider fails or is rate-limited, the site orchestrator retains useful
+results from the others and reports `partial`. The category must propagate that
+reason, as the fuel example does, so the host does not cache an incomplete answer. Each
 merged site carries the credits of every feed it drew from, and
 `siteAttributions` returns the full list so the credit set covers all
 contributors. For
 sharing categories that read GBFS, the
 `@openmapx/mobility-core` GBFS client and `gbfs-provider-base` handle feed
-discovery, fetching, and station-status normalization — build on those rather
+discovery, fetching, and station-status normalization: build on those rather
 than parsing GBFS by hand.
 
 :::tip[Large datasets belong in OpenConditions]
@@ -294,22 +278,10 @@ ingests and links them; read the result through the matching provider contract
 (for example `charging-sites`) instead.
 :::
 
-Both fixed `fetch.url` values and URLs returned by `resolveUrl` use the same
-streaming safe downloader. It permits only public HTTP(S) endpoints on default
-ports, follows at most five redirects, validates and DNS-pins every connection,
-and rejects a hostname when any answer is private, loopback, link-local, or
-reserved. The default total deadline is 60 seconds. `fetch.timeoutMs` may set a
-source-specific deadline; `fetch.maxBytes` may raise or lower the 256 MiB
-compressed-byte default but cannot exceed the 2 GiB hard maximum. Parser-specific
-inflated and output limits still apply after acquisition.
-
-If `headers` or `resolveHeaders` supplies any header, every redirect must retain
-the exact scheme, hostname, and effective port. With no configured headers, URL
-userinfo and nonstandard headers are stripped. Partial files are removed on
-failure. Successful audit data is limited to the source kind, hostname, byte
-count, duration, and SHA-256 digest; never put a full URL, query, or credential
-in a source's own log messages.
-:::
+Acquisition limits and safe downloading for those bulk feeds belong to
+OpenConditions. The OpenMapX adapter consumes the resulting typed records; it
+must still enforce accepted runtime sources, current source policy, pagination
+limits and partial-result propagation. See [Runtime data sources](./integration-system.md#runtime-data-sources).
 
 ## Attribution and freshness
 
@@ -323,32 +295,30 @@ export interface MobilityResult<T> {
 }
 ```
 
-**Attribution.** Credit metadata lives in the manifest's `dataSources` array
-(one entry per upstream feed, each with a stable `sourceId`, license, and privacy
-fields). `createManifestAttribution()` turns that array into the canonical
-`Attribution[]` shape, so the provider never hand-rolls credit literals. The
-store gives you three readers:
+**Attribution.** Declare static source/privacy metadata in the manifest's
+`dataSources`, with stable `sourceId` values and localized disclosures.
+`createManifestAttribution()` supplies metadata lookup readers (`all`,
+`bySource`, `forResults`); those readers do not establish that a configured feed
+supplied visible data. Capture the exact supplier metadata before acquisition,
+then retain canonical `contributors` on each station, vehicle, detail and map
+context polygon. Shared-mobility parser child IDs require an explicitly proven
+canonical parent source, including its mandatory notices.
 
-- `all()` — every declared attribution, for the provider's `attribution` getter.
-- `bySource(sourceId)` — one entry, for a detail response from a single feed.
-- `forResults(results, sourcesFor?)` — the subset actually credited by a search
-  response, deduped. It reads each result's `source` by default; pass a
-  `sourcesFor` extractor (returning `result.sources`) when points merge several
-  feeds.
+Use `contributorsForRecords` from `@openmapx/integration-framework` for envelope
+credits after filtering/deduplication. The mapper retains canonical receipts;
+legacy `DataSourceResult.attributions` remain an explicit compatibility format.
+A discarded duplicate owes no credit unless a field/identity was actually
+merged. Canonical `[]` is authoritative. Missing mixed item provenance cannot
+fall back to every declared source or a provider/domain catalogue.
 
-Returning only the credited subset is what makes the map's attribution strip
-show _just_ the feeds visible right now — browsing EV charging in one city
-credits the feeds with stations there, not every declared registry. The
-frontend layer intersects the manifest's declared sources with the `sourceId`s
-in the response, adds every per-record `result.attributions`, and feeds the
-result into the map's attribution control, which appears while the layer is on
-and clears when it is switched off.
-
-Per-record credits are first-class. An integration that orchestrates other
-providers (such as `fuel`) declares no `dataSources` and credits every result
-and detail through its `attributions` alone. The layer renders those without a
-manifest entry and raises its development warning only for envelope credits
-that neither the manifest declares nor a record carries.
+`DataSourceLayer` publishes per-feature snapshots and registers the actual
+rendered marker/logo/label/context geometry. A query-bbox response is not the
+visible viewport; offscreen, filtered and hidden records do not credit their
+supplier. Successful cached visible data keeps its acquisition-time receipt
+through registry changes and failed refreshes. Detail panels own their selected
+record's displayed-field credits independently of map visibility. See the
+[captured contributor contract](./integration-system.md#captured-contributor-contract)
+and [map contract](./integration-system.md#crediting-an-overlays-sources).
 
 **Freshness.** Every result carries a `Freshness` stamp:
 
@@ -366,7 +336,10 @@ export interface Freshness {
 spaces, current price) so the UI can mark the data live; set `isStale: true` when
 an ingested table has never been populated (cold start) or a realtime max-age
 check tripped. When the upstream stamps its own timestamp, set `dataAsOf`
-directly instead of using the factory.
+on the returned envelope, for example
+`{ ...freshnessNow({ hasRealtimeData: true }), dataAsOf: upstreamTimestamp }`. Keep the
+actual evidence time when serving stale/cached data; a new request time cannot
+make old data fresh.
 
 ## How a request flows
 
@@ -375,11 +348,12 @@ directly instead of using the factory.
    bbox through the generic `data-source` HTTP routes.
 2. The orchestrator selects the provider by `id`, calls `search`, and caches the
    response in Redis keyed by the rounded bbox and a hash of the filters (TTL
-   from the provider's `searchCacheTtl`, defaulting to the orchestrator's). A
+   from `searchCacheTtl`, default 21,600 seconds; detail defaults to the same
+   lifetime and map context to 300 seconds). A
    popular viewport is not re-fetched on every pan.
-3. `DataSourceLayer` renders `data` as markers, and pushes the envelope's
-   `attributions` into the map's attribution strip — filtered to the sources the
-   response actually credited.
+3. `DataSourceLayer` publishes captured receipts with marker/logo/label/context
+   features and projects the union of actual rendered contributions into the map
+   credits strip. The envelope is not a substitute for individual ownership.
 4. Panning shows a **Search this area** chip; the user refetches for the new
    viewport rather than reloading continuously.
 5. Clicking a marker calls `getDetail`; the place resolver (registered in
@@ -388,13 +362,26 @@ directly instead of using the factory.
 
 ## Related pages
 
-- [Mobility & live data](../features/mobility-data.md) — the user-facing feature
+- [Mobility & live data](../features/mobility-data.md): the user-facing feature
   and the full list of built-in sources.
-- [Integration system](./integration-system.md) — the manifest, context,
+- [Integration system](./integration-system.md): the manifest, context,
   domains, and lifecycle this contract plugs into.
-- [Writing an integration](./writing-an-integration.md) — the end-to-end
+- [Writing an integration](./writing-an-integration.md): the end-to-end
   walkthrough of building one.
-- [Transit integrations](./transit-integrations.md) — the sibling contract for
+- [Transit integrations](./transit-integrations.md): the sibling contract for
   stops, departures, and trip planning.
-- [Service manifest](./service-manifest.md) — backend services such as Overpass
+- [Service manifest](./service-manifest.md): backend services such as Overpass
   and the data-manager that data sources lean on.
+
+## Verify a category
+
+Test search/detail mapping with synthetic or captured public fixtures, including
+empty results, explicit empty receipts, mixed suppliers and partial failures.
+Assert that partial reasons survive filtering and that `isAvailable` hides a
+category with no backing providers. Verify both tuple and object bounding-box
+boundaries; the typed site providers use `[west, south, east, north]`, while this
+contract takes `{ south, west, north, east }`.
+
+For visible changes, inspect the real rendered markers, filters, detail panel
+and attribution after panning, filtering and refresh. A result envelope or a
+successful HTTP fixture alone does not establish which features are visible.

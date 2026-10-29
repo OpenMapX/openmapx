@@ -1,24 +1,26 @@
 "use client";
 
 import { escapeHtml, sanitizeUrl, useOverlayExclusion } from "@openmapx/core";
+import { captureHazardFeatures } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { EMPTY_FEATURE_COLLECTION, type MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
-import { useSourceAttributions } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { ALL_CATEGORIES, useNaturalEventStore } from "./store";
 
 const SOURCE_ID = "openmapx-natural-events-source";
 const CIRCLE_LAYER_ID = "openmapx-natural-events-circles";
 const REFRESH_INTERVAL_MS = 900_000; // 15 minutes
-const NO_SOURCES: readonly string[] = [];
 
 export const CATEGORY_COLORS: Record<string, string> = {
   volcanoes: "#e53935",
@@ -93,6 +95,30 @@ function buildFilterExpr(active: Set<string>): maplibregl.ExpressionSpecificatio
   ] as maplibregl.ExpressionSpecification;
 }
 
+function naturalEventsGroup(activeCategories: Set<string>): MapLayerGroup {
+  return {
+    sources: { [SOURCE_ID]: { type: "geojson", data: EMPTY_FEATURE_COLLECTION } },
+    layers: [
+      {
+        id: CIRCLE_LAYER_ID,
+        type: "circle",
+        source: SOURCE_ID,
+        filter: buildFilterExpr(activeCategories),
+        slot: "overlay-points",
+        order: 5,
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 6, 5, 10, 10, 16, 14, 22],
+          "circle-color": buildColorExpr(),
+          "circle-opacity": 0.85,
+          "circle-stroke-color": buildStrokeColorExpr(),
+          "circle-stroke-width": buildStrokeWidthExpr(),
+          "circle-stroke-opacity": 0.9,
+        },
+      },
+    ],
+  };
+}
+
 export function NaturalEventLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
@@ -100,8 +126,8 @@ export function NaturalEventLayer() {
   const registry = useIntegrationRegistry();
   const t = useTranslations("naturalEvents");
   const layerVisible = useNaturalEventStore((s) => s.layerVisible);
-  const [sourceIds, setSourceIds] = useState<readonly string[]>(NO_SOURCES);
-  useSourceAttributions("natural-events", layerVisible ? sourceIds : NO_SOURCES);
+  const resolveContributors = useContributorResolver();
+  useRenderedMapAttributions("natural-events", [CIRCLE_LAYER_ID], layerVisible);
   const days = useNaturalEventStore((s) => s.days);
   const activeCategories = useNaturalEventStore((s) => s.activeCategories);
   const setLoading = useNaturalEventStore((s) => s.setLoading);
@@ -112,8 +138,6 @@ export function NaturalEventLayer() {
   useOverlayExclusion("natural-events", layerVisible);
 
   const popupRef = useRef<maplibregl.Popup | null>(null);
-  const fetchedRef = useRef(false);
-  const prevDaysRef = useRef(days);
   const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
     mapRef,
     mapReady,
@@ -145,11 +169,10 @@ export function NaturalEventLayer() {
       setEventCount(data.features?.length ?? 0);
       setLastUpdated(Date.now());
 
-      publishGeoJson([{ sourceId: SOURCE_ID, data }]);
-      const ids: string[] = Array.isArray(data.sources) ? data.sources : [];
-      setSourceIds((prev) =>
-        prev.length === ids.length && prev.every((id, i) => id === ids[i]) ? prev : ids,
+      const captured = captureHazardFeatures(data, resolveContributors, (feature) =>
+        Array.isArray(feature.properties?.sources) ? feature.properties.sources : [],
       );
+      publishGeoJson([{ sourceId: SOURCE_ID, data: captured }]);
     } catch {
       // A network failure leaves the layer as it was; an aborted request says nothing.
       if (request.isCurrent()) setUnavailable(true);
@@ -157,6 +180,7 @@ export function NaturalEventLayer() {
       if (request.isLatest()) setLoading(false);
     }
   }, [
+    resolveContributors,
     beginRequest,
     env.apiUrl,
     locale,
@@ -169,95 +193,19 @@ export function NaturalEventLayer() {
     setUnavailable,
   ]);
 
-  // Refetch when days changes
+  useMapLayerGroup(
+    useMemo(
+      () => (layerVisible ? naturalEventsGroup(activeCategories) : null),
+      [layerVisible, activeCategories],
+    ),
+  );
+
+  // Showing the overlay or changing the time window or language fetches immediately.
   useEffect(() => {
-    if (prevDaysRef.current !== days && layerVisible) {
-      prevDaysRef.current = days;
-      fetchedRef.current = false;
-    }
-  }, [days, layerVisible]);
-
-  // Main layer lifecycle
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-
-    const syncLayer = () => {
-      if (!layerVisible) {
-        try {
-          if (map.getLayer(CIRCLE_LAYER_ID)) map.removeLayer(CIRCLE_LAYER_ID);
-          if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        } catch {
-          // ignore
-        }
-        unregisterLayerSlot(CIRCLE_LAYER_ID);
-        popupRef.current?.remove();
-        fetchedRef.current = false;
-        setEventCount(0);
-        return;
-      }
-
-      if (!map.isStyleLoaded()) {
-        map.once("idle", syncLayer);
-        return;
-      }
-
-      if (!map.getSource(SOURCE_ID)) {
-        map.addSource(SOURCE_ID, {
-          type: "geojson",
-          data: { type: "FeatureCollection", features: [] },
-        });
-      }
-
-      if (!map.getLayer(CIRCLE_LAYER_ID)) {
-        addLayerInSlot(
-          map,
-          {
-            id: CIRCLE_LAYER_ID,
-            type: "circle",
-            source: SOURCE_ID,
-            filter: buildFilterExpr(activeCategories),
-            paint: {
-              "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 6, 5, 10, 10, 16, 14, 22],
-              "circle-color": buildColorExpr(),
-              "circle-opacity": 0.85,
-              "circle-stroke-color": buildStrokeColorExpr(),
-              "circle-stroke-width": buildStrokeWidthExpr(),
-              "circle-stroke-opacity": 0.9,
-            },
-          },
-          "overlay-points",
-          5,
-        );
-      }
-
-      if (!fetchedRef.current) {
-        fetchedRef.current = true;
-        fetchEvents();
-      }
-    };
-
-    if (!layerVisible) {
-      syncLayer();
-      return;
-    }
-
-    syncLayer();
-    map.on("styledata", syncLayer);
-    return () => {
-      map.off("styledata", syncLayer);
-    };
-  }, [mapReady, styleVersion, mapRef, layerVisible, activeCategories, fetchEvents, setEventCount]);
-
-  // Update filter when activeCategories changes
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady || !layerVisible) return;
-    if (map.getLayer(CIRCLE_LAYER_ID)) {
-      map.setFilter(CIRCLE_LAYER_ID, buildFilterExpr(activeCategories));
-    }
-  }, [mapRef, mapReady, layerVisible, activeCategories]);
+    if (!mapReady) return;
+    if (layerVisible) void fetchEvents();
+    else setEventCount(0);
+  }, [mapReady, layerVisible, fetchEvents, setEventCount]);
 
   // Auto-refresh
   useEffect(() => {

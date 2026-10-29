@@ -69,6 +69,49 @@ const baseInput = {
 afterEach(() => vi.useRealTimers());
 
 describe("prepareTransitStart", () => {
+  it("does not start journey or area requests for an already-aborted preparation", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const { client } = fakeClient(() => withStops(2));
+    const getOptional = vi.fn(async () => null);
+    (client as unknown as { getOptional: unknown }).getOptional = getOptional;
+    expect(
+      await prepareTransitStart({
+        ...baseInput,
+        itinerary: itineraryWith(["t1", "t2"]),
+        client,
+        signal: controller.signal,
+      }),
+    ).toEqual({ ok: false, code: "aborted" });
+    expect(client.get).not.toHaveBeenCalled();
+    expect(getOptional).not.toHaveBeenCalled();
+  });
+
+  it("stops scheduling queued journeys when preparation is cancelled", async () => {
+    const controller = new AbortController();
+    const release = Promise.withResolvers<void>();
+    const { client, fetched } = fakeClient(async () => {
+      await release.promise;
+      return withStops(2);
+    });
+    const work = prepareTransitStart({
+      ...baseInput,
+      itinerary: itineraryWith(["t1", "t2", "t3", "t4", "t5", "t6"]),
+      client,
+      signal: controller.signal,
+    });
+    try {
+      // Let scheduled callbacks reach the blocked fake client before the next timer turn.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(fetched).toHaveLength(CAPTURE_CONCURRENCY);
+      controller.abort();
+    } finally {
+      release.resolve();
+    }
+    expect(await work).toEqual({ ok: false, code: "aborted" });
+    expect(fetched).toHaveLength(CAPTURE_CONCURRENCY);
+  });
+
   it("captures each ridden leg", async () => {
     const { client } = fakeClient(() => withStops(4));
 
@@ -203,6 +246,44 @@ describe("prepareTransitStart", () => {
     await pending;
 
     expect(peak()).toBeLessThanOrEqual(CAPTURE_CONCURRENCY);
+  });
+
+  it("bounds journeys and stop areas independently without changing their output order", async () => {
+    const journeys = Promise.withResolvers<void>();
+    const areas = Promise.withResolvers<void>();
+    const { client, fetched, peak } = fakeClient(async () => {
+      await journeys.promise;
+      return withStops(2);
+    });
+    let activeAreas = 0;
+    let areaPeak = 0;
+    let startedAreas = 0;
+    (client as unknown as { getOptional: unknown }).getOptional = vi.fn(async () => {
+      activeAreas++;
+      startedAreas++;
+      areaPeak = Math.max(areaPeak, activeAreas);
+      try {
+        await areas.promise;
+        return null;
+      } finally {
+        activeAreas--;
+      }
+    });
+    const ids = ["t1", "t2", "t3", "t4", "t5", "t6"];
+    const work = prepareTransitStart({ ...baseInput, itinerary: itineraryWith(ids), client });
+    try {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(fetched).toHaveLength(CAPTURE_CONCURRENCY);
+      expect(startedAreas).toBe(CAPTURE_CONCURRENCY);
+    } finally {
+      journeys.resolve();
+      areas.resolve();
+    }
+    const result = await work;
+    expect(peak()).toBe(CAPTURE_CONCURRENCY);
+    expect(areaPeak).toBe(CAPTURE_CONCURRENCY);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.outcomes.map((outcome) => outcome.tripId)).toEqual(ids);
   });
 
   it("reports an aborted preparation rather than a degraded package", async () => {

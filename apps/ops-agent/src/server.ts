@@ -1,5 +1,7 @@
 import { createHash, randomBytes as nodeRandomBytes, timingSafeEqual } from "node:crypto";
 import {
+  type ConfigurationApplyResult,
+  configurationApplyResultSchema,
   OPS_KIND_POLICIES,
   OPS_MAX_CLOCK_SKEW_MS,
   OPS_MAX_EVENT_BATCH,
@@ -38,7 +40,9 @@ import {
 import {
   createUnavailableRuntime,
   dispatchOpsOperation,
+  OpsAgentBusyError,
   type OpsExecutionContext,
+  OpsHostUpdateRequiredError,
   OpsNotWiredError,
   type OpsRuntime,
   type OpsTrustedClaim,
@@ -97,6 +101,11 @@ export interface BuildOpsAgentServerOptions {
   maxJobEntries?: number;
   jobRetentionMs?: number;
   claimTimeoutMs?: number;
+  /**
+   * True while the agent is being replaced. New asynchronous operations are
+   * refused as busy, because recreating the agent would end them.
+   */
+  replacementInProgress?: () => boolean;
   /** Dedicated streaming managed-Dawarich collector; absent in minimal/dev agents. */
   dawarichExport?: Omit<DawarichSubjectExportRouteOptions, "apiToken">;
   /** Dedicated case-scoped backup extraction; absent in minimal agents. */
@@ -231,6 +240,9 @@ function classify(error: unknown): { errorClass: OpsErrorClass; statusCode: numb
   if (error instanceof RequestGuardError) {
     return { errorClass: error.errorClass, statusCode: error.statusCode };
   }
+  if (error instanceof OpsHostUpdateRequiredError)
+    return { errorClass: "host_update_required", statusCode: 409 };
+  if (error instanceof OpsAgentBusyError) return { errorClass: "busy", statusCode: 409 };
   if (error instanceof OpsNotWiredError) return { errorClass: "not_wired", statusCode: 501 };
   return { errorClass: "runtime", statusCode: 500 };
 }
@@ -277,6 +289,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   const activeControllers = new Map<string, AbortController>();
   const activeSettlements = new Map<string, Promise<void>>();
   const stickyRecoveryRequired = new Set<string>();
+  const configurationResultsSettling = new Set<string>();
   let active = 0;
   let admissionTail = Promise.resolve();
 
@@ -356,6 +369,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       const retained = [...jobsById.values()].filter(
         (job) =>
           (job.state === "failed" && job.errorClass === "recovery_required") ||
+          configurationResultsSettling.has(job.operationId) ||
           job.terminalAt === undefined ||
           job.terminalAt + jobRetentionMs > nowMs,
       );
@@ -364,6 +378,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       for (const [id, job] of jobsById) {
         if (
           !(job.state === "failed" && job.errorClass === "recovery_required") &&
+          !configurationResultsSettling.has(job.operationId) &&
           job.terminalAt !== undefined &&
           job.terminalAt + jobRetentionMs <= nowMs
         ) {
@@ -401,6 +416,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     job.eventBytes += bytes;
   };
 
+  const outwardStateFor = (job: JobRecord): OpsJobState =>
+    configurationResultsSettling.has(job.operationId) ? "running" : job.state;
+
   const transition = async (
     job: JobRecord,
     state: OpsJobState,
@@ -416,7 +434,11 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       job.updatedAt = updatedAt;
       job.state = state;
       job.cursor += 1;
-      pushEvent(job, { cursor: job.cursor, type: "state", state });
+      pushEvent(job, {
+        cursor: job.cursor,
+        type: "state",
+        state: outwardStateFor(job),
+      });
     });
   };
 
@@ -438,6 +460,14 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   ): OpsExecutionContext => ({
     signal,
     claim,
+    otherActiveOperations: () =>
+      [...jobsById.values()].filter(
+        (other) =>
+          other.operationId !== job.operationId &&
+          (other.state === "queued" ||
+            other.state === "running" ||
+            other.state === "termination_pending"),
+      ).length,
     emitLog: (stream, message) => {
       const boundedMessage = truncateUtf8(message, OPS_MAX_EVENT_MESSAGE_BYTES);
       job.cursor += 1;
@@ -456,14 +486,18 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     operationKey: job.operationKey,
     kind: job.operation.kind,
     resourceId: job.resourceId,
-    state: job.state,
+    state: outwardStateFor(job),
     submittedAt: job.submittedAt,
     updatedAt: job.updatedAt,
     ...(job.terminationRequestedAt === undefined
       ? {}
       : { terminationRequestedAt: job.terminationRequestedAt }),
-    ...(job.result === undefined ? {} : { result: job.result }),
-    ...(job.errorClass === undefined ? {} : { errorClass: job.errorClass }),
+    ...(job.result === undefined || configurationResultsSettling.has(job.operationId)
+      ? {}
+      : { result: job.result }),
+    ...(job.errorClass === undefined || configurationResultsSettling.has(job.operationId)
+      ? {}
+      : { errorClass: job.errorClass }),
   });
 
   const runAsync = async (
@@ -488,6 +522,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     );
     let timedOut = false;
     let terminalDurable = false;
+    let claimReleased = false;
+    let configurationEvidence: ConfigurationApplyResult | undefined;
     const timer = setTimeout(() => {
       timedOut = true;
       void transition(job, "termination_pending").then(
@@ -501,7 +537,39 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         async (rawResult) => {
           clearTimeout(timer);
           try {
-            if (stickyRecoveryRequired.has(job.operationId)) {
+            if ("revisionId" in job.operation) {
+              // Persist commit evidence before releasing confidential claim data.
+              // Public status remains running until cleanup evidence is settled.
+              const result = configurationApplyResultSchema.parse(
+                parseBoundedOpsResult(job.operation.kind, rawResult),
+              );
+              configurationEvidence = result;
+              configurationResultsSettling.add(job.operationId);
+              await transition(job, "succeeded", {
+                result,
+                errorClass: undefined,
+                terminalAt: now().getTime(),
+              });
+              terminalDurable = true;
+              claimReleased = true;
+              try {
+                await claimAdmission?.release();
+              } catch {
+                configurationEvidence = { ...result, cleanupFailed: true };
+                await transition(job, "succeeded", {
+                  result: configurationEvidence,
+                  errorClass: undefined,
+                  terminalAt: now().getTime(),
+                });
+              }
+              audit(
+                job.role,
+                job.operation.kind,
+                job.resourceId,
+                timedOut ? "late_completion" : "success",
+                startedAt,
+              );
+            } else if (stickyRecoveryRequired.has(job.operationId)) {
               audit(
                 job.role,
                 job.operation.kind,
@@ -550,18 +618,40 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               audit(job.role, job.operation.kind, job.resourceId, "success", startedAt);
             }
           } catch {
-            await transition(job, "failed", {
-              result: undefined,
-              errorClass: "runtime",
-              terminalAt: now().getTime(),
-            })
-              .then(() => {
-                terminalDurable = true;
+            if (configurationEvidence) {
+              // Journal failure must not erase observed pointer-commit evidence.
+              // Retain it in memory; restart may still require reconciliation if
+              // this final record cannot be made durable. Do not release an
+              // uncheckpointed claim or retry the configuration mutation.
+              const retained = { ...configurationEvidence, cleanupFailed: true };
+              await transition(job, "succeeded", {
+                result: retained,
+                errorClass: undefined,
+                terminalAt: now().getTime(),
+              }).catch(() => {
+                job.state = "succeeded";
+                job.result = retained;
+                job.errorClass = undefined;
+                job.terminalAt = now().getTime();
+              });
+            } else {
+              await transition(job, "failed", {
+                result: undefined,
+                errorClass: "runtime",
+                terminalAt: now().getTime(),
               })
-              .catch(() => forceRecoveryRequired(job));
-            audit(job.role, job.operation.kind, job.resourceId, "error", startedAt, "runtime");
+                .then(() => {
+                  terminalDurable = true;
+                })
+                .catch(() => forceRecoveryRequired(job));
+              audit(job.role, job.operation.kind, job.resourceId, "error", startedAt, "runtime");
+            }
           } finally {
-            if (terminalDurable) {
+            if (configurationResultsSettling.delete(job.operationId) && job.state === "succeeded") {
+              job.cursor += 1;
+              pushEvent(job, { cursor: job.cursor, type: "state", state: "succeeded" });
+            }
+            if (terminalDurable && !claimReleased && !configurationEvidence) {
               await claimAdmission?.release().catch(async () => {
                 stickyRecoveryRequired.add(job.operationId);
                 await transition(job, "failed", {
@@ -617,7 +707,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               })
               .catch(() => forceRecoveryRequired(job));
           } finally {
-            if (terminalDurable) {
+            if (terminalDurable && !claimReleased) {
               await claimAdmission?.release().catch(async () => {
                 stickyRecoveryRequired.add(job.operationId);
                 await transition(job, "failed", {
@@ -688,12 +778,16 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               operationId: existing.operationId,
               operationKey: existing.operationKey,
               kind: existing.operation.kind,
-              state: existing.state,
+              state: outwardStateFor(existing),
             }),
           );
         }
         if (jobsById.size >= maxJobEntries) {
           throw new RequestGuardError("busy", 429);
+        }
+        // A resumed agent update re-attaches above; nothing new may start.
+        if (operation.kind !== "agent.update" && options.replacementInProgress?.()) {
+          throw new RequestGuardError("busy", 409);
         }
       }
       if (active >= maxConcurrency) throw new RequestGuardError("busy", 429);
@@ -831,7 +925,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               operationId: admission.job.operationId,
               operationKey: admission.job.operationKey,
               kind: admission.job.operation.kind,
-              state: admission.job.state,
+              state: outwardStateFor(admission.job),
             }),
           );
         }
@@ -856,7 +950,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             operationId: job.operationId,
             operationKey: job.operationKey,
             kind: job.operation.kind,
-            state: job.state,
+            state: outwardStateFor(job),
           }),
         );
       }
@@ -1058,7 +1152,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         version: 1,
         operationId,
         nextCursor: events.at(-1)?.cursor ?? after,
-        terminal: job.terminalAt !== undefined,
+        terminal:
+          job.terminalAt !== undefined && !configurationResultsSettling.has(job.operationId),
         truncated: job.eventsTruncated,
         events,
       }),

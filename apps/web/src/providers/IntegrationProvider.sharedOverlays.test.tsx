@@ -6,13 +6,12 @@ import {
   toggleOverlay,
   useStreetLevelStore,
 } from "@openmapx/core";
-import type { LoadedIntegrationMeta } from "@openmapx/integration-framework";
+import type { IntegrationMetadata } from "@openmapx/core/api-contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useLayerSelectorConfig } from "@/components/map/layer-selector/useLayerSelectorConfig";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
-import { useIntegrationDomainAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
 import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
 import { IntegrationProvider } from "./IntegrationProvider";
 
@@ -24,14 +23,19 @@ const integrations = ["mapillary", "panoramax"].map((provider) => {
   const id = `street-level-imagery-${provider}`;
   const manifest = JSON.parse(
     readFileSync(join(process.cwd(), "integrations", id, "manifest.json"), "utf8"),
-  ) as LoadedIntegrationMeta;
-  return { ...manifest, name: id, enabled: true };
+  ) as IntegrationMetadata;
+  return {
+    id,
+    name: id,
+    enabled: true,
+    isBuiltIn: true,
+    domains: manifest.domains,
+    frontend: manifest.frontend,
+  };
 });
 
 function SharedOverlayControls() {
   const { mapDetails } = useLayerSelectorConfig();
-  const visible = useStreetLevelStore((state) => state.layerVisible);
-  useIntegrationDomainAttribution("street-level-imagery", visible);
   return mapDetails.map((entry) => (
     <button
       key={entry.id}
@@ -43,7 +47,7 @@ function SharedOverlayControls() {
   ));
 }
 
-let metadata: LoadedIntegrationMeta[];
+let metadata: IntegrationMetadata[];
 let client: QueryClient;
 
 beforeEach(() => {
@@ -54,7 +58,7 @@ beforeEach(() => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   vi.stubGlobal("fetch", async () =>
     Response.json({
-      revision: "fixture",
+      revision: "a".repeat(64),
       integrations: metadata,
       frameworkStrings: {},
       disclosures: [],
@@ -70,7 +74,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("initializes both imagery providers with one toggle and keeps their credits through refresh", async () => {
+it("initializes both imagery providers with one toggle, retaining it through refresh without claiming configured sources", async () => {
   render(
     <QueryClientProvider client={client}>
       <IntegrationProvider>
@@ -86,11 +90,11 @@ it("initializes both imagery providers with one toggle and keeps their credits t
   fireEvent.click(toggle);
   expect(useStreetLevelStore.getState().panelOpen).toBe(true);
   const credits = () =>
-    useMapAttributionStore.getState().byLayer["domain:street-level-imagery"] ?? [];
+    Object.values(useMapAttributionStore.getState().byLayer)
+      .flat()
+      .map((entry) => entry.fullHtml);
   await waitFor(() => {
-    expect(credits()).toHaveLength(2);
-    expect(credits().join(" ")).toContain("Mapillary");
-    expect(credits().join(" ")).toContain("Panoramax");
+    expect(credits()).toHaveLength(0);
   });
 
   metadata = integrations.filter(
@@ -102,9 +106,7 @@ it("initializes both imagery providers with one toggle and keeps their credits t
       "street-level-imagery-panoramax",
     ]);
     expect(useStreetLevelStore.getState().layerVisible).toBe(true);
-    expect(credits()).toHaveLength(1);
-    expect(credits().join(" ")).toContain("Panoramax");
-    expect(credits().join(" ")).not.toContain("Mapillary");
+    expect(credits()).toHaveLength(0);
   });
 
   metadata = [];

@@ -14,7 +14,7 @@ describe("useStopsNearby", () => {
   it("fetches nearby stops and unwraps the envelope", async () => {
     const envelope = {
       data: [{ id: "ms:s1", name: "Alexanderplatz" }],
-      attributions: [{ name: "MOTIS" }],
+      attributions: [{ sourceId: "motis", name: "MOTIS" }],
       freshness: undefined,
     };
     const spy = vi.spyOn(apiClient, "get").mockResolvedValue(envelope as never);
@@ -24,7 +24,9 @@ describe("useStopsNearby", () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual(envelope.data);
+    expect(result.current.data).toEqual(
+      envelope.data.map((row) => ({ ...row, contributors: envelope.attributions })),
+    );
     expect(result.current.attributions).toEqual(envelope.attributions);
     expect(spy).toHaveBeenCalledWith(
       API_ENDPOINTS.transitStopsNearby,

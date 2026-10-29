@@ -1,5 +1,4 @@
-import { readBoundedResponseText } from "@openmapx/core";
-import { services as coreServices } from "@openmapx/core/server";
+import * as dm from "@openmapx/core/data-manager-sdk";
 import { envString } from "@openmapx/core/server-env";
 import { and, asc, count, desc, eq } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -12,6 +11,7 @@ import { systemMaintenanceLimit } from "../utils/rate-limit.js";
 import { tryAdminSession } from "../utils/require-admin.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
 import { safeEqual } from "../utils/safe-equal.js";
+import { registerDataManagerAdminRoute } from "./data-manager-admin-contract.js";
 
 /**
  * `/api/data-manager/transit/*` — operator-facing surface for the self-hosted
@@ -57,7 +57,7 @@ function extractBearerToken(req: FastifyRequest): string | null {
  * frequently re-resolves session cookies for every probe and that's wasted
  * latency for service-to-service calls.
  */
-async function authenticateDataManager(req: FastifyRequest): Promise<AuthResult> {
+async function resolveDataManagerAuthentication(req: FastifyRequest): Promise<AuthResult> {
   const presented = extractBearerToken(req);
   const expected = process.env.DATA_MANAGER_AUTH_TOKEN?.trim();
   if (presented && expected && safeEqual(presented, expected)) {
@@ -73,41 +73,24 @@ async function authenticateDataManager(req: FastifyRequest): Promise<AuthResult>
   return { kind: "denied", reason: "no-credentials" };
 }
 
-interface FastifyJsonResponse {
-  status: number;
-  body: unknown;
+const authenticatedRequests = new WeakMap<FastifyRequest, Promise<AuthResult>>();
+function authenticateDataManager(req: FastifyRequest): Promise<AuthResult> {
+  const cached = authenticatedRequests.get(req);
+  if (cached) return cached;
+  const result = resolveDataManagerAuthentication(req);
+  authenticatedRequests.set(req, result);
+  return result;
 }
 
-async function proxyToDataManager(
-  method: "GET" | "POST" | "DELETE",
-  path: string,
-  body?: unknown,
-): Promise<FastifyJsonResponse> {
-  const baseUrl = coreServices.validateDataManagerBaseUrl(
-    envString("DATA_MANAGER_URL", DATA_MANAGER_URL_DEFAULT),
-  );
-  const url = `${baseUrl}${path}`;
-  const token = envString("DATA_MANAGER_AUTH_TOKEN", "");
-  const res = await fetch(url, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    redirect: "error",
-    signal: AbortSignal.timeout(DATA_MANAGER_PROXY_TIMEOUT_MS),
-  });
-  const text = await readBoundedResponseText(res, DATA_MANAGER_PROXY_MAX_BYTES, {
-    label: "data-manager proxy response",
-  });
-  let parsed: unknown;
-  try {
-    parsed = text ? JSON.parse(text) : null;
-  } catch {
-    parsed = { raw: text };
-  }
-  return { status: res.status, body: parsed };
+function dataManagerOptions() {
+  return {
+    transport: dm.createDataManagerTransport({
+      baseUrl: envString("DATA_MANAGER_URL", DATA_MANAGER_URL_DEFAULT),
+      authToken: envString("DATA_MANAGER_AUTH_TOKEN", ""),
+      requestTimeoutMs: DATA_MANAGER_PROXY_TIMEOUT_MS,
+      maxJsonBytes: DATA_MANAGER_PROXY_MAX_BYTES,
+    }),
+  };
 }
 
 interface LockSummary {
@@ -117,18 +100,18 @@ interface LockSummary {
 }
 
 async function readLockSummary(): Promise<LockSummary> {
-  // The lock lives under the repository's `infra/docker/`, which only the
-  // operations agent owns. Reading a copy baked into this image would report a
-  // build-time pin rather than the live one.
+  // The pin in effect is the operations agent's to report: the release's, or
+  // one an administrator or the auto-bump approved over it. Reading a copy
+  // baked into this image would report the build's pin, not the live one.
+  // transitousPin.inspect is the api role's read-only view; transitousLock.*
+  // is data-manager's.
   try {
     const { active } = await executeAndWait(
       createApiOpsClient(),
-      { kind: "transitousLock.inspect" },
-      createDurableOpsKey("api.transitous-lock.inspect", "read-lock-summary"),
+      { kind: "transitousPin.inspect" },
+      createDurableOpsKey("api.transitous-pin.inspect", "read-lock-summary"),
     );
-    return active
-      ? { ref: active.ref, lockedAt: active.lockedAt, lockedBy: active.lockedBy }
-      : { ref: null, lockedAt: null, lockedBy: null };
+    return { ref: active.ref, lockedAt: active.lockedAt, lockedBy: active.lockedBy };
   } catch {
     return { ref: null, lockedAt: null, lockedBy: null };
   }
@@ -136,62 +119,40 @@ async function readLockSummary(): Promise<LockSummary> {
 
 export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
   declareRouteAuth(app, "service");
-  app.get("/data-manager/road-conditions/policy", async (req, reply) => {
-    const auth = await authenticateDataManager(req);
-    if (auth.kind === "denied") return reply.code(401).send({ error: "Authentication required" });
-    reply.header("Cache-Control", "no-store");
-    const { getRoadConditionsPolicySnapshot } = await import("../services/data-use-policy.js");
-    return getRoadConditionsPolicySnapshot();
-  });
-
-  // -------- READ endpoints (direct DB) --------
-
-  app.get<{
-    Querystring: {
-      search?: string;
-      lifecycle?: string;
-      origin?: string;
-      limit?: string;
-      offset?: string;
-    };
-  }>("/data-manager/transit/sources", async (req, reply) => {
-    const auth = await authenticateDataManager(req);
-    if (auth.kind === "denied") {
+  // Preserve authentication before the canonical shape validator and before
+  // DB, proxy or job work. Handler guards consume this same cached result.
+  app.addHook("preValidation", async (request, reply) => {
+    if ((await authenticateDataManager(request)).kind === "denied")
       return reply.code(401).send({ error: "Authentication required" });
-    }
-    const params = new URLSearchParams();
-    for (const key of ["search", "lifecycle", "origin", "limit", "offset"] as const) {
-      const value = req.query[key];
-      if (value) params.set(key, value);
-    }
-    const query = params.toString();
-    const result = await proxyToDataManager("GET", `/transit/sources${query ? `?${query}` : ""}`);
-    return reply.code(result.status).send(result.body);
   });
-
-  app.get<{ Querystring: { search?: string; country?: string } }>(
-    "/data-manager/transit/catalog",
-    async (req, reply) => {
-      const auth = await authenticateDataManager(req);
-      if (auth.kind === "denied") {
-        return reply.code(401).send({ error: "Authentication required" });
-      }
-      try {
-        const { searchTransitCatalog } = await import("../services/transit-catalog/index.js");
-        const sources = await searchTransitCatalog(req.query.search, req.query.country);
-        return { sources, total: sources.length };
-      } catch (error) {
-        return reply.code(502).send({ error: (error as Error).message });
-      }
+  registerDataManagerAdminRoute(
+    app,
+    "getApiDataManagerRoadConditionsPolicy",
+    async (_req, reply) => {
+      reply.header("Cache-Control", "no-store");
+      const { getRoadConditionsPolicySnapshot } = await import("../services/data-use-policy.js");
+      return getRoadConditionsPolicySnapshot();
     },
   );
 
-  app.get("/data-manager/transit/state", async (req, reply) => {
-    const auth = await authenticateDataManager(req);
-    if (auth.kind === "denied") {
-      return reply.code(401).send({ error: "Authentication required" });
-    }
+  // -------- READ endpoints (direct DB) --------
 
+  registerDataManagerAdminRoute(app, "getApiDataManagerTransitSources", async (req, reply) => {
+    const result = await dm.getTransitSources(req.query, dataManagerOptions());
+    return reply.code(result.status).send(result.data);
+  });
+
+  registerDataManagerAdminRoute(app, "getApiDataManagerTransitCatalog", async (req, reply) => {
+    try {
+      const { searchTransitCatalog } = await import("../services/transit-catalog/index.js");
+      const sources = await searchTransitCatalog(req.query.search, req.query.country);
+      return { sources, total: sources.length };
+    } catch (error) {
+      return reply.code(502).send({ error: (error as Error).message });
+    }
+  });
+
+  registerDataManagerAdminRoute(app, "getApiDataManagerTransitState", async () => {
     const lock = await readLockSummary();
 
     const [lastJobRow, feedCountRow, regionRows, statusRows, currentRows] = await Promise.all([
@@ -242,16 +203,9 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.get<{
-    Querystring: { region?: string; status?: string; limit?: string; offset?: string };
-  }>("/data-manager/transit/feeds", async (req, reply) => {
-    const auth = await authenticateDataManager(req);
-    if (auth.kind === "denied") {
-      return reply.code(401).send({ error: "Authentication required" });
-    }
-
-    const limit = Math.min(Number(req.query.limit ?? 100), 500);
-    const offset = Math.max(Number(req.query.offset ?? 0), 0);
+  registerDataManagerAdminRoute(app, "getApiDataManagerTransitFeeds", async (req) => {
+    const limit = req.query.limit ?? 100;
+    const offset = req.query.offset ?? 0;
 
     const conditions = [] as ReturnType<typeof eq>[];
     if (req.query.region) conditions.push(eq(dataManagerFeedState.region, req.query.region));
@@ -287,50 +241,39 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.get<{ Querystring: { limit?: string; offset?: string; kind?: string } }>(
-    "/data-manager/transit/jobs",
-    async (req, reply) => {
-      const auth = await authenticateDataManager(req);
-      if (auth.kind === "denied") {
-        return reply.code(401).send({ error: "Authentication required" });
-      }
-      const limit = Math.min(Number(req.query.limit ?? 50), 200);
-      const offset = Math.max(Number(req.query.offset ?? 0), 0);
-      const kind = req.query.kind ?? "transitous-sync";
+  registerDataManagerAdminRoute(app, "getApiDataManagerTransitJobs", async (req) => {
+    const limit = req.query.limit ?? 50;
+    const offset = req.query.offset ?? 0;
+    const kind = req.query.kind ?? "transitous-sync";
 
-      const [jobs, [totalRow]] = await Promise.all([
-        db
-          .select()
-          .from(dataManagerJobs)
-          .where(eq(dataManagerJobs.kind, kind))
-          .orderBy(desc(dataManagerJobs.startedAt))
-          .limit(limit)
-          .offset(offset),
-        db.select({ total: count() }).from(dataManagerJobs).where(eq(dataManagerJobs.kind, kind)),
-      ]);
-      return {
-        jobs: jobs.map((j) => ({
-          id: j.id,
-          kind: j.kind,
-          status: j.status,
-          startedAt: j.startedAt.toISOString(),
-          finishedAt: j.finishedAt?.toISOString() ?? null,
-          triggeredBy: j.triggeredBy,
-          idempotencyKey: j.idempotencyKey,
-          metadata: j.metadata,
-        })),
-        total: totalRow?.total ?? 0,
-        limit,
-        offset,
-      };
-    },
-  );
+    const [jobs, [totalRow]] = await Promise.all([
+      db
+        .select()
+        .from(dataManagerJobs)
+        .where(eq(dataManagerJobs.kind, kind))
+        .orderBy(desc(dataManagerJobs.startedAt))
+        .limit(limit)
+        .offset(offset),
+      db.select({ total: count() }).from(dataManagerJobs).where(eq(dataManagerJobs.kind, kind)),
+    ]);
+    return {
+      jobs: jobs.map((j) => ({
+        id: j.id,
+        kind: j.kind,
+        status: j.status,
+        startedAt: j.startedAt.toISOString(),
+        finishedAt: j.finishedAt?.toISOString() ?? null,
+        triggeredBy: j.triggeredBy,
+        idempotencyKey: j.idempotencyKey,
+        metadata: j.metadata,
+      })),
+      total: totalRow?.total ?? 0,
+      limit,
+      offset,
+    };
+  });
 
-  app.get<{ Params: { id: string } }>("/data-manager/transit/jobs/:id", async (req, reply) => {
-    const auth = await authenticateDataManager(req);
-    if (auth.kind === "denied") {
-      return reply.code(401).send({ error: "Authentication required" });
-    }
+  registerDataManagerAdminRoute(app, "getApiDataManagerTransitJobsId", async (req, reply) => {
     const id = req.params.id;
     const [job] = await db
       .select()
@@ -370,26 +313,12 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
 
   // -------- MUTATION endpoints (proxied) --------
 
-  app.post<{
-    Body: {
-      region: string;
-      name: string;
-      url: string;
-      license: Record<string, unknown>;
-      idempotencyKey?: string;
-    };
-  }>("/data-manager/transit/sources", async (req, reply) => {
+  registerDataManagerAdminRoute(app, "postApiDataManagerTransitSources", async (req, reply) => {
     const auth = await authenticateDataManager(req);
-    if (auth.kind === "denied") {
-      return reply.code(401).send({ error: "Authentication required" });
-    }
     const triggeredBy = auth.kind === "session" ? `user:${auth.userId}` : "service-token";
-    const result = await proxyToDataManager("POST", "/transit/sources", {
-      ...req.body,
-      triggeredBy,
-    });
+    const result = await dm.addTransitSource({ ...req.body, triggeredBy }, dataManagerOptions());
     if (result.status === 202) {
-      const body = result.body as { sourceId?: string; jobId?: string };
+      const body = result.data;
       await writeAuditLog({
         actorId: auth.kind === "session" ? auth.userId : null,
         targetId: body.sourceId ?? null,
@@ -399,94 +328,87 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
         request: req,
       });
     }
-    return reply.code(result.status).send(result.body);
+    return reply.code(result.status).send(result.data);
   });
 
-  app.delete<{
-    Params: { sourceId: string };
-    Body?: { idempotencyKey?: string };
-  }>("/data-manager/transit/sources/:sourceId", async (req, reply) => {
-    const auth = await authenticateDataManager(req);
-    if (auth.kind === "denied") {
-      return reply.code(401).send({ error: "Authentication required" });
-    }
-    const triggeredBy = auth.kind === "session" ? `user:${auth.userId}` : "service-token";
-    const result = await proxyToDataManager(
-      "DELETE",
-      `/transit/sources/${encodeURIComponent(req.params.sourceId)}`,
-      { ...req.body, triggeredBy },
-    );
-    if (result.status === 202) {
-      const body = result.body as { jobId?: string };
-      await writeAuditLog({
-        actorId: auth.kind === "session" ? auth.userId : null,
-        targetId: req.params.sourceId,
-        targetType: "transit-source",
-        action: "transit.source.remove",
-        details: { jobId: body.jobId ?? null },
-        request: req,
-      });
-    }
-    return reply.code(result.status).send(result.body);
-  });
-
-  app.post<{
-    Params: { sourceId: string };
-    Body?: { idempotencyKey?: string };
-  }>("/data-manager/transit/sources/:sourceId/enable", async (req, reply) => {
-    const auth = await authenticateDataManager(req);
-    if (auth.kind === "denied") {
-      return reply.code(401).send({ error: "Authentication required" });
-    }
-    const triggeredBy = auth.kind === "session" ? `user:${auth.userId}` : "service-token";
-    const result = await proxyToDataManager(
-      "POST",
-      `/transit/sources/${encodeURIComponent(req.params.sourceId)}/enable`,
-      { ...req.body, triggeredBy },
-    );
-    if (result.status === 202) {
-      const body = result.body as { jobId?: string };
-      await writeAuditLog({
-        actorId: auth.kind === "session" ? auth.userId : null,
-        targetId: req.params.sourceId,
-        targetType: "transit-source",
-        action: "transit.source.enable",
-        details: { jobId: body.jobId ?? null },
-        request: req,
-      });
-    }
-    return reply.code(result.status).send(result.body);
-  });
-
-  app.post<{ Body?: { idempotencyKey?: string; countries?: string[] } }>(
-    "/data-manager/transit/sync",
+  registerDataManagerAdminRoute(
+    app,
+    "deleteApiDataManagerTransitSourcesSourceId",
     async (req, reply) => {
       const auth = await authenticateDataManager(req);
-      if (auth.kind === "denied") {
-        return reply.code(401).send({ error: "Authentication required" });
-      }
-
-      const body = req.body ?? {};
       const triggeredBy = auth.kind === "session" ? `user:${auth.userId}` : "service-token";
-      const proxied = await proxyToDataManager("POST", "/transit/sync", {
-        idempotencyKey: body.idempotencyKey,
-        countries: body.countries,
-        triggeredBy,
-      });
-      reply.code(proxied.status);
-      return proxied.body;
+      const result = await dm.removeTransitSource(
+        req.params.sourceId,
+        { ...req.body, triggeredBy },
+        dataManagerOptions(),
+      );
+      if (result.status === 202) {
+        const body = result.data;
+        await writeAuditLog({
+          actorId: auth.kind === "session" ? auth.userId : null,
+          targetId: req.params.sourceId,
+          targetType: "transit-source",
+          action: "transit.source.remove",
+          details: { jobId: body.jobId ?? null },
+          request: req,
+        });
+      }
+      return reply.code(result.status).send(result.data);
     },
   );
 
-  app.post("/data-manager/transit/restart-motis", async (req, reply) => {
+  registerDataManagerAdminRoute(
+    app,
+    "postApiDataManagerTransitSourcesSourceIdEnable",
+    async (req, reply) => {
+      const auth = await authenticateDataManager(req);
+      const triggeredBy = auth.kind === "session" ? `user:${auth.userId}` : "service-token";
+      const result = await dm.enableTransitSource(
+        req.params.sourceId,
+        { ...req.body, triggeredBy },
+        dataManagerOptions(),
+      );
+      if (result.status === 202) {
+        const body = result.data;
+        await writeAuditLog({
+          actorId: auth.kind === "session" ? auth.userId : null,
+          targetId: req.params.sourceId,
+          targetType: "transit-source",
+          action: "transit.source.enable",
+          details: { jobId: body.jobId ?? null },
+          request: req,
+        });
+      }
+      return reply.code(result.status).send(result.data);
+    },
+  );
+
+  registerDataManagerAdminRoute(app, "postApiDataManagerTransitSync", async (req, reply) => {
     const auth = await authenticateDataManager(req);
-    if (auth.kind === "denied") {
-      return reply.code(401).send({ error: "Authentication required" });
-    }
-    const proxied = await proxyToDataManager("POST", "/transit/restart-motis");
+
+    const body = req.body ?? {};
+    const triggeredBy = auth.kind === "session" ? `user:${auth.userId}` : "service-token";
+    const proxied = await dm.syncTransit(
+      {
+        idempotencyKey: body.idempotencyKey,
+        countries: body.countries,
+        triggeredBy,
+      },
+      dataManagerOptions(),
+    );
     reply.code(proxied.status);
-    return proxied.body;
+    return proxied.data;
   });
+
+  registerDataManagerAdminRoute(
+    app,
+    "postApiDataManagerTransitRestartMotis",
+    async (_req, reply) => {
+      const proxied = await dm.restartMotis(dataManagerOptions());
+      reply.code(proxied.status);
+      return proxied.data;
+    },
+  );
 
   // -------- Provider health --------
   //
@@ -496,11 +418,7 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
   // POST /reset is admin-session-only (mirrors /bump-transitous-ref policy:
   // mutations against ops state need a logged-in human).
 
-  app.get("/data-manager/providers", async (req, reply) => {
-    const auth = await authenticateDataManager(req);
-    if (auth.kind === "denied") {
-      return reply.code(401).send({ error: "Authentication required" });
-    }
+  registerDataManagerAdminRoute(app, "getApiDataManagerProviders", async (_req, reply) => {
     reply.header("Cache-Control", "no-store");
     const ph = getProviderHealth();
     if (!ph) {
@@ -513,11 +431,7 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     return { providers };
   });
 
-  app.get<{ Params: { id: string } }>("/data-manager/providers/:id", async (req, reply) => {
-    const auth = await authenticateDataManager(req);
-    if (auth.kind === "denied") {
-      return reply.code(401).send({ error: "Authentication required" });
-    }
+  registerDataManagerAdminRoute(app, "getApiDataManagerProvidersId", async (req, reply) => {
     reply.header("Cache-Control", "no-store");
     const ph = getProviderHealth();
     if (!ph) {
@@ -530,11 +444,8 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     return { id: req.params.id, ...state };
   });
 
-  app.post<{ Params: { id: string } }>("/data-manager/providers/:id/reset", async (req, reply) => {
+  registerDataManagerAdminRoute(app, "postApiDataManagerProvidersIdReset", async (req, reply) => {
     const auth = await authenticateDataManager(req);
-    if (auth.kind === "denied") {
-      return reply.code(401).send({ error: "Authentication required" });
-    }
     if (auth.kind === "token") {
       return reply.code(403).send({
         error: "Resetting provider health requires an admin session, not a service token",
@@ -549,33 +460,28 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     return { ok: true, providerId: req.params.id };
   });
 
-  app.post<{ Body?: { branch?: string; force?: boolean } }>(
-    "/data-manager/transit/bump-transitous-ref",
-    { preHandler: [systemMaintenanceLimit.preHandler()] },
+  registerDataManagerAdminRoute(
+    app,
+    "postApiDataManagerTransitBumpTransitousRef",
     async (req, reply) => {
       // Admin-session-only — bumps are explicit human decisions that need
       // an audit trail. A service token would let a leaked CI credential
       // bump the catalog without anyone noticing.
       const auth = await authenticateDataManager(req);
-      if (auth.kind === "denied") {
-        return reply.code(401).send({ error: "Authentication required" });
-      }
-      if (auth.kind === "token") {
-        return reply.code(403).send({
-          error: "Bumping the Transitous ref requires an admin session, not a service token",
-        });
-      }
 
       const body = req.body ?? {};
       const branch = body.branch?.trim() || "main";
       if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$/.test(branch) || branch.includes("..")) {
         return reply.code(400).send({ error: "Invalid Transitous branch name" });
       }
-      const proxied = await proxyToDataManager("POST", "/transit/bump", {
-        branch,
-        force: body.force === true,
-        lockedBy: auth.userId ?? "admin",
-      });
+      const proxied = await dm.proposeTransitBump(
+        {
+          branch,
+          force: body.force === true,
+          lockedBy: auth.userId ?? "admin",
+        },
+        dataManagerOptions(),
+      );
       if (proxied.status >= 200 && proxied.status < 300) {
         await writeAuditLog({
           actorId: auth.userId ?? null,
@@ -587,50 +493,50 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
         });
       }
       reply.code(proxied.status);
-      return proxied.body;
+      return proxied.data;
+    },
+    {
+      preHandler: [systemMaintenanceLimit.preHandler()],
+      beforeValidation: async (request, reply) => {
+        if ((await authenticateDataManager(request)).kind === "token")
+          return reply.code(403).send({
+            error: "Bumping the Transitous ref requires an admin session, not a service token",
+          });
+      },
     },
   );
 
-  app.get("/data-manager/overture/status", async (req, reply) => {
+  registerDataManagerAdminRoute(app, "getApiDataManagerOvertureStatus", async (req, reply) => {
     const auth = await authenticateDataManager(req);
-    if (auth.kind === "denied") {
-      return reply.code(401).send({ error: "Authentication required" });
-    }
     if (auth.kind === "token") {
       return reply.code(403).send({ error: "Overture operator status requires an admin session" });
     }
-    const proxied = await proxyToDataManager("GET", "/overture/status");
+    const proxied = await dm.getOvertureStatus(dataManagerOptions());
     reply.code(proxied.status);
-    return proxied.body;
+    return proxied.data;
   });
 
-  app.get("/data-manager/search-index/status", async (req, reply) => {
+  registerDataManagerAdminRoute(app, "getApiDataManagerSearchIndexStatus", async (req, reply) => {
     const auth = await authenticateDataManager(req);
-    if (auth.kind === "denied") {
-      return reply.code(401).send({ error: "Authentication required" });
-    }
     if (auth.kind === "token") {
       return reply
         .code(403)
         .send({ error: "Search-index operator status requires an admin session" });
     }
-    const proxied = await proxyToDataManager("GET", "/search-index/status");
+    const proxied = await dm.getSearchIndexStatus(dataManagerOptions());
     reply.code(proxied.status);
-    return proxied.body;
+    return proxied.data;
   });
 
-  app.get("/data-manager/notable-places/status", async (req, reply) => {
+  registerDataManagerAdminRoute(app, "getApiDataManagerNotablePlacesStatus", async (req, reply) => {
     const auth = await authenticateDataManager(req);
-    if (auth.kind === "denied") {
-      return reply.code(401).send({ error: "Authentication required" });
-    }
     if (auth.kind === "token") {
       return reply
         .code(403)
         .send({ error: "Notable-places operator status requires an admin session" });
     }
-    const proxied = await proxyToDataManager("GET", "/notable-places/status");
+    const proxied = await dm.getNotablePlacesStatus(dataManagerOptions());
     reply.code(proxied.status);
-    return proxied.body;
+    return proxied.data;
   });
 }

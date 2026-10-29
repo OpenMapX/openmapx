@@ -2,9 +2,13 @@ import { get as httpGet } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Writable } from "node:stream";
 import cors from "@fastify/cors";
+import { ApiClientError, createApiClient } from "@openmapx/core";
+import { getApiDataManagerTransitState, unwrapAdminResponse } from "@openmapx/core/api-admin-sdk";
+import { exportSavedList, unwrapSavedResponse } from "@openmapx/core/saved-places-sdk";
 import Fastify, { type FastifyInstance } from "fastify";
 import pino from "pino";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { registerSavedRoute } from "./routes/saved-contract";
 import {
   controlledRequestLoggingOptions,
   corsOptions,
@@ -24,6 +28,7 @@ import { createSafePinoOptions } from "./utils/safe-log-fields.js";
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 describe("trustProxyConfig", () => {
@@ -87,13 +92,144 @@ describe("uniformErrorHandler", () => {
     const app = await appThatThrows(new Error("db password xyz leaked"));
     const res = await app.inject({ method: "GET", url: "/boom" });
     expect(res.statusCode).toBe(500);
+    expect(res.headers["cache-control"]).toBe("no-store");
     expect(res.json()).toEqual({ error: "Internal Server Error" });
     expect(res.payload).not.toContain("leaked");
+    await app.close();
+  });
+
+  it("replaces stale success headers before serializing a 5xx response", async () => {
+    const app = Fastify({ logger: false });
+    app.setErrorHandler(uniformErrorHandler);
+    app.get("/boom", async (_request, reply) => {
+      reply.header("Cache-Control", "public, max-age=604800");
+      reply.type("image/png");
+      throw Object.assign(new Error("upstream detail"), { statusCode: 502 });
+    });
+    await app.ready();
+
+    const res = await app.inject({ method: "GET", url: "/boom" });
+
+    expect(res.statusCode).toBe(502);
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(res.headers["content-type"]).toContain("application/json");
+    expect(res.json()).toEqual({ error: "Internal Server Error" });
     await app.close();
   });
 });
 
 describe("corsOptions", () => {
+  it.each([
+    ["gpx", "application/gpx+xml"],
+    ["geojson", "application/geo+json"],
+    ["kml", "application/vnd.google-earth.kml+xml"],
+  ] as const)(
+    "exposes attachment metadata for credentialed %s SDK downloads",
+    async (format, media) => {
+      const app = Fastify({ logger: false });
+      await app.register(cors, corsOptions(["https://web.example"]));
+      await app.register(
+        async (routes) => {
+          registerSavedRoute(routes, "exportSavedList", async (_request, reply) =>
+            reply
+              .header("Content-Type", media)
+              .header("Content-Disposition", "attachment; filename=fixture")
+              .send("synthetic export"),
+          );
+        },
+        { prefix: "/api" },
+      );
+      vi.stubGlobal("fetch", async (_url: unknown, init: RequestInit) => {
+        expect(init.credentials).toBe("include");
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/saved/lists/list/export?format=${format}`,
+          headers: { origin: "https://web.example" },
+        });
+        expect(response.statusCode).toBe(200);
+        expect(response.headers["access-control-allow-origin"]).toBe("https://web.example");
+        expect(response.headers["access-control-allow-credentials"]).toBe("true");
+        // Model Fetch's CORS view: Content-Type is safelisted, attachment metadata is not.
+        const headers = new Headers({ "content-type": String(response.headers["content-type"]) });
+        const exposed = String(response.headers["access-control-expose-headers"] ?? "")
+          .toLowerCase()
+          .split(/,\s*/);
+        for (const name of exposed) {
+          const value = response.headers[name];
+          if (value !== undefined) headers.set(name, String(value));
+        }
+        return new Response(response.body, { status: response.statusCode, headers });
+      });
+      try {
+        const result = unwrapSavedResponse(
+          await exportSavedList(
+            "list",
+            { format },
+            {
+              client: createApiClient({ baseUrl: "https://api.example", credentials: "include" }),
+            },
+          ),
+        );
+        expect(result.type.split(";", 1)[0]).toBe(media);
+        expect(await result.text()).toBe("synthetic export");
+      } finally {
+        await app.close();
+      }
+    },
+  );
+
+  it("lets a cross-origin generated client retain rate-limit retry metadata", async () => {
+    const app = Fastify({ logger: false });
+    await app.register(cors, corsOptions(["https://web.example"]));
+    app.get("/api/data-manager/transit/state", async (_request, reply) =>
+      reply
+        .code(429)
+        .header("Retry-After", "7")
+        .send({ error: "Too many requests", retryAfter: 7 }),
+    );
+    vi.stubGlobal("fetch", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/data-manager/transit/state",
+        headers: { origin: "https://web.example" },
+      });
+      expect(response.headers["access-control-allow-origin"]).toBe("https://web.example");
+      expect(response.headers["access-control-allow-credentials"]).toBe("true");
+      // Fetch exposes only safelisted headers plus the server's explicit CORS list.
+      const visible = new Set([
+        "cache-control",
+        "content-language",
+        "content-length",
+        "content-type",
+        "expires",
+        "last-modified",
+        "pragma",
+        ...String(response.headers["access-control-expose-headers"] ?? "")
+          .toLowerCase()
+          .split(/,\s*/),
+      ]);
+      const headers = new Headers();
+      for (const [name, value] of Object.entries(response.headers)) {
+        if (visible.has(name) && value !== undefined) headers.set(name, String(value));
+      }
+      return new Response(response.body, { status: response.statusCode, headers });
+    });
+    try {
+      const response = await getApiDataManagerTransitState({
+        client: createApiClient({ baseUrl: "https://api.example", credentials: "include" }),
+      });
+      expect(response.status).toBe(429);
+      expect(() => unwrapAdminResponse(response)).toThrow(ApiClientError);
+      try {
+        unwrapAdminResponse(response);
+      } catch (error) {
+        expect(error).toMatchObject({ status: 429, retryAfterSeconds: 7 });
+      }
+    } finally {
+      await app.close();
+    }
+  });
+
   async function corsApp(): Promise<FastifyInstance> {
     const app = Fastify({ logger: false });
     await app.register(cors, corsOptions());
@@ -195,6 +331,7 @@ describe("makeRateLimitTierHook", () => {
       auth: vi.fn(async () => {}),
       tile: vi.fn(async () => {}),
       expensive: vi.fn(async () => {}),
+      integrationIngress: vi.fn(async () => {}),
       status: vi.fn(async () => {}),
       public: vi.fn(async () => {}),
     };
@@ -204,13 +341,23 @@ describe("makeRateLimitTierHook", () => {
   async function tierApp(tiers: RateLimitTiers): Promise<FastifyInstance> {
     const app = Fastify({ logger: false });
     app.addHook("onRequest", makeRateLimitTierHook(tiers));
+    app.route({
+      method: ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"],
+      url: "/api/integrations/:id",
+      handler: async () => ({ ok: true }),
+    });
+    app.route({
+      method: ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"],
+      url: "/api/integrations/:id/*",
+      handler: async () => ({ ok: true }),
+    });
     app.all("/*", async () => ({ ok: true }));
     await app.ready();
     return app;
   }
 
   const cases: Array<{
-    method?: "GET" | "POST" | "PUT" | "DELETE";
+    method?: "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE";
     url: string;
     tier: keyof RateLimitTiers | null;
   }> = [
@@ -218,24 +365,29 @@ describe("makeRateLimitTierHook", () => {
     { url: "/api/auth/sign-in", tier: "auth" },
     { url: "/api/tiles/1/2/3", tier: "tile" },
     { url: "/api/offline/packages/glyphs/glyphs-v1/Noto%20Sans/0-255.pbf", tier: "tile" },
-    { url: `/api/offline/packages/omp2-${"a".repeat(64)}/archive`, tier: "tile" },
+    { url: `/api/offline/packages/omp2-${"a".repeat(64)}/archive`, tier: "public" },
     { url: "/api/offline/packages/prepare", tier: "expensive" },
     { url: "/api/isochrone?x=1", tier: "expensive" },
     { url: "/api/motis/plan", tier: "expensive" },
     {
       method: "POST",
       url: "/api/integrations/transit/reachability/surface",
-      tier: null,
+      tier: "integrationIngress",
     },
     {
       method: "POST",
       url: "/api/integrations/transit/reachability/check",
-      tier: null,
+      tier: "integrationIngress",
     },
+    { method: "PUT", url: "/api/integrations/example/item", tier: "integrationIngress" },
+    { method: "PATCH", url: "/api/integrations/example/item", tier: "integrationIngress" },
+    { method: "DELETE", url: "/api/integrations/example/item", tier: "integrationIngress" },
     { url: "/api/integrations/food-delivery/resolve", tier: null },
+    { method: "HEAD", url: "/api/integrations/food-delivery/resolve", tier: null },
     { url: "/api/integrations/food-delivery/ubereats/open", tier: null },
     { url: "/api/integrations/restaurants/menu?website=https://example.com", tier: null },
     { url: "/api/integrations/food-delivery/providers?country=de", tier: null },
+    { url: "/api/integrations", tier: "public" },
     { method: "GET", url: "/api/status", tier: "status" },
     { method: "GET", url: "/api/status?probe=public", tier: "status" },
     { method: "POST", url: "/api/status", tier: "public" },
@@ -276,6 +428,12 @@ describe("makeRateLimitTierHook", () => {
     const { hook, stubs } = stubTiers();
     const app = await tierApp(hook);
     await app.inject({ method: "GET", url: "/api/saved", remoteAddress: "127.0.0.1" });
+    await app.inject({
+      method: "POST",
+      url: "/api/integrations/routing/match",
+      remoteAddress: "127.0.0.1",
+      payload: { trace: [] },
+    });
     for (const key of Object.keys(stubs) as Array<keyof RateLimitTiers>) {
       expect(stubs[key]).not.toHaveBeenCalled();
     }

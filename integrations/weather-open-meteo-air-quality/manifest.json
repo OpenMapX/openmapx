@@ -42,8 +42,6 @@
       "credentialOwner": "none",
       "reviewedAt": "2026-08-30",
       "apiHosts": ["air-quality-api.open-meteo.com"],
-      "license": "CC BY 4.0 (free tier: non-commercial only)",
-      "licenseUrl": "https://open-meteo.com/en/terms",
       "attribution": "Open-Meteo and CAMS ENSEMBLE data providers",
       "commercialUse": "no",
       "notes": "CAMS model evidence redistributed through Open-Meteo. The free API is non-commercial; commercial deployments require an eligible Open-Meteo plan. Attribution to Open-Meteo and CAMS ENSEMBLE data providers is required.",
@@ -52,7 +50,49 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Open-Meteo output data",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-4.0"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Open-Meteo API",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:open-meteo-air-quality",
+              "id": "LicenseRef-Service-Terms",
+              "name": "Open-Meteo API terms",
+              "url": "https://open-meteo.com/en/terms"
+            },
+            "conditions": [
+              "The free API is restricted to non-commercial use; commercial use requires an appropriate account."
+            ],
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["content"],
+              "basis": "provider-terms",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://open-meteo.com/en/licence"],
+              "reason": "Reviewed provider-specific attribution placement; complete notices remain available",
+              "compactText": "<a href=\"https://open-meteo.com/\">Weather data by Open-Meteo.com</a>"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CC-BY-4.0 (free tier: non-commercial only)",
+            "url": "https://open-meteo.com/en/terms"
+          }
+        ]
+      }
     }
   ]
 }

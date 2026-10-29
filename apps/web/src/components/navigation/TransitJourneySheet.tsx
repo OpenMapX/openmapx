@@ -11,8 +11,13 @@ import type { TripItinerary, TripLeg, VehicleJourneyStop } from "@openmapx/mobil
 import { useTranslations } from "next-intl";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
+import {
+  TransitDataStatus,
+  TransitQueryNotice,
+} from "@/components/panels/transit/TransitDataStatus";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
+import { useNow } from "@/lib/useNow";
 import { TransitBoardingDepartures } from "./TransitBoardingDepartures";
 
 /** Best available time for a stop: realtime departure/arrival, else scheduled. */
@@ -127,7 +132,7 @@ function StopTimeline({ stops, nextIdx }: { stops: VehicleJourneyStop[]; nextIdx
               )}
               {stop.platform && !stop.canceled && (
                 <Box sx={{ mt: 0.25 }}>
-                  <PlatformBadge code={stop.platform} />
+                  <PlatformBadge code={stop.platform} scheduledCode={stop.scheduledPlatform} />
                 </Box>
               )}
             </Box>
@@ -139,9 +144,10 @@ function StopTimeline({ stops, nextIdx }: { stops: VehicleJourneyStop[]; nextIdx
 }
 
 /** One compact row per upcoming leg, shown under the current-ride timeline. */
-function UpcomingLegRow({ leg }: { leg: TripLeg }) {
+function UpcomingLegRow({ leg, source, now }: { leg: TripLeg; source?: string; now: number }) {
   const fmt = useDateTimeFormat();
   const t = useTranslations("navigation");
+  const tt = useTranslations("transit");
   const isWalk = leg.mode === "walking" || !leg.route;
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 0.75 }}>
@@ -162,10 +168,26 @@ function UpcomingLegRow({ leg }: { leg: TripLeg }) {
           />
         )
       )}
-      <Typography variant="body2" noWrap sx={{ flex: 1, minWidth: 0 }}>
-        {isWalk ? t("walkTo", { place: leg.to.name }) : leg.to.name}
-      </Typography>
-      {leg.from.platformCode && !isWalk && <PlatformBadge code={leg.from.platformCode} />}
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography
+          variant="body2"
+          sx={{ textDecoration: leg.cancelled ? "line-through" : undefined }}
+        >
+          {isWalk ? t("walkTo", { place: leg.to.name }) : leg.to.name}
+        </Typography>
+        {leg.cancelled && (
+          <Typography variant="caption" color="error.main" sx={{ fontWeight: 600 }}>
+            {tt("canceled")}
+          </Typography>
+        )}
+        {!isWalk && <TransitDataStatus now={now} realtime={leg.realtime} source={source} />}
+      </Box>
+      {leg.from.platformCode && !isWalk && (
+        <PlatformBadge
+          code={leg.from.platformCode}
+          scheduledCode={leg.from.scheduledPlatformCode}
+        />
+      )}
     </Box>
   );
 }
@@ -181,6 +203,7 @@ export function TransitJourneySheet({
   currentLegIndex,
   transitProgress: _transitProgress,
   scroll = true,
+  showQueryNotice = true,
 }: {
   itinerary: TripItinerary;
   currentLegIndex: number;
@@ -191,16 +214,20 @@ export function TransitJourneySheet({
    * the menu below stays reachable instead of adding a nested scrollbar.
    */
   scroll?: boolean;
+  /** Navigation already displays the same query warning above the map. */
+  showQueryNotice?: boolean;
 }) {
   const t = useTranslations("navigation");
+  const now = useNow(30_000);
   const legs = itinerary.legs;
   const currentLeg = legs[currentLegIndex];
   const isTransitLeg = !!currentLeg && currentLeg.mode !== "walking" && !!currentLeg.route;
   const { browserAuthority } = useMobileRuntime();
-  const { data: journey } = useVehicleJourney(
+  const journeyQuery = useVehicleJourney(
     browserAuthority && isTransitLeg ? (currentLeg?.tripId ?? null) : null,
   );
 
+  const { data: journey } = journeyQuery;
   const legStops = journey?.stops
     ? sliceJourneyToLeg(journey.stops, currentLeg?.from.stopId, currentLeg?.to.stopId)
     : [];
@@ -226,6 +253,31 @@ export function TransitJourneySheet({
           targetRouteShortName={nextTransitLeg.route?.shortName}
         />
       )}
+      {isTransitLeg && (
+        <Box sx={{ px: 2, py: 0.5, "&:empty": { display: "none" } }}>
+          <TransitDataStatus
+            now={now}
+            realtime={currentLeg.realtime}
+            freshness={journeyQuery.freshness}
+            source={itinerary.source ?? itinerary.instance}
+            queryFailed={journeyQuery.isError}
+          />
+        </Box>
+      )}
+      {isTransitLeg && showQueryNotice && (
+        <TransitQueryNotice
+          failed={journeyQuery.isError}
+          partial={journeyQuery.freshness?.isPartial}
+          onRetry={
+            browserAuthority
+              ? () => {
+                  void journeyQuery.refetch();
+                }
+              : undefined
+          }
+          retrying={journeyQuery.isFetching}
+        />
+      )}
       {legStops.length > 0 && <StopTimeline stops={legStops} nextIdx={nextIdx} />}
       {upcomingLegs.length > 0 && (
         <>
@@ -235,9 +287,13 @@ export function TransitJourneySheet({
           >
             {t("restOfJourney")}
           </Typography>
-          {upcomingLegs.map((leg, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: legs are a fixed ordered plan
-            <UpcomingLegRow key={i} leg={leg} />
+          {upcomingLegs.map((leg) => (
+            <UpcomingLegRow
+              key={`${leg.tripId ?? leg.mode}-${leg.startTime}-${leg.from.stopId ?? leg.from.name}-${leg.to.stopId ?? leg.to.name}`}
+              leg={leg}
+              now={now}
+              source={itinerary.source ?? itinerary.instance}
+            />
           ))}
         </>
       )}

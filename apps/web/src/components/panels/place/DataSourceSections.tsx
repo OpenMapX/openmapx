@@ -1,5 +1,6 @@
 "use client";
 
+import AnnouncementIcon from "@mui/icons-material/Announcement";
 import BusinessIcon from "@mui/icons-material/Business";
 import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
 import ElectricScooterIcon from "@mui/icons-material/ElectricScooter";
@@ -7,8 +8,11 @@ import EvStationIcon from "@mui/icons-material/EvStation";
 import InfoIcon from "@mui/icons-material/Info";
 import LocalGasStationIcon from "@mui/icons-material/LocalGasStation";
 import LocalParkingIcon from "@mui/icons-material/LocalParking";
+import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
 import PedalBikeIcon from "@mui/icons-material/PedalBike";
+import ThermostatIcon from "@mui/icons-material/Thermostat";
+import TimerIcon from "@mui/icons-material/Timer";
 import TrainIcon from "@mui/icons-material/Train";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import Box from "@mui/material/Box";
@@ -17,9 +21,6 @@ import Divider from "@mui/material/Divider";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import {
-  buildRuntimeAttributionHtml,
-  buildSourceAttribution,
-  type DataSourceAttribution,
   type DataSourceDetail,
   type DataSourceDetailSection,
   pickIntegrationForSources,
@@ -28,8 +29,8 @@ import {
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { Translatable } from "@openmapx/integration-framework/strings";
 import { useTranslations } from "next-intl";
-import { Fragment, type ReactNode } from "react";
-import { AttributionText } from "@/components/ui/AttributionText";
+import type { ReactNode } from "react";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { BrandMark } from "../shared/BrandMark";
 import { type StructuredSection, StructuredSections } from "../shared/StructuredSections";
@@ -72,6 +73,15 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   "db-station": { icon: <TrainIcon sx={{ fontSize: 20 }} />, titleKey: "dbStation" },
   // Webcam: camera details carry OpenConditions feed ids, so the header is matched by provider.
   webcam: { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
+  // Message signs: matched by provider for the same reason.
+  "message-signs": { icon: <AnnouncementIcon sx={{ fontSize: 20 }} />, titleKey: "messageSigns" },
+  // Road weather, road maintenance and border crossings: matched by provider too.
+  "road-weather": { icon: <ThermostatIcon sx={{ fontSize: 20 }} />, titleKey: "roadWeather" },
+  "road-maintenance": {
+    icon: <LocalShippingIcon sx={{ fontSize: 20 }} />,
+    titleKey: "roadMaintenance",
+  },
+  "border-crossings": { icon: <TimerIcon sx={{ fontSize: 20 }} />, titleKey: "borderCrossings" },
 };
 
 export function resolveSourceHeader(
@@ -146,6 +156,7 @@ function translateStructuredSection(
   // `I18nToken | string` slots.
   return {
     id: undefined,
+    contributors: section.contributors,
     title: translatedTitle,
     caption: translatedCaption,
     captionTimestamp: section.captionTimestamp,
@@ -169,53 +180,18 @@ function translateStructuredSection(
 }
 
 function AttributionFooter({ detail }: { detail: DataSourceDetail }) {
-  const registry = useIntegrationRegistry();
-
-  // Resolve the producing integration. The host stamps `providerId`, which is
-  // authoritative; fall back to the source-coverage heuristic only for details
-  // that predate the stamp or come from outside the data-source orchestrator.
-  // The heuristic ties when integrations share a generic sourceId like "osm"
-  // (parking, ev-charging, etc.), so it must not override a known providerId.
-  const meta =
-    (detail.providerId ? registry.get(detail.providerId) : undefined) ??
-    pickIntegrationForSources(registry.getByDomain("data-source"), detail.sources);
-  const html = meta?.dataSources ? buildSourceAttribution(meta.dataSources, detail.sources) : "";
-  const detailAttributions = detail.attributions ?? [];
-
-  if (!html && detailAttributions.length === 0) return null;
-
+  const captured = detail.contributors ?? detail.attributions ?? [];
+  if (captured.length === 0) return null;
   return (
     <Box sx={{ px: 2, py: 1.25 }}>
-      <Typography
-        variant="caption"
-        component="div"
-        sx={{
-          color: "text.secondary",
-        }}
-      >
-        {html && <AttributionText html={html} />}
-        {detailAttributions.map((attribution, index) => (
-          <Fragment key={detailAttributionKey(attribution)}>
-            {(html || index > 0) && " · "}
-            <AttributionText
-              html={buildRuntimeAttributionHtml({
-                text: attribution.text,
-                url: attribution.url,
-                license: attribution.license,
-                licenseUrl: attribution.licenseUrl,
-              })}
-            />
-          </Fragment>
-        ))}
-      </Typography>
+      <AttributionStrip
+        attributions={[...captured]}
+        variant="plain"
+        surface="content"
+        maxVisible={3}
+      />
     </Box>
   );
-}
-
-function detailAttributionKey(attribution: DataSourceAttribution): string {
-  return [attribution.text, attribution.url, attribution.license, attribution.licenseUrl]
-    .filter(Boolean)
-    .join("|");
 }
 
 export function pickRentalActionUrl(

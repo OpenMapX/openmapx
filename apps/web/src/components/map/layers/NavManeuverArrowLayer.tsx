@@ -13,7 +13,11 @@ import {
 } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useMemo } from "react";
-import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
+import {
+  EMPTY_FEATURE_COLLECTION,
+  type MapLayerGroup,
+  type SlottedLayer,
+} from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 
 const SOURCE = "nav-maneuver-arrow-source";
@@ -22,7 +26,6 @@ const BODY = "nav-maneuver-arrow";
 const HEAD = "nav-maneuver-arrow-head";
 export const MANEUVER_ARROW_HEAD_IMAGE_ID = "nav-maneuver-arrow-head-icon";
 
-const EMPTY_FC = { type: "FeatureCollection" as const, features: [] };
 const CASING_COLOR = "#1b1b1b";
 const BODY_COLOR = "#ffffff";
 
@@ -53,15 +56,16 @@ export function NavManeuverArrowLayer() {
     distanceToNextManeuver <= guidanceApproachMeters(mode, speedMps ?? 0);
 
   const data = useMemo(() => {
-    if (status !== "navigating" && status !== "rerouting") return EMPTY_FC;
-    if (!route || !approaching || route.geometry.length < 2) return EMPTY_FC;
+    if (status !== "navigating" && status !== "rerouting") return EMPTY_FEATURE_COLLECTION;
+    if (!route || !approaching || route.geometry.length < 2) return EMPTY_FEATURE_COLLECTION;
     const step = route.steps[upcomingIndex];
-    if (!step?.maneuver || NON_JUNCTION_TYPES.has(step.maneuver.type)) return EMPTY_FC;
+    if (!step?.maneuver || NON_JUNCTION_TYPES.has(step.maneuver.type))
+      return EMPTY_FEATURE_COLLECTION;
     const cum = cumulativeDistances(route.geometry);
     const alongMeters = stepStartMeters(route.steps, upcomingIndex);
     const spans: ManeuverArrowSpans = maneuverArrowSpans(mode);
     const line = maneuverArrowLine(route.geometry, cum, alongMeters, spans);
-    if (!line || line.length < 2) return EMPTY_FC;
+    if (!line || line.length < 2) return EMPTY_FEATURE_COLLECTION;
     const bearing = maneuverArrowTipBearing(line);
     return {
       type: "FeatureCollection" as const,

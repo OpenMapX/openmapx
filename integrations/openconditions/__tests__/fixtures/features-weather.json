@@ -1,0 +1,2003 @@
+{
+  "records": [
+    {
+      "id": "oc:feature:fi-digitraffic-weather:1001",
+      "temporality": "static",
+      "externalIds": [
+        {
+          "scheme": "provider",
+          "id": "1001",
+          "authority": "fi-digitraffic-weather"
+        }
+      ],
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [24.596399, 60.228227]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact",
+        "roads": [
+          {
+            "ref": "1"
+          }
+        ],
+        "admin": {
+          "country": "FI",
+          "municipality": "Espoo"
+        }
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "fi-digitraffic-weather",
+        "sourceFormat": "digitraffic-weather",
+        "accessMode": "bulk",
+        "recordId": "1001",
+        "attribution": {
+          "provider": "Source: Fintraffic / digitraffic.fi, license CC 4.0 BY",
+          "name": "Fintraffic Digitraffic road weather stations",
+          "licensing": {
+            "version": 1,
+            "declarations": [
+              {
+                "text": "CC-BY-4.0",
+                "url": "https://creativecommons.org/licenses/by/4.0/"
+              }
+            ],
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "Fintraffic Digitraffic road weather stations",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC-BY-4.0",
+                  "url": "https://creativecommons.org/licenses/by/4.0/"
+                }
+              }
+            ]
+          },
+          "license": "CC-BY-4.0",
+          "url": "https://www.digitraffic.fi/en/",
+          "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+          "rights": {
+            "source_redistribution": "yes",
+            "derived_redistribution": "yes",
+            "commercial_use": "yes",
+            "attribution_required": "yes",
+            "retention": "yes",
+            "evidence_origin": "https://www.digitraffic.fi/en/terms-of-service/",
+            "evidence_version": "CC-BY-4.0",
+            "reviewed_at": "2026-10-15T00:00:00.000Z"
+          }
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "conditions.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-14T23:25:19Z"
+      },
+      "class": "feature",
+      "kind": "weather_station",
+      "name": [
+        {
+          "lang": "fi",
+          "text": "Tie 1 Espoo, Nupuri"
+        },
+        {
+          "lang": "sv",
+          "text": "Väg 1 Esbo, Nuburböle"
+        },
+        {
+          "lang": "en",
+          "text": "Road 1 Espoo, Nupuri"
+        }
+      ],
+      "lifecycle": "operational",
+      "components": [
+        {
+          "key": "3",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.surface_temperature"
+          }
+        },
+        {
+          "key": "5",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.surface_temperature"
+          }
+        },
+        {
+          "key": "7",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.subsurface_temperature"
+          }
+        },
+        {
+          "key": "8",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.subsurface_temperature"
+          }
+        },
+        {
+          "key": "10",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.freezing_point"
+          }
+        },
+        {
+          "key": "11",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.freezing_point"
+          }
+        },
+        {
+          "key": "27",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.surface_state"
+          }
+        },
+        {
+          "key": "28",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.surface_state"
+          }
+        },
+        {
+          "key": "50",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.water_film"
+          }
+        },
+        {
+          "key": "51",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.water_film"
+          }
+        },
+        {
+          "key": "54",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.salt_concentration"
+          }
+        },
+        {
+          "key": "55",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.salt_concentration"
+          }
+        },
+        {
+          "key": "176",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.friction"
+          }
+        },
+        {
+          "key": "177",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.water_film"
+          }
+        },
+        {
+          "key": "178",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.snow_depth"
+          }
+        },
+        {
+          "key": "179",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.ice_thickness"
+          }
+        },
+        {
+          "key": "186",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.friction"
+          }
+        },
+        {
+          "key": "187",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.water_film"
+          }
+        },
+        {
+          "key": "188",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.snow_depth"
+          }
+        },
+        {
+          "key": "189",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.ice_thickness"
+          }
+        }
+      ],
+      "details": {
+        "kind": "weather_station",
+        "v": 1,
+        "equipment": ["RWS_200"],
+        "measuredProperties": [
+          "weather.air_temperature",
+          "road.surface_temperature",
+          "road.subsurface_temperature",
+          "weather.dew_point",
+          "road.freezing_point",
+          "weather.wind_speed",
+          "weather.wind_gust",
+          "weather.wind_direction",
+          "weather.humidity",
+          "weather.precipitation_rate",
+          "weather.precipitation_type",
+          "road.surface_state",
+          "road.water_film",
+          "road.salt_concentration",
+          "weather.visibility",
+          "road.friction",
+          "road.snow_depth",
+          "road.ice_thickness"
+        ],
+        "surfaceSensorCount": 4
+      },
+      "canonicalId": "18e0b3870e6c4de9d069bd60d5f615bf60cc675e5cd1f3089ac7bcc4d9f89231",
+      "domain": "weather",
+      "revision": 1,
+      "recordedAt": "2026-10-14T23:25:19Z",
+      "contentHash": "cc60e066d81501846e7dc6128ab8c3deff21fe4d1709de5e980b3652099612d0"
+    },
+    {
+      "id": "oc:feature:fi-digitraffic-weather:1071",
+      "temporality": "static",
+      "externalIds": [
+        {
+          "scheme": "provider",
+          "id": "1071",
+          "authority": "fi-digitraffic-weather"
+        }
+      ],
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [25.166245, 60.226774]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact",
+        "roads": [
+          {
+            "ref": "103"
+          }
+        ],
+        "admin": {
+          "country": "FI",
+          "municipality": "Helsinki"
+        }
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "fi-digitraffic-weather",
+        "sourceFormat": "digitraffic-weather",
+        "accessMode": "bulk",
+        "recordId": "1071",
+        "attribution": {
+          "provider": "Source: Fintraffic / digitraffic.fi, license CC 4.0 BY",
+          "name": "Fintraffic Digitraffic road weather stations",
+          "licensing": {
+            "version": 1,
+            "declarations": [
+              {
+                "text": "CC-BY-4.0",
+                "url": "https://creativecommons.org/licenses/by/4.0/"
+              }
+            ],
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "Fintraffic Digitraffic road weather stations",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC-BY-4.0",
+                  "url": "https://creativecommons.org/licenses/by/4.0/"
+                }
+              }
+            ]
+          },
+          "license": "CC-BY-4.0",
+          "url": "https://www.digitraffic.fi/en/",
+          "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+          "rights": {
+            "source_redistribution": "yes",
+            "derived_redistribution": "yes",
+            "commercial_use": "yes",
+            "attribution_required": "yes",
+            "retention": "yes",
+            "evidence_origin": "https://www.digitraffic.fi/en/terms-of-service/",
+            "evidence_version": "CC-BY-4.0",
+            "reviewed_at": "2026-10-15T00:00:00.000Z"
+          }
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "conditions.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-14T23:25:19Z"
+      },
+      "class": "feature",
+      "kind": "weather_station",
+      "name": [
+        {
+          "lang": "fi",
+          "text": "Tie 103 Helsinki, Vuosaari eteläinen"
+        },
+        {
+          "lang": "sv",
+          "text": "Väg 103 Helsingfors, Nordsjö söder"
+        },
+        {
+          "lang": "en",
+          "text": "Road 103 Helsinki, Vuosaari south"
+        }
+      ],
+      "lifecycle": "temporarily_closed",
+      "components": [
+        {
+          "key": "3",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.surface_temperature"
+          }
+        },
+        {
+          "key": "5",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.surface_temperature"
+          }
+        },
+        {
+          "key": "7",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.subsurface_temperature"
+          }
+        },
+        {
+          "key": "8",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.subsurface_temperature"
+          }
+        },
+        {
+          "key": "10",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.freezing_point"
+          }
+        },
+        {
+          "key": "11",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.freezing_point"
+          }
+        },
+        {
+          "key": "27",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.surface_state"
+          }
+        },
+        {
+          "key": "28",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.surface_state"
+          }
+        },
+        {
+          "key": "50",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.water_film"
+          }
+        },
+        {
+          "key": "51",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.water_film"
+          }
+        },
+        {
+          "key": "54",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.salt_concentration"
+          }
+        },
+        {
+          "key": "55",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.salt_concentration"
+          }
+        },
+        {
+          "key": "101",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 3,
+            "property": "road.surface_temperature"
+          }
+        },
+        {
+          "key": "103",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 3,
+            "property": "road.subsurface_temperature"
+          }
+        },
+        {
+          "key": "104",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 3,
+            "property": "road.freezing_point"
+          }
+        },
+        {
+          "key": "105",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 3,
+            "property": "road.surface_state"
+          }
+        },
+        {
+          "key": "111",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 4,
+            "property": "road.surface_temperature"
+          }
+        },
+        {
+          "key": "113",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 4,
+            "property": "road.subsurface_temperature"
+          }
+        },
+        {
+          "key": "114",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 4,
+            "property": "road.freezing_point"
+          }
+        },
+        {
+          "key": "115",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 4,
+            "property": "road.surface_state"
+          }
+        },
+        {
+          "key": "172",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "property": "road.surface_temperature"
+          }
+        },
+        {
+          "key": "176",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.friction"
+          }
+        },
+        {
+          "key": "177",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.water_film"
+          }
+        },
+        {
+          "key": "178",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.snow_depth"
+          }
+        },
+        {
+          "key": "179",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.ice_thickness"
+          }
+        },
+        {
+          "key": "186",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.friction"
+          }
+        },
+        {
+          "key": "187",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.water_film"
+          }
+        },
+        {
+          "key": "188",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.snow_depth"
+          }
+        },
+        {
+          "key": "189",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.ice_thickness"
+          }
+        },
+        {
+          "key": "198",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 3,
+            "property": "road.water_film"
+          }
+        },
+        {
+          "key": "199",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 4,
+            "property": "road.water_film"
+          }
+        },
+        {
+          "key": "202",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 3,
+            "property": "road.salt_concentration"
+          }
+        },
+        {
+          "key": "203",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 4,
+            "property": "road.salt_concentration"
+          }
+        }
+      ],
+      "details": {
+        "kind": "weather_station",
+        "v": 1,
+        "equipment": ["RWS_200"],
+        "measuredProperties": [
+          "weather.air_temperature",
+          "road.surface_temperature",
+          "road.subsurface_temperature",
+          "weather.dew_point",
+          "road.freezing_point",
+          "weather.wind_speed",
+          "weather.wind_gust",
+          "weather.wind_direction",
+          "weather.humidity",
+          "weather.precipitation_rate",
+          "weather.precipitation_type",
+          "road.surface_state",
+          "road.water_film",
+          "road.salt_concentration",
+          "weather.visibility",
+          "road.friction",
+          "road.snow_depth",
+          "road.ice_thickness"
+        ],
+        "surfaceSensorCount": 7
+      },
+      "canonicalId": "abf350e639cae668b2f57a22ab770c092d0d96549f0bf2f2b09ed8ee2aa04e45",
+      "domain": "weather",
+      "revision": 1,
+      "recordedAt": "2026-10-14T23:25:19Z",
+      "contentHash": "0793caa4495df6545eaf9ae8263a6d53af2fd7ba28e09543121bffb09091f74e"
+    },
+    {
+      "id": "oc:feature:fi-digitraffic-weather:7037",
+      "temporality": "static",
+      "externalIds": [
+        {
+          "scheme": "provider",
+          "id": "7037",
+          "authority": "fi-digitraffic-weather"
+        }
+      ],
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [29.873687, 61.974388]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact",
+        "roads": [
+          {
+            "ref": "6"
+          }
+        ],
+        "admin": {
+          "country": "FI",
+          "municipality": "Kitee"
+        }
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "fi-digitraffic-weather",
+        "sourceFormat": "digitraffic-weather",
+        "accessMode": "bulk",
+        "recordId": "7037",
+        "attribution": {
+          "provider": "Source: Fintraffic / digitraffic.fi, license CC 4.0 BY",
+          "name": "Fintraffic Digitraffic road weather stations",
+          "licensing": {
+            "version": 1,
+            "declarations": [
+              {
+                "text": "CC-BY-4.0",
+                "url": "https://creativecommons.org/licenses/by/4.0/"
+              }
+            ],
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "Fintraffic Digitraffic road weather stations",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC-BY-4.0",
+                  "url": "https://creativecommons.org/licenses/by/4.0/"
+                }
+              }
+            ]
+          },
+          "license": "CC-BY-4.0",
+          "url": "https://www.digitraffic.fi/en/",
+          "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+          "rights": {
+            "source_redistribution": "yes",
+            "derived_redistribution": "yes",
+            "commercial_use": "yes",
+            "attribution_required": "yes",
+            "retention": "yes",
+            "evidence_origin": "https://www.digitraffic.fi/en/terms-of-service/",
+            "evidence_version": "CC-BY-4.0",
+            "reviewed_at": "2026-10-15T00:00:00.000Z"
+          }
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "conditions.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-14T23:25:19Z"
+      },
+      "class": "feature",
+      "kind": "weather_station",
+      "name": [
+        {
+          "lang": "fi",
+          "text": "Tie 6 Kitee, Kousa"
+        },
+        {
+          "lang": "sv",
+          "text": "Väg 6 Kides, Kousa"
+        },
+        {
+          "lang": "en",
+          "text": "Road 6 Kitee, Kousa"
+        }
+      ],
+      "lifecycle": "operational",
+      "components": [
+        {
+          "key": "3",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.surface_temperature"
+          }
+        },
+        {
+          "key": "7",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.subsurface_temperature"
+          }
+        },
+        {
+          "key": "10",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.freezing_point"
+          }
+        },
+        {
+          "key": "27",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.surface_state"
+          }
+        },
+        {
+          "key": "50",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.water_film"
+          }
+        },
+        {
+          "key": "54",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.salt_concentration"
+          }
+        },
+        {
+          "key": "172",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "property": "road.surface_temperature"
+          }
+        },
+        {
+          "key": "176",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.friction"
+          }
+        },
+        {
+          "key": "177",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.water_film"
+          }
+        },
+        {
+          "key": "178",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.snow_depth"
+          }
+        },
+        {
+          "key": "179",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.ice_thickness"
+          }
+        }
+      ],
+      "details": {
+        "kind": "weather_station",
+        "v": 1,
+        "equipment": ["RWS_200"],
+        "measuredProperties": [
+          "weather.air_temperature",
+          "road.surface_temperature",
+          "road.subsurface_temperature",
+          "weather.dew_point",
+          "road.freezing_point",
+          "weather.wind_speed",
+          "weather.wind_gust",
+          "weather.wind_direction",
+          "weather.humidity",
+          "weather.precipitation_rate",
+          "weather.precipitation_type",
+          "road.surface_state",
+          "road.water_film",
+          "road.salt_concentration",
+          "weather.visibility",
+          "road.friction",
+          "road.snow_depth",
+          "road.ice_thickness"
+        ],
+        "surfaceSensorCount": 3
+      },
+      "canonicalId": "44a950838ac9af355f5dda21b0b822044ac257041a14d42c74433a4c3ec10530",
+      "domain": "weather",
+      "revision": 1,
+      "recordedAt": "2026-10-14T23:25:19Z",
+      "contentHash": "e7626069938ae661d8aaa8e3397ddee4d00540aeeadd70d4a9bc8a96cac74be7"
+    },
+    {
+      "id": "oc:feature:fi-digitraffic-weather:8003",
+      "temporality": "static",
+      "externalIds": [
+        {
+          "scheme": "provider",
+          "id": "8003",
+          "authority": "fi-digitraffic-weather"
+        }
+      ],
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [27.450941, 63.303119]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact",
+        "admin": {
+          "country": "FI"
+        }
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "fi-digitraffic-weather",
+        "sourceFormat": "digitraffic-weather",
+        "accessMode": "bulk",
+        "recordId": "8003",
+        "attribution": {
+          "provider": "Source: Fintraffic / digitraffic.fi, license CC 4.0 BY",
+          "name": "Fintraffic Digitraffic road weather stations",
+          "licensing": {
+            "version": 1,
+            "declarations": [
+              {
+                "text": "CC-BY-4.0",
+                "url": "https://creativecommons.org/licenses/by/4.0/"
+              }
+            ],
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "Fintraffic Digitraffic road weather stations",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC-BY-4.0",
+                  "url": "https://creativecommons.org/licenses/by/4.0/"
+                }
+              }
+            ]
+          },
+          "license": "CC-BY-4.0",
+          "url": "https://www.digitraffic.fi/en/",
+          "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+          "rights": {
+            "source_redistribution": "yes",
+            "derived_redistribution": "yes",
+            "commercial_use": "yes",
+            "attribution_required": "yes",
+            "retention": "yes",
+            "evidence_origin": "https://www.digitraffic.fi/en/terms-of-service/",
+            "evidence_version": "CC-BY-4.0",
+            "reviewed_at": "2026-10-15T00:00:00.000Z"
+          }
+        },
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "conditions.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-14T23:25:19Z"
+      },
+      "class": "feature",
+      "kind": "weather_station",
+      "name": [
+        {
+          "lang": "und",
+          "text": "vt5_Lapinlahti_Mäntylahti"
+        }
+      ],
+      "lifecycle": "operational",
+      "components": [
+        {
+          "key": "3",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.surface_temperature"
+          }
+        },
+        {
+          "key": "5",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.surface_temperature"
+          }
+        },
+        {
+          "key": "7",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.subsurface_temperature"
+          }
+        },
+        {
+          "key": "8",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.subsurface_temperature"
+          }
+        },
+        {
+          "key": "10",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.freezing_point"
+          }
+        },
+        {
+          "key": "11",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.freezing_point"
+          }
+        },
+        {
+          "key": "27",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.surface_state"
+          }
+        },
+        {
+          "key": "28",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.surface_state"
+          }
+        },
+        {
+          "key": "50",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.water_film"
+          }
+        },
+        {
+          "key": "51",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.water_film"
+          }
+        },
+        {
+          "key": "54",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.salt_concentration"
+          }
+        },
+        {
+          "key": "55",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 2,
+            "property": "road.salt_concentration"
+          }
+        },
+        {
+          "key": "176",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.friction"
+          }
+        },
+        {
+          "key": "177",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.water_film"
+          }
+        },
+        {
+          "key": "178",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.snow_depth"
+          }
+        },
+        {
+          "key": "179",
+          "kind": "sensor_channel",
+          "details": {
+            "kind": "sensor_channel",
+            "v": 1,
+            "index": 1,
+            "property": "road.ice_thickness"
+          }
+        }
+      ],
+      "details": {
+        "kind": "weather_station",
+        "v": 1,
+        "measuredProperties": [
+          "weather.air_temperature",
+          "road.surface_temperature",
+          "road.subsurface_temperature",
+          "weather.dew_point",
+          "road.freezing_point",
+          "weather.wind_speed",
+          "weather.wind_gust",
+          "weather.wind_direction",
+          "weather.humidity",
+          "weather.precipitation_rate",
+          "weather.precipitation_type",
+          "road.surface_state",
+          "road.water_film",
+          "road.salt_concentration",
+          "weather.visibility",
+          "road.friction",
+          "road.snow_depth",
+          "road.ice_thickness"
+        ],
+        "surfaceSensorCount": 3
+      },
+      "canonicalId": "caf24d35679bbbf51a2a801d9e80100d71dad8e1e0c267ffaace644c7deb3656",
+      "domain": "weather",
+      "revision": 1,
+      "recordedAt": "2026-10-14T23:25:19Z",
+      "contentHash": "c968ba2826b65e57b66dd41bb4638a124e68b2b89ff2a0f8eee02ddc54f818f6"
+    }
+  ],
+  "latest": {
+    "oc:feature:fi-digitraffic-weather:1001": [
+      {
+        "property": "device.status",
+        "result": {
+          "type": "category",
+          "value": "ok",
+          "vocabulary": "device_status"
+        },
+        "phenomenonTime": {
+          "instant": "2025-10-30T07:36:31Z"
+        },
+        "validUntil": "2026-10-16T23:25:19Z",
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "weather.air_temperature",
+        "result": {
+          "type": "quantity",
+          "value": 9.7,
+          "unit": "Cel"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.surface_temperature",
+        "componentKey": "3",
+        "result": {
+          "type": "quantity",
+          "value": 9.6,
+          "unit": "Cel"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.surface_temperature",
+        "componentKey": "5",
+        "result": {
+          "type": "quantity",
+          "value": 9.2,
+          "unit": "Cel"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.subsurface_temperature",
+        "componentKey": "7",
+        "result": {
+          "type": "quantity",
+          "value": 9.7,
+          "unit": "Cel"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.subsurface_temperature",
+        "componentKey": "8",
+        "result": {
+          "type": "quantity",
+          "value": 9.4,
+          "unit": "Cel"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "weather.dew_point",
+        "result": {
+          "type": "quantity",
+          "value": 8.8,
+          "unit": "Cel"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "weather.wind_speed",
+        "result": {
+          "type": "quantity",
+          "value": 0.4,
+          "unit": "m/s"
+        },
+        "phenomenonTime": {
+          "start": "2026-10-14T23:09:55Z",
+          "end": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "weather.wind_gust",
+        "result": {
+          "type": "quantity",
+          "value": 1.5,
+          "unit": "m/s"
+        },
+        "phenomenonTime": {
+          "start": "2026-10-14T23:09:55Z",
+          "end": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "weather.wind_direction",
+        "result": {
+          "type": "quantity",
+          "value": 180,
+          "unit": "deg"
+        },
+        "phenomenonTime": {
+          "start": "2026-10-14T23:09:55Z",
+          "end": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "weather.humidity",
+        "result": {
+          "type": "quantity",
+          "value": 95,
+          "unit": "%"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "weather.precipitation_rate",
+        "result": {
+          "type": "quantity",
+          "value": 0,
+          "unit": "mm/h"
+        },
+        "phenomenonTime": {
+          "start": "2026-10-14T23:19:25Z",
+          "end": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "weather.precipitation_type",
+        "result": {
+          "type": "category",
+          "value": "none",
+          "vocabulary": "precipitation_type"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:55Z"
+        },
+        "validUntil": "2026-10-14T23:55:19Z",
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.surface_state",
+        "componentKey": "27",
+        "result": {
+          "type": "category",
+          "value": "dry",
+          "vocabulary": "surface_state"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:55Z"
+        },
+        "validUntil": "2026-10-14T23:55:19Z",
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.surface_state",
+        "componentKey": "28",
+        "result": {
+          "type": "category",
+          "value": "dry",
+          "vocabulary": "surface_state"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:55Z"
+        },
+        "validUntil": "2026-10-14T23:55:19Z",
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.water_film",
+        "componentKey": "50",
+        "result": {
+          "type": "quantity",
+          "value": 0,
+          "unit": "mm"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.water_film",
+        "componentKey": "51",
+        "result": {
+          "type": "quantity",
+          "value": 0,
+          "unit": "mm"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "weather.visibility",
+        "result": {
+          "type": "quantity",
+          "value": 20000,
+          "unit": "m"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.friction",
+        "componentKey": "176",
+        "result": {
+          "type": "quantity",
+          "value": 0.82,
+          "unit": "1"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.water_film",
+        "componentKey": "177",
+        "result": {
+          "type": "quantity",
+          "value": 0,
+          "unit": "mm"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.snow_depth",
+        "componentKey": "178",
+        "result": {
+          "type": "quantity",
+          "value": 0,
+          "unit": "mm"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.ice_thickness",
+        "componentKey": "179",
+        "result": {
+          "type": "quantity",
+          "value": 0,
+          "unit": "mm"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.friction",
+        "componentKey": "186",
+        "result": {
+          "type": "quantity",
+          "value": 0.82,
+          "unit": "1"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.water_film",
+        "componentKey": "187",
+        "result": {
+          "type": "quantity",
+          "value": 0,
+          "unit": "mm"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.snow_depth",
+        "componentKey": "188",
+        "result": {
+          "type": "quantity",
+          "value": 0,
+          "unit": "mm"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.ice_thickness",
+        "componentKey": "189",
+        "result": {
+          "type": "quantity",
+          "value": 0,
+          "unit": "mm"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:55Z"
+        },
+        "source": "fi-digitraffic-weather"
+      }
+    ],
+    "oc:feature:fi-digitraffic-weather:1071": [
+      {
+        "property": "device.status",
+        "result": {
+          "type": "category",
+          "value": "offline",
+          "vocabulary": "device_status"
+        },
+        "phenomenonTime": {
+          "instant": "2026-01-09T10:23:13Z"
+        },
+        "validUntil": "2026-10-16T23:25:19Z",
+        "source": "fi-digitraffic-weather"
+      }
+    ],
+    "oc:feature:fi-digitraffic-weather:7037": [
+      {
+        "property": "device.status",
+        "result": {
+          "type": "category",
+          "value": "warning",
+          "vocabulary": "device_status"
+        },
+        "phenomenonTime": {
+          "instant": "2026-08-25T13:14:17Z"
+        },
+        "validUntil": "2026-10-16T23:25:19Z",
+        "source": "fi-digitraffic-weather"
+      }
+    ],
+    "oc:feature:fi-digitraffic-weather:8003": [
+      {
+        "property": "weather.air_temperature",
+        "result": {
+          "type": "quantity",
+          "value": 7.4,
+          "unit": "Cel"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.surface_temperature",
+        "componentKey": "3",
+        "result": {
+          "type": "quantity",
+          "value": 5.8,
+          "unit": "Cel"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.surface_temperature",
+        "componentKey": "5",
+        "result": {
+          "type": "quantity",
+          "value": 5.8,
+          "unit": "Cel"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.subsurface_temperature",
+        "componentKey": "7",
+        "result": {
+          "type": "quantity",
+          "value": 5.6,
+          "unit": "Cel"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.subsurface_temperature",
+        "componentKey": "8",
+        "result": {
+          "type": "quantity",
+          "value": 5.5,
+          "unit": "Cel"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "weather.dew_point",
+        "result": {
+          "type": "quantity",
+          "value": 6.3,
+          "unit": "Cel"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.freezing_point",
+        "componentKey": "10",
+        "result": {
+          "type": "quantity",
+          "value": -4.2,
+          "unit": "Cel"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.freezing_point",
+        "componentKey": "11",
+        "result": {
+          "type": "quantity",
+          "value": -3.2,
+          "unit": "Cel"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "weather.wind_speed",
+        "result": {
+          "type": "quantity",
+          "value": 3.1,
+          "unit": "m/s"
+        },
+        "phenomenonTime": {
+          "start": "2026-10-14T23:09:57Z",
+          "end": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "weather.wind_gust",
+        "result": {
+          "type": "quantity",
+          "value": 3.3,
+          "unit": "m/s"
+        },
+        "phenomenonTime": {
+          "start": "2026-10-14T23:09:57Z",
+          "end": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "weather.wind_direction",
+        "result": {
+          "type": "quantity",
+          "value": 192,
+          "unit": "deg"
+        },
+        "phenomenonTime": {
+          "start": "2026-10-14T23:09:57Z",
+          "end": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "weather.humidity",
+        "result": {
+          "type": "quantity",
+          "value": 93,
+          "unit": "%"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "weather.precipitation_rate",
+        "result": {
+          "type": "quantity",
+          "value": 0,
+          "unit": "mm/h"
+        },
+        "phenomenonTime": {
+          "start": "2026-10-14T23:19:27Z",
+          "end": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "weather.precipitation_type",
+        "result": {
+          "type": "category",
+          "value": "none",
+          "vocabulary": "precipitation_type"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:57Z"
+        },
+        "validUntil": "2026-10-14T23:55:19Z",
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.surface_state",
+        "componentKey": "27",
+        "result": {
+          "type": "category",
+          "value": "chemically_wet",
+          "vocabulary": "surface_state"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:57Z"
+        },
+        "validUntil": "2026-10-14T23:55:19Z",
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.surface_state",
+        "componentKey": "28",
+        "result": {
+          "type": "category",
+          "value": "wet",
+          "vocabulary": "surface_state"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:57Z"
+        },
+        "validUntil": "2026-10-14T23:55:19Z",
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.water_film",
+        "componentKey": "50",
+        "result": {
+          "type": "quantity",
+          "value": 0.29,
+          "unit": "mm"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.water_film",
+        "componentKey": "51",
+        "result": {
+          "type": "quantity",
+          "value": 0.04,
+          "unit": "mm"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.salt_concentration",
+        "componentKey": "54",
+        "result": {
+          "type": "quantity",
+          "value": 7.3,
+          "unit": "kg/m3"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.salt_concentration",
+        "componentKey": "55",
+        "result": {
+          "type": "quantity",
+          "value": 38.8,
+          "unit": "kg/m3"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "weather.visibility",
+        "result": {
+          "type": "quantity",
+          "value": 20000,
+          "unit": "m"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.friction",
+        "componentKey": "176",
+        "result": {
+          "type": "quantity",
+          "value": 0.77,
+          "unit": "1"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.water_film",
+        "componentKey": "177",
+        "result": {
+          "type": "quantity",
+          "value": 0.15,
+          "unit": "mm"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.snow_depth",
+        "componentKey": "178",
+        "result": {
+          "type": "quantity",
+          "value": 0,
+          "unit": "mm"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      },
+      {
+        "property": "road.ice_thickness",
+        "componentKey": "179",
+        "result": {
+          "type": "quantity",
+          "value": 0,
+          "unit": "mm"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-14T23:19:57Z"
+        },
+        "source": "fi-digitraffic-weather"
+      }
+    ]
+  },
+  "next": null
+}

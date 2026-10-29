@@ -10,8 +10,10 @@ import {
 } from "@openmapx/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-/** Max points per /match request — safely under Valhalla's 5000-point cap. */
+/** Max points per /match request, below the gateway and Valhalla trace caps. */
 const MAX_TRACE_POINTS = 4500;
+/** Stay below Valhalla's 200 km trace limit even on sparse motorway geometry. */
+const MAX_TRACE_METERS = 100_000;
 /** Fetch the next window once the driver is within this far of its end (m). */
 const PREFETCH_METERS = 2000;
 
@@ -33,7 +35,7 @@ function writeLimits(arr: (number | null)[], start: number, perPoint: (number | 
  *
  * The first window is fetched when the route is set (or replaced on reroute) and
  * later windows are prefetched as the driver nears each window's end. On a route
- * longer than one window (>4500 pts), a position in a not-yet-fetched window
+ * longer than one window (>4500 pts or 100 km), a position in a not-yet-fetched window
  * (e.g. after a large forward GPS jump) reports an unknown limit until the window
  * is prefetched — an accepted trade-off for dropping the per-fix map-match poll.
  */
@@ -49,6 +51,7 @@ export function useNavTrafficSignals(): LngLat[] {
   const [signals, setSignals] = useState<LngLat[]>([]);
   const windowRef = useRef({ nextStart: 0, endMeters: 0, done: true });
   const fetchingRef = useRef(false);
+  const requestControllerRef = useRef<AbortController | null>(null);
   // Speed limits accumulated across windows, indexed by route.geometry point.
   const limitsRef = useRef<(number | null)[]>([]);
   // Countries along the route, extended window by window.
@@ -66,6 +69,7 @@ export function useNavTrafficSignals(): LngLat[] {
   useEffect(() => {
     genRef.current += 1;
     fetchingRef.current = false;
+    requestControllerRef.current = null;
     if (connectivity === "offline" || !route || route.geometry.length < 2) {
       setSignals([]);
       setLiveSpeedLimits(null);
@@ -78,15 +82,17 @@ export function useNavTrafficSignals(): LngLat[] {
       return;
     }
     const gen = genRef.current;
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     limitsRef.current = new Array(route.geometry.length).fill(null);
     // The first window is fetched again after a reconnect; its answer replaces
     // the spans rather than appending out of route order.
     countriesRef.current = [];
     setLiveSpeedLimits(null);
-    const w = windowGeometry(route.geometry, 0, MAX_TRACE_POINTS, cum);
+    const w = windowGeometry(route.geometry, 0, MAX_TRACE_POINTS, cum, MAX_TRACE_METERS);
     windowRef.current = { nextStart: w.nextStart, endMeters: w.endMeters, done: w.done };
     fetchingRef.current = true;
-    fetchRouteMatchWindow(w.trace, mode)
+    fetchRouteMatchWindow(w.trace, mode, { signal: controller.signal })
       .then(({ signals: found, speedLimitsByPoint, countriesByPoint }) => {
         if (genRef.current !== gen) return;
         setSignals(found);
@@ -106,6 +112,11 @@ export function useNavTrafficSignals(): LngLat[] {
         // previous-route fetch must not clear the new route's in-flight flag.
         if (genRef.current === gen) fetchingRef.current = false;
       });
+    return () => {
+      controller.abort();
+      // Invalidate late results on unmount as well as on route/connectivity changes.
+      if (genRef.current === gen) genRef.current += 1;
+    };
   }, [
     route,
     mode,
@@ -120,16 +131,18 @@ export function useNavTrafficSignals(): LngLat[] {
   useEffect(() => {
     if (connectivity === "offline" || !route || windowRef.current.done || fetchingRef.current)
       return;
+    const controller = requestControllerRef.current;
+    if (!controller || controller.signal.aborted) return;
     if (alongMeters < windowRef.current.endMeters - PREFETCH_METERS) return;
     fetchingRef.current = true;
     const gen = genRef.current;
     const startIndex = windowRef.current.nextStart;
     // Advance the window ref BEFORE the async fetch so a segment with no signals
     // still moves us forward (or to done) and can't re-trigger this effect on
-    // every fix.
-    const w = windowGeometry(route.geometry, startIndex, MAX_TRACE_POINTS, cum);
+    // every fix. The fetch holds the lock through retries of this same window.
+    const w = windowGeometry(route.geometry, startIndex, MAX_TRACE_POINTS, cum, MAX_TRACE_METERS);
     windowRef.current = { nextStart: w.nextStart, endMeters: w.endMeters, done: w.done };
-    fetchRouteMatchWindow(w.trace, mode)
+    fetchRouteMatchWindow(w.trace, mode, { signal: controller.signal })
       .then(({ signals: found, speedLimitsByPoint, countriesByPoint }) => {
         if (genRef.current !== gen) return;
         if (countriesByPoint.length > 0) {

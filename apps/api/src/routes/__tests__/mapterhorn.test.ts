@@ -9,7 +9,7 @@ beforeAll(async () => {
   await app.register(mapterhornRoute);
   await app.ready();
 });
-afterAll(async () => app.close());
+afterAll(async () => app?.close());
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.restoreAllMocks();

@@ -5,10 +5,12 @@ import type { MapMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { EMPTY_FEATURE_COLLECTION, type MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useHikingStore } from "./store";
 
@@ -34,12 +36,68 @@ const SHELTER_TYPE_KEYS: Record<string, string> = {
   pt_passage: "mountainPass",
 };
 
+const SHELTER_GROUP: MapLayerGroup = {
+  sources: { [SOURCE_ID]: { type: "geojson", data: EMPTY_FEATURE_COLLECTION } },
+  layers: [
+    {
+      id: CIRCLE_LAYER_ID,
+      type: "circle",
+      source: SOURCE_ID,
+      minzoom: MIN_ZOOM,
+      slot: "overlay-points",
+      order: 7,
+      paint: {
+        "circle-color": [
+          "match",
+          ["get", "type"],
+          "refuge",
+          SHELTER_COLORS.refuge,
+          "cabane",
+          SHELTER_COLORS.cabane,
+          "gite",
+          SHELTER_COLORS.gite,
+          "pt_eau",
+          SHELTER_COLORS.pt_eau,
+          "pt_passage",
+          SHELTER_COLORS.pt_passage,
+          "#795548",
+        ],
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], MIN_ZOOM, 4, 16, 8],
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 1.5,
+        "circle-opacity": 0.9,
+      },
+    },
+    {
+      id: LABEL_LAYER_ID,
+      type: "symbol",
+      source: SOURCE_ID,
+      minzoom: 12,
+      slot: "overlay-markers",
+      order: 4,
+      layout: {
+        "text-field": ["get", "name"],
+        "text-size": 11,
+        "text-offset": [0, 1.3],
+        "text-anchor": "top",
+        "text-optional": true,
+        "text-max-width": 8,
+      },
+      paint: {
+        "text-color": "#333333",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1.5,
+      },
+    },
+  ],
+};
+
 export function MountainShelterLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
   const layerVisible = useHikingStore((s) => s.layerVisible);
+  useRenderedMapAttributions("hiking-shelters", [CIRCLE_LAYER_ID, LABEL_LAYER_ID], layerVisible);
   const t = useTranslations("hiking");
-  const fetchedRef = useRef(false);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
     mapRef,
@@ -72,128 +130,17 @@ export function MountainShelterLayer() {
     }
   }, [beginRequest, env, mapRef, publishGeoJson]);
 
-  // Combined layer management + initial fetch
+  useMapLayerGroup(layerVisible ? SHELTER_GROUP : null);
+
+  // Showing the overlay fetches the view immediately.
   useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-
-    const syncLayers = () => {
-      if (!layerVisible) {
-        try {
-          if (map.getLayer(LABEL_LAYER_ID)) map.removeLayer(LABEL_LAYER_ID);
-          if (map.getLayer(CIRCLE_LAYER_ID)) map.removeLayer(CIRCLE_LAYER_ID);
-          if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        } catch {
-          // In-flight tiles
-        }
-        unregisterLayerSlot(LABEL_LAYER_ID);
-        unregisterLayerSlot(CIRCLE_LAYER_ID);
-        popupRef.current?.remove();
-        fetchedRef.current = false;
-        return;
-      }
-
-      // Try to create source + layers. No isStyleLoaded() gate — just catch errors.
-      try {
-        if (!map.getSource(SOURCE_ID)) {
-          map.addSource(SOURCE_ID, {
-            type: "geojson",
-            data: { type: "FeatureCollection", features: [] },
-            attribution:
-              '<a href="https://www.refuges.info" target="_blank" rel="noreferrer">Refuges.info</a> (<a href="https://creativecommons.org/licenses/by-sa/2.0/" target="_blank" rel="noreferrer">CC BY-SA 2.0</a>)',
-          });
-        }
-
-        if (!map.getLayer(CIRCLE_LAYER_ID)) {
-          addLayerInSlot(
-            map,
-            {
-              id: CIRCLE_LAYER_ID,
-              type: "circle",
-              source: SOURCE_ID,
-              minzoom: MIN_ZOOM,
-              paint: {
-                "circle-color": [
-                  "match",
-                  ["get", "type"],
-                  "refuge",
-                  SHELTER_COLORS.refuge,
-                  "cabane",
-                  SHELTER_COLORS.cabane,
-                  "gite",
-                  SHELTER_COLORS.gite,
-                  "pt_eau",
-                  SHELTER_COLORS.pt_eau,
-                  "pt_passage",
-                  SHELTER_COLORS.pt_passage,
-                  "#795548",
-                ],
-                "circle-radius": ["interpolate", ["linear"], ["zoom"], MIN_ZOOM, 4, 16, 8],
-                "circle-stroke-color": "#ffffff",
-                "circle-stroke-width": 1.5,
-                "circle-opacity": 0.9,
-              },
-            },
-            "overlay-points",
-            7,
-          );
-        }
-
-        if (!map.getLayer(LABEL_LAYER_ID)) {
-          addLayerInSlot(
-            map,
-            {
-              id: LABEL_LAYER_ID,
-              type: "symbol",
-              source: SOURCE_ID,
-              minzoom: 12,
-              layout: {
-                "text-field": ["get", "name"],
-                "text-size": 11,
-                "text-offset": [0, 1.3],
-                "text-anchor": "top",
-                "text-optional": true,
-                "text-max-width": 8,
-              },
-              paint: {
-                "text-color": "#333333",
-                "text-halo-color": "#ffffff",
-                "text-halo-width": 1.5,
-              },
-            },
-            "overlay-markers",
-            4,
-          );
-        }
-
-        // Source exists — trigger initial fetch
-        if (!fetchedRef.current) {
-          fetchedRef.current = true;
-          void fetchShelters();
-        }
-      } catch {
-        // Style not ready yet — styledata will retry
-      }
-    };
-
-    if (!layerVisible) {
-      syncLayers();
-      return;
-    }
-
-    syncLayers();
-    map.on("styledata", syncLayers);
-    return () => {
-      map.off("styledata", syncLayers);
-    };
-  }, [mapReady, styleVersion, mapRef, layerVisible, fetchShelters]);
+    if (mapReady && layerVisible) void fetchShelters();
+  }, [mapReady, layerVisible, fetchShelters]);
 
   // Refetch on pan/zoom
   const debouncedFetch = useDebouncedCallback(() => void fetchShelters(), 800);
 
   useEffect(() => {
-    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !layerVisible) return;
 
@@ -201,11 +148,10 @@ export function MountainShelterLayer() {
     return () => {
       map.off("moveend", debouncedFetch);
     };
-  }, [mapReady, styleVersion, mapRef, layerVisible, debouncedFetch]);
+  }, [mapReady, mapRef, layerVisible, debouncedFetch]);
 
-  // Click popup + cursor
+  // Click popup + cursor; hiding the overlay closes the popup.
   useEffect(() => {
-    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !layerVisible) return;
 
@@ -262,7 +208,7 @@ export function MountainShelterLayer() {
       map.getCanvasContainer().style.cursor = "";
       popupRef.current?.remove();
     };
-  }, [mapReady, styleVersion, mapRef, layerVisible]);
+  }, [mapReady, mapRef, layerVisible]);
 
   return null;
 }

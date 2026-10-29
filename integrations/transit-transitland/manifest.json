@@ -52,15 +52,51 @@
       "sourceId": "transitland",
       "name": "Transitland (Interline)",
       "url": "https://transit.land/",
-      "license": "Proprietary (Interline Technologies ToS)",
-      "licenseUrl": "https://www.transit.land/terms",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.interline.io/legal/privacy/",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Transitland (Interline) material",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Transitland (Interline) access/account contract",
+            "license": {
+              "kind": "unknown",
+              "url": "https://www.transit.land/terms"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://www.transit.land/terms",
+                "https://www.interline.io/legal/terms/"
+              ],
+              "reason": "Reviewed provider-specific attribution placement; complete notices remain available",
+              "compactText": "<a href=\"https://www.transit.land/terms\">Transitland</a>"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (Interline Technologies ToS)",
+            "url": "https://www.transit.land/terms"
+          }
+        ]
+      }
     }
   ],
   "dependencies": ["transit"]

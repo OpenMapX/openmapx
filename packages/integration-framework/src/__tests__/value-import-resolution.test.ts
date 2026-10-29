@@ -46,7 +46,18 @@ function resolves(fromFile: string, specifier: string): boolean {
  * not, so the two can sit on adjacent lines looking identical.
  */
 describe("value imports resolve to files that exist", () => {
-  const files = sourceFiles(SRC_DIR);
+  const browserReceiptModules = [
+    "contributors",
+    "contribution-merge",
+    "geometry-contributors",
+    "raster-contributors",
+    "transit-contributors",
+  ].map((module) =>
+    fileURLToPath(new URL(`../../../mobility-core/src/${module}.ts`, import.meta.url)),
+  );
+  // These portable receipts are also consumed directly by the browser host.
+  // Server-only mobility modules retain their separate Node resolution contract.
+  const files = [...sourceFiles(SRC_DIR), ...browserReceiptModules];
 
   it("finds source files to check", () => {
     expect(files.length).toBeGreaterThan(10);

@@ -1,7 +1,9 @@
 import { existsSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { dump as yamlDump } from "js-yaml";
+import { type AgentMountLayout, agentBindMounts } from "./agent-mounts";
 import { configSchemaKeys, serviceConfigEnvPrefix } from "./config-resolver";
+import { resolveConsumesDependencies } from "./consumes-dependencies";
 import { STACK_PROJECT } from "./deployment";
 import {
   EXTERNAL_PROXY_NETWORK_KEY,
@@ -158,6 +160,11 @@ function hardlinkTargetDir(consumerId: string, c: ServiceConsumes): string {
 export interface RenderContext {
   domain?: string;
   /**
+   * How the operations agent's container mounts the checkout's path (see
+   * agent-mounts.ts). Absent, its manifest's mounts render as declared.
+   */
+  agentMountLayout?: AgentMountLayout;
+  /**
    * Per-consumer-entry mount paths keyed by the same `<type>` / `<type>/<instance>`
    * key shape used in the producer index. The renderer wires this up
    * automatically; callers don't usually pass it.
@@ -246,6 +253,13 @@ export interface RenderContext {
    * Traefik regardless of the environment.
    */
   externalProxyNetwork?: string | null;
+  /**
+   * Where a generation keeps the files built-in services mount from a service
+   * directory: the host path of `path` of `serviceId` in its service-file
+   * tree, or undefined for one it doesn't hold, which is mounted from the
+   * service's directory as before.
+   */
+  serviceFileSource?: (serviceId: string, path: string) => string | undefined;
 }
 
 function externalProxyNetwork(ctx: RenderContext): string | undefined {
@@ -298,6 +312,8 @@ function toComposePath(absolute: string, composeOutDir: string | undefined): str
 interface ResolvedBindSource {
   src: string;
   absoluteHostPath: string | null;
+  /** Render writes it with the generation: a service-file tree or a writable copy. */
+  written?: boolean;
 }
 
 function resolveBindSource(
@@ -306,7 +322,22 @@ function resolveBindSource(
   allServices: LoadedService[],
   composeOutDir: string | undefined,
   infraDir: string | undefined,
+  serviceFileSource?: RenderContext["serviceFileSource"],
 ): ResolvedBindSource {
+  // A file the container rewrites is mounted from its writable copy, which
+  // render seeds from the release's file.
+  if (bm.writableCopy && service.isBuiltIn) {
+    return {
+      ...resolveBindSource(
+        { ...bm, source: bm.writableCopy, writableCopy: undefined },
+        service,
+        allServices,
+        composeOutDir,
+        infraDir,
+      ),
+      written: true,
+    };
+  }
   // Compose-variable pass-through. Sources that start with `$` — including
   // `${VAR}`, `${VAR:-default}`, and `$VAR` — are emitted verbatim so the
   // Docker Compose parser does the substitution at stack-up time. This is
@@ -359,13 +390,24 @@ function resolveBindSource(
         `bindMount source "${bm.source}" on service "${service.manifest.id}": @service:<slug> is only allowed to reference built-in services (target "${slug}" is "${target.manifest.quality}")`,
       );
     }
-    const absolute = resolve(target.directory, relPath);
-    return { src: toComposePath(absolute, composeOutDir), absoluteHostPath: absolute };
+    const copy = serviceFileSource?.(slug, relPath);
+    const absolute = copy ?? resolve(target.directory, relPath);
+    return {
+      src: toComposePath(absolute, composeOutDir),
+      absoluteHostPath: absolute,
+      written: copy !== undefined,
+    };
   }
 
-  // Plain relative path — resolved against the consuming service's own dir.
-  const absolute = resolve(service.directory, bm.source);
-  return { src: toComposePath(absolute, composeOutDir), absoluteHostPath: absolute };
+  // Plain relative path — the release's copy in the generation's tree, or
+  // (outside a generation) the consuming service's own directory.
+  const copy = service.isBuiltIn ? serviceFileSource?.(service.manifest.id, bm.source) : undefined;
+  const absolute = copy ?? resolve(service.directory, bm.source);
+  return {
+    src: toComposePath(absolute, composeOutDir),
+    absoluteHostPath: absolute,
+    written: copy !== undefined,
+  };
 }
 
 export interface ComposeServiceSnippet {
@@ -391,6 +433,7 @@ export interface ComposeServiceSnippet {
   secrets?: Array<{ source: string; target: string }>;
   labels?: Record<string, string>;
   restart?: string;
+  stop_grace_period?: string;
   healthcheck?: Record<string, unknown>;
   depends_on?: Record<string, { condition: string }>;
   logging?: { driver: string; options?: Record<string, string> };
@@ -634,13 +677,14 @@ export function renderServiceSnippet(
     }
   }
   const exists = ctx.existsSync ?? existsSync;
-  for (const bm of m.bindMounts ?? []) {
+  for (const bm of agentBindMounts(service, ctx.agentMountLayout)) {
     const resolved = resolveBindSource(
       bm,
       service,
       ctx.allServices ?? [service],
       ctx.composeOutDir,
       ctx.infraDir,
+      ctx.serviceFileSource,
     );
     // `optional: true` + resolvable host path + path missing → skip the mount
     // and surface an advisory. If the host path can't be resolved (only true
@@ -652,6 +696,22 @@ export function renderServiceSnippet(
       );
       continue;
     }
+    // Outside a generation's service-file trees, a built-in mounts its files
+    // from its directory. When that lacks one, Docker would create an empty
+    // root-owned directory in its place.
+    if (
+      service.isBuiltIn &&
+      !resolved.written &&
+      resolved.absoluteHostPath &&
+      !isAbsolute(bm.source) &&
+      !bm.source.startsWith(INFRA_BIND_PREFIX) &&
+      !SPECIAL_BIND_SOURCE_PATHS[bm.source] &&
+      !exists(resolved.absoluteHostPath)
+    ) {
+      ctx.warnings?.push(
+        `service "${m.id}": bind-mount source ${bm.source} is not present at ${resolved.absoluteHostPath}; update the checkout to the selected release`,
+      );
+    }
     // readOnly defaults to true for bind mounts (config files, docker socket)
     const readOnly = bm.readOnly !== false;
     volumes.push(`${resolved.src}:${bm.target}${readOnly ? ":ro" : ""}`);
@@ -662,6 +722,7 @@ export function renderServiceSnippet(
     if (
       !readOnly &&
       resolved.absoluteHostPath &&
+      !bm.writableCopy &&
       bm.source.startsWith(`${INFRA_BIND_PREFIX}data/`)
     ) {
       ctx.bindDirSink?.push(resolved.absoluteHostPath);
@@ -686,6 +747,7 @@ export function renderServiceSnippet(
   }
 
   if (c.restart) snippet.restart = c.restart;
+  if (c.stopGracePeriod) snippet.stop_grace_period = c.stopGracePeriod;
 
   if (c.healthcheck) {
     snippet.healthcheck = renderHealthcheck(c.healthcheck, c);
@@ -844,41 +906,7 @@ function renderTraefikLabels(m: ServiceManifest, ctx: RenderContext): Record<str
 }
 
 function topologicalOrder(services: LoadedService[]): LoadedService[] {
-  // Mirror the same instance-aware lookup as `detectConsumesCycle` so multi-
-  // region producer setups order correctly.
-  const defaultProducers = new Map<string, string>();
-  const instancedProducers = new Map<string, string>();
-  const producersByType = new Map<string, string[]>();
-  for (const s of services) {
-    for (const p of s.manifest.produces ?? []) {
-      if (p.instance === undefined) {
-        defaultProducers.set(p.type, s.manifest.id);
-      } else {
-        instancedProducers.set(`${p.type}/${p.instance}`, s.manifest.id);
-      }
-      const list = producersByType.get(p.type) ?? [];
-      list.push(s.manifest.id);
-      producersByType.set(p.type, list);
-    }
-  }
-  const adj = new Map<string, Set<string>>();
-  for (const s of services) {
-    const upstream = new Set<string>();
-    for (const c of s.manifest.consumes ?? []) {
-      let producer: string | undefined;
-      if (c.instance !== undefined) {
-        producer = instancedProducers.get(`${c.type}/${c.instance}`);
-      } else {
-        producer =
-          defaultProducers.get(c.type) ??
-          (producersByType.get(c.type)?.length === 1
-            ? producersByType.get(c.type)?.[0]
-            : undefined);
-      }
-      if (producer && producer !== s.manifest.id) upstream.add(producer);
-    }
-    adj.set(s.manifest.id, upstream);
-  }
+  const adj = resolveConsumesDependencies(services);
 
   const visited = new Set<string>();
   const result: LoadedService[] = [];

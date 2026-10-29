@@ -15,26 +15,44 @@ export interface PostgisFixture {
 // manifest as production.
 export async function startPostgis(): Promise<PostgisFixture> {
   const container = await new PostgreSqlContainer(
-    "ghcr.io/baosystems/postgis:18-3.6@sha256:4117c8beae9081e76a23a1577c64d05260a61fb0a3c212f37596054ef4c190d8",
+    "ghcr.io/baosystems/postgis:18-3.6@sha256:8784f86b3e0e046859c96ea25eb8b10f0b801fd891b99a82b82f28ac4a643db8",
   )
     .withDatabase("openmapx_test")
     .withUsername("postgres")
     .withPassword("postgres")
     .withStartupTimeout(60_000)
     .start();
-  const connectionString = container.getConnectionUri();
-  const sql = postgres(connectionString, { max: 2 });
-  // Production shares its client with drizzle, which replaces the client's
-  // date and JSON serializers and its date parsers.
-  drizzle(sql);
-  await sql.unsafe(`CREATE EXTENSION IF NOT EXISTS postgis`);
-  return {
-    container,
-    sql,
-    connectionString,
-    stop: async () => {
-      await sql.end({ timeout: 2 });
+  let sql: ReturnType<typeof postgres> | undefined;
+  const close = async () => {
+    const errors: unknown[] = [];
+    try {
+      await sql?.end({ timeout: 2 });
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
       await container.stop();
-    },
+    } catch (error) {
+      errors.push(error);
+    }
+    if (errors.length) throw new AggregateError(errors, "PostGIS fixture cleanup failed");
   };
+  try {
+    const connectionString = container.getConnectionUri();
+    sql = postgres(connectionString, { max: 2 });
+    // Production shares its client with drizzle, which replaces the client's
+    // date and JSON serializers and its date parsers.
+    drizzle(sql);
+    await sql.unsafe(`CREATE EXTENSION IF NOT EXISTS postgis`);
+    return { container, sql, connectionString, stop: close };
+  } catch (error) {
+    try {
+      await close();
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], "PostGIS fixture setup and cleanup failed", {
+        cause: error,
+      });
+    }
+    throw error;
+  }
 }

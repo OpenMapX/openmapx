@@ -77,14 +77,7 @@ export function PlaceSunTimes({ lat, lng, enabled = true }: Props) {
         </Typography>
       </Box>
 
-      {data.attribution && (
-        <SectionAttribution
-          name={data.attribution.name}
-          url={data.attribution.url}
-          license={data.attribution.license}
-          licenseUrl={data.attribution.licenseUrl}
-        />
-      )}
+      <SectionAttribution attributions={data.contributors ?? []} />
     </Box>
   );
 }

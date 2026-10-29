@@ -1,6 +1,6 @@
 /**
  * Toolchain-pin gate: the MOTIS version and the `gtfsclean` build commit are
- * each duplicated across Dockerfiles, service manifests, and package.json deps.
+ * each duplicated across build inputs, service manifests, and package.json deps.
  * `@openmapx/transitous-core` holds the single source of truth
  * (`MOTIS_VERSION`, `GTFSCLEAN_COMMIT`); this script asserts every other
  * occurrence matches, so a bump in one place can't silently drift from the
@@ -22,6 +22,88 @@ const read = (rel: string): string => readFileSync(join(ROOT, rel), "utf-8");
 const errors: string[] = [];
 const SHA256 = /^[a-f0-9]{64}$/;
 const OCI_DIGEST = /^sha256:[a-f0-9]{64}$/;
+
+// Node, pnpm, and mobile releases cross package-manager, container, and
+// provenance boundaries. Keep every duplicated declaration on the selected
+// exact toolchain rather than letting a stale build path survive an upgrade.
+const nodeVersion = read(".nvmrc").trim();
+const rootPackage = JSON.parse(read("package.json")) as {
+  packageManager?: string;
+  engines?: { node?: string };
+};
+const docsPackage = JSON.parse(read("docs/package.json")) as {
+  packageManager?: string;
+  engines?: { node?: string };
+};
+const mobilePackage = JSON.parse(read("apps/mobile/package.json")) as {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+};
+const releaseToolchains = JSON.parse(read("apps/mobile/release/toolchains.json")) as {
+  node?: string;
+  pnpm?: string;
+  expoSdk?: string;
+  reactNative?: string;
+};
+const packageManagerVersion = rootPackage.packageManager?.match(/^pnpm@([^+]+)/)?.[1];
+const expectedNodeRange = `>=${nodeVersion}`;
+const expoVersion = mobilePackage.dependencies?.expo?.replace(/^[~^]/, "");
+
+if (!/^\d+\.\d+\.\d+$/.test(nodeVersion)) {
+  errors.push(`.nvmrc: "${nodeVersion}" must pin an exact Node release`);
+}
+if (rootPackage.engines?.node !== expectedNodeRange) {
+  errors.push(
+    `package.json: engines.node "${rootPackage.engines?.node}" != "${expectedNodeRange}"`,
+  );
+}
+if (docsPackage.engines?.node !== expectedNodeRange) {
+  errors.push(
+    `docs/package.json: engines.node "${docsPackage.engines?.node}" != "${expectedNodeRange}"`,
+  );
+}
+if (docsPackage.packageManager !== rootPackage.packageManager) {
+  errors.push("docs/package.json: packageManager must exactly match the root workspace");
+}
+if (releaseToolchains.node !== expectedNodeRange) {
+  errors.push(
+    `apps/mobile/release/toolchains.json: node "${releaseToolchains.node}" != "${expectedNodeRange}"`,
+  );
+}
+if (!packageManagerVersion || releaseToolchains.pnpm !== packageManagerVersion) {
+  errors.push(
+    `apps/mobile/release/toolchains.json: pnpm "${releaseToolchains.pnpm}" != root package manager "${packageManagerVersion}"`,
+  );
+}
+if (!expoVersion || releaseToolchains.expoSdk !== expoVersion.split(".")[0]) {
+  errors.push(
+    `apps/mobile/release/toolchains.json: Expo SDK "${releaseToolchains.expoSdk}" != expo "${expoVersion}"`,
+  );
+}
+if (releaseToolchains.reactNative !== mobilePackage.dependencies?.["react-native"]) {
+  errors.push(
+    `apps/mobile/release/toolchains.json: reactNative "${releaseToolchains.reactNative}" != installed runtime "${mobilePackage.dependencies?.["react-native"]}"`,
+  );
+}
+for (const rel of [
+  "apps/api/Dockerfile",
+  "apps/ops-agent/Dockerfile",
+  "apps/transitous-runner/Dockerfile",
+  "apps/web/Dockerfile",
+  "docs/Dockerfile",
+  "services/data-manager/Dockerfile",
+]) {
+  const nodeImages = read(rel).match(/^FROM node:([^@\s]+)/gm) ?? [];
+  if (nodeImages.length === 0) {
+    errors.push(`${rel}: no Node base image found`);
+    continue;
+  }
+  for (const image of nodeImages) {
+    if (!image.startsWith(`FROM node:${nodeVersion}-`)) {
+      errors.push(`${rel}: Node base "${image}" does not match .nvmrc ${nodeVersion}`);
+    }
+  }
+}
 
 // Third-party production services must retain a readable tag and an immutable
 // multi-architecture manifest digest. First-party OpenMapX images are released
@@ -74,10 +156,6 @@ for (const rel of ["apps/api/package.json", "packages/mobility-core/package.json
 
 // React Native's Jest preset imports runtime-internal entry points, so even a
 // semver-minor drift can make every mobile suite fail before tests execute.
-const mobilePackage = JSON.parse(read("apps/mobile/package.json")) as {
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
-};
 const reactNativeVersion = mobilePackage.dependencies?.["react-native"];
 const reactNativeJestPreset = mobilePackage.devDependencies?.["@react-native/jest-preset"];
 if (!reactNativeVersion || reactNativeJestPreset !== reactNativeVersion) {
@@ -86,14 +164,20 @@ if (!reactNativeVersion || reactNativeJestPreset !== reactNativeVersion) {
   );
 }
 
-// gtfsclean commit: every image that builds it.
-for (const rel of [
-  "services/motis/tools/transitous/Dockerfile",
-  "services/data-manager/Dockerfile",
-  "apps/transitous-runner/Dockerfile",
-]) {
-  if (!read(rel).includes(`gtfsclean@${GTFSCLEAN_COMMIT}`)) {
-    errors.push(`${rel}: gtfsclean commit != ${GTFSCLEAN_COMMIT}`);
+// gtfsclean commit: one reviewed build script copied by every image that ships it.
+const gtfscleanBuildScript = read("services/motis/tools/transitous/build-gtfsclean.sh");
+if (!gtfscleanBuildScript.includes(`gtfsclean@${GTFSCLEAN_COMMIT}`)) {
+  errors.push(
+    `services/motis/tools/transitous/build-gtfsclean.sh: gtfsclean commit != ${GTFSCLEAN_COMMIT}`,
+  );
+}
+for (const [rel, source] of [
+  ["services/motis/tools/transitous/Dockerfile", "build-gtfsclean.sh"],
+  ["services/data-manager/Dockerfile", "services/motis/tools/transitous/build-gtfsclean.sh"],
+  ["apps/transitous-runner/Dockerfile", "services/motis/tools/transitous/build-gtfsclean.sh"],
+] as const) {
+  if (!read(rel).includes(source)) {
+    errors.push(`${rel}: does not copy the pinned gtfsclean build script`);
   }
 }
 

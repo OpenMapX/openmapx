@@ -1,21 +1,39 @@
+export { dataSourceToAttribution } from "@openmapx/mobility-core/contributors";
+export {
+  addressComponentsFromOsmTags,
+  directPlaceDetailsId,
+  sanitizeAddressComponents,
+} from "./addressEvidence";
 export { isCityOrSmaller } from "./administrativePlace";
 export {
+  type AttributionDetail,
+  type AttributionLabels,
+  type AttributionPresentation,
   buildAttributionHtml,
-  buildIntegrationAttribution,
+  buildAttributionPresentation,
+  buildLicensingHtml,
   buildRuntimeAttributionHtml,
-  buildSourceAttribution,
-  combineAttributions,
   extractSourcePrefix,
+  parseAttributionHtml,
   pickIntegrationForSources,
   sanitizeAttributionHtml,
 } from "./attribution";
+export {
+  type AttributionPresentationGroup,
+  dedupeAttributionHtml,
+  mergeAttributionDetails,
+  projectAttributionPresentations,
+  type VisibleAttribution,
+} from "./attribution-presentation";
 export { bboxAroundPoint, bboxCacheKey, geoJsonBBox } from "./bbox";
 export {
   BRAND_QID_KEYS,
+  brandForPlaceLogo,
   brandToFilter,
   commonsLogoUrl,
   firstBrandIdentity,
   gapFillBranding,
+  withBrandingContributors,
 } from "./brandFilter";
 export { isBuildingStyleLayer } from "./buildingStyle";
 export { withCache } from "./cache-helpers";
@@ -98,7 +116,6 @@ export {
   formatDistance,
   formatDuration,
   formatMeasurementDistance,
-  formatSpokenDistance,
   getInitials,
 } from "./formatting";
 export {
@@ -139,6 +156,11 @@ export {
 } from "./gridOrientation";
 export { buildHotelOpenUrl } from "./hotelLink";
 export { bareDomain } from "./httpUrl";
+export {
+  captureKnowledgeResult,
+  knowledgeFieldContributors,
+  mergeKnowledgeResults,
+} from "./knowledgeContributors";
 export { formatAddress, legalConfig } from "./legalConfig";
 export { isLodging } from "./lodgingPlace";
 export { type MatchRange, matchRanges } from "./matchRanges";
@@ -152,6 +174,40 @@ export {
   presentOpeningHoursInfo,
 } from "./openingHoursClient";
 export { type OpeningHoursSource, openingHoursSourceFromOsm } from "./openingHoursSource";
+export {
+  buildSimpleWeekdaySelectors,
+  createDefaultOpeningHoursRule,
+  extractSimpleWeekdaySelection,
+  OSM_HOLIDAYS,
+  OSM_MONTHS,
+  OSM_RULE_MODIFIERS,
+  OSM_RULE_SEPARATORS,
+  OSM_SOLAR_EVENTS,
+  OSM_WEEKDAYS,
+  type OsmDateEndpoint,
+  type OsmDateOffset,
+  type OsmHoliday,
+  type OsmMonth,
+  type OsmMonthdayRange,
+  type OsmNthEntry,
+  type OsmNthValue,
+  type OsmOpeningHoursDocument,
+  type OsmOpeningHoursParseResult,
+  type OsmOpeningHoursRule,
+  type OsmRuleModifier,
+  type OsmRuleSeparator,
+  type OsmSolarEvent,
+  type OsmTimePoint,
+  type OsmTimeSelector,
+  type OsmWeekday,
+  type OsmWeekdaySelectorItem,
+  type OsmWeekRange,
+  type OsmYearRange,
+  parseOsmOpeningHours,
+  type SimpleWeekdaySelection,
+  serializeOsmOpeningHours,
+  serializeOsmOpeningHoursRule,
+} from "./osmOpeningHoursAst";
 export { otpMode } from "./otp";
 export {
   buildNodeMap,
@@ -166,6 +222,7 @@ export {
   reconstructMultiLineString,
   reconstructMultiPolygon,
   reconstructPolygon,
+  setOverpassContributorResolver,
   setOverpassUrl,
 } from "./overpass";
 export type {
@@ -205,17 +262,22 @@ export {
 } from "./overtureCategoryTyped";
 export {
   assertSupportedOvertureContributors,
+  captureOvertureFieldContributors,
   normalizeOvertureProvenance,
   OVERTURE_PLACE_DATASET_SOURCE_IDS,
   type OverturePlaceDataset,
   type OvertureSourceItem,
   overtureDatasetSourceId,
+  overturePropertyContributors,
+  selectOvertureName,
 } from "./overtureSource";
+export { type PanoramaxCreatorMetadata, panoramaxAuthor } from "./panoramax-metadata";
 export {
   parseCoordinateInput,
   parseDMSCoordinateInput,
 } from "./parseCoordinates";
-export { formatPaymentMethodLabel, formatPaymentMethods } from "./paymentMethods";
+export { formatPaymentMethodLabel } from "./paymentMethods";
+export { withPhotoContributors } from "./photo-contributors";
 export {
   computePlusCode,
   decodePlusCode,
@@ -248,6 +310,7 @@ export { pointInIsochroneGeometry } from "./pointInPolygon";
 export type { RankedPoiResults } from "./poiRanking";
 export { MAX_POI_SEARCH_RESULTS, rankAndLimitPoiResults, rankPoiResults } from "./poiRanking";
 export { decodePolyline, encodePolyline } from "./polyline";
+export { createRequestJsonScope, type RequestJsonScope } from "./requestJsonScope";
 export {
   type DistanceReference,
   resolveDistanceReference,
@@ -256,13 +319,17 @@ export {
 } from "./resultReference";
 export { buildRideOpenUrl, rideQuoteBody } from "./rideLink";
 export {
+  actionInForce,
+  actionInPlace,
   bindsEveryCar,
   closesRoadForCars,
   effectInForceAt,
+  effectStatusInForce,
   effectValidity,
   isLocalAccessClosure,
   isRestrictionEvidence,
   isVehicleSpecific,
+  lifecycleInForce,
   localizedTextFor,
   readRoadConditionEffects,
   roadConditionEffectSchema,
@@ -272,6 +339,7 @@ export {
   speedCapKph,
   VEHICLE_CLASSES,
   validityHoldsAt,
+  validityWindowHoldsAt,
   vehicleApplicabilitySchema,
 } from "./roadConditionEffects";
 export {
@@ -282,6 +350,8 @@ export {
   getRoadConditionRoutingDecision,
   isRoadConditionRoutingEvidence,
   isRoutingRelevantBinding,
+  type RoadConditionRightsPolicy,
+  routingRightsReasons,
 } from "./roadConditionRouting";
 export { isSystemSavedList } from "./savedLists";
 export {

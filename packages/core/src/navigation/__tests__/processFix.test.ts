@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Route } from "../../types/routing";
+import { cumulativeDistances, positionAt } from "../deadReckon";
 import { navOptionsForMode } from "../options";
 import { processFix } from "../processFix";
 import { simulatePositions } from "../simulatePositions";
-import type { NavTickResult, NavTickState } from "../types";
+import type { FixInput, NavTickResult, NavTickState } from "../types";
 
 const geometry: [number, number][] = [
   [0, 0],
@@ -30,6 +31,124 @@ const emptyState: NavTickState = {
   rerouteBackoffMs: 0,
   spokenCues: [],
 };
+
+describe("processFix speed fallback", () => {
+  const longGeometry: [number, number][] = [
+    [0, 0],
+    [0.1, 0],
+  ];
+  const cum = cumulativeDistances(longGeometry);
+  const longRoute = { ...route, geometry: longGeometry, distance: cum[1], steps: [] };
+
+  function driver() {
+    let state = emptyState;
+    return (alongMeters: number, timestampMs: number, extra: Partial<FixInput> = {}) => {
+      const result = processFix(
+        longRoute,
+        {
+          coords: positionAt(longGeometry, cum, alongMeters).point,
+          timestampMs,
+          accuracy: 20,
+          speed: null,
+          ...extra,
+        },
+        state,
+        opts,
+      );
+      state = result.nextState;
+      return result.progress?.speedMps;
+    };
+  }
+
+  it("estimates steady motorway speed through alternating position noise", () => {
+    const fix = driver();
+    for (let i = 0; i < 24; i++) {
+      const speed = fix(3000 + 30 * i + (i % 2 ? 20 : -20), i * 1000);
+      if (i >= 8) {
+        expect(speed).toBeGreaterThan(24);
+        expect(speed).toBeLessThan(36);
+      }
+    }
+  });
+
+  it("downweights an accepted but inaccurate position jump", () => {
+    const fix = driver();
+    for (let i = 0; i < 10; i++) fix(3000 + 30 * i, i * 1000, { accuracy: 5 });
+    const speed = fix(3500, 10_000, { accuracy: 200 });
+    expect(speed).toBeGreaterThan(25);
+    expect(speed).toBeLessThan(35);
+    expect(fix(3330, 11_000, { accuracy: 5 })).toBeCloseTo(30, 0);
+  });
+
+  it("takes a reported stop immediately instead of filtering it", () => {
+    const fix = driver();
+    fix(3000, 1000, { speed: 30 });
+    expect(fix(3030, 2000, { speed: 0 })).toBe(0);
+  });
+
+  it("does not invent motion when reported stops alternate with missing speed", () => {
+    const fix = driver();
+    for (let i = 0; i < 24; i++) {
+      const speed = fix(3000 + (i % 2 ? 20 : -20), i * 1000, { speed: i % 2 ? null : 0 });
+      expect(speed).toBeLessThan(2);
+    }
+  });
+
+  it.each([5, 20])(
+    "preserves a reported stop through missing speed at %s m accuracy",
+    (accuracy) => {
+      const fix = driver();
+      for (let i = 0; i < 12; i++) fix(3000 + 30 * i, i * 1000, { speed: 30, accuracy });
+      fix(3360, 12_000, { speed: 0, accuracy });
+      for (let i = 13; i <= 24; i++) expect(fix(3360, i * 1000, { accuracy })).toBeLessThan(2);
+    },
+  );
+
+  it("lets position evidence replace an old reported stop when moving again", () => {
+    const fix = driver();
+    fix(3000, 0, { speed: 0 });
+    let speed: number | undefined;
+    for (let i = 1; i <= 10; i++) speed = fix(3000 + 30 * i, i * 1000);
+    expect(speed).toBeGreaterThan(25);
+    expect(speed).toBeLessThan(35);
+  });
+
+  it("settles to a stop when reported speed is unavailable", () => {
+    const fix = driver();
+    for (let i = 0; i <= 10; i++) fix(3000 + 30 * i, i * 1000);
+    let speed: number | undefined;
+    for (let i = 11; i <= 23; i++) speed = fix(3300, i * 1000);
+    expect(speed).toBeLessThan(1.5);
+  });
+
+  it("uses real fixes to resume after coasting", () => {
+    const fix = driver();
+    fix(3000, 1000, { speed: 30 });
+    fix(3030, 2000);
+    fix(3300, 5000, { speed: 25, coasted: true });
+    expect(fix(3150, 6000)).toBeCloseTo(30, 3);
+  });
+
+  it.each([1000, 500])(
+    "does not let a fix at %s replace the latest speed evidence",
+    (timestamp) => {
+      const fix = driver();
+      fix(3000, 0);
+      fix(3030, 1000);
+      fix(3200, timestamp);
+      expect(fix(3060, 2000)).toBeCloseTo(30, 3);
+    },
+  );
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY])(
+    "falls back for non-finite reported speed %s",
+    (speed) => {
+      const fix = driver();
+      fix(3000, 0);
+      expect(fix(3030, 1000, { speed })).toBeCloseTo(30, 3);
+    },
+  );
+});
 
 describe("processFix", () => {
   it("keeps maneuver distance and gate timing on the same geometry despite provider distance drift", () => {

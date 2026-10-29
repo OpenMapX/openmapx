@@ -97,6 +97,7 @@ export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptio
       confidence        DOUBLE PRECISION,
       operating_status  TEXT,
       sources           JSONB,
+      sources_catalogue JSONB,
       release           TEXT NOT NULL,
       imported_at       TIMESTAMPTZ DEFAULT NOW()
     );
@@ -113,8 +114,6 @@ export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptio
       release           TEXT NOT NULL,
       PRIMARY KEY (osm_type, osm_id)
     );
-
-    CREATE INDEX idx_link_gers ON "${schema}".poi_conflation_link (gers_id);
 
     CREATE TABLE "${schema}".poi_conflation_candidate (
       osm_type          TEXT NOT NULL,

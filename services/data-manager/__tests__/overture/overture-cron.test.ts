@@ -86,7 +86,6 @@ describe("Overture cron gating", () => {
   it("overtureCron is null when overtureEnabled is false (default)", () => {
     const handles = startCron({
       dataDir,
-      repoRoot: "/tmp/nope",
       countries: [],
       store: {} as never,
       singleFlight: makeController(),
@@ -102,7 +101,6 @@ describe("Overture cron gating", () => {
   it("overtureCron is null when overtureCronExpression is a disable sentinel", () => {
     const handles = startCron({
       dataDir,
-      repoRoot: "/tmp/nope",
       countries: [],
       store: {} as never,
       singleFlight: makeController(),
@@ -119,7 +117,6 @@ describe("Overture cron gating", () => {
   it("overtureCron is registered when overtureEnabled=true and valid cron expression", () => {
     const handles = startCron({
       dataDir,
-      repoRoot: "/tmp/nope",
       countries: [],
       store: {} as never,
       singleFlight: makeController(),
@@ -136,7 +133,6 @@ describe("Overture cron gating", () => {
   it("runOvertureNow is always present as a callable function", () => {
     const handles = startCron({
       dataDir,
-      repoRoot: "/tmp/nope",
       countries: [],
       store: {} as never,
       singleFlight: makeController(),
@@ -152,7 +148,6 @@ describe("Overture cron gating", () => {
     let overtureCalled = false;
     const handles = startCron({
       dataDir,
-      repoRoot: "/tmp/nope",
       countries: [],
       store: {} as never,
       singleFlight: makeController(),
@@ -187,7 +182,6 @@ describe("Overture cron gating", () => {
     const calls: string[] = [];
     const handles = startCron({
       dataDir,
-      repoRoot: "/tmp/nope",
       countries: [],
       store: {} as never,
       singleFlight: makeController(),
@@ -229,7 +223,6 @@ describe("Overture cron gating", () => {
     }));
     const handles = startCron({
       dataDir,
-      repoRoot: "/tmp/nope",
       countries: [],
       store: {} as never,
       singleFlight: makeController(),
@@ -279,7 +272,6 @@ describe("Overture cron gating", () => {
     }));
     const handles = startCron({
       dataDir,
-      repoRoot: "/tmp/nope",
       countries: [],
       store: {} as never,
       singleFlight: makeController(),
@@ -312,7 +304,6 @@ describe("Overture cron gating", () => {
     const calls: string[] = [];
     const handles = startCron({
       dataDir,
-      repoRoot: "/tmp/nope",
       countries: [],
       store: {} as never,
       singleFlight: makeController(),
@@ -348,7 +339,6 @@ describe("Overture cron gating", () => {
     const writeOvertureFeedState = vi.fn();
     const handles = startCron({
       dataDir,
-      repoRoot: "/tmp/nope",
       countries: [],
       store: {} as never,
       singleFlight: makeController(),
@@ -376,7 +366,6 @@ describe("Overture cron gating", () => {
       process.env.OVERTURE_ENABLED = "true";
       const handles = startCron({
         dataDir,
-        repoRoot: "/tmp/nope",
         countries: [],
         store: {} as never,
         singleFlight: makeController(),

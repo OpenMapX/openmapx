@@ -2,6 +2,8 @@ import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useFrameworkStrings } from "@/lib/frameworkStringsContext";
+import { useIntegrationDisclosures } from "@/lib/integrationDisclosuresContext";
 import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
 import { CHANNEL_GLOBAL } from "@/lib/mobile/mobileShellEnvironment";
 import { IntegrationProvider } from "./IntegrationProvider";
@@ -12,6 +14,9 @@ vi.mock("@/integration-api/runtime/EnvProvider", () => ({
 
 const COMMUNITY_INTEGRATION = {
   id: "community-layer",
+  name: "Community layer",
+  enabled: true,
+  domains: ["map-overlay"],
   isBuiltIn: false,
   frontend: { mapLayer: true },
 };
@@ -21,8 +26,16 @@ let runtimeMetadata: Record<string, unknown>;
 
 function MetadataProbe() {
   const registry = useIntegrationRegistry();
+  const disclosures = useIntegrationDisclosures();
+  const strings = useFrameworkStrings();
   return (
-    <span>{registry.get(COMMUNITY_INTEGRATION.id) ? "metadata-loaded" : "metadata-pending"}</span>
+    <>
+      <span>{registry.get(COMMUNITY_INTEGRATION.id) ? "metadata-loaded" : "metadata-pending"}</span>
+      <span data-testid="disclosures">
+        {disclosures === undefined ? "pending" : JSON.stringify(disclosures)}
+      </span>
+      <span data-testid="strings">{JSON.stringify(strings)}</span>
+    </>
   );
 }
 
@@ -49,7 +62,7 @@ const bundleScripts = () =>
 describe("IntegrationProvider community bundle boundary", () => {
   beforeEach(() => {
     runtimeMetadata = {
-      revision: "default",
+      revision: "a".repeat(64),
       integrations: [COMMUNITY_INTEGRATION],
       frameworkStrings: {},
       disclosures: [],
@@ -76,7 +89,7 @@ describe("IntegrationProvider community bundle boundary", () => {
     await findByText("metadata-loaded");
 
     runtimeMetadata = {
-      revision: "second",
+      revision: "b".repeat(64),
       integrations: [],
       frameworkStrings: {},
       disclosures: [],
@@ -98,12 +111,69 @@ describe("IntegrationProvider community bundle boundary", () => {
 
     expect(bundleScripts()).toEqual([]);
   });
+
+  it("rejects malformed initial metadata instead of publishing it", async () => {
+    runtimeMetadata = {
+      integrations: [COMMUNITY_INTEGRATION],
+      frameworkStrings: {},
+      disclosures: [],
+    };
+    const { client, queryByText } = renderProvider();
+    await waitFor(() =>
+      expect(client.getQueryState(["integrations", "https://api.example.test"])?.status).toBe(
+        "error",
+      ),
+    );
+    expect(queryByText("metadata-loaded")).toBeNull();
+  });
+
+  it("retains the last valid registry when a refreshed response is malformed", async () => {
+    runtimeMetadata.frameworkStrings = { en: { nested: [true, null, 7] } };
+    runtimeMetadata.disclosures = [
+      { type: "email", provider: "smtp", vendorName: "", countryCode: "", transfer: "none" },
+    ];
+    const { client, findByText, getByTestId } = renderProvider();
+    await findByText("metadata-loaded");
+    const strings = getByTestId("strings").textContent;
+    const disclosures = getByTestId("disclosures").textContent;
+    runtimeMetadata = { integrations: [], frameworkStrings: {}, disclosures: [] };
+    await act(() => invalidateIntegrationRuntime(client, "https://api.example.test"));
+    await waitFor(() =>
+      expect(client.getQueryState(["integrations", "https://api.example.test"])?.status).toBe(
+        "error",
+      ),
+    );
+    await findByText("metadata-loaded");
+    expect(getByTestId("strings").textContent).toBe(strings);
+    expect(getByTestId("disclosures").textContent).toBe(disclosures);
+  });
+
+  it("keeps disclosures pending during acquisition and permits fallback after initial failure", async () => {
+    let fail!: (error: Error) => void;
+    fetchMock.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject;
+        }),
+    );
+    const { client, getByTestId } = renderProvider();
+    expect(getByTestId("disclosures").textContent).toBe("pending");
+    await act(async () => fail(new Error("offline")));
+    await waitFor(() =>
+      expect(client.getQueryState(["integrations", "https://api.example.test"])?.status).toBe(
+        "error",
+      ),
+    );
+    expect(getByTestId("disclosures").textContent).toBe("[]");
+    expect(getByTestId("strings").textContent).toBe("{}");
+  });
 });
 
 describe("IntegrationProvider across every native descriptor state", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", async () =>
       Response.json({
+        revision: "a".repeat(64),
         integrations: [COMMUNITY_INTEGRATION],
         frameworkStrings: {},
         disclosures: [],

@@ -4,6 +4,7 @@ import {
   VECTOR_TILE_MEDIA_TYPES,
 } from "@openmapx/core/server";
 import {
+  captureStreetLevelProviderContributors,
   filterImagesByHeading,
   type IntegrationContext,
   parseStreetLevelSearchQuery,
@@ -37,10 +38,11 @@ async function upstream<T>(
 
 export function setup(ctx: IntegrationContext): void {
   const instanceUrl = (ctx.config.instanceUrl as string | undefined) || DEFAULT_INSTANCE_URL;
-  const provider = createPanoramaxProvider({
-    instanceUrl,
-    tileUrlTemplate: TILE_PATH,
-  });
+  const provider = captureStreetLevelProviderContributors(
+    ctx,
+    createPanoramaxProvider({ instanceUrl, tileUrlTemplate: TILE_PATH }),
+    "panoramax",
+  );
 
   ctx.registerStreetLevelProvider(provider);
 

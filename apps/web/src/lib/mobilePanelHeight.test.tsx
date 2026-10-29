@@ -6,6 +6,7 @@ import {
   useMobilePanelClearance,
   useMobilePanelFollowCap,
   useMobilePanelHeightTracker,
+  useMobilePanelOccupiedHeight,
   useWindowHeight,
 } from "./mobilePanelHeight";
 
@@ -217,4 +218,30 @@ describe("window height", () => {
       value: originalHeight,
     });
   });
+});
+
+it("reserves full measured sheet occupancy for previews even when control following is capped", () => {
+  const { result, unmount } = renderHook(() => ({
+    occupied: useMobilePanelOccupiedHeight(),
+    following: useMobilePanelClearance(844),
+  }));
+  try {
+    act(() => publishMobilePanelHeight("preview-occupied", 700));
+    expect(result.current.following).toBe(548.6);
+    expect(result.current.occupied).toBe(700);
+    act(() => publishMobilePanelHeight("preview-other-owner", 200));
+    act(() => publishMobilePanelHeight("preview-occupied", 120));
+    expect(result.current.occupied).toBe(200);
+    act(() => publishMobilePanelHeight("preview-other-owner", null));
+    expect(result.current.occupied).toBe(120);
+    unmount();
+    const retained = renderHook(() => useMobilePanelOccupiedHeight());
+    expect(retained.result.current).toBe(120);
+    retained.unmount();
+  } finally {
+    act(() => {
+      publishMobilePanelHeight("preview-occupied", null);
+      publishMobilePanelHeight("preview-other-owner", null);
+    });
+  }
 });

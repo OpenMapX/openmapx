@@ -1,10 +1,12 @@
 import type { BBox } from "@openmapx/core";
+import { buildAttributionPresentation } from "@openmapx/core/attribution";
 import type { HazardsProvider } from "@openmapx/integration-framework";
 import {
   createMockIntegrationContext,
   type FakeHttpRequest,
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { describe, expect, test } from "vitest";
 import { createOpenConditionsClient } from "../client.js";
 import { pointOf, textOf } from "../hazards/map.js";
@@ -39,22 +41,66 @@ const METEOALARM = "eu-meteoalarm-alerts";
 const NWS = "us-nws-alerts";
 const VIIRS = "nasa-firms-viirs-fires";
 const MODIS = "nasa-firms-modis-fires";
+const SLSTR = "eumetsat-slstr-fires";
 const NOTICE =
   "Time delays between this website and the www.meteoalarm.org website are possible. For the most up-to-date awareness information as published by the participating National Meteorological and Hydrological Services, please refer to www.meteoalarm.org.";
 
 const clone = <T>(value: T): T => structuredClone(value);
 const ocSources = (): OcSource[] => clone(sourcesAnswer.sources) as unknown as OcSource[];
 
+const COPERNICUS_LICENSE = {
+  kind: "custom",
+  id: "LicenseRef-Copernicus-Sentinel-Data",
+  namespace: "openconditions:licences",
+  name: "Legal notice on the use of Copernicus Sentinel Data and Service Information",
+  url: "https://sentinels.copernicus.eu/documents/247904/690755/Sentinel_Data_Legal_Notice",
+};
+
+/**
+ * The EUMETSAT SLSTR feed as `/sources` lists it. The hazards fixture predates
+ * the feed, so the entry is written here in the shape of the FIRMS entries.
+ */
+function slstrSource(): OcSource {
+  const modis = ocSources().find((s) => s.id === MODIS)!;
+  return {
+    ...modis,
+    id: SLSTR,
+    name: "EUMETSAT Sentinel-3 SLSTR active fires",
+    format: "slstr-frp",
+    qualifier: "slstr",
+    operator: "eumetsat",
+    license: COPERNICUS_LICENSE.id,
+    // `/sources` resolves the catalogue's `{year}` to the current year.
+    attribution: "Contains modified Copernicus Sentinel data 2026, processed by EUMETSAT",
+    homepage: "https://data.eumetsat.int/product/EO:EUM:DAT:0417",
+    privacyUrl: "https://www.eumetsat.int/privacy-policy",
+    rights: { ...modis.rights, attributionRequired: true },
+    licensing: {
+      version: 1,
+      bindings: [
+        {
+          scope: "data",
+          subject: "EUMETSAT Sentinel-3 SLSTR active fires",
+          license: COPERNICUS_LICENSE,
+        },
+      ],
+    },
+  } as unknown as OcSource;
+}
+
+/** The hazards sources with the SLSTR feed listed too. */
+const withSlstr = (): OcSource[] => [...ocSources(), slstrSource()];
+
 /** The live list as the integration builds it from a `/sources` answer. */
 function liveSources(list: OcSource[] = ocSources()): UpdatableLiveSources {
   const live = createLiveSources();
   live.update(list.flatMap((s) => toDataSource(s) ?? []));
   live.updateDescribed(list);
-  live.updateLicenses(list);
+
   return live;
 }
 
-const situationIds = (answer: { records: Rec[] }) => answer.records.map((r) => String(r["id"]));
+const situationIds = (answer: { records: Rec[] }) => answer.records.map((r) => String(r.id));
 
 type Responder = (path: string, params: Record<string, unknown>) => unknown;
 
@@ -75,8 +121,8 @@ const callParams = (calls: FakeHttpRequest[], i = 0) =>
 
 /** A keyset-paged answer of `records`, as the API serves a collection. */
 function paged(records: Rec[], params: Record<string, unknown>) {
-  const limit = Number(params["limit"]);
-  const start = params["cursor"] ? Number(params["cursor"]) : 0;
+  const limit = Number(params.limit);
+  const start = params.cursor ? Number(params.cursor) : 0;
   const page = records.slice(start, start + limit);
   const end = start + page.length;
   return { records: page, next: end < records.length ? String(end) : null };
@@ -118,7 +164,16 @@ describe("alerts", () => {
       expect.objectContaining({
         sourceId: METEOALARM,
         name: "EUMETNET - MeteoAlarm",
-        spdxLicense: expect.stringMatching(/MeteoAlarm/),
+        licensing: expect.objectContaining({
+          bindings: [
+            expect.objectContaining({
+              license: expect.objectContaining({
+                kind: "custom",
+                name: expect.stringMatching(/MeteoAlarm/),
+              }),
+            }),
+          ],
+        }),
       }),
     ]);
     expect(juneau).toMatchObject({ severity: "Minor", notices: [] });
@@ -130,6 +185,64 @@ describe("alerts", () => {
       limit: 5000,
     });
     expect(callParams(calls)).not.toHaveProperty("simplify");
+  });
+
+  test("an alert drawn from a location table credits the table beside its source; one without credits none", async () => {
+    const DGU =
+      "Contains information of the State Geodetic Administration of the Republic of Croatia (Državna geodetska uprava) under the Open Licence: Upravne jedinice INSPIRE, 2026-10-11, https://geoportal.dgu.hr/services/atom/au/xml; county boundaries simplified";
+    const template = (alertsAnswer.records as unknown as Rec[])[0]!;
+    const location = template.location as Rec;
+    const croatian = {
+      ...template,
+      id: "oc:situation:eu-meteoalarm-alerts:hr-1",
+      location: {
+        ...location,
+        geometryOrigin: "derived",
+        admin: { country: "HR", geocodes: [{ scheme: "nuts", code: "HR050" }] },
+        locationTable: {
+          ref: "DGU Upravne jedinice INSPIRE",
+          version: "2026-10-11",
+          attribution: DGU,
+          license: "LicenseRef-OD-HR",
+        },
+      },
+    };
+    const { provider } = providerWith(() => ({ records: [template, croatian], next: null }));
+    const [austria, croatia] = (await provider.getAlerts(BBOX)).alerts;
+
+    const credit = {
+      sourceId: METEOALARM,
+      name: "DGU Upravne jedinice INSPIRE (2026-10-11)",
+      url: "https://data.gov.hr/otvorena-dozvola",
+      licensing: {
+        version: 1,
+        bindings: [
+          {
+            scope: "data",
+            subject: "DGU Upravne jedinice INSPIRE (2026-10-11)",
+            license: {
+              kind: "custom",
+              namespace: "openconditions:licences",
+              id: "LicenseRef-OD-HR",
+              name: "Otvorena dozvola / Open Licence (Croatia)",
+              url: "https://data.gov.hr/otvorena-dozvola",
+            },
+          },
+        ],
+        declarations: [{ text: "LicenseRef-OD-HR" }],
+      },
+      attributionText: DGU,
+      modified: true,
+    };
+    expect(croatia!.contributors).toContainEqual(credit);
+    expect(croatia!.attributions).toContainEqual(credit);
+    expect(croatia!.contributors!.filter((c) => c.attributionText === DGU)).toHaveLength(1);
+    // The Open Licence's statement stays beside the drawn area, with its licence linked.
+    const shown = buildAttributionPresentation(credit as Attribution, "map").visibleHtml;
+    expect(shown).toContain("Državna geodetska uprava");
+    expect(shown).toContain('href="https://data.gov.hr/otvorena-dozvola"');
+    expect(austria!.contributors!.some((c) => c.name.startsWith("DGU"))).toBe(false);
+    expect(austria!.attributions.some((c) => c.name.startsWith("DGU"))).toBe(false);
   });
 
   test("asks for simplified geometries when the caller does", async () => {
@@ -186,7 +299,7 @@ describe("alerts", () => {
 
   test("a record of another origin passes without being a listed feed; a feed record of an unlisted source does not", async () => {
     const template = (alertsAnswer.records as unknown as Rec[])[0]!;
-    const provenance = template["provenance"] as Rec;
+    const provenance = template.provenance as Rec;
     const crowd = {
       ...template,
       id: "crowd-1",
@@ -241,12 +354,28 @@ describe("natural hazards", () => {
     expect(byId(await hazards(), "usgs-quakes:us6000ty43").tsunamiFlag).toBe(true);
   });
 
+  test("a severity of no impact stays none, not unknown", async () => {
+    const answer = clone(naturalAnswer);
+    const records = answer.records as unknown as Rec[];
+    const quake = records.find((r) => String(r.id).endsWith("us6000u0xi"))!;
+    quake.severity = { label: "none" };
+    const other = records.find((r) => String(r.id).endsWith("us6000ty43"))!;
+    other.severity = { label: "none", declaredRaw: "green" };
+    const { provider } = providerWith((path) => (path === "/situations" ? answer : undefined));
+    const list = (await provider.getNaturalHazards(BBOX, { types: ["earthquake"] })).hazards;
+    expect(byId(list, "usgs-quakes:us6000u0xi").severity).toEqual({ label: "none" });
+    expect(byId(list, "usgs-quakes:us6000ty43").severity).toEqual({
+      label: "none",
+      declared: "green",
+    });
+  });
+
   test("a polygon hazard is drawn at the vertex mean of its outer rings", async () => {
     const fire = byId(await hazards(), "us-nifc-fires:DB5448A6-FCAC-4041-A817-6F8198161DBA");
     const record = (naturalAnswer.records as unknown as Rec[]).find((r) =>
-      String(r["id"]).endsWith("DB5448A6-FCAC-4041-A817-6F8198161DBA"),
+      String(r.id).endsWith("DB5448A6-FCAC-4041-A817-6F8198161DBA"),
     )!;
-    const geometry = (record["location"] as { geometry: GeoJSON.MultiPolygon }).geometry;
+    const geometry = (record.location as { geometry: GeoJSON.MultiPolygon }).geometry;
     const vertices = geometry.coordinates.flatMap((polygon) => polygon[0]!.slice(0, -1));
     const mean = [
       vertices.reduce((sum, p) => sum + p[0]!, 0) / vertices.length,
@@ -361,8 +490,8 @@ describe("natural hazards", () => {
 
   test("names come in the requested language", async () => {
     const answer = clone(naturalAnswer) as unknown as { records: Rec[] };
-    const quake = answer.records.find((r) => String(r["id"]).endsWith("us6000u0xi"))!;
-    (quake["details"] as Rec)["name"] = [
+    const quake = answer.records.find((r) => String(r.id).endsWith("us6000u0xi"))!;
+    (quake.details as Rec).name = [
       { lang: "en", text: "Norsup" },
       { lang: "fr", text: "Norsup (fr)" },
     ];
@@ -387,9 +516,9 @@ describe("fire detections", () => {
   /** The `/observations/latest` answer, narrowed by the requested `source` and paged. */
   const serve: Responder = (path, params) => {
     if (path !== "/observations/latest") return undefined;
-    const wanted = new Set(String(params["source"]).split(","));
+    const wanted = new Set(String(params.source).split(","));
     const records = (fire.records as unknown as Rec[]).filter((r) =>
-      wanted.has(String((r["provenance"] as Rec)["sourceId"])),
+      wanted.has(String((r.provenance as Rec).sourceId)),
     );
     return paged(records, params);
   };
@@ -439,6 +568,41 @@ describe("fire detections", () => {
       satellite: "T",
       sources: [MODIS],
     });
+  });
+
+  test("an SLSTR read keeps only the SLSTR feed; confidence is the class with its percentage", async () => {
+    const modis = (fire.records as unknown as Rec[]).find(
+      (r) => (r.provenance as Rec).sourceId === MODIS,
+    )!;
+    const reading = {
+      ...clone(modis),
+      id: `oc:observation:${SLSTR}:1`,
+      provenance: {
+        ...clone(modis.provenance as Rec),
+        sourceId: SLSTR,
+        sourceFormat: "slstr-frp",
+      },
+      extras: { instrument: "slstr", satellite: "S3A", brightnessK: 341.2, daynight: "night" },
+      quality: { supplierCode: "low", confidence: 0.97 },
+    };
+    const { provider, calls } = providerWith(
+      (path, params) => (path === "/observations/latest" ? paged([reading], params) : undefined),
+      liveSources(withSlstr()),
+    );
+    const result = await provider.getFirePixels(BBOX, { since, instrument: "slstr", limit: 5000 });
+
+    expect(callParams(calls)).toMatchObject({ property: "fire.frp", source: SLSTR });
+    expect(result.pixels).toHaveLength(1);
+    expect(result.pixels[0]).toMatchObject({
+      frpMW: 14.13,
+      brightnessK: 341.2,
+      instrument: "slstr",
+      satellite: "S3A",
+      confidence: { level: "low", percent: 97 },
+      dayNight: "night",
+      sources: [SLSTR],
+    });
+    expect(result.pixels[0]!.contributors?.map((c) => c.sourceId)).toContain(SLSTR);
   });
 
   test("a read stops at the limit and says the area is partly covered", async () => {
@@ -493,6 +657,8 @@ describe("fire detections", () => {
       count: 2,
       frpSumMW: 6.96,
       frpMaxMW: 3.69,
+      sources: [],
+      contributors: [],
     });
     expect(result.sources).toEqual([MODIS, VIIRS]);
     expect(result.partial).toBeUndefined();
@@ -505,7 +671,7 @@ describe("fire detections", () => {
     const result = await provider.getFireDensity(BBOX, { since, instrument: "viirs", cellDeg: 1 });
 
     const strips = calls.map((call) =>
-      String((call.options?.params as Record<string, unknown>)["bbox"])
+      String((call.options?.params as Record<string, unknown>).bbox)
         .split(",")
         .map(Number),
     );
@@ -522,6 +688,36 @@ describe("fire detections", () => {
     // Every strip answered the same cells: each is counted once.
     expect(result.cells).toHaveLength(7);
     expect(result.sources).toEqual([MODIS, VIIRS]);
+  });
+
+  test("a read that leaves out low-confidence detections asks for nominal confidence or more", async () => {
+    const { provider, calls } = providerWith((path, params) =>
+      path === "/observations/grid" ? clone(grid) : serve(path, params),
+    );
+    await provider.getFirePixels(BBOX, {
+      since,
+      instrument: "viirs",
+      limit: 5000,
+      excludeLowConfidence: true,
+    });
+    await provider.getFireDensity([-30, -60, 60, 70], {
+      since,
+      instrument: "viirs",
+      cellDeg: 1,
+      excludeLowConfidence: true,
+    });
+    await provider.getFirePixels(BBOX, {
+      since,
+      instrument: "viirs",
+      limit: 5000,
+      excludeLowConfidence: false,
+    });
+
+    expect(calls.map((c) => callParams([c]).minConfidence)).toEqual([
+      "nominal",
+      "nominal",
+      undefined,
+    ]);
   });
 
   test("a source the answer names but the instance does not list is not named", async () => {
@@ -573,18 +769,27 @@ describe("the live source list", () => {
     );
   });
 
-  test("firmsSources are the listed FIRMS feeds of an instrument", () => {
-    const live = liveSources();
-    expect(live.firmsSources("viirs")).toEqual([VIIRS]);
-    expect(live.firmsSources("modis")).toEqual([MODIS]);
-    const without = liveSources(ocSources().filter((s) => s.id !== VIIRS));
-    expect(without.firmsSources("viirs")).toEqual([]);
-    expect(createLiveSources().firmsSources("viirs")).toEqual([]);
+  test("fireSources are the listed fire-pixel feeds of an instrument", () => {
+    const live = liveSources(withSlstr());
+    expect(live.fireSources("viirs")).toEqual([VIIRS]);
+    expect(live.fireSources("modis")).toEqual([MODIS]);
+    expect(live.fireSources("slstr")).toEqual([SLSTR]);
+    expect(liveSources().fireSources("slstr")).toEqual([]);
+    const without = liveSources(withSlstr().filter((s) => s.id !== VIIRS));
+    expect(without.fireSources("viirs")).toEqual([]);
+    expect(createLiveSources().fireSources("viirs")).toEqual([]);
   });
 
-  test("a feed of another format with a FIRMS qualifier is not a FIRMS feed", () => {
-    const list = ocSources().map((s) => (s.id === NWS ? { ...s, qualifier: "firms-viirs" } : s));
-    expect(liveSources(list).firmsSources("viirs")).toEqual([VIIRS]);
+  test("a feed of another format with a fire-pixel qualifier is not a fire-pixel feed", () => {
+    const list = withSlstr().map((s) =>
+      s.id === NWS
+        ? { ...s, qualifier: "firms-viirs" }
+        : s.id === MODIS
+          ? { ...s, qualifier: "slstr" }
+          : s,
+    );
+    expect(liveSources(list).fireSources("viirs")).toEqual([VIIRS]);
+    expect(liveSources(list).fireSources("slstr")).toEqual([SLSTR]);
   });
 });
 
@@ -632,4 +837,112 @@ describe("setup and legal disclosure", () => {
     expect(named.every((id) => ids.has(id))).toBe(true);
     expect(situationIds(alertsAnswer as unknown as { records: Rec[] })).toHaveLength(3);
   });
+});
+
+describe("captured hazard contributor receipts", () => {
+  test("density metadata belongs to its keyed cell and never expands the collection sources", async () => {
+    const a = { sourceId: "parent-a", name: "Publisher A" };
+    const notice = { sourceId: "parent-a", name: "Required notice" };
+    const b = { sourceId: "parent-b", name: "Publisher B" };
+    const answer = {
+      cells: [
+        [10.5, 45.5, 1, 10, 10],
+        [12.5, 47.5, 2, 30, 20],
+      ],
+      sources: [VIIRS, MODIS],
+      cell_contributors: [
+        {
+          longitude: 12.5,
+          latitude: 47.5,
+          sources: ["parent-b"],
+          native_sources: [VIIRS],
+          contributors: [b],
+          lineage_complete: false,
+        },
+        {
+          longitude: 10.5,
+          latitude: 45.5,
+          sources: ["parent-a"],
+          native_sources: [VIIRS],
+          contributors: [a, notice],
+        },
+      ],
+    };
+    const { provider } = providerWith(() => answer);
+    const result = await provider.getFireDensity([10, 45, 13, 48], {
+      since: "2026-10-09T00:00:00Z",
+      instrument: "viirs",
+      cellDeg: 1,
+    });
+    expect(result.cells).toMatchObject([
+      {
+        point: [10.5, 45.5],
+        sources: ["parent-a"],
+        nativeSources: [VIIRS],
+        contributors: [a, notice],
+      },
+      { point: [12.5, 47.5], sources: ["parent-b"], contributors: [b], lineageComplete: false },
+    ]);
+    a.name = "Changed upstream";
+    expect((result.cells[0] as { contributors?: { name: string }[] }).contributors?.[0]?.name).toBe(
+      "Publisher A",
+    );
+  });
+
+  test("legacy density retains usable values with unknown per-cell receipts", async () => {
+    const { provider } = providerWith(() => ({
+      cells: [[10.5, 45.5, 1, 10, 10]],
+      sources: [VIIRS, MODIS],
+    }));
+    const result = await provider.getFireDensity([10, 45, 13, 48], {
+      since: "2026-10-09T00:00:00Z",
+      instrument: "viirs",
+      cellDeg: 1,
+    });
+    expect(result.cells).toMatchObject([{ count: 1, contributors: [], sources: [] }]);
+  });
+
+  test("a captured canonical receipt overrides current catalogue metadata including an explicit empty receipt", async () => {
+    const record = clone(alertsAnswer.records[0]) as unknown as Rec;
+    const captured = [
+      { sourceId: "canonical-parent", name: "Captured publisher" },
+      { sourceId: "canonical-parent", name: "Captured notice" },
+    ];
+    record.contributors = captured;
+    const { provider } = providerWith(() => ({ records: [record], next: null }));
+    const alert = (await provider.getAlerts(BBOX)).alerts[0]!;
+    expect(alert).toMatchObject({ contributors: captured });
+    captured[0]!.name = "Changed after acquisition";
+    expect((alert as { contributors?: { name: string }[] }).contributors?.[0]?.name).toBe(
+      "Captured publisher",
+    );
+    record.contributors = [];
+    expect((await provider.getAlerts(BBOX)).alerts[0]).toMatchObject({ contributors: [] });
+  });
+});
+
+test("copies exact live metadata and required notices when a legacy hazard is acquired", async () => {
+  const live = liveSources();
+  const { provider } = providerWith(() => clone(alertsAnswer), live);
+  const alert = (await provider.getAlerts(BBOX)).alerts[0]!;
+  const receipt = structuredClone(alert.contributors);
+  expect(receipt?.some((a) => a.name === NOTICE)).toBe(true);
+  expect(
+    receipt?.some(
+      (a) =>
+        a.sourceId === METEOALARM &&
+        a.licensing?.bindings.some((b) => b.license.url?.includes("terms-and-conditions")),
+    ),
+  ).toBe(true);
+  const updated = ocSources().map((source) => ({
+    ...source,
+    name: "Changed catalogue",
+    notice: "Changed notice",
+  }));
+  live.update(updated.flatMap((source) => toDataSource(source) ?? []));
+  live.updateDescribed(updated);
+  expect(alert.contributors).toEqual(receipt);
+  const obtained = live.contributors?.(METEOALARM);
+  if (obtained?.[0]) obtained[0].name = "Caller changed its copy";
+  expect(live.contributors?.(METEOALARM)?.[0]?.name).toBe("Changed catalogue");
 });

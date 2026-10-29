@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CategoryResultsHeader } from "./CategoryResultsHeader";
@@ -10,6 +11,7 @@ vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 const feeds: Attribution[] = ["alpha", "bravo", "charlie", "delta"].map((sourceId) => ({
   sourceId,
   name: sourceId,
+  licensing: licensingFromDeclaration("CC0-1.0"),
 }));
 
 function renderHeader(isTransit: boolean) {
@@ -33,7 +35,8 @@ describe("CategoryResultsHeader attribution visibility", () => {
   it("shows every transit feed while keeping the POI three-source expansion", () => {
     const transit = renderHeader(true);
     expect(transit.container.querySelectorAll("[data-source-id]")).toHaveLength(4);
-    expect(transit.container.querySelector("button")).toBeNull();
+    expect(transit.queryByRole("button", { name: "common.showMore" })).toBeNull();
+    expect(transit.getByRole("button", { name: "footer.attributions" })).toBeInTheDocument();
 
     transit.unmount();
     const poi = renderHeader(false);

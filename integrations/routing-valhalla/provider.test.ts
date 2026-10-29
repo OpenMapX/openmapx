@@ -294,13 +294,17 @@ describe("transformTrip motorway flag and bearings", () => {
 describe("buildCostingOptions", () => {
   const defaultSpeedTypes = { speed_types: ["freeflow", "constrained", "predicted"] };
 
-  it("returns only the default speed_types when no avoid flags are set (non-motorised costing)", () => {
-    expect(buildCostingOptions({}, "bicycle")).toEqual(defaultSpeedTypes);
+  it("uses trekking surface preferences and default speed sources for cycling", () => {
+    expect(buildCostingOptions({}, "bicycle")).toEqual({
+      avoid_bad_surfaces: 0.5,
+      ...defaultSpeedTypes,
+    });
   });
 
   it("sets use_tolls=0 when avoidTolls is set", () => {
     expect(buildCostingOptions({ avoidTolls: true }, "bicycle")).toEqual({
       use_tolls: 0,
+      avoid_bad_surfaces: 0.5,
       ...defaultSpeedTypes,
     });
   });
@@ -308,7 +312,13 @@ describe("buildCostingOptions", () => {
   it("maps every avoid flag to its Valhalla costing knob", () => {
     expect(
       buildCostingOptions({ avoidHighways: true, avoidTolls: true, avoidFerries: true }, "bicycle"),
-    ).toEqual({ use_highways: 0, use_tolls: 0, use_ferry: 0, ...defaultSpeedTypes });
+    ).toEqual({
+      use_highways: 0,
+      use_tolls: 0,
+      use_ferry: 0,
+      avoid_bad_surfaces: 0.5,
+      ...defaultSpeedTypes,
+    });
   });
 
   it("adds a maneuver penalty for motorised costings only", () => {
@@ -351,6 +361,43 @@ describe("buildExclusions", () => {
     expect(buildExclusions({ excludeLocations: [[5.1, 52.1]] })).toEqual({
       exclude_locations: [{ lon: 5.1, lat: 52.1 }],
     });
+  });
+
+  it("sends directed exclusions with their heading and a tolerance", () => {
+    expect(
+      buildExclusions({
+        excludeLocations: [[5.1, 52.1]],
+        directedExclusions: [{ point: [5.2, 52.2], heading: 90 }],
+      }),
+    ).toEqual({
+      exclude_locations: [
+        { lon: 5.1, lat: 52.1 },
+        { lon: 5.2, lat: 52.2, heading: 90, heading_tolerance: 45 },
+      ],
+    });
+  });
+
+  it("keeps every directed exclusion and trims undirected points to the remaining budget", () => {
+    const directed = Array.from({ length: 40 }, (_, i) => ({
+      point: [5 + i / 1000, 52] as [number, number],
+      heading: 0,
+    }));
+    const points = Array.from({ length: 20 }, (_, i) => [6 + i / 1000, 52] as [number, number]);
+    const out = buildExclusions({ excludeLocations: points, directedExclusions: directed });
+    expect(out.exclude_locations).toHaveLength(45);
+    expect(out.exclude_locations?.filter((l) => l.heading !== undefined)).toHaveLength(40);
+  });
+
+  it("refuses more directed exclusions than the engine accepts, or an invalid heading", () => {
+    const point: [number, number] = [5, 52];
+    expect(() =>
+      buildExclusions({
+        directedExclusions: Array.from({ length: 46 }, () => ({ point, heading: 0 })),
+      }),
+    ).toThrow(/directed points/);
+    expect(() => buildExclusions({ directedExclusions: [{ point, heading: 360 }] })).toThrow(
+      /heading/,
+    );
   });
 
   it("converts excludePolygons rings preserving [lon,lat] order", () => {

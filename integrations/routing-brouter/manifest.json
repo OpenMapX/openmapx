@@ -1,0 +1,86 @@
+{
+  "id": "routing-brouter",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
+  "domains": ["routing"],
+  "dependencies": ["routing"],
+  "infrastructure": {
+    "planetScale": true
+  },
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "endpoint": {
+        "type": "string",
+        "title": "BRouter endpoint URL",
+        "description": "Optional operator-controlled BRouter base URL. Otherwise uses the selected brouter service. No public endpoint is used by default.",
+        "format": "url"
+      }
+    }
+  },
+  "quality": "built-in",
+  "category": "Routing",
+  "dataSources": [
+    {
+      "sourceId": "brouter",
+      "name": "BRouter",
+      "url": "https://brouter.de/",
+      "attribution": "Routing: <a href=\"https://brouter.de/\">BRouter</a>, © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
+      "commercialUse": "conditional",
+      "providerCountry": "XX",
+      "providerPrivacyUrl": "https://github.com/abrensch/brouter",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "software",
+            "subject": "BRouter engine",
+            "license": {
+              "kind": "spdx",
+              "expression": "MIT"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "OpenStreetMap routing data",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "MIT (BRouter engine); ODbL-1.0 (OpenStreetMap data)",
+            "url": "https://github.com/abrensch/brouter/blob/master/LICENSE"
+          }
+        ]
+      },
+      "notes": "Self-hosted or explicitly operator-configured endpoint. Route requests stay with that operator. BRouter segments contain elevation; responses do not identify the underlying DEM. Engine MIT and OSM data notices do not establish DEM ownership."
+    }
+  ],
+  "requires": [
+    {
+      "service": "brouter",
+      "optional": true
+    }
+  ]
+}

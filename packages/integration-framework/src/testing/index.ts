@@ -20,8 +20,10 @@ import type {
   RouteHandler,
   RouteOptions,
   SecretsClient,
+  StreamHttpResponse,
 } from "../context.js";
 import type { AirQualityProvider } from "../contracts/air-quality-provider.js";
+import type { BorderCrossingProvider } from "../contracts/border-crossing-provider.js";
 import type { CameraProvider } from "../contracts/camera-provider.js";
 import type { ChargingSiteProvider } from "../contracts/charging-site-provider.js";
 import type { FuelStationProvider } from "../contracts/fuel-station-provider.js";
@@ -29,6 +31,7 @@ import type { GeocodingProvider } from "../contracts/geocoding-provider.js";
 import type { GtfsCatalogProvider } from "../contracts/gtfs-catalog-provider.js";
 import type { HazardsProvider } from "../contracts/hazards-provider.js";
 import type { KnowledgeProvider } from "../contracts/knowledge-provider.js";
+import type { MessageSignProvider } from "../contracts/message-sign-provider.js";
 import type { MobilityDataSourceProvider } from "../contracts/mobility-data-source-provider.js";
 import type { ParkingSiteProvider } from "../contracts/parking-site-provider.js";
 import type { PhotoProvider } from "../contracts/photo-provider.js";
@@ -37,8 +40,10 @@ import type { RealtimeProvider } from "../contracts/realtime-provider.js";
 import type { ReviewProvider } from "../contracts/review-provider.js";
 import type { RideProvider } from "../contracts/ride-provider.js";
 import type { RoadConditionsProvider } from "../contracts/road-conditions-provider.js";
+import type { RoadWeatherProvider } from "../contracts/road-weather-provider.js";
 import type { RoutingProvider } from "../contracts/routing-provider.js";
 import type { SearchSuggestionProvider } from "../contracts/search-suggestion-provider.js";
+import type { ServiceVehicleProvider } from "../contracts/service-vehicle-provider.js";
 import type { StreetLevelProvider } from "../contracts/street-level-imagery-provider.js";
 import type { TransitProvider } from "../contracts/transit-provider.js";
 import type { WeatherProvider } from "../contracts/weather-provider.js";
@@ -94,7 +99,15 @@ export function fakeMobilityHttpTransport(
  */
 
 export interface FakeHttpRequest {
-  method: "get" | "post" | "getResponse" | "getBytes";
+  method:
+    | "get"
+    | "post"
+    | "getResponse"
+    | "postResponse"
+    | "getBytes"
+    | "getText"
+    | "postText"
+    | "getStream";
   url: string;
   body?: unknown;
   options?: HttpClientOptions | ResponseOptions;
@@ -109,6 +122,20 @@ export type FakeHttpResponder = ((req: FakeHttpRequest) => unknown) | Record<str
 export interface FakeHttpClient extends HttpClient {
   /** Every request seen, in order — assert against this. */
   readonly calls: FakeHttpRequest[];
+}
+
+/** A canned `{ status, headers, body }` passes through; any other value is a 200 body. */
+function asHttpResponse<T>(value: unknown): HttpResponse<T> {
+  if (
+    value &&
+    typeof value === "object" &&
+    "status" in value &&
+    "headers" in value &&
+    "body" in value
+  ) {
+    return value as HttpResponse<T>;
+  }
+  return { status: 200, headers: {}, body: value as T };
 }
 
 /**
@@ -142,17 +169,16 @@ export function fakeHttpClient(responder: FakeHttpResponder = {}): FakeHttpClien
     getResponse<T = unknown>(url: string, options: ResponseOptions): Promise<HttpResponse<T>> {
       const req: FakeHttpRequest = { method: "getResponse", url, options };
       calls.push(req);
-      const value = resolve(req);
-      if (
-        value &&
-        typeof value === "object" &&
-        "status" in value &&
-        "headers" in value &&
-        "body" in value
-      ) {
-        return Promise.resolve(value as HttpResponse<T>);
-      }
-      return Promise.resolve({ status: 200, headers: {}, body: value as T });
+      return Promise.resolve(asHttpResponse<T>(resolve(req)));
+    },
+    postResponse<T = unknown>(
+      url: string,
+      body: unknown,
+      options: ResponseOptions,
+    ): Promise<HttpResponse<T>> {
+      const req: FakeHttpRequest = { method: "postResponse", url, body, options };
+      calls.push(req);
+      return Promise.resolve(asHttpResponse<T>(resolve(req)));
     },
     getBytes(url: string, options: ResponseOptions): Promise<BinaryHttpResponse> {
       const req: FakeHttpRequest = { method: "getBytes", url, options };
@@ -173,6 +199,40 @@ export function fakeHttpClient(responder: FakeHttpResponder = {}): FakeHttpClien
         );
       }
       return Promise.resolve({ status: 200, headers: {}, bytes: value });
+    },
+    async getText(url: string, options: ResponseOptions): Promise<HttpResponse<string>> {
+      const req: FakeHttpRequest = { method: "getText", url, options };
+      calls.push(req);
+      return asHttpResponse<string>(await resolve(req));
+    },
+    async postText(
+      url: string,
+      body: string,
+      options: ResponseOptions,
+    ): Promise<HttpResponse<string>> {
+      const req: FakeHttpRequest = { method: "postText", url, body, options };
+      calls.push(req);
+      return asHttpResponse<string>(await resolve(req));
+    },
+    async getStream(url: string, options: ResponseOptions): Promise<StreamHttpResponse> {
+      const req: FakeHttpRequest = { method: "getStream", url, options };
+      calls.push(req);
+      const value = await resolve(req);
+      if (
+        value &&
+        typeof value === "object" &&
+        "status" in value &&
+        "headers" in value &&
+        "stream" in value
+      ) {
+        return value as StreamHttpResponse;
+      }
+      if (!(value instanceof ReadableStream)) {
+        throw new TypeError(
+          "fakeHttpClient: getStream response must be ReadableStream or StreamHttpResponse",
+        );
+      }
+      return { status: 200, headers: {}, stream: value };
     },
   };
 }
@@ -215,6 +275,10 @@ export interface CapturedRegistrations {
   parkingSites: ParkingSiteProvider[];
   chargingSites: ChargingSiteProvider[];
   cameras: CameraProvider[];
+  messageSigns: MessageSignProvider[];
+  roadWeather: RoadWeatherProvider[];
+  serviceVehicles: ServiceVehicleProvider[];
+  borderCrossings: BorderCrossingProvider[];
   hazards: HazardsProvider[];
   photo: PhotoProvider[];
   streetLevel: StreetLevelProvider[];
@@ -269,6 +333,10 @@ export function createMockIntegrationContext(
     parkingSites: [],
     chargingSites: [],
     cameras: [],
+    messageSigns: [],
+    roadWeather: [],
+    serviceVehicles: [],
+    borderCrossings: [],
     hazards: [],
     photo: [],
     streetLevel: [],
@@ -337,6 +405,18 @@ export function createMockIntegrationContext(
     },
     registerCameraProvider: (p) => {
       registered.cameras.push(p);
+    },
+    registerMessageSignProvider: (p) => {
+      registered.messageSigns.push(p);
+    },
+    registerRoadWeatherProvider: (p) => {
+      registered.roadWeather.push(p);
+    },
+    registerServiceVehicleProvider: (p) => {
+      registered.serviceVehicles.push(p);
+    },
+    registerBorderCrossingProvider: (p) => {
+      registered.borderCrossings.push(p);
     },
     registerHazardsProvider: (p) => {
       registered.hazards.push(p);

@@ -11,12 +11,12 @@ import WcIcon from "@mui/icons-material/Wc";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import Typography from "@mui/material/Typography";
+import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
 import { useTranslations } from "next-intl";
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 import { SectionAttribution } from "@/components/ui/SectionAttribution";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import { useDataSourceAttribution } from "./useDataSourceAttribution";
 
 interface HarborFacility {
   osmId: string;
@@ -27,7 +27,7 @@ interface HarborFacility {
   tags: Record<string, string>;
 }
 
-interface HarborDetail {
+interface HarborDetail extends ContributingRecord {
   harbor: {
     id: number;
     name: string;
@@ -114,8 +114,6 @@ export function PlaceHarborFacilities({ harbourId, lat, lng, name, category }: P
   const env = useEnv();
   const [data, setData] = useState<HarborDetail | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const attributionSource = useDataSourceAttribution("overlay-nautical", "openseamap");
 
   useEffect(() => {
     let cancelled = false;
@@ -232,15 +230,7 @@ export function PlaceHarborFacilities({ harbourId, lat, lng, name, category }: P
           </Box>
         )}
 
-        {attributionSource && (
-          <SectionAttribution
-            name={attributionSource.name}
-            url={attributionSource.url}
-            license={attributionSource.license}
-            licenseUrl={attributionSource.licenseUrl}
-            attribution={attributionSource.attribution}
-          />
-        )}
+        <SectionAttribution attributions={data?.contributors ?? []} />
       </Box>
     </Box>
   );

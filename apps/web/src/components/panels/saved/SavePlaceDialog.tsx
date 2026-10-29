@@ -10,10 +10,8 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import type { Place, SavedPlace } from "@openmapx/core";
+import type { Place } from "@openmapx/core";
 import {
-  API_ENDPOINTS,
-  apiClient,
   isSystemSavedList,
   useCreateList,
   useIsSaved,
@@ -21,6 +19,8 @@ import {
   useSavedLists,
   useSavePlace,
 } from "@openmapx/core";
+import { captureSavedPlaceContributors } from "@openmapx/core/saved-place-contributors";
+import { listSavedListPlaces, unwrapSavedResponse } from "@openmapx/core/saved-places-sdk";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -129,14 +129,13 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
                   lat: capturedPlace.coordinates[1],
                   lng: capturedPlace.coordinates[0],
                   placeId: capturedPlace.id,
+                  fieldContributors: captureSavedPlaceContributors(capturedPlace),
                 });
                 current.savedId = saved.id;
                 current.present = true;
               } else {
                 if (!current.savedId) {
-                  const response = await apiClient.get<{ places: SavedPlace[] }>(
-                    `${API_ENDPOINTS.savedLists}/${listId}/places`,
-                  );
+                  const response = unwrapSavedResponse(await listSavedListPlaces(listId));
                   current.savedId =
                     response.places.find((p) => p.placeId === capturedPlace.id)?.id ?? null;
                   if (!current.savedId) {

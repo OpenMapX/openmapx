@@ -6,58 +6,51 @@ import TrainIcon from "@mui/icons-material/Train";
 import TramIcon from "@mui/icons-material/Tram";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
-import type {
-  CategoryCardEnrichmentResponse,
-  CategoryPlace,
-  DistanceReference,
-  TagPredicate,
-} from "@openmapx/core";
+import type { CategoryPlace, TagPredicate } from "@openmapx/core";
 import {
   AD_HOC_CATEGORY_ID,
   categoryPlaceToPlace,
-  formatMeasurementDistance,
   isAreaTooLarge,
   makeSyntheticStopPlace,
   PANEL,
-  proxyImageUrl,
   resolveStopAsPlace,
-  resultDistanceMetres,
   sortResultsByIntent,
   useBrandLogos,
   useCategoryFacetStore,
   useCategorySearchStore,
   useOpeningHoursStore,
   usePlaceStore,
-  useSettingsStore,
   useSidebarStore,
   useTransitStops,
 } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import {
+  contributorsForRecordFields,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 import type * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { distinctBrandQids, placeBrandIdentity } from "@/components/map/CategoryResultMarkers";
-import { PhotoAttribution } from "@/components/panels/place/PhotoAttribution";
+import { distinctBrandQids } from "@/components/map/CategoryResultMarkers";
 import { useExpandOnBackgroundTap } from "@/components/panels/sheet/sheetState";
-import { BrandLogo } from "@/components/search/BrandLogo";
-import { ResultItemName, ResultList, ResultListItem } from "@/components/ui/ResultListItem";
+import { AttributionDetailsGroup } from "@/components/ui/AttributionDetailsGroup";
+import { categoryCardContributors, PlaceResultRow } from "@/components/ui/PlaceResultRow";
+import {
+  ResultItemName,
+  ResultList,
+  ResultListItem,
+  ResultRowSkeleton,
+} from "@/components/ui/ResultListItem";
 import { ResultNotice } from "@/components/ui/ResultNotice";
 import { usePlaceEnrichment } from "@/hooks/usePlaceEnrichment";
 import { useMap } from "@/integration-api/map/MapContext";
-import { useAttributionFromHooks } from "@/integration-api/overlay/useAttributionFromHooks";
-import { attributionsForSources } from "@/lib/attributionForProviders";
-import { openingHoursTone } from "@/lib/openingHoursTone";
 import { useExploreReachResults } from "@/lib/useExploreReachResults";
-import { useOpeningHoursText } from "@/lib/useOpeningHoursText";
 import { BrandHeaderCard } from "./BrandHeaderCard";
 import { CategoryResultsHeader } from "./CategoryResultsHeader";
-import { selectResultAttributes } from "./resultAttributes";
+
 import { cachedSummary, useCardEnrichment } from "./useCardEnrichment";
 
-type CardSummary = CategoryCardEnrichmentResponse["results"][number];
 const SLOW_SEARCH_NOTICE_MS = 8_000;
 
 const TRANSIT_MODE_ICONS: Partial<Record<TransportMode, typeof TrainIcon>> = {
@@ -85,8 +78,7 @@ function SearchLoading({ waitingForResponse }: { waitingForResponse: boolean }) 
       ) : (
         [0, 1, 2, 3, 4].map((i) => (
           <Box key={i} sx={{ mb: 2 }}>
-            <Skeleton variant="text" width="60%" height={20} />
-            <Skeleton variant="text" width="80%" height={16} />
+            <ResultRowSkeleton />
           </Box>
         ))
       )}
@@ -126,222 +118,6 @@ function TransitStopCard({
   );
 }
 
-function CategoryPlaceCard({
-  place,
-  summary,
-  isHovered,
-  onSelect,
-  onHover,
-  onHoverEnd,
-  brandLogos,
-  distanceReference,
-}: {
-  place: CategoryPlace;
-  summary?: CardSummary;
-  isHovered: boolean;
-  onSelect: (place: CategoryPlace) => void;
-  onHover: (id: string) => void;
-  onHoverEnd: () => void;
-  /** QID -> Commons logo filename, resolved once for the whole result list. */
-  brandLogos: Map<string, string | undefined>;
-  distanceReference: DistanceReference | null;
-}) {
-  const tp = useTranslations("place");
-  const locale = useLocale();
-  const registry = useIntegrationRegistry();
-  const tc = useTranslations("common");
-  const tcat = useTranslations("category");
-  const units = useSettingsStore((s) => s.units);
-  const ohText = useOpeningHoursText();
-  const distanceMetres = resultDistanceMetres(distanceReference, place.coordinates);
-  const attributes = selectResultAttributes(place.osmTags);
-  const tagLabel = place.category
-    ? place.category.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
-    : undefined;
-  const brandIdentity = placeBrandIdentity(place);
-  const photo = summary?.photo;
-  const photoUrl = photo?.thumbnailUrl ?? photo?.url;
-  const [failedPhotoUrl, setFailedPhotoUrl] = useState<string | null>(null);
-  const showPhoto = Boolean(photoUrl && failedPhotoUrl !== photoUrl);
-  const rating = summary?.rating;
-
-  return (
-    <>
-      <ResultListItem
-        onClick={() => onSelect(place)}
-        onPointerEnter={(event) => {
-          if (event.pointerType === "mouse") onHover(place.id);
-        }}
-        onPointerLeave={(event) => {
-          if (event.pointerType === "mouse") onHoverEnd();
-        }}
-        selected={isHovered}
-        hoverBg="rgba(0,0,0,0.06)"
-        bottomPadding={showPhoto ? 0.25 : undefined}
-      >
-        {showPhoto && photoUrl && (
-          <Box
-            component="img"
-            src={proxyImageUrl(photoUrl)}
-            alt=""
-            loading="lazy"
-            onError={() => setFailedPhotoUrl(photoUrl)}
-            sx={{
-              width: 72,
-              height: 72,
-              objectFit: "cover",
-              borderRadius: 1,
-              float: "right",
-              ml: 1,
-              mb: 0.5,
-            }}
-          />
-        )}
-        {brandIdentity ? (
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <BrandLogo
-              brand={{
-                qid: brandIdentity.qid,
-                name: place.brand?.name ?? place.name,
-                logoFile: brandLogos.get(brandIdentity.qid),
-                kind: [brandIdentity.kind],
-              }}
-              size={20}
-            />
-            {/* minWidth: 0 lets the name shrink/wrap inside the row instead of
-              pushing the fixed-size logo out or overflowing the list item. */}
-            <Box sx={{ minWidth: 0, flex: 1 }}>
-              <ResultItemName>{place.name}</ResultItemName>
-            </Box>
-          </Box>
-        ) : (
-          <ResultItemName>{place.name}</ResultItemName>
-        )}
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center", mb: 0.25 }}>
-          {tagLabel && (
-            <Typography
-              variant="caption"
-              sx={{
-                color: "text.secondary",
-              }}
-            >
-              {tagLabel}
-            </Typography>
-          )}
-          {tagLabel && place.address && (
-            <Typography
-              variant="caption"
-              sx={{
-                color: "text.secondary",
-              }}
-            >
-              ·
-            </Typography>
-          )}
-          {place.address && (
-            <Typography
-              variant="caption"
-              sx={{
-                color: "text.secondary",
-                overflowWrap: "anywhere",
-              }}
-            >
-              {place.address}
-            </Typography>
-          )}
-        </Box>
-        {rating && (
-          <Typography
-            variant="caption"
-            sx={{ color: "text.secondary", display: "block", mb: 0.25 }}
-          >
-            ★ {new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(rating.stars)} ·{" "}
-            {rating.count} {tp("ratedReviews")} ·{" "}
-            {registry.findDataSource(rating.source)?.name ?? rating.source}
-          </Typography>
-        )}
-        {(distanceMetres !== null || attributes.length > 0) && (
-          <Box
-            sx={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 0.75,
-              alignItems: "center",
-              minWidth: 0,
-              mb: 0.25,
-            }}
-          >
-            {distanceMetres !== null && (
-              <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>
-                {formatMeasurementDistance(distanceMetres, units)}
-              </Typography>
-            )}
-            {attributes.map((attribute) => (
-              <Typography
-                key={attribute.kind}
-                variant="caption"
-                sx={{ color: "text.secondary", overflowWrap: "anywhere" }}
-              >
-                {attribute.kind === "cuisine"
-                  ? `${tcat("cuisine")}: ${attribute.value}`
-                  : attribute.kind === "outdoor_seating"
-                    ? tp("outdoorSeating")
-                    : attribute.kind === "wheelchair_yes"
-                      ? tp("wheelchairYes")
-                      : attribute.kind === "wheelchair_designated"
-                        ? tp("wheelchairDesignated")
-                        : tp("wheelchairLimited")}
-              </Typography>
-            ))}
-          </Box>
-        )}
-        {(() => {
-          const hours = place.openingHoursInfo?.status ?? null;
-          if (hours) {
-            if (hours.isUnknown) {
-              return (
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color: "text.secondary",
-                  }}
-                >
-                  {ohText.state(hours)}
-                </Typography>
-              );
-            }
-            const detail = ohText.detail(hours);
-            return (
-              <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                <Box component="span" sx={{ color: openingHoursTone(hours), fontWeight: 700 }}>
-                  {ohText.state(hours)}
-                </Box>
-                {detail && <> · {detail}</>}
-              </Typography>
-            );
-          }
-          if (place.isOpen !== undefined) {
-            return (
-              <Typography
-                variant="body2"
-                sx={{ color: place.isOpen ? "success.main" : "error.main", fontWeight: 700 }}
-              >
-                {place.isOpen ? tc("open") : tc("closed")}
-              </Typography>
-            );
-          }
-          return null;
-        })()}
-      </ResultListItem>
-      {showPhoto && photo && (
-        <Box sx={{ px: 2, pb: 0.75, color: "text.secondary", fontSize: "0.65rem" }}>
-          <PhotoAttribution photo={photo} color="currentColor" />
-        </Box>
-      )}
-    </>
-  );
-}
-
 export function CategoryResultsContent() {
   const locale = useLocale();
   const ts = useTranslations("search");
@@ -374,7 +150,6 @@ export function CategoryResultsContent() {
   const { selectWithEnrichment } = usePlaceEnrichment();
   const { flyTo, mapRef, mapReady, zoomIn, zoomOut } = useMap();
   const expandOnBackgroundTap = useExpandOnBackgroundTap();
-  const registry = useIntegrationRegistry();
 
   const {
     filtered,
@@ -393,7 +168,22 @@ export function CategoryResultsContent() {
   } = useExploreReachResults();
   const transitStopsQuery = useTransitStops(isTransitCategory ? searchBbox : null);
   const { data: transitStops } = transitStopsQuery;
-  const transitAttributions = useAttributionFromHooks(transitStopsQuery);
+  const transitAttributions = useMemo(
+    () =>
+      snapshotContributors(
+        ...(transitStops ?? []).map((stop) =>
+          contributorsForRecordFields(stop, [
+            ...(stop.name ? ["name"] : []),
+            // The card shows the first icon for each mode. Preserve index-level
+            // overrides, including [] on a child of the modes container.
+            ...stop.modes.flatMap((mode, index) =>
+              stop.modes.indexOf(mode) === index ? [`modes.${index}`] : [],
+            ),
+          ]),
+        ),
+      ),
+    [transitStops],
+  );
   const transitLoading = isTransitCategory && transitStopsQuery.isLoading;
   const loading = isTransitCategory ? transitLoading : isLoading;
   const waitingForResponse = isTransitCategory ? transitStopsQuery.isFetching : isLoading;
@@ -443,15 +233,18 @@ export function CategoryResultsContent() {
     isTransitCategory,
     scrollRef,
   });
-  const poiAttributions = attributionsForSources(
-    registry,
-    results?.flatMap((place) => [
-      ...(place.provenance?.map((source) => source.sourceId) ?? []),
-      ...(cachedSummary(cardSummaries, place, locale)?.rating?.source
-        ? [cachedSummary(cardSummaries, place, locale)?.rating?.source]
-        : []),
-    ]) ?? [],
-  );
+  const poiAttributions =
+    !isTransitCategory && !isLoading && !isError
+      ? snapshotContributors(
+          ...(results ?? []).map((place) =>
+            categoryCardContributors(
+              place,
+              cachedSummary(cardSummaries, place, locale),
+              distanceReference ?? null,
+            ),
+          ),
+        )
+      : [];
   // Resolved once here (not per row — see useBrandLogos) so hook count stays
   // fixed no matter how many rows carry a brand identity.
   const brandQids = useMemo(() => distinctBrandQids(results ?? []), [results]);
@@ -548,173 +341,175 @@ export function CategoryResultsContent() {
       onClick={expandOnBackgroundTap}
       sx={{ flex: 1, overflowY: "auto", pt: { xs: 0, sm: "64px" } }}
     >
-      <BrandHeaderCard />
-      {(anchor || activeCategory || isViewportText || headerCount !== null) && (
-        <CategoryResultsHeader
-          count={headerCount}
-          isTransit={isTransitCategory}
-          sort={
-            chosenSort ??
-            (defaultSort === "distance" && distanceReference ? "distance" : "relevance")
-          }
-          onSort={(value) => setSortChoice({ revision: searchRevision, value })}
-          distanceReference={distanceReference ?? null}
-          showTravelTime={Boolean(anchor)}
-          showMapUpdate={Boolean(activeCategory || isViewportText)}
-          autoRefresh={autoRefresh}
-          onAutoRefresh={setAutoRefresh}
-          adHocLabel={activeCategory === AD_HOC_CATEGORY_ID ? adHocLabel : null}
-          attributions={
-            headerCount !== null && headerCount > 0
-              ? isTransitCategory
-                ? transitAttributions
-                : poiAttributions
-              : null
-          }
-        />
-      )}
-      {loading && (
-        <SearchLoading
-          key={`${mode}:${activeCategory}:${searchRevision}:${JSON.stringify(adHocFilter)}:${waitingForResponse}`}
-          waitingForResponse={waitingForResponse}
-        />
-      )}
-      {!isTransitCategory && isError && (
-        <Box sx={{ px: 2, py: 2 }}>
-          <ResultNotice
-            tone={isAreaTooLarge(error) ? "info" : "error"}
-            action={{
-              label: isAreaTooLarge(error) ? tm("zoomIn") : tc("retry"),
-              kind: isAreaTooLarge(error) ? "zoom" : "retry",
-              onClick: isAreaTooLarge(error) ? zoomIn : () => void refetch(),
-            }}
-          >
-            {isAreaTooLarge(error) ? ts("zoomInToSearch") : ts("failedToLoad")}
-          </ResultNotice>
-        </Box>
-      )}
-      {!isTransitCategory && !isError && partial && (
-        <Box sx={{ px: 2, pt: 1.5 }}>
-          <ResultNotice tone="info">{ts("partialResults")}</ResultNotice>
-        </Box>
-      )}
-      {/* The area holds more matches than the result cap returns. `partial`
+      <AttributionDetailsGroup placement="footer">
+        <BrandHeaderCard />
+        {(anchor || activeCategory || isViewportText || headerCount !== null) && (
+          <CategoryResultsHeader
+            count={headerCount}
+            isTransit={isTransitCategory}
+            sort={
+              chosenSort ??
+              (defaultSort === "distance" && distanceReference ? "distance" : "relevance")
+            }
+            onSort={(value) => setSortChoice({ revision: searchRevision, value })}
+            distanceReference={distanceReference ?? null}
+            showTravelTime={Boolean(anchor)}
+            showMapUpdate={Boolean(activeCategory || isViewportText)}
+            autoRefresh={autoRefresh}
+            onAutoRefresh={setAutoRefresh}
+            adHocLabel={activeCategory === AD_HOC_CATEGORY_ID ? adHocLabel : null}
+            attributions={
+              headerCount !== null && headerCount > 0
+                ? isTransitCategory
+                  ? transitAttributions
+                  : poiAttributions
+                : null
+            }
+          />
+        )}
+        {loading && (
+          <SearchLoading
+            key={`${mode}:${activeCategory}:${searchRevision}:${JSON.stringify(adHocFilter)}:${waitingForResponse}`}
+            waitingForResponse={waitingForResponse}
+          />
+        )}
+        {!isTransitCategory && isError && (
+          <Box sx={{ px: 2, py: 2 }}>
+            <ResultNotice
+              tone={isAreaTooLarge(error) ? "info" : "error"}
+              action={{
+                label: isAreaTooLarge(error) ? tm("zoomIn") : tc("retry"),
+                kind: isAreaTooLarge(error) ? "zoom" : "retry",
+                onClick: isAreaTooLarge(error) ? zoomIn : () => void refetch(),
+              }}
+            >
+              {isAreaTooLarge(error) ? ts("zoomInToSearch") : ts("failedToLoad")}
+            </ResultNotice>
+          </Box>
+        )}
+        {!isTransitCategory && !isError && partial && (
+          <Box sx={{ px: 2, pt: 1.5 }}>
+            <ResultNotice tone="info">{ts("partialResults")}</ResultNotice>
+          </Box>
+        )}
+        {/* The area holds more matches than the result cap returns. `partial`
           already tells the stronger story (something failed), so only one of the
           two notices ever shows. Both phrasings describe the *area*, never "showing
           N" — the count below is post-filter, so a "showing N" here would contradict
           it whenever an hours or facet chip is active. */}
-      {!isTransitCategory && !isError && !partial && truncated && (
-        <Box sx={{ px: 2, pt: 1.5 }}>
-          <ResultNotice tone="info">
-            {total === undefined
-              ? ts("truncatedResultsUnknown")
-              : ts("truncatedResults", { total })}
-          </ResultNotice>
-        </Box>
-      )}
-      {!isTransitCategory && !isError && relaxed && relaxed.length > 0 && (
-        <Box sx={{ px: 2, pt: 1.5 }}>
-          <ResultNotice tone="info">
-            {ts("relaxedFilters", { filters: relaxed.map(relaxedFilterLabel).join(", ") })}
-          </ResultNotice>
-        </Box>
-      )}
-      {/* Transit: empty state */}
-      {isTransitCategory && transitStopsQuery.isError && (
-        <Box sx={{ px: 2, py: 2 }}>
-          <ResultNotice
-            tone={transitAreaTooLarge ? "info" : "error"}
-            action={{
-              label: transitAreaTooLarge ? tm("zoomIn") : tc("retry"),
-              kind: transitAreaTooLarge ? "zoom" : "retry",
-              onClick: transitAreaTooLarge ? zoomIn : () => void transitStopsQuery.refetch(),
-            }}
-          >
-            {transitAreaTooLarge ? ts("zoomInToSearch") : ts("failedToLoad")}
-          </ResultNotice>
-        </Box>
-      )}
-      {isTransitCategory &&
-        !transitLoading &&
-        !transitStopsQuery.isError &&
-        transitStops &&
-        transitStops.length === 0 && (
+        {!isTransitCategory && !isError && !partial && truncated && (
+          <Box sx={{ px: 2, pt: 1.5 }}>
+            <ResultNotice tone="info">
+              {total === undefined
+                ? ts("truncatedResultsUnknown")
+                : ts("truncatedResults", { total })}
+            </ResultNotice>
+          </Box>
+        )}
+        {!isTransitCategory && !isError && relaxed && relaxed.length > 0 && (
+          <Box sx={{ px: 2, pt: 1.5 }}>
+            <ResultNotice tone="info">
+              {ts("relaxedFilters", { filters: relaxed.map(relaxedFilterLabel).join(", ") })}
+            </ResultNotice>
+          </Box>
+        )}
+        {/* Transit: empty state */}
+        {isTransitCategory && transitStopsQuery.isError && (
+          <Box sx={{ px: 2, py: 2 }}>
+            <ResultNotice
+              tone={transitAreaTooLarge ? "info" : "error"}
+              action={{
+                label: transitAreaTooLarge ? tm("zoomIn") : tc("retry"),
+                kind: transitAreaTooLarge ? "zoom" : "retry",
+                onClick: transitAreaTooLarge ? zoomIn : () => void transitStopsQuery.refetch(),
+              }}
+            >
+              {transitAreaTooLarge ? ts("zoomInToSearch") : ts("failedToLoad")}
+            </ResultNotice>
+          </Box>
+        )}
+        {isTransitCategory &&
+          !transitLoading &&
+          !transitStopsQuery.isError &&
+          transitStops &&
+          transitStops.length === 0 && (
+            <Box sx={{ px: 2, py: 4, textAlign: "center" }}>
+              <Typography
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
+                {ts("noStopsFound")}
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary", mt: 1 }}>
+                {ts("moveMapToSearch")}
+              </Typography>
+              <Button size="small" variant="outlined" sx={{ mt: 1.5 }} onClick={zoomOut}>
+                {tm("zoomOut")}
+              </Button>
+            </Box>
+          )}
+        {/* Transit: results list */}
+        {isTransitCategory &&
+          !transitLoading &&
+          !transitStopsQuery.isError &&
+          transitStops &&
+          transitStops.length > 0 && (
+            <ResultList
+              items={transitStops}
+              getKey={(stop) => stop.id}
+              renderItem={(stop) => <TransitStopCard stop={stop} onSelect={handleSelectStop} />}
+            />
+          )}
+        {/* Non-transit: empty state */}
+        {!isTransitCategory && !isLoading && !isError && results && results.length === 0 && (
           <Box sx={{ px: 2, py: 4, textAlign: "center" }}>
             <Typography
               sx={{
                 color: "text.secondary",
               }}
             >
-              {ts("noStopsFound")}
+              {activeBrand
+                ? ts("noBrandLocationsInView", { brand: activeBrand.name })
+                : ts("noResultsFound")}
             </Typography>
-            <Typography variant="body2" sx={{ color: "text.secondary", mt: 1 }}>
-              {ts("moveMapToSearch")}
-            </Typography>
-            <Button size="small" variant="outlined" sx={{ mt: 1.5 }} onClick={zoomOut}>
-              {tm("zoomOut")}
+            {!hasAppliedFilters && (
+              <Typography variant="body2" sx={{ color: "text.secondary", mt: 1 }}>
+                {ts("moveMapToSearch")}
+              </Typography>
+            )}
+            <Button
+              size="small"
+              variant="outlined"
+              sx={{ mt: 1.5 }}
+              onClick={hasAppliedFilters ? clearAppliedFilters : zoomOut}
+            >
+              {hasAppliedFilters ? ts("clearFilters") : tm("zoomOut")}
             </Button>
           </Box>
         )}
-      {/* Transit: results list */}
-      {isTransitCategory &&
-        !transitLoading &&
-        !transitStopsQuery.isError &&
-        transitStops &&
-        transitStops.length > 0 && (
+        {/* Non-transit: results list */}
+        {!isTransitCategory && !isLoading && !isError && results && results.length > 0 && (
           <ResultList
-            items={transitStops}
-            getKey={(stop) => stop.id}
-            renderItem={(stop) => <TransitStopCard stop={stop} onSelect={handleSelectStop} />}
+            items={results}
+            getKey={(place) => place.id}
+            renderItem={(place) => (
+              <Box data-card-id={place.id}>
+                <PlaceResultRow
+                  place={place}
+                  summary={cachedSummary(cardSummaries, place, locale)}
+                  isHovered={hoveredCategoryPlaceId === place.id}
+                  onSelect={handleSelectPlace}
+                  onHover={setHoveredCategoryPlaceId}
+                  onHoverEnd={() => setHoveredCategoryPlaceId(null)}
+                  brandLogos={brandLogos}
+                  distanceReference={distanceReference}
+                />
+              </Box>
+            )}
           />
         )}
-      {/* Non-transit: empty state */}
-      {!isTransitCategory && !isLoading && !isError && results && results.length === 0 && (
-        <Box sx={{ px: 2, py: 4, textAlign: "center" }}>
-          <Typography
-            sx={{
-              color: "text.secondary",
-            }}
-          >
-            {activeBrand
-              ? ts("noBrandLocationsInView", { brand: activeBrand.name })
-              : ts("noResultsFound")}
-          </Typography>
-          {!hasAppliedFilters && (
-            <Typography variant="body2" sx={{ color: "text.secondary", mt: 1 }}>
-              {ts("moveMapToSearch")}
-            </Typography>
-          )}
-          <Button
-            size="small"
-            variant="outlined"
-            sx={{ mt: 1.5 }}
-            onClick={hasAppliedFilters ? clearAppliedFilters : zoomOut}
-          >
-            {hasAppliedFilters ? ts("clearFilters") : tm("zoomOut")}
-          </Button>
-        </Box>
-      )}
-      {/* Non-transit: results list */}
-      {!isTransitCategory && !isLoading && !isError && results && results.length > 0 && (
-        <ResultList
-          items={results}
-          getKey={(place) => place.id}
-          renderItem={(place) => (
-            <Box data-card-id={place.id}>
-              <CategoryPlaceCard
-                place={place}
-                summary={cachedSummary(cardSummaries, place, locale)}
-                isHovered={hoveredCategoryPlaceId === place.id}
-                onSelect={handleSelectPlace}
-                onHover={setHoveredCategoryPlaceId}
-                onHoverEnd={() => setHoveredCategoryPlaceId(null)}
-                brandLogos={brandLogos}
-                distanceReference={distanceReference}
-              />
-            </Box>
-          )}
-        />
-      )}
+      </AttributionDetailsGroup>
     </Box>
   );
 }

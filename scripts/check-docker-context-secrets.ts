@@ -1219,7 +1219,35 @@ function casePattern(command: string): { pattern: string; remainder: string } | 
 }
 
 function staticGroupRedirection(source: string): boolean {
-  return /^(?:\d*(?:<|>|>>|<>)\s*(?:[A-Za-z0-9_./-]+|"[^"$`]*"|'[^']*')\s*)+$/.test(source);
+  if (!source) return false;
+  // Consume raw characters once: shellWordSpans removes quotes and escapes that
+  // this deliberately narrow grammar must validate. Never retry target/fd splits.
+  let index = 0;
+  while (index < source.length) {
+    while (/[0-9]/.test(source[index] ?? "")) index += 1;
+    const operator = source[index];
+    if (operator !== "<" && operator !== ">") return false;
+    index += 1;
+    if (source[index] === ">") index += 1;
+    while (/\s/.test(source[index] ?? "")) index += 1;
+
+    const quote = source[index];
+    if (quote === '"' || quote === "'") {
+      index += 1;
+      while (index < source.length && source[index] !== quote) {
+        if (quote === '"' && (source[index] === "$" || source[index] === "`")) return false;
+        index += 1;
+      }
+      if (source[index] !== quote) return false;
+      index += 1;
+    } else {
+      const start = index;
+      while (/[A-Za-z0-9_./-]/.test(source[index] ?? "")) index += 1;
+      if (index === start) return false;
+    }
+    while (/\s/.test(source[index] ?? "")) index += 1;
+  }
+  return true;
 }
 
 function structuralAsynchronousLists(nodes: ShellNode[]): ShellNode[] {

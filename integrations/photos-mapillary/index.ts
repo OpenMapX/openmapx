@@ -1,7 +1,10 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import {
+  capturePhotoProviderContributors,
+  type IntegrationContext,
+} from "@openmapx/integration-framework";
 import { mapillaryPhotoProvider, setMapillaryAccessToken } from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
   ctx.onActivate(() => setMapillaryAccessToken(ctx.config.accessToken as string | undefined));
-  ctx.registerPhotoProvider(mapillaryPhotoProvider);
+  ctx.registerPhotoProvider(capturePhotoProviderContributors(ctx, mapillaryPhotoProvider));
 }

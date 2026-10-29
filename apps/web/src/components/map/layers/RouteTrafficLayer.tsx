@@ -7,11 +7,15 @@ import {
   useRouteFlow,
 } from "@openmapx/core";
 import { useMemo } from "react";
-import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
+import {
+  EMPTY_FEATURE_COLLECTION,
+  type MapLayerGroup,
+  type SlottedLayer,
+} from "@/integration-api/map/mapLayerGroup";
 import { flowColorExpression } from "@/integration-api/map/trafficFlowExpression";
 import { useDrawnDirectionsRoutes } from "@/integration-api/map/useDrawnDirectionsRoutes";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
-import { useIntegrationDomainAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { ROUTE_ALT_OPACITY, ROUTE_WIDTHS } from "@/lib/routeStyle";
 import {
   activeSpanFilter,
@@ -30,8 +34,6 @@ const ALT_LAYER = "route-traffic-alt";
 
 /** Congestion is a driving concern; a bike route through a jam is not slowed by it. */
 const MOTORISED = new Set(["driving", "motorcycle"]);
-
-const EMPTY = { type: "FeatureCollection" as const, features: [] };
 
 /**
  * Live congestion painted on the route itself: the band is a slice of the drawn
@@ -97,13 +99,12 @@ export function RouteTrafficLayer() {
   const live = !navigating || isLiveNavigationStatus(navStatus);
   const spansByRoute = useRouteFlow(flowInputs, enabled && live);
 
-  const hasBands = Object.values(spansByRoute).some((spans) => spans.length > 0);
-  useIntegrationDomainAttribution("road-conditions", enabled && hasBands);
+  useRenderedMapAttributions("route-flow", [ACTIVE_LAYER, CURRENT_LAYER, ALT_LAYER], enabled);
 
   // The whole picture, untrimmed — never re-published on progress alone (see
   // `routes`'s own comment above).
   const staticFeatures = useMemo(
-    () => (enabled ? buildStaticSpanFeatures(routes, spansByRoute) : EMPTY),
+    () => (enabled ? buildStaticSpanFeatures(routes, spansByRoute) : EMPTY_FEATURE_COLLECTION),
     [enabled, routes, spansByRoute],
   );
 
@@ -113,7 +114,7 @@ export function RouteTrafficLayer() {
   // This *is* meant to change every GPS fix — cheap because it is small, not
   // because it is memoized away.
   const currentFeatures = useMemo(() => {
-    if (!enabled || !activeRoute || currentAlongMeters <= 0) return EMPTY;
+    if (!enabled || !activeRoute || currentAlongMeters <= 0) return EMPTY_FEATURE_COLLECTION;
     const spans = spansByRoute[activeRoute.id] ?? [];
     return {
       type: "FeatureCollection" as const,

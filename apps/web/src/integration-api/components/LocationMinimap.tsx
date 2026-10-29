@@ -2,12 +2,15 @@
 
 import Box from "@mui/material/Box";
 import { type SxProps, type Theme, useColorScheme } from "@mui/material/styles";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import type { StyleSpecification } from "maplibre-gl";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MapCredits } from "@/components/map/MapCredits";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import { baseMapCreditsHtml, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
+import { loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
 import { loadMapLibreRuntime } from "@/lib/maplibreRuntime";
+import { captureNativeBasemapRequest } from "@/lib/nativeBasemapAcquisition";
 
 interface LocationMinimapProps {
   lng: number;
@@ -15,6 +18,8 @@ interface LocationMinimapProps {
   zoom?: number;
   onClick?: () => void;
   sx?: SxProps<Theme>;
+  /** Transfers credit placement to the caller, using the installed style receipt. */
+  onCreditsChange?: (credits: readonly Attribution[]) => void;
 }
 
 interface MinimapInstance {
@@ -31,12 +36,22 @@ interface MinimapInstance {
  * placement via `sx`. Mirrors MapCanvas' style loading so it works against both
  * MapTiler and a self-hosted openmapx-streets tileserver.
  */
-export function LocationMinimap({ lng, lat, zoom = 16, onClick, sx }: LocationMinimapProps) {
+export function LocationMinimap({
+  lng,
+  lat,
+  zoom = 16,
+  onClick,
+  sx,
+  onCreditsChange,
+}: LocationMinimapProps) {
   const env = useEnv();
   const { mode, systemMode } = useColorScheme();
   const variant = (mode === "system" ? systemMode : mode) === "dark" ? "dark" : "light";
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MinimapInstance | null>(null);
+  const [credits, setCredits] = useState<Attribution[]>([]);
+  const creditsCallbackRef = useRef(onCreditsChange);
+  creditsCallbackRef.current = onCreditsChange;
   const cameraRef = useRef({ lng, lat, zoom });
   cameraRef.current = { lng, lat, zoom };
 
@@ -44,23 +59,28 @@ export function LocationMinimap({ lng, lat, zoom = 16, onClick, sx }: LocationMi
     const el = containerRef.current;
     if (!el) return;
 
+    const acquisition = captureNativeBasemapRequest(env);
     let cancelled = false;
     let instance: MinimapInstance | null = null;
 
     (async () => {
       const [maplibregl, style] = await Promise.all([
         loadMapLibreRuntime(),
-        env.styleProvider === "openmapx"
-          ? loadOpenMapXStyle(env, variant)
-          : loadMaptilerStyle(variant === "dark" ? "streets-v2-dark" : "bright-v2", env),
+        acquisition.env.styleProvider === "openmapx"
+          ? loadOpenMapXStyle(acquisition.env, variant)
+          : loadMaptilerStyle(
+              variant === "dark" ? "streets-v2-dark" : "bright-v2",
+              acquisition.env,
+            ),
       ]);
       if (cancelled || !el) return;
 
+      const candidate = acquisition.bind(style, false);
       const camera = cameraRef.current;
 
       const map = new maplibregl.Map({
         container: el,
-        style: style as string | StyleSpecification,
+        style: candidate.style as StyleSpecification,
         center: [camera.lng, camera.lat],
         zoom: camera.zoom,
         interactive: false,
@@ -83,6 +103,12 @@ export function LocationMinimap({ lng, lat, zoom = 16, onClick, sx }: LocationMi
 
       instance = { map, marker };
       mapRef.current = instance;
+      const installedCredits = snapshotContributors(
+        candidate.styleContributors,
+        ...Object.values(candidate.sourceContributors),
+      );
+      setCredits(installedCredits);
+      creditsCallbackRef.current?.(installedCredits);
     })().catch(() => {
       // Style load or MapLibre import failed — leave the container empty.
     });
@@ -90,6 +116,8 @@ export function LocationMinimap({ lng, lat, zoom = 16, onClick, sx }: LocationMi
     return () => {
       cancelled = true;
       if (instance) {
+        setCredits([]);
+        creditsCallbackRef.current?.([]);
         instance.map.remove();
         if (mapRef.current === instance) mapRef.current = null;
         instance = null;
@@ -114,7 +142,7 @@ export function LocationMinimap({ lng, lat, zoom = 16, onClick, sx }: LocationMi
       sx={[{ position: "relative" }, ...(Array.isArray(sx) ? sx : [sx])] as SxProps<Theme>}
     >
       <Box ref={containerRef} sx={{ position: "absolute", inset: 0 }} />
-      <MapCredits compact html={baseMapCreditsHtml(env)} />
+      {!onCreditsChange && credits.length > 0 && <MapCredits attributions={credits} />}
     </Box>
   );
 }

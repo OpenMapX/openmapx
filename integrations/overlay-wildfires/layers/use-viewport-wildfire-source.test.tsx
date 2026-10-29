@@ -681,3 +681,20 @@ describe("useViewportWildfireSource", () => {
     expect(useWildfireStore.getState().statuses.effis.featureCount).toBe(9);
   });
 });
+
+it("retains last-good publication when only contributor resolver callbacks change", async () => {
+  const good = { ...EMPTY_COLLECTION, features: [NIFC_FEATURE], sources: ["us-nifc-fires"] };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => response(good)),
+  );
+  const { params, rerender } = mountSource();
+  await waitFor(() => expect(params.publish).toHaveBeenCalledWith(good));
+  const nextPublish = vi.fn<(data: WildfireFeatureCollection) => void>();
+  const nextClear = vi.fn();
+  rerender({ ...params, publish: nextPublish, clear: nextClear });
+  await act(async () => {});
+  expect(params.clear).not.toHaveBeenCalled();
+  expect(nextClear).not.toHaveBeenCalled();
+  expect(fetch).toHaveBeenCalledTimes(1);
+});

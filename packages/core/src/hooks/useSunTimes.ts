@@ -1,7 +1,8 @@
+import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 
-export interface SunTimesResponse {
+export interface SunTimesResponse extends ContributingRecord {
   sunrise: string;
   sunset: string;
   solarNoon: string;
@@ -13,7 +14,6 @@ export interface SunTimesResponse {
   astronomicalTwilightBegin: string;
   astronomicalTwilightEnd: string;
   timezone: string;
-  attribution: { name: string; url: string; license?: string; licenseUrl?: string };
 }
 
 export function useSunTimes(lat: number | null, lng: number | null, enabled = true) {

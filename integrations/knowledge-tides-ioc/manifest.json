@@ -22,7 +22,10 @@
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
   "quality": "built-in",
@@ -39,16 +42,69 @@
       "sourceId": "ioc-sealevel",
       "name": "IOC Sea Level Station Monitoring Facility",
       "url": "https://www.ioc-sealevelmonitoring.org/",
-      "license": "UNESCO-IOC public data",
-      "licenseUrl": "https://www.unesco.org/en/open-access",
       "attribution": "Water-level data from the <a href=\"https://www.ioc-sealevelmonitoring.org/\">IOC Sea Level Station Monitoring Facility</a>",
-      "commercialUse": "yes",
+      "commercialUse": "conditional",
       "providerCountry": "FR",
       "providerPrivacyUrl": "https://www.unesco.org/en/legal-affairs/privacy-policy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Each IOC originator measurement set",
+            "license": {
+              "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://www.ioc-sealevelmonitoring.org/disclaimer.php"],
+              "reason": "Exact originator permission and non-commercial scope remain unresolved; visible credit does not grant usage"
+            },
+            "conditions": [
+              "Published IOC data and products are available for non-commercial use; commercial use requires permission from the relevant data originators. Originator permissions for this operator are unverified."
+            ]
+          },
+          {
+            "scope": "service",
+            "subject": "IOC distribution policy",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:ioc-sealevel",
+              "id": "LicenseRef-Service-Terms",
+              "name": "IOC distribution policy terms",
+              "url": "https://www.ioc-sealevelmonitoring.org/disclaimer.php"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://www.ioc-sealevelmonitoring.org/disclaimer.php"],
+              "reason": "Exact originator permission and non-commercial scope remain unresolved; visible credit does not grant usage"
+            },
+            "conditions": [
+              "Published IOC data and products are available for non-commercial use; commercial use requires permission from the relevant data originators. Originator permissions for this operator are unverified."
+            ]
+          }
+        ],
+        "declarations": [
+          {
+            "text": "UNESCO-IOC public data",
+            "url": "https://www.unesco.org/en/open-access"
+          }
+        ]
+      },
+      "notes": "Published IOC data and products are available for non-commercial use; commercial use requires permission from the relevant data originators. Originator permissions for this operator are unverified.",
+      "usageConditions": [
+        "Published IOC data and products are available for non-commercial use; commercial use requires permission from the relevant data originators. Originator permissions for this operator are unverified."
+      ]
     }
   ]
 }

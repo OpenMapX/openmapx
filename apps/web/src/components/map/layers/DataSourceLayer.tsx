@@ -2,15 +2,9 @@
 
 import Box from "@mui/material/Box";
 import { alpha } from "@mui/material/styles";
-import type {
-  DataSourceMapContextSelection,
-  DataSourceMeta,
-  DataSourceResult,
-  LngLat,
-} from "@openmapx/core";
+import type { DataSourceMapContextSelection, DataSourceResult, LngLat } from "@openmapx/core";
 import {
   applyClientSideFilters,
-  createPlace,
   PANEL,
   splitFilters,
   useDataSourceMapContext,
@@ -18,26 +12,43 @@ import {
   useDataSourceStore,
   useDataSources,
   useOpeningHoursStore,
-  usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
-import { isI18nToken, type Translatable } from "@openmapx/integration-framework/strings";
+import { isI18nToken } from "@openmapx/integration-framework/strings";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  contributorsForField,
+  contributorsForRecordFields,
+  readCapturedContributors,
+  serializeContributors,
+  snapshotContributors,
+  withContributors,
+  withFeatureContributors,
+} from "@openmapx/mobility-core/contributors";
 import type * as maplibregl from "maplibre-gl";
 import type { Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSourceI18nResolver";
 import { usePinMarker } from "@/hooks/usePinMarker";
+import {
+  buildGeoJson,
+  buildTrackGeoJson,
+  buildVariantColorExpression,
+  DATA_SOURCE_TRACK_LAYOUT,
+  dataSourceCirclePaint,
+  dataSourceTrackPaint,
+} from "@/integration-api/map/dataSourceFeatures";
+import { openDataSourceItem } from "@/integration-api/map/dataSourceOverlay";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { addLayerInSlot, removeSlottedLayers } from "@/integration-api/map/layerStack";
 import { createGeoJsonSourcePublisher } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
-import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
-import { dataSourceLayerCredits } from "@/lib/attributionForProviders";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
+import { dataSourceRecordContributors } from "@/lib/attributionForProviders";
 import { dataSourceBrandImageId, loadDataSourceBrandMarker } from "@/lib/dataSourceBrandMarker";
 import { translateDataSourceSummary } from "@/lib/dataSourceSummaryI18n";
 import { createMarkerSvg } from "@/lib/markerSvg";
@@ -73,6 +84,14 @@ function labelsLayerId(dsId: string) {
   return `ds-${dsId}-labels`;
 }
 
+function tracksSourceId(dsId: string) {
+  return `ds-${dsId}-tracks`;
+}
+
+function tracksLayerId(dsId: string) {
+  return `ds-${dsId}-tracks`;
+}
+
 function mapContextSourceId(dsId: string) {
   return `ds-${dsId}-map-context`;
 }
@@ -85,6 +104,8 @@ function mapContextOutlineLayerId(dsId: string) {
   return `ds-${dsId}-map-context-outline`;
 }
 
+const loadedBrandAssets = new WeakMap<MaplibreMap, Map<string, readonly Attribution[]>>();
+
 const ZONE_LABEL_KEYS = {
   no_ride: "contextNoRide",
   no_parking: "contextNoParking",
@@ -93,49 +114,6 @@ const ZONE_LABEL_KEYS = {
   slow_zone: "contextSlowZone",
   station_area: "contextStationArea",
 } as const satisfies Record<ContextZoneClass, string>;
-
-/**
- * Buckets a data-source result's live availability into a marker color state.
- * `unknown` covers results with no live coverage (or a reported zero-capacity
- * station), so the marker falls back to its static variant color.
- */
-export function availStateOf(result: {
-  availability?: { available: number; total: number };
-}): "available" | "busy" | "unknown" {
-  const a = result.availability;
-  if (!a || a.total === 0) return "unknown";
-  return a.available > 0 ? "available" : "busy";
-}
-
-function buildGeoJson(
-  results: DataSourceResult[],
-  translate: (value: Translatable | undefined) => string | undefined,
-  imageId?: string,
-) {
-  return {
-    type: "FeatureCollection" as const,
-    features: results.map((r) => ({
-      type: "Feature" as const,
-      geometry: {
-        type: "Point" as const,
-        coordinates: r.coordinates,
-      },
-      properties: {
-        id: r.id,
-        name: r.name || (translate(r.fallbackName) ?? ""),
-        source: r.source,
-        variant: r.variant,
-        status: r.status ?? "",
-        summary: translate(r.summary) ?? "",
-        operator: r.operator ?? "",
-        kind: r.kind ?? "",
-        availState: availStateOf(r),
-        logoUrl: r.branding?.logoUrl ?? "",
-        ...(imageId ? { imageId } : {}),
-      },
-    })),
-  };
-}
 
 function buildMapContextSelection(results: DataSourceResult[]): DataSourceMapContextSelection {
   const systemIds = new Set<string>();
@@ -168,23 +146,6 @@ function buildMapContextSelection(results: DataSourceResult[]): DataSourceMapCon
 }
 
 /**
- * Build a MapLibre `match` expression for circle-color using variantColors.
- */
-function buildVariantColorExpression(
-  markerStyle: DataSourceMeta["markerStyle"],
-): maplibregl.ExpressionSpecification {
-  const entries = Object.entries(markerStyle.variantColors);
-  if (entries.length === 0) return ["literal", markerStyle.defaultColor];
-
-  const expr: unknown[] = ["match", ["get", "variant"]];
-  for (const [variant, color] of entries) {
-    expr.push(variant, color);
-  }
-  expr.push(markerStyle.defaultColor);
-  return expr as maplibregl.ExpressionSpecification;
-}
-
-/**
  * Creates a 64x64 SVG (2x for retina): colored circle with white icon path.
  */
 
@@ -198,30 +159,19 @@ function loadMarkerImage(map: MaplibreMap, imageId: string, iconPath: string, fi
 }
 
 function removeLayers(map: maplibregl.Map, dsId: string) {
-  const sid = sourceId(dsId);
-  const markers = markersLayerId(dsId);
-  const labels = labelsLayerId(dsId);
-  const mapContextSid = mapContextSourceId(dsId);
-  const mapContextFill = mapContextFillLayerId(dsId);
-  const mapContextOutline = mapContextOutlineLayerId(dsId);
-  try {
-    if (map.getLayer(mapContextOutline)) map.removeLayer(mapContextOutline);
-    if (map.getLayer(mapContextFill)) map.removeLayer(mapContextFill);
-    if (map.getLayer(brandLogosLayerId(dsId))) map.removeLayer(brandLogosLayerId(dsId));
-    if (map.getLayer(brandHalosLayerId(dsId))) map.removeLayer(brandHalosLayerId(dsId));
-    if (map.getLayer(labels)) map.removeLayer(labels);
-    if (map.getLayer(markers)) map.removeLayer(markers);
-    if (map.getSource(mapContextSid)) map.removeSource(mapContextSid);
-    if (map.getSource(sid)) map.removeSource(sid);
-  } catch {
-    // Source may already be torn down
-  }
-  unregisterLayerSlot(mapContextOutline);
-  unregisterLayerSlot(mapContextFill);
-  unregisterLayerSlot(brandLogosLayerId(dsId));
-  unregisterLayerSlot(brandHalosLayerId(dsId));
-  unregisterLayerSlot(labels);
-  unregisterLayerSlot(markers);
+  removeSlottedLayers(
+    map,
+    [
+      tracksLayerId(dsId),
+      mapContextOutlineLayerId(dsId),
+      mapContextFillLayerId(dsId),
+      brandLogosLayerId(dsId),
+      brandHalosLayerId(dsId),
+      labelsLayerId(dsId),
+      markersLayerId(dsId),
+    ],
+    [tracksSourceId(dsId), mapContextSourceId(dsId), sourceId(dsId)],
+  );
 }
 
 export function DataSourceLayer() {
@@ -293,22 +243,47 @@ export function DataSourceLayer() {
     searchBbox !== null &&
     (activeMeta ? viewportZoom >= activeMeta.minZoom : true);
 
-  const {
-    data: searchResults,
-    attributions: searchAttributions,
-    isFetching: searchIsFetching,
-  } = useDataSourceSearch(
+  const { data: searchResults, attributions: searchAttributions } = useDataSourceSearch(
     shouldFetch ? activeSource : null,
     shouldFetch ? searchBbox : null,
     serverFilters,
   );
 
+  // Keep a legacy record's receipt with its identity while the same cached
+  // record remains visible, even if a refresh or registry generation changes.
+  const capturedRecords = useRef(new WeakMap<DataSourceResult, DataSourceResult>());
+  const previousCapturedResults = useRef<DataSourceResult[]>([]);
+  const capturedResults = useMemo(() => {
+    const next = (searchResults ?? []).map((record) => {
+      const retained = capturedRecords.current.get(record);
+      if (retained) return retained;
+      const captured = withContributors(
+        record,
+        dataSourceRecordContributors(
+          record,
+          searchAttributions,
+          registry.get(activeSource ?? "")?.dataSources ?? [],
+        ),
+      );
+      capturedRecords.current.set(record, captured);
+      return captured;
+    });
+    const previous = previousCapturedResults.current;
+    if (
+      next.length === previous.length &&
+      next.every((record, index) => record === previous[index])
+    )
+      return previous;
+    previousCapturedResults.current = next;
+    return next;
+  }, [searchResults, searchAttributions, registry, activeSource]);
+
   // Apply client-side filters (speed, operator, opening hours) to the search
   // results from React Query. No manual accumulation — React Query is the
   // single source of truth and handles caching/staleness.
   const filteredResults = useMemo(
-    () => applyClientSideFilters(searchResults ?? [], filters, openingHoursFilter),
-    [searchResults, filters, openingHoursFilter],
+    () => applyClientSideFilters(capturedResults, filters, openingHoursFilter),
+    [capturedResults, filters, openingHoursFilter],
   );
 
   const mapContextSelection = useMemo(
@@ -318,32 +293,84 @@ export function DataSourceLayer() {
 
   const shouldFetchMapContext = shouldFetch && viewportBbox !== null;
 
-  const { data: mapContext } = useDataSourceMapContext(
+  const { data: fetchedMapContext } = useDataSourceMapContext(
     shouldFetchMapContext ? activeSource : null,
     shouldFetchMapContext ? viewportBbox : null,
     serverFilters,
     mapContextSelection,
   );
 
-  // Attribution for the active layer: the manifest's declared sources the
-  // envelope credited for this response, plus every visible record's own
-  // credits — see `dataSourceLayerCredits` for the fallback and in-flight rules.
-  const dataSourceAttributions = useMemo<Attribution[]>(() => {
-    if (!activeSource) return [];
-    return dataSourceLayerCredits({
-      sourceLabel: activeSource,
-      dataSources: registry.get(activeSource)?.dataSources ?? [],
-      envelope: searchAttributions,
-      results: filteredResults,
-      isFetching: searchIsFetching,
-      // Credits nothing can render are flagged in dev so manifests and
-      // providers can be reconciled.
-      warn: process.env.NODE_ENV !== "production" ? console.warn : undefined,
-    });
-  }, [activeSource, registry, searchAttributions, searchIsFetching, filteredResults]);
-  useMapAttributions(
+  const mapContext = useMemo(
+    () =>
+      fetchedMapContext
+        ? {
+            ...fetchedMapContext,
+            geojson: {
+              ...fetchedMapContext.geojson,
+              features: fetchedMapContext.geojson.features.map((feature) =>
+                withFeatureContributors(
+                  feature,
+                  feature.contributors ??
+                    readCapturedContributors(feature.properties?._mapAttributions) ??
+                    [],
+                ),
+              ),
+            },
+          }
+        : fetchedMapContext,
+    [fetchedMapContext],
+  );
+  const attributionLayerIds = useMemo(
+    () =>
+      activeSource
+        ? [
+            markersLayerId(activeSource),
+            labelsLayerId(activeSource),
+            brandLogosLayerId(activeSource),
+            brandHalosLayerId(activeSource),
+            mapContextFillLayerId(activeSource),
+            mapContextOutlineLayerId(activeSource),
+            tracksLayerId(activeSource),
+          ]
+        : [],
+    [activeSource],
+  );
+  useRenderedMapAttributions(
     activeSource ? `data-source:${activeSource}` : "data-source",
-    dataSourceAttributions,
+    attributionLayerIds,
+    activeSource !== null && !!activeMeta && viewportZoom >= activeMeta.minZoom,
+    {
+      resolveFeatureContributors: (feature) => {
+        const properties = feature.properties ?? {};
+        if (!activeSource) return [];
+        if (feature.layer.id === labelsLayerId(activeSource)) {
+          const summaryZoom = Math.max(11, (activeMeta?.minZoom ?? 0) + 2) + 2;
+          return (
+            readCapturedContributors(
+              properties[
+                (mapRef.current?.getZoom() ?? 0) >= summaryZoom
+                  ? "_mapSummaryLabelAttributions"
+                  : "_mapLabelAttributions"
+              ],
+            ) ?? []
+          );
+        }
+        if (feature.layer.id === brandLogosLayerId(activeSource))
+          return properties.brandImageId
+            ? (readCapturedContributors(properties._mapBrandAttributions) ?? [])
+            : [];
+        if (feature.layer.id === brandHalosLayerId(activeSource))
+          return properties.brandImageId
+            ? (readCapturedContributors(properties._mapHaloAttributions) ?? [])
+            : [];
+        if (feature.layer.id === markersLayerId(activeSource))
+          return readCapturedContributors(properties._mapMarkerAttributions) ?? [];
+        if (feature.layer.id === tracksLayerId(activeSource))
+          return readCapturedContributors(properties._mapTrackAttributions) ?? [];
+        // Shared-mobility context geometry carries its own producer receipts.
+        return undefined;
+      },
+    },
   );
 
   // Show pin marker for hovered item
@@ -351,6 +378,16 @@ export function DataSourceLayer() {
   usePinMarker(
     hoveredResult?.coordinates ?? null,
     hoveredResult ? hoveredResult.name || resolveToken(hoveredResult.fallbackName) : "",
+    true,
+    undefined,
+    undefined,
+    hoveredResult ? contributorsForField(hoveredResult, "coordinates") : [],
+    hoveredResult
+      ? contributorsForRecordFields(hoveredResult, [
+          "coordinates",
+          hoveredResult.name ? "name" : "fallbackName",
+        ])
+      : [],
   );
 
   // Track whether we've set the initial searchBbox
@@ -400,7 +437,6 @@ export function DataSourceLayer() {
 
   // Clean up layers when activeSource changes
   useEffect(() => {
-    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -409,7 +445,7 @@ export function DataSourceLayer() {
       removeLayers(map, prevSource);
     }
     prevSourceRef.current = activeSource;
-  }, [activeSource, mapReady, styleVersion, mapRef]);
+  }, [activeSource, mapReady, mapRef]);
 
   const geojson = useMemo(
     () =>
@@ -422,9 +458,11 @@ export function DataSourceLayer() {
           return translateDataSourceSummary(summary, t);
         },
         activeMeta?.markerStyle.type === "icon" ? `ds-marker-${activeSource}` : undefined,
+        activeMeta?.markerStyle,
       ),
     [filteredResults, activeMeta, activeSource, resolveToken, t],
   );
+  const trackGeojson = useMemo(() => buildTrackGeoJson(filteredResults), [filteredResults]);
 
   // Sync GeoJSON source + layers
   useEffect(() => {
@@ -459,7 +497,7 @@ export function DataSourceLayer() {
 
       const urls = [...new Set(geojson.features.map((f) => f.properties.logoUrl).filter(Boolean))];
       const ready = urls.filter((url) => map.hasImage(dataSourceBrandImageId(url)));
-      const key = JSON.stringify(ready);
+      const key = JSON.stringify(ready.map((url) => [url, loadedBrandAssets.get(map)?.get(url)]));
       if (key !== brandedKey) {
         brandedKey = key;
         brandedData = ready.length
@@ -470,7 +508,17 @@ export function DataSourceLayer() {
                 properties: {
                   ...feature.properties,
                   ...(ready.includes(feature.properties.logoUrl)
-                    ? { brandImageId: dataSourceBrandImageId(feature.properties.logoUrl) }
+                    ? {
+                        brandImageId: dataSourceBrandImageId(feature.properties.logoUrl),
+                        _mapBrandAttributions: serializeContributors(
+                          snapshotContributors(
+                            readCapturedContributors(
+                              feature.properties._mapLogoSelectionAttributions,
+                            ) ?? [],
+                            loadedBrandAssets.get(map)?.get(feature.properties.logoUrl) ?? [],
+                          ),
+                        ),
+                      }
                     : {}),
                 },
               })),
@@ -484,9 +532,24 @@ export function DataSourceLayer() {
         if (map.hasImage(dataSourceBrandImageId(url)) || sourceAttempts.has(url)) continue;
         sourceAttempts.add(url);
         const isCurrent = () => !cancelled && map.getSource(sid) === source;
+        // This URL's first retained owner initiated the acquisition. Other rows
+        // keep their selector receipts; they do not retroactively supply its bytes.
+        const acquisitionReceipts = snapshotContributors(
+          readCapturedContributors(
+            geojson.features.find((feature) => feature.properties.logoUrl === url)?.properties
+              ._mapLogoFileAttributions,
+          ) ?? [],
+        );
         void loadDataSourceBrandMarker(map, url, isCurrent).then((loaded) => {
-          if (loaded && isCurrent()) syncLayer();
-          else if (!isCurrent()) sourceAttempts.delete(url);
+          if (loaded && isCurrent()) {
+            let assets = loadedBrandAssets.get(map);
+            if (!assets) {
+              assets = new Map();
+              loadedBrandAssets.set(map, assets);
+            }
+            assets.set(url, acquisitionReceipts);
+            syncLayer();
+          } else if (!isCurrent()) sourceAttempts.delete(url);
         });
       }
       if (urls.length) {
@@ -547,6 +610,28 @@ export function DataSourceLayer() {
           );
       }
 
+      const tracksSid = tracksSourceId(activeSource);
+      const tracksLid = tracksLayerId(activeSource);
+      if (trackGeojson.features.length > 0) {
+        publish(map, tracksSid, trackGeojson);
+        if (!map.getLayer(tracksLid)) {
+          addLayerInSlot(
+            map,
+            {
+              id: tracksLid,
+              type: "line",
+              source: tracksSid,
+              layout: DATA_SOURCE_TRACK_LAYOUT,
+              paint: dataSourceTrackPaint(activeMeta.markerStyle),
+            },
+            "overlay-lines",
+            17,
+          );
+        }
+      } else {
+        removeSlottedLayers(map, [tracksLid], [tracksSid]);
+      }
+
       const mapContextData = mapContext?.geojson;
       if (mapContextData && mapContextData.features.length > 0) {
         publish(map, mapContextSid, mapContextData);
@@ -591,11 +676,7 @@ export function DataSourceLayer() {
           );
         }
       } else {
-        if (map.getLayer(mapContextOutlineLid)) map.removeLayer(mapContextOutlineLid);
-        if (map.getLayer(mapContextFillLid)) map.removeLayer(mapContextFillLid);
-        if (map.getSource(mapContextSid)) map.removeSource(mapContextSid);
-        unregisterLayerSlot(mapContextOutlineLid);
-        unregisterLayerSlot(mapContextFillLid);
+        removeSlottedLayers(map, [mapContextOutlineLid, mapContextFillLid], [mapContextSid]);
       }
 
       if (useIconMarkers && imageId) {
@@ -670,41 +751,13 @@ export function DataSourceLayer() {
       } else {
         // Circle marker mode (default, e.g. EV charging)
         if (!map.getLayer(markersLid)) {
-          const variantColorExpr = buildVariantColorExpression(activeMeta.markerStyle);
-          const colorExpr: maplibregl.ExpressionSpecification = [
-            "match",
-            ["get", "availState"],
-            "available",
-            "#2E7D32",
-            "busy",
-            "#F9A825",
-            variantColorExpr,
-          ];
-
           addLayerInSlot(
             map,
             {
               id: markersLid,
               type: "circle",
               source: sid,
-              paint: {
-                "circle-radius": 6,
-                "circle-color": colorExpr,
-                "circle-stroke-color": "#ffffff",
-                "circle-stroke-width": 1.5,
-                "circle-opacity": [
-                  "case",
-                  ["==", ["get", "status"], "non-operational"],
-                  activeMeta.markerStyle.inactiveOpacity,
-                  1,
-                ],
-                "circle-stroke-opacity": [
-                  "case",
-                  ["==", ["get", "status"], "non-operational"],
-                  activeMeta.markerStyle.inactiveOpacity,
-                  1,
-                ],
-              },
+              paint: dataSourceCirclePaint(activeMeta.markerStyle),
             },
             "overlay-points",
             15,
@@ -722,6 +775,7 @@ export function DataSourceLayer() {
     activeSource,
     activeMeta,
     geojson,
+    trackGeojson,
     publish,
     viewportZoom,
     mapReady,
@@ -729,8 +783,6 @@ export function DataSourceLayer() {
     mapRef,
     mapContext,
   ]);
-
-  const { setSelectedPlace } = usePlaceStore();
 
   useEffect(() => {
     const map = mapRef.current;
@@ -805,26 +857,7 @@ export function DataSourceLayer() {
         kind?: string;
       };
       const coords = (features[0].geometry as { coordinates: number[] }).coordinates as LngLat;
-      selectItem(currentSource, props.id);
-      // For free-floating vehicles, leave the preview address empty so
-      // `usePlaceDetails` sends `hasAddress=0` and the API resolver runs a
-      // reverse-geocode to fill in a real street address. The marker label
-      // (e.g. "Dott E-Scooter") is not an address and would otherwise win
-      // the merge in `useMergedPlace`.
-      const isVehicle = props.kind === "vehicle";
-      // Set a preview place immediately so the floating card shows without waiting for detail API
-      setSelectedPlace(
-        createPlace({
-          primaryScheme: currentSource,
-          ids: { [currentSource]: props.id },
-          name: props.name,
-          address: isVehicle ? "" : props.name,
-          coordinates: coords,
-          category: activeMeta?.placeCategory,
-          rawCategory: activeMeta?.placeCategoryRaw,
-        }),
-      );
-      useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
+      openDataSourceItem(currentSource, props, coords, activeMeta);
     };
 
     const onMouseMove = (e: MapMouseEvent) => {
@@ -889,16 +922,7 @@ export function DataSourceLayer() {
       map.getCanvasContainer().style.cursor = "";
       setHoveredItemId(null);
     };
-  }, [
-    activeSource,
-    activeMeta,
-    mapReady,
-    styleVersion,
-    mapRef,
-    selectItem,
-    setSelectedPlace,
-    setHoveredItemId,
-  ]);
+  }, [activeSource, activeMeta, mapReady, styleVersion, mapRef, selectItem, setHoveredItemId]);
 
   // Cleanup on unmount
   useEffect(() => {

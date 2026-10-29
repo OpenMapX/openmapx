@@ -1,3 +1,9 @@
+import {
+  captureFieldContributors,
+  contributorsForField,
+  contributorsForFields,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { BrandKind, BrandSummary } from "../types/brand";
 import type { DataSourceBranding } from "../types/dataSource";
 import type { OverpassFilter } from "./overpassFilter";
@@ -72,13 +78,13 @@ export function commonsLogoUrl(logoFile: string, width = 64): string {
  * Gap-fills a data-source result/detail's branding from the brand catalog.
  *
  * Gap-fill only: an upstream feed's own mark is authoritative, so this never
- * overwrites an existing `logoUrl` — it only fills in a logo when the feed
- * published a plain operator/brand name and nothing else. `resolveBrand` is
+ * overwrites an existing `logoUrl`. Catalog filenames are identity hints;
+ * only an asynchronous per-file metadata acquisition may authorize logo bytes. `resolveBrand` is
  * passed in rather than imported here because `@openmapx/brands` depends on
  * this package (`@openmapx/core`); importing it back would be circular.
  *
  * Shared by the EV charging, fuel, and parking result/detail mappers so the
- * "look up the catalog, borrow its logo and name" block isn't hand-duplicated
+ * "look up the catalog and borrow its name" block isn't hand-duplicated
  * at each of the six call sites.
  */
 export function gapFillBranding(
@@ -86,14 +92,88 @@ export function gapFillBranding(
   osmTags: Record<string, string> | undefined,
   resolveBrand: (
     osmTags: Record<string, string> | undefined,
-  ) => { name: string; logoFile?: string } | undefined,
+  ) => Pick<BrandSummary, "name" | "logoFile" | "contributors" | "fieldContributors"> | undefined,
 ): DataSourceBranding | undefined {
   if (existing?.logoUrl) return existing;
   const catalogued = resolveBrand(osmTags);
-  if (!catalogued?.logoFile) return existing;
+  if (!catalogued) return existing;
+  if (existing?.name !== undefined) return existing;
+  const fieldContributors = {
+    ...Object.fromEntries(
+      Object.keys(existing ?? {})
+        .filter((field) => !["contributors", "fieldContributors"].includes(field))
+        .flatMap((field) => Object.entries(captureFieldContributors(existing ?? {}, field))),
+    ),
+    ...captureFieldContributors(catalogued, "name"),
+  };
   return {
     ...existing,
-    name: existing?.name ?? catalogued.name,
-    logoUrl: commonsLogoUrl(catalogued.logoFile, 96),
+    name: catalogued.name,
+    fieldContributors,
+    contributors: contributorsForFields(fieldContributors, Object.keys(fieldContributors)),
+  };
+}
+
+/** Trusted mapper boundary: catalogue branding cannot broaden every station field's source. */
+export function withBrandingContributors<
+  T extends {
+    contributors?: BrandSummary["contributors"];
+    fieldContributors?: BrandSummary["fieldContributors"];
+    branding?: DataSourceBranding;
+  },
+>(record: T): T {
+  if (!record.branding?.contributors && !record.branding?.fieldContributors) return record;
+  const fieldContributors = {
+    ...Object.fromEntries(
+      Object.keys(record)
+        .filter((field) => !["contributors", "fieldContributors", "branding"].includes(field))
+        .flatMap((field) => Object.entries(captureFieldContributors(record, field))),
+    ),
+    branding: snapshotContributors(record.branding.contributors ?? []),
+    ...Object.fromEntries(
+      Object.keys(record.branding)
+        .filter((field) => !["contributors", "fieldContributors"].includes(field))
+        .flatMap((field) =>
+          Object.entries(
+            captureFieldContributors(record.branding ?? {}, field, `branding.${field}`),
+          ),
+        ),
+    ),
+  };
+  return {
+    ...record,
+    fieldContributors,
+    contributors: contributorsForFields(fieldContributors, Object.keys(fieldContributors)),
+  };
+}
+
+/** A place supplies its label/identity; the catalogue supplies only the selected file hint. */
+export function brandForPlaceLogo(
+  place: {
+    name: string;
+    brand?: { name?: string; wikidata?: string };
+    contributors?: BrandSummary["contributors"];
+    fieldContributors?: BrandSummary["fieldContributors"];
+  },
+  catalogue: BrandSummary | undefined,
+  qid: string,
+  kind: BrandKind,
+): BrandSummary {
+  const identityField =
+    place.brand?.wikidata === qid ? "brand.wikidata" : `osmTags.${kind}:wikidata`;
+  const nameField = place.brand?.name !== undefined ? "brand.name" : "name";
+  const fieldContributors = {
+    qid: contributorsForField(place, identityField),
+    kind: contributorsForField(place, identityField),
+    name: contributorsForField(place, nameField),
+    logoFile: contributorsForField(catalogue ?? {}, "logoFile"),
+  };
+  return {
+    qid,
+    name: place.brand?.name ?? place.name,
+    kind: [kind],
+    logoFile: catalogue?.logoFile,
+    fieldContributors,
+    contributors: contributorsForFields(fieldContributors, Object.keys(fieldContributors)),
   };
 }

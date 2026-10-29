@@ -1,17 +1,20 @@
 "use client";
 
 import { escapeHtml, relativeTime, sanitizeUrl, useOverlayExclusion } from "@openmapx/core";
+import { captureHazardFeatures } from "@openmapx/integration-framework";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { syncHeatmapLayer } from "@/integration-api/map/heatmapLayer";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { createHeatmapPaint } from "@/integration-api/map/heatmapLayer";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { EMPTY_FEATURE_COLLECTION, type MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
-import { useSourceAttributions } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useEarthquakeStore } from "./store";
 
@@ -193,37 +196,82 @@ export function buildEarthquakePopupHtml(
       </div>`;
 }
 
-const NO_SOURCES: readonly string[] = [];
+function earthquakesGroup(colorMode: "depth" | "recency", showHeatmap: boolean): MapLayerGroup {
+  return {
+    sources: { [SOURCE_ID]: { type: "geojson", data: EMPTY_FEATURE_COLLECTION } },
+    layers: [
+      ...(showHeatmap
+        ? [
+            {
+              id: HEATMAP_LAYER_ID,
+              type: "heatmap" as const,
+              source: SOURCE_ID,
+              slot: "overlay-heat" as const,
+              order: 1,
+              paint: createHeatmapPaint("mag", 8),
+            },
+          ]
+        : []),
+      {
+        id: CIRCLE_LAYER_ID,
+        type: "circle",
+        source: SOURCE_ID,
+        slot: "overlay-points",
+        order: 2,
+        paint: {
+          "circle-radius": CIRCLE_RADIUS_EXPR,
+          "circle-color": circleColorExpr(colorMode),
+          "circle-opacity": 0.85,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 1.5,
+        },
+      },
+      // Pulse layer for events < 1 hour old; its radius and stroke are animated.
+      {
+        id: PULSE_LAYER_ID,
+        type: "circle",
+        source: SOURCE_ID,
+        filter: ["<", ["get", "ageMs"], 3_600_000],
+        slot: "overlay-points",
+        order: 3,
+        paint: {
+          "circle-radius": MAG_RADIUS_EXPR,
+          "circle-color": "#ef4444",
+          "circle-opacity": 0,
+          "circle-stroke-color": "#ef4444",
+          "circle-stroke-width": 2,
+          "circle-stroke-opacity": 0,
+        },
+      },
+    ],
+  };
+}
 
-function startPulseAnimation(map: maplibregl.Map, pulseAnimRef: { current: number | null }) {
-  if (pulseAnimRef.current !== null) {
-    cancelAnimationFrame(pulseAnimRef.current);
-    pulseAnimRef.current = null;
-  }
+/**
+ * Animate the pulse layer until the returned stop function runs. Frames skip
+ * while the layer is absent, so the pulse resumes once a style rebuild puts it back.
+ */
+function startPulseAnimation(map: maplibregl.Map): () => void {
   const duration = 2000;
   const start = performance.now();
 
   function frame(now: number) {
-    if (!map.getLayer(PULSE_LAYER_ID)) return;
-    const elapsed = ((now - start) % duration) / duration;
-    const scale = 1 + elapsed * 0.8;
-    const opacity = 0.6 * (1 - elapsed);
-
-    try {
+    if (map.getLayer(PULSE_LAYER_ID)) {
+      const elapsed = ((now - start) % duration) / duration;
+      const scale = 1 + elapsed * 0.8;
+      const opacity = 0.6 * (1 - elapsed);
       map.setPaintProperty(PULSE_LAYER_ID, "circle-radius", [
         "*",
         MAG_RADIUS_EXPR,
         scale,
       ] as maplibregl.ExpressionSpecification);
       map.setPaintProperty(PULSE_LAYER_ID, "circle-stroke-opacity", opacity);
-    } catch {
-      return;
     }
-
-    pulseAnimRef.current = requestAnimationFrame(frame);
+    frameId = requestAnimationFrame(frame);
   }
 
-  pulseAnimRef.current = requestAnimationFrame(frame);
+  let frameId = requestAnimationFrame(frame);
+  return () => cancelAnimationFrame(frameId);
 }
 
 export function EarthquakeLayer() {
@@ -231,8 +279,12 @@ export function EarthquakeLayer() {
   const env = useEnv();
   const locale = useLocale();
   const layerVisible = useEarthquakeStore((s) => s.layerVisible);
-  const [sourceIds, setSourceIds] = useState<readonly string[]>(NO_SOURCES);
-  useSourceAttributions("earthquakes", layerVisible ? sourceIds : NO_SOURCES);
+  const resolveContributors = useContributorResolver();
+  useRenderedMapAttributions(
+    "earthquakes",
+    [CIRCLE_LAYER_ID, HEATMAP_LAYER_ID, PULSE_LAYER_ID],
+    layerVisible,
+  );
   const timeRange = useEarthquakeStore((s) => s.timeRange);
   const minMagnitude = useEarthquakeStore((s) => s.minMagnitude);
   const colorMode = useEarthquakeStore((s) => s.colorMode);
@@ -242,9 +294,7 @@ export function EarthquakeLayer() {
   const setUnavailable = useEarthquakeStore((s) => s.setUnavailable);
   useOverlayExclusion("earthquakes", layerVisible);
   const t = useTranslations("earthquakes");
-  const fetchedRef = useRef(false);
   const popupRef = useRef<maplibregl.Popup | null>(null);
-  const pulseAnimRef = useRef<number | null>(null);
   const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
     mapRef,
     mapReady,
@@ -271,11 +321,10 @@ export function EarthquakeLayer() {
       const data = await res.json();
       if (!request.isCurrent()) return;
 
-      publishGeoJson([{ sourceId: SOURCE_ID, data }]);
-      const ids: string[] = Array.isArray(data.sources) ? data.sources : [];
-      setSourceIds((prev) =>
-        prev.length === ids.length && prev.every((id, i) => id === ids[i]) ? prev : ids,
+      const captured = captureHazardFeatures(data, resolveContributors, (feature) =>
+        Array.isArray(feature.properties?.sources) ? feature.properties.sources : [],
       );
+      publishGeoJson([{ sourceId: SOURCE_ID, data: captured }]);
       setUnavailable(false);
       setLastUpdated(Date.now());
     } catch {
@@ -285,6 +334,7 @@ export function EarthquakeLayer() {
       if (request.isLatest()) setLoading(false);
     }
   }, [
+    resolveContributors,
     beginRequest,
     env,
     locale,
@@ -297,141 +347,25 @@ export function EarthquakeLayer() {
     setUnavailable,
   ]);
 
-  // Layer management
+  useMapLayerGroup(
+    useMemo(
+      () => (layerVisible ? earthquakesGroup(colorMode, showHeatmap) : null),
+      [layerVisible, colorMode, showHeatmap],
+    ),
+  );
+
+  // Showing the overlay or changing a filter or the language fetches immediately.
   useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
+    if (!mapReady || !layerVisible) return;
+    // The fetch handles its own failures and loading state.
+    void fetchEarthquakes();
+  }, [mapReady, layerVisible, fetchEarthquakes]);
 
-    const syncLayers = () => {
-      if (!layerVisible) {
-        try {
-          if (map.getLayer(PULSE_LAYER_ID)) map.removeLayer(PULSE_LAYER_ID);
-          if (map.getLayer(HEATMAP_LAYER_ID)) map.removeLayer(HEATMAP_LAYER_ID);
-          if (map.getLayer(CIRCLE_LAYER_ID)) map.removeLayer(CIRCLE_LAYER_ID);
-          if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        } catch {
-          // In-flight tiles
-        }
-        unregisterLayerSlot(HEATMAP_LAYER_ID);
-        unregisterLayerSlot(CIRCLE_LAYER_ID);
-        unregisterLayerSlot(PULSE_LAYER_ID);
-        popupRef.current?.remove();
-        fetchedRef.current = false;
-        if (pulseAnimRef.current !== null) {
-          cancelAnimationFrame(pulseAnimRef.current);
-          pulseAnimRef.current = null;
-        }
-        return;
-      }
-
-      try {
-        if (!map.getSource(SOURCE_ID)) {
-          map.addSource(SOURCE_ID, {
-            type: "geojson",
-            data: { type: "FeatureCollection", features: [] },
-          });
-        }
-
-        // Circle layer
-        if (!map.getLayer(CIRCLE_LAYER_ID)) {
-          addLayerInSlot(
-            map,
-            {
-              id: CIRCLE_LAYER_ID,
-              type: "circle",
-              source: SOURCE_ID,
-              paint: {
-                "circle-radius": CIRCLE_RADIUS_EXPR,
-                "circle-color": circleColorExpr(useEarthquakeStore.getState().colorMode),
-                "circle-opacity": 0.85,
-                "circle-stroke-color": "#ffffff",
-                "circle-stroke-width": 1.5,
-              },
-            },
-            "overlay-points",
-            2,
-          );
-        }
-
-        // Pulse layer for events < 1 hour old
-        if (!map.getLayer(PULSE_LAYER_ID)) {
-          addLayerInSlot(
-            map,
-            {
-              id: PULSE_LAYER_ID,
-              type: "circle",
-              source: SOURCE_ID,
-              filter: ["<", ["get", "ageMs"], 3_600_000],
-              paint: {
-                "circle-radius": MAG_RADIUS_EXPR,
-                "circle-color": "#ef4444",
-                "circle-opacity": 0,
-                "circle-stroke-color": "#ef4444",
-                "circle-stroke-width": 2,
-                "circle-stroke-opacity": 0,
-              },
-            },
-            "overlay-points",
-            3,
-          );
-          startPulseAnimation(map, pulseAnimRef);
-        }
-
-        if (!fetchedRef.current) {
-          fetchedRef.current = true;
-          // The fetch handles its own failures and loading state.
-          void fetchEarthquakes();
-        }
-      } catch {
-        // Style not ready — styledata fires during loading but doesn't
-        // reliably re-fire after sources finish, so register an idle retry.
-        map.once("idle", syncLayers);
-      }
-    };
-
-    if (!layerVisible) {
-      syncLayers();
-      return;
-    }
-
-    // Reset fetchedRef so syncLayers will fetch (handles filter param changes via fetchEarthquakes)
-    fetchedRef.current = false;
-    syncLayers();
-    map.on("styledata", syncLayers);
-    return () => {
-      map.off("styledata", syncLayers);
-    };
-  }, [mapReady, mapRef, styleVersion, layerVisible, fetchEarthquakes]);
-
-  // When colorMode changes, rebuild circle layer color expression
   useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady || !layerVisible || !map.getLayer(CIRCLE_LAYER_ID)) return;
-
-    try {
-      map.setPaintProperty(CIRCLE_LAYER_ID, "circle-color", circleColorExpr(colorMode));
-    } catch {
-      // Layer may not exist yet
-    }
-  }, [mapRef, mapReady, styleVersion, layerVisible, colorMode]);
-
-  // Heatmap toggle
-  useEffect(() => {
-    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !layerVisible) return;
-
-    syncHeatmapLayer(map, {
-      enabled: showHeatmap,
-      layerId: HEATMAP_LAYER_ID,
-      sourceId: SOURCE_ID,
-      weightProperty: "mag",
-      weightMax: 8,
-      order: 1,
-    });
-  }, [mapRef, mapReady, styleVersion, layerVisible, showHeatmap]);
+    return startPulseAnimation(map);
+  }, [mapRef, mapReady, layerVisible]);
 
   // Auto-refresh
   useEffect(() => {
@@ -494,16 +428,6 @@ export function EarthquakeLayer() {
       INTERACTIVE_LAYER_IDS.delete(CIRCLE_LAYER_ID);
     };
   }, [mapReady, mapRef, styleVersion, layerVisible, t]);
-
-  // Cleanup pulse animation on unmount
-  useEffect(() => {
-    return () => {
-      if (pulseAnimRef.current !== null) {
-        cancelAnimationFrame(pulseAnimRef.current);
-        pulseAnimRef.current = null;
-      }
-    };
-  }, []);
 
   return null;
 }

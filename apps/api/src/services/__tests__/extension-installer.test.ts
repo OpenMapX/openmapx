@@ -1,3 +1,5 @@
+import { getKillSwitch } from "../extension-store";
+import { TrustedConfigurationApplyError } from "../trusted-config-outcome";
 /**
  * Characterization + regression tests for the extension bundle install
  * pipeline (`installExtension`). These pin the observable behavior of the
@@ -15,22 +17,6 @@ import { createDbMock, type DbMock } from "../../test/db.js";
 const dbMock: DbMock = createDbMock();
 
 vi.mock("../../db/index.js", () => ({ db: dbMock.db }));
-
-vi.mock("@openmapx/integration-framework/installer", () => ({
-  backupInstalledIntegration: vi.fn(() => ({
-    id: "intg-one",
-    backupDirectory: "/safe/mock-integration-backup",
-  })),
-  discardInstalledIntegrationBackup: vi.fn(),
-  installIntegration: vi.fn(async (opts: { source: string }) => ({
-    // The installer asserts the artifact reports the declared component id.
-    id: /intg-[a-z0-9-]+/.exec(opts.source)?.[0] ?? "intg-one",
-    directory: "/safe/mock-integration",
-    replaced: false,
-  })),
-  removeIntegration: vi.fn(),
-  restoreInstalledIntegration: vi.fn(),
-}));
 
 vi.mock("../extension-component-ownership", () => ({
   assertComponentOwnership: vi.fn().mockResolvedValue(undefined),
@@ -66,15 +52,12 @@ vi.mock("../admin-ops", () => ({
   serviceStart: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../extension-install-journal", () => ({
-  createExtensionInstallJournal: vi.fn((_root, extensionId, targetManifest) => ({
-    path: "/safe/mock-extension-journal.json",
-    data: { schemaVersion: 1, extensionId, targetManifest, integrations: [] },
-  })),
-  appendIntegrationJournalEntry: vi.fn(),
-  markIntegrationJournalEntryInstalled: vi.fn(),
-  markExtensionInstallJournalRestoring: vi.fn(),
-  reconcileExtensionInstallJournal: vi.fn().mockResolvedValue(undefined),
+vi.mock("../agent-integrations", () => ({
+  adoptIntegration: vi.fn(),
+  publishIntegration: vi.fn(),
+  readInstalledIntegrations: vi.fn(),
+  removeIntegration: vi.fn(),
+  settleIntegration: vi.fn(),
 }));
 
 const applyEnabledIds = vi.fn();
@@ -85,97 +68,45 @@ vi.mock("../service-registry", () => ({
     applyEnabledIds,
   })),
   initServiceRegistry: vi.fn().mockResolvedValue(undefined),
+  communityServiceRepository: vi.fn((id: string) =>
+    id === "svc-one" ? REPO_ONE : id === "svc-two" ? REPO_TWO : undefined,
+  ),
 }));
 
-vi.mock("../service-repositories", () => ({
-  backupRepo: vi.fn((snapshot, options) => ({
-    snapshot,
-    backupDir: "/safe/mock-backup",
-    selectionBefore: options?.selectionBefore,
-  })),
-  discardRepoBackup: vi.fn(),
-  discardRepoPreparation: vi.fn(),
-  hashUrl: vi.fn((u: string) => `hash-${u}`),
-  inspectStagedRepo: vi.fn().mockReturnValue({
-    commit: "d".repeat(40),
-    services: [
-      {
-        slug: "svc-one",
-        name: "Service One",
-        version: "1.0.0",
-        hostPorts: [],
-        securityRating: {
-          score: 6,
-          requiresBuiltIn: false,
-          hostPorts: 0,
-          secretCount: 0,
-          deploymentVariables: [],
-          factors: [],
-        },
-      },
-      {
-        slug: "svc-two",
-        name: "Service Two",
-        version: "1.0.0",
-        hostPorts: [],
-        securityRating: {
-          score: 6,
-          requiresBuiltIn: false,
-          hostPorts: 0,
-          secretCount: 0,
-          deploymentVariables: [],
-          factors: [],
-        },
-      },
-    ],
-  }),
-  stageRepo: vi.fn().mockResolvedValue({ id: "staged-service-repository" }),
-  publishStagedRepo: vi.fn().mockResolvedValue({
-    hash: "h1",
-    url: "https://git.example/repo.git",
-    displayName: "Bundle X",
-    lastFetchedAt: new Date("2026-08-02T00:00:00Z"),
-    lastSha: "d".repeat(40),
-    pinnedRef: null,
-    managedByExtension: "bundle-x",
-    preparationJournal: "/safe/mock-preparation.json",
-  }),
-  discardStagedRepo: vi.fn(),
-  registerRepo: vi.fn().mockResolvedValue({ hash: "h1" }),
-  removeRepo: vi.fn().mockResolvedValue(undefined),
-  restoreRepo: vi.fn().mockResolvedValue(undefined),
+vi.mock("../community-repositories", () => ({
+  inspectServiceRepository: vi.fn(),
+  publishServiceRepository: vi.fn(),
+  readCommunityServices: vi.fn(),
+  settleServiceRepository: vi.fn(),
+  removeServiceRepository: vi.fn(),
 }));
 
-import {
-  backupInstalledIntegration,
-  discardInstalledIntegrationBackup,
-  installIntegration,
-  removeIntegration,
-  restoreInstalledIntegration,
-} from "@openmapx/integration-framework/installer";
+vi.mock("../extension-recovery", () => ({
+  withExtensionChangeLock: vi.fn((work: () => Promise<unknown>) => work()),
+  recoverInterruptedExtensionChanges: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { reloadIntegrations } from "../../integration-host";
 import { dockerComposeAction } from "../../utils/docker-compose";
 import { getServiceSelectionSummary } from "../admin-cli";
 import { renderAndPersistCompose, serviceStart } from "../admin-ops";
 import {
-  createExtensionInstallJournal,
-  markExtensionInstallJournalRestoring,
-  reconcileExtensionInstallJournal,
-} from "../extension-install-journal";
+  adoptIntegration,
+  publishIntegration,
+  readInstalledIntegrations,
+  removeIntegration,
+  settleIntegration,
+} from "../agent-integrations";
+import {
+  inspectServiceRepository,
+  publishServiceRepository,
+  readCommunityServices,
+  removeServiceRepository,
+  settleServiceRepository,
+} from "../community-repositories";
+import { recoverInterruptedExtensionChanges, withExtensionChangeLock } from "../extension-recovery";
 import type { JobContext } from "../job-runner.js";
 import { getServiceRegistry, initServiceRegistry } from "../service-registry";
-import {
-  backupRepo,
-  discardRepoBackup,
-  discardRepoPreparation,
-  discardStagedRepo,
-  inspectStagedRepo,
-  publishStagedRepo,
-  registerRepo,
-  removeRepo,
-  restoreRepo,
-  stageRepo,
-} from "../service-repositories";
 import { applyTrustedConfiguration } from "../trusted-config-operations";
 
 // The SUT is imported dynamically (after the mocks are wired) so the db mock
@@ -224,7 +155,7 @@ const MANIFEST = {
   id: "bundle-x",
   name: "Bundle X",
   version: "1.2.3",
-  services: [{ repo: "https://git.example/repo.git", service: "svc-one" }],
+  services: [{ repo: "https://github.com/example/repo.git", service: "svc-one" }],
   integrations: [
     { artifact: "https://ex.example/intg-one.tar.gz", id: "intg-one", sha256: "a".repeat(64) },
   ],
@@ -233,8 +164,8 @@ const MANIFEST = {
 const TWO_REPO_MANIFEST = {
   ...MANIFEST,
   services: [
-    { repo: "https://git.example/repo.git", service: "svc-one" },
-    { repo: "https://git.example/other.git", service: "svc-two" },
+    { repo: "https://github.com/example/repo.git", service: "svc-one" },
+    { repo: "https://github.com/example/other.git", service: "svc-two" },
   ],
   integrations: [],
 } satisfies ExtensionManifest;
@@ -248,118 +179,213 @@ const INTEGRATION_ONLY = {
   ],
 } satisfies ExtensionManifest;
 
-function safeRepoInspection() {
+const REPO_URL = "https://github.com/example/repo.git";
+const REPO_ONE = "1111111111111111";
+const REPO_TWO = "2222222222222222";
+const COMMIT = "d".repeat(40);
+
+function communityManifest(id: string, overrides: Record<string, unknown> = {}) {
   return {
-    commit: "d".repeat(40),
-    services: [
-      {
-        slug: "svc-one",
-        name: "Service One",
-        version: "1.0.0",
-        hostPorts: [],
-        securityRating: {
-          score: 6,
-          requiresBuiltIn: false,
-          hostPorts: 0,
-          secretCount: 0,
-          deploymentVariables: [],
-          factors: [],
-        },
-      },
-      {
-        slug: "svc-two",
-        name: "Service Two",
-        version: "1.0.0",
-        hostPorts: [],
-        securityRating: {
-          score: 6,
-          requiresBuiltIn: false,
-          hostPorts: 0,
-          secretCount: 0,
-          deploymentVariables: [],
-          factors: [],
-        },
-      },
-    ],
+    id,
+    name: id === "svc-one" ? "Service One" : "Service Two",
+    version: "1.0.0",
+    quality: "community",
+    container: {
+      image: `registry.example.test/${id}`,
+      tag: "1.0.0",
+      digest: `sha256:${"b".repeat(64)}`,
+    },
+    ...overrides,
   };
 }
 
-const dbInstallMock = vi.mocked(installIntegration);
-const dbRemoveMock = vi.mocked(removeIntegration);
-const integrationBackupMock = vi.mocked(backupInstalledIntegration);
-const integrationBackupDiscardMock = vi.mocked(discardInstalledIntegrationBackup);
-const integrationRestoreMock = vi.mocked(restoreInstalledIntegration);
+function inspection(url: string, overrides: Record<string, unknown> = {}) {
+  const repository = url === REPO_URL ? REPO_ONE : REPO_TWO;
+  return {
+    url,
+    repository,
+    commit: COMMIT,
+    valid: true,
+    problems: [],
+    services: [
+      { manifest: communityManifest("svc-one"), path: "svc-one" },
+      { manifest: communityManifest("svc-two"), path: "svc-two" },
+    ],
+    ...overrides,
+  };
+}
+
+function transactionFor(repository: string): string {
+  return `txn1_${repository.slice(0, 1).repeat(24)}`;
+}
+
+const RECOVERY = {
+  selectionBefore: [],
+  touchedServiceIds: ["svc-one"],
+  previouslyEnabledServiceIds: [],
+};
+
+const publishIntegrationMock = vi.mocked(publishIntegration);
+const settleIntegrationMock = vi.mocked(settleIntegration);
+const removeIntegrationMock = vi.mocked(removeIntegration);
+const adoptIntegrationMock = vi.mocked(adoptIntegration);
+const readInstalledMock = vi.mocked(readInstalledIntegrations);
 const reloadMock = vi.mocked(reloadIntegrations);
 const composeMock = vi.mocked(dockerComposeAction);
-const registerRepoMock = vi.mocked(registerRepo);
-const stageRepoMock = vi.mocked(stageRepo);
-const inspectStagedRepoMock = vi.mocked(inspectStagedRepo);
-const publishStagedRepoMock = vi.mocked(publishStagedRepo);
-const discardStagedRepoMock = vi.mocked(discardStagedRepo);
-const removeRepoMock = vi.mocked(removeRepo);
-const restoreRepoMock = vi.mocked(restoreRepo);
-const backupRepoMock = vi.mocked(backupRepo);
-const discardRepoBackupMock = vi.mocked(discardRepoBackup);
-const discardRepoPreparationMock = vi.mocked(discardRepoPreparation);
+const inspectMock = vi.mocked(inspectServiceRepository);
+const publishMock = vi.mocked(publishServiceRepository);
+const settleMock = vi.mocked(settleServiceRepository);
+const removeRepositoryMock = vi.mocked(removeServiceRepository);
+const readCommunityMock = vi.mocked(readCommunityServices);
+const recoverMock = vi.mocked(recoverInterruptedExtensionChanges);
+const lockMock = vi.mocked(withExtensionChangeLock);
 const serviceStartMock = vi.mocked(serviceStart);
 const renderMock = vi.mocked(renderAndPersistCompose);
 const writeSelectionMock = vi.mocked(applyTrustedConfiguration);
 const initRegistryMock = vi.mocked(initServiceRegistry);
-const createInstallJournalMock = vi.mocked(createExtensionInstallJournal);
-const markInstallJournalRestoringMock = vi.mocked(markExtensionInstallJournalRestoring);
-const reconcileInstallJournalMock = vi.mocked(reconcileExtensionInstallJournal);
+
+const INTEGRATION_TRANSACTION = `itx1_${"e".repeat(24)}`;
+
+function installedSnapshot(
+  integrations: Array<{ integrationId: string; extensionId: string | null }>,
+  unrecorded: string[] = [],
+) {
+  return {
+    integrations: integrations.map((entry) => ({
+      ...entry,
+      status: "ok" as const,
+      reason: null,
+      source: null,
+      files: [],
+      pending: null,
+    })),
+    unrecorded,
+  };
+}
 
 afterEach(() => {
   // clearAllMocks resets call history but preserves mockReturnValue /
   // mockResolvedValue implementations (see integration-host.test.ts:135-139).
   vi.clearAllMocks();
+  vi.mocked(getKillSwitch).mockResolvedValue({
+    removed: new Map(),
+    critical: new Map(),
+    stale: false,
+  });
   // Re-prime implementations cleared history relies on but that must persist.
   reloadMock.mockResolvedValue({ message: "ok", reloaded: 1, enabled: 1 });
   composeMock.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
-  registerRepoMock.mockResolvedValue({ hash: "h1" } as never);
-  stageRepoMock.mockResolvedValue({ id: "staged-service-repository" } as never);
-  inspectStagedRepoMock.mockReturnValue(safeRepoInspection() as never);
-  publishStagedRepoMock.mockResolvedValue({
-    hash: "h1",
-    url: "https://git.example/repo.git",
-    displayName: "Bundle X",
-    lastFetchedAt: new Date("2026-08-02T00:00:00Z"),
-    lastSha: "d".repeat(40),
-    pinnedRef: null,
-    managedByExtension: "bundle-x",
-    preparationJournal: "/safe/mock-preparation.json",
+  inspectMock.mockImplementation(async (url) => inspection(url) as never);
+  publishMock.mockImplementation(async (request) => {
+    const repository = request.url === REPO_URL ? REPO_ONE : REPO_TWO;
+    return {
+      repository,
+      commit: request.commit,
+      transactionId: transactionFor(repository),
+      serviceIds: ["svc-one", "svc-two"],
+    };
+  });
+  settleMock.mockImplementation(async (request) => ({
+    repository: request.repository,
+    outcome: request.outcome,
+    changed: true,
+  }));
+  removeRepositoryMock.mockImplementation(async (request) => ({
+    repository: request.repository,
+    removed: true,
+  }));
+  readCommunityMock.mockResolvedValue({
+    revisionId: `cfg1_${"d".repeat(43)}`,
+    repositories: [],
+    services: [],
+    problems: ["svc-one was rejected"],
+    reportedServiceIds: ["svc-one"],
   } as never);
+  publishIntegrationMock.mockImplementation(async (request) => ({
+    integrationId: request.integrationId,
+    transactionId: INTEGRATION_TRANSACTION,
+    manifestSha256: "f".repeat(64),
+  }));
+  settleIntegrationMock.mockImplementation(async (request) => ({
+    integrationId: request.integrationId,
+    outcome: request.outcome,
+    changed: true,
+  }));
+  removeIntegrationMock.mockImplementation(async (request) => ({
+    integrationId: request.integrationId,
+    removed: true,
+  }));
+  adoptIntegrationMock.mockImplementation(async (request) => ({
+    integrationId: request.integrationId,
+    status: "needs_reinstall",
+    reason: "Nothing records the archive it was installed from.",
+  }));
+  readInstalledMock.mockResolvedValue(
+    installedSnapshot([{ integrationId: "intg-one", extensionId: "bundle-x" }]),
+  );
+  recoverMock.mockResolvedValue(undefined);
+  lockMock.mockImplementation((work) => work());
   vi.mocked(getServiceSelectionSummary).mockReturnValue({ selectedRoots: [] } as never);
 });
 
 describe("installExtension", () => {
+  it.each([undefined, "0.0", "1.0.0", "2.0", "10.0", "arbitrary-release"])(
+    "blocks critical preview and queued execution regardless of maxVersion %s",
+    async (maxVersion) => {
+      vi.mocked(getKillSwitch).mockResolvedValue({
+        removed: new Map(),
+        critical: new Map([[MANIFEST.id, { reason: "Synthetic advisory", maxVersion }]]),
+        stale: false,
+      });
+      for (const version of ["0.1", "1.0.0", "2.0", "10.0", "arbitrary-version"]) {
+        const opts = { manifest: { ...MANIFEST, version }, sourceTrust: "community" as const };
+        await expect(previewExtensionInstall(opts)).rejects.toThrow(/critical/);
+        await expect(installExtension(makeCtx(), opts)).rejects.toThrow(/critical/);
+      }
+      expect(inspectMock).not.toHaveBeenCalled();
+      expect(writeSelectionMock).not.toHaveBeenCalled();
+      expect(serviceStartMock).not.toHaveBeenCalled();
+      expect(publishIntegrationMock).not.toHaveBeenCalled();
+    },
+  );
+  it("rechecks revocation after preview while queued and permits flow once cleared", async () => {
+    const opts = { manifest: MANIFEST, sourceTrust: "community" as const };
+    await previewExtensionInstall(opts);
+    inspectMock.mockClear();
+    vi.mocked(getKillSwitch).mockResolvedValue({
+      removed: new Map(),
+      critical: new Map([[MANIFEST.id, { reason: "Arrived while queued", maxVersion: "0" }]]),
+      stale: true,
+    });
+    await expect(installExtension(makeCtx(), opts)).rejects.toThrow(/critical/);
+    expect(inspectMock).not.toHaveBeenCalled();
+    expect(publishIntegrationMock).not.toHaveBeenCalled();
+    vi.mocked(getKillSwitch).mockResolvedValue({
+      removed: new Map(),
+      critical: new Map(),
+      stale: true,
+    });
+    await expect(installExtension(makeCtx(), opts)).resolves.toBeDefined();
+  });
   it("requires confirmation bound to the exact host-port preview", async () => {
-    const portInspection = {
-      commit: "d".repeat(40),
-      services: [
-        {
-          slug: "svc-one",
-          name: "Service One",
-          version: "1.0.0",
-          hostPorts: [{ host: 8080, container: 80 }],
-          securityRating: {
-            score: 4,
-            requiresBuiltIn: false,
-            hostPorts: 1,
-            secretCount: 0,
-            deploymentVariables: [],
-            factors: ["-1 publishes 1 host port(s)"],
-          },
-        },
-      ],
-    };
-    inspectStagedRepoMock.mockReturnValue(portInspection as never);
-    dbMock.queueSelect([]);
+    inspectMock.mockImplementation(
+      async (url) =>
+        inspection(url, {
+          services: [
+            {
+              manifest: communityManifest("svc-one", {
+                exposure: { hostPorts: [{ host: 8080, container: 80 }] },
+              }),
+              path: "svc-one",
+            },
+          ],
+        }) as never,
+    );
 
     await expect(
       installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" }),
     ).rejects.toThrow(/fresh security preview and explicit confirmation/);
-    expect(publishStagedRepoMock).not.toHaveBeenCalled();
+    expect(publishMock).not.toHaveBeenCalled();
 
     const preview = await previewExtensionInstall({
       manifest: MANIFEST,
@@ -370,13 +396,13 @@ describe("installExtension", () => {
       services: [
         {
           id: "svc-one",
+          repositoryCommit: COMMIT,
           hostPorts: [{ bindAddress: "127.0.0.1", host: 8080, container: 80 }],
+          securityRating: { hostPorts: 1 },
         },
       ],
     });
 
-    dbMock.queueSelect([]);
-    dbMock.queueSelect([]);
     await expect(
       installExtension(makeCtx(), {
         manifest: MANIFEST,
@@ -386,80 +412,90 @@ describe("installExtension", () => {
     ).resolves.toEqual({ id: "bundle-x", components: 2 });
   });
 
-  it("publishes an existing-repository update from its exact validated stage", async () => {
-    const previous = {
-      hash: "hash-https://git.example/repo.git",
-      url: "https://git.example/repo.git",
-      displayName: "Bundle X old",
-      lastFetchedAt: new Date("2026-08-01T00:00:00Z"),
-      lastSha: "c".repeat(40),
-      autoUpdate: false,
-      pinnedRef: "v1.0.0",
-      managedByExtension: "bundle-x",
-      createdAt: new Date("2026-08-01T00:00:00Z"),
-    };
-    const staged = { id: "exact-validated-stage" } as never;
-    dbMock.queueSelect([previous]);
-    dbMock.queueSelect([]);
-    stageRepoMock.mockResolvedValueOnce(staged);
-
+  it("installs the exact inspected commit with this run's recovery note", async () => {
     await installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" });
 
-    expect(stageRepoMock).toHaveBeenCalledTimes(1);
-    expect(publishStagedRepoMock).toHaveBeenCalledWith(staged);
-    expect(backupRepoMock.mock.invocationCallOrder[0]).toBeLessThan(
-      publishStagedRepoMock.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    expect(inspectMock).toHaveBeenCalledTimes(1);
+    expect(inspectMock).toHaveBeenCalledWith(
+      REPO_URL,
+      undefined,
+      expect.objectContaining({ operationKey: expect.stringMatching(/^opk1_/) }),
+    );
+    expect(publishMock).toHaveBeenCalledWith(
+      {
+        url: REPO_URL,
+        commit: COMMIT,
+        ref: "HEAD",
+        extensionId: "bundle-x",
+        recovery: RECOVERY,
+      },
+      expect.objectContaining({ operationKey: expect.stringMatching(/^opk1_/) }),
+    );
+    expect(inspectMock.mock.invocationCallOrder[0]).toBeLessThan(
+      publishMock.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
     );
   });
 
-  it("does not back up an existing repository when staging rejects its bind policy", async () => {
-    const previous = {
-      hash: "hash-https://git.example/repo.git",
-      url: "https://git.example/repo.git",
-      displayName: "Bundle X old",
-      lastFetchedAt: new Date("2026-08-01T00:00:00Z"),
-      lastSha: "c".repeat(40),
-      autoUpdate: false,
-      pinnedRef: "v1.0.0",
-      managedByExtension: "bundle-x",
-      createdAt: new Date("2026-08-01T00:00:00Z"),
-    };
-    dbMock.queueSelect([previous]);
-    stageRepoMock.mockRejectedValueOnce(
-      new Error(
-        "community_bind_mount_forbidden: bindMounts are not allowed for community services",
-      ),
+  it("recovers interrupted changes under the extension change lock before installing", async () => {
+    await installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" });
+
+    expect(lockMock).toHaveBeenCalledTimes(1);
+    expect(recoverMock.mock.invocationCallOrder[0]).toBeLessThan(
+      inspectMock.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    );
+  });
+
+  it("refuses a repository the agent rejects and installs nothing", async () => {
+    inspectMock.mockImplementation(
+      async (url) =>
+        inspection(url, {
+          valid: false,
+          problems: [
+            "service.json: community_bind_mount_forbidden: bindMounts are not allowed for community services",
+          ],
+          services: [],
+        }) as never,
     );
 
     await expect(
       installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" }),
     ).rejects.toThrow("community_bind_mount_forbidden");
 
-    expect(backupRepoMock).not.toHaveBeenCalled();
-    expect(publishStagedRepoMock).not.toHaveBeenCalled();
+    expect(publishMock).not.toHaveBeenCalled();
+    expect(settleMock).not.toHaveBeenCalled();
+    expect(initRegistryMock).not.toHaveBeenCalled();
+    expect(applyEnabledIds).not.toHaveBeenCalled();
+    expect(publishIntegrationMock).not.toHaveBeenCalled();
+    expect(settleIntegrationMock).not.toHaveBeenCalled();
+    expect(renderMock).not.toHaveBeenCalled();
+    expect(composeMock).not.toHaveBeenCalled();
+    expect(serviceStartMock).not.toHaveBeenCalled();
+    expect(reloadMock).not.toHaveBeenCalled();
+    expect(dbMock.db.select).not.toHaveBeenCalled();
+    expect(dbMock.db.transaction).not.toHaveBeenCalled();
   });
 
-  it("cleans earlier stages when a later repository fails before publication", async () => {
-    const firstStage = { id: "first-validated-stage" } as never;
-    dbMock.queueSelect([]);
-    dbMock.queueSelect([]);
-    stageRepoMock
-      .mockResolvedValueOnce(firstStage)
-      .mockRejectedValueOnce(new Error("community_bind_mount_forbidden"));
+  it("inspects every repository before installing any of them", async () => {
+    inspectMock
+      .mockImplementationOnce(async (url) => inspection(url) as never)
+      .mockImplementationOnce(
+        async (url) =>
+          inspection(url, {
+            valid: false,
+            problems: ["community_bind_mount_forbidden"],
+            services: [],
+          }) as never,
+      );
 
     await expect(
       installExtension(makeCtx(), { manifest: TWO_REPO_MANIFEST, sourceTrust: "community" }),
     ).rejects.toThrow("community_bind_mount_forbidden");
 
-    expect(discardStagedRepoMock).toHaveBeenCalledWith(firstStage);
-    expect(backupRepoMock).not.toHaveBeenCalled();
-    expect(publishStagedRepoMock).not.toHaveBeenCalled();
+    expect(inspectMock).toHaveBeenCalledTimes(2);
+    expect(publishMock).not.toHaveBeenCalled();
   });
 
   it("happy path installs a service + integration and records all bookkeeping", async () => {
-    dbMock.queueSelect([]); // service repo not registered
-    dbMock.queueSelect([]); // integration not installed
-
     const result = await installExtension(makeCtx(), {
       manifest: MANIFEST,
       sourceTrust: "community",
@@ -467,26 +503,21 @@ describe("installExtension", () => {
 
     expect(result).toEqual({ id: "bundle-x", components: 2 });
 
-    expect(stageRepoMock).toHaveBeenCalledWith("https://git.example/repo.git", {
-      ref: undefined,
-      managedByExtension: "bundle-x",
-      journalNewInstall: true,
-      selectionBefore: [],
-      minimumLastFetchedAtExclusive: undefined,
-      touchedServiceIds: ["svc-one"],
-      previouslyEnabledServiceIds: [],
-    });
-    expect(publishStagedRepoMock).toHaveBeenCalledWith({ id: "staged-service-repository" });
-    expect(registerRepoMock).not.toHaveBeenCalled();
-    expect(discardRepoPreparationMock).toHaveBeenCalledWith("/safe/mock-preparation.json");
+    expect(publishMock).toHaveBeenCalledTimes(1);
     expect(composeMock).toHaveBeenCalledWith("svc-one", "pull", expect.anything());
     expect(serviceStartMock).toHaveBeenCalledWith("svc-one", expect.anything());
-    expect(dbInstallMock).toHaveBeenCalledTimes(1);
-    expect(dbInstallMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sourceKind: "artifact",
-        source: "https://ex.example/intg-one.tar.gz",
-      }),
+    expect(publishIntegrationMock).toHaveBeenCalledTimes(1);
+    expect(publishIntegrationMock).toHaveBeenCalledWith(
+      {
+        integrationId: "intg-one",
+        source: {
+          kind: "artifact",
+          url: "https://ex.example/intg-one.tar.gz",
+          sha256: "a".repeat(64),
+        },
+        extensionId: "bundle-x",
+      },
+      expect.objectContaining({ operationKey: expect.stringMatching(/^opk1_/) }),
     );
     expect(reloadMock).toHaveBeenCalledTimes(1);
 
@@ -510,10 +541,73 @@ describe("installExtension", () => {
     for (const order of writeOrders) expect(order).toBeGreaterThan(txOrder);
   });
 
-  it("commits service repository metadata in the extension bookkeeping transaction", async () => {
-    dbMock.queueSelect([]);
-    dbMock.queueSelect([]);
+  it("canonicalizes every locator before host calls and durable bookkeeping", async () => {
+    const manifest = {
+      ...MANIFEST,
+      services: [
+        {
+          repo: "https://GitHub.com:443/example/releases/../repo.git",
+          service: "svc-one",
+        },
+      ],
+      integrations: [
+        {
+          ...MANIFEST.integrations[0],
+          artifact: "https://EX.example:443/releases/../intg-one.tar.gz",
+        },
+      ],
+    } satisfies ExtensionManifest;
+    const sourceUrl = "https://EX.example:443/releases/../extension.json";
 
+    await installExtension(makeCtx(), { manifest, sourceUrl, sourceTrust: "community" });
+
+    expect(inspectMock).toHaveBeenCalledWith(REPO_URL, undefined, expect.anything());
+    expect(publishIntegrationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: expect.objectContaining({ url: "https://ex.example/intg-one.tar.gz" }),
+      }),
+      expect.anything(),
+    );
+    const integrationInsert = dbMock.db.insert.mock.results[1]?.value as {
+      values: ReturnType<typeof vi.fn>;
+    };
+    expect(integrationInsert.values).toHaveBeenCalledWith(
+      expect.objectContaining({ repository: "https://ex.example/extension.json" }),
+    );
+    const extensionInsert = dbMock.db.insert.mock.results[2]?.value as {
+      values: ReturnType<typeof vi.fn>;
+    };
+    expect(extensionInsert.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceUrl: "https://ex.example/extension.json",
+        manifest: expect.objectContaining({
+          services: [expect.objectContaining({ repo: REPO_URL })],
+          integrations: [
+            expect.objectContaining({ artifact: "https://ex.example/intg-one.tar.gz" }),
+          ],
+        }),
+      }),
+    );
+  });
+
+  it("does not write repository, artifact, or source locators to job logs", async () => {
+    const ctx = makeCtx();
+    await installExtension(ctx, {
+      manifest: MANIFEST,
+      sourceUrl: "https://ex.example/extension.json",
+      sourceTrust: "community",
+    });
+
+    expect(JSON.stringify(vi.mocked(ctx.log).mock.calls)).not.toContain(REPO_URL);
+    expect(JSON.stringify(vi.mocked(ctx.log).mock.calls)).not.toContain(
+      MANIFEST.integrations[0].artifact,
+    );
+    expect(JSON.stringify(vi.mocked(ctx.log).mock.calls)).not.toContain(
+      "https://ex.example/extension.json",
+    );
+  });
+
+  it("records the agent transaction with the repository in the bookkeeping transaction", async () => {
     await installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" });
 
     expect(dbMock.db.transaction).toHaveBeenCalledTimes(1);
@@ -521,19 +615,146 @@ describe("installExtension", () => {
       values: ReturnType<typeof vi.fn>;
     };
     expect(firstInsert.values).toHaveBeenCalledWith({
-      hash: "h1",
-      url: "https://git.example/repo.git",
-      displayName: "Bundle X",
-      lastFetchedAt: new Date("2026-08-02T00:00:00Z"),
-      lastSha: "d".repeat(40),
+      hash: REPO_ONE,
+      url: REPO_URL,
+      lastSha: COMMIT,
       pinnedRef: null,
       managedByExtension: "bundle-x",
+      lastTransactionId: transactionFor(REPO_ONE),
     });
-    expect(registerRepoMock).not.toHaveBeenCalled();
+  });
+
+  it("takes over an earlier release's unverified install of this extension before replacing it", async () => {
+    readInstalledMock.mockResolvedValue(installedSnapshot([], ["intg-one"]));
+    dbMock.queueSelect([{ managedByExtension: "bundle-x" }]);
+
+    await installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" });
+
+    expect(adoptIntegrationMock).toHaveBeenCalledWith(
+      { integrationId: "intg-one", extensionId: "bundle-x" },
+      expect.anything(),
+    );
+    expect(adoptIntegrationMock.mock.invocationCallOrder[0]).toBeLessThan(
+      publishIntegrationMock.mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it("never takes over an unrecorded integration another owner installed", async () => {
+    readInstalledMock.mockResolvedValue(installedSnapshot([], ["intg-one"]));
+    dbMock.queueSelect([{ managedByExtension: "another-bundle" }]);
+
+    await installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" });
+
+    expect(adoptIntegrationMock).not.toHaveBeenCalled();
+  });
+
+  it("records the integration's agent transaction on its row in the bookkeeping transaction", async () => {
+    await installExtension(makeCtx(), { manifest: INTEGRATION_ONLY, sourceTrust: "community" });
+
+    expect(dbMock.db.transaction).toHaveBeenCalledTimes(1);
+    const integrationInsert = dbMock.db.insert.mock.results[0]?.value as {
+      values: ReturnType<typeof vi.fn>;
+      onConflictDoUpdate: ReturnType<typeof vi.fn>;
+    };
+    expect(integrationInsert.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "intg-one",
+        managedByExtension: "bundle-x",
+        lastTransactionId: INTEGRATION_TRANSACTION,
+      }),
+    );
+    expect(integrationInsert.onConflictDoUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        set: expect.objectContaining({ lastTransactionId: INTEGRATION_TRANSACTION }),
+      }),
+    );
+  });
+
+  it("commits the integration transaction only after the bookkeeping transaction", async () => {
+    await installExtension(makeCtx(), { manifest: INTEGRATION_ONLY, sourceTrust: "community" });
+
+    expect(settleIntegrationMock).toHaveBeenCalledTimes(1);
+    expect(settleIntegrationMock).toHaveBeenCalledWith(
+      { integrationId: "intg-one", transactionId: INTEGRATION_TRANSACTION, outcome: "commit" },
+      expect.objectContaining({ operationKey: expect.stringMatching(/^opk1_/) }),
+    );
+    expect(settleIntegrationMock.mock.invocationCallOrder[0]).toBeGreaterThan(
+      dbMock.db.transaction.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    );
+    expect(publishIntegrationMock.mock.invocationCallOrder[0]).toBeLessThan(
+      reloadMock.mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it("keeps a committed integration install when the agent cannot settle it yet", async () => {
+    settleIntegrationMock.mockRejectedValueOnce(new Error("agent unavailable"));
+    const ctx = makeCtx();
+
+    await expect(
+      installExtension(ctx, { manifest: INTEGRATION_ONLY, sourceTrust: "community" }),
+    ).resolves.toEqual({ id: "bundle-x", components: 1 });
+
+    // Recovery commits the pending transaction the row records.
+    expect(settleIntegrationMock).toHaveBeenCalledTimes(1);
+    expect(settleIntegrationMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: "rollback" }),
+      expect.anything(),
+    );
+    expect(ctx.log).toHaveBeenCalledWith(
+      expect.stringContaining("could not settle integration intg-one"),
+      "stderr",
+    );
+  });
+
+  it("scrubs provider details from cleanup diagnostics", async () => {
+    const secret = "provider failed\nht\ttps://example.test/private? sentinel-query";
+    settleIntegrationMock.mockRejectedValueOnce(new Error(secret));
+    const ctx = makeCtx();
+
+    await installExtension(ctx, { manifest: INTEGRATION_ONLY, sourceTrust: "community" });
+
+    expect(JSON.stringify(vi.mocked(ctx.log).mock.calls)).not.toMatch(
+      /sentinel-|example\.test|\/private/,
+    );
+  });
+
+  it("commits each repository transaction only after the bookkeeping transaction", async () => {
+    await installExtension(makeCtx(), { manifest: TWO_REPO_MANIFEST, sourceTrust: "community" });
+
+    expect(settleMock).toHaveBeenCalledTimes(2);
+    expect(settleMock).toHaveBeenNthCalledWith(
+      1,
+      { repository: REPO_ONE, transactionId: transactionFor(REPO_ONE), outcome: "commit" },
+      expect.anything(),
+    );
+    expect(settleMock).toHaveBeenNthCalledWith(
+      2,
+      { repository: REPO_TWO, transactionId: transactionFor(REPO_TWO), outcome: "commit" },
+      expect.anything(),
+    );
+    const txOrder = dbMock.db.transaction.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY;
+    for (const order of settleMock.mock.invocationCallOrder) {
+      expect(order).toBeGreaterThan(txOrder);
+    }
+  });
+
+  it("keeps a committed install when the agent cannot settle it yet", async () => {
+    settleMock.mockRejectedValueOnce(new Error("agent unavailable"));
+
+    await expect(
+      installExtension(makeCtx(), { manifest: TWO_REPO_MANIFEST, sourceTrust: "community" }),
+    ).resolves.toEqual({ id: "bundle-x", components: 2 });
+
+    // Recovery commits a pending transaction the database records.
+    expect(settleMock).toHaveBeenCalledTimes(2);
+    expect(settleMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: "rollback" }),
+      expect.anything(),
+    );
+    expect(composeMock).not.toHaveBeenCalledWith("svc-one", "remove", expect.anything());
   });
 
   it("does not roll back a committed install when final progress reporting fails", async () => {
-    dbMock.queueSelect([]);
     const ctx = makeCtx();
     vi.mocked(ctx.setProgress).mockImplementation(async (progress) => {
       if (progress === 100) throw new Error("job store unavailable");
@@ -544,14 +765,13 @@ describe("installExtension", () => {
     ).resolves.toEqual({ id: "bundle-x", components: 1 });
 
     expect(dbMock.db.transaction).toHaveBeenCalledTimes(1);
-    expect(dbRemoveMock).not.toHaveBeenCalled();
-    expect(removeRepoMock).not.toHaveBeenCalled();
+    expect(settleIntegrationMock.mock.calls.map(([request]) => request.outcome)).toEqual([
+      "commit",
+    ]);
+    expect(settleMock).not.toHaveBeenCalled();
   });
 
   it("makes the new service part of the operator's selection through one apply, init once", async () => {
-    dbMock.queueSelect([]);
-    dbMock.queueSelect([]);
-
     await installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" });
 
     // The apply writes the selection file and moves the registry to what it applied.
@@ -564,27 +784,85 @@ describe("installExtension", () => {
     expect(initRegistryMock).toHaveBeenCalledTimes(1);
   });
 
+  it("refuses a service the agent did not install from its declared repository", async () => {
+    publishMock.mockImplementationOnce(async (request) => ({
+      repository: REPO_ONE,
+      commit: request.commit,
+      transactionId: transactionFor(REPO_ONE),
+      serviceIds: ["svc-two"],
+    }));
+
+    await expect(
+      installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" }),
+    ).rejects.toThrow(/was not installed from its declared repository/);
+
+    expect(writeSelectionMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ selectedRoots: ["svc-one"] }),
+    );
+    expect(composeMock).not.toHaveBeenCalled();
+    expect(settleMock).toHaveBeenCalledWith(
+      { repository: REPO_ONE, transactionId: transactionFor(REPO_ONE), outcome: "rollback" },
+      expect.anything(),
+    );
+    expect(dbMock.db.transaction).not.toHaveBeenCalled();
+  });
+
+  it.each(["unknown", "committed"] as const)(
+    "leaves the transaction pending for recovery after a %s configuration failure",
+    async (outcome) => {
+      const error = new TrustedConfigurationApplyError(
+        outcome === "unknown"
+          ? {
+              outcome,
+              reason: "transport_or_result",
+              publisherCleanupFailed: false,
+              registryUpdateFailed: false,
+            }
+          : {
+              outcome,
+              revisionId: `cfg1_${"a".repeat(43)}`,
+              enabledServiceIds: ["svc-one"],
+              followUp: "failed",
+              cleanupFailed: false,
+              publisherCleanupFailed: false,
+              registryUpdateFailed: false,
+            },
+      );
+      writeSelectionMock.mockRejectedValueOnce(error);
+      await expect(
+        installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" }),
+      ).rejects.toBe(error);
+      expect(settleMock).not.toHaveBeenCalled();
+      expect(renderMock).not.toHaveBeenCalled();
+      expect(dbMock.db.transaction).not.toHaveBeenCalled();
+    },
+  );
+
   it("rolls back via the ledger when serviceStart fails, writing no extension rows", async () => {
-    dbMock.queueSelect([]); // repo check; integration check never reached
     serviceStartMock.mockRejectedValueOnce(new Error("boom"));
 
     await expect(
       installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" }),
     ).rejects.toThrow(/boom/);
 
-    // Rollback removed the freshly-added service + repo, re-rendered compose.
+    // Rollback removed the freshly-added runtime, then had the agent undo the
+    // repository change, then restored the selection and re-rendered compose.
     expect(composeMock).toHaveBeenCalledWith("svc-one", "remove", expect.anything());
-    expect(removeRepoMock).toHaveBeenCalledWith("h1");
-    expect(discardRepoPreparationMock).toHaveBeenCalledWith("/safe/mock-preparation.json");
+    expect(settleMock).toHaveBeenCalledWith(
+      { repository: REPO_ONE, transactionId: transactionFor(REPO_ONE), outcome: "rollback" },
+      expect.anything(),
+    );
+    const removeOrder = composeMock.mock.invocationCallOrder.at(-1) ?? 0;
+    expect(settleMock.mock.invocationCallOrder[0]).toBeGreaterThan(removeOrder);
     expect(renderMock).toHaveBeenCalled();
     // No integration was installed this run, and no bookkeeping was written.
-    expect(dbRemoveMock).not.toHaveBeenCalled();
+    expect(publishIntegrationMock).not.toHaveBeenCalled();
+    expect(settleIntegrationMock).not.toHaveBeenCalled();
     expect(dbMock.db.insert).not.toHaveBeenCalled();
     expect(reloadMock).not.toHaveBeenCalled();
   });
 
   it("still rolls back and preserves the install error when rollback logging fails", async () => {
-    dbMock.queueSelect([]);
     serviceStartMock.mockRejectedValueOnce(new Error("start failed"));
     const ctx = makeCtx();
     vi.mocked(ctx.log).mockImplementation(async (message) => {
@@ -597,27 +875,62 @@ describe("installExtension", () => {
       installExtension(ctx, { manifest: MANIFEST, sourceTrust: "community" }),
     ).rejects.toThrow("start failed");
 
-    expect(removeRepoMock).toHaveBeenCalledWith("h1");
-    expect(discardRepoPreparationMock).toHaveBeenCalledWith("/safe/mock-preparation.json");
+    expect(settleMock).toHaveBeenCalledWith(
+      expect.objectContaining({ repository: REPO_ONE, outcome: "rollback" }),
+      expect.anything(),
+    );
     expect(renderMock).toHaveBeenCalled();
   });
 
-  it("retains the preparation journal when fresh-checkout removal fails", async () => {
-    dbMock.queueSelect([]);
+  it("continues the rollback when the agent cannot undo a repository yet", async () => {
     serviceStartMock.mockRejectedValueOnce(new Error("start failed"));
-    removeRepoMock.mockRejectedValueOnce(new Error("filesystem busy"));
+    settleMock.mockRejectedValueOnce(new Error("agent unavailable"));
 
     await expect(
       installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" }),
     ).rejects.toThrow("start failed");
 
-    expect(removeRepoMock).toHaveBeenCalledWith("h1");
-    expect(discardRepoPreparationMock).not.toHaveBeenCalled();
+    expect(settleMock).toHaveBeenCalledTimes(1);
+    expect(writeSelectionMock).toHaveBeenCalledTimes(2);
+    expect(renderMock).toHaveBeenCalledTimes(2);
   });
 
-  it("retains every service recovery artifact when failed-install runtime removal fails", async () => {
-    dbMock.queueSelect([]);
-    dbMock.queueSelect([]);
+  it("rolls back repositories newest first", async () => {
+    serviceStartMock
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("start failed"));
+
+    await expect(
+      installExtension(makeCtx(), { manifest: TWO_REPO_MANIFEST, sourceTrust: "community" }),
+    ).rejects.toThrow("start failed");
+
+    // Checkouts are restored newest first, then the selection, and only then
+    // are the agent's recovery notes released.
+    expect(settleMock.mock.calls.map(([request]) => request)).toEqual([
+      { repository: REPO_TWO, transactionId: transactionFor(REPO_TWO), outcome: "rollback" },
+      { repository: REPO_ONE, transactionId: transactionFor(REPO_ONE), outcome: "rollback" },
+      { repository: REPO_TWO, transactionId: transactionFor(REPO_TWO), outcome: "release" },
+      { repository: REPO_ONE, transactionId: transactionFor(REPO_ONE), outcome: "release" },
+    ]);
+    const restoreOrder = writeSelectionMock.mock.invocationCallOrder.at(-1) ?? 0;
+    expect(settleMock.mock.invocationCallOrder[1]).toBeLessThan(restoreOrder);
+    expect(settleMock.mock.invocationCallOrder[2]).toBeGreaterThan(restoreOrder);
+  });
+
+  it("keeps the recovery notes when restoring the selection fails", async () => {
+    serviceStartMock.mockRejectedValueOnce(new Error("start failed"));
+    writeSelectionMock
+      .mockResolvedValueOnce({ revisionId: "revision_1" } as never)
+      .mockRejectedValueOnce(new Error("selection unavailable"));
+
+    await expect(
+      installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" }),
+    ).rejects.toThrow("start failed");
+
+    expect(settleMock.mock.calls.map(([request]) => request.outcome)).toEqual(["rollback"]);
+  });
+
+  it("leaves every repository transaction pending when failed-install runtime removal fails", async () => {
     serviceStartMock
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new Error("start failed"));
@@ -633,15 +946,13 @@ describe("installExtension", () => {
 
     expect(composeMock).toHaveBeenCalledWith("svc-one", "remove", expect.anything());
     expect(composeMock).toHaveBeenCalledWith("svc-two", "remove", expect.anything());
-    expect(removeRepoMock).not.toHaveBeenCalled();
-    expect(discardRepoPreparationMock).not.toHaveBeenCalled();
-    expect(restoreRepoMock).not.toHaveBeenCalled();
+    // Recovery repairs the runtimes, restores the selection, then rolls back.
+    expect(settleMock).not.toHaveBeenCalled();
     expect(writeSelectionMock).toHaveBeenCalledTimes(1);
     expect(renderMock).toHaveBeenCalledTimes(1);
   });
 
   it("fails closed on a service image pull failure and records no requested version", async () => {
-    dbMock.queueSelect([]); // repo was newly registered
     composeMock.mockResolvedValueOnce({ exitCode: 1, stdout: "", stderr: "" });
 
     await expect(
@@ -649,109 +960,14 @@ describe("installExtension", () => {
     ).rejects.toThrow(/Failed to pull community service image svc-one/i);
 
     expect(serviceStartMock).not.toHaveBeenCalled();
-    expect(removeRepoMock).toHaveBeenCalledWith("h1");
-    expect(dbMock.db.transaction).not.toHaveBeenCalled();
-  });
-
-  it("restores an existing service repository when an update pull fails", async () => {
-    const previous = {
-      hash: "hash-https://git.example/repo.git",
-      url: "https://git.example/repo.git",
-      displayName: "Bundle X old",
-      lastFetchedAt: new Date("2026-08-01T00:00:00Z"),
-      lastSha: "c".repeat(40),
-      autoUpdate: false,
-      pinnedRef: "v1.0.0",
-      managedByExtension: "bundle-x",
-      createdAt: new Date("2026-08-01T00:00:00Z"),
-    };
-    dbMock.queueSelect([previous]);
-    composeMock.mockResolvedValueOnce({ exitCode: 1, stdout: "", stderr: "" });
-
-    await expect(
-      installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" }),
-    ).rejects.toThrow(/pull/i);
-
-    expect(backupRepoMock).toHaveBeenCalledWith(previous, {
-      selectionBefore: [],
-      touchedServiceIds: ["svc-one"],
-      previouslyEnabledServiceIds: [],
-    });
-    expect(stageRepoMock).toHaveBeenCalledWith(
-      "https://git.example/repo.git",
-      expect.objectContaining({ minimumLastFetchedAtExclusive: previous.lastFetchedAt }),
+    expect(settleMock).toHaveBeenCalledWith(
+      expect.objectContaining({ repository: REPO_ONE, outcome: "rollback" }),
+      expect.anything(),
     );
-    expect(publishStagedRepoMock).toHaveBeenCalledTimes(1);
-    expect(restoreRepoMock).toHaveBeenCalledWith({
-      snapshot: previous,
-      backupDir: "/safe/mock-backup",
-      selectionBefore: [],
-    });
-    expect(discardRepoBackupMock).not.toHaveBeenCalled();
-    expect(removeRepoMock).not.toHaveBeenCalled();
     expect(dbMock.db.transaction).not.toHaveBeenCalled();
-  });
-
-  it("retains update rollback backup and selection when runtime removal fails", async () => {
-    const previous = {
-      hash: "hash-https://git.example/repo.git",
-      url: "https://git.example/repo.git",
-      displayName: "old",
-      lastFetchedAt: new Date("2026-08-01T00:00:00Z"),
-      lastSha: "c".repeat(40),
-      autoUpdate: false,
-      pinnedRef: "v1",
-      managedByExtension: "bundle-x",
-      createdAt: new Date("2026-08-01T00:00:00Z"),
-    };
-    dbMock.queueSelect([previous]);
-    dbMock.queueSelect([{ ...previous, hash: "hash-https://git.example/other.git" }]);
-    serviceStartMock
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(new Error("start failed"));
-    composeMock
-      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
-      .mockResolvedValueOnce({ exitCode: 1, stdout: "", stderr: "" });
-    await expect(
-      installExtension(makeCtx(), { manifest: TWO_REPO_MANIFEST, sourceTrust: "community" }),
-    ).rejects.toThrow("start failed");
-    expect(composeMock).toHaveBeenCalledWith("svc-one", "remove", expect.anything());
-    expect(composeMock).toHaveBeenCalledWith("svc-two", "remove", expect.anything());
-    expect(restoreRepoMock).not.toHaveBeenCalled();
-    expect(discardRepoBackupMock).not.toHaveBeenCalled();
-    expect(discardRepoPreparationMock).not.toHaveBeenCalled();
-    expect(writeSelectionMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("discards an existing repository backup only after a successful update", async () => {
-    const previous = {
-      hash: "hash-https://git.example/repo.git",
-      url: "https://git.example/repo.git",
-      displayName: "Bundle X old",
-      lastFetchedAt: new Date("2026-08-01T00:00:00Z"),
-      lastSha: "c".repeat(40),
-      autoUpdate: false,
-      pinnedRef: "v1.0.0",
-      managedByExtension: "bundle-x",
-      createdAt: new Date("2026-08-01T00:00:00Z"),
-    };
-    dbMock.queueSelect([previous]);
-    dbMock.queueSelect([]);
-
-    await installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" });
-
-    expect(discardRepoBackupMock).toHaveBeenCalledWith({
-      snapshot: previous,
-      backupDir: "/safe/mock-backup",
-      selectionBefore: [],
-    });
-    expect(restoreRepoMock).not.toHaveBeenCalled();
   });
 
   it("rejects an extension service whose image is not pinned by digest", async () => {
-    dbMock.queueSelect([]);
     vi.mocked(getServiceRegistry)
       .mockReturnValueOnce({
         list: () => [SVC_DEF],
@@ -772,123 +988,103 @@ describe("installExtension", () => {
       installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" }),
     ).rejects.toThrow(/must pin.*digest/i);
 
-    expect(composeMock).not.toHaveBeenCalledWith("svc-one", "pull");
-    expect(removeRepoMock).toHaveBeenCalledWith("h1");
-    expect(dbMock.db.transaction).not.toHaveBeenCalled();
-  });
-
-  it("does not mutate registry, filesystem, or Compose when community bind preflight rejects", async () => {
-    dbMock.queueSelect([]);
-    stageRepoMock.mockRejectedValueOnce(
-      new Error(
-        "community_bind_mount_forbidden: bindMounts are not allowed for community services",
-      ),
+    expect(composeMock).not.toHaveBeenCalledWith("svc-one", "pull", expect.anything());
+    expect(settleMock).toHaveBeenCalledWith(
+      expect.objectContaining({ repository: REPO_ONE, outcome: "rollback" }),
+      expect.anything(),
     );
-
-    await expect(
-      installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" }),
-    ).rejects.toThrow("community_bind_mount_forbidden");
-
-    expect(initRegistryMock).not.toHaveBeenCalled();
-    expect(applyEnabledIds).not.toHaveBeenCalled();
-    expect(removeRepoMock).not.toHaveBeenCalled();
-    expect(restoreRepoMock).not.toHaveBeenCalled();
-    expect(discardRepoPreparationMock).not.toHaveBeenCalled();
-    expect(createInstallJournalMock).not.toHaveBeenCalled();
-    expect(markInstallJournalRestoringMock).not.toHaveBeenCalled();
-    expect(reconcileInstallJournalMock).not.toHaveBeenCalled();
-    expect(renderMock).not.toHaveBeenCalled();
-    expect(composeMock).not.toHaveBeenCalled();
-    expect(serviceStartMock).not.toHaveBeenCalled();
-    expect(reloadMock).not.toHaveBeenCalled();
     expect(dbMock.db.transaction).not.toHaveBeenCalled();
-  });
-
-  it("does not back up or roll back an existing repository when bind preflight rejects", async () => {
-    const previous = {
-      hash: "hash-https://git.example/repo.git",
-      url: "https://git.example/repo.git",
-      displayName: "Bundle X old",
-      lastFetchedAt: new Date("2026-08-01T00:00:00Z"),
-      lastSha: "c".repeat(40),
-      autoUpdate: false,
-      pinnedRef: "v1.0.0",
-      managedByExtension: "bundle-x",
-      createdAt: new Date("2026-08-01T00:00:00Z"),
-    };
-    dbMock.queueSelect([previous]);
-    stageRepoMock.mockRejectedValueOnce(
-      new Error(
-        "community_bind_mount_forbidden: bindMounts are not allowed for community services",
-      ),
-    );
-
-    await expect(
-      installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" }),
-    ).rejects.toThrow("community_bind_mount_forbidden");
-
-    expect(backupRepoMock).not.toHaveBeenCalled();
-    expect(publishStagedRepoMock).not.toHaveBeenCalled();
-    expect(restoreRepoMock).not.toHaveBeenCalled();
-    expect(discardRepoBackupMock).not.toHaveBeenCalled();
-    expect(initRegistryMock).not.toHaveBeenCalled();
-    expect(applyEnabledIds).not.toHaveBeenCalled();
-    expect(renderMock).not.toHaveBeenCalled();
-    expect(composeMock).not.toHaveBeenCalled();
-    expect(serviceStartMock).not.toHaveBeenCalled();
-    expect(dbMock.db.transaction).not.toHaveBeenCalled();
-    expect(dbMock.db.select).toHaveBeenCalledTimes(1);
   });
 
   it("rolls back the installed integration when the reload fails", async () => {
-    dbMock.queueSelect([]); // integration not installed
     reloadMock.mockRejectedValueOnce(new Error("reload-fail"));
 
     await expect(
       installExtension(makeCtx(), { manifest: INTEGRATION_ONLY, sourceTrust: "community" }),
     ).rejects.toThrow(/reload-fail/);
 
-    expect(dbRemoveMock).toHaveBeenCalledWith(
-      expect.objectContaining({ rootDir: expect.any(String), id: "intg-one" }),
-    );
-    expect(dbMock.db.delete).toHaveBeenCalled(); // installedIntegration cleanup
+    // The agent restores the previous copy, or removes a fresh install.
+    expect(settleIntegrationMock.mock.calls.map(([request]) => request)).toEqual([
+      { integrationId: "intg-one", transactionId: INTEGRATION_TRANSACTION, outcome: "rollback" },
+    ]);
     // Pipeline reload (threw) + rollback reload.
     expect(reloadMock).toHaveBeenCalledTimes(2);
+    expect(reloadMock.mock.invocationCallOrder[1]).toBeGreaterThan(
+      settleIntegrationMock.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    );
     // The reload threw before the bookkeeping transaction, so no rows to leak.
+    expect(dbMock.db.transaction).not.toHaveBeenCalled();
+    expect(dbMock.db.insert).not.toHaveBeenCalled();
+  });
+
+  it("rolls back an integration the agent reports under a different id", async () => {
+    publishIntegrationMock.mockResolvedValueOnce({
+      integrationId: "intg-other",
+      transactionId: INTEGRATION_TRANSACTION,
+      manifestSha256: "f".repeat(64),
+    });
+
+    await expect(
+      installExtension(makeCtx(), { manifest: INTEGRATION_ONLY, sourceTrust: "community" }),
+    ).rejects.toThrow(/installed "intg-other" but the manifest declared "intg-one"/);
+
+    expect(settleIntegrationMock).toHaveBeenCalledWith(
+      { integrationId: "intg-one", transactionId: INTEGRATION_TRANSACTION, outcome: "rollback" },
+      expect.anything(),
+    );
     expect(dbMock.db.transaction).not.toHaveBeenCalled();
   });
 
-  it("restores a pre-existing integration artifact when reload fails", async () => {
-    dbMock.queueSelect([{ id: "intg-one" }]);
+  it("rolls back integrations newest first, before the services", async () => {
+    const manifest = {
+      ...MANIFEST,
+      integrations: [
+        ...MANIFEST.integrations,
+        { artifact: "https://ex.example/intg-two.tar.gz", id: "intg-two", sha256: "b".repeat(64) },
+      ],
+    } satisfies ExtensionManifest;
+    publishIntegrationMock.mockImplementation(async (request) => ({
+      integrationId: request.integrationId,
+      transactionId: `itx1_${(request.integrationId === "intg-one" ? "1" : "2").repeat(24)}`,
+      manifestSha256: "f".repeat(64),
+    }));
     reloadMock.mockRejectedValueOnce(new Error("reload-fail"));
 
     await expect(
-      installExtension(makeCtx(), { manifest: INTEGRATION_ONLY, sourceTrust: "community" }),
+      installExtension(makeCtx(), { manifest, sourceTrust: "community" }),
     ).rejects.toThrow(/reload-fail/);
 
-    expect(integrationBackupMock).toHaveBeenCalledWith(expect.any(String), "intg-one");
-    expect(integrationRestoreMock).toHaveBeenCalledWith(expect.any(String), {
-      id: "intg-one",
-      backupDirectory: "/safe/mock-integration-backup",
-    });
-    expect(dbRemoveMock).not.toHaveBeenCalled();
-    expect(integrationBackupDiscardMock).not.toHaveBeenCalled();
-    expect(reloadMock).toHaveBeenCalledTimes(2);
+    expect(settleIntegrationMock.mock.calls.map(([request]) => request.integrationId)).toEqual([
+      "intg-two",
+      "intg-one",
+    ]);
+    expect(settleIntegrationMock.mock.invocationCallOrder.at(-1)).toBeLessThan(
+      settleMock.mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it("keeps rolling back when the agent cannot undo an integration yet", async () => {
+    reloadMock.mockRejectedValueOnce(new Error("reload-fail"));
+    settleIntegrationMock.mockRejectedValueOnce(new Error("agent unavailable"));
+
+    await expect(
+      installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" }),
+    ).rejects.toThrow(/reload-fail/);
+
+    // Recovery rolls the integration back later; the services are still undone.
+    expect(settleMock).toHaveBeenCalledWith(
+      expect.objectContaining({ repository: REPO_ONE, outcome: "rollback" }),
+      expect.anything(),
+    );
   });
 
   it("update/re-install re-writes the component links (delete + insert)", async () => {
-    dbMock.queueSelect([{ id: "intg-one" }]); // integration already installed → ledger empty
-
     const result = await installExtension(makeCtx(), {
       manifest: INTEGRATION_ONLY,
       sourceTrust: "community",
     });
 
     expect(result).toEqual({ id: "bundle-x", components: 1 });
-    expect(integrationBackupDiscardMock).toHaveBeenCalledWith(expect.any(String), {
-      id: "intg-one",
-      backupDirectory: "/safe/mock-integration-backup",
-    });
     expect(dbMock.db.delete).toHaveBeenCalledTimes(1);
 
     // Inserts: [0]=installedIntegration, [1]=installedExtension, [2]=component.
@@ -901,19 +1097,146 @@ describe("installExtension", () => {
   });
 
   it("rejects on a platform version gate before touching any host or db state", async () => {
-    const manifest = { ...INTEGRATION_ONLY, platform: "9999.0.0" } satisfies ExtensionManifest;
+    const manifest = { ...INTEGRATION_ONLY, platform: "9999.0" } satisfies ExtensionManifest;
 
     await expect(
       installExtension(makeCtx(), { manifest, sourceTrust: "community" }),
     ).rejects.toThrow(/requires platform/);
 
-    expect(registerRepoMock).not.toHaveBeenCalled();
-    expect(dbInstallMock).not.toHaveBeenCalled();
+    expect(inspectMock).not.toHaveBeenCalled();
+    expect(publishMock).not.toHaveBeenCalled();
+    expect(publishIntegrationMock).not.toHaveBeenCalled();
     expect(dbMock.db.insert).not.toHaveBeenCalled();
   });
 });
 
 describe("removeExtension", () => {
+  it("has the agent remove the extension's repositories before deleting its records", async () => {
+    dbMock.queueSelect([{ id: "bundle-x" }]);
+    dbMock.queueSelect([{ extensionId: "bundle-x", kind: "service", componentId: "svc-one" }]);
+    dbMock.queueSelect([{ hash: REPO_ONE, url: REPO_URL }]);
+
+    await expect(removeExtension(makeCtx(), "bundle-x")).resolves.toEqual({
+      id: "bundle-x",
+      removed: 1,
+    });
+
+    expect(lockMock).toHaveBeenCalledTimes(1);
+    expect(recoverMock).toHaveBeenCalledTimes(1);
+    expect(composeMock).toHaveBeenCalledWith("svc-one", "remove", expect.anything());
+    expect(writeSelectionMock).toHaveBeenCalledTimes(1);
+    expect(removeRepositoryMock).toHaveBeenCalledWith(
+      { repository: REPO_ONE, extensionId: "bundle-x" },
+      expect.objectContaining({ operationKey: expect.stringMatching(/^opk1_/) }),
+    );
+    // The repository row, then the extension record.
+    expect(dbMock.db.delete).toHaveBeenCalledTimes(2);
+    expect(removeRepositoryMock.mock.invocationCallOrder[0]).toBeLessThan(
+      dbMock.db.delete.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(renderMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the extension record when the agent cannot remove its repository", async () => {
+    dbMock.queueSelect([{ id: "bundle-x" }]);
+    dbMock.queueSelect([{ extensionId: "bundle-x", kind: "service", componentId: "svc-one" }]);
+    dbMock.queueSelect([{ hash: REPO_ONE, url: REPO_URL }]);
+    removeRepositoryMock.mockRejectedValueOnce(new Error("busy"));
+
+    await expect(removeExtension(makeCtx(), "bundle-x")).rejects.toThrow("busy");
+
+    expect(dbMock.db.delete).not.toHaveBeenCalled();
+    expect(renderMock).not.toHaveBeenCalled();
+  });
+
+  it("retries a removal whose repository the agent already deleted", async () => {
+    dbMock.queueSelect([{ id: "bundle-x" }]);
+    dbMock.queueSelect([{ extensionId: "bundle-x", kind: "service", componentId: "svc-one" }]);
+    dbMock.queueSelect([{ hash: REPO_ONE, url: REPO_URL }]);
+    readCommunityMock.mockResolvedValueOnce({
+      revisionId: `cfg1_${"d".repeat(43)}`,
+      repositories: [],
+      services: [],
+      problems: [],
+      reportedServiceIds: [],
+    } as never);
+    removeRepositoryMock.mockResolvedValueOnce({ repository: REPO_ONE, removed: false });
+
+    await expect(removeExtension(makeCtx(), "bundle-x")).resolves.toMatchObject({
+      id: "bundle-x",
+    });
+
+    expect(composeMock).not.toHaveBeenCalled();
+    expect(dbMock.db.delete).toHaveBeenCalledTimes(2);
+  });
+
+  it("has the agent remove the extension's integrations before deleting its records", async () => {
+    dbMock.queueSelect([{ id: "bundle-x" }]);
+    dbMock.queueSelect([{ extensionId: "bundle-x", kind: "integration", componentId: "intg-one" }]);
+
+    await expect(removeExtension(makeCtx(), "bundle-x")).resolves.toEqual({
+      id: "bundle-x",
+      removed: 1,
+    });
+
+    expect(removeIntegrationMock).toHaveBeenCalledWith(
+      { integrationId: "intg-one", extensionId: "bundle-x" },
+      expect.objectContaining({ operationKey: expect.stringMatching(/^opk1_/) }),
+    );
+    expect(adoptIntegrationMock).not.toHaveBeenCalled();
+    // The integration row, then the extension record.
+    expect(dbMock.db.delete).toHaveBeenCalledTimes(2);
+    expect(removeIntegrationMock.mock.invocationCallOrder[0]).toBeLessThan(
+      dbMock.db.delete.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(reloadMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the extension record when the agent cannot remove its integration", async () => {
+    dbMock.queueSelect([{ id: "bundle-x" }]);
+    dbMock.queueSelect([{ extensionId: "bundle-x", kind: "integration", componentId: "intg-one" }]);
+    removeIntegrationMock.mockRejectedValueOnce(new Error("busy"));
+
+    await expect(removeExtension(makeCtx(), "bundle-x")).rejects.toThrow("busy");
+
+    expect(dbMock.db.delete).not.toHaveBeenCalled();
+  });
+
+  it("records an integration an earlier release installed before removing it", async () => {
+    dbMock.queueSelect([{ id: "bundle-x" }]);
+    dbMock.queueSelect([{ extensionId: "bundle-x", kind: "integration", componentId: "intg-one" }]);
+    readInstalledMock.mockResolvedValueOnce(installedSnapshot([], ["intg-one"]));
+
+    await removeExtension(makeCtx(), "bundle-x");
+
+    expect(adoptIntegrationMock).toHaveBeenCalledWith(
+      { integrationId: "intg-one", extensionId: "bundle-x" },
+      expect.anything(),
+    );
+    expect(removeIntegrationMock).toHaveBeenCalledWith(
+      { integrationId: "intg-one", extensionId: "bundle-x" },
+      expect.anything(),
+    );
+    expect(adoptIntegrationMock.mock.invocationCallOrder[0]).toBeLessThan(
+      removeIntegrationMock.mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it("leaves an integration someone else now installs in place", async () => {
+    dbMock.queueSelect([{ id: "bundle-x" }]);
+    dbMock.queueSelect([{ extensionId: "bundle-x", kind: "integration", componentId: "intg-one" }]);
+    readInstalledMock.mockResolvedValueOnce(
+      installedSnapshot([{ integrationId: "intg-one", extensionId: null }]),
+    );
+
+    await expect(removeExtension(makeCtx(), "bundle-x")).resolves.toMatchObject({
+      id: "bundle-x",
+    });
+
+    expect(removeIntegrationMock).not.toHaveBeenCalled();
+    expect(dbMock.db.delete).toHaveBeenCalledTimes(2);
+  });
+
   it("retains selection and repository ownership when community runtime removal fails", async () => {
     dbMock.queueSelect([{ id: "bundle-x" }]);
     dbMock.queueSelect([{ extensionId: "bundle-x", kind: "service", componentId: "svc-one" }]);
@@ -925,7 +1248,7 @@ describe("removeExtension", () => {
 
     expect(composeMock).toHaveBeenCalledWith("svc-one", "remove", expect.anything());
     expect(writeSelectionMock).not.toHaveBeenCalled();
-    expect(removeRepoMock).not.toHaveBeenCalled();
+    expect(removeRepositoryMock).not.toHaveBeenCalled();
     expect(renderMock).not.toHaveBeenCalled();
     expect(dbMock.db.delete).not.toHaveBeenCalled();
   });

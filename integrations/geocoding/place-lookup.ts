@@ -1,3 +1,6 @@
+import { OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
+import { snapshotContributors, withContributors } from "@openmapx/mobility-core/contributors";
+import { LRUCache } from "lru-cache";
 /**
  * Nominatim place detail lookups.
  * Separate from nominatim geocoding (which handles geocoding/autocomplete)
@@ -5,7 +8,10 @@
  */
 
 import {
+  type AddressEvidence,
   type AreaGeometry,
+  type Attribution,
+  addressComponentsFromOsmTags,
   type BBox,
   createPlace,
   fetchJson,
@@ -16,8 +22,10 @@ import {
   type OverpassWay,
   overpassQuery,
   type Place,
+  type PlaceAddressComponents,
   type PlaceIds,
   parseId,
+  sanitizeAddressComponents,
 } from "@openmapx/core";
 import { formatAddress, formatStreetLine } from "./format-address.js";
 import { resolveOsmLabel } from "./osm-label.js";
@@ -133,7 +141,9 @@ function buildIds(result: NominatimDetailResult, requestId: string): PlaceIds {
 // Populated by setup(ctx) from the resolved integration config cascade.
 let NOMINATIM_URL = "https://nominatim.openstreetmap.org";
 export function setPlaceLookupNominatimUrl(value: string | undefined): void {
-  NOMINATIM_URL = value && value.length > 0 ? value : "https://nominatim.openstreetmap.org";
+  const next = value && value.length > 0 ? value : "https://nominatim.openstreetmap.org";
+  if (next !== NOMINATIM_URL) clearPlaceLookupCaches(lookupCacheAvailable);
+  NOMINATIM_URL = next;
 }
 
 const DEFAULT_HEADERS = {
@@ -145,17 +155,20 @@ function headersForLang(lang?: string): Record<string, string> {
   return { ...DEFAULT_HEADERS, "Accept-Language": lang };
 }
 
-interface NominatimAddress {
-  house_number?: string;
-  road?: string;
-  city?: string;
-  town?: string;
-  village?: string;
-  county?: string;
-  state?: string;
-  country?: string;
-  country_code?: string;
-  postcode?: string;
+interface NominatimAddress extends PlaceAddressComponents {}
+
+function nominatimAddressEvidence(
+  result: NominatimDetailResult,
+  method: "provider-address" | "reverse",
+): AddressEvidence | undefined {
+  const components = sanitizeAddressComponents(result.address);
+  if (Object.keys(components).length === 0) return undefined;
+  return {
+    components,
+    source: "geocoding-nominatim",
+    method,
+    recordId: `osm:${result.osm_type}/${result.osm_id}`,
+  };
 }
 
 interface NominatimDetailResult {
@@ -195,7 +208,11 @@ const NAMEDETAILS_TAG_ALLOWLIST = new Set([
   "local_code",
 ]);
 
-function toPlace(r: NominatimDetailResult, id: string): Place {
+function toPlace(
+  r: NominatimDetailResult,
+  id: string,
+  method: "provider-address" | "reverse" = "provider-address",
+): Place {
   const {
     opening_hours,
     phone,
@@ -228,20 +245,29 @@ function toPlace(r: NominatimDetailResult, id: string): Place {
     }
   }
 
-  const address = formatAddress(r.address) || r.display_name;
+  const components = sanitizeAddressComponents(r.address);
+  const address = formatAddress(components) || r.display_name;
   // Address-type places (buildings/house numbers) have no POI name. Derive a
   // proper street line ("Kinderhauser Straße 40") instead of falling back to
   // display_name's first segment, which is the bare house number in DE/AT/CH.
-  const name = r.name?.trim() || formatStreetLine(r.address) || r.display_name.split(",")[0].trim();
-  const city = r.address.city ?? r.address.town ?? r.address.village ?? r.address.county;
+  const name =
+    r.name?.trim() || formatStreetLine(components) || r.display_name.split(",")[0].trim();
+  const city =
+    components.city ??
+    components.town ??
+    components.village ??
+    components.municipality ??
+    components.county;
 
   return createPlace({
     primaryScheme: "osm",
+    contributors: snapshotContributors([OPENSTREETMAP_ATTRIBUTION]),
     ids: buildIds(r, id),
     name,
     address,
+    addressEvidence: nominatimAddressEvidence(r, method),
     city,
-    countryCode: r.address.country_code ?? undefined,
+    countryCode: components.country_code ?? undefined,
     coordinates: [Number.parseFloat(r.lon), Number.parseFloat(r.lat)],
     category: osmClass ? resolveOsmLabel(osmClass, r.type) : r.type,
     phone: phone ?? contactPhone,
@@ -311,7 +337,7 @@ interface NominatimBoundaryResult {
 export async function fetchOsmBoundary(
   osmRef: string,
   lang?: string,
-): Promise<{ boundary: AreaGeometry; boundingBox?: BBox } | null> {
+): Promise<{ boundary: AreaGeometry; boundingBox?: BBox; contributors: Attribution[] } | null> {
   const [osmType, osmId] = osmRef.split("/");
   const prefix = OSM_TYPE_PREFIX[osmType];
   if (!prefix || !osmId) return null;
@@ -339,7 +365,11 @@ export async function fetchOsmBoundary(
       }
     }
 
-    return { boundary, boundingBox };
+    return {
+      boundary,
+      boundingBox,
+      contributors: snapshotContributors([OPENSTREETMAP_ATTRIBUTION]),
+    };
   } catch {
     return null;
   }
@@ -369,7 +399,7 @@ export async function lookupByCoords(
   try {
     const result = await fetchNominatim<NominatimDetailResult>(url, lang);
     if (!result?.osm_id) return null;
-    return toPlace(result, originalId);
+    return toPlace(result, originalId, "reverse");
   } catch {
     return null;
   }
@@ -396,8 +426,22 @@ const CITY_NAME_TTL_MS = 3_600_000; // 1h
 // Country only changes at borders, so a coarse 1° grid (~111 km cell) and a
 // 24h TTL are sufficient. Shared with the nearby-places route so opening-hours
 // public-holiday rules can be evaluated against the right country.
-const countryCodeCache = new Map<string, { countryCode: string | null; expiresAt: number }>();
+// An entry budget for small country-code results, not an estimated heap-byte limit.
+const countryCodeCache = new LRUCache<string, { countryCode: string | null; expiresAt: number }>({
+  max: 4096,
+  ttlResolution: 0,
+  perf: { now: () => Date.now() },
+});
 const COUNTRY_CODE_TTL_MS = 24 * 60 * 60 * 1000;
+let lookupGeneration = 0;
+let lookupCacheAvailable = true;
+
+export function clearPlaceLookupCaches(available = true): void {
+  lookupGeneration++;
+  lookupCacheAvailable = available;
+  countryCodeCache.clear();
+  cityNameCache.clear();
+}
 
 /**
  * Reverse-geocode coordinates to a city name (city-level zoom).
@@ -410,7 +454,8 @@ export async function reverseGeocodeCity(
 ): Promise<string | null> {
   const effectiveLang = lang ?? "en";
   const key = `${Math.round(lat * 10) / 10},${Math.round(lng * 10) / 10}:${effectiveLang}`;
-  const cached = cityNameCache.get(key);
+  const generation = lookupGeneration;
+  const cached = lookupCacheAvailable ? cityNameCache.get(key) : undefined;
   if (cached && cached.expiresAt > Date.now()) return cached.city;
 
   try {
@@ -424,7 +469,9 @@ export async function reverseGeocodeCity(
     const result = await fetchNominatim<NominatimDetailResult>(url, lang);
     const city = result?.address?.city ?? result?.address?.town ?? result?.address?.village ?? null;
 
-    cityNameCache.set(key, { city, expiresAt: Date.now() + CITY_NAME_TTL_MS });
+    if (lookupCacheAvailable && generation === lookupGeneration) {
+      cityNameCache.set(key, { city, expiresAt: Date.now() + CITY_NAME_TTL_MS });
+    }
     return city;
   } catch {
     return null;
@@ -438,12 +485,14 @@ export async function reverseGeocodeCity(
  * unreachable upstream so callers can fall back gracefully.
  */
 export async function reverseGeocodeCountry(lat: number, lng: number): Promise<string | null> {
-  const key = `${Math.round(lat)},${Math.round(lng)}`;
-  const cached = countryCodeCache.get(key);
+  const endpoint = NOMINATIM_URL;
+  const generation = lookupGeneration;
+  const key = `${endpoint}:${Math.round(lat)},${Math.round(lng)}`;
+  const cached = lookupCacheAvailable ? countryCodeCache.get(key) : undefined;
   if (cached && cached.expiresAt > Date.now()) return cached.countryCode;
 
   try {
-    const url = new URL(`${NOMINATIM_URL}/reverse`);
+    const url = new URL(`${endpoint}/reverse`);
     url.searchParams.set("lat", String(lat));
     url.searchParams.set("lon", String(lng));
     url.searchParams.set("format", "jsonv2");
@@ -453,10 +502,16 @@ export async function reverseGeocodeCountry(lat: number, lng: number): Promise<s
     const result = await fetchNominatim<NominatimDetailResult>(url);
     const countryCode = result?.address?.country_code?.toLowerCase() ?? null;
 
-    countryCodeCache.set(key, {
-      countryCode,
-      expiresAt: Date.now() + COUNTRY_CODE_TTL_MS,
-    });
+    if (lookupCacheAvailable && generation === lookupGeneration) {
+      countryCodeCache.set(
+        key,
+        {
+          countryCode,
+          expiresAt: Date.now() + COUNTRY_CODE_TTL_MS,
+        },
+        { ttl: COUNTRY_CODE_TTL_MS },
+      );
+    }
     return countryCode;
   } catch {
     return null;
@@ -506,16 +561,18 @@ export async function lookupByNameAndCoords(
 
 /**
  * Reverse-geocode coordinates to a structured street address (zoom=18, building level).
- * Returns only the address string and city — no POI name, phone, or business details.
- *
- * When Nominatim finds the road but no house number (common for sidewalk/corner locations),
- * falls back to an Overpass query for the nearest addr:housenumber node on that street
- * within 50 m — where the actual mapped building addresses are.
+ * Returns address components as contextual reverse evidence, without borrowing
+ * a nearby building's house number or other POI details.
  */
 export async function lookupAddressByCoords(
   lat: number,
   lng: number,
-): Promise<{ address: string; city?: string } | null> {
+): Promise<{
+  address: string;
+  city?: string;
+  countryCode?: string;
+  addressEvidence: AddressEvidence;
+} | null> {
   const url = new URL(`${NOMINATIM_URL}/reverse`);
   url.searchParams.set("lat", String(lat));
   url.searchParams.set("lon", String(lng));
@@ -523,73 +580,23 @@ export async function lookupAddressByCoords(
   url.searchParams.set("addressdetails", "1");
   url.searchParams.set("zoom", "18");
 
-  let addr: NominatimAddress | undefined;
-
   try {
     const result = await fetchNominatim<NominatimDetailResult>(url);
     if (!result?.osm_id) return null;
-    addr = result.address;
+    const evidence = nominatimAddressEvidence(result, "reverse");
+    if (!evidence) return null;
+    const addr = evidence.components;
+    if (!addr.road && !addr.place && !addr.house && !addr.full) return null;
+    const address = formatAddress(addr);
+    if (!address) return null;
+    return {
+      address,
+      city: addr.city ?? addr.town ?? addr.village ?? addr.municipality ?? addr.county,
+      countryCode: addr.country_code,
+      addressEvidence: evidence,
+    };
   } catch {
     return null;
-  }
-
-  if (!addr?.road) return null;
-
-  const city = addr.city ?? addr.town ?? addr.village ?? addr.county;
-
-  // If Nominatim didn't return a house number, search for the nearest
-  // address on the same street via a structured Nominatim query (50 m radius).
-  const houseNumber =
-    addr.house_number ?? (await lookupNearestHouseNumber(lat, lng, addr.road, 50));
-
-  return {
-    address: formatAddress({ ...addr, house_number: houseNumber }),
-    city,
-  };
-}
-
-/**
- * Query Overpass for the nearest node/way with addr:housenumber + addr:street
- * matching the given road name, within radiusM metres of [lat, lng].
- */
-async function lookupNearestHouseNumber(
-  lat: number,
-  lng: number,
-  road: string,
-  radiusM: number,
-): Promise<string | undefined> {
-  const escapedRoad = road.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  const query = `[out:json][timeout:5];(node["addr:housenumber"]["addr:street"="${escapedRoad}"](around:${radiusM},${lat},${lng});way["addr:housenumber"]["addr:street"="${escapedRoad}"](around:${radiusM},${lat},${lng}););out center 5;`;
-
-  try {
-    const data = await overpassQuery(query);
-    if (!data.elements.length) return undefined;
-
-    const best = data.elements
-      .filter((el): el is OverpassNode | OverpassWay => el.type === "node" || el.type === "way")
-      .map((el) => {
-        let elLat: number;
-        let elLon: number;
-        if (el.type === "node") {
-          elLat = el.lat;
-          elLon = el.lon;
-        } else if (el.center) {
-          elLat = el.center.lat;
-          elLon = el.center.lon;
-        } else {
-          return null;
-        }
-        return {
-          hn: el.tags?.["addr:housenumber"],
-          dist: haversineMeters(lat, lng, elLat, elLon),
-        };
-      })
-      .filter((c): c is NonNullable<typeof c> => c !== null && !!c.hn)
-      .sort((a, b) => a.dist - b.dist)[0];
-
-    return best?.hn;
-  } catch {
-    return undefined;
   }
 }
 
@@ -666,7 +673,8 @@ export async function lookupByOsmFilters(
       best = matched;
     }
 
-    return overpassElementToPlace(best.el, best.elLat, best.elLon, originalId);
+    const place = overpassElementToPlace(best.el, best.elLat, best.elLon, originalId);
+    return place ? withContributors(place, data.contributors ?? [OPENSTREETMAP_ATTRIBUTION]) : null;
   } catch {
     return null;
   }
@@ -680,20 +688,19 @@ function overpassElementToPlace(
 ): Place | null {
   const tags = el.tags ?? {};
   const name = tags.name ?? "";
-  const housenumber = tags["addr:housenumber"];
-  const street = tags["addr:street"];
   const phone = tags.phone ?? tags["contact:phone"];
   const website = tags.website ?? tags["contact:website"];
   const openingHours = tags.opening_hours;
 
-  const city = tags["addr:city"] ?? tags["addr:town"] ?? undefined;
-  const countryCode = tags["addr:country"]?.toLowerCase() ?? undefined;
+  const components = addressComponentsFromOsmTags(tags);
+  const city = components.city ?? components.town;
+  const countryCode = components.country_code;
   // Address from structured addr:* tags only — don't fall back to the element name
   // because data source items use selectedPlace.name for identity already.
-  const address = formatAddress(
-    { road: street, house_number: housenumber, country_code: countryCode },
-    { appendCountry: false },
+  const hasPremises = Boolean(
+    components.road || components.place || components.house || components.full,
   );
+  const address = hasPremises ? formatAddress(components, { appendCountry: false }) : "";
 
   const osmTags: Record<string, string> = { ...tags };
 
@@ -706,9 +713,13 @@ function overpassElementToPlace(
 
   return createPlace({
     primaryScheme: "osm",
+    contributors: snapshotContributors([OPENSTREETMAP_ATTRIBUTION]),
     ids,
     name,
     address,
+    addressEvidence: address
+      ? { components, source: "overpass", method: "osm-tags", recordId: `osm:${osmRef}` }
+      : undefined,
     city,
     countryCode,
     coordinates: [lng, lat],

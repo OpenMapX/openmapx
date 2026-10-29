@@ -30,6 +30,8 @@ export interface TideStationBase {
 export interface TidesIntegrationConfig<S extends TideStationBase> {
   /** Place-id scheme this integration owns (e.g. "ioc", "pegel"). */
   readonly scheme: string;
+  /** Exact dataset used by this adapter, distinct from its place-id scheme. */
+  readonly sourceId: string;
 
   /** Load (and cache) the station catalog. Fully provider-specific. */
   loadStations(ctx: IntegrationContext): Promise<S[]>;
@@ -77,9 +79,9 @@ export interface TidesIntegrationConfig<S extends TideStationBase> {
 
   /**
    * Optional hook run on a warm `nearest:` cache hit, BEFORE the response is
-   * sent. Lets a provider mutate the cached payload (Canada re-fetches the
-   * live `currentLevel` so warm hits don't pin a stale level for the full
-   * TTL). Receives the cached response object and may mutate it in place.
+   * sent. Receives a detached response copy that the provider may update
+   * without changing the retained cache generation. Canada refreshes its
+   * independently cached live `currentLevel` here.
    */
   onWarmNearestHit?(ctx: IntegrationContext, cached: TidesPayload): Promise<void> | void;
 }
@@ -148,18 +150,19 @@ export function createTidesIntegration<S extends TideStationBase>(
       // client, so a cached response that spans midnight UTC would land
       // yesterday's events under today's label until the TTL expires.
       const dayKey = new Date().toISOString().slice(0, 10);
-      const cacheKey = `nearest:${round4(lat)},${round4(lng)}:${dayKey}`;
+      const cacheKey = `nearest:contributors-v2:${round4(lat)},${round4(lng)}:${dayKey}`;
       const cached = await ctx.cache.get<TidesPayload | { notFound: true }>(cacheKey);
       if (cached) {
-        if ("notFound" in (cached as object)) {
+        if ("notFound" in cached) {
           reply.status(204).send(null);
           return;
         }
-        if (config.onWarmNearestHit) {
-          await config.onWarmNearestHit(ctx, cached as TidesPayload);
-        }
+        // Cache clients may return retained references; a live field refresh
+        // must never mutate the stored prediction generation.
+        const response = structuredClone(cached);
+        await config.onWarmNearestHit?.(ctx, response);
         reply.header("Cache-Control", `public, max-age=${config.cacheControlMaxAge}`);
-        reply.send(cached);
+        reply.send(response);
         return;
       }
 
@@ -179,9 +182,9 @@ export function createTidesIntegration<S extends TideStationBase>(
         reply.status(204).send(null);
         return;
       }
-      await ctx.cache.set(cacheKey, result, config.nearestCacheTtl);
+      await ctx.cache.set(cacheKey, structuredClone(result), config.nearestCacheTtl);
       reply.header("Cache-Control", `public, max-age=${config.cacheControlMaxAge}`);
-      reply.send(result);
+      reply.send(structuredClone(result));
       return;
     }
 
@@ -191,6 +194,6 @@ export function createTidesIntegration<S extends TideStationBase>(
       return;
     }
     reply.header("Cache-Control", `public, max-age=${config.cacheControlMaxAge}`);
-    reply.send(result);
+    reply.send(structuredClone(result));
   });
 }

@@ -133,7 +133,6 @@ describe("purpose-based layer groups", () => {
         ]),
       ),
     ).toEqual({
-      otherDetails: ["ambient-places"],
       transport: [
         "cycling",
         "live-transit",
@@ -157,7 +156,7 @@ describe("purpose-based layer groups", () => {
         "wildfires",
       ],
     });
-    expect(result.current.mapDetails).toHaveLength(23);
+    expect(result.current.mapDetails).toHaveLength(22);
   });
 
   it("keeps each selectable detail once and exposes unknown integrations", () => {

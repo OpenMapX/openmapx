@@ -1,3 +1,4 @@
+import type { ContributingRecord } from "../contributors.js";
 import type { Attribution } from "./attribution.js";
 
 export type ParkingSiteType =
@@ -11,6 +12,7 @@ export type ParkingLayout =
   | "single_level"
   | "multi_storey"
   | "underground"
+  | "underground_and_multi_storey"
   | "surface"
   | "automated"
   | "covered"
@@ -33,7 +35,7 @@ export type ParkingTrend = "filling" | "clearing" | "steady";
  * absent when the source does not give it, never a zero standing in for
  * "unknown".
  */
-export interface ParkingCounts {
+export interface ParkingCounts extends ContributingRecord {
   capacity?: number;
   /** Free spaces. */
   available?: number;
@@ -55,6 +57,14 @@ export interface ParkingArea extends ParkingCounts {
   vehicleType: string;
   /** `any` for untyped spaces. */
   userGroup: string;
+  /**
+   * When the area's restriction holds, as an OSM-format opening_hours string:
+   * its spaces are kept for its user group, and its maximum stay applies,
+   * during these hours only.
+   */
+  hours?: string;
+  /** The longest a vehicle may stay in the area, in minutes. */
+  maxStayMin?: number;
 }
 
 /**
@@ -62,7 +72,7 @@ export interface ParkingArea extends ParkingCounts {
  * `fromMin`. A `per_hour` row is an hourly price charged in steps of
  * `stepMin`, applying from `fromMin` to `toMin`.
  */
-export interface ParkingRate {
+export interface ParkingRate extends ContributingRecord {
   currency: string;
   rows: {
     kind: "flat" | "per_hour";
@@ -95,6 +105,12 @@ export interface ParkingSite extends ParkingCounts {
   free?: boolean;
   /** Maximum vehicle height in centimetres. */
   heightLimitCm?: number;
+  /** The longest a vehicle may stay at the site, in minutes. */
+  maxStayMin?: number;
+  /** Whether a space can be reserved ahead. */
+  reservation?: boolean;
+  /** What else the site offers, as OpenConditions amenity codes (`toilets`, `shower`). */
+  amenities?: string[];
   areas: ParkingArea[];
   rates: ParkingRate[];
   tariffText?: string;

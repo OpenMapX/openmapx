@@ -1,374 +1,308 @@
 ---
 title: Self-hosting location history (Dawarich)
-description: Run your own private location history server with Dawarich, record tracks via mobile apps, import Google Takeout, and view personal timelines and visit history in OpenMapX.
+description: Provision managed Dawarich or connect an external instance, then view a personal day timeline in OpenMapX.
 sidebar_position: 8
 ---
 
 # Self-hosting location history with Dawarich
 
-OpenMapX is built on a clear privacy principle: the map never tracks you, logs
-your location, or maintains a central database of your movements. But many
-people value having a private record of where they have been — what Google
-called Location History or Timeline — provided they own the data and host the
-server themselves.
+OpenMapX can display a personal timeline from [Dawarich](https://dawarich.app/).
+Tracking apps and imports send history directly to Dawarich. To view it in
+OpenMapX, each user connects their own Dawarich API key.
 
-To support this without compromising the core map's privacy boundary, OpenMapX
-integrates with [Dawarich](https://dawarich.app/), an open-source, self-hosted
-location history and personal timeline application created by Artem Freik.
-
-This guide explains how Dawarich works, how to run the managed Dawarich stack
-inside OpenMapX, how to connect an existing external Dawarich instance, how to
-send location data from your phone or import past history, and how OpenMapX
-surfaces your timeline and place visit history.
-
-If you only want to know how the timeline looks to a user, see the
-[Personal timeline feature guide](../features/personal-timeline.md).
+Complete [Getting started](../install/getting-started.md) before adding the
+managed bundle. Existing Dawarich users can skip deployment and follow
+[Connecting Dawarich to OpenMapX](#connecting-dawarich-to-openmapx).
 
 ## How Dawarich fits into OpenMapX
 
-The division of responsibility between OpenMapX and Dawarich is strict:
+Dawarich stores location points, imports, visits, and tracks in its own database
+and file volumes. The OpenMapX timeline viewer reads a selected day through the
+API server; it does not run a background tracker or send history to search
+providers. It stores the encrypted connection credential and operational
+metadata, while fetched day geometry stays out of the ordinary OpenMapX database
+and shared cache.
 
-- **Dawarich owns data collection and storage.** Dawarich receives GPS points
-  from mobile tracking apps, aggregates points into stationary **visits** and
-  moving **trips**, performs reverse geocoding to identify named places, and
-  stores your complete location history in a dedicated PostGIS database.
-- **OpenMapX is a read-only presentation client.** OpenMapX never collects GPS
-  points, tracks your background movements, writes to Dawarich, or stores your
-  location history in its own database.
-- **Fetched timeline data is strictly ephemeral.** When you view a day in
-  OpenMapX, the server requests that single day's summary, visits, and tracks
-  from the Dawarich REST API using your personal API key. The payload is
-  rendered in the browser session and discarded. It is **never** written to the
-  OpenMapX PostgreSQL database, never cached in Redis or shared caches, and
-  never stored in the offline Service Worker cache.
-
-```mermaid
-graph LR
-    subgraph Mobile["Location Collection"]
-      App["Dawarich Mobile<br/>OwnTracks · Overland"]
-    end
-
-    subgraph Dawarich["Dawarich Stack (Port 3000 · timeline.domain)"]
-      DApp["dawarich-app (Rails)"]
-      DSidekiq["dawarich-sidekiq (Worker)"]
-      DDB[("dawarich-postgis<br/>Location records · visits · trips")]
-      DRedis[("dawarich-redis")]
-      DApp <--> DSidekiq
-      DApp <--> DDB
-      DApp <--> DRedis
-    end
-
-    subgraph OpenMapX["OpenMapX Core"]
-      API["app-api"]
-      Web["app-web (Browser)"]
-    end
-
-    App -->|POST /api/v1/points (GPS)| DApp
-    Web -->|GET /api/timeline/day/:date| API
-    API -->|GET /api/v1/timeline (read-only)| DApp
-```
+Managed privacy exports and operator backups are separate workflows that can
+contain personal data. Protect them independently; a read-only timeline viewer
+does not make the whole deployment free of stored location history.
 
 ## Managed bundle vs. external instance
 
-You can use Dawarich with OpenMapX in either of two ways:
+|                    | Managed bundle                                          | External instance                       |
+| ------------------ | ------------------------------------------------------- | --------------------------------------- |
+| Deployment         | Four services in this Compose stack                     | Existing separate Dawarich installation |
+| Public origin      | `https://timeline.<DOMAIN>` by default                  | User-supplied supported HTTPS origin    |
+| Browser login      | OpenMapX OIDC or retained local recovery login          | Managed by that instance                |
+| Timeline API       | Personal Dawarich API key                               | Personal Dawarich API key               |
+| Backup and updates | OpenMapX service workflow plus protected recovery state | External operator's responsibility      |
 
-|                    | **Managed Dawarich bundle**                          | **External Dawarich instance**                                     |
-| ------------------ | ---------------------------------------------------- | ------------------------------------------------------------------ |
-| **Where it runs**  | Containers inside your OpenMapX Docker stack         | Any external server or existing Dawarich instance                  |
-| **Domain**         | Automatic subdomain `timeline.<DOMAIN>`              | Your instance's HTTPS origin (e.g. `https://timeline.example.org`) |
-| **Single Sign-On** | One-click sign-in via OpenMapX Better Auth OIDC      | Dawarich's native authentication or external IdP                   |
-| **Backups**        | Managed by `openmapx backup` (`pg_dump` of database) | Managed independently by the external instance operator            |
-| **Updates**        | Staged and updated through OpenMapX maintenance      | Updated independently                                              |
-| **Good for**       | All-in-one self-hosting on a single machine          | Existing Dawarich users, or multi-host topologies                  |
-
-Both modes present the identical experience inside OpenMapX: a day-by-day
-timeline viewer on the map and personal visit history badges in place panels.
-
----
+OIDC authenticates a browser session. It does not replace the personal API key
+needed by the OpenMapX viewer, and signing out of OpenMapX does not sign out of
+the separate Dawarich browser session.
 
 ## The managed Dawarich stack
 
-OpenMapX ships with a production-ready, four-container Dawarich bundle:
+| Service            | Role                                | Default memory ceiling |
+| ------------------ | ----------------------------------- | ---------------------- |
+| `dawarich-app`     | Dawarich 1.15.3 web app             | 4 GiB                  |
+| `dawarich-sidekiq` | Background worker, concurrency 3    | 2 GiB                  |
+| `dawarich-postgis` | Dedicated PostgreSQL 18/PostGIS 3.6 | 2 GiB                  |
+| `dawarich-redis`   | Dedicated Redis 7.4 queue/cache     | 512 MiB                |
 
-1. **`dawarich-app`**: The Dawarich web server running Puma on Ruby on Rails
-   (`freikin/dawarich:1.15.2`). Exposes port `3000` internally and is routed by
-   Traefik at `timeline.<DOMAIN>`.
-2. **`dawarich-sidekiq`**: The asynchronous background worker running Sidekiq.
-   It processes incoming GPS point batches, groups points into stays and visits,
-   performs reverse geocoding, imports background files, and manages data
-   retention.
-3. **`dawarich-postgis`**: A dedicated PostgreSQL 18 database with PostGIS 3.6
-   (`ghcr.io/baosystems/postgis:18-3.6`). Database name: `dawarich_production`.
-   Data lives in the `openmapx-dawarich-db-data` volume.
-4. **`dawarich-redis`**: A dedicated Redis 7.4 instance (`redis:7.4-alpine`)
-   providing Sidekiq job queues and transient caching. Data lives in the
-   `openmapx-dawarich-redis-data` volume.
-
-In addition, three shared Docker volumes connect the web app and Sidekiq worker:
-
-- `openmapx-dawarich-public` (`/var/app/public`) — static compiled assets and uploads;
-- `openmapx-dawarich-watched` (`/var/app/tmp/imports/watched`) — watched directory for automated file imports;
-- `openmapx-dawarich-storage` (`/var/app/storage`) — Active Storage files.
+The app and worker use the same digest-pinned Dawarich image. Their database,
+Redis, credentials, cookies, and volumes are separate from the OpenMapX platform
+ones. Selecting `dawarich-app` selects the complete bundle; only the application
+gets a public route. Database, Redis, and worker remain private.
 
 ### Resource requirements
 
-Dawarich is lightweight when idle, but file imports and batch processing can
-utilize noticeable memory and CPU:
+Budget the 8.5 GiB combined container ceilings **in addition** to OpenMapX and
+host overhead. These are limits, not measured idle use. Imports, reverse
+geocoding, point density, attachments, retained history, and backups determine
+actual capacity. Test a representative synthetic import before onboarding users.
 
-- **RAM**: ~2 GB baseline for the four containers combined (App: ~512 MB,
-  Sidekiq: ~512 MB, PostGIS: ~1 GB, Valkey: ~128 MB).
-- **Disk**: Dependent on your point volume. A year of continuous 1-minute
-  logging typically consumes 500 MB to 2 GB of database storage.
-- **CPU**: Minimal during regular tracking; multithreaded spikes when importing
-  large Google Takeout archives.
+The default `STORE_GEODATA=true` can send coordinates to Dawarich's configured
+reverse geocoder. Review that provider and its terms before recording history.
 
----
+:::caution[Verify dedicated database persistence]
+Before recording real history, check that the running database's `PGDATA` is
+inside the intended persistent Docker volume and survives container recreation.
+The Dawarich manifest currently mounts `/var/lib/postgresql/data`; the platform's
+PostgreSQL 18 manifest mounts `/var/lib/postgresql`. Resolve any image/path
+mismatch on a disposable setup before relying on retained history. A successful
+logical backup alone does not prove live persistence.
+:::
 
 ## Deploying managed Dawarich
 
 ### Step 1: Configure DNS
 
-Dawarich is exposed on a dedicated subdomain. In your DNS provider, create an
-**A** (or CNAME) record for:
-
-```text
-timeline.<your-domain.com>  ->  <Your Server IP>
-```
-
-Traefik watches for this subdomain automatically and routes traffic to
-`dawarich-app:3000` with automated Let's Encrypt TLS certificates.
+Create DNS for `timeline.<DOMAIN>` pointing to the host. With bundled Traefik,
+TCP 80/443 must reach it for certificate issuance and HTTPS. If using an external
+proxy, apply the [external-proxy requirements](../install/managing-services.md#behind-an-existing-reverse-proxy)
+and route the Dawarich hostname without a path prefix.
 
 ### Step 2: Start the services
 
-Start the Dawarich services using the `openmapx` CLI:
+Provision the bundle before attempting to start it:
 
-```bash
-pnpm openmapx services start dawarich-app dawarich-sidekiq dawarich-postgis dawarich-redis
+1. Open **Admin → Services** and the **Dawarich Timeline** detail.
+2. In **Managed Dawarich setup**, enter a public hostname if the default is not
+   suitable, then choose **Provision/reconcile**.
+3. Resolve any reported conflict before continuing. Provisioning creates or
+   reconciles the persisted Better Auth client, shared vault secrets, and
+   service configuration. It does not start containers.
+4. Select `dawarich-app` in the service selection if not already selected.
+5. Use the admin **Apply changes** or **Save & Apply** controls for both
+   **Dawarich Timeline** and **Dawarich Sidekiq**. Check that the setup's apply
+   notice clears only after both consumers use the current generation.
+
+The first apply must be through the admin workflow: it reads newly provisioned
+database and vault values. A fresh CLI render before that apply cannot read
+them. After the first successful admin apply, CLI renders preserve the applied
+settings and file-backed secrets.
+
+The shared database password, Rails key, and OIDC secret are managed through the
+provisioner. The generic Credentials tab deliberately blocks independent Set,
+Rotate, and Remove actions. Do not create guessed secret files or set plaintext
+fallbacks. A conflict between database/Rails copies needs coordinated maintenance;
+see [Troubleshooting and recovery](#troubleshooting-and-recovery).
+
+### Step 3: Verify single sign-on (OIDC)
+
+Open `https://timeline.<your-domain>` and choose **Sign in with OpenMapX**. The
+expected configuration is:
+
+```text
+Issuer:       https://<DOMAIN>/api/auth
+Redirect URI: https://timeline.<DOMAIN>/users/auth/openid_connect/callback
+Flow:         Authorization Code with S256 PKCE
+Scopes:       openid profile email
 ```
 
-Alternatively, navigate to **Admin panel → Services → Catalog**, find the
-Dawarich services, and click **Start**.
+A custom hostname changes the callback accordingly. The provisioner maintains
+that exact relationship. Test signed-out sign-in and an existing OpenMapX
+session. A Dawarich account with the same email can require explicit account
+linking; do not bypass that challenge.
 
-The Compose renderer automatically provisions three cryptographically random
-secrets in `infra/docker/secrets/`:
-
-- `dawarich-database-password` — database authentication;
-- `dawarich-secret-key-base` — Rails session and cookie encryption key;
-- `dawarich-oidc-client-secret` — Better Auth OIDC client secret.
-
-The service entrypoint (`openmapx-entrypoint.sh`) validates and injects these
-secrets at runtime without exposing them on the process command line or in
-Docker inspection metadata.
-
-### Step 3: Verify Single Sign-On (OIDC)
-
-Once running, visit `https://timeline.<your-domain.com>`.
-
-You will see the Dawarich login page featuring a **Sign in with OpenMapX**
-button. Clicking it authenticates you through OpenMapX's Better Auth provider.
-Because `OIDC_AUTO_REGISTER=true` is set, your Dawarich user account is created
-automatically on first login, mapped to your OpenMapX username and email.
-
-> [!TIP]
-> Keep a verified local Dawarich administrator password configured in Dawarich
-> as a recovery login in case you ever need emergency direct database or
-> admin access.
-
----
+Keep a verified local Dawarich administrator login until OIDC and linking have
+been tested. On shared devices, sign out of both applications.
 
 ## Connecting Dawarich to OpenMapX
 
-Even when running the managed bundle, OpenMapX requires you to link your
-personal Dawarich API key. This guarantees that OpenMapX accesses only your
-individual timeline records, respecting Dawarich's multi-user isolation.
-
 ### Step 1: Copy your Dawarich API key
 
-1. Log into your Dawarich web interface (`https://timeline.<your-domain.com>` or
-   your external instance).
-2. Go to **Account Settings** (click your profile icon or visit `/users/edit`).
-3. Under the **API key** section, copy your personal API key (or click
-   **Generate** if one has not been generated yet).
+Sign in to Dawarich and open **Account settings** at `/users/edit`. Copy your
+personal API key. Use a key belonging to the intended user, not an operator's
+shared key.
 
 ### Step 2: Link the key in OpenMapX
 
-1. In OpenMapX, open **Account Settings** (click your avatar at top right) and
-   scroll to **Personal Timeline**.
-2. Select your mode:
-   - **Managed Dawarich**: If your server administrator has enabled the managed
-     services on your instance.
-   - **External instance**: If connecting a separate server. Enter the full
-     HTTPS URL (e.g. `https://timeline.example.org`). Plain HTTP, localhost,
-     and private IP ranges are rejected for security unless explicitly allowlisted
-     by the operator.
-3. Paste your Dawarich API key into the credential field and click **Connect**.
+1. Open OpenMapX account settings and **Personal timeline**.
+2. Choose the managed instance, or enter the external instance's HTTPS origin.
+3. Paste your key and choose **Connect**.
 
-OpenMapX immediately performs two validation calls against Dawarich:
+OpenMapX validates `/api/v1/users/me` and `/api/v1/settings`, then stores the key
+encrypted with `OPENMAPX_SECRETS_KEY`. The connection response does not return the
+raw key. External origins are checked for unsafe targets; HTTP, embedded
+credentials, and unsupported origins are rejected. Operators can allow specific
+private DNS hostnames through `OPENMAPX_DAWARICH_PRIVATE_HOSTS`; this is a narrow
+network exception and does not remove the other origin checks.
 
-- `GET /api/v1/users/me` to confirm the key is active and matches your identity;
-- `GET /api/v1/settings` to retrieve your preferred time zone and distance unit
-  (kilometres or miles).
-
-When validation succeeds, OpenMapX encrypts the API key with
-`OPENMAPX_SECRETS_KEY` and stores the connection record in PostgreSQL. The raw
-key is never sent back to the browser.
-
----
+The managed connection uses `http://dawarich-app:3000` internally; browser links
+use the public HTTPS origin. An unavailable or unprovisioned bundle cannot be
+selected as a working managed source.
 
 ## Recording your location history
 
-Dawarich can receive location updates from background mobile apps or import
-historical datasets.
+Record and import directly in Dawarich. OpenMapX does not perform these writes.
 
 ### Continuous mobile tracking
 
 #### 1. Official Dawarich mobile app (iOS & Android)
 
-The official Dawarich app is the easiest way to log movements:
-
-- Download Dawarich from the Apple App Store or Google Play.
-- Enter your instance URL (`https://timeline.<your-domain.com>`).
-- Paste your Dawarich API key and enable background tracking.
+Install a supported client from the
+[Dawarich tracking guide](https://dawarich.app/docs/getting-started/track-your-location/), enter
+your instance URL and personal key, and configure background permissions and
+recording frequency. Confirm a small test appears in Dawarich before leaving
+tracking enabled.
 
 #### 2. OwnTracks (iOS & Android)
 
-[OwnTracks](https://owntracks.org/) is a mature, open-source background tracking
-client:
+Select HTTP mode and use your Dawarich receiver URL:
 
-1. In OwnTracks preferences, select **HTTP mode**.
-2. Set the **Host URL** to:
-   ```text
-   https://timeline.<your-domain.com>/api/v1/owntracks/points?api_key=<YOUR_DAWARICH_API_KEY>
-   ```
-3. Set your Tracker ID (e.g. `me`) and enable **Move mode** or **Significant
-   changes**.
+```text
+https://timeline.<your-domain>/api/v1/owntracks/points?api_key=<YOUR_KEY>
+```
+
+Configure the tracker ID and recording mode for your device, then confirm a test
+upload. Follow [Dawarich's client instructions](https://dawarich.app/docs/getting-started/track-your-location/)
+for supported formats.
 
 #### 3. Overland (iOS)
 
-[Overland](https://overland.p3k.app/) batches GPS points efficiently:
+Configure its receiver endpoint:
 
-1. In Overland settings, set the receiver endpoint to:
-   ```text
-   https://timeline.<your-domain.com>/api/v1/overland/batches?api_key=<YOUR_DAWARICH_API_KEY>
-   ```
-2. Overland will automatically queue and upload points in power-efficient
-   batches.
+```text
+https://timeline.<your-domain>/api/v1/overland/batches?api_key=<YOUR_KEY>
+```
+
+These URLs contain credentials. Keep them out of screenshots, support reports,
+proxy query logs, and shared configuration.
 
 ### Importing past history (Google Takeout, GPX, Strava)
 
-If you have years of location data in Google Maps Timeline, you can import it
-directly into Dawarich:
+Open Dawarich's **Imports** and choose the importer matching your actual export
+format. Google exports vary between account Takeout and device-based Timeline
+exports; do not assume every account still supplies `Records.json`. Keep the
+original archive and test a small supported file first. Follow
+[Dawarich's import documentation](https://dawarich.app/docs/getting-started/import-existing-data/)
+for current supported formats and integrations.
 
-1. Export your location history using [Google Takeout](https://takeout.google.com/).
-   Select **Location History (Timeline)** and choose JSON format.
-2. In Dawarich, open **Imports** from the sidebar.
-3. Choose **Google Takeout** and upload your `Records.json` or year-by-year
-   Semantic Location History folders.
-4. Dawarich's Sidekiq worker will process the records in the background,
-   reverse-geocoding places and building your historical trips.
-5. You can also import standalone `.gpx`, `.kml`, or `.geojson` track files, or
-   connect your Strava account.
-
-> [!NOTE]
-> For very large Google Takeout archives (multiple gigabytes), you can place
-> the files directly into the watched import volume on the host at
-> `/var/app/tmp/imports/watched` (`openmapx-dawarich-watched`). Dawarich
-> automatically picks up and processes files dropped into that directory.
-
----
+Monitor `dawarich-sidekiq` logs and the import's progress. Large imports can need
+substantial temporary space and processing time. The watched-import directory
+`/var/app/tmp/imports/watched` is a **container path** in the
+`openmapx-dawarich-watched` named volume, not a host directory. Use the upstream
+watched-import layout and resolve the actual Compose volume before copying
+files; do not drop a personal archive into the repository checkout.
 
 ## Viewing your timeline in OpenMapX
 
-Once your connection is active and Dawarich contains data:
-
 ### 1. The day timeline viewer
 
-Click the **Timeline** icon in the map sidebar or open the user menu and select
-**Your timeline**:
-
-- **Date navigation**: Step through days with the calendar picker. OpenMapX
-  reads the local day bounds according to your Dawarich time zone, accurately
-  handling daylight saving transition days (23- or 25-hour days).
-- **Day summary**: Displays total distance travelled, active moving time, and
-  number of distinct places visited.
-- **Visits and journeys**: The left panel lists each stop chronologically with
-  arrival and departure times, duration, and the reverse-geocoded place name.
-- **Interactive map trace**: Your actual travel path is rendered as a clean,
-  color-coded route line on top of the OpenMapX vector basemap, with distinct
-  puck markers at stationary visit locations.
+Open the Timeline panel, select a date, and verify summary, entries, and map
+tracks against a known day in Dawarich. Day bounds use the account's time zone,
+including daylight-saving transitions. Empty days can be valid; confirm the
+selected date, time zone, and source import before diagnosing a connection fault.
 
 ### 2. Personal visit history on places
 
-When you search for or click any café, park, restaurant, or address in OpenMapX,
-the place detail panel displays a **Visits** card showing:
-
-- How many times you have visited that location;
-- The date of your most recent visit;
-- Links to jump straight to that day in your timeline viewer.
-
-This transforms OpenMapX into a personal spatial memory tool without sharing
-any of your visit data with external search providers or advertisers.
-
----
+The implemented viewer displays visits within the selected day. It does not
+currently provide an all-time visit-count card on arbitrary place details. Use
+the day panel or Dawarich itself to inspect history.
 
 ## Privacy, rate limiting, and security
 
 ### Privacy architecture
 
-- **No coordinate retention**: OpenMapX does not retain coordinates, geometry,
-  or place visits from Dawarich in its database.
-- **Cache-Control: no-store**: All `/api/timeline/*` HTTP endpoints transmit
-  `Cache-Control: no-store, private, max-age=0` and `Pragma: no-cache` headers.
-  Intermediaries, reverse proxies, and browsers are forbidden from storing
-  timeline data on disk.
-- **Audit isolation**: OpenMapX audit logs record that a user accessed their
-  timeline, but strip all query parameters, coordinates, dates, and response
-  payloads.
+Timeline routes use `Cache-Control: no-store, private, max-age=0` and
+`Pragma: no-cache`. The application excludes timeline payloads from shared and
+offline caches, suppresses sensitive request logging, and keeps lifecycle audit
+details bounded. Verify your external proxy and monitoring configuration too:
+those components can override headers or retain URLs independently.
+
+Connection records and credentials remain in OpenMapX until disconnected or
+handled by the relevant account/privacy workflow. Managed Dawarich data and
+backups have their own retention and deletion rules.
 
 ### Rate limiting
 
-To prevent accidental denial-of-service against self-hosted Dawarich backends:
-
-- Personal timeline day reads run on a dedicated rate-limit bucket
-  (`timelineDayApiLimit`).
-- Connection mutation actions (`PUT`, `DELETE`, `POST /test`) are governed by
-  expensive rate limits.
-- When Dawarich returns HTTP `429 Too Many Requests`, OpenMapX extracts the
-  upstream `Retry-After` header, returns code `TIMELINE_RATE_LIMITED`, and
-  instructs the UI to pause requests.
-
----
+Day reads and connection mutations use separate limits. Upstream 429 responses
+produce `TIMELINE_RATE_LIMITED`; a valid bounded `Retry-After` is forwarded when
+available. Wait before retrying rather than repeatedly reconnecting the same key.
 
 ## Troubleshooting and recovery
 
-If the timeline panel reports an error, consult the table below:
+| Error                           | Action                                                                                |
+| ------------------------------- | ------------------------------------------------------------------------------------- |
+| `TIMELINE_NOT_CONNECTED`        | Connect your key in account settings.                                                 |
+| `TIMELINE_MANAGED_DISABLED`     | Check selection, provisioning, both applied generations, and app health.              |
+| `TIMELINE_CREDENTIAL_INVALID`   | Verify the personal key in Dawarich and reconnect if replaced.                        |
+| `TIMELINE_INSTANCE_UNSUPPORTED` | Check the HTTPS origin and supported API contract.                                    |
+| `TIMELINE_PLAN_RESTRICTED`      | Check whether the source account permits the required API access.                     |
+| `TIMELINE_RATE_LIMITED`         | Wait for the retry interval.                                                          |
+| `TIMELINE_UPSTREAM_UNAVAILABLE` | Inspect container/network health and source availability.                             |
+| `TIMELINE_RESPONSE_INVALID`     | Check API compatibility with the managed 1.15.3 baseline and bounded response limits. |
 
-| Error code                      | Meaning                                             | Recommended action                                                                  |
-| ------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `TIMELINE_NOT_CONNECTED`        | No Dawarich instance is linked to this account.     | Open Account Settings → Personal Timeline and connect your API key.                 |
-| `TIMELINE_MANAGED_DISABLED`     | Managed Dawarich services are stopped or unhealthy. | Check `pnpm openmapx services status` or start the containers in Admin → Services.  |
-| `TIMELINE_CREDENTIAL_INVALID`   | Dawarich rejected the API key (HTTP 401).           | Verify the key in Dawarich (`/users/edit`), regenerate if necessary, and reconnect. |
-| `TIMELINE_RATE_LIMITED`         | Dawarich or OpenMapX rate limit exceeded.           | Wait for the indicated retry countdown before requesting further days.              |
-| `TIMELINE_UPSTREAM_UNAVAILABLE` | Dawarich container or external host is unreachable. | Ensure `dawarich-app` is running and healthy on port 3000.                          |
-| `TIMELINE_RESPONSE_INVALID`     | Upstream payload violates the expected schema.      | Check that your Dawarich version is compatible (v1.10.x recommended).               |
+```bash
+pnpm openmapx services status dawarich-app
+pnpm openmapx services logs dawarich-app --tail 200
+pnpm openmapx services logs dawarich-sidekiq --tail 200
+```
+
+For an interrupted OIDC change, restore vault access and run **Provision/reconcile**
+again. The recovery marker must clear before applying both app and worker. A
+rotation invalidates the previous OIDC secret immediately; app-only apply is
+insufficient. For database or Rails conflicts, stop the whole bundle and repair
+shared credentials as one coordinated maintenance operation; independent
+credential edits can leave consumers inconsistent.
 
 ### Backup and restore
 
-When taking a regular platform backup via `pnpm openmapx backup create`:
+`backup create` captures the dedicated database as `pg_dump` and the app's
+public, watched, and storage volumes as tar archives. Dawarich Redis is excluded.
+Protect snapshots and retain an off-host copy:
 
-- The `dawarich-postgis` database volume is dumped consistently via streamed
-  `pg_dump` into `infra/docker/backups/<name>/dawarich-postgis.sql.gz`.
-- The storage and public asset volumes are snapshotted via compressed `tar`.
-- To restore Dawarich data alongside your OpenMapX instance, use:
-  ```bash
-  pnpm openmapx backup restore <snapshot-name> --services dawarich-postgis --stop-running
-  ```
+```bash
+pnpm openmapx backup create --name dawarich-pre-upgrade
+pnpm openmapx backup list
+```
+
+Restore only after reviewing [Backup and restore](../administration/backup-and-restore.md),
+with matching service versions and preserved deployment keys. Include both the
+app file volumes and the database, and stop all Dawarich writers first:
+
+```bash
+pnpm openmapx services stop dawarich-sidekiq dawarich-app
+pnpm openmapx backup restore dawarich-pre-upgrade \
+  --services dawarich-app dawarich-postgis --stop-running
+pnpm openmapx services start dawarich-app dawarich-sidekiq
+```
+
+Verify all four services, browser sign-in, and a synthetic point/import after a
+rehearsal. External Dawarich backups are the external operator's responsibility.
+A database dump does not replace preservation of the vault/encryption keys and
+OpenMapX OAuth/connection state needed for full recovery.
 
 ### Disconnecting or deleting data
 
-- **Disconnecting**: In OpenMapX Account Settings, click **Disconnect**. OpenMapX
-  purges your encrypted API key and connection record from the database.
-  Your location history inside Dawarich is completely untouched.
-- **Purging data**: To delete your location history, use Dawarich's native
-  account management tools at `https://timeline.<your-domain.com>/users/edit`
-  or wipe specific imports/points directly within Dawarich.
+Disconnecting removes OpenMapX's encrypted key and connection record. It does
+not delete the source history. Delete source history through Dawarich's own
+account/import tools or the applicable managed privacy workflow.
+
+To stop managed collection without deleting volumes, stop all four services,
+remove the `dawarich-app` root, and render again. Confirm no separately selected
+Dawarich roots remain. Do not use `compose down --volumes`: it also affects other
+selected services' data. Volume purge is destructive and needs a verified backup
+and exact identification of the five Dawarich volumes.

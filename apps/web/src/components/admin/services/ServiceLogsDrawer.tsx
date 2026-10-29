@@ -7,8 +7,10 @@ import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import { streamAdminServiceLogs } from "@openmapx/core/api-admin-sdk";
 import { useEffect, useRef, useState } from "react";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import { useActivityClient } from "@/components/admin/activity/activityQueries";
+import { serviceOrThrow } from "@/lib/admin/serviceAdmin";
 
 const MAX_LINES = 500;
 
@@ -25,89 +27,71 @@ export function ServiceLogsDrawer({
   serviceId,
   serviceName,
 }: ServiceLogsDrawerProps) {
-  const env = useEnv();
-  const apiUrl = env.apiUrl;
+  const { client, apiUrl } = useActivityClient();
+  return (
+    <ServiceLogsSession
+      key={JSON.stringify([apiUrl, serviceId, open])}
+      open={open}
+      onClose={onClose}
+      serviceId={serviceId}
+      serviceName={serviceName}
+      client={client}
+    />
+  );
+}
+
+function ServiceLogsSession({
+  open,
+  onClose,
+  serviceId,
+  serviceName,
+  client,
+}: ServiceLogsDrawerProps & Pick<ReturnType<typeof useActivityClient>, "client">) {
   const [lines, setLines] = useState<string[]>([]);
   const [streaming, setStreaming] = useState(open);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const streamKey = open ? serviceId : null;
-  const [previousStreamKey, setPreviousStreamKey] = useState(streamKey);
-
-  if (streamKey !== previousStreamKey) {
-    setPreviousStreamKey(streamKey);
-    if (open) {
-      setLines([]);
-      setError(null);
-      setStreaming(true);
-    }
-  }
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
     if (!open) return;
-
     const controller = new AbortController();
     abortRef.current = controller;
-
+    let residual = "";
+    function append(parts: string[]) {
+      if (controller.signal.aborted) return;
+      setLines((previous) =>
+        [...previous, ...parts.filter((line) => line.length > 0)].slice(-MAX_LINES),
+      );
+    }
     void (async () => {
       try {
-        const res = await fetch(`${apiUrl}/api/admin/services/${serviceId}/logs`, {
-          credentials: "include",
-          signal: controller.signal,
-          headers: { "Idempotency-Key": crypto.randomUUID() },
-        });
-        if (!res.ok) {
-          setError(`HTTP ${res.status}: ${res.statusText}`);
-          setStreaming(false);
-          return;
-        }
-        if (!res.body) {
-          setError("No response body");
-          setStreaming(false);
-          return;
-        }
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const parts = buffer.split("\n");
-          buffer = parts.pop() ?? "";
-
-          if (parts.length > 0) {
-            setLines((prev) => {
-              const next = [...prev, ...parts.filter((p) => p.length > 0)];
-              return next.length > MAX_LINES ? next.slice(next.length - MAX_LINES) : next;
-            });
-          }
-        }
-
-        if (buffer.length > 0) {
-          setLines((prev) => {
-            const next = [...prev, buffer];
-            return next.length > MAX_LINES ? next.slice(next.length - MAX_LINES) : next;
-          });
-        }
-      } catch (err) {
-        if (err instanceof Error && err.name !== "AbortError") {
-          setError(err.message);
-        }
+        await serviceOrThrow(
+          streamAdminServiceLogs(serviceId, { "idempotency-key": idempotencyKey }, undefined, {
+            client,
+            signal: controller.signal,
+            onTextChunk: (chunk) => {
+              if (controller.signal.aborted) return;
+              const parts = (residual + chunk).split("\n");
+              residual = parts.pop() ?? "";
+              append(parts);
+            },
+          }),
+        );
+        append([residual]);
+      } catch (error) {
+        if (!controller.signal.aborted)
+          setError(error instanceof Error ? error.message : "Service request failed");
       } finally {
-        setStreaming(false);
+        if (!controller.signal.aborted) setStreaming(false);
       }
     })();
-
     return () => {
       controller.abort();
       abortRef.current = null;
     };
-  }, [open, serviceId, apiUrl]);
+  }, [open, serviceId, client, idempotencyKey]);
 
   useEffect(() => {
     if (open && lines.length > 0) {
@@ -117,6 +101,9 @@ export function ServiceLogsDrawer({
 
   function handleClose() {
     abortRef.current?.abort();
+    setLines([]);
+    setError(null);
+    setStreaming(false);
     onClose();
   }
 

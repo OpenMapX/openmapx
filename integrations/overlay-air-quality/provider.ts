@@ -13,7 +13,8 @@ import type {
   ProviderCallContext,
   StationViewportQuery,
 } from "@openmapx/integration-framework";
-import { mapSettledWithConcurrency } from "@openmapx/integration-framework";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
+import { pMapSettled } from "p-map";
 import {
   loadOpenAQCached,
   OPENAQ_METADATA_TTL,
@@ -82,6 +83,14 @@ function activeLicense(location: OpenAQLocation, observedAt: string | null) {
     location.licenses?.[0] ??
     null
   );
+}
+
+function knownContributor(value: string | null | undefined): string | null {
+  // OpenAQ's official Del Norte example uses this sentinel for an unknown owner
+  // and repeats it in the licence attribution. Do not hide arbitrary names that
+  // contain "unknown", or rewrite real supplied attribution notices.
+  const normalized = value?.trim().toLowerCase();
+  return !normalized || normalized === "unknown governmental organization" ? null : (value ?? null);
 }
 
 function coordinateTuple(location: OpenAQLocation): [number, number] | null {
@@ -176,6 +185,8 @@ function evidenceFromSeries(
   const allEnds = series.flatMap((item) => item.samples.map((sample) => sample.endAt));
   const observedAt = allEnds.sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? null;
   const license = activeLicense(location, observedAt);
+  const owner = knownContributor(location.owner.name);
+  const provider = knownContributor(location.provider.name);
   const spatialSupportId = `openaq-location-${location.id}`;
   const originRecords = series.flatMap((item) =>
     item.samples.map((sample) => ({
@@ -221,14 +232,14 @@ function evidenceFromSeries(
     sources: [
       {
         sourceId: SOURCE_ID,
-        name: `OpenAQ via ${location.provider.name}`,
+        name: provider ? `OpenAQ via ${provider}` : "OpenAQ",
         url: license?.attribution.url ?? null,
-        owner: location.owner.name,
-        license: license
-          ? { name: license.name, url: options.licenseUrls?.get(license.id) ?? null }
+        owner,
+        licensing: license
+          ? licensingFromDeclaration(license.name, options.licenseUrls?.get(license.id))
           : null,
         methodologyUrl: "https://docs.openaq.org/resources/measurements",
-        attribution: license?.attribution.name ?? location.owner.name,
+        attribution: knownContributor(license?.attribution.name) ?? owner ?? provider ?? "OpenAQ",
       },
     ],
   };
@@ -400,14 +411,18 @@ export function createOpenAQProvider(
       const sensors = location.sensors
         .filter((sensor) => active.has(sensor.id) && pollutant(sensor.parameter) !== null)
         .slice(0, MAX_POINT_SENSORS);
-      const settled = await mapSettledWithConcurrency(sensors, 4, async (sensor) => ({
-        sensor,
-        hours: (
-          await cached(`hours:${sensor.id}:${from}:${to}`, "series", call.signal, () =>
-            client.getSensorHours(sensor.id, { from, to, maxSamples: 48 }, call.signal),
-          )
-        ).items,
-      }));
+      const settled = await pMapSettled(
+        sensors,
+        async (sensor) => ({
+          sensor,
+          hours: (
+            await cached(`hours:${sensor.id}:${from}:${to}`, "series", call.signal, () =>
+              client.getSensorHours(sensor.id, { from, to, maxSamples: 48 }, call.signal),
+            )
+          ).items,
+        }),
+        { concurrency: 4, signal: call.signal },
+      );
       if (call.signal.aborted)
         throw call.signal.reason ?? new DOMException("Aborted", "AbortError");
       for (const item of settled) {
@@ -450,28 +465,32 @@ export function createOpenAQProvider(
     });
     const licenseUrls =
       demand.selected.length > 0 ? await loadLicenseUrls(call.signal) : new Map<number, string>();
-    const settled = await mapSettledWithConcurrency(demand.selected, 5, async (location) => {
-      const latest = await cached(`latest:${location.id}`, "series", call.signal, () =>
-        client.getLatest(location.id, call.signal),
-      );
-      const candidates = latest.items
-        .map((item) => ({
-          item,
-          sensor: location.sensors.find((sensor) => sensor.id === item.sensorsId),
-        }))
-        .filter(
-          (item): item is { item: OpenAQLatest; sensor: OpenAQLocation["sensors"][number] } =>
-            item.sensor !== undefined && pollutant(item.sensor.parameter) === query.pollutant,
-        )
-        .sort(
-          (left, right) =>
-            Date.parse(right.item.datetime.utc) - Date.parse(left.item.datetime.utc) ||
-            left.sensor.id - right.sensor.id,
+    const settled = await pMapSettled(
+      demand.selected,
+      async (location) => {
+        const latest = await cached(`latest:${location.id}`, "series", call.signal, () =>
+          client.getLatest(location.id, call.signal),
         );
-      return candidates[0]
-        ? buildLatestEvidence(location, candidates[0].sensor, candidates[0].item, licenseUrls)
-        : null;
-    });
+        const candidates = latest.items
+          .map((item) => ({
+            item,
+            sensor: location.sensors.find((sensor) => sensor.id === item.sensorsId),
+          }))
+          .filter(
+            (item): item is { item: OpenAQLatest; sensor: OpenAQLocation["sensors"][number] } =>
+              item.sensor !== undefined && pollutant(item.sensor.parameter) === query.pollutant,
+          )
+          .sort(
+            (left, right) =>
+              Date.parse(right.item.datetime.utc) - Date.parse(left.item.datetime.utc) ||
+              left.sensor.id - right.sensor.id,
+          );
+        return candidates[0]
+          ? buildLatestEvidence(location, candidates[0].sensor, candidates[0].item, licenseUrls)
+          : null;
+      },
+      { concurrency: 5, signal: call.signal },
+    );
     const evidence = settled.flatMap((item) =>
       item.status === "fulfilled" && item.value ? [item.value] : [],
     );

@@ -12,12 +12,14 @@ export interface CoreRouteEntry {
 export interface BuildDocumentInput {
   /** `paths` as emitted by @fastify/swagger for the core route table. */
   corePaths: Record<string, Record<string, unknown>>;
+  coreComponents?: Record<string, unknown>;
   /** Auth classification per core route, collected from Fastify's `onRoute` hook. */
   coreAuth: CoreRouteEntry[];
   integrationRoutes: IntegrationRouteDescriptor[];
 }
 
 export interface OpenApiDocument {
+  components?: Record<string, unknown>;
   openapi: string;
   info: { title: string; description: string; version: string };
   tags: { name: string; description: string }[];
@@ -27,6 +29,15 @@ export interface OpenApiDocument {
 const HTTP_METHODS = ["get", "put", "post", "delete", "options", "head", "patch", "trace"];
 
 const TAG_DESCRIPTIONS: Record<string, string> = {
+  "integration-admin":
+    "Integration, credential, binding and overview administration with validated contracts.",
+  "activity-admin":
+    "Activity administration: application and data-manager jobs, cancellation and live application events.",
+  "data-manager-admin":
+    "Data-manager administration, transit maintenance and ambient publications.",
+  "extension-admin":
+    "Extension administration: catalogs, installed components, previews, jobs and sources.",
+  "runtime-metadata": "Public runtime capabilities, integration metadata and legal disclosures.",
   admin: "Operator-facing administration of integrations, services, settings and jobs.",
   "data-manager": "Transit, POI and Overture data pipeline control.",
   integrations: "Routes contributed by integrations under /api/integrations/<id>.",
@@ -140,8 +151,9 @@ export function buildDocument(input: BuildDocumentInput): OpenApiDocument {
       const base = (operation ?? {}) as Record<string, unknown>;
       operations[method] = sortObject({
         ...base,
-        operationId: toOperationId(method, path),
-        tags: [tagForPath(rawPath)],
+        operationId:
+          typeof base.operationId === "string" ? base.operationId : toOperationId(method, path),
+        tags: Array.isArray(base.tags) ? base.tags : [tagForPath(rawPath)],
         "x-openmapx-auth": authFor(coreAuthIndex, method, path),
       });
     }
@@ -178,6 +190,9 @@ export function buildDocument(input: BuildDocumentInput): OpenApiDocument {
   }
 
   return {
+    ...(input.coreComponents && Object.keys(input.coreComponents).length > 0
+      ? { components: sortObject(input.coreComponents) }
+      : {}),
     openapi: "3.1.0",
     info: {
       title: "OpenMapX API",

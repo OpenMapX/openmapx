@@ -1,15 +1,20 @@
 import type { PlacePhoto } from "@openmapx/core";
+import {
+  type PanoramaxCreatorMetadata,
+  panoramaxAuthor,
+  withPhotoContributors,
+} from "@openmapx/core";
 import type { PhotoProvider } from "@openmapx/integration-framework";
 import { createBboxPhotoProvider } from "@openmapx/integration-photos/bbox-provider";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 
-interface PanoramaxFeature {
+interface PanoramaxFeature extends PanoramaxCreatorMetadata {
   id?: string;
   geometry?: { type: "Point"; coordinates: [number, number] };
   properties?: {
     datetime?: string;
     license?: string;
-    providers?: Array<{ name?: string }>;
-    "geovisio:producer"?: { name?: string };
+    "geovisio:producer"?: string;
   };
   links?: Array<{ rel?: string; href?: string }>;
   assets?: {
@@ -51,29 +56,29 @@ export const panoramaxPhotoProvider: PhotoProvider =
             feature.assets?.thumb?.href ??
             "";
           const thumbUrl = feature.assets?.thumb?.href;
-          const author =
-            feature.properties?.providers?.[0]?.name ??
-            feature.properties?.["geovisio:producer"]?.name;
+          const author = panoramaxAuthor(feature);
           const capturedAt = feature.properties?.datetime;
-          const spdxLicense = feature.properties?.license ?? "CC-BY-SA-4.0";
-          // SPDX "CC-BY-SA-4.0" → display "CC BY-SA 4.0"
-          const license = spdxLicense.replace(/^CC-/, "CC ").replace(/-(\d)/, " $1");
-          const licenseLink = feature.links?.find((l) => l.rel === "license");
-          const licenseUrl =
-            licenseLink?.href ??
-            `https://creativecommons.org/licenses/${spdxLicense.replace(/^CC-/, "").toLowerCase()}/`;
-
-          return {
-            url: imageUrl,
-            thumbnailUrl: thumbUrl,
-            source: "panoramax",
-            author,
-            license,
-            licenseUrl,
-            pageUrl: feature.id ? `https://panoramax.xyz/#focus=pic&pic=${feature.id}` : undefined,
-            capturedAt: capturedAt ?? undefined,
-            coordinates: feature.geometry?.coordinates,
-          };
+          const licensing = licensingFromDeclaration(
+            feature.properties?.license,
+            feature.links?.find((l) => l.rel === "license")?.href,
+            "Panoramax image",
+            "imagery",
+          );
+          return withPhotoContributors(
+            {
+              url: imageUrl,
+              thumbnailUrl: thumbUrl,
+              source: "panoramax",
+              author,
+              licensing,
+              pageUrl: feature.id
+                ? `https://panoramax.xyz/#focus=pic&pic=${feature.id}`
+                : undefined,
+              capturedAt: capturedAt ?? undefined,
+              coordinates: feature.geometry?.coordinates,
+            },
+            "Panoramax",
+          );
         });
     },
   });

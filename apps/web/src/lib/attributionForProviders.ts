@@ -1,101 +1,73 @@
 import {
-  type DataSourceAttribution,
   dataSourceToAttribution,
   type IntegrationDataSource,
+  narrowContributors,
+  parseContributors,
+  snapshotContributors,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 
-/** Merge response-scoped attribution groups, preserving the first credit for each source. */
-export function mergeAttributions(...groups: Attribution[][]): Attribution[] {
-  const seen = new Set<string>();
-  const merged: Attribution[] = [];
-  for (const group of groups) {
-    for (const attribution of group) {
-      if (!attribution.sourceId || seen.has(attribution.sourceId)) continue;
-      seen.add(attribution.sourceId);
-      merged.push(attribution);
-    }
-  }
-  return merged;
+/** Merge captured credits, retaining distinct mandatory notices and immutable copies. */
+export function mergeAttributions(...groups: readonly (readonly Attribution[])[]): Attribution[] {
+  return snapshotContributors(...groups);
 }
 
-/**
- * Map a provider's per-record runtime attribution ({@link DataSourceAttribution}
- * — e.g. France IRVE's per-station Licence-Ouverte publisher credit, an EV
- * charge stop's upstream OCM data provider) onto the shared {@link Attribution}
- * shape consumed by `<AttributionStrip>`. Shared by `DataSourceLayer` (map
- * strip) and `EvPlanCard` (per-stop credit) so the mapping lives in one place.
- */
-export function runtimeAttributionToAttribution(attr: DataSourceAttribution): Attribution {
-  return {
-    sourceId: attr.text || attr.url,
-    name: attr.text,
-    url: attr.url,
-    spdxLicense: attr.license,
-    licenseUrl: attr.licenseUrl,
-  };
+export interface DataSourceRecordCredits {
+  source?: string;
+  sources?: readonly string[];
+  contributors?: readonly Attribution[];
+  attributions?: Attribution[];
+}
+
+/** Capture an exact legacy record at the response boundary. Unknown IDs never expand. */
+export function dataSourceRecordContributors(
+  record: DataSourceRecordCredits,
+  envelope: readonly Attribution[],
+  dataSources: readonly IntegrationDataSource[],
+): Attribution[] {
+  const captured = parseContributors(record.contributors);
+  if (captured !== undefined) return snapshotContributors(captured);
+  const sourceIds = new Set(record.sources ?? (record.source ? [record.source] : []));
+  const matched = narrowContributors(envelope, sourceIds);
+  const matchedIds = new Set(matched.map((receipt) => receipt.sourceId));
+  const declared = dataSources.filter(
+    (source) => sourceIds.has(source.sourceId) && !matchedIds.has(source.sourceId),
+  );
+  return snapshotContributors(
+    matched,
+    declared.map(dataSourceToAttribution),
+    snapshotContributors(record.attributions ?? []),
+  );
 }
 
 export interface DataSourceLayerCreditsInput {
-  /** The active data source id, for the diagnostic message. */
   sourceLabel: string;
-  /** The integration manifest's declared sources (may be empty). */
   dataSources: IntegrationDataSource[];
-  /** The search envelope's attributions. */
   envelope: Attribution[];
-  /** The visible results; their per-record `attributions` are credited too. */
-  results: { attributions?: DataSourceAttribution[] }[];
-  /** Whether the search is in flight. */
+  results: DataSourceRecordCredits[];
   isFetching: boolean;
-  /** Receives a diagnostic for credits nothing can render; omit to stay silent. */
   warn?: (message: string) => void;
 }
 
-/**
- * The credits the map strip shows for a data-source layer.
- *
- * Manifest-declared sources are narrowed to those the envelope credited (or,
- * when the envelope credited none, all of them — but only while results are
- * visible). Per-record `result.attributions` are first-class credits beside
- * them: an aggregating integration (e.g. `fuel`, which orchestrates providers
- * and declares no sources itself) credits each record's sources this way.
- * While the first response is in flight nothing is credited, so a freshly
- * selected layer never flashes every declared publisher.
- */
+/** Only final retained records contribute; fetch state never clears captured visible data. */
 export function dataSourceLayerCredits(input: DataSourceLayerCreditsInput): Attribution[] {
-  const { dataSources, envelope, results } = input;
-  if (input.isFetching && envelope.length === 0) return [];
-
-  const creditedIds = new Set(envelope.map((a) => a.sourceId));
-  const filtered = dataSources.filter((ds) => creditedIds.has(ds.sourceId));
-  const creditedSources = filtered.length > 0 ? filtered : results.length > 0 ? dataSources : [];
-  const manifestCredits = creditedSources.map(dataSourceToAttribution);
-
-  const seen = new Set(manifestCredits.map((a) => a.sourceId));
-  const runtimeCredits: Attribution[] = [];
-  for (const result of results) {
-    for (const attr of result.attributions ?? []) {
-      const credit = runtimeAttributionToAttribution(attr);
-      if (seen.has(credit.sourceId)) continue;
-      seen.add(credit.sourceId);
-      runtimeCredits.push(credit);
-    }
-  }
-
-  if (filtered.length === 0 && input.warn) {
-    // An envelope credit is rendered when the manifest declares it or a
-    // record carries it; flag only the ones neither does.
-    const perRecord = new Set(runtimeCredits.map((c) => c.name));
-    const unrendered = envelope.filter((a) => !perRecord.has(a.name)).map((a) => a.sourceId);
-    if (unrendered.length > 0) {
+  const credits = snapshotContributors(
+    ...input.results.map((record) =>
+      dataSourceRecordContributors(record, input.envelope, input.dataSources),
+    ),
+  );
+  if (input.warn && input.results.length > 0) {
+    const sourceIds = new Set(credits.map((receipt) => receipt.sourceId));
+    const names = new Set(credits.map((receipt) => receipt.name));
+    const unresolved = input.envelope.filter(
+      (receipt) => !sourceIds.has(receipt.sourceId) && !names.has(receipt.name),
+    );
+    if (unresolved.length)
       input.warn(
-        `[DataSourceLayer] envelope.attributions for "${input.sourceLabel}" reference sourceIds ` +
-          `not declared in the integration manifest: ${unrendered.join(", ")}`,
+        `[DataSourceLayer] envelope.attributions for "${input.sourceLabel}" do not belong to retained records: ${unresolved.map((receipt) => receipt.sourceId).join(", ")}`,
       );
-    }
   }
-
-  return [...manifestCredits, ...runtimeCredits];
+  return credits;
 }
 
 /**

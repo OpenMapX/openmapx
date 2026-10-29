@@ -2,15 +2,30 @@
   "record": {
     "id": "oc:feature:de-bw-mobidata-charging:KA-2",
     "kind": "charging_site",
-    "name": [{ "lang": "de", "text": "Schnellladepunkt Durlacher Tor" }],
+    "name": [
+      {
+        "lang": "de",
+        "text": "Schnellladepunkt Durlacher Tor"
+      }
+    ],
     "class": "feature",
     "domain": "charging",
-    "details": { "v": 1, "kind": "charging_site" },
-    "access": { "audience": "public" },
+    "details": {
+      "v": 1,
+      "kind": "charging_site"
+    },
+    "access": {
+      "audience": "public"
+    },
     "location": {
-      "admin": { "country": "DE" },
+      "admin": {
+        "country": "DE"
+      },
       "extent": "point",
-      "geometry": { "type": "Point", "coordinates": [8.4195, 49.0107] },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [8.4195, 49.0107]
+      },
       "fuzziness": "exact",
       "geometryOrigin": "source"
     },
@@ -19,7 +34,12 @@
         "key": "KA2-EVSE-1",
         "kind": "evse",
         "lifecycle": "operational",
-        "details": { "v": 1, "kind": "evse", "evseId": "DE*BWE*E2002*1", "uid": "KA2-EVSE-1" }
+        "details": {
+          "v": 1,
+          "kind": "evse",
+          "evseId": "DE*BWE*E2002*1",
+          "uid": "KA2-EVSE-1"
+        }
       },
       {
         "key": "KA2-EVSE-1/1",
@@ -38,11 +58,15 @@
       }
     ],
     "revision": 1,
-    "freshness": { "fetchedAt": "2026-10-06T03:00:00Z" },
+    "freshness": {
+      "fetchedAt": "2026-10-06T03:00:00Z"
+    },
     "lifecycle": "operational",
     "provenance": {
       "origin": "feed",
-      "privacy": { "class": "authoritative" },
+      "privacy": {
+        "class": "authoritative"
+      },
       "recordId": "KA-2",
       "sourceId": "de-bw-mobidata-charging",
       "accessMode": "bulk",
@@ -50,7 +74,21 @@
       "attribution": {
         "license": "DL-DE-BY-2.0",
         "provider": "MobiData BW, Datenlizenz Deutschland – Namensnennung – Version 2.0",
-        "licenseUrl": "https://www.govdata.de/dl-de/by-2-0"
+        "licenseUrl": "https://www.govdata.de/dl-de/by-2-0",
+        "licensing": {
+          "version": 1,
+          "bindings": [
+            {
+              "scope": "data",
+              "subject": "MobiData BW, Datenlizenz Deutschland – Namensnennung – Version 2.0",
+              "license": {
+                "kind": "spdx",
+                "expression": "DL-DE-BY-2.0",
+                "url": "https://www.govdata.de/dl-de/by-2-0"
+              }
+            }
+          ]
+        }
       },
       "sourceFormat": "ocpi"
     },
@@ -61,8 +99,14 @@
     {
       "property": "charging.evse_status",
       "componentKey": "KA2-EVSE-1",
-      "result": { "type": "category", "value": "available", "vocabulary": "evse_status" },
-      "phenomenonTime": { "instant": "2026-10-06T02:55:00Z" },
+      "result": {
+        "type": "category",
+        "value": "available",
+        "vocabulary": "evse_status"
+      },
+      "phenomenonTime": {
+        "instant": "2026-10-06T02:55:00Z"
+      },
       "validUntil": "2026-10-06T03:25:00.000Z",
       "source": "de-bw-mobidata-charging"
     }
@@ -73,26 +117,54 @@
       "kind": "energy_tariff",
       "class": "offer",
       "domain": "charging",
-      "subject": { "id": "oc:feature:de-bw-mobidata-charging:KA-2", "class": "feature" },
+      "subject": {
+        "id": "oc:feature:de-bw-mobidata-charging:KA-2",
+        "class": "feature"
+      },
       "currency": "EUR",
       "elements": [
         {
           "components": [
-            { "type": "energy", "price": { "amount": "0.69", "currency": "EUR" }, "vatPct": 19 }
+            {
+              "type": "energy",
+              "price": {
+                "amount": "0.69",
+                "currency": "EUR"
+              },
+              "vatPct": 19
+            }
           ]
         }
       ],
-      "validity": { "status": "active" },
+      "validity": {
+        "status": "active"
+      },
       "provenance": {
         "origin": "feed",
-        "privacy": { "class": "authoritative" },
+        "privacy": {
+          "class": "authoritative"
+        },
         "recordId": "KA-2:T1",
         "sourceId": "de-bw-mobidata-charging",
         "accessMode": "bulk",
         "instanceId": "test.local",
         "attribution": {
           "license": "DL-DE-BY-2.0",
-          "provider": "MobiData BW, Datenlizenz Deutschland – Namensnennung – Version 2.0"
+          "provider": "MobiData BW, Datenlizenz Deutschland – Namensnennung – Version 2.0",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "MobiData BW, Datenlizenz Deutschland – Namensnennung – Version 2.0",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "DL-DE-BY-2.0",
+                  "url": "https://www.govdata.de/dl-de/by-2-0"
+                }
+              }
+            ]
+          }
         },
         "sourceFormat": "ocpi"
       },

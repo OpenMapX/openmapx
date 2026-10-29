@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "../api/client";
-import { API_ENDPOINTS } from "../api/endpoints";
+import * as sdk from "../api/saved-sdk";
 import { useSession } from "../auth/useSession";
-import type { LabeledPlace, SavedList, SavedPlace } from "../types/saved";
+
+export type { ImportPlacesInput, ImportPlacesResult } from "../api/contracts/saved";
+
+import type { ImportPlacesInput } from "../api/contracts/saved";
 
 /**
  * Saved data lives on the server per account, so a signed-out visitor has none
@@ -18,8 +20,11 @@ export function useSavedLists() {
   const signedIn = useSignedIn();
   return useQuery({
     queryKey: ["savedLists"],
-    queryFn: () =>
-      apiClient.get<{ lists: SavedList[] }>(API_ENDPOINTS.savedLists).then((r) => r.lists),
+    queryFn: ({ signal }) =>
+      sdk
+        .listSavedLists({ signal })
+        .then(sdk.unwrapSavedResponse)
+        .then((r) => r.lists),
     enabled: signedIn,
     staleTime: 60_000,
   });
@@ -29,9 +34,10 @@ export function useSavedListPlaces(listId: string | null) {
   const signedIn = useSignedIn();
   return useQuery({
     queryKey: ["savedListPlaces", listId],
-    queryFn: () =>
-      apiClient
-        .get<{ places: SavedPlace[] }>(`${API_ENDPOINTS.savedLists}/${listId}/places`)
+    queryFn: ({ signal }) =>
+      sdk
+        .listSavedListPlaces(listId ?? "", { signal })
+        .then(sdk.unwrapSavedResponse)
         .then((r) => r.places),
     enabled: signedIn && listId !== null,
     staleTime: 30_000,
@@ -42,8 +48,11 @@ export function useLabeledPlaces() {
   const signedIn = useSignedIn();
   return useQuery({
     queryKey: ["labeledPlaces"],
-    queryFn: () =>
-      apiClient.get<{ labels: LabeledPlace[] }>(API_ENDPOINTS.savedLabels).then((r) => r.labels),
+    queryFn: ({ signal }) =>
+      sdk
+        .listSavedLabels({ signal })
+        .then(sdk.unwrapSavedResponse)
+        .then((r) => r.labels),
     enabled: signedIn,
     staleTime: 60_000,
   });
@@ -53,9 +62,10 @@ export function useIsSaved(placeId: string | null) {
   const signedIn = useSignedIn();
   return useQuery({
     queryKey: ["savedCheck", placeId],
-    queryFn: () =>
-      apiClient
-        .get<{ listIds: string[] }>(API_ENDPOINTS.savedCheck, { placeId: placeId as string })
+    queryFn: ({ signal }) =>
+      sdk
+        .checkSavedPlace({ placeId: placeId ?? "" }, { signal })
+        .then(sdk.unwrapSavedResponse)
         .then((r) => r.listIds),
     enabled: signedIn && placeId !== null,
     staleTime: 30_000,
@@ -65,10 +75,23 @@ export function useIsSaved(placeId: string | null) {
 export function useCreateList() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { name: string; icon?: string; isPrivate?: boolean }) =>
-      apiClient.post<SavedList>(API_ENDPOINTS.savedLists, data),
+    mutationFn: (data: sdk.CreateSavedListInput) =>
+      sdk.createSavedList(data).then(sdk.unwrapSavedResponse),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["savedLists"] });
+    },
+  });
+}
+
+export function useImportPlaces() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ImportPlacesInput) =>
+      sdk.importSavedPlaces(data).then(sdk.unwrapSavedResponse),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["savedLists"] });
+      void queryClient.invalidateQueries({ queryKey: ["savedListPlaces", result.listId] });
+      void queryClient.invalidateQueries({ queryKey: ["savedCheck"] });
     },
   });
 }
@@ -76,15 +99,8 @@ export function useCreateList() {
 export function useUpdateList() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      id,
-      ...data
-    }: {
-      id: string;
-      name?: string;
-      icon?: string | null;
-      isPrivate?: boolean;
-    }) => apiClient.patch<SavedList>(`${API_ENDPOINTS.savedLists}/${id}`, data),
+    mutationFn: ({ id, ...data }: sdk.UpdateSavedListInput & { id: string }) =>
+      sdk.updateSavedList(id, data).then(sdk.unwrapSavedResponse),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["savedLists"] });
     },
@@ -94,7 +110,7 @@ export function useUpdateList() {
 export function useDeleteList() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiClient.delete(`${API_ENDPOINTS.savedLists}/${id}`),
+    mutationFn: (id: string) => sdk.deleteSavedList(id).then(sdk.unwrapSavedResponse),
     onSuccess: async (_data, id) => {
       void queryClient.invalidateQueries({ queryKey: ["savedLists"] });
       queryClient.removeQueries({ queryKey: ["savedListPlaces", id], exact: true });
@@ -109,18 +125,8 @@ export function useDeleteList() {
 export function useSavePlace() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      listId,
-      ...data
-    }: {
-      listId: string;
-      name: string;
-      address?: string | null;
-      lat: number;
-      lng: number;
-      placeId?: string | null;
-      note?: string | null;
-    }) => apiClient.post<SavedPlace>(`${API_ENDPOINTS.savedLists}/${listId}/places`, data),
+    mutationFn: ({ listId, ...data }: sdk.CreateSavedPlaceInput & { listId: string }) =>
+      sdk.createSavedPlace(listId, data).then(sdk.unwrapSavedResponse),
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({ queryKey: ["savedLists"] });
       void queryClient.invalidateQueries({ queryKey: ["savedListPlaces", vars.listId] });
@@ -132,7 +138,7 @@ export function useSavePlace() {
 export function useRemovePlace() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiClient.delete(`${API_ENDPOINTS.savedPlaces}/${id}`),
+    mutationFn: (id: string) => sdk.deleteSavedPlace(id).then(sdk.unwrapSavedResponse),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["savedLists"] });
       void queryClient.invalidateQueries({ queryKey: ["savedListPlaces"] });
@@ -144,8 +150,8 @@ export function useRemovePlace() {
 export function useUpdatePlace() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: string; note?: string | null; sortOrder?: number }) =>
-      apiClient.patch<SavedPlace>(`${API_ENDPOINTS.savedPlaces}/${id}`, data),
+    mutationFn: ({ id, ...data }: sdk.UpdateSavedPlaceInput & { id: string }) =>
+      sdk.updateSavedPlace(id, data).then(sdk.unwrapSavedResponse),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["savedListPlaces"] });
     },
@@ -155,22 +161,8 @@ export function useUpdatePlace() {
 export function useUpdateLabel() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      label,
-      ...data
-    }: {
-      label: string;
-      icon?: string | null;
-      name: string;
-      address?: string | null;
-      lat: number;
-      lng: number;
-      placeId?: string | null;
-    }) =>
-      apiClient.put<LabeledPlace>(
-        `${API_ENDPOINTS.savedLabels}/${encodeURIComponent(label)}`,
-        data,
-      ),
+    mutationFn: ({ label, ...data }: sdk.WriteSavedLabelInput & { label: string }) =>
+      sdk.writeSavedLabel(label, data).then(sdk.unwrapSavedResponse),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["labeledPlaces"] });
     },
@@ -180,8 +172,7 @@ export function useUpdateLabel() {
 export function useDeleteLabel() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (label: string) =>
-      apiClient.delete(`${API_ENDPOINTS.savedLabels}/${encodeURIComponent(label)}`),
+    mutationFn: (label: string) => sdk.deleteSavedLabel(label).then(sdk.unwrapSavedResponse),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["labeledPlaces"] });
     },

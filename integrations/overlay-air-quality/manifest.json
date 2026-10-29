@@ -60,8 +60,6 @@
       "credentialOwner": "instance-operator",
       "reviewedAt": "2026-08-30",
       "apiHosts": ["api.openaq.org"],
-      "license": "Varies by contributing source",
-      "licenseUrl": "https://docs.openaq.org/resources/licenses",
       "attribution": "OpenAQ and the contributing data owner",
       "notes": "Each location carries its own source license and attribution; callers must retain both.",
       "commercialUse": "conditional",
@@ -70,7 +68,53 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Each actual contributing feed/operator/source",
+            "license": {
+              "kind": "per-item",
+              "raw": "Determined by each contributing item or operator"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://docs.openaq.org/about/terms",
+                "https://docs.openaq.org/resources/licenses"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "OpenAQ endpoint policy",
+            "license": {
+              "kind": "unknown",
+              "url": "https://docs.openaq.org/resources/licenses"
+            },
+            "attribution": {
+              "placement": "details",
+              "surfaces": ["content", "map"],
+              "basis": "provider-terms",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://docs.openaq.org/about/terms"],
+              "reason": "OpenAQ provider identity only; original source binding unresolved until its terms reviewed"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Varies by contributing source",
+            "url": "https://docs.openaq.org/resources/licenses"
+          }
+        ]
+      }
     }
   ]
 }

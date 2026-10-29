@@ -35,25 +35,44 @@
   "backend": {
     "routes": false
   },
-  "healthCheck": {
-    "type": "ping",
-    "urlTemplate": "${endpoint}/otp/routers/default",
-    "requiredConfigKeys": ["endpoint"]
-  },
   "dataSources": [
     {
       "sourceId": "otp",
       "name": "OpenTripPlanner (self-hosted)",
       "url": "http://localhost:8090/",
-      "license": "LGPL v3+",
-      "licenseUrl": "https://github.com/opentripplanner/OpenTripPlanner/blob/dev-2.x/LICENSE",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "-",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "software",
+            "subject": "OpenTripPlanner engine",
+            "license": {
+              "kind": "spdx",
+              "expression": "LGPL-3.0-or-later"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "Configured GTFS/RT/OSM inputs and output",
+            "license": {
+              "kind": "unknown"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "LGPL-3.0-or-later",
+            "url": "https://github.com/opentripplanner/OpenTripPlanner/blob/dev-2.x/LICENSE"
+          }
+        ]
+      }
     }
   ],
   "dependencies": ["transit"],

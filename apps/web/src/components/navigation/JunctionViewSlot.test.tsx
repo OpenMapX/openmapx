@@ -1,5 +1,6 @@
 import type { Route } from "@openmapx/core";
 import { useNavigationStore, useSettingsStore } from "@openmapx/core";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -104,7 +105,7 @@ describe("JunctionViewSlot", () => {
         fovDeg: 70,
         assets: {},
         author: "motocultrice",
-        license: "CC BY-SA 4.0",
+        licensing: licensingFromDeclaration("CC BY-SA 4.0", undefined),
       },
       objectUrl: "blob:photo-1",
       prepared: {
@@ -199,7 +200,7 @@ describe("JunctionViewSlot", () => {
         fovDeg: 70,
         assets: {},
         author: "motocultrice",
-        license: "CC BY-SA 4.0",
+        licensing: licensingFromDeclaration("CC BY-SA 4.0", undefined),
       },
       objectUrl: "blob:photo-1",
       prepared: {
@@ -258,7 +259,7 @@ describe("JunctionViewSlot", () => {
         fovDeg: 70,
         assets: {},
         author: "motocultrice",
-        license: "CC BY-SA 4.0",
+        licensing: licensingFromDeclaration("CC BY-SA 4.0"),
       },
       objectUrl: "blob:photo-1",
       prepared: {

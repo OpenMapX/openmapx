@@ -1,4 +1,12 @@
 import type { TransitReachabilitySeed } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  captureResultContributors,
+  readCapturedContributors,
+  serializeContributors,
+  snapshotContributors,
+  withContributors,
+} from "@openmapx/mobility-core/contributors";
 import type {
   CustomLayerInterface,
   CustomRenderMethodInput,
@@ -75,6 +83,60 @@ void main() {
   vec3 purple = vec3(0.435, 0.259, 0.757);
   out_color = vec4(purple * alpha, alpha);
 }`;
+
+/** This second pass certifies actual positive composite pixels for each seed
+ * receipt. Losing/offscreen disks are discarded against the already-rendered
+ * MAX field; ties retain both inputs. The composite shader above has strictly
+ * positive alpha for every remaining>0 pixel in a selected band.
+ * No color writes occur. Occlusion queries are polled asynchronously.
+ */
+const RECEIPT_FRAGMENT = `#version 300 es
+precision highp float;
+in vec2 v_quad;
+flat in float v_remaining_seconds;
+flat in float v_radius_seconds;
+uniform sampler2D u_field;
+uniform float u_max_budget;
+uniform float u_thresholds[4];
+uniform int u_threshold_count;
+out vec4 out_color;
+void main() {
+  float distance_ratio = length(v_quad);
+  if (distance_ratio > 1.0) discard;
+  float remaining = max(0.001, v_remaining_seconds - distance_ratio * v_radius_seconds);
+  float winner = texelFetch(u_field, ivec2(gl_FragCoord.xy), 0).r;
+  if (winner <= 0.0 || remaining < winner) discard;
+  float travel_seconds = u_max_budget - winner;
+  int band = -1;
+  for (int i = 0; i < 4; i++) {
+    if (i < u_threshold_count && band < 0 && travel_seconds <= u_thresholds[i]) band = i;
+  }
+  if (band < 0) discard;
+  out_color = vec4(0.0);
+}`;
+
+interface ReceiptGroup {
+  offset: number;
+  count: number;
+  contributors: readonly Attribution[];
+}
+interface FieldPaint {
+  revision: number;
+  matrix: Float32Array;
+  width: number;
+  height: number;
+  texture: WebGLTexture;
+  thresholdsMinutes: readonly number[];
+  groups: readonly ReceiptGroup[];
+}
+interface RenderedFieldPaint {
+  field: FieldPaint;
+  target: WebGLFramebuffer | null;
+}
+interface ReceiptEvidence {
+  epoch: number;
+  tickets: { query: WebGLQuery; contributors: readonly Attribution[] }[];
+}
 
 function shader(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader {
   const value = gl.createShader(type);
@@ -230,11 +292,21 @@ export class TransitFieldLayer implements CustomLayerInterface {
   private instancesDirty = true;
   private uploadedBudgetSeconds = -1;
   private unsupported = false;
+  private receiptProgram: WebGLProgram | null = null;
+  private receiptGroups: ReceiptGroup[] = [];
+  private receiptEvidence: ReceiptEvidence | null = null;
+  private visibleContributors: readonly Attribution[] = [];
+  private receiptRefreshRequested = true;
+  private revision = 0;
+  private fieldPaint: FieldPaint | null = null;
+  private renderedPaint: RenderedFieldPaint | null = null;
+  private receiptEpoch = 0;
+  private lastReceiptQueryAt = Number.NEGATIVE_INFINITY;
   private readonly onUnsupported?: (reason: TransitFieldUnsupportedReason) => void;
 
   constructor(options: TransitFieldLayerOptions) {
     this.id = options.id;
-    this.seeds = options.seeds;
+    this.seeds = this.captureSeeds(options.seeds, []);
     this.thresholdsMinutes = normalizeTransitBands(options.thresholdsMinutes);
     this.onUnsupported = options.onUnsupported;
   }
@@ -248,6 +320,19 @@ export class TransitFieldLayer implements CustomLayerInterface {
     if (this.compositeVao) gl.deleteVertexArray(this.compositeVao);
     if (this.framebuffer) gl.deleteFramebuffer(this.framebuffer);
     if (this.texture) gl.deleteTexture(this.texture);
+    if (this.receiptProgram) gl.deleteProgram(this.receiptProgram);
+    for (const ticket of this.receiptEvidence?.tickets ?? []) gl.deleteQuery(ticket.query);
+    this.receiptProgram = null;
+    this.receiptEvidence = null;
+    this.visibleContributors = [];
+    this.receiptRefreshRequested = true;
+    this.instancesDirty = true;
+    this.uploadedBudgetSeconds = -1;
+    this.width = 0;
+    this.height = 0;
+    this.fieldPaint = null;
+    this.renderedPaint = null;
+    this.lastReceiptQueryAt = Number.NEGATIVE_INFINITY;
     this.fieldProgram = null;
     this.compositeProgram = null;
     this.quadBuffer = null;
@@ -258,15 +343,49 @@ export class TransitFieldLayer implements CustomLayerInterface {
     this.texture = null;
   }
 
-  setData(seeds: TransitReachabilitySeed[], thresholdsMinutes: number[]): void {
-    this.seeds = seeds;
+  private captureSeeds(
+    seeds: TransitReachabilitySeed[],
+    contributors: readonly Attribution[],
+  ): TransitReachabilitySeed[] {
+    return seeds.map((seed) =>
+      withContributors(
+        seed,
+        captureResultContributors(
+          {
+            contributors:
+              readCapturedContributors(seed.contributors) ??
+              readCapturedContributors(seed.stop?.contributors),
+          },
+          contributors,
+        ),
+      ),
+    );
+  }
+
+  /** Invoked by the host's shared four-Hz render-evidence scheduler. */
+  renderedContributors(): readonly Attribution[] {
+    this.receiptRefreshRequested = true;
+    if (!this.unsupported && this.thresholdsMinutes.length && this.map) this.map.triggerRepaint();
+    return this.visibleContributors;
+  }
+
+  setData(
+    seeds: TransitReachabilitySeed[],
+    thresholdsMinutes: number[],
+    contributors: readonly Attribution[] = [],
+  ): void {
+    this.seeds = this.captureSeeds(seeds, contributors);
     this.thresholdsMinutes = normalizeTransitBands(thresholdsMinutes);
     this.instancesDirty = true;
+    this.receiptRefreshRequested = true;
+    this.revision += 1;
+    if (!this.thresholdsMinutes.length || !this.seeds.length) this.visibleContributors = [];
     if (this.map) this.map.triggerRepaint();
   }
 
   onAdd(map: MapLibreMap, gl: WebGL2RenderingContext): void {
     this.map = map;
+    this.unsupported = false;
     if (typeof WebGL2RenderingContext === "undefined" || !(gl instanceof WebGL2RenderingContext)) {
       this.unsupported = true;
       this.onUnsupported?.("webgl2");
@@ -343,7 +462,30 @@ export class TransitFieldLayer implements CustomLayerInterface {
   }
 
   private uploadInstances(gl: WebGL2RenderingContext, maxBudgetSeconds: number): void {
-    const instances = prepareTransitFieldInstances(this.seeds, maxBudgetSeconds);
+    const grouped = new Map<
+      string,
+      {
+        contributors: readonly Attribution[];
+        instances: ReturnType<typeof prepareTransitFieldInstances>;
+      }
+    >();
+    for (const seed of this.seeds) {
+      const contributors = snapshotContributors(seed.contributors ?? []);
+      const key = serializeContributors(contributors);
+      let group = grouped.get(key);
+      if (!group) {
+        group = { contributors, instances: [] };
+        grouped.set(key, group);
+      }
+      group.instances.push(...prepareTransitFieldInstances([seed], maxBudgetSeconds));
+    }
+    const instances = [...grouped.values()].flatMap((group) => group.instances);
+    let offset = 0;
+    this.receiptGroups = [...grouped.values()].map((group) => {
+      const result = { offset, count: group.instances.length, contributors: group.contributors };
+      offset += group.instances.length;
+      return result;
+    });
     const values = new Float32Array(instances.length * 5);
     instances.forEach((instance, index) => {
       values.set(
@@ -392,6 +534,7 @@ export class TransitFieldLayer implements CustomLayerInterface {
     const maxBudgetSeconds = maxMinutes * 60;
     const previous = saveGlState(gl);
     try {
+      const matrix = new Float32Array(args.modelViewProjectionMatrix);
       if (!this.resize(gl)) return;
       if (this.instancesDirty || this.uploadedBudgetSeconds !== maxBudgetSeconds) {
         this.uploadInstances(gl, maxBudgetSeconds);
@@ -414,16 +557,170 @@ export class TransitFieldLayer implements CustomLayerInterface {
       );
       gl.bindVertexArray(this.fieldVao);
       gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.instanceCount);
+      // Retain the actual texture paint, not props that may arrive between
+      // prerender and render. Identical paints share an evidence epoch.
+      const old = this.fieldPaint;
+      if (
+        !old ||
+        old.revision !== this.revision ||
+        old.width !== this.width ||
+        old.height !== this.height ||
+        old.texture !== this.texture ||
+        !matrix.every((value, index) => value === old.matrix[index])
+      ) {
+        if (!this.texture) return;
+        this.fieldPaint = {
+          revision: this.revision,
+          matrix,
+          width: this.width,
+          height: this.height,
+          texture: this.texture,
+          thresholdsMinutes: [...this.thresholdsMinutes],
+          groups: this.receiptGroups,
+        };
+      }
     } finally {
       restoreGlState(gl, previous);
     }
   }
 
+  private discardReceiptEvidence(gl: WebGL2RenderingContext): void {
+    for (const ticket of this.receiptEvidence?.tickets ?? []) gl.deleteQuery(ticket.query);
+    this.receiptEvidence = null;
+  }
+
+  private markRenderedPaint(
+    gl: WebGL2RenderingContext,
+    field: FieldPaint,
+    target: WebGLFramebuffer | null,
+  ): void {
+    if (this.renderedPaint?.field === field && this.renderedPaint.target === target) return;
+    this.renderedPaint = { field, target };
+    this.receiptEpoch += 1;
+    this.visibleContributors = [];
+    // Deleting an obsolete query is nonblocking; never wait for old-view
+    // availability or apply that result to the freshly painted viewport.
+    this.discardReceiptEvidence(gl);
+  }
+
+  private pollReceiptEvidence(gl: WebGL2RenderingContext): void {
+    const evidence = this.receiptEvidence;
+    if (!evidence) return;
+    if (
+      !evidence.tickets.every((ticket) =>
+        gl.getQueryParameter(ticket.query, gl.QUERY_RESULT_AVAILABLE),
+      )
+    ) {
+      this.map?.triggerRepaint();
+      return;
+    }
+    if (evidence.epoch === this.receiptEpoch) {
+      this.visibleContributors = snapshotContributors(
+        ...evidence.tickets
+          .filter((ticket) => gl.getQueryParameter(ticket.query, gl.QUERY_RESULT))
+          .map((ticket) => ticket.contributors),
+      );
+    }
+    for (const ticket of evidence.tickets) gl.deleteQuery(ticket.query);
+    this.receiptEvidence = null;
+  }
+
+  private queryReceiptEvidence(gl: WebGL2RenderingContext, paint: FieldPaint): void {
+    if (
+      !this.receiptRefreshRequested ||
+      this.receiptEvidence ||
+      performance.now() - this.lastReceiptQueryAt < 250
+    )
+      return;
+    this.receiptRefreshRequested = false;
+    const groups = paint.groups.filter((group) => group.count > 0 && group.contributors.length > 0);
+    if (!groups.length) {
+      this.visibleContributors = [];
+      return;
+    }
+    this.lastReceiptQueryAt = performance.now();
+    const maxBudgetSeconds = (paint.thresholdsMinutes.at(-1) ?? 0) * 60;
+    this.receiptProgram ??= program(gl, FIELD_VERTEX, RECEIPT_FRAGMENT);
+    gl.useProgram(this.receiptProgram);
+    gl.colorMask(false, false, false, false);
+    gl.disable(gl.BLEND);
+    gl.uniformMatrix4fv(
+      gl.getUniformLocation(this.receiptProgram, "u_matrix"),
+      false,
+      paint.matrix,
+    );
+    gl.uniform1i(gl.getUniformLocation(this.receiptProgram, "u_field"), 0);
+    gl.uniform1f(gl.getUniformLocation(this.receiptProgram, "u_max_budget"), maxBudgetSeconds);
+    const thresholds = paint.thresholdsMinutes.map((minutes) => minutes * 60);
+    while (thresholds.length < 4) thresholds.push(0);
+    gl.uniform1fv(
+      gl.getUniformLocation(this.receiptProgram, "u_thresholds"),
+      new Float32Array(thresholds),
+    );
+    gl.uniform1i(
+      gl.getUniformLocation(this.receiptProgram, "u_threshold_count"),
+      paint.thresholdsMinutes.length,
+    );
+    gl.bindVertexArray(this.fieldVao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
+    const stride = 5 * Float32Array.BYTES_PER_ELEMENT;
+    const position = (offset: number) => {
+      gl.vertexAttribPointer(1, 2, gl.FLOAT, false, stride, offset * stride);
+      for (let location = 2; location <= 4; location += 1) {
+        gl.vertexAttribPointer(
+          location,
+          1,
+          gl.FLOAT,
+          false,
+          stride,
+          offset * stride + location * Float32Array.BYTES_PER_ELEMENT,
+        );
+      }
+    };
+    const tickets: ReceiptEvidence["tickets"] = [];
+    try {
+      for (const group of groups) {
+        const query = gl.createQuery();
+        if (!query) continue;
+        position(group.offset);
+        gl.beginQuery(gl.ANY_SAMPLES_PASSED, query);
+        try {
+          gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, group.count);
+        } finally {
+          gl.endQuery(gl.ANY_SAMPLES_PASSED);
+        }
+        tickets.push({ query, contributors: snapshotContributors(group.contributors) });
+      }
+    } finally {
+      position(0);
+    }
+    this.receiptEvidence = { epoch: this.receiptEpoch, tickets };
+    this.map?.triggerRepaint();
+  }
+
   render(gl: WebGL2RenderingContext): void {
-    if (this.unsupported || !this.compositeProgram || this.thresholdsMinutes.length === 0) return;
-    const maxMinutes = this.thresholdsMinutes.at(-1);
+    const paint = this.fieldPaint;
+    if (
+      this.unsupported ||
+      !this.compositeProgram ||
+      this.thresholdsMinutes.length === 0 ||
+      !paint
+    ) {
+      this.visibleContributors = [];
+      this.renderedPaint = null;
+      this.discardReceiptEvidence(gl);
+      return;
+    }
+    if (paint.width !== gl.drawingBufferWidth || paint.height !== gl.drawingBufferHeight) {
+      this.visibleContributors = [];
+      this.renderedPaint = null;
+      this.discardReceiptEvidence(gl);
+      this.map?.triggerRepaint();
+      return;
+    }
+    const maxMinutes = paint.thresholdsMinutes.at(-1);
     if (maxMinutes === undefined) return;
-    const thresholds = this.thresholdsMinutes.map((minutes) => minutes * 60);
+    const thresholds = paint.thresholdsMinutes.map((minutes) => minutes * 60);
     while (thresholds.length < 4) thresholds.push(0);
     const previous = saveGlState(gl);
     try {
@@ -436,7 +733,7 @@ export class TransitFieldLayer implements CustomLayerInterface {
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       gl.useProgram(this.compositeProgram);
       gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, this.texture);
+      gl.bindTexture(gl.TEXTURE_2D, paint.texture);
       gl.uniform1i(gl.getUniformLocation(this.compositeProgram, "u_field"), 0);
       gl.uniform1f(gl.getUniformLocation(this.compositeProgram, "u_max_budget"), maxMinutes * 60);
       gl.uniform1fv(
@@ -445,10 +742,13 @@ export class TransitFieldLayer implements CustomLayerInterface {
       );
       gl.uniform1i(
         gl.getUniformLocation(this.compositeProgram, "u_threshold_count"),
-        this.thresholdsMinutes.length,
+        paint.thresholdsMinutes.length,
       );
       gl.bindVertexArray(this.compositeVao);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
+      this.markRenderedPaint(gl, paint, previous.framebuffer);
+      this.pollReceiptEvidence(gl);
+      this.queryReceiptEvidence(gl, paint);
     } finally {
       restoreGlState(gl, previous);
     }

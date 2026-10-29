@@ -28,3 +28,21 @@ describe("Traefik access-log privacy", () => {
     expect(accessLog).not.toMatch(/Request(?:Path|Line):\s*keep/);
   });
 });
+
+describe("Traefik encoded path characters", () => {
+  it("lets encoded ids through the https entrypoint while refusing NUL and backslash", () => {
+    const websecure = config.slice(
+      config.indexOf("\n  websecure:\n"),
+      config.indexOf("\ncertificatesResolvers:"),
+    );
+
+    expect(websecure).toContain("      encodedCharacters:\n");
+    expect(websecure).toContain("        allowEncodedSlash: true");
+    expect(websecure).toContain("        allowEncodedPercent: true");
+    expect(websecure).toContain("        allowEncodedHash: true");
+    expect(websecure).toContain("        allowEncodedQuestionMark: true");
+    expect(websecure).toContain("        allowEncodedSemicolon: true");
+    expect(websecure).toContain("        allowEncodedBackSlash: false");
+    expect(websecure).toContain("        allowEncodedNullCharacter: false");
+  });
+});

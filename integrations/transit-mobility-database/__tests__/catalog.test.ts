@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it } from "vitest";
 import { normalizeProducerUrl, toMdbCatalogFeed, toMdbCatalogFeeds } from "../catalog.js";
 import type { MdbFeed } from "../types.js";
@@ -35,9 +36,12 @@ describe("toMdbCatalogFeed", () => {
       source: "mobilitydb",
       countryCode: "de",
       url: "https://example.org/gtfs.zip",
-      license: "CC-BY-4.0",
+      licensing: licensingFromDeclaration(
+        undefined,
+        "https://creativecommons.org/licenses/by/4.0/",
+        "Acme Transit — All routes",
+      ),
       mdbId: "mdb-1234",
-      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
       latestDatasetUrl: "https://files.mobilitydatabase.org/mdb-1234/snapshot.zip",
       latestDatasetHash: "abc123",
       latestDatasetDownloadedAt: "2026-04-01T00:00:00Z",
@@ -55,8 +59,10 @@ describe("toMdbCatalogFeed", () => {
         },
       }),
     );
-    expect(row?.license).toBeUndefined();
-    expect(row?.licenseUrl).toBe("https://operator.example/terms");
+    expect(row?.licensing.bindings[0].license).toEqual({
+      kind: "unknown",
+      url: "https://operator.example/terms",
+    });
   });
 
   it("skips authenticated feeds (we have no bilateral keys)", () => {
@@ -127,4 +133,16 @@ describe("normalizeProducerUrl", () => {
     expect(normalizeProducerUrl(undefined)).toBeNull();
     expect(normalizeProducerUrl("not a url")).toBeNull();
   });
+});
+
+it("does not identify a grant from an unrelated URL containing a licence path", () => {
+  const row = toMdbCatalogFeed(
+    feed({
+      source_info: {
+        producer_url: "https://example.test/feed.zip",
+        license_url: "https://example.test/?next=creativecommons.org/licenses/by/4.0/",
+      },
+    }),
+  );
+  expect(row?.licensing?.bindings[0].license).toMatchObject({ kind: "unknown" });
 });

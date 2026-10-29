@@ -1,9 +1,17 @@
 "use client";
 
 import { routeColor, usePlaceStore, useRouteStops, useTransitRoute } from "@openmapx/core";
-import { useEffect } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import {
+  contributorsForField,
+  contributorsForRecords,
+  serializeContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
+import { useEffect, useMemo } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
+import type { MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
 
 const SOURCE_ID = "transit-route-detail-source";
@@ -12,75 +20,76 @@ const STOPS_SOURCE_ID = "transit-route-detail-stops-source";
 const STOPS_LAYER_ID = "transit-route-detail-stops";
 const CURRENT_STOP_LAYER_ID = "transit-route-detail-current-stop";
 
-export function TransitRouteLayer() {
-  const { mapRef, mapReady, styleVersion, fitBounds } = useMap();
-  const { selectedPlace, activeRouteId } = usePlaceStore();
-  const { data: route } = useTransitRoute(activeRouteId);
-  const { data: stops } = useRouteStops(activeRouteId);
+type TransitRoute = ReturnType<typeof useTransitRoute>["data"];
+type RouteStop = NonNullable<ReturnType<typeof useRouteStops>["data"]>[number];
 
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
+// Use route geometry from the API (road-snapped) when available,
+// otherwise fall back to connecting stop coordinates with straight lines.
+function routeLineGeometry(
+  route: TransitRoute,
+  stops: readonly RouteStop[],
+): GeoJSON.LineString | GeoJSON.MultiLineString {
+  const geometry = route?.geometry;
+  if (!geometry) {
+    return { type: "LineString", coordinates: stops.map((s): [number, number] => [s.lng, s.lat]) };
+  }
+  return geometry.type === "MultiLineString"
+    ? { type: "MultiLineString", coordinates: geometry.coordinates as [number, number][][] }
+    : { type: "LineString", coordinates: geometry.coordinates as [number, number][] };
+}
 
-    const cleanup = () => {
-      if (map.getLayer(CURRENT_STOP_LAYER_ID)) map.removeLayer(CURRENT_STOP_LAYER_ID);
-      if (map.getLayer(STOPS_LAYER_ID)) map.removeLayer(STOPS_LAYER_ID);
-      if (map.getLayer(LINE_LAYER_ID)) map.removeLayer(LINE_LAYER_ID);
-      if (map.getSource(STOPS_SOURCE_ID)) map.removeSource(STOPS_SOURCE_ID);
-      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      unregisterLayerSlot(CURRENT_STOP_LAYER_ID);
-      unregisterLayerSlot(STOPS_LAYER_ID);
-      unregisterLayerSlot(LINE_LAYER_ID);
-    };
-
-    if (!activeRouteId || !stops?.length) {
-      cleanup();
-      return;
-    }
-
-    const lineColor = routeColor(route, PRIMARY_BLUE_HEX);
-
-    // Use route geometry from the API (road-snapped) when available,
-    // otherwise fall back to connecting stop coordinates with straight lines.
-    const fallbackGeom: { type: "LineString"; coordinates: [number, number][] } = {
-      type: "LineString",
-      coordinates: stops.map((s): [number, number] => [s.lng, s.lat]),
-    };
-    const routeGeometry = route?.geometry ?? fallbackGeom;
-
-    // Collect all coordinates for bounds fitting
-    const lineCoords =
-      routeGeometry.type === "MultiLineString"
-        ? (routeGeometry.coordinates as [number, number][][]).flat()
-        : (routeGeometry.coordinates as [number, number][]);
-
-    cleanup();
-
-    map.addSource(SOURCE_ID, {
-      type: "geojson",
-      data: {
-        type: "Feature",
-        properties: {},
-        geometry:
-          routeGeometry.type === "MultiLineString"
-            ? {
-                type: "MultiLineString" as const,
-                coordinates: routeGeometry.coordinates as [number, number][][],
-              }
-            : {
-                type: "LineString" as const,
-                coordinates: routeGeometry.coordinates as [number, number][],
-              },
+function transitRouteGroup(
+  route: TransitRoute,
+  stops: readonly RouteStop[],
+  selectedPlaceId: string | undefined,
+): MapLayerGroup {
+  const lineColor = routeColor(route, PRIMARY_BLUE_HEX);
+  return {
+    sources: {
+      [SOURCE_ID]: {
+        type: "geojson",
+        data: {
+          type: "Feature",
+          properties: {
+            _mapAttributions: serializeContributors(
+              route?.geometry
+                ? snapshotContributors(
+                    contributorsForField(route, "geometry"),
+                    contributorsForField(route, route.color ? "color" : "mode"),
+                  )
+                : snapshotContributors(
+                    route ? contributorsForField(route, route.color ? "color" : "mode") : [],
+                    contributorsForRecords(stops),
+                  ),
+            ),
+          },
+          geometry: routeLineGeometry(route, stops),
+        },
       },
-    });
-
-    addLayerInSlot(
-      map,
+      [STOPS_SOURCE_ID]: {
+        type: "geojson",
+        data: {
+          type: "FeatureCollection",
+          features: stops.map((s) => ({
+            type: "Feature" as const,
+            properties: {
+              _mapAttributions: serializeContributors(s.contributors ?? []),
+              id: s.id,
+              name: s.name,
+              isCurrent: s.id === selectedPlaceId,
+            },
+            geometry: { type: "Point" as const, coordinates: [s.lng, s.lat] },
+          })),
+        },
+      },
+    },
+    layers: [
       {
         id: LINE_LAYER_ID,
         type: "line",
         source: SOURCE_ID,
+        slot: "overlay-lines",
+        order: 16,
         paint: {
           "line-color": lineColor,
           "line-width": 4,
@@ -88,27 +97,12 @@ export function TransitRouteLayer() {
         },
         layout: { "line-cap": "round", "line-join": "round" },
       },
-      "overlay-lines",
-      16,
-    );
-
-    const stopsGeoJson = {
-      type: "FeatureCollection" as const,
-      features: stops.map((s) => ({
-        type: "Feature" as const,
-        properties: { id: s.id, name: s.name, isCurrent: s.id === selectedPlace?.id },
-        geometry: { type: "Point" as const, coordinates: [s.lng, s.lat] },
-      })),
-    };
-
-    map.addSource(STOPS_SOURCE_ID, { type: "geojson", data: stopsGeoJson });
-
-    addLayerInSlot(
-      map,
       {
         id: STOPS_LAYER_ID,
         type: "circle",
         source: STOPS_SOURCE_ID,
+        slot: "overlay-points",
+        order: 18,
         filter: ["!=", ["get", "isCurrent"], true],
         paint: {
           "circle-radius": 5,
@@ -117,16 +111,12 @@ export function TransitRouteLayer() {
           "circle-stroke-color": lineColor,
         },
       },
-      "overlay-points",
-      18,
-    );
-
-    addLayerInSlot(
-      map,
       {
         id: CURRENT_STOP_LAYER_ID,
         type: "circle",
         source: STOPS_SOURCE_ID,
+        slot: "overlay-points",
+        order: 19,
         filter: ["==", ["get", "isCurrent"], true],
         paint: {
           "circle-radius": 8,
@@ -135,24 +125,47 @@ export function TransitRouteLayer() {
           "circle-stroke-color": "#fff",
         },
       },
-      "overlay-points",
-      19,
+    ],
+  };
+}
+
+export function TransitRouteLayer() {
+  const { mapReady, fitBounds } = useMap();
+  const { selectedPlace, activeRouteId } = usePlaceStore();
+  const { data: route } = useTransitRoute(activeRouteId);
+  const { data: stops } = useRouteStops(activeRouteId);
+  const selectedPlaceId = selectedPlace?.id;
+  const shownStops = activeRouteId && stops?.length ? stops : null;
+
+  useRenderedMapAttributions(
+    "transit-route-detail",
+    [LINE_LAYER_ID, STOPS_LAYER_ID, CURRENT_STOP_LAYER_ID],
+    Boolean(activeRouteId),
+  );
+  useMapLayerGroup(
+    useMemo(
+      () => (shownStops ? transitRouteGroup(route, shownStops, selectedPlaceId) : null),
+      [route, shownStops, selectedPlaceId],
+    ),
+  );
+
+  useEffect(() => {
+    void selectedPlaceId; // selecting another stop on the route re-fits it
+    if (!mapReady || !shownStops) return;
+    const geometry = routeLineGeometry(route, shownStops);
+    const lineCoords =
+      geometry.type === "MultiLineString" ? geometry.coordinates.flat() : geometry.coordinates;
+    if (lineCoords.length < 2) return;
+    const lngs = lineCoords.map((c) => c[0]);
+    const lats = lineCoords.map((c) => c[1]);
+    fitBounds(
+      [
+        [Math.min(...lngs), Math.min(...lats)],
+        [Math.max(...lngs), Math.max(...lats)],
+      ],
+      60,
     );
-
-    if (lineCoords.length >= 2) {
-      const lngs = lineCoords.map((c) => c[0]);
-      const lats = lineCoords.map((c) => c[1]);
-      fitBounds(
-        [
-          [Math.min(...lngs), Math.min(...lats)],
-          [Math.max(...lngs), Math.max(...lats)],
-        ],
-        60,
-      );
-    }
-
-    return cleanup;
-  }, [mapRef, mapReady, styleVersion, activeRouteId, route, stops, selectedPlace?.id, fitBounds]);
+  }, [mapReady, route, shownStops, selectedPlaceId, fitBounds]);
 
   return null;
 }

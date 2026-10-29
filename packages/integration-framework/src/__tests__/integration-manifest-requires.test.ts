@@ -54,3 +54,12 @@ describe("integration manifest.requires", () => {
     expect(r.valid).toBe(true);
   });
 });
+
+describe("integration background health cadence", () => {
+  it("accepts slower probes and rejects intervals below the scheduler cadence", () => {
+    expect(validateManifest({ ...valid, healthCheckIntervalMs: 900_000 }).valid).toBe(true);
+    for (const healthCheckIntervalMs of [0, -1, 59_999, 60_000.5, "900000"]) {
+      expect(validateManifest({ ...valid, healthCheckIntervalMs }).valid).toBe(false);
+    }
+  });
+});

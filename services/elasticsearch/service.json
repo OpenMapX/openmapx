@@ -13,15 +13,15 @@
   },
   "container": {
     "image": "elasticsearch",
-    "tag": "7.17.28",
-    "digest": "sha256:a06b03a2db8db2be43d3c3851e7bcebdd4fff79f4db08c7da6bad7a8776d3e15",
+    "tag": "8.19.23",
+    "digest": "sha256:8b1751877c984f3e4f59bafb15fc890e01969a744255fd5f6860c060b62cff36",
     "expose": [9200],
     "environment": {
       "discovery.type": "single-node",
       "ES_JAVA_OPTS": "-Xms2g -Xmx2g",
       "xpack.security.enabled": "false"
     },
-    "user": "${UID:-1000}:0",
+    "user": "${UID:?UID must be set, run pnpm openmapx compose render}:0",
     "memory": "4g",
     "restart": "unless-stopped",
     "healthcheck": {

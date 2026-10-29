@@ -7,9 +7,7 @@ import { JunctionPhoto } from "./JunctionPhoto";
 
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string, values?: Record<string, unknown>) =>
-    key === "junctionPhotoCaption"
-      ? `© ${values?.author} · ${values?.license} · ${values?.date}`
-      : `© ${values?.author} · ${values?.license}`,
+    key === "junctionPhotoDate" ? `Captured ${values?.date}` : key,
   useLocale: () => "en",
 }));
 const flatImage: StreetLevelImage = {
@@ -22,7 +20,6 @@ const flatImage: StreetLevelImage = {
   fovDeg: 70,
   assets: {},
   author: "motocultrice",
-  license: "CC BY-SA 4.0",
 };
 
 const prepared: PreparedJunctionPhoto = {
@@ -44,14 +41,13 @@ const ribbon = [
   { xPercent: 99, yPercent: 55, widthPercent: 0.5, distanceMeters: 30 },
 ];
 describe("prepared junction photo", () => {
-  it("shows a decoded bare photo with complete attribution and a non-truncating capture month", () => {
+  it("shows a decoded bare photo with a capture date and no legacy credit", () => {
     const { container } = render(
       <JunctionPhoto image={flatImage} objectUrl="blob:photo" prepared={prepared} />,
     );
-    expect(container.querySelector("[data-capture-month]")?.textContent).toBe("Sep 2019");
-    expect(container.querySelector("[title]")?.getAttribute("title")).toBe(
-      "© motocultrice · CC BY-SA 4.0 · Sep 2019",
-    );
+    expect(container.querySelector("[data-capture-month]")?.textContent).toBe("Captured Sep 2019");
+    expect(container.textContent).toContain("Captured Sep 2019");
+    expect(container.textContent).not.toContain("motocultrice");
     expect(container.querySelector("[data-photo-path]")).toBeNull();
     expect(container.querySelector("a")).toBeNull();
   });

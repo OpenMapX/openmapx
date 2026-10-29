@@ -32,7 +32,23 @@
         "attribution": {
           "provider": "U.S. Geological Survey",
           "license": "LicenseRef-US-Gov-Public-Domain",
-          "licenseUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
+          "licenseUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "U.S. Geological Survey",
+                "license": {
+                  "kind": "custom",
+                  "id": "LicenseRef-US-Gov-Public-Domain",
+                  "namespace": "openconditions:licences",
+                  "name": "U.S. Government Public Domain (17 U.S.C. §105)",
+                  "url": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"
@@ -121,7 +137,23 @@
         "attribution": {
           "provider": "U.S. Geological Survey",
           "license": "LicenseRef-US-Gov-Public-Domain",
-          "licenseUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
+          "licenseUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "U.S. Geological Survey",
+                "license": {
+                  "kind": "custom",
+                  "id": "LicenseRef-US-Gov-Public-Domain",
+                  "namespace": "openconditions:licences",
+                  "name": "U.S. Government Public Domain (17 U.S.C. §105)",
+                  "url": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"
@@ -210,7 +242,23 @@
         "attribution": {
           "provider": "U.S. Geological Survey",
           "license": "LicenseRef-US-Gov-Public-Domain",
-          "licenseUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
+          "licenseUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "U.S. Geological Survey",
+                "license": {
+                  "kind": "custom",
+                  "id": "LicenseRef-US-Gov-Public-Domain",
+                  "namespace": "openconditions:licences",
+                  "name": "U.S. Government Public Domain (17 U.S.C. §105)",
+                  "url": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"
@@ -295,7 +343,23 @@
         "attribution": {
           "provider": "U.S. Geological Survey",
           "license": "LicenseRef-US-Gov-Public-Domain",
-          "licenseUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
+          "licenseUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "U.S. Geological Survey",
+                "license": {
+                  "kind": "custom",
+                  "id": "LicenseRef-US-Gov-Public-Domain",
+                  "namespace": "openconditions:licences",
+                  "name": "U.S. Government Public Domain (17 U.S.C. §105)",
+                  "url": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"
@@ -388,7 +452,23 @@
         "attribution": {
           "provider": "U.S. Geological Survey",
           "license": "LicenseRef-US-Gov-Public-Domain",
-          "licenseUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
+          "licenseUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "U.S. Geological Survey",
+                "license": {
+                  "kind": "custom",
+                  "id": "LicenseRef-US-Gov-Public-Domain",
+                  "namespace": "openconditions:licences",
+                  "name": "U.S. Government Public Domain (17 U.S.C. §105)",
+                  "url": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"
@@ -858,7 +938,23 @@
         "attribution": {
           "provider": "National Interagency Fire Center (NIFC) / WFIGS and contributing agencies, dynamic data, not legal documents.",
           "license": "LicenseRef-US-Gov-Public-Domain",
-          "licenseUrl": "https://www.arcgis.com/home/item.html?id=d1c32af3212341869b3c810f1a215824"
+          "licenseUrl": "https://www.arcgis.com/home/item.html?id=d1c32af3212341869b3c810f1a215824",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "National Interagency Fire Center (NIFC) / WFIGS and contributing agencies, dynamic data, not legal documents.",
+                "license": {
+                  "kind": "custom",
+                  "id": "LicenseRef-US-Gov-Public-Domain",
+                  "namespace": "openconditions:licences",
+                  "name": "U.S. Government Public Domain (17 U.S.C. §105)",
+                  "url": "https://www.arcgis.com/home/item.html?id=d1c32af3212341869b3c810f1a215824"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"
@@ -940,7 +1036,21 @@
         "attribution": {
           "provider": "NOAA/NESDIS Hazard Mapping System (HMS)",
           "license": "CC0-1.0",
-          "licenseUrl": "https://www.arcgis.com/home/item.html?id=ab7a5fbd76e3499296350eabf599fc63"
+          "licenseUrl": "https://www.arcgis.com/home/item.html?id=ab7a5fbd76e3499296350eabf599fc63",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "NOAA/NESDIS Hazard Mapping System (HMS)",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC0-1.0",
+                  "url": "https://www.arcgis.com/home/item.html?id=ab7a5fbd76e3499296350eabf599fc63"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"
@@ -1001,7 +1111,21 @@
         "attribution": {
           "provider": "NASA Earth Observatory Natural Event Tracker (EONET)",
           "license": "CC0-1.0",
-          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "NASA Earth Observatory Natural Event Tracker (EONET)",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC0-1.0",
+                  "url": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"
@@ -1070,7 +1194,21 @@
         "attribution": {
           "provider": "NASA Earth Observatory Natural Event Tracker (EONET)",
           "license": "CC0-1.0",
-          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+          "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "NASA Earth Observatory Natural Event Tracker (EONET)",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC0-1.0",
+                  "url": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"

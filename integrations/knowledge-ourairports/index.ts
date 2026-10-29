@@ -8,9 +8,12 @@ import {
 } from "@openmapx/core";
 import {
   type IntegrationContext,
+  resolveIntegrationContributors,
   type SearchSuggestionProvider,
   scalarQueries,
+  withKnowledgeContributors,
 } from "@openmapx/integration-framework";
+import { contributorsForRecords, snapshotContributors } from "@openmapx/mobility-core/contributors";
 import {
   type AirportRecord,
   type AirportSearchMatch,
@@ -94,16 +97,18 @@ export function createOurAirportsSuggestionProvider(
       { signal },
     ): Promise<SearchSuggestionProviderResult> {
       signal.throwIfAborted();
+      const captured = snapshotContributors([
+        ctx.attributionIndex?.getById("ourairports") ?? {
+          sourceId: "ourairports",
+          name: "OurAirports",
+          url: "https://ourairports.com/",
+          attributionText: "OurAirports public-domain airport data",
+        },
+      ]);
       const matches = await search(ctx.log, query.query, query.limit);
       signal.throwIfAborted();
-      const attribution = ctx.attributionIndex?.getById("ourairports") ?? {
-        sourceId: "ourairports",
-        name: "OurAirports",
-        url: "https://ourairports.com/",
-        attributionText: "OurAirports public-domain airport data",
-      };
-      return {
-        suggestions: matches.map(({ record, kind, matchedValue, namespace }) => ({
+      const suggestions: SearchSuggestionProviderResult["suggestions"] = matches.map(
+        ({ record, kind, matchedValue, namespace }) => ({
           id: `oa:${record.ident}`,
           ids: {
             oa: record.ident,
@@ -125,8 +130,12 @@ export function createOurAirportsSuggestionProvider(
           importance: AIRPORT_IMPORTANCE[record.type] ?? MINOR_AIRFIELD_IMPORTANCE,
           provider: "knowledge-ourairports",
           contributingProviders: ["knowledge-ourairports"],
-        })),
-        attributions: matches.length > 0 ? [attribution] : [],
+          contributors: snapshotContributors(captured),
+        }),
+      );
+      return {
+        suggestions,
+        attributions: contributorsForRecords(suggestions),
         freshnessSeconds: 3_600,
       };
     },
@@ -178,7 +187,11 @@ async function findNearestAirports(
 export function setup(ctx: IntegrationContext): void {
   const releaseBackgroundLoad = startBackgroundLoad(ctx.log);
   ctx.onShutdown(async () => releaseBackgroundLoad());
-  ctx.registerKnowledgeProvider(createOurAirportsSource(ctx.log));
+  ctx.registerKnowledgeProvider(
+    withKnowledgeContributors(createOurAirportsSource(ctx.log), () => {
+      return { uniform: resolveIntegrationContributors(ctx, ["ourairports"]) };
+    }),
+  );
   ctx.registerSearchSuggestionProvider(createOurAirportsSuggestionProvider(ctx));
 
   // Place-resolver for `oa:` scheme. When the SearchBar / overlay clicks

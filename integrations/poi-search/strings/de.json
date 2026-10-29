@@ -10,7 +10,12 @@
     "wikimedia-commons-logos": {
       "purpose": "Logo-Bild einer Marke für die Anzeige in Suchvorschlägen und Ortsdetails auflösen",
       "dataSent": "Der Wikimedia-Commons-Dateiname aus dem Katalogeintrag der Marke, angefragt über den Bild-Proxy, sodass der Browser nie direkt mit Commons kommuniziert",
-      "dataReceived": "Die Logo-Bilddatei"
+      "dataReceived": "Logo-Bild-URL, Dateiseite, Urheber, Lizenz und erforderliche Hinweise"
+    },
+    "wikidata": {
+      "purpose": "Ausgewählte Markennamen, Beschreibungen, Websites und Logo-Dateireferenzen aus dem mit NSI verteilten Wikidata-Artefakt",
+      "dataSent": "Keine Daten pro Anfrage; das heruntergeladene Artefakt wird beim Build aufbereitet und lokal gelesen",
+      "dataReceived": "Vom Kataloggenerator ausgewählte Wikidata-Namen, Beschreibungen, offizielle Websites und Commons-Dateinamen"
     }
   }
 }

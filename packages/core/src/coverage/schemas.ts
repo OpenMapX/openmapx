@@ -1,38 +1,16 @@
+import { licensingSchema } from "@openmapx/extension-contracts/licensing-schema";
+import { isSafeAttributionUrl, parseLicensing } from "@openmapx/mobility-core/licensing";
 import z from "zod/v4";
 import type { CoverageDomain, CoverageReasonCode, StreamEvidence } from "./types";
 
 const boundedString = (max = 512) => z.string().min(1).max(max);
 const nullableDate = z.iso.datetime().nullable();
 const date = z.iso.datetime();
-const credentialParameterNames = new Set([
-  "access_token",
-  "api_key",
-  "apikey",
-  "client_secret",
-  "credential",
-  "key",
-  "password",
-  "secret",
-  "sig",
-  "signature",
-  "token",
-]);
 const safeHttpUrl = z
   .string()
   .url()
-  .max(2_000)
-  .refine((value) => {
-    try {
-      const url = new URL(value);
-      if (url.protocol !== "http:" && url.protocol !== "https:") return false;
-      if (url.username || url.password) return false;
-      return ![...url.searchParams.keys()].some((key) =>
-        credentialParameterNames.has(key.toLocaleLowerCase()),
-      );
-    } catch {
-      return false;
-    }
-  }, "must be a credential-free HTTP(S) URL");
+  .max(2_048)
+  .refine(isSafeAttributionUrl, "must be a credential-free HTTP(S) URL");
 
 export const coverageDomainSchema = z.enum([
   "addresses",
@@ -170,7 +148,8 @@ const boundsSchema = z
       south < north &&
       west !== east,
     "bounds must be valid WGS84 coordinates",
-  );
+  )
+  .readonly();
 
 const evidenceRegionSchema = z.object({
   keys: z.array(boundedString(256)).max(64),
@@ -234,8 +213,9 @@ export const rightsEvidenceSchema = z
         derivedData: coveragePermissionSchema,
       })
       .strict(),
-    license: z.string().max(512).optional(),
-    licenseUrl: safeHttpUrl.optional(),
+    licensing: licensingSchema
+      .refine((value) => Boolean(parseLicensing(value)), "Invalid licensing")
+      .optional(),
     termsUrl: safeHttpUrl.optional(),
     attribution: z.string().max(1_000).optional(),
     usageConditions: z.array(z.string().min(1).max(1_000)).max(32),
@@ -282,6 +262,17 @@ const roadConditionOperationalMetricsSchema = z.object({
     .record(z.string().max(64), z.number().int().nonnegative())
     .refine((value) => Object.keys(value).length <= 16, "Too many binding buckets")
     .nullable(),
+  bindingReasons: z
+    .array(
+      z.object({
+        status: z.string().max(64),
+        reason: z.string().max(64),
+        situations: z.number().int().nonnegative(),
+        effects: z.number().int().nonnegative(),
+      }),
+    )
+    .max(64)
+    .optional(),
   graph: z.object({
     generation: z.string().max(256).nullable(),
     status: z.enum(["ready", "partial", "missing", "unknown"]),

@@ -17,16 +17,27 @@
   "scripts": {
     "build": "tsup",
     "check-types": "tsc --noEmit",
-    "test": "cd ../.. && vitest run --project node packages/extension-cli/src/__tests__"
+    "test": "cd ../.. && vitest run --project node packages/extension-cli/src/__tests__",
+    "prepack": "pnpm build"
   },
   "dependencies": {
     "commander": "^15.0.0"
   },
   "devDependencies": {
     "@openmapx/integration-framework": "workspace:^",
-    "@types/node": "^26.6.2",
+    "@types/node": "^26.6.5",
     "tsup": "8.5.1",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.1"
-  }
+    "vitest": "^5.0.3",
+    "@openmapx/extension-contracts": "workspace:^"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpenMapX/openmapx.git",
+    "directory": "packages/extension-cli"
+  },
+  "homepage": "https://github.com/OpenMapX/openmapx"
 }

@@ -1,9 +1,9 @@
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
 import { useWildfireStore } from "../store";
 
-const attributionState = vi.hoisted(() => ({ filtered: vi.fn() }));
 const mapContext = vi.hoisted(() => ({ mapRef: { current: null as FakeMap["map"] | null } }));
 const popupState = vi.hoisted(() => ({
   instances: [] as Array<{ removeCalls: number }>,
@@ -15,10 +15,6 @@ vi.mock("@/integration-api/map/MapContext", () => ({
 
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "https://api.test" }),
-}));
-
-vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
-  useSourceAttributions: attributionState.filtered,
 }));
 
 vi.mock("next-intl", () => ({
@@ -93,6 +89,7 @@ function providerCollection(source: "nifc" | "effis" | "noaa-hms") {
                 id,
                 kind: "reported-perimeter" as const,
                 provider: FEED.nifc,
+                contributors: [{ sourceId: FEED.nifc, name: FEED.nifc }],
                 name: "Pine Fire",
               }
             : source === "effis"
@@ -100,12 +97,14 @@ function providerCollection(source: "nifc" | "effis" | "noaa-hms") {
                   id,
                   kind: "satellite-burned-area" as const,
                   provider: FEED.effis,
+                  contributors: [{ sourceId: FEED.effis, name: FEED.effis }],
                   areaHectares: 42,
                 }
               : {
                   id,
                   kind: "observed-smoke" as const,
                   provider: FEED["noaa-hms"],
+                  contributors: [{ sourceId: FEED["noaa-hms"], name: FEED["noaa-hms"] }],
                   density: "medium" as const,
                 },
         geometry: POLYGON,
@@ -121,7 +120,13 @@ const DENSITY_COLLECTION = {
     {
       type: "Feature" as const,
       geometry: { type: "Point" as const, coordinates: [8.25, 50.25] },
-      properties: { count: 2, frpSum: 20, frpMax: 12 },
+      properties: {
+        count: 2,
+        frpSum: 20,
+        frpMax: 12,
+        sources: [VIIRS],
+        contributors: [{ sourceId: VIIRS, name: VIIRS }],
+      },
     },
   ],
   sources: [VIIRS],
@@ -170,7 +175,7 @@ beforeEach(() => {
   fake = createFakeMap({ zoom: 4 });
   mapContext.mapRef.current = fake.map;
   popupState.instances.length = 0;
-  attributionState.filtered.mockClear();
+  useMapAttributionStore.setState({ byLayer: {} });
   useWildfireStore.setState({
     layerVisible: true,
     showHotspots: true,
@@ -258,7 +263,7 @@ describe("WildfireLayer source orchestration", () => {
       expect(useWildfireStore.getState().statuses.effis.error).toBe("unavailable"),
     );
     expect(fake.state.sources.get("openmapx-wildfires-nifc-source")?.data).toEqual(
-      providerCollection("nifc"),
+      published(providerCollection("nifc")),
     );
     expect(fake.state.sources.has("openmapx-wildfires-source")).toBe(true);
     expect(fake.state.layers.has("openmapx-wildfires-nifc-fill")).toBe(true);
@@ -300,18 +305,11 @@ describe("WildfireLayer source orchestration", () => {
     useWildfireStore.setState({ showEffisBurnedAreas: false, showNoaaSmoke: true });
     render(<WildfireLayer />);
 
-    await waitFor(() =>
-      expect(attributionState.filtered).toHaveBeenLastCalledWith("wildfires", [
-        VIIRS,
-        FEED.nifc,
-        FEED["noaa-hms"],
-      ]),
-    );
-    expect(
-      attributionState.filtered.mock.calls.some(([, ids]) =>
-        (ids as string[]).includes(FEED.effis),
-      ),
-    ).toBe(false);
+    await waitFor(() => {
+      renderLoadedFeatures();
+      expect(credits()).toEqual([VIIRS, FEED.nifc, FEED["noaa-hms"]].sort());
+    });
+    expect(credits()).not.toContain(FEED.effis);
   });
 
   it("credits hotspot sources once drawn and drops them when hotspots are hidden", async () => {
@@ -332,21 +330,18 @@ describe("WildfireLayer source orchestration", () => {
     });
     render(<WildfireLayer />);
 
-    await waitFor(() =>
-      expect(attributionState.filtered).toHaveBeenLastCalledWith("wildfires", []),
-    );
+    await waitFor(() => expect(credits()).toEqual([]));
 
     await act(async () => {
       resolveRequest(successfulResponse("https://api.test/wildfires/density?dayRange=1"));
     });
-    await waitFor(() =>
-      expect(attributionState.filtered).toHaveBeenLastCalledWith("wildfires", [VIIRS]),
-    );
+    await waitFor(() => {
+      renderLoadedFeatures();
+      expect(credits()).toEqual([VIIRS]);
+    });
 
     act(() => useWildfireStore.getState().setShowHotspots(false));
-    await waitFor(() =>
-      expect(attributionState.filtered).toHaveBeenLastCalledWith("wildfires", []),
-    );
+    await waitFor(() => expect(credits()).toEqual([]));
   });
 
   it("keeps hotspot attribution after a failed refresh retains last-good data", async () => {
@@ -368,7 +363,10 @@ describe("WildfireLayer source orchestration", () => {
       expect(useWildfireStore.getState().statuses.firms.error).toBe("unavailable"),
     );
 
-    expect(attributionState.filtered).toHaveBeenLastCalledWith("wildfires", [VIIRS]);
+    await waitFor(() => {
+      renderLoadedFeatures();
+      expect(credits()).toEqual([VIIRS]);
+    });
   });
 
   it("removes the first popup when a different source opens the next one", async () => {
@@ -474,3 +472,45 @@ describe("WildfireLayer source orchestration", () => {
     await waitFor(() => expect(popupState.instances[1]?.removeCalls).toBe(1));
   });
 });
+
+function published<T extends { features: { properties: object }[] }>(data: T) {
+  return {
+    ...data,
+    features: data.features.map((feature) => ({
+      ...feature,
+      properties: {
+        ...feature.properties,
+        _mapAttributions: JSON.stringify(
+          (feature.properties as { contributors?: unknown }).contributors ?? [],
+        ),
+      },
+    })),
+  };
+}
+
+function credits() {
+  return [
+    ...new Set(
+      Object.entries(useMapAttributionStore.getState().byLayer)
+        .filter(([key]) => key.startsWith("rendered:wildfires-"))
+        .flatMap(([, entries]) => entries.map((entry) => entry.fullHtml)),
+    ),
+  ].sort();
+}
+
+/** Simulate the worker's rendered snapshot, using the exact features published by production components. */
+function renderLoadedFeatures() {
+  for (const [id, layer] of fake.state.layers) {
+    if (layer.type === "heatmap") continue;
+    const collection = fake.state.sources.get(String(layer.source))?.data as
+      | { features?: GeoJSON.Feature[] }
+      | undefined;
+    fake.state.renderedFeatures.set(
+      id,
+      (collection?.features ?? []).map(
+        (feature) => ({ ...feature, layer: { id, type: String(layer.type) } }) as MapGeoJSONFeature,
+      ),
+    );
+  }
+  fake.emit("render");
+}

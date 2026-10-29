@@ -6,6 +6,7 @@ import {
   type StreetLevelSearchQuery,
 } from "@openmapx/core";
 import type { StreetLevelCapabilities, StreetLevelProvider } from "@openmapx/integration-framework";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 
 const GRAPH = "https://graph.mapillary.com";
 const FIELDS =
@@ -61,8 +62,7 @@ export function graphImageToStreetLevelImage(
       sd: raw.thumb_2048_url,
       hd: raw.thumb_original_url,
     },
-    license: "CC BY-SA 4.0",
-    licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+    licensing: licensingFromDeclaration("CC-BY-SA-4.0", undefined, "Mapillary image", "imagery"),
     pageUrl: `https://www.mapillary.com/app/?pKey=${raw.id}`,
   };
 }
@@ -116,6 +116,7 @@ export function createMapillaryProvider(options: {
           minzoom: 6,
           maxzoom: 14,
           layers: { sequences: "sequence", pictures: "image" },
+          layerSourceIds: { sequence: ["mapillary"], image: ["mapillary"] },
           props: {
             id: "id",
             isPano: "is_pano",

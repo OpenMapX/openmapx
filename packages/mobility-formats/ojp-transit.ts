@@ -1,3 +1,4 @@
+import { parseElapsedDurationSeconds } from "./elapsed-duration.js";
 import {
   getOjpDelivery,
   type OjpGeoPosition,
@@ -209,15 +210,8 @@ export interface OjpFareResponse {
 }
 
 function parseIsoDurationSeconds(value: string | undefined): number | undefined {
-  if (!value) return undefined;
-  const match = value.match(/^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/i);
-  if (!match) return undefined;
-  const days = Number(match[1] ?? 0);
-  const hours = Number(match[2] ?? 0);
-  const minutes = Number(match[3] ?? 0);
-  const seconds = Number(match[4] ?? 0);
-  const total = days * 86_400 + hours * 3_600 + minutes * 60 + seconds;
-  return Number.isFinite(total) ? Math.round(total) : undefined;
+  const seconds = parseElapsedDurationSeconds(value);
+  return seconds === undefined ? undefined : Math.round(seconds);
 }
 
 function parseNumber(value: string | undefined): number | undefined {

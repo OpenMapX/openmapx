@@ -6,14 +6,15 @@ export {
   useMangroveTransport,
   useMangroveWebauthnKeyName,
 } from "./provider";
+export type { SignerAccount, SignerConfig, SignerTransport } from "./signer";
+export { clearMangroveSignerStorage, MangroveSignerError } from "./signer";
+export { useMangroveSigner } from "./signerProvider";
 export type { MangroveCurrentUser, MangroveTransport } from "./transport";
 export type {
   CreateKeypairEnvelopePayload,
   EnvelopeState,
-  KeypairEncryptionMode,
   KeypairEnvelope,
   KeypairEnvelopeEncrypted,
-  KeypairEnvelopeUnencrypted,
   KeypairWrap,
   KeypairWrapType,
   PlaceReviewsQuery,
@@ -22,6 +23,7 @@ export type {
   UploadReviewImagePayload,
   WrapMeta,
 } from "./types";
+export { MAX_KEYPAIR_WRAPS, MangroveConflictError } from "./types";
 export {
   type AddPassphraseWrapInput,
   type AddWebAuthnWrapInput,
@@ -30,7 +32,6 @@ export {
   type SetupInput,
   type SetupPassphraseAndWebAuthnInput,
   type SetupPassphraseInput,
-  type SetupUnencryptedInput,
   type UnlockInput,
   type UnlockPassphraseInput,
   type UnlockWebAuthnInput,
@@ -47,5 +48,6 @@ export {
   useUserKeypair,
 } from "./useKeypair";
 export { usePlaceReviews, useReviewAggregate } from "./usePlaceReviews";
+export { useReviewIdentity } from "./useReviewIdentity";
 export { type SubmitReviewInput, useSubmitReview } from "./useSubmitReview";
 export { useUploadReviewImage } from "./useUploadReviewImage";

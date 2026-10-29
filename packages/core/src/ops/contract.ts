@@ -1,3 +1,7 @@
+import {
+  canonicalExtensionLocator,
+  extensionLocatorSchema,
+} from "@openmapx/extension-contracts/extension";
 import z from "zod/v4";
 
 export const OPS_PROTOCOL_VERSION = 1 as const;
@@ -16,6 +20,9 @@ export const OPS_OPERATION_KINDS = [
   "docker.status",
   "stack.status",
   "stack.render",
+  "configuration.inspect",
+  "configuration.hardlinks.inspect",
+  "configuration.failure.inspect",
   "stack.start",
   "stack.stop",
   "service.start",
@@ -37,6 +44,8 @@ export const OPS_OPERATION_KINDS = [
   "release.apply",
   "appApi.replace",
   "appApi.runtime.inspect",
+  "agent.update",
+  "agent.handoff.inspect",
   "backup.list",
   "backup.create",
   "backup.restore",
@@ -44,10 +53,17 @@ export const OPS_OPERATION_KINDS = [
   "system.diagnostics",
   "system.inspect",
   "system.update",
-  "extension.repository.inspect",
-  "extension.install",
-  "extension.update",
-  "extension.remove",
+  "serviceRepository.inspect",
+  "serviceRepository.publish",
+  "serviceRepository.settle",
+  "serviceRepository.remove",
+  "communityServices.inspect",
+  "integration.inspect",
+  "integration.publish",
+  "integration.settle",
+  "integration.remove",
+  "integration.adopt",
+  "installedIntegrations.inspect",
   "serviceSelection.apply",
   "serviceSelection.inspect",
   "serviceConfig.apply",
@@ -80,9 +96,22 @@ export const OPS_OPERATION_KINDS = [
   "transitousLock.propose",
   "transitousLock.approve",
   "gbfsCatalogLock.inspect",
+  "transitousPin.inspect",
 ] as const;
 
 export type OpsOperationKind = (typeof OPS_OPERATION_KINDS)[number];
+
+/** `none` means no handoff with the requested ID exists. */
+export const OPS_AGENT_HANDOFF_PHASES = [
+  "none",
+  "launched",
+  "overlay_written",
+  "recreated",
+  "applied",
+  "rolled_back",
+  "failed",
+] as const;
+export type OpsAgentHandoffPhase = (typeof OPS_AGENT_HANDOFF_PHASES)[number];
 export type OpsRole = "api" | "data-manager";
 export type OpsExecutionMode = "sync" | "async";
 
@@ -108,19 +137,25 @@ const asyncEffect = (
   emitsEvents = true,
 ): OpsKindPolicy => ({ role, execution: "async", timeoutMs, maxResultBytes, emitsEvents });
 
+// Leave settlement time after the whole lifecycle command deadline.
+const LIFECYCLE_TIMEOUT_MS = 10 * 60_000 + 30_000;
+
 export const OPS_KIND_POLICIES = {
   "docker.status": sync("api", 5_000),
   "stack.status": sync("api", 15_000, 256 * 1024),
+  "configuration.inspect": sync("api", 15_000),
+  "configuration.hardlinks.inspect": sync("api", 15_000, 1024 * 1024),
+  "configuration.failure.inspect": sync("api", 15_000),
   "stack.render": asyncEffect("api", 120_000),
-  "stack.start": asyncEffect("api", 5 * 60_000),
+  "stack.start": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "stack.stop": asyncEffect("api", 5 * 60_000),
-  "service.start": asyncEffect("api", 3 * 60_000),
-  "service.stop": asyncEffect("api", 3 * 60_000),
-  "service.restart": asyncEffect("api", 2 * 60_000),
-  "service.recreate": asyncEffect("api", 5 * 60_000),
-  "service.recreateIsolated": asyncEffect("api", 5 * 60_000),
+  "service.start": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
+  "service.stop": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
+  "service.restart": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
+  "service.recreate": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
+  "service.recreateIsolated": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "service.pull": asyncEffect("api", 15 * 60_000),
-  "service.remove": asyncEffect("api", 3 * 60_000),
+  "service.remove": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "service.update": asyncEffect("api", 15 * 60_000),
   "service.build": asyncEffect("api", 30 * 60_000),
   "services.buildAll": asyncEffect("api", 30 * 60_000, 16 * 1024),
@@ -133,6 +168,8 @@ export const OPS_KIND_POLICIES = {
   "release.apply": asyncEffect("api", 30 * 60_000),
   "appApi.replace": asyncEffect("api", 10 * 60_000),
   "appApi.runtime.inspect": sync("api", 30_000),
+  "agent.update": asyncEffect("api", 2 * 60_000),
+  "agent.handoff.inspect": sync("api", 30_000),
   "backup.list": sync("api", 30_000, 256 * 1024),
   "backup.create": asyncEffect("api", 30 * 60_000),
   "backup.restore": asyncEffect("api", 30 * 60_000),
@@ -140,10 +177,17 @@ export const OPS_KIND_POLICIES = {
   "system.diagnostics": asyncEffect("api", 10 * 60_000, 256 * 1024),
   "system.inspect": sync("api", 30_000, 256 * 1024),
   "system.update": asyncEffect("api", 30 * 60_000),
-  "extension.repository.inspect": asyncEffect("api", 5 * 60_000, 256 * 1024),
-  "extension.install": asyncEffect("api", 30 * 60_000),
-  "extension.update": asyncEffect("api", 30 * 60_000),
-  "extension.remove": asyncEffect("api", 15 * 60_000),
+  "serviceRepository.inspect": asyncEffect("api", 5 * 60_000, 1024 * 1024),
+  "serviceRepository.publish": asyncEffect("api", 10 * 60_000),
+  "serviceRepository.settle": asyncEffect("api", 5 * 60_000),
+  "serviceRepository.remove": asyncEffect("api", 5 * 60_000),
+  "communityServices.inspect": sync("api", 15_000, 1024 * 1024),
+  "integration.inspect": asyncEffect("api", 5 * 60_000, 256 * 1024),
+  "integration.publish": asyncEffect("api", 10 * 60_000),
+  "integration.settle": asyncEffect("api", 5 * 60_000),
+  "integration.remove": asyncEffect("api", 5 * 60_000),
+  "integration.adopt": asyncEffect("api", 10 * 60_000),
+  "installedIntegrations.inspect": sync("api", 15_000, 1024 * 1024),
   "serviceSelection.apply": asyncEffect("api", 2 * 60_000),
   "serviceSelection.inspect": sync("api", 15_000),
   "serviceConfig.apply": asyncEffect("api", 2 * 60_000),
@@ -176,6 +220,8 @@ export const OPS_KIND_POLICIES = {
   "transitousLock.propose": sync("data-manager", 30_000),
   "transitousLock.approve": sync("data-manager", 30_000),
   "gbfsCatalogLock.inspect": sync("data-manager", 30_000),
+  // Read-only, for the admin panel: the pins, never a proposal or a change.
+  "transitousPin.inspect": sync("api", 30_000),
 } as const satisfies Record<OpsOperationKind, OpsKindPolicy>;
 
 const operationKindSchema = z.enum(OPS_OPERATION_KINDS);
@@ -218,6 +264,55 @@ const transitousSubmodulesSchema = z.record(
   z.string().regex(/^[0-9a-f]{40}$/),
 );
 const actorLabelSchema = z.string().min(1).max(128);
+
+// Community service repositories. The ops-agent owns their checkouts in its
+// community store, as `<repository>`, where the repository id is the first 16
+// hex digits of the SHA-256 of the canonical URL.
+const repositoryIdSchema = z.string().regex(/^[a-f0-9]{16}$/);
+const gitCommitSchema = z.string().regex(/^[a-f0-9]{40}$/);
+// The canonical form of an allowed Git URL: https on the default port, without
+// credentials, query or fragment. The agent checks the host allowlist again
+// before it fetches anything.
+const gitRepositoryUrlSchema = z
+  .string()
+  .max(2_048)
+  .regex(/^https:\/\/[a-z0-9.-]+\/[^\s?#]+$/);
+const gitRefSchema = z
+  .string()
+  .min(1)
+  .max(255)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/);
+const repositoryTransactionIdSchema = z.string().regex(/^txn1_[a-f0-9]{24}$/);
+const serviceIdListSchema = z.array(serviceIdSchema).max(256);
+// What the API needs to undo an interrupted extension change, kept by the agent
+// with the pending repository transaction so it survives an API restart.
+const repositoryRecoverySchema = z.strictObject({
+  selectionBefore: serviceIdListSchema.nullable(),
+  touchedServiceIds: serviceIdListSchema,
+  previouslyEnabledServiceIds: serviceIdListSchema,
+});
+// A service manifest as read from a checkout. Its receiver validates it with
+// the service manifest rules; the result size limit bounds it here.
+const serviceManifestObjectSchema = z.record(z.string().max(256), z.unknown());
+
+// Installed integrations. The ops-agent owns `<integration store>/<id>` and
+// records the SHA-256 of every file it installed there.
+const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
+const integrationTransactionIdSchema = z.string().regex(/^itx1_[a-f0-9]{24}$/);
+// An HTTPS artifact pinned by its SHA-256, or an archive the operator staged
+// in the agent's state directory, named by its SHA-256.
+export const integrationSourceSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("artifact"),
+    url: extensionLocatorSchema.transform(canonicalExtensionLocator),
+    sha256: sha256Schema,
+  }),
+  z.strictObject({ kind: z.literal("upload"), sha256: sha256Schema }),
+]);
+const integrationFileSchema = z.strictObject({
+  path: z.string().min(1).max(1_024),
+  sha256: sha256Schema,
+});
 const transitousLockRecordSchema = z.strictObject({
   ref: transitousRefSchema,
   submodules: transitousSubmodulesSchema,
@@ -230,10 +325,31 @@ const kindOnly = <T extends OpsOperationKind>(kind: T) => z.strictObject({ kind:
 const serviceOperation = <T extends OpsOperationKind>(kind: T) =>
   z.strictObject({ kind: z.literal(kind), serviceId: serviceIdSchema });
 
+export const configurationGenerationRevisionSchema = z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/);
+
 export const opsOperationSchema = z.discriminatedUnion("kind", [
   kindOnly("docker.status"),
   kindOnly("stack.status"),
-  z.strictObject({ kind: z.literal("stack.render"), revisionId: stableIdSchema }),
+  kindOnly("configuration.inspect"),
+  z.strictObject({
+    kind: z.literal("stack.render"),
+    revisionId: stableIdSchema,
+    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
+  }),
+  // The hardlink plan of the named, applied configuration generation. Fails if
+  // another generation has been applied since. Data-manager applies it: only
+  // its mounts confine the links and prunes to the data root.
+  z.strictObject({
+    kind: z.literal("configuration.hardlinks.inspect"),
+    revisionId: configurationGenerationRevisionSchema,
+  }),
+  // Why a configuration apply was not committed, when the operator can act
+  // on it (an override render may not use), as one line for the admin panel.
+  // A separate operation, so the apply result itself stays as before.
+  z.strictObject({
+    kind: z.literal("configuration.failure.inspect"),
+    attemptedRevisionId: configurationGenerationRevisionSchema,
+  }),
   kindOnly("stack.start"),
   kindOnly("stack.stop"),
   serviceOperation("service.start"),
@@ -276,6 +392,13 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
     updateJobId: stableIdSchema,
   }),
   kindOnly("appApi.runtime.inspect"),
+  z.strictObject({
+    kind: z.literal("agent.update"),
+    releaseId: stableIdSchema,
+    expectedDigest: z.string().regex(/^[a-f0-9]{64}$/),
+    handoffId: stableIdSchema,
+  }),
+  z.strictObject({ kind: z.literal("agent.handoff.inspect"), handoffId: stableIdSchema }),
   kindOnly("backup.list"),
   z.strictObject({ kind: z.literal("backup.create"), backupId: backupIdSchema }),
   z.strictObject({
@@ -290,42 +413,100 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("system.update"),
     releaseId: stableIdSchema,
+    expectedDigest: z.string().regex(/^[a-f0-9]{64}$/),
     createBackup: z.boolean(),
     backupId: backupIdSchema.optional(),
   }),
+  // Clones a repository into staging, validates its services and discards the
+  // clone. Validation problems are part of the result, not a failure.
   z.strictObject({
-    kind: z.literal("extension.repository.inspect"),
-    catalogEntryId: stableIdSchema,
-    catalogRevisionId: stableIdSchema,
+    kind: z.literal("serviceRepository.inspect"),
+    url: gitRepositoryUrlSchema,
+    ref: gitRefSchema.optional(),
   }),
+  // Installs the exact commit as the repository's checkout. The previous
+  // checkout is kept until the transaction is settled.
   z.strictObject({
-    kind: z.literal("extension.install"),
+    kind: z.literal("serviceRepository.publish"),
+    url: gitRepositoryUrlSchema,
+    commit: gitCommitSchema,
+    // The ref the commit was inspected at, for hosts that refuse to fetch an
+    // unadvertised commit; it must still resolve to `commit`.
+    ref: gitRefSchema.optional(),
     extensionId: serviceIdSchema,
-    catalogEntryId: stableIdSchema,
-    catalogRevisionId: stableIdSchema,
+    recovery: repositoryRecoverySchema,
   }),
   z.strictObject({
-    kind: z.literal("extension.update"),
-    extensionId: serviceIdSchema,
-    catalogRevisionId: stableIdSchema,
+    kind: z.literal("serviceRepository.settle"),
+    repository: repositoryIdSchema,
+    transactionId: repositoryTransactionIdSchema,
+    // `rollback` restores the previous checkout and keeps the recovery note;
+    // `release` drops the note once the API has restored what it describes.
+    outcome: z.enum(["commit", "rollback", "release"]),
   }),
-  z.strictObject({ kind: z.literal("extension.remove"), extensionId: serviceIdSchema }),
-  z.strictObject({ kind: z.literal("serviceSelection.apply"), revisionId: stableIdSchema }),
+  z.strictObject({
+    kind: z.literal("serviceRepository.remove"),
+    repository: repositoryIdSchema,
+    extensionId: serviceIdSchema,
+  }),
+  kindOnly("communityServices.inspect"),
+  // Fetches an integration archive into staging, validates it and discards it.
+  // Validation problems are part of the result, not a failure.
+  z.strictObject({ kind: z.literal("integration.inspect"), source: integrationSourceSchema }),
+  // Installs the archive as `<integration store>/<integrationId>`. The previous
+  // copy is kept until the transaction is settled. Without `extensionId` the
+  // operator installs it (the host CLI). The owner is bookkeeping, not a
+  // boundary: app-api and the fixed CLI share the `api` principal.
+  z.strictObject({
+    kind: z.literal("integration.publish"),
+    integrationId: serviceIdSchema,
+    source: integrationSourceSchema,
+    extensionId: serviceIdSchema.optional(),
+  }),
+  z.strictObject({
+    kind: z.literal("integration.settle"),
+    integrationId: serviceIdSchema,
+    transactionId: integrationTransactionIdSchema,
+    outcome: z.enum(["commit", "rollback"]),
+  }),
+  z.strictObject({
+    kind: z.literal("integration.remove"),
+    integrationId: serviceIdSchema,
+    extensionId: serviceIdSchema.optional(),
+  }),
+  // Records an integration installed before the agent kept records, but only
+  // when its files match `source` fetched again; anything else needs a
+  // reinstall. Without a source nothing can be verified.
+  z.strictObject({
+    kind: z.literal("integration.adopt"),
+    integrationId: serviceIdSchema,
+    extensionId: serviceIdSchema.optional(),
+    source: integrationSourceSchema.optional(),
+  }),
+  kindOnly("installedIntegrations.inspect"),
+  z.strictObject({
+    kind: z.literal("serviceSelection.apply"),
+    revisionId: stableIdSchema,
+    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
+  }),
   kindOnly("serviceSelection.inspect"),
   z.strictObject({
     kind: z.literal("serviceConfig.apply"),
     serviceId: serviceIdSchema,
     revisionId: stableIdSchema,
+    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
   }),
   z.strictObject({
     kind: z.literal("integrationConfig.apply"),
     integrationId: serviceIdSchema,
     revisionId: stableIdSchema,
+    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
   }),
   z.strictObject({
     kind: z.literal("vault.apply"),
     serviceId: serviceIdSchema,
     revisionId: stableIdSchema,
+    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
   }),
   kindOnly("data.inspect"),
   z.strictObject({ kind: z.literal("data.downloadOsm"), regionId: regionIdSchema.optional() }),
@@ -381,6 +562,7 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
     approvedBy: actorLabelSchema,
   }),
   kindOnly("gbfsCatalogLock.inspect"),
+  kindOnly("transitousPin.inspect"),
 ]);
 export type OpsOperation = z.infer<typeof opsOperationSchema>;
 
@@ -411,6 +593,7 @@ export type OpsErrorClass =
   | "not_found"
   | "not_wired"
   | "recovery_required"
+  | "host_update_required"
   | "runtime";
 export const OPS_PUBLIC_ERROR_MESSAGES: Record<OpsErrorClass, string> = {
   authentication: "Request authentication failed",
@@ -425,6 +608,8 @@ export const OPS_PUBLIC_ERROR_MESSAGES: Record<OpsErrorClass, string> = {
   not_found: "Operation was not found",
   not_wired: "Operation is not available",
   recovery_required: "Operation requires an explicit retry",
+  host_update_required:
+    "Host update required: the operations agent or its backup helper could not be updated from the admin panel. Run `pnpm openmapx compose release`, then `pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner` on the host.",
   runtime: "Operation failed",
 };
 export class OpsContractError extends Error {
@@ -473,7 +658,7 @@ export interface OpsResourcePolicy {
   allowPreparedRun?: (preparedRunId: string) => PolicyResult;
   allowCandidate?: (candidateId: string) => PolicyResult;
   allowRelease?: (
-    kind: "release.pull" | "release.apply" | "appApi.replace" | "system.update",
+    kind: "release.pull" | "release.apply" | "appApi.replace" | "agent.update" | "system.update",
     releaseId: string,
   ) => PolicyResult;
   allowUpdateJobId?: (updateJobId: string) => PolicyResult;
@@ -481,10 +666,6 @@ export interface OpsResourcePolicy {
   allowCountry?: (kind: "data.update", countryCode: string) => PolicyResult;
   allowDataType?: (dataTypeId: string) => PolicyResult;
   allowCatalogRevision?: (kind: "data.generateApiKeys", catalogRevisionId: string) => PolicyResult;
-  allowExtension?: (
-    kind: "extension.install" | "extension.update" | "extension.remove",
-    extensionId: string,
-  ) => PolicyResult;
   allowIntegration?: (integrationId: string) => PolicyResult;
   allowTrustedRevision?: (kind: OpsOperationKind, revisionId: string) => PolicyResult;
 }
@@ -526,6 +707,7 @@ export async function authorizeOpsResources(
       return allowed(policy.allowCandidate?.(operation.candidateId));
     case "release.pull":
     case "release.apply":
+    case "agent.update":
       return allowed(policy.allowRelease?.(operation.kind, operation.releaseId));
     case "appApi.replace":
       return (
@@ -539,24 +721,6 @@ export async function authorizeOpsResources(
           (operation.backupId !== undefined &&
             (await allowed(policy.allowBackup?.("backup.create", operation.backupId)))))
       );
-    case "extension.repository.inspect":
-      return (
-        (await allowed(policy.allowTrustedRevision?.(operation.kind, operation.catalogEntryId))) &&
-        allowed(policy.allowTrustedRevision?.(operation.kind, operation.catalogRevisionId))
-      );
-    case "extension.install":
-      return (
-        (await allowed(policy.allowExtension?.(operation.kind, operation.extensionId))) &&
-        (await allowed(policy.allowTrustedRevision?.(operation.kind, operation.catalogEntryId))) &&
-        allowed(policy.allowTrustedRevision?.(operation.kind, operation.catalogRevisionId))
-      );
-    case "extension.update":
-      return (
-        (await allowed(policy.allowExtension?.(operation.kind, operation.extensionId))) &&
-        allowed(policy.allowTrustedRevision?.(operation.kind, operation.catalogRevisionId))
-      );
-    case "extension.remove":
-      return allowed(policy.allowExtension?.(operation.kind, operation.extensionId));
     case "stack.render":
     case "serviceSelection.apply":
       return allowed(policy.allowTrustedRevision?.(operation.kind, operation.revisionId));
@@ -604,6 +768,10 @@ export async function authorizeOpsResources(
 }
 
 const changed = z.strictObject({ changed: z.boolean() });
+const confirmedMotisStop = z.strictObject({
+  changed: z.boolean(),
+  state: z.enum(["stopped", "absent"]),
+});
 const completed = z.strictObject({ completed: z.literal(true) });
 const inspection = z.strictObject({ state: z.enum(["ready", "not_ready", "unknown"]) });
 const serviceRuntimeState = z.enum([
@@ -671,11 +839,29 @@ const backupInventoryEntry = z
       });
     }
   });
-const extension = z.strictObject({ extensionId: serviceIdSchema, revisionId: stableIdSchema });
-const revision = z.strictObject({
-  revisionId: stableIdSchema,
-  enabledServiceIds: z.array(serviceIdSchema).max(256),
+const repositoryPending = z.strictObject({
+  transactionId: repositoryTransactionIdSchema,
+  phase: z.enum(["published", "rolledBack"]),
+  previousCommit: gitCommitSchema.nullable(),
+  recovery: repositoryRecoverySchema,
 });
+export const configurationApplyResultSchema = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("committed"),
+    revisionId: configurationGenerationRevisionSchema,
+    enabledServiceIds: z.array(serviceIdSchema).max(256),
+    followUp: z.enum(["complete", "failed"]),
+    cleanupFailed: z.boolean(),
+  }),
+  z.strictObject({
+    outcome: z.literal("not_committed"),
+    reason: z.enum(["conflict", "busy", "failed"]),
+    currentRevisionId: configurationGenerationRevisionSchema.nullable().optional(),
+    cleanupFailed: z.boolean(),
+  }),
+]);
+export type ConfigurationApplyResult = z.infer<typeof configurationApplyResultSchema>;
+const revision = configurationApplyResultSchema;
 const data = z.strictObject({
   completed: z.literal(true),
   resourceId: resourceIdSchema.optional(),
@@ -769,6 +955,36 @@ export const OPS_RESULT_SCHEMAS = {
       )
       .max(256),
   }),
+  "configuration.hardlinks.inspect": z.strictObject({
+    revisionId: configurationGenerationRevisionSchema,
+    plan: z
+      .array(
+        z.strictObject({
+          source: z.string().min(1).max(1_024),
+          target: z.string().min(1).max(1_024),
+          consumerService: serviceIdSchema,
+          dataType: z.string().min(1).max(128),
+          instance: z.string().min(1).max(128).optional(),
+          targetFilename: z.string().min(1).max(255).optional(),
+        }),
+      )
+      .max(256),
+  }),
+  "configuration.failure.inspect": z.strictObject({
+    attemptedRevisionId: configurationGenerationRevisionSchema,
+    problem: z.string().min(1).max(4_096).nullable(),
+  }),
+  "configuration.inspect": z.strictObject({
+    revisionId: configurationGenerationRevisionSchema.nullable(),
+    integrationConfigDigests: z
+      .array(
+        z.strictObject({
+          integrationId: serviceIdSchema,
+          digest: z.string().regex(/^[a-f0-9]{64}$/),
+        }),
+      )
+      .max(256),
+  }),
   "stack.render": revision,
   "stack.start": changed,
   "stack.stop": changed,
@@ -818,12 +1034,25 @@ export const OPS_RESULT_SCHEMAS = {
   "release.inspect": z.strictObject({
     currentReleaseId: stableIdSchema.optional(),
     availableReleaseId: stableIdSchema.optional(),
+    configuredSelector: z.string().max(128).optional(),
+    currentVersion: z.string().max(128).optional(),
+    availableVersion: z.string().max(128).optional(),
+    availableDigest: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
   }),
   "release.apply": release,
   "appApi.replace": z.strictObject({ updateJobId: stableIdSchema, replaced: z.boolean() }),
   "appApi.runtime.inspect": z.strictObject({
     releaseId: stableIdSchema.optional(),
     updateJobId: stableIdSchema.optional(),
+  }),
+  "agent.update": z.strictObject({ handoffId: stableIdSchema, replaced: z.boolean() }),
+  "agent.handoff.inspect": z.strictObject({
+    handoffId: stableIdSchema,
+    phase: z.enum(OPS_AGENT_HANDOFF_PHASES),
+    reason: z.string().max(256).optional(),
   }),
   "backup.list": z.strictObject({
     backups: z.array(backupInventoryEntry).max(OPS_MAX_BACKUP_INVENTORY_ENTRIES),
@@ -845,6 +1074,13 @@ export const OPS_RESULT_SCHEMAS = {
     release: z.strictObject({
       currentReleaseId: stableIdSchema.optional(),
       availableReleaseId: stableIdSchema.optional(),
+      configuredSelector: z.string().max(128).optional(),
+      currentVersion: z.string().max(128).optional(),
+      availableVersion: z.string().max(128).optional(),
+      availableDigest: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
     }),
     services: z
       .array(
@@ -865,14 +1101,96 @@ export const OPS_RESULT_SCHEMAS = {
       ),
   }),
   "system.update": release,
-  "extension.repository.inspect": z.strictObject({
-    catalogEntryId: stableIdSchema,
-    revisionId: stableIdSchema,
+  "serviceRepository.inspect": z.strictObject({
+    url: gitRepositoryUrlSchema,
+    repository: repositoryIdSchema,
+    commit: gitCommitSchema,
     valid: z.boolean(),
+    problems: z.array(z.string().max(1_024)).max(64),
+    services: z
+      .array(z.strictObject({ path: z.string().max(512), manifest: serviceManifestObjectSchema }))
+      .max(64),
   }),
-  "extension.install": extension,
-  "extension.update": extension,
-  "extension.remove": z.strictObject({ extensionId: serviceIdSchema, removed: z.boolean() }),
+  "serviceRepository.publish": z.strictObject({
+    repository: repositoryIdSchema,
+    commit: gitCommitSchema,
+    transactionId: repositoryTransactionIdSchema,
+    serviceIds: serviceIdListSchema,
+  }),
+  "serviceRepository.settle": z.strictObject({
+    repository: repositoryIdSchema,
+    outcome: z.enum(["commit", "rollback", "release"]),
+    changed: z.boolean(),
+  }),
+  "serviceRepository.remove": z.strictObject({
+    repository: repositoryIdSchema,
+    removed: z.boolean(),
+  }),
+  "communityServices.inspect": z.strictObject({
+    revisionId: stableIdSchema,
+    repositories: z
+      .array(
+        z.strictObject({
+          repository: repositoryIdSchema,
+          url: gitRepositoryUrlSchema.nullable(),
+          commit: gitCommitSchema.nullable(),
+          extensionId: serviceIdSchema.nullable(),
+          pending: repositoryPending.nullable(),
+        }),
+      )
+      .max(256),
+    services: z
+      .array(
+        z.strictObject({
+          repository: repositoryIdSchema,
+          directory: z.string().min(1).max(4_096),
+          manifest: serviceManifestObjectSchema,
+        }),
+      )
+      .max(256),
+  }),
+  "integration.inspect": z.strictObject({
+    integrationId: serviceIdSchema.nullable(),
+    valid: z.boolean(),
+    problems: z.array(z.string().max(1_024)).max(64),
+    manifest: serviceManifestObjectSchema.nullable(),
+  }),
+  "integration.publish": z.strictObject({
+    integrationId: serviceIdSchema,
+    transactionId: integrationTransactionIdSchema,
+    manifestSha256: sha256Schema,
+  }),
+  "integration.settle": z.strictObject({
+    integrationId: serviceIdSchema,
+    outcome: z.enum(["commit", "rollback"]),
+    changed: z.boolean(),
+  }),
+  "integration.remove": z.strictObject({
+    integrationId: serviceIdSchema,
+    removed: z.boolean(),
+  }),
+  "integration.adopt": z.strictObject({
+    integrationId: serviceIdSchema,
+    status: z.enum(["recorded", "needs_reinstall"]),
+    reason: z.string().max(1_024).nullable(),
+  }),
+  "installedIntegrations.inspect": z.strictObject({
+    integrations: z
+      .array(
+        z.strictObject({
+          integrationId: serviceIdSchema,
+          extensionId: serviceIdSchema.nullable(),
+          status: z.enum(["ok", "needs_reinstall"]),
+          reason: z.string().max(1_024).nullable(),
+          source: integrationSourceSchema.nullable(),
+          files: z.array(integrationFileSchema).max(128),
+          pending: z.strictObject({ transactionId: integrationTransactionIdSchema }).nullable(),
+        }),
+      )
+      .max(256),
+    // Directories in the integration store the agent holds no record of.
+    unrecorded: z.array(serviceIdSchema).max(256),
+  }),
   "serviceSelection.apply": revision,
   "serviceSelection.inspect": z.strictObject({
     source: z.enum(["env", "file", "default"]),
@@ -928,9 +1246,9 @@ export const OPS_RESULT_SCHEMAS = {
   "data.searchIndexBuild": data,
   "data.notablePlacesBuild": data,
   "motis.staging.restart": changed,
-  "motis.staging.stop": changed,
+  "motis.staging.stop": confirmedMotisStop,
   "motis.primary.restart": changed,
-  "motis.primary.stop": changed,
+  "motis.primary.stop": confirmedMotisStop,
   "motis.primary.promote": z.strictObject({ activeRunId: stableIdSchema }),
   "feedProxy.validateAndReload": z.strictObject({
     candidateId: stableIdSchema,
@@ -954,6 +1272,12 @@ export const OPS_RESULT_SCHEMAS = {
   "transitousLock.approve": z.strictObject({
     ref: transitousRefSchema,
     lockedAt: timestampSchema,
+  }),
+  "transitousPin.inspect": z.strictObject({
+    /** The pin the release ships. */
+    release: transitousLockRecordSchema,
+    /** The pin in effect: the release's, or one approved over it. */
+    active: transitousLockRecordSchema,
   }),
   "gbfsCatalogLock.inspect": z.strictObject({
     commit: z.string().regex(/^[0-9a-f]{40}$/),
@@ -1163,12 +1487,12 @@ export function opsResourceId(operation: OpsOperation): string {
   if ("backupId" in operation && operation.backupId) return operation.backupId;
   if ("preparedRunId" in operation) return operation.preparedRunId;
   if ("candidateId" in operation) return operation.candidateId;
-  if ("extensionId" in operation) return operation.extensionId;
+  if ("repository" in operation) return operation.repository;
+  if ("extensionId" in operation && operation.extensionId) return operation.extensionId;
   if ("integrationId" in operation) return operation.integrationId;
   if ("regionId" in operation && operation.regionId) return operation.regionId;
   if ("dataTypeId" in operation) return operation.dataTypeId;
   if ("releaseId" in operation) return operation.releaseId;
   if ("revisionId" in operation) return operation.revisionId;
-  if ("catalogEntryId" in operation) return operation.catalogEntryId;
   return operation.kind;
 }

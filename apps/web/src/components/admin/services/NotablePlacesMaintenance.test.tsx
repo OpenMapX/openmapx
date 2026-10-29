@@ -1,8 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-const status = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
+const status = vi.hoisted(() => ({ current: {} as Record<string, unknown> | null }));
 
+vi.mock("@/lib/admin/serviceAdminJobs", () => ({ useServiceJobRegistration: () => vi.fn() }));
 vi.mock("../shared/AdminToast", () => ({ useAdminToast: () => vi.fn() }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
@@ -30,7 +31,7 @@ describe("NotablePlacesMaintenance", () => {
   });
 
   it("explains what search does without an index", async () => {
-    status.current = { ok: false, error: "notable_places index not built" };
+    status.current = null;
     const { NotablePlacesMaintenance } = await import("./NotablePlacesMaintenance");
     const markup = renderToStaticMarkup(<NotablePlacesMaintenance apiUrl="http://api.test" />);
     expect(markup).toContain("No notable-places index is published yet");

@@ -1,0 +1,108 @@
+{
+  "name": "Straßenwetter",
+  "description": "Straßenwetterstationen und ihre Messwerte: Zustand und Temperatur der Fahrbahn und das Wetter darüber",
+  "fallbackName": "Straßenwetterstation",
+  "summary": {
+    "two": "{first} · {second}",
+    "three": "{first} · {second} · {third}",
+    "road": "Fahrbahn {value, number, ::.0} °C",
+    "air": "Luft {value, number, ::.0} °C",
+    "grip": "Griffigkeit {value, number, ::.00}",
+    "closed": "Außer Betrieb",
+    "stale": "Keine aktuellen Messwerte",
+    "noValues": "Keine Messwerte",
+    "withFault": "{summary} · {fault}"
+  },
+  "fault": {
+    "suspected": "Störung vermutet",
+    "confirmed": "Störung bestätigt"
+  },
+  "state": {
+    "dry": "Trocken",
+    "damp": "Feucht",
+    "wet": "Nass",
+    "frost": "Reif",
+    "ice": "Eis",
+    "black_ice": "Glatteis",
+    "snow": "Schnee",
+    "packed_snow": "Schneeglätte",
+    "slush": "Schneematsch",
+    "standing_water": "Stehendes Wasser",
+    "flooded": "Überflutet",
+    "chemically_wet": "Nass mit Tausalz",
+    "unknown": "Unbekannt"
+  },
+  "precipitation": {
+    "none": "Kein",
+    "rain": "Regen",
+    "snow": "Schnee",
+    "sleet": "Schneeregen",
+    "hail": "Hagel",
+    "drizzle": "Nieselregen",
+    "freezing_rain": "Gefrierender Regen"
+  },
+  "section": {
+    "surface": "Fahrbahn",
+    "surfaceSensor": "Fahrbahn, Sensor {n}",
+    "air": "Wetter",
+    "readings": "Messwerte",
+    "status": "Stationszustand"
+  },
+  "caption": {
+    "measured": "Gemessen",
+    "lastReading": "Letzter Messwert",
+    "since": "Seit"
+  },
+  "text": {
+    "closed": "Die Station ist vorübergehend außer Betrieb.",
+    "stale": "Die Station hat keine aktuellen Messwerte gemeldet.",
+    "fault": {
+      "suspected": "Der Betreiber vermutet eine Störung der Station, ihre Messwerte können daher falsch sein.",
+      "confirmed": "Der Betreiber hat eine Störung der Station bestätigt, ihre Messwerte können daher falsch sein."
+    }
+  },
+  "row": {
+    "surface": "Zustand",
+    "roadTemperature": "Fahrbahntemperatur",
+    "freezingPoint": "Gefrierpunkt",
+    "groundTemperature": "Bodentemperatur",
+    "grip": "Griffigkeit",
+    "water": "Wasser",
+    "snow": "Schnee",
+    "ice": "Eis",
+    "salt": "Salz",
+    "airTemperature": "Lufttemperatur",
+    "dewPoint": "Taupunkt",
+    "humidity": "Luftfeuchte",
+    "wind": "Wind",
+    "gusts": "Böen",
+    "visibility": "Sichtweite",
+    "precipitation": "Niederschlag",
+    "road": "Straße",
+    "municipality": "Gemeinde",
+    "provider": "Anbieter"
+  },
+  "value": {
+    "celsius": "{value, number, ::.0} °C",
+    "percent": "{value, number} %",
+    "friction": "{value, number, ::.00}",
+    "mm": "{value, number, ::.##} mm",
+    "salt": "{value, number, ::.#} g/l",
+    "wind": "{speed, number, ::.0} m/s",
+    "windFrom": "{speed, number, ::.0} m/s aus {direction}",
+    "km": "{value, number, ::.#} km",
+    "m": "{value, number} m",
+    "rate": "{value, number, ::.#} mm/h",
+    "precipitationWithRate": "{type}, {rate, number, ::.#} mm/h"
+  },
+  "compass": {
+    "N": "Nord",
+    "NE": "Nordost",
+    "E": "Ost",
+    "SE": "Südost",
+    "S": "Süd",
+    "SW": "Südwest",
+    "W": "West",
+    "NW": "Nordwest"
+  }
+}

@@ -11,13 +11,19 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { haptics } from "@/lib/haptics";
 import { publishMapObstruction } from "@/lib/mapObstructions";
-import { publishMobilePanelHeight, useMobilePanelFollowCap } from "@/lib/mobilePanelHeight";
+import { publishMobileFooterSurface } from "@/lib/mobileFooterSurface";
+import {
+  DEFAULT_FOLLOW_CAP_FRACTION,
+  publishMobilePanelHeight,
+  useMobilePanelFollowCap,
+} from "@/lib/mobilePanelHeight";
 import { useVisualViewport } from "@/lib/useVisualViewport";
 import { SHEET_PART_STYLES, sheetChromeVars } from "./chrome";
 import { type Detent, type DetentConfig, detentIndex, snapSlots } from "./detents";
@@ -64,6 +70,8 @@ export function isHostKeyDown(event: { target: unknown; currentTarget: unknown }
 interface Props {
   id: string;
   zIndex: number;
+  /** Effective global layer, when an ancestor establishes the stacking context. */
+  stackLevel?: number;
   detents: DetentConfig;
   /**
    * Drives the sheet's resting detent from outside — e.g. a caller collapsing
@@ -110,6 +118,7 @@ interface Props {
 export function MobileBottomSheet({
   id,
   zIndex,
+  stackLevel = zIndex,
   detents,
   detent,
   onDetentChange,
@@ -123,6 +132,7 @@ export function MobileBottomSheet({
   const theme = useTheme();
   const t = useTranslations("common");
   const [host, setHost] = useState<BottomSheetElement | null>(null);
+  const [footerOutlet, setFooterOutlet] = useState<HTMLDivElement | null>(null);
   const [peekEl, setPeekEl] = useState<HTMLElement | null>(null);
   const [peekPx, setPeekPx] = useState<number | null>(null);
   const [midPx, setMidPx] = useState<number | null>(null);
@@ -312,6 +322,33 @@ export function MobileBottomSheet({
     };
   }, [host, id, obscured, settleControlledTransition]);
 
+  // Publish the physical surface in layout, independently of settled/capped
+  // camera occupancy. Removal notifies the stable footer before its outlet dies.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a position-only keyboard lift must publish even without a host resize
+  useLayoutEffect(() => {
+    if (!host || !footerOutlet || obscured) return;
+    const publish = () =>
+      publishMobileFooterSurface(id, {
+        host,
+        outlet: footerOutlet,
+        stackLevel,
+        visibleHeight: visibleSheetHeight(host),
+        bottom: host.getBoundingClientRect().bottom,
+        followCap: midPx ?? window.innerHeight * DEFAULT_FOLLOW_CAP_FRACTION,
+      });
+    publish();
+    host.addEventListener("scroll", publish, { passive: true });
+    window.addEventListener("resize", publish);
+    const observer = new ResizeObserver(publish);
+    observer.observe(host);
+    return () => {
+      host.removeEventListener("scroll", publish);
+      window.removeEventListener("resize", publish);
+      observer.disconnect();
+      publishMobileFooterSurface(id, null);
+    };
+  }, [host, footerOutlet, obscured, id, stackLevel, midPx, keyboardLift]);
+
   // A new cap, or a sheet coming out from under the one that covered it, still
   // has to reach the camera — but neither is a drag, so both land at once
   // rather than behind the settle delay. Runs after the effect above, so the
@@ -457,7 +494,15 @@ export function MobileBottomSheet({
             // `pointer-events` here would win over `:host` and swallow those
             // gestures — slotted content is already interactive without it.
             sx={[
-              { zIndex },
+              {
+                zIndex,
+                "&::part(content)": { minHeight: 0 },
+                "&[data-map-footer-owned]::part(content)": { paddingBottom: 0 },
+                "&[data-map-footer-owned]::part(footer)": {
+                  paddingBottom:
+                    "calc(var(--omx-safe-bottom) + var(--omx-footer-keyboard-avoidance, 0px))",
+                },
+              },
               SHEET_PART_STYLES(theme),
               disableContentSafeArea ? { "&::part(content)": { paddingBottom: 0 } } : {},
               hideHandle ? { "&::part(handle)": { display: "none" } } : {},
@@ -494,7 +539,10 @@ export function MobileBottomSheet({
             <Box ref={setPeekEl} sx={contentSx}>
               {children}
             </Box>
-            {chromeFooter ? <div slot="footer">{chromeFooter}</div> : null}
+            <div slot="footer">
+              {chromeFooter}
+              <div ref={setFooterOutlet} data-map-footer-outlet={id} />
+            </div>
           </Box>
         </FloatingHandleContext.Provider>
       </MobileSheetContext.Provider>

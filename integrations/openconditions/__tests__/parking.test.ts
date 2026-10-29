@@ -6,13 +6,14 @@ import {
 } from "@openmapx/integration-framework/testing";
 import { describe, expect, test } from "vitest";
 import { createOpenConditionsClient } from "../client.js";
-import { CROWD_CREDIT, type LatestReading, NO_SOURCES } from "../features/record.js";
+import { type LatestReading, NO_SOURCES } from "../features/record.js";
 import { setup } from "../index.js";
 import { recordToParkingSite } from "../parking/map.js";
 import { createParkingSiteProvider } from "../parking/provider.js";
 import { createLiveSources, type LiveSources } from "../sources.js";
 import stringsDe from "../strings/de.json" with { type: "json" };
 import stringsEn from "../strings/en.json" with { type: "json" };
+import { CROWD_PROVENANCE, CROWD_READING_CREDIT, CROWD_SOURCES } from "./fixtures/crowd.js";
 import featureResponse from "./fixtures/feature-parking.json" with { type: "json" };
 import featuresResponse from "./fixtures/features-parking.json" with { type: "json" };
 
@@ -59,9 +60,9 @@ const EVERY_SOURCE: LiveSources = {
   ready: true,
   has: () => true,
   link: () => undefined,
-  licenseName: () => undefined,
+  crowd: () => undefined,
   noticeOf: () => undefined,
-  firmsSources: () => [],
+  fireSources: () => [],
 };
 
 function providerWith(respond: Responder, sources: LiveSources = EVERY_SOURCE, now = FRESH) {
@@ -115,11 +116,28 @@ describe("parking-sites-openconditions", () => {
       stale: false,
     });
     expect(site.areas).toEqual([
-      { key: "car:disabled", vehicleType: "car", userGroup: "disabled", capacity: 5, stale: false },
-      { key: "car:women", vehicleType: "car", userGroup: "women", capacity: 20, stale: false },
+      {
+        key: "car:disabled",
+        contributors: [],
+        vehicleType: "car",
+        userGroup: "disabled",
+        capacity: 5,
+        stale: false,
+      },
+      {
+        key: "car:women",
+        contributors: [],
+        vehicleType: "car",
+        userGroup: "women",
+        capacity: 20,
+        stale: false,
+      },
     ]);
     expect(site.rates).toEqual([
       {
+        contributors: [
+          expect.objectContaining({ sourceId: MOBIDATA, licensing: expect.any(Object) }),
+        ],
         currency: "EUR",
         rows: [
           { kind: "per_hour", amount: 2, toMin: 180, stepMin: 30 },
@@ -148,6 +166,7 @@ describe("parking-sites-openconditions", () => {
     expect(fresh).toMatchObject({ available: 160, stale: false });
     expect(fresh.areas[0]).toEqual({
       key: "car:disabled",
+      contributors: [],
       vehicleType: "car",
       userGroup: "disabled",
       capacity: 5,
@@ -180,45 +199,106 @@ describe("parking-sites-openconditions", () => {
     expect(site!.attributions).toEqual([
       {
         sourceId: MOBIDATA,
+        modified: true,
         name: MOBIDATA_PROVIDER,
+        attributionText: MOBIDATA_PROVIDER,
         url: "https://mobidata-bw.de",
-        spdxLicense: "DL-DE-BY-2.0",
-        licenseUrl: "https://www.govdata.de/dl-de/by-2-0",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: MOBIDATA_PROVIDER,
+              license: {
+                kind: "spdx",
+                expression: "DL-DE-BY-2.0",
+                url: "https://www.govdata.de/dl-de/by-2-0",
+              },
+            },
+          ],
+        } as const,
       },
       {
         sourceId: OSM,
+        modified: true,
         name: "© OpenStreetMap contributors",
+        attributionText: "© OpenStreetMap contributors",
         url: "https://www.openstreetmap.org/copyright",
-        spdxLicense: "ODbL-1.0",
-        licenseUrl: "https://opendatacommons.org/licenses/odbl/1-0/",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "© OpenStreetMap contributors",
+              license: {
+                kind: "spdx",
+                expression: "ODbL-1.0",
+                url: "https://opendatacommons.org/licenses/odbl/1-0/",
+              },
+            },
+          ],
+        } as const,
       },
       {
         sourceId: MOBIDATA,
+        modified: true,
         name: `${MOBIDATA_PROVIDER} – Stadt Karlsruhe`,
-        url: "https://mobidata-bw.de",
-        spdxLicense: "CC-BY-4.0",
-        licenseUrl: "https://creativecommons.org/licenses/by/4.0/legalcode",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Stadt Karlsruhe",
+              license: {
+                kind: "spdx",
+                expression: "CC-BY-4.0",
+                url: "https://creativecommons.org/licenses/by/4.0/",
+              },
+            },
+          ],
+        } as const,
         publisher: { name: "Stadt Karlsruhe" },
+      },
+      // The rate's independent capture has no feature catalogue URL.
+      {
+        sourceId: MOBIDATA,
+        modified: true,
+        name: MOBIDATA_PROVIDER,
+        attributionText: MOBIDATA_PROVIDER,
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: MOBIDATA_PROVIDER,
+              license: {
+                kind: "spdx",
+                expression: "DL-DE-BY-2.0",
+                url: "https://www.govdata.de/dl-de/by-2-0",
+              },
+            },
+          ],
+        },
       },
     ]);
   });
 
   test("an upstream publisher of a member that is not the survivor is credited", () => {
     const answer = body();
-    const provenance = recordOf(answer)["provenance"] as Rec;
-    const [osm] = provenance["mergedSources"] as Rec[];
+    const provenance = recordOf(answer).provenance as Rec;
+    const [osm] = provenance.mergedSources as Rec[];
     // The OSM member survives; MobiData, with its upstream publisher, is merged into it.
-    recordOf(answer)["provenance"] = {
+    recordOf(answer).provenance = {
       ...provenance,
       sourceId: OSM,
-      attribution: osm!["attribution"],
+      attribution: osm?.attribution,
       upstream: undefined,
       mergedSources: [
         {
           source: MOBIDATA,
           recordId: MOBIDATA_MEMBER,
-          attribution: provenance["attribution"],
-          upstream: provenance["upstream"],
+          attribution: provenance.attribution,
+          upstream: provenance.upstream,
           link: "same_asset",
         },
       ],
@@ -227,9 +307,22 @@ describe("parking-sites-openconditions", () => {
     expect(site.sources).toEqual([OSM, MOBIDATA]);
     expect(site.attributions).toContainEqual({
       sourceId: MOBIDATA,
+      modified: true,
       name: `${MOBIDATA_PROVIDER} – Stadt Karlsruhe`,
-      spdxLicense: "CC-BY-4.0",
-      licenseUrl: "https://creativecommons.org/licenses/by/4.0/legalcode",
+      licensing: {
+        version: 1,
+        bindings: [
+          {
+            scope: "data",
+            subject: "Stadt Karlsruhe",
+            license: {
+              kind: "spdx",
+              expression: "CC-BY-4.0",
+              url: "https://creativecommons.org/licenses/by/4.0/",
+            },
+          },
+        ],
+      } as const,
       publisher: { name: "Stadt Karlsruhe" },
     });
     // An excluded member's upstream publishers go with it.
@@ -239,8 +332,8 @@ describe("parking-sites-openconditions", () => {
 
   test("an upstream publisher without a licence is credited by name", () => {
     const answer = body();
-    const provenance = recordOf(answer)["provenance"] as Rec;
-    provenance["upstream"] = [{ publisher: "Stadt Karlsruhe", recordId: "66" }];
+    const provenance = recordOf(answer).provenance as Rec;
+    provenance.upstream = [{ publisher: "Stadt Karlsruhe", recordId: "66" }];
     const { attributions } = mapped(answer)!;
     expect(attributions.map((a) => a.name)).toEqual([
       MOBIDATA_PROVIDER,
@@ -248,8 +341,7 @@ describe("parking-sites-openconditions", () => {
       `${MOBIDATA_PROVIDER} – Stadt Karlsruhe`,
     ]);
     const credit = attributions.find((a) => a.publisher?.name === "Stadt Karlsruhe");
-    expect(credit?.spdxLicense).toBeUndefined();
-    expect(credit?.licenseUrl).toBeUndefined();
+    expect(credit?.licensing).toBeUndefined();
   });
 
   test("an excluded source's readings and offers are dropped", async () => {
@@ -264,8 +356,8 @@ describe("parking-sites-openconditions", () => {
       contributors: [MOBIDATA, OSM],
     } as LatestReading);
     const osmRate = clone(offersOf(answer)[0]!);
-    osmRate["id"] = "oc:offer:osm-parking:node/1725394191:1";
-    (osmRate["provenance"] as Rec)["sourceId"] = OSM;
+    osmRate.id = "oc:offer:osm-parking:node/1725394191:1";
+    (osmRate.provenance as Rec).sourceId = OSM;
     offersOf(answer).push(osmRate);
     const { provider } = providerWith(listing(answer));
 
@@ -290,20 +382,20 @@ describe("parking-sites-openconditions", () => {
 
   test("coverage.partial is passed through as area", async () => {
     const answer = body();
-    answer["coverage"] = {
+    answer.coverage = {
       partial: true,
       sources: [{ id: OSM, complete: false, reason: "deadline" }],
     };
     expect((await providerWith(listing(answer)).provider.searchSites(BBOX)).partial).toBe("area");
 
     const unflagged = body();
-    unflagged["coverage"] = { sources: [{ id: OSM, complete: false, reason: "too_many_cells" }] };
+    unflagged.coverage = { sources: [{ id: OSM, complete: false, reason: "too_many_cells" }] };
     expect((await providerWith(listing(unflagged)).provider.searchSites(BBOX)).partial).toBe(
       "area",
     );
 
     const without = body();
-    delete without["coverage"];
+    delete without.coverage;
     expect(
       (await providerWith(listing(without)).provider.searchSites(BBOX)).partial,
     ).toBeUndefined();
@@ -320,7 +412,7 @@ describe("parking-sites-openconditions", () => {
     const page = (n: number, next: string | null) => ({
       records: Array.from({ length: 400 }, (_, i) => {
         const record = clone(recordOf(body()));
-        record["id"] = `oc:feature:t:p${n}-${i}`;
+        record.id = `oc:feature:t:p${n}-${i}`;
         return record;
       }),
       latest: {},
@@ -328,7 +420,7 @@ describe("parking-sites-openconditions", () => {
       next,
     });
     const cursorOf = (req: FakeHttpRequest) =>
-      (req.options?.params as Rec | undefined)?.["cursor"] as string | undefined;
+      (req.options?.params as Rec | undefined)?.cursor as string | undefined;
     const { http, provider } = providerWith((req) => {
       const cursor = cursorOf(req);
       const n = cursor === undefined ? 1 : Number(cursor.slice(1));
@@ -346,7 +438,7 @@ describe("parking-sites-openconditions", () => {
     const page = (n: number) => ({
       records: Array.from({ length: 400 }, (_, i) => {
         const record = clone(recordOf(body()));
-        record["id"] = `oc:feature:t:p${n}-${i}`;
+        record.id = `oc:feature:t:p${n}-${i}`;
         return record;
       }),
       latest: {},
@@ -354,7 +446,7 @@ describe("parking-sites-openconditions", () => {
       next: `c${n + 1}`,
     });
     const cursorOf = (req: FakeHttpRequest) =>
-      (req.options?.params as Rec | undefined)?.["cursor"] as string | undefined;
+      (req.options?.params as Rec | undefined)?.cursor as string | undefined;
     const { http, provider } = providerWith((req) => {
       const cursor = cursorOf(req);
       if (cursor === "c3") throw new Error("The operation was aborted due to timeout");
@@ -383,10 +475,10 @@ describe("parking-sites-openconditions", () => {
     const record = recordOf(answer);
     const canonical =
       "oc:feature:test.local:0000000000000000000000000000000000000000000000000000000000000000";
-    record["id"] = canonical;
+    record.id = canonical;
     answer.latest = { [canonical]: latestOf(body()) as unknown as Rec[] };
     answer.offers = { [canonical]: offersOf(body()) };
-    const provenance = record["provenance"] as { derivedFrom: { records: Rec[] } };
+    const provenance = record.provenance as { derivedFrom: { records: Rec[] } };
     provenance.derivedFrom.records.push({ class: "feature", id: "oc:feature:osm-parking:way/9" });
 
     const opened = await provider.getSite(searched!.id);
@@ -432,7 +524,7 @@ describe("parking-sites-openconditions", () => {
       canonical: 1,
       expand: "components,latest,offers",
     });
-    const [w, s, e, n] = String(params["bbox"]).split(",").map(Number) as [
+    const [w, s, e, n] = String(params.bbox).split(",").map(Number) as [
       number,
       number,
       number,
@@ -453,7 +545,7 @@ describe("parking-sites-openconditions", () => {
 
   test("a feature that is not a parking site is not a site", () => {
     const answer = body();
-    recordOf(answer)["kind"] = "fuel_station";
+    recordOf(answer).kind = "fuel_station";
     expect(mapped(answer)).toBeNull();
   });
 });
@@ -462,7 +554,7 @@ describe("recordToParkingSite", () => {
   test("a closed lifecycle closes the site", () => {
     for (const lifecycle of ["temporarily_closed", "decommissioned"]) {
       const answer = body();
-      recordOf(answer)["lifecycle"] = lifecycle;
+      recordOf(answer).lifecycle = lifecycle;
       expect(mapped(answer)!.closed, lifecycle).toBe(true);
     }
     expect(mapped(body())!.closed).toBe(false);
@@ -471,14 +563,14 @@ describe("recordToParkingSite", () => {
   test("free, audience, operator, texts and website come from the record", () => {
     const answer = body();
     const record = recordOf(answer);
-    record["access"] = { audience: "customers", payment: ["free"] };
-    record["operator"] = {
+    record.access = { audience: "customers", payment: ["free"] };
+    record.operator = {
       role: "operator",
       name: [{ lang: "und", text: "Karstadt Warenhaus AG" }],
     };
-    record["openingHours"] = { osm: "Mo-Sa 07:00-21:00" };
-    record["description"] = [{ lang: "de", text: "Einfahrt über die Kreuzstraße" }];
-    Object.assign(record["details"] as Rec, {
+    record.openingHours = { osm: "Mo-Sa 07:00-21:00" };
+    record.description = [{ lang: "de", text: "Einfahrt über die Kreuzstraße" }];
+    Object.assign(record.details as Rec, {
       website: "https://www.example.org/karstadt",
       tariffText: [{ lang: "de", text: "Erste Stunde frei" }],
       openingHoursText: [{ lang: "de", text: "Mo–Sa 7–21 Uhr" }],
@@ -495,9 +587,9 @@ describe("recordToParkingSite", () => {
       notes: "Einfahrt über die Kreuzstraße",
     });
 
-    record["access"] = { audience: "public", payment: ["cash", "credit_card"] };
+    record.access = { audience: "public", payment: ["cash", "credit_card"] };
     expect(mapped(answer)).toMatchObject({ audience: "public", free: false });
-    delete record["access"];
+    delete record.access;
     const plain = mapped(answer)!;
     expect(plain).not.toHaveProperty("free");
     expect(plain).not.toHaveProperty("audience");
@@ -510,7 +602,7 @@ describe("recordToParkingSite", () => {
       components: [{ type: "flat", price: { amount: "1.00", currency: "EUR" } }],
       restrictions: { ...(minDuration ? { minDuration } : {}), maxDuration },
     });
-    rate["elements"] = [
+    rate.elements = [
       row({ value: 900, unit: "s" }, { value: 90, unit: "min" }),
       row(undefined, { value: 2, unit: "wk" }),
       row(undefined, { value: 1, unit: "a" }),
@@ -529,9 +621,7 @@ describe("recordToParkingSite", () => {
     const answer = body();
     const rate = offersOf(answer)[0]!;
     const other = { ...clone(rate), kind: "charging_tariff" };
-    rate["elements"] = [
-      { components: [{ type: "flat", price: { amount: "n/a", currency: "EUR" } }] },
-    ];
+    rate.elements = [{ components: [{ type: "flat", price: { amount: "n/a", currency: "EUR" } }] }];
     offersOf(answer).push(other);
     expect(mapped(answer)!.rates).toEqual([]);
   });
@@ -539,23 +629,103 @@ describe("recordToParkingSite", () => {
   test("of two areas under one key, the counted one wins", () => {
     const answer = body();
     const record = recordOf(answer);
-    record["components"] = [
+    record.components = [
       {
         key: "car:disabled",
         kind: "parking_area",
         details: { kind: "parking_area", v: 1, vehicleType: "car", userGroup: "disabled" },
       },
-      ...(record["components"] as Rec[]),
+      ...(record.components as Rec[]),
     ];
     const areas = mapped(answer)!.areas;
     expect(areas.map((a) => a.key)).toEqual(["car:disabled", "car:women"]);
     expect(areas[0]).toMatchObject({ capacity: 5 });
   });
 
-  test("crowd reports are credited", () => {
+  test("an area carries its hours and maximum stay; one with them replaces one without", () => {
+    const answer = body();
+    const record = recordOf(answer);
+    const components = record.components as Rec[];
+    components[0]!.details = {
+      ...(components[0]!.details as Rec),
+      maxStay: { value: 3, unit: "h" },
+      hours: { osm: "Mo-Fr 08:00-18:00" },
+    };
+    components[1]!.details = {
+      ...(components[1]!.details as Rec),
+      hours: { spec: [{ days: ["SA", "SU"], opens: "10:00", closes: "16:00" }] },
+      maxStay: { value: 2, unit: "fortnight" },
+    };
+    record.components = [
+      ...components,
+      {
+        key: "osm-parking/truck:delivery",
+        kind: "parking_area",
+        details: { kind: "parking_area", v: 1, vehicleType: "truck", userGroup: "delivery" },
+      },
+      {
+        key: "osm-parking/truck:delivery-limited",
+        kind: "parking_area",
+        details: {
+          kind: "parking_area",
+          v: 1,
+          vehicleType: "truck",
+          userGroup: "delivery",
+          maxStay: { value: 30, unit: "min" },
+        },
+      },
+    ];
+    const areas = mapped(answer)!.areas;
+    expect(areas.map((a) => [a.key, a.hours, a.maxStayMin])).toEqual([
+      ["car:disabled", "Mo-Fr 08:00-18:00", 180],
+      ["car:women", "Sa,Su 10:00-16:00", undefined],
+      ["truck:delivery", undefined, 30],
+    ]);
+  });
+
+  test("a site carries its maximum stay, reservation, amenities and the new layout", () => {
+    const answer = body();
+    const record = recordOf(answer);
+    record.details = {
+      ...(record.details as Rec),
+      layout: "underground_and_multi_storey",
+      maxStay: { value: 1, unit: "d" },
+      reservation: true,
+    };
+    record.amenities = ["toilets", "shower", 3];
+    expect(mapped(answer)).toMatchObject({
+      layout: "underground_and_multi_storey",
+      maxStayMin: 1_440,
+      reservation: true,
+      amenities: ["toilets", "shower"],
+    });
+
+    const bare = mapped(body())!;
+    expect(bare).not.toHaveProperty("maxStayMin");
+    expect(bare).not.toHaveProperty("reservation");
+    expect(bare).not.toHaveProperty("amenities");
+  });
+
+  test("crowd reports retain the expanded observation capture", () => {
     const answer = body();
     latestOf(answer)[0]!.contributors = [MOBIDATA, "crowd"];
-    expect(mapped(answer)!.attributions.at(-1)).toEqual(CROWD_CREDIT);
+    latestOf(answer)[0]!.provenance = CROWD_PROVENANCE;
+    const site = recordToParkingSite(
+      recordOf(answer),
+      latestOf(answer),
+      offersOf(answer),
+      () => false,
+      CROWD_SOURCES,
+      FRESH,
+    )!;
+    expect(site.attributions.at(-1)).toEqual(CROWD_READING_CREDIT);
+  });
+
+  test("a crowd reading is left out while /sources states no crowd credit", () => {
+    const answer = body();
+    latestOf(answer)[0]!.contributors = [MOBIDATA, "crowd"];
+    const site = mapped(answer, (sourceId) => sourceId === "crowd")!;
+    expect(site.attributions.map((a) => a.sourceId)).not.toContain("crowd");
   });
 });
 

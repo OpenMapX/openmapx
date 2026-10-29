@@ -74,28 +74,3 @@ export async function runWithProviderDeadline<T>(
     removeAbortListener();
   }
 }
-
-/** Promise.allSettled semantics with an explicit worker bound. */
-export async function mapSettledWithConcurrency<TInput, TOutput>(
-  inputs: readonly TInput[],
-  maxConcurrency: number,
-  call: (input: TInput, index: number) => Promise<TOutput>,
-): Promise<PromiseSettledResult<TOutput>[]> {
-  const concurrency = Math.max(1, Math.floor(maxConcurrency));
-  const results = new Array<PromiseSettledResult<TOutput>>(inputs.length);
-  let nextIndex = 0;
-
-  async function worker(): Promise<void> {
-    while (nextIndex < inputs.length) {
-      const index = nextIndex++;
-      try {
-        results[index] = { status: "fulfilled", value: await call(inputs[index], index) };
-      } catch (reason) {
-        results[index] = { status: "rejected", reason };
-      }
-    }
-  }
-
-  await Promise.all(Array.from({ length: Math.min(concurrency, inputs.length) }, () => worker()));
-  return results;
-}

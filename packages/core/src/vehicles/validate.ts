@@ -16,10 +16,10 @@ export const MAX_VEHICLES_PER_USER = 12;
 /** A parking meter nobody returns to within a month is a note, not a timer. */
 export const MAX_EXPIRY_AHEAD_MS = 30 * 24 * 60 * 60 * 1000;
 
-const MAX_NAME_LENGTH = 60;
+export const MAX_VEHICLE_NAME_LENGTH = 60;
 const MAX_NOTE_LENGTH = 500;
 const MAX_ADDRESS_LENGTH = 300;
-const MAX_FUEL_L_PER_100KM = 60;
+export const MAX_VEHICLE_FUEL_L_PER_100KM = 60;
 
 export type NormalizeResult<T> = { ok: true; value: T } | { ok: false; reason: string };
 
@@ -77,7 +77,7 @@ export function normalizeVehicleDraft(input: unknown): NormalizeResult<VehicleDr
 
   const name = typeof raw.name === "string" ? raw.name.trim() : "";
   if (name === "") return { ok: false, reason: "name is required" };
-  if (name.length > MAX_NAME_LENGTH) return { ok: false, reason: "name is too long" };
+  if (name.length > MAX_VEHICLE_NAME_LENGTH) return { ok: false, reason: "name is too long" };
 
   if (!VEHICLE_KINDS.includes(raw.kind as VehicleKind)) {
     return { ok: false, reason: "unknown kind" };
@@ -102,14 +102,14 @@ export function normalizeVehicleDraft(input: unknown): NormalizeResult<VehicleDr
     }
     if (
       !positive(raw.fuelConsumptionLPer100Km) ||
-      raw.fuelConsumptionLPer100Km > MAX_FUEL_L_PER_100KM
+      raw.fuelConsumptionLPer100Km > MAX_VEHICLE_FUEL_L_PER_100KM
     ) {
       return { ok: false, reason: "fuel consumption is out of range" };
     }
     fuelConsumptionLPer100Km = raw.fuelConsumptionLPer100Km;
   }
 
-  const presetId = optionalText(raw.presetId, MAX_NAME_LENGTH);
+  const presetId = optionalText(raw.presetId, MAX_VEHICLE_NAME_LENGTH);
   if (!presetId) return { ok: false, reason: "invalid presetId" };
 
   return {
@@ -146,7 +146,7 @@ export function normalizeParkedDraft(input: unknown): NormalizeResult<ParkedDraf
   if (!address) return { ok: false, reason: "address is too long" };
   const note = optionalText(raw.note, MAX_NOTE_LENGTH);
   if (!note) return { ok: false, reason: "note is too long" };
-  const vehicleId = optionalText(raw.vehicleId, MAX_NAME_LENGTH);
+  const vehicleId = optionalText(raw.vehicleId, MAX_VEHICLE_NAME_LENGTH);
   if (!vehicleId) return { ok: false, reason: "invalid vehicleId" };
 
   let expiresAt: string | null = null;

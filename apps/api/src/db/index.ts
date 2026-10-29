@@ -11,6 +11,8 @@ const connectionString = envString(
 
 assertProductionDatabaseUrlSecret(connectionString, process.env.NODE_ENV);
 
-export const sql = postgres(connectionString);
+export const sql = postgres(connectionString, {
+  connection: { application_name: "openmapx-api" },
+});
 
 export const db = drizzle(sql, { schema });

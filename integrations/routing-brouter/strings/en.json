@@ -1,0 +1,11 @@
+{
+  "name": "BRouter Cycling",
+  "description": "Elevation-aware bicycle routing with bike profiles and quieter-road preferences",
+  "dataSources": {
+    "brouter": {
+      "purpose": "Bicycle routes, alternatives, elevation and turn-by-turn directions",
+      "dataSent": "Waypoint coordinates, bike type, hill and quieter-road preferences, ferry avoidance and exclusion geometry",
+      "dataReceived": "Route geometry, distance, estimated duration, maneuvers and elevation; no live traffic observations"
+    }
+  }
+}

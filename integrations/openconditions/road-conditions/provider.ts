@@ -1,5 +1,6 @@
 import type { BBox, RoadConditionRoutingEvidence } from "@openmapx/core";
 import type {
+  RoadConditionBinding,
   RoadConditionEvent,
   RoadConditionsProvider,
   RoadConditionsQuery,
@@ -18,6 +19,12 @@ const ROUTING_PAGE = 5000;
 
 type Rec = Record<string, unknown>;
 
+/**
+ * The severity thresholds `/situations` takes. Any other threshold is left
+ * to the orchestrator, which applies every threshold again after the read.
+ */
+const SEVERITY_THRESHOLDS = new Set<string>(["minor", "moderate", "major", "critical"]);
+
 type SituationPage = { records?: unknown; next?: unknown };
 
 type SegmentConditionEvidenceResponse = {
@@ -25,6 +32,17 @@ type SegmentConditionEvidenceResponse = {
   complete?: unknown;
   conditions?: Array<{ routing_evidence?: RoadConditionRoutingEvidence }>;
 };
+
+/** One binding as the record API serves it, keeping its status and reason; null when unreadable. */
+function bindingOf(raw: unknown): RoadConditionBinding | null {
+  if (raw === null || typeof raw !== "object") return null;
+  const { status, reason } = raw as Rec;
+  if (typeof status !== "string" || status.length === 0 || status.length > 64) return null;
+  return {
+    status,
+    reason: typeof reason === "string" && reason.length > 0 && reason.length <= 64 ? reason : null,
+  };
+}
 
 /** Whether a record comes from a source, or a catalogue child of a source, the deployment excluded. */
 function excluded(record: Rec, sources: ReadonlySet<string>): boolean {
@@ -80,8 +98,9 @@ export function createRoadConditionsProvider(
     bbox: BBox,
     opts: RoadConditionsQuery | undefined,
     routing: boolean,
-  ): Promise<Rec[]> {
+  ): Promise<{ records: Rec[]; events: RoadConditionEvent[] }> {
     const records: Rec[] = [];
+    const capturedEvents = new Map<Rec, RoadConditionEvent>();
     let cursor: string | null = null;
     do {
       const page: SituationPage = await client.get<SituationPage>(
@@ -92,7 +111,9 @@ export function createRoadConditionsProvider(
           ...(opts?.kinds?.length ? { kind: opts.kinds.join(",") } : {}),
           ...(opts?.excludeKinds?.length ? { excludeKind: opts.excludeKinds.join(",") } : {}),
           ...(opts?.types?.length ? { type: opts.types.join(",") } : {}),
-          ...(opts?.minSeverity ? { minSeverity: opts.minSeverity } : {}),
+          ...(opts?.minSeverity && SEVERITY_THRESHOLDS.has(opts.minSeverity)
+            ? { minSeverity: opts.minSeverity }
+            : {}),
           // Only narrow when the caller asked: routing reads unfiltered so it
           // can evaluate future closures at the chosen travel time.
           ...(opts?.horizonDays != null ? { horizonDays: opts.horizonDays } : {}),
@@ -103,24 +124,16 @@ export function createRoadConditionsProvider(
       if (!Array.isArray(page.records) || (page.next !== null && typeof page.next !== "string")) {
         throw new Error("Malformed situation page");
       }
-      records.push(...(page.records as Rec[]));
+      for (const record of page.records as Rec[]) {
+        records.push(record);
+        const event = situationToRoadConditionEvent(record, PROVIDER_ID);
+        if (event) capturedEvents.set(record, { ...event, routingEvidence: {} });
+      }
       cursor = page.next as string | null;
     } while (cursor !== null && (routing || records.length < DISPLAY_MAX));
     const without = new Set(opts?.excludedSourceIds ?? []);
-    return records.filter((r) => listed(r, sources) && !excluded(r, without));
-  }
-
-  /**
-   * The events of `records`, each with an evidence map that starts empty.
-   * OpenConditions publishes routing evidence for every effect it binds, so an
-   * effect without an entry is unbound, stale or not licensed for routing: the
-   * host must not stand in its raw geometry for a binding.
-   */
-  function eventsOf(records: readonly Rec[]): RoadConditionEvent[] {
-    return records.flatMap((record) => {
-      const event = situationToRoadConditionEvent(record, PROVIDER_ID, sources);
-      return event ? [{ ...event, routingEvidence: {} }] : [];
-    });
+    const allowed = records.filter((r) => listed(r, sources) && !excluded(r, without));
+    return { records: allowed, events: allowed.flatMap((r) => capturedEvents.get(r) ?? []) };
   }
 
   /**
@@ -136,6 +149,7 @@ export function createRoadConditionsProvider(
     bbox: BBox,
     records: readonly Rec[],
     strict: boolean,
+    capturedEvents: readonly RoadConditionEvent[],
   ): Promise<RoadConditionEvent[]> {
     const snapshot = await client.get<SegmentConditionEvidenceResponse>(
       "/segments/conditions.json",
@@ -150,7 +164,7 @@ export function createRoadConditionsProvider(
       throw new Error("Incomplete routing evidence snapshot");
     }
     const byId = new Map(records.map((r) => [String(r["id"]), r]));
-    const events = new Map(eventsOf(records).map((e) => [e.id, e]));
+    const events = new Map(capturedEvents.map((e) => [e.id, { ...e, routingEvidence: {} }]));
     const changed = new Set<string>();
     for (const condition of snapshot.conditions) {
       const evidence = condition.routing_evidence;
@@ -185,23 +199,54 @@ export function createRoadConditionsProvider(
      */
     async getEvents(bbox, opts) {
       if (!sources.ready) return [];
-      const records = await readSituations(bbox, opts, false);
+      const { records, events } = await readSituations(bbox, opts, false);
       try {
-        return await withEvidence(bbox, records, false);
+        return await withEvidence(bbox, records, false, events);
       } catch {
-        return eventsOf(records);
+        return events;
       }
     },
     async getRoutingEvents(bbox) {
       if (!sources.ready) throw new Error("OpenConditions source list not read yet");
-      const records = await readSituations(bbox, undefined, true);
-      return { complete: true, events: await withEvidence(bbox, records, true) };
+      const { records, events } = await readSituations(bbox, undefined, true);
+      return { complete: true, events: await withEvidence(bbox, records, true, events) };
     },
-    /** Flow is fused across sources and carries none; it is held back only until the first list. */
+    /** Fused flow carries captured per-field contributor receipts when the producer supports them. */
     async getFlow(bbox) {
       if (!sources.ready) return [];
       const body = await client.get<unknown>("/segments.geojson", { bbox: bbox.join(",") });
       return featureCollectionToRoadFlowSegments(body, PROVIDER_ID);
+    },
+    /**
+     * A situation's bindings from `GET /situations/{id}`: its own place's and
+     * each effect's bound on its own, with the resolver's reason. A situation
+     * the live source list does not serve, or of an excluded source, has none
+     * to show. Until the source list is read it cannot tell, and fails rather
+     * than answer "none".
+     */
+    async getBindings(eventId, opts) {
+      if (!sources.ready) throw new Error("OpenConditions source list not read yet");
+      if (!eventId.startsWith("oc:situation:")) return null;
+      const answer = await client.getOptional<unknown>(
+        `/situations/${encodeURIComponent(eventId)}`,
+      );
+      const body = answer !== null && typeof answer === "object" ? (answer as Rec) : undefined;
+      const record = body?.["record"];
+      if (!body || !record || typeof record !== "object") return null;
+      const without = new Set(opts?.excludedSourceIds ?? []);
+      if (!listed(record as Rec, sources) || excluded(record as Rec, without)) return null;
+      const effects = body["effectBindings"];
+      return {
+        situation: bindingOf(body["binding"]),
+        effects: Object.fromEntries(
+          Object.entries(effects !== null && typeof effects === "object" ? effects : {}).flatMap(
+            ([id, raw]) => {
+              const binding = bindingOf(raw);
+              return binding ? [[id, binding] as const] : [];
+            },
+          ),
+        ),
+      };
     },
     /** The road feeds' polls and publications, judged with the segment graph they bind to. */
     async getOperationalEvidence() {

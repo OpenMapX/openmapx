@@ -22,7 +22,10 @@
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
   "quality": "built-in",
@@ -39,8 +42,6 @@
       "sourceId": "dfo-iwls",
       "name": "Fisheries and Oceans Canada — CHS/IWLS",
       "url": "https://www.dfo-mpo.gc.ca/science/data-donnees/iwls-snhe-eng.html",
-      "license": "Open Government Licence — Canada 2.0",
-      "licenseUrl": "https://open.canada.ca/en/open-government-licence-canada",
       "attribution": "Contains information licensed under the <a href=\"https://open.canada.ca/en/open-government-licence-canada\">Open Government Licence – Canada</a>",
       "commercialUse": "yes",
       "providerCountry": "CA",
@@ -48,7 +49,27 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Fisheries and Oceans Canada — CHS/IWLS material",
+            "license": {
+              "kind": "spdx",
+              "expression": "OGL-Canada-2.0",
+              "url": "https://open.canada.ca/en/open-government-licence-canada"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "OGL-Canada-2.0",
+            "url": "https://open.canada.ca/en/open-government-licence-canada"
+          }
+        ]
+      }
     }
   ]
 }

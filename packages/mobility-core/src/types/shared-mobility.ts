@@ -1,3 +1,4 @@
+import type { ContributingRecord } from "../contributors.js";
 import type { LngLat } from "./geometry.js";
 import type { Ids } from "./identified.js";
 
@@ -50,7 +51,7 @@ export interface SharedMobilityProviderGroup {
   formFactors: VehicleFormFactor[];
 }
 
-export interface SharedMobilityProvider {
+export interface SharedMobilityProvider extends ContributingRecord {
   id: string;
   nativeId: string;
   name: string;
@@ -69,7 +70,7 @@ export interface SharedMobilityProvider {
   servingOrigin: RentalServingOrigin;
 }
 
-export interface SharedMobilityZone {
+export interface SharedMobilityZone extends ContributingRecord {
   id: string;
   providerId: string;
   providerGroupId: string;
@@ -101,7 +102,7 @@ export interface MotisRentalSnapshot {
   completeness: MotisRentalSnapshotCompleteness;
 }
 
-export interface SharedMobilityStation {
+export interface SharedMobilityStation extends ContributingRecord {
   /** Collision-safe OpenMapX id containing origin, provider, kind and native id. */
   id: string;
   /** Scheme key in `ids` that is canonical for this station. */
@@ -203,7 +204,7 @@ export interface PricingDetail {
   flatRate?: number;
 }
 
-export interface SharedMobilityVehicle {
+export interface SharedMobilityVehicle extends ContributingRecord {
   /** Collision-safe OpenMapX id containing origin, provider, kind and native id. */
   id: string;
   /** Scheme key in `ids` that is canonical for this vehicle. */

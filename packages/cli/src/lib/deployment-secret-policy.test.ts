@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   APPLICATION_DEPLOYMENT_SECRET_MIN_LENGTH,
   assertApplicationDeploymentSecret,
+  assertCliDeploymentSecrets,
   assertPostgresDeploymentSecret,
   assertProductionApplicationSecret,
   assertProductionDatabaseUrlSecret,
@@ -131,6 +132,35 @@ describe("deployment secret assertions", () => {
     } catch (error) {
       expect((error as Error).message).not.toContain(rejected);
       expect((error as Error).message).toContain("DATA_MANAGER_AUTH_TOKEN");
+    }
+  });
+});
+
+describe("assertCliDeploymentSecrets", () => {
+  const env = {
+    POSTGRES_PASSWORD: "p".repeat(POSTGRES_DEPLOYMENT_SECRET_MIN_LENGTH),
+    BETTER_AUTH_SECRET: "b".repeat(APPLICATION_DEPLOYMENT_SECRET_MIN_LENGTH),
+    DATA_MANAGER_AUTH_TOKEN: "d".repeat(APPLICATION_DEPLOYMENT_SECRET_MIN_LENGTH),
+  };
+
+  it("leaves the tile server's password to deployments that set it", () => {
+    expect(() => assertCliDeploymentSecrets(env)).not.toThrow();
+    expect(() =>
+      assertCliDeploymentSecrets({
+        ...env,
+        MARTIN_DB_PASSWORD: "m".repeat(POSTGRES_DEPLOYMENT_SECRET_MIN_LENGTH),
+      }),
+    ).not.toThrow();
+  });
+
+  it("rejects a weak tile server password by name without revealing it", () => {
+    expect.assertions(2);
+    const rejected = "short-tiles-fixture";
+    try {
+      assertCliDeploymentSecrets({ ...env, MARTIN_DB_PASSWORD: rejected });
+    } catch (error) {
+      expect((error as Error).message).toMatch(/MARTIN_DB_PASSWORD.*too-short/);
+      expect((error as Error).message).not.toContain(rejected);
     }
   });
 });

@@ -1,6 +1,9 @@
+import { createApiClient } from "@openmapx/core";
+import { getApiDataManagerProviders } from "@openmapx/core/api-admin-sdk";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProviderHealthState } from "../../services/provider-health/index.js";
+import { administrationSdkFetch } from "./helpers/administration-sdk-fetch";
 
 vi.mock("../../db/index.js", () => {
   const builder: Record<string, unknown> = {};
@@ -59,6 +62,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 const sampleState: ProviderHealthState = {
@@ -108,6 +112,33 @@ describe("GET /data-manager/providers", () => {
     expect(body.providers.map((p) => p.id)).toEqual(["alpha", "zeta"]);
   });
 
+  it("round-trips actual serialized provider output through the generated browser operation", async () => {
+    tryAdminSessionMock.mockResolvedValue({
+      user: { id: "admin", role: "admin" },
+      session: { id: "session" },
+    });
+    providerHealthMock.getAll.mockResolvedValue({ provider: { ...sampleState } });
+    const sdkApp = Fastify();
+    const { dataManagerRoute } = await import("../data-manager.js");
+    await sdkApp.register(dataManagerRoute, { prefix: "/api" });
+    const fetch = vi.fn(administrationSdkFetch(sdkApp));
+    vi.stubGlobal("fetch", fetch);
+    try {
+      const result = await getApiDataManagerProviders({
+        client: createApiClient({ baseUrl: "https://app.test", credentials: "include" }),
+      });
+      expect(result.status).toBe(200);
+      if (result.status !== 200) throw new Error("Expected provider response");
+      expect(result.data).toEqual({ providers: [{ id: "provider", ...sampleState }] });
+      expect(result.data.providers[0]?.lastFailureAt).toBe("2026-05-21T00:00:30.000Z");
+      expect(result.data.providers[0]?.window[0]?.latencyMs).toBe(80);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch.mock.calls[0]?.[1]?.credentials).toBe("include");
+      expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).has("authorization")).toBe(false);
+    } finally {
+      await sdkApp.close();
+    }
+  });
   it("accepts service-token authentication", async () => {
     tryAdminSessionMock.mockResolvedValue(null);
     providerHealthMock.getAll.mockResolvedValue({});

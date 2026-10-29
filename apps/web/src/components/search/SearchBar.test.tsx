@@ -1,9 +1,25 @@
 import { IntegrationRegistry } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
+import type { QueryClient } from "@tanstack/react-query";
 import { Profiler } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getMapObstructionInsets, publishMapObstruction } from "@/lib/mapObstructions";
-import { act, createFakeMap, createQueryWrapper, fireEvent, render, screen, waitFor } from "@/test";
+import {
+  act,
+  createFakeMap,
+  createQueryWrapper,
+  createTestQueryClient,
+  fireEvent,
+  render,
+  screen,
+  userEvent,
+  waitFor,
+} from "@/test";
+import {
+  type NlpParseResponse,
+  useNlpSearch as useRealNlpSearch,
+} from "../../../../../packages/core/src/hooks/useNlpSearch";
 import businessLocationFixture from "../../../../../packages/core/src/utils/__tests__/fixtures/business-location-intent.json";
 import distinctBusinesses from "../../../../../packages/core/src/utils/__tests__/fixtures/distinct-businesses.json";
 
@@ -14,11 +30,29 @@ const useGeocodingMock = vi.fn();
 const useNlpSearchMock = vi.fn();
 const useSearchSuggestionsMock = vi.fn();
 const useBrandSuggestMock = vi.fn();
+const useBrandLogoAttributionMock = vi.fn();
 const usePresetSuggestMock = vi.fn();
 const useChipTranslationsMock = vi.fn();
 const useDataSourcesMock = vi.fn();
+const useLabeledPlacesMock = vi.fn();
+const useSessionMock = vi.fn();
 const resolveStopAsPlaceMock = vi.fn();
 const useMediaQueryMock = vi.fn();
+let consentActions: { onAccept: () => void; onDecline: () => void } | undefined;
+vi.mock("@/components/ui/NlpConsentDialog", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/ui/NlpConsentDialog")>();
+  return {
+    NlpConsentDialog: (props: {
+      open: boolean;
+      providers: string[];
+      onAccept: () => void;
+      onDecline: () => void;
+    }) => {
+      consentActions = props;
+      return <actual.NlpConsentDialog {...props} />;
+    },
+  };
+});
 let voiceResult: ((transcript: string, isFinal: boolean) => void) | undefined;
 vi.mock("./VoiceSearchButton", () => ({
   VoiceSearchButton: ({ onResult }: { onResult: typeof voiceResult }) => {
@@ -38,14 +72,15 @@ vi.mock("@openmapx/core", async (importOriginal) => {
     useNlpSearch: (...a: unknown[]) => useNlpSearchMock(...a),
     useSearchSuggestions: (...a: unknown[]) => useSearchSuggestionsMock(...a),
     useBrandSuggest: (...a: unknown[]) => useBrandSuggestMock(...a),
+    useBrandLogoAttribution: () => useBrandLogoAttributionMock(),
     resolveStopAsPlace: (...a: unknown[]) => resolveStopAsPlaceMock(...a),
     usePresetSuggest: (...a: unknown[]) => usePresetSuggestMock(...a),
     useChipTranslations: (...a: unknown[]) => useChipTranslationsMock(...a),
     useDataSources: () => useDataSourcesMock(),
-    useLabeledPlaces: () => ({ data: undefined }),
+    useLabeledPlaces: () => useLabeledPlacesMock(),
     // The mobile empty state only needs a signed-out session. Keep the real
     // Better Auth client (and its delayed browser lifecycle) out of this test.
-    useSession: () => ({ data: null }),
+    useSession: () => useSessionMock(),
   };
 });
 
@@ -90,12 +125,14 @@ vi.mock("@/lib/launchExplore", () => ({
 
 import type {
   AutocompleteResult,
+  BoundingBox,
   Place,
   SearchSuggestion,
   SearchSuggestionsResponse,
 } from "@openmapx/core";
 import {
   apiClient,
+  createPlace,
   PANEL,
   useCategorySearchStore,
   useDirectionsStore,
@@ -105,8 +142,9 @@ import {
   useSearchStore,
   useSettingsStore,
   useSidebarStore,
+  useStreetLevelStore,
 } from "@openmapx/core";
-import type { Disclosure } from "@openmapx/integration-framework";
+import type { Disclosure } from "@openmapx/core/api-contracts";
 import type { TransitStop } from "@openmapx/mobility-core/transit";
 import { IntegrationDisclosuresProvider } from "@/lib/integrationDisclosuresContext";
 import { useRecentSearchStore } from "@/stores/recentSearchStore";
@@ -124,11 +162,15 @@ class ResizeObserverStub {
 globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
 
 beforeEach(() => {
+  consentActions = undefined;
+  useLabeledPlacesMock.mockReset().mockReturnValue({ data: undefined });
+  useSessionMock.mockReset().mockReturnValue({ data: null });
   useAutocompleteMock.mockReset().mockReturnValue({ data: undefined, isFetching: false });
   useGeocodingMock.mockReset().mockReturnValue({ data: [] });
   useNlpSearchMock.mockReset().mockReturnValue({ data: undefined, isFetching: false });
   useSearchSuggestionsMock.mockReset().mockReturnValue({ data: undefined, isFetching: false });
   useBrandSuggestMock.mockReset().mockReturnValue({ data: undefined });
+  useBrandLogoAttributionMock.mockReset().mockReturnValue({ data: undefined });
   usePresetSuggestMock.mockReset().mockReturnValue({ data: undefined });
   useChipTranslationsMock.mockReset().mockReturnValue({ data: {} });
   useDataSourcesMock
@@ -147,6 +189,7 @@ beforeEach(() => {
   useCategorySearchStore.getState().clearCategory();
   useCategorySearchStore.setState({ anchor: null, exploreBoxOpen: false, activeCategory: null });
   usePlaceStore.setState({ selectedPlace: null });
+  useStreetLevelStore.getState().closeViewer();
   useMapStore.setState({ userLocation: null });
   useSidebarStore.setState({ activeSidebarId: null });
   useSettingsStore.setState({ aiSearchEnabled: true, searchHistoryEnabled: true });
@@ -174,12 +217,12 @@ function aggregateResponse(
   return { suggestions, attributions, partial: false };
 }
 
-const renderBar = (disclosures: Disclosure[] = []) =>
+const renderBar = (disclosures: Disclosure[] = [], queryClient?: QueryClient) =>
   render(
     <IntegrationDisclosuresProvider value={disclosures}>
       <SearchBar />
     </IntegrationDisclosuresProvider>,
-    { wrapper: createQueryWrapper() },
+    { wrapper: createQueryWrapper(queryClient) },
   );
 
 describe("SearchBar", () => {
@@ -230,6 +273,7 @@ describe("SearchBar", () => {
         id: "parking",
         name: "Parking",
         enabled: true,
+        isBuiltIn: true,
         domains: ["data-source"],
         frontend: { searchCategory: { id: "parking", label: "Parking" } },
       },
@@ -261,6 +305,7 @@ describe("SearchBar", () => {
         id: "fuel",
         name: "Fuel",
         enabled: true,
+        isBuiltIn: true,
         domains: ["data-source"],
         frontend: { searchCategory: { id: "fuel", label: "Gas Stations" } },
       },
@@ -290,6 +335,7 @@ describe("SearchBar", () => {
         id: "parking",
         name: "Parking",
         enabled: true,
+        isBuiltIn: true,
         domains: ["data-source"],
         frontend: { searchCategory: { id: "parking-lots", label: "Car parks" } },
       },
@@ -1296,6 +1342,7 @@ describe("SearchBar", () => {
       searchMatch: { kind: "authoritative_code", value: "FRA", normalized: "fra" },
       importance: 0.95,
       provider: "knowledge-ourairports",
+      contributors: [{ sourceId: "ourairports", name: "OurAirports" }],
     });
     useSearchSuggestionsMock.mockReturnValue({
       data: aggregateResponse([airport], [{ sourceId: "ourairports", name: "OurAirports" }]),
@@ -1324,7 +1371,7 @@ describe("SearchBar", () => {
     screen.getByText("OurAirports");
   });
 
-  it("shows response-scoped attribution in the mobile results panel", async () => {
+  it("shows displayed-row attribution in the mobile results panel", async () => {
     useMediaQueryMock.mockReturnValue(true);
     useSearchSuggestionsMock.mockReturnValue({
       data: aggregateResponse(
@@ -1334,6 +1381,7 @@ describe("SearchBar", () => {
             label: "Frankfurt am Main Airport",
             searchMatch: { kind: "authoritative_code", value: "FRA", normalized: "fra" },
             provider: "knowledge-ourairports",
+            contributors: [{ sourceId: "ourairports", name: "OurAirports" }],
           }),
         ],
         [{ sourceId: "ourairports", name: "OurAirports" }],
@@ -1348,6 +1396,27 @@ describe("SearchBar", () => {
 
     await screen.findByRole("option", { name: /Frankfurt am Main Airport/ });
     screen.getByText("OurAirports");
+  });
+
+  it("credits only displayed rows when an aggregate envelope includes another source", async () => {
+    const shown = { sourceId: "shown-feed", name: "Visible supplier" };
+    const hidden = { sourceId: "hidden-feed", name: "Hidden supplier" };
+    useSearchSuggestionsMock.mockReturnValue({
+      data: aggregateResponse(
+        [aggregateSuggestion({ label: "Visible station", contributors: [shown] })],
+        [shown, hidden],
+      ),
+      isFetching: false,
+    });
+
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "station" } });
+
+    await screen.findByRole("option", { name: /Visible station/ });
+    expect(screen.getByText("Visible supplier")).toBeInTheDocument();
+    expect(screen.queryByText("Hidden supplier")).not.toBeInTheDocument();
   });
 
   it("keeps an explicit alias ahead of a generated acronym collision", async () => {
@@ -1826,6 +1895,273 @@ describe("SearchBar", () => {
   });
 });
 
+describe("SearchBar NLP submission context", () => {
+  const query = "cozy cafes with wifi";
+  const bboxA: BoundingBox = { west: 13.3, south: 52.4, east: 13.5, north: 52.6 };
+  const bboxB: BoundingBox = { west: 12.4, south: 51.5, east: 14.4, north: 53.5 };
+  const intent = {
+    filter: { selectors: [{ tags: [{ key: "amenity", value: "cafe" }] }] },
+    spatial_constraint: null,
+    time_constraint: null,
+    sort_by: "relevance" as const,
+    unmapped_attributes: [],
+    confidence: 0.9,
+    explanation: "Cafés with WiFi",
+  };
+
+  function viewport() {
+    let bounds = { ...bboxA };
+    fakeMap.state.center = { lng: 13.4, lat: 52.5 };
+    vi.spyOn(fakeMap.map, "getBounds").mockImplementation(
+      () =>
+        ({
+          getWest: () => bounds.west,
+          getSouth: () => bounds.south,
+          getEast: () => bounds.east,
+          getNorth: () => bounds.north,
+        }) as ReturnType<typeof fakeMap.map.getBounds>,
+    );
+    return (nextBounds: BoundingBox, center: [number, number] = [13.4, 52.5]) => {
+      bounds = { ...nextBounds };
+      fakeMap.state.center.lng = center[0];
+      fakeMap.state.center.lat = center[1];
+    };
+  }
+
+  function lastContext() {
+    const call = useNlpSearchMock.mock.calls.at(-1);
+    return { query: call?.[0], center: call?.[1], bbox: call?.[2], enabled: call?.[3] };
+  }
+
+  function submit(input: HTMLElement) {
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+  }
+
+  function unrelatedRender() {
+    act(() => useMapStore.setState({ userLocation: [7, 50] }));
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("reads the map at explicit submit and retains it while parsing and after success", async () => {
+    const move = viewport();
+    useSearchStore.setState({ query, isFocused: true });
+    useNlpSearchMock.mockReturnValue({ data: undefined, isFetching: true });
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    // No render between map movement and Enter: capture must read the map itself.
+    move(bboxB, [12.8, 52.2]);
+    submit(input);
+    await waitFor(() =>
+      expect(lastContext()).toEqual({ query, center: [12.8, 52.2], bbox: bboxB, enabled: true }),
+    );
+
+    move(bboxA, [14, 53]);
+    unrelatedRender();
+    expect(lastContext()).toEqual({ query, center: [12.8, 52.2], bbox: bboxB, enabled: true });
+
+    useNlpSearchMock.mockReturnValue({
+      data: { intent, resolvedBbox: bboxB, provider: "local" },
+      isFetching: false,
+    });
+    act(() => useMapStore.setState({ userLocation: null }));
+    await screen.findByText("Cafés with WiFi");
+    expect(lastContext()).toEqual({ query, center: [12.8, 52.2], bbox: bboxB, enabled: true });
+    fireEvent.click(screen.getByText("Cafés with WiFi"));
+    expect(useCategorySearchStore.getState().searchBbox).toEqual(bboxB);
+  });
+
+  it("keeps the submitted zoom until the same text is explicitly submitted at new bounds", async () => {
+    const move = viewport();
+    useSearchStore.setState({ query, isFocused: true });
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    submit(input);
+    await waitFor(() =>
+      expect(lastContext()).toEqual({ query, center: [13.4, 52.5], bbox: bboxA, enabled: true }),
+    );
+    move(bboxB);
+    unrelatedRender();
+    expect(lastContext()).toEqual({ query, center: [13.4, 52.5], bbox: bboxA, enabled: true });
+    submit(input);
+    await waitFor(() =>
+      expect(lastContext()).toEqual({ query, center: [13.4, 52.5], bbox: bboxB, enabled: true }),
+    );
+  });
+
+  it("keeps the explicit text and viewport while suggestions for a new query settle", async () => {
+    const move = viewport();
+    useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: true });
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: query } });
+    submit(input);
+    expect(lastContext().enabled).toBe(false);
+    move(bboxB, [14, 53]);
+    unrelatedRender();
+    await waitFor(() => expect(useAutocompleteMock.mock.calls.at(-1)?.[0]).toBe(query));
+    useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: false });
+    act(() => useMapStore.setState({ userLocation: null }));
+    await waitFor(() =>
+      expect(lastContext()).toEqual({ query, center: [13.4, 52.5], bbox: bboxA, enabled: true }),
+    );
+    // Suggestion proximity remains live while NLP uses the submitted context.
+    expect(useAutocompleteMock.mock.calls.at(-1)?.[2]).toEqual({ proximity: [14, 53], zoom: 10 });
+  });
+
+  it("suspends the previous parse when a new submission waits for suggestions", async () => {
+    const move = viewport();
+    useSearchStore.setState({ query, isFocused: true });
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    submit(input);
+    await waitFor(() => expect(lastContext().enabled).toBe(true));
+    move(bboxB);
+    useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: true });
+    unrelatedRender();
+    useNlpSearchMock.mockClear();
+    submit(input);
+    expect(lastContext().enabled).toBe(false);
+    expect(useNlpSearchMock.mock.calls.every((call) => call[3] === false)).toBe(true);
+    move(bboxA, [14, 53]);
+    useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: false });
+    act(() => useMapStore.setState({ userLocation: null }));
+    await waitFor(() =>
+      expect(lastContext()).toEqual({ query, center: [13.4, 52.5], bbox: bboxB, enabled: true }),
+    );
+  });
+
+  it("keeps the original viewport when suggestion settlement times out", async () => {
+    vi.useFakeTimers();
+    try {
+      const move = viewport();
+      useSearchStore.setState({ query, isFocused: true });
+      useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: true });
+      renderBar();
+      submit(screen.getByLabelText("search.ariaLabel"));
+      move(bboxB, [14, 53]);
+      unrelatedRender();
+      await act(async () => vi.advanceTimersByTime(2_500));
+      expect(lastContext()).toEqual({ query, center: [13.4, 52.5], bbox: bboxA, enabled: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries with cloud consent in the submitted viewport after the map moves", async () => {
+    const move = viewport();
+    useSearchStore.setState({ query, isFocused: true });
+    renderBar([
+      {
+        type: "ai-search",
+        integrationId: "search-nlp",
+        aiActive: true,
+        localActive: true,
+        cloudActive: true,
+        cloudAvailable: true,
+        cloudConsentRequired: true,
+        cloudProviderLabels: ["Cloud test"],
+        cloudProcessors: [],
+      },
+    ]);
+    submit(screen.getByLabelText("search.ariaLabel"));
+    await screen.findByText("search.nlpConsentTitle");
+    move(bboxB, [14, 53]);
+    unrelatedRender();
+    expect(lastContext().enabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "search.enable" }));
+    await waitFor(() =>
+      expect(lastContext()).toEqual({ query, center: [13.4, 52.5], bbox: bboxA, enabled: true }),
+    );
+    expect(useNlpSearchMock.mock.calls.at(-1)?.[5]).toBe("consented");
+  });
+
+  it("requires another explicit submission after query editing", async () => {
+    viewport();
+    useSearchStore.setState({ query, isFocused: true });
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    submit(input);
+    await waitFor(() => expect(lastContext().enabled).toBe(true));
+    fireEvent.change(input, { target: { value: "quiet cafes with wifi" } });
+    await waitFor(() =>
+      expect(useAutocompleteMock.mock.calls.at(-1)?.[0]).toBe("quiet cafes with wifi"),
+    );
+    expect(lastContext().enabled).toBe(false);
+    submit(input);
+    await waitFor(() =>
+      expect(lastContext()).toEqual({
+        query: "quiet cafes with wifi",
+        center: [13.4, 52.5],
+        bbox: bboxA,
+        enabled: true,
+      }),
+    );
+  });
+
+  it("falls back to plain text search when submitted bounds are missing", async () => {
+    viewport();
+    useSearchStore.setState({ query, isFocused: true });
+    renderBar();
+    vi.spyOn(fakeMap.map, "getBounds").mockReturnValue(null as never);
+    submit(screen.getByLabelText("search.ariaLabel"));
+    await waitFor(() => expect(launchTextSearch).toHaveBeenCalledWith(fakeMap.map, query));
+    expect(lastContext()).toEqual({ query, center: [13.4, 52.5], bbox: null, enabled: false });
+  });
+
+  it.each(["error", "empty"])(
+    "preserves the plain text fallback after an NLP %s",
+    async (outcome) => {
+      viewport();
+      useSearchStore.setState({ query, isFocused: true });
+      useNlpSearchMock.mockImplementation((...args: unknown[]) =>
+        args[3]
+          ? {
+              data:
+                outcome === "empty"
+                  ? {
+                      intent: { ...intent, filter: { selectors: [] } },
+                      resolvedBbox: bboxA,
+                      provider: "local",
+                    }
+                  : undefined,
+              isFetching: false,
+              isError: outcome === "error",
+            }
+          : { data: undefined, isFetching: false },
+      );
+      renderBar();
+      submit(screen.getByLabelText("search.ariaLabel"));
+      await waitFor(() => expect(launchTextSearch).toHaveBeenCalledWith(fakeMap.map, query));
+      expect(lastContext().enabled).toBe(false);
+    },
+  );
+
+  it.each(["recent", "voice"])(
+    "captures a %s submission before its suggestions settle",
+    async (path) => {
+      const move = viewport();
+      useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: true });
+      if (path === "recent") useRecentSearchStore.getState().add(query);
+      renderBar();
+      const input = screen.getByLabelText("search.ariaLabel");
+      fireEvent.focus(input);
+      if (path === "recent") fireEvent.click(screen.getByRole("button", { name: query }));
+      else act(() => voiceResult?.(query, true));
+      expect(useSearchStore.getState().query).toBe(query);
+      move(bboxB, [14, 53]);
+      unrelatedRender();
+      await waitFor(() => expect(useAutocompleteMock.mock.calls.at(-1)?.[0]).toBe(query));
+      useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: false });
+      act(() => useMapStore.setState({ userLocation: null }));
+      await waitFor(() =>
+        expect(lastContext()).toEqual({ query, center: [13.4, 52.5], bbox: bboxA, enabled: true }),
+      );
+    },
+  );
+});
+
 describe("SearchBar map obstruction", () => {
   // jsdom lays nothing out, so an unstubbed `getBoundingClientRect` reports an
   // all-zero box — and a zero extent is exactly how the registry spells "not on
@@ -1888,4 +2224,769 @@ describe("SearchBar map obstruction", () => {
     viewerBar.unmount();
     expect(getMapObstructionInsets().top).toBe(BAR_BOTTOM);
   });
+});
+
+describe("SearchBar NLP submission ownership", () => {
+  const query = "coffee near me";
+  const response: NlpParseResponse = {
+    intent: {
+      filter: { selectors: [{ tags: [{ key: "amenity", value: "cafe" }] }] },
+      spatial_constraint: null,
+      time_constraint: null,
+      sort_by: "relevance",
+      unmapped_attributes: [],
+      confidence: 0.9,
+      explanation: "Owned cafés",
+    },
+    resolvedBbox: { west: 0, south: 0, east: 1, north: 1 },
+    provider: "local",
+    providerLabel: "Local",
+    cloud: false,
+    cloudAvailable: false,
+    cloudConsentRequired: false,
+    cloudProviderLabels: [],
+    cached: false,
+  };
+  const empty = { ...response, intent: { ...response.intent, filter: { selectors: [] } } };
+  const clients: QueryClient[] = [];
+
+  function deferred() {
+    let resolve!: (value: NlpParseResponse) => void;
+    let reject!: (error: Error) => void;
+    const promise = new Promise<NlpParseResponse>((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
+    return { promise, resolve, reject };
+  }
+
+  async function start(disclosures: Disclosure[] = [], surface: "map" | "street-level" = "map") {
+    const request = deferred();
+    const post = vi.spyOn(apiClient, "post").mockReturnValue(request.promise);
+    useNlpSearchMock.mockImplementation((...args: unknown[]) =>
+      useRealNlpSearch(...(args as Parameters<typeof useRealNlpSearch>)),
+    );
+    useSearchStore.setState({ query, isFocused: true });
+    const client = createTestQueryClient();
+    clients.push(client);
+    const view = render(
+      <IntegrationDisclosuresProvider value={disclosures}>
+        <SearchBar surface={surface} />
+      </IntegrationDisclosuresProvider>,
+      { wrapper: createQueryWrapper(client) },
+    );
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    return { request, post, input, client, ...view };
+  }
+
+  async function finish(
+    run: Awaited<ReturnType<typeof start>>,
+    outcome: "empty" | "error" | "success" | "cloud consent" | "cloud open" = "empty",
+  ) {
+    await act(async () => {
+      if (outcome === "error") run.request.reject(new Error("parse failed"));
+      else
+        run.request.resolve(
+          outcome === "success"
+            ? response
+            : outcome === "cloud consent" || outcome === "cloud open"
+              ? {
+                  ...empty,
+                  cloudAvailable: true,
+                  cloudConsentRequired: outcome === "cloud consent",
+                }
+              : empty,
+        );
+    });
+    await waitFor(() => expect(run.client.isFetching()).toBe(0));
+    await act(async () => {});
+  }
+
+  function visibleState() {
+    return {
+      query: useSearchStore.getState().query,
+      focused: useSearchStore.getState().isFocused,
+      place: usePlaceStore.getState().selectedPlace,
+      sidebar: useSidebarStore.getState().activeSidebarId,
+      category: useCategorySearchStore.getState().activeCategory,
+      brand: useCategorySearchStore.getState().activeBrand,
+      anchor: useCategorySearchStore.getState().anchor,
+      directions: useDirectionsStore.getState().isOpen,
+    };
+  }
+
+  afterEach(() => {
+    for (const client of clients.splice(0)) client.clear();
+    vi.restoreAllMocks();
+  });
+
+  const mapPlace = createPlace({
+    primaryScheme: "osm",
+    ids: { osm: "node/123" },
+    name: "Map café",
+    address: "Fixture address",
+    coordinates: [1, 1],
+  });
+
+  const viewerImage = { providerId: "panoramax", imageId: "fixture" };
+
+  it.each(["empty", "error", "success", "cloud consent", "cloud open"] as const)(
+    "keeps an external map selection after an obsolete %s response",
+    async (outcome) => {
+      const actual =
+        await vi.importActual<typeof import("@/lib/launchExplore")>("@/lib/launchExplore");
+      launchTextSearch.mockImplementation((...args: unknown[]) =>
+        actual.launchTextSearch(...(args as Parameters<typeof actual.launchTextSearch>)),
+      );
+      const run = await start();
+      act(() => {
+        usePlaceStore.getState().setSelectedPlace(mapPlace);
+        useSidebarStore.getState().openSidebar(PANEL.PLACE);
+      });
+      const state = visibleState();
+      await finish(run, outcome);
+      expect(visibleState()).toEqual(state);
+      expect(run.post).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText("Owned cafés")).toBeNull();
+      expect(screen.queryByText("search.nlpConsentTitle")).toBeNull();
+    },
+  );
+
+  it("cancels a same-place reselection but preserves selection enrichment", async () => {
+    usePlaceStore.getState().setSelectedPlace(mapPlace);
+    const run = await start();
+    act(() => {
+      const revision = usePlaceStore.getState().selectionRevision;
+      usePlaceStore
+        .getState()
+        .enrichSelectedPlace(revision, { ...mapPlace, name: "Enriched café" });
+    });
+    await finish(run, "success");
+    await screen.findByText("Owned cafés");
+    act(() => usePlaceStore.getState().setSelectedPlace(usePlaceStore.getState().selectedPlace));
+    expect(screen.queryByText("Owned cafés")).toBeNull();
+  });
+
+  it.each(["map", "street-level"] as const)(
+    "cancels the %s submission when its surface closes, even if reopened before render",
+    async (surface) => {
+      if (surface === "street-level") useStreetLevelStore.setState({ activeImage: viewerImage });
+      const run = await start([], surface);
+      act(() => {
+        if (surface === "map") {
+          useStreetLevelStore.setState({ activeImage: viewerImage });
+          useStreetLevelStore.getState().closeViewer();
+        } else {
+          useStreetLevelStore.getState().closeViewer();
+          useStreetLevelStore.setState({ activeImage: viewerImage });
+        }
+      });
+      await finish(run, "empty");
+      expect(launchTextSearch).not.toHaveBeenCalled();
+      expect(screen.queryByText("Owned cafés")).toBeNull();
+    },
+  );
+
+  it("hands search ownership to a second mounted viewer bar sharing the query cache", async () => {
+    const run = await start();
+    const next = deferred();
+    run.post.mockReturnValue(next.promise);
+    act(() => useStreetLevelStore.setState({ activeImage: viewerImage }));
+    const viewer = render(
+      <IntegrationDisclosuresProvider value={[]}>
+        <SearchBar surface="street-level" />
+      </IntegrationDisclosuresProvider>,
+      { wrapper: createQueryWrapper(run.client) },
+    );
+    const form = viewer.container.querySelector("form");
+    if (!form) throw new Error("Missing viewer search form");
+    fireEvent.submit(form);
+    await waitFor(() => expect(run.post).toHaveBeenCalledTimes(2));
+    await act(async () => run.request.resolve(empty));
+    expect(launchTextSearch).not.toHaveBeenCalled();
+    await act(async () => next.resolve(response));
+    await screen.findByText("Owned cafés");
+    expect(run.container.textContent).not.toContain("Owned cafés");
+    expect(viewer.container.textContent).toContain("Owned cafés");
+    fireEvent.click(screen.getByText("Owned cafés"));
+    expect(useNlpSearchStore.getState().intent?.explanation).toBe("Owned cafés");
+  });
+
+  it("keeps a viewer submission while changing images", async () => {
+    useStreetLevelStore.setState({ activeImage: viewerImage });
+    const run = await start([], "street-level");
+    act(() => useStreetLevelStore.setState({ activeImage: { ...viewerImage, imageId: "next" } }));
+    await finish(run, "success");
+    fireEvent.click(await screen.findByText("Owned cafés"));
+    expect(useNlpSearchStore.getState().intent?.explanation).toBe("Owned cafés");
+  });
+
+  it.each(["selection", "viewer"])(
+    "cancels pending suggestion settlement on external %s",
+    async (action) => {
+      const post = vi.spyOn(apiClient, "post").mockResolvedValue(response);
+      useNlpSearchMock.mockImplementation((...args: unknown[]) =>
+        useRealNlpSearch(...(args as Parameters<typeof useRealNlpSearch>)),
+      );
+      useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: true });
+      useSearchStore.setState({ query, isFocused: true });
+      renderBar();
+      fireEvent.submit(
+        screen.getByLabelText("search.ariaLabel").closest("form") as HTMLFormElement,
+      );
+      act(() => {
+        if (action === "selection") usePlaceStore.getState().setSelectedPlace(mapPlace);
+        else {
+          useStreetLevelStore.setState({ activeImage: viewerImage });
+          useStreetLevelStore.getState().closeViewer();
+        }
+      });
+      const state = visibleState();
+      useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: false });
+      act(() => useMapStore.setState({ userLocation: [1, 1] }));
+      await act(async () => {});
+      expect(post).not.toHaveBeenCalled();
+      expect(visibleState()).toEqual(state);
+    },
+  );
+
+  it.each(["empty", "error"] as const)(
+    "keeps Directions after an obsolete %s completion through the actual control",
+    async (outcome) => {
+      const run = await start();
+      fireEvent.click(screen.getByLabelText("search.getDirectionsAriaLabel"));
+      const state = visibleState();
+      expect(state.sidebar).toBe(PANEL.DIRECTIONS);
+      await finish(run, outcome);
+      expect(launchTextSearch).not.toHaveBeenCalled();
+      expect(visibleState()).toEqual(state);
+      expect(screen.queryByText("Owned cafés")).toBeNull();
+      expect(screen.queryByText("search.nlpConsentTitle")).toBeNull();
+    },
+  );
+
+  it.each([
+    "store Directions",
+    "Escape",
+    "Back",
+    "clear",
+    "panel close",
+    "query edit",
+    "store query edit",
+    "voice replacement",
+    "Settings off and on",
+    "nearby cancel",
+  ])("preserves the newer action after %s", async (action) => {
+    if (action === "Back" || action === "clear") useMediaQueryMock.mockReturnValue(true);
+    const run = await start();
+    if (action === "store Directions")
+      act(() => {
+        useDirectionsStore.getState().open();
+        useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);
+      });
+    if (action === "Escape") fireEvent.keyDown(run.input, { key: "Escape" });
+    if (action === "Back") fireEvent.click(screen.getByLabelText("common.back"));
+    if (action === "clear") fireEvent.click(screen.getByLabelText("common.clear"));
+    if (action === "panel close") {
+      act(() => useSidebarStore.getState().openSidebar(PANEL.PLACE));
+      fireEvent.click(screen.getByLabelText("search.closePanelAriaLabel"));
+    }
+    if (action === "query edit") fireEvent.change(run.input, { target: { value: "tea near me" } });
+    if (action === "store query edit") act(() => useSearchStore.getState().setQuery("tea near me"));
+    if (action === "voice replacement") act(() => voiceResult?.("tea near me", false));
+    if (action === "Settings off and on") {
+      act(() => useSettingsStore.setState({ aiSearchEnabled: false }));
+      act(() => useSettingsStore.setState({ aiSearchEnabled: true }));
+    }
+    if (action === "nearby cancel") {
+      act(() => {
+        useCategorySearchStore.setState({
+          anchor: { id: "anchor", name: "Anchor", coordinates: [1, 1] } as Place,
+        });
+        useSearchStore.getState().setIsFocused(false);
+      });
+      fireEvent.click(screen.getByLabelText("search.cancelNearby"));
+    }
+    const state = visibleState();
+    const calls = launchTextSearch.mock.calls.length;
+    await finish(run);
+    expect(launchTextSearch).toHaveBeenCalledTimes(calls);
+    expect(visibleState()).toEqual(state);
+    fireEvent.focus(screen.queryByLabelText("search.ariaLabel") ?? run.input);
+    expect(screen.queryByText("Owned cafés")).toBeNull();
+  });
+
+  it.each([
+    "place",
+    "same-label place",
+    "category",
+    "brand",
+    "text",
+    "labeled place",
+    "nearby selection",
+  ])("keeps an explicit %s selection after the older parse finishes", async (action) => {
+    const run = await start();
+    const row: AutocompleteResult = {
+      id: "osm:node/123",
+      label: action === "same-label place" ? query : "Coffee Place",
+      type: "poi",
+      coordinates: [1, 1],
+    };
+    if (action === "category") Object.assign(row, { id: "category-cafes", type: "category" });
+    if (action === "brand")
+      Object.assign(row, {
+        type: "brand",
+        brand: { qid: "Q1", name: "Coffee Place", kind: ["brand"], matchedOn: "name" },
+      });
+    if (action === "labeled place") row.type = "labeled_place";
+    useAutocompleteMock.mockReturnValue({ data: [row], isFetching: false });
+    act(() => useMapStore.setState({ userLocation: [1, 1] }));
+    if (action === "nearby selection") {
+      act(() =>
+        useCategorySearchStore.setState({
+          anchor: { id: "anchor", name: "Anchor", coordinates: [1, 1] } as Place,
+        }),
+      );
+      fireEvent.click(screen.getByRole("option", { name: /search.searchFreeText/ }));
+    } else if (action === "text")
+      fireEvent.click(screen.getByRole("option", { name: /search.searchQueryInArea/ }));
+    else fireEvent.click(await screen.findByRole("option", { name: new RegExp(row.label) }));
+    const state = visibleState();
+    const calls = launchTextSearch.mock.calls.length;
+    await finish(run);
+    expect(visibleState()).toEqual(state);
+    expect(launchTextSearch).toHaveBeenCalledTimes(calls);
+  });
+
+  it.each(["Settings off/on", "query away/back", "Directions open/close"])(
+    "irrevocably cancels pending suggestion settlement after %s",
+    async (action) => {
+      const post = vi.spyOn(apiClient, "post").mockResolvedValue(response);
+      useNlpSearchMock.mockImplementation((...args: unknown[]) =>
+        useRealNlpSearch(...(args as Parameters<typeof useRealNlpSearch>)),
+      );
+      useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: true });
+      useSearchStore.setState({ query, isFocused: true });
+      renderBar();
+      const input = screen.getByLabelText("search.ariaLabel");
+      fireEvent.submit(input.closest("form") as HTMLFormElement);
+      if (action === "Settings off/on") {
+        act(() => useSettingsStore.setState({ aiSearchEnabled: false }));
+        act(() => useSettingsStore.setState({ aiSearchEnabled: true }));
+      } else if (action === "query away/back")
+        act(() => {
+          useSearchStore.getState().setQuery("tea near me");
+          useSearchStore.getState().setQuery(query);
+        });
+      else
+        act(() => {
+          useDirectionsStore.getState().open();
+          useDirectionsStore.getState().close();
+        });
+      const state = visibleState();
+      useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: false });
+      act(() => useMapStore.setState({ userLocation: [1, 1] }));
+      await act(async () => {});
+      expect(post).not.toHaveBeenCalled();
+      expect(launchTextSearch).not.toHaveBeenCalled();
+      expect(visibleState()).toEqual(state);
+      expect(useNlpSearchMock.mock.calls.at(-1)?.[3]).toBe(false);
+    },
+  );
+
+  it.each(["query", "Directions", "Settings"])(
+    "does not publish from a pending timer before a %s store change flushes",
+    async (action) => {
+      vi.useFakeTimers();
+      try {
+        const post = vi.spyOn(apiClient, "post").mockResolvedValue(response);
+        useNlpSearchMock.mockImplementation((...args: unknown[]) =>
+          useRealNlpSearch(...(args as Parameters<typeof useRealNlpSearch>)),
+        );
+        useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: true });
+        useSearchStore.setState({ query, isFocused: true });
+        renderBar();
+        const input = screen.getByLabelText("search.ariaLabel");
+        fireEvent.submit(input.closest("form") as HTMLFormElement);
+        act(() => vi.advanceTimersByTime(2_499));
+        let state: ReturnType<typeof visibleState> | undefined;
+        act(() => {
+          useSearchStore.getState().setIsFocused(false);
+          if (action === "query") useSearchStore.getState().setQuery("tea near me");
+          if (action === "Directions") {
+            useDirectionsStore.getState().open();
+            useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);
+          }
+          if (action === "Settings") useSettingsStore.setState({ aiSearchEnabled: false });
+          state = visibleState();
+          vi.advanceTimersByTime(1);
+        });
+        await act(async () => {});
+        expect(visibleState()).toEqual(state);
+        expect(post).not.toHaveBeenCalled();
+        expect(launchTextSearch).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("settles an explicit plain submission while AI was already disabled", async () => {
+    const post = vi.spyOn(apiClient, "post").mockResolvedValue(response);
+    useNlpSearchMock.mockImplementation((...args: unknown[]) =>
+      useRealNlpSearch(...(args as Parameters<typeof useRealNlpSearch>)),
+    );
+    useSettingsStore.setState({ aiSearchEnabled: false });
+    useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: true });
+    useSearchStore.setState({ query, isFocused: true });
+    renderBar();
+    fireEvent.submit(screen.getByLabelText("search.ariaLabel").closest("form") as HTMLFormElement);
+    useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: false });
+    act(() => useMapStore.setState({ userLocation: [1, 1] }));
+    await waitFor(() => expect(launchTextSearch).toHaveBeenCalledWith(fakeMap.map, query));
+    expect(launchTextSearch).toHaveBeenCalledTimes(1);
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("keeps a labeled-place empty-search shortcut after an earlier submission", async () => {
+    const run = await start();
+    useSessionMock.mockReturnValue({ data: { user: { id: "test-user" } } });
+    useLabeledPlacesMock.mockReturnValue({
+      data: [
+        {
+          id: "home",
+          label: "home",
+          name: "My Home",
+          address: "Home address",
+          lat: 1,
+          lng: 1,
+          placeId: "osm:node/5",
+          icon: null,
+        },
+      ],
+    });
+    act(() => useSearchStore.getState().setQuery(""));
+    fireEvent.click(screen.getByRole("button", { name: /saved.home/ }));
+    const state = visibleState();
+    expect(state.place?.name).toBe("My Home");
+    expect(state.sidebar).toBe(PANEL.PLACE);
+    await finish(run, "success");
+    expect(visibleState()).toEqual(state);
+    expect(launchTextSearch).not.toHaveBeenCalled();
+  });
+
+  it.each(["empty", "error"] as const)(
+    "falls back exactly once for an active %s response",
+    async (outcome) => {
+      const run = await start();
+      await finish(run, outcome);
+      await waitFor(() => expect(launchTextSearch).toHaveBeenCalledWith(fakeMap.map, query));
+      expect(launchTextSearch).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("keeps a successful response through blur and refocus and consumes it on activation", async () => {
+    const run = await start();
+    fireEvent.blur(run.input);
+    await waitFor(() => expect(useSearchStore.getState().isFocused).toBe(false));
+    await finish(run, "success");
+    fireEvent.focus(run.input);
+    fireEvent.click(await screen.findByText("Owned cafés"));
+    expect(useNlpSearchStore.getState().isNlpActive).toBe(true);
+    expect(useCategorySearchStore.getState().searchBbox).toEqual(response.resolvedBbox);
+    expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.CATEGORY);
+    fireEvent.focus(run.input);
+    expect(screen.queryByText("Owned cafés")).toBeNull();
+  });
+
+  it("hides an abandoned cached success until the same text is explicitly submitted again", async () => {
+    const run = await start();
+    await finish(run, "success");
+    await screen.findByText("Owned cafés");
+    fireEvent.keyDown(run.input, { key: "Escape" });
+    fireEvent.focus(run.input);
+    expect(screen.queryByText("Owned cafés")).toBeNull();
+    fireEvent.submit(run.input.closest("form") as HTMLFormElement);
+    await screen.findByText("Owned cafés");
+    expect(run.post).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["success", "cloud consent", "cloud open"] as const)(
+    "keeps an abandoned %s result invisible and inert after Escape",
+    async (outcome) => {
+      const run = await start();
+      fireEvent.keyDown(run.input, { key: "Escape" });
+      const state = visibleState();
+      await finish(run, outcome);
+      expect(visibleState()).toEqual(state);
+      expect(launchTextSearch).not.toHaveBeenCalled();
+      expect(run.post).toHaveBeenCalledTimes(1);
+      fireEvent.focus(run.input);
+      expect(screen.queryByText("Owned cafés")).toBeNull();
+      expect(screen.queryByText("search.nlpConsentTitle")).toBeNull();
+    },
+  );
+
+  it.each(["accept", "decline"])(
+    "preserves active consent %s through ordinary blur",
+    async (choice) => {
+      const run = await start();
+      const cloud = deferred();
+      run.post.mockReturnValue(cloud.promise);
+      await act(async () =>
+        run.request.resolve({ ...empty, cloudAvailable: true, cloudConsentRequired: true }),
+      );
+      await screen.findByText("search.nlpConsentTitle");
+      expect(launchTextSearch).not.toHaveBeenCalled();
+      fireEvent.blur(run.input);
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: choice === "accept" ? "search.enable" : "search.noThanks",
+        }),
+      );
+      if (choice === "accept") {
+        await waitFor(() => expect(run.post).toHaveBeenCalledTimes(2));
+        expect(run.post.mock.calls[1]?.[1]).toEqual(
+          expect.objectContaining({ cloudAccess: "consented", query }),
+        );
+        await act(async () => cloud.resolve(response));
+        fireEvent.focus(run.input);
+        await screen.findByText("Owned cafés");
+        expect(launchTextSearch).not.toHaveBeenCalled();
+      } else {
+        await waitFor(() => expect(launchTextSearch).toHaveBeenCalledWith(fakeMap.map, query));
+        expect(launchTextSearch).toHaveBeenCalledTimes(1);
+        expect(run.post).toHaveBeenCalledTimes(1);
+      }
+    },
+  );
+
+  it("retries an active open-cloud response with the existing submitted context", async () => {
+    const run = await start();
+    const cloud = deferred();
+    run.post.mockReturnValue(cloud.promise);
+    await act(async () => run.request.resolve({ ...empty, cloudAvailable: true }));
+    await waitFor(() => expect(run.post).toHaveBeenCalledTimes(2));
+    expect(run.post.mock.calls[1]?.[1]).toEqual(
+      expect.objectContaining({ query, cloudAccess: "defer-to-server" }),
+    );
+    expect(launchTextSearch).not.toHaveBeenCalled();
+    await act(async () => cloud.resolve(response));
+    await screen.findByText("Owned cafés");
+  });
+
+  it.each(["accept", "decline"])(
+    "makes an obsolete consent %s callback inert before a store update flushes",
+    async (choice) => {
+      const run = await start();
+      await act(async () =>
+        run.request.resolve({ ...empty, cloudAvailable: true, cloudConsentRequired: true }),
+      );
+      await screen.findByText("search.nlpConsentTitle");
+      const callback = choice === "accept" ? consentActions?.onAccept : consentActions?.onDecline;
+      expect(callback).toBeDefined();
+      const storage = { ...localStorage };
+      act(() => {
+        useDirectionsStore.getState().open();
+        useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);
+        callback?.();
+      });
+      expect({ ...localStorage }).toEqual(storage);
+      expect(run.post).toHaveBeenCalledTimes(1);
+      expect(launchTextSearch).not.toHaveBeenCalled();
+      expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.DIRECTIONS);
+      expect(screen.queryByText("search.nlpConsentTitle")).toBeNull();
+    },
+  );
+
+  it("ignores an old success while a different submission waits for its debounce", async () => {
+    const run = await start();
+    const next = deferred();
+    run.post.mockReturnValue(next.promise);
+    fireEvent.change(run.input, { target: { value: "tea near me" } });
+    fireEvent.submit(run.input.closest("form") as HTMLFormElement);
+    await act(async () =>
+      run.request.resolve({ ...response, cloudAvailable: true, cloudConsentRequired: true }),
+    );
+    expect(screen.queryByText("Owned cafés")).toBeNull();
+    expect(screen.queryByText("search.nlpConsentTitle")).toBeNull();
+    expect(launchTextSearch).not.toHaveBeenCalled();
+    await waitFor(() => expect(run.post).toHaveBeenCalledTimes(2));
+    expect(run.post.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ query: "tea near me" }));
+    await act(async () =>
+      next.resolve({ ...response, intent: { ...response.intent, explanation: "Owned tea" } }),
+    );
+    await screen.findByText("Owned tea");
+    expect(screen.queryByText("Owned cafés")).toBeNull();
+    fireEvent.click(screen.getByText("Owned tea"));
+    expect(useNlpSearchStore.getState().intent?.explanation).toBe("Owned tea");
+  });
+});
+
+it("keeps captured source fields when an autocomplete row becomes a selected place", async () => {
+  const name = { sourceId: "name", name: "Name supplier" };
+  const geometry = { sourceId: "geometry", name: "Geometry supplier" };
+  useAutocompleteMock.mockReturnValue({
+    data: [
+      {
+        id: "osm:node/1",
+        label: "Cafe Aurora",
+        sublabel: "Street",
+        type: "poi",
+        coordinates: [8, 50],
+        contributors: [name, geometry],
+        fieldContributors: {
+          label: [name],
+          sublabel: [name],
+          coordinates: [geometry],
+          id: [name],
+          type: [],
+        },
+      },
+    ],
+    isFetching: false,
+  });
+  renderBar();
+  const input = screen.getByLabelText("search.ariaLabel");
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "Cafe Aurora" } });
+  fireEvent.click(await screen.findByRole("option", { name: /Cafe Aurora/ }));
+  const selected = usePlaceStore.getState().selectedPlace;
+  expect(selected?.fieldContributors?.name).toEqual([name]);
+  expect(selected?.fieldContributors?.coordinates).toEqual([geometry]);
+  name.name = "Changed catalogue";
+  expect(selected?.fieldContributors?.name?.[0].name).toBe("Name supplier");
+});
+
+it("retains direct object and address evidence when a MapTiler row is selected", async () => {
+  const evidence = {
+    source: "overpass",
+    method: "osm-tags",
+    recordId: "osm:way/1",
+    components: { road: "Grunerstraße", house_number: "20" },
+  };
+  const reference = { source: "geocoding-maptiler", recordId: "maptiler:poi.1", osmRef: "way/1" };
+  useAutocompleteMock.mockReturnValue({
+    data: [
+      {
+        id: "maptiler:poi.1",
+        label: "Cafe Aurora",
+        sublabel: "Cafe Aurora, Alexanderstraße 25",
+        address: "Grunerstraße 20",
+        addressEvidence: evidence,
+        directOsmReference: reference,
+        ids: { osm: "way/1", wikidata: "Q1" },
+        type: "poi",
+        coordinates: [8, 50],
+      },
+    ],
+    isFetching: false,
+  });
+  renderBar();
+  const input = screen.getByLabelText("search.ariaLabel");
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "Cafe Aurora" } });
+  fireEvent.click(await screen.findByRole("option", { name: /Cafe Aurora/ }));
+  const selected = usePlaceStore.getState().selectedPlace;
+  expect(selected?.id).toBe("maptiler:poi.1");
+  expect(selected?.ids).toEqual({ maptiler: "poi.1", osm: "way/1", wikidata: "Q1" });
+  expect(selected?.address).toBe("Grunerstraße 20");
+  expect(selected?.addressEvidence).toEqual(evidence);
+  expect(selected?.directOsmReference).toEqual(reference);
+});
+
+describe("SearchBar credit focus ownership", () => {
+  it.each([
+    ["desktop", false, "pointer"],
+    ["desktop", false, "keyboard"],
+    ["mobile", true, "pointer"],
+    ["mobile", true, "keyboard"],
+  ] as const)(
+    "retains %s brand credit controls and dialogs (mobile=%s, %s)",
+    async (_surface, mobile, interaction) => {
+      useMediaQueryMock.mockReturnValue(mobile);
+      useBrandSuggestMock.mockReturnValue({
+        data: {
+          matches: [
+            {
+              qid: "Q1",
+              name: "Brand",
+              kind: ["brand"],
+              logoFile: "Brand.svg",
+              matchedOn: "name",
+              presence: "here",
+            },
+          ],
+        },
+      });
+      useBrandLogoAttributionMock.mockReturnValue({
+        data: {
+          logoFile: "Brand.svg",
+          url: "https://image.test/brand.svg",
+          pageUrl: "https://commons.wikimedia.org/wiki/File:Brand.svg",
+          source: "wikimedia-commons",
+          author: "Captured brand artist",
+          licensing: licensingFromDeclaration(
+            "CC BY 4.0",
+            "https://creativecommons.org/licenses/by/4.0/",
+          ),
+        },
+      });
+      const outside = document.createElement("button");
+      outside.textContent = "Outside search";
+      document.body.appendChild(outside);
+      try {
+        renderBar();
+        const user = userEvent.setup();
+        const input = screen.getByLabelText("search.ariaLabel");
+        await user.click(input);
+        fireEvent.change(input, { target: { value: "Brand" } });
+        const trigger = await screen.findByRole("button", { name: "photoGallery.credits" });
+
+        if (interaction === "keyboard") {
+          for (let step = 0; step < 20 && document.activeElement !== trigger; step++)
+            await user.tab();
+          expect(trigger).toHaveFocus();
+          await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 200));
+          });
+          expect(useSearchStore.getState().isFocused).toBe(true);
+          await user.keyboard("{Enter}");
+        } else await user.click(trigger);
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        });
+        expect(screen.getByRole("dialog", { name: "photoGallery.credits" })).toBeVisible();
+        expect(useSearchStore.getState().isFocused).toBe(true);
+        expect(usePlaceStore.getState().selectedPlace).toBeNull();
+        await user.tab();
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        });
+        expect(
+          screen
+            .getByRole("dialog", { name: "photoGallery.credits" })
+            .contains(document.activeElement),
+        ).toBe(true);
+        if (interaction === "keyboard") await user.keyboard("{Escape}");
+        else await user.click(screen.getByRole("button", { name: "common.close" }));
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        });
+        expect(screen.queryByRole("dialog")).toBeNull();
+        expect(trigger).toHaveFocus();
+        expect(screen.getByRole("listbox")).toBeVisible();
+        act(() => outside.focus());
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        });
+        expect(useSearchStore.getState().isFocused).toBe(false);
+        expect(screen.queryByRole("listbox")).toBeNull();
+      } finally {
+        outside.remove();
+      }
+    },
+  );
 });

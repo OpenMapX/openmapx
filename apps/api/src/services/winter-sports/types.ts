@@ -4,6 +4,7 @@ import type {
   MultiPolygonGeometry,
   PolygonGeometry,
 } from "@openmapx/core";
+import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
 
 export type {
   LineStringGeometry,
@@ -14,7 +15,7 @@ export type {
   PolygonGeometry,
 } from "@openmapx/core";
 
-export interface WinterSportsPiste {
+export interface WinterSportsPiste extends ContributingRecord {
   id: string;
   name: string;
   type: string;
@@ -26,7 +27,7 @@ export interface WinterSportsPiste {
   geometry: LineStringGeometry | MultiLineStringGeometry;
 }
 
-export interface WinterSportsLift {
+export interface WinterSportsLift extends ContributingRecord {
   id: string;
   name: string;
   aerialway: string;
@@ -39,7 +40,7 @@ export interface WinterSportsLift {
   geometry: LineStringGeometry;
 }
 
-export interface WinterSportsArea {
+export interface WinterSportsArea extends ContributingRecord {
   id: string;
   name: string;
   geometry: PolygonGeometry | MultiPolygonGeometry;

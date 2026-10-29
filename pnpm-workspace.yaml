@@ -33,10 +33,9 @@ blockExoticSubdeps: true
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
 minimumReleaseAgeIgnoreMissingTime: false
-# One-version exception for jsdom's 30.1.1 focus-regression fix. Later jsdom
-# releases remain subject to the normal 24-hour quarantine.
+# Install this exact security patch immediately; retain the age gate elsewhere.
 minimumReleaseAgeExclude:
-  - "jsdom@30.1.1"
+  - "node-forge@1.4.2"
 trustPolicy: no-downgrade
 
 # TypeScript 7 has no compiler API yet; keep this workspace's direct compiler
@@ -47,6 +46,7 @@ updateConfig:
 
 overrides:
   "@hey-api/client-fetch": "workspace:*"
+  "node-forge@1": "^1.4.2" # CVE-2026-85393; includes the PEM Buffer regression fix.
   "protobufjs": ">=7.5.5"
   "uuid": ">=14.0.0"
   # Include sharp 0.35.5's librsvg fix (GHSA-wq5f-xc86-pv6w) as well as
@@ -60,12 +60,19 @@ overrides:
   "source-map-js@1": "^1.2.2" # CVE-2026-93749
   # Updating vue brings its exact-version renderer/compiler dependencies along.
   "vue@3": "^3.5.42" # GHSA-g2v6-rqmx-r4w6
+  # Serwist pins zod 4.6.5, and zod 3 has no patched release. The Expo CLI,
+  # the only zod 3 consumer, uses schema APIs that zod 4 keeps.
+  "zod": "^4.6.7" # GHSA-mrhx-c7xc-m3w5
   "@xmldom/xmldom@0.9": "^0.9.12"
   "esbuild": ">=0.28.1"
   "postcss": ">=8.5.10"
   # Force every 7.x consumer onto the security-fixed request stack. Scalar's
-  # parser still declares an older compatible 7.x range.
-  "undici@7": ">=7.29.1"
+  # parser and the AI SDK still declare older compatible 7.x ranges; this
+  # override resolves them to 8.x, so it also excludes the 8.x releases before
+  # the same fix.
+  "undici@7": ">=7.30.1 <8.0.0 || >=8.12.3" # GHSA-xjj6-f33q-929c
+  # jsdom and testcontainers lock the 8.x release before the fix.
+  "undici@8": "^8.12.3" # GHSA-xjj6-f33q-929c
   # Serwist pins 4.28.6 directly; 4.28.7+ fixes its unbounded query cache and
   # custom-stats prototype write. Keep the workspace on the current 4.x line.
   "browserslist": ">=4.29.0"
@@ -78,8 +85,11 @@ overrides:
   # js-yaml 5.2.x is a dual CJS/ESM package that addresses the merge-key DoS
   # (GHSA-h67p-54hq-rp68) structurally: load() defaults to CORE_SCHEMA (no
   # `!!merge`), plus the maxTotalMergeKeys/maxAliases caps added in 5.2.0.
-  # Pinned to keep one version workspace-wide for every YAML consumer.
+  # Default for YAML consumers; Orval's ESM entry still requires the v4 default export.
   "js-yaml": "^5.2.1"
+  # Orval pins this maintained v4 release, including the merge/omap DoS fixes.
+  # Keep this exception scoped to dev-only code generation, not runtime parsers.
+  "orval@8.43.0>js-yaml": "4.3.2"
   # react-redux@9.2.0 and reselect@5.1.1 ship without provenance attestation
   # even though earlier and later versions have it; pin to the latest provenance-
   # signed releases so pnpm's `trustPolicy: no-downgrade` lets the install
@@ -126,10 +136,32 @@ overrides:
   # jest-expo 57 still pins jest-watch-typeahead 2 even though this workspace
   # runs Jest 30. The plugin's 3.x line is the Jest 30-compatible successor.
   "jest-expo>jest-watch-typeahead": "^3.0.1"
+  # Expo 57.0.26's expo-asset range accepts constants 57.0.20, but the frozen
+  # graph otherwise retains 57.0.19 beside the app's 57.0.20 native module.
+  # Keep a single compatible native runtime while the newer Expo wave remains
+  # ineligible under the no-downgrade trust policy.
+  "expo-asset>expo-constants": "57.0.20"
   # Expo SDK 57 is coupled to React Native 0.86.3. Without this workspace-wide
   # constraint, drizzle-orm's optional expo-sqlite peer in server workspaces
   # auto-installs the newer 0.87.x line and leaves duplicate native modules.
   "react-native": "0.86.3"
+  # pnpm attaches a package's optional peer whenever any workspace project
+  # installs it. These peers serve entry points nothing here imports, and the
+  # API's production install carried them: Expo, React Native and Hermes
+  # through drizzle-orm's `drizzle-orm/expo-sqlite` (only apps/mobile installs
+  # expo-sqlite, and it does not use drizzle-orm) and @better-auth/expo's
+  # `/client`; Next.js, Vue and Vitest through better-auth's `/next-js`, `/vue`
+  # and `/test`. Remove an entry before importing the entry point it serves.
+  "@better-auth/expo>expo-constants": "-"
+  "@better-auth/expo>expo-linking": "-"
+  "@better-auth/expo>expo-network": "-"
+  "@better-auth/expo>expo-secure-store": "-"
+  "@better-auth/expo>expo-web-browser": "-"
+  "better-auth>drizzle-kit": "-"
+  "better-auth>next": "-"
+  "better-auth>vitest": "-"
+  "better-auth>vue": "-"
+  "drizzle-orm>expo-sqlite": "-"
 
 peerDependencyRules:
   # @emoji-mart/react is unchanged since 2022 and its React peer range stops at

@@ -11,10 +11,14 @@ import Typography from "@mui/material/Typography";
 import type { EvChargeStop, EvDirectionsResult } from "@openmapx/core";
 import { formatDuration, useDataSources } from "@openmapx/core";
 import { formatMoney } from "@openmapx/integration-framework/strings";
+import {
+  contributorsForRecordFields,
+  contributorsForRecords,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import { useLocale, useTranslations } from "next-intl";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { BRAND } from "@/integration-api/runtime/theme";
-import { runtimeAttributionToAttribution } from "@/lib/attributionForProviders";
 import { EV_CHARGING_SOURCE_ID, openChargerPlace } from "@/lib/openChargerPlace";
 
 export function EvPlanCard({
@@ -110,6 +114,28 @@ export function EvPlanCard({
         )}
       </Box>
 
+      <AttributionStrip
+        attributions={
+          result.totals.fieldContributors !== undefined || result.totals.contributors !== undefined
+            ? contributorsForRecordFields(result.totals, [
+                "driveSeconds",
+                "chargeSeconds",
+                "energyKwh",
+                ...(estimatedCost && costFmt ? ["estimatedCost"] : []),
+              ])
+            : contributorsForRecords(
+                result.routes.map((route) => ({
+                  contributors: contributorsForRecordFields(route, [
+                    "duration",
+                    "distance",
+                    "geometry",
+                    ...(route.elevation?.length ? ["elevation"] : []),
+                  ]),
+                })),
+              )
+        }
+        variant="plain"
+      />
       <Divider />
 
       {hasNoChargers && (
@@ -201,7 +227,21 @@ function EvPlanStopRow({
         unit: stop.tariffPrice.unit,
       })
     : null;
-  const attributions = stop.attributions.map(runtimeAttributionToAttribution);
+  const attributions =
+    stop.fieldContributors === undefined
+      ? snapshotContributors(stop.contributors ?? stop.attributions)
+      : contributorsForRecordFields(stop, [
+          "station.name",
+          "connector",
+          "powerKw",
+          "chargeSeconds",
+          "arriveSocPct",
+          "departSocPct",
+          ...(stop.operator || stop.isPreferredNetwork ? ["operator"] : []),
+          ...(stop.availability ? ["availability"] : []),
+          ...(tariffFmt ? ["tariffPrice"] : []),
+          ...(costFmt ? ["estimatedCost"] : []),
+        ]);
 
   return (
     <Box sx={{ py: 1, borderTop: index > 0 ? "1px solid" : "none", borderColor: "divider" }}>

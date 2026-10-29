@@ -1,0 +1,86 @@
+import { parseSavedPlaceContributors } from "@openmapx/core/saved-place-contributors";
+import { savedPlaceNoteFromDescription } from "@openmapx/core/saved-place-description";
+import {
+  fileList,
+  ImportFileError,
+  type ImportList,
+  makePlace,
+  type ParseOptions,
+  validCoordinates,
+} from "./types";
+import { childText, elements, plainText, xml } from "./xml";
+
+export function parseKml(
+  input: string,
+  filename: string,
+  options: ParseOptions = {},
+): ImportList[] {
+  const doc = xml(input, "kml");
+  const placemarks = elements(doc, "Placemark");
+  if (!placemarks.length && elements(doc, "NetworkLink").length)
+    throw new ImportFileError("networkLink");
+  const documents = elements(doc, "Document");
+  const roots = documents.filter((e) => !e.parentElement?.closest("Document"));
+  const lists = (roots.length ? roots : [doc.documentElement]).map((root) => {
+    const places = elements(root, "Placemark").flatMap((mark) => {
+      const point = elements(mark, "Point")[0];
+      const coordinates =
+        point && elements(point, "coordinates")[0]?.textContent?.trim().split(/\s+/)[0].split(",");
+      if (!coordinates?.[0]?.trim() || !coordinates[1]?.trim()) return [];
+      const [lng, lat] = coordinates.map(Number);
+      if (!validCoordinates(lat, lng)) return [];
+      const extended = elements(mark, "ExtendedData")[0];
+      const data = extended ? elements(extended, "Data") : [];
+      const capture = data.find((element) => element.getAttribute("name") === "fieldContributors");
+      const fieldContributors = parseSavedPlaceContributors(capture && childText(capture, "value"));
+      // The explicit format marker also identifies our exports without acquired credits.
+      const ownExport =
+        fieldContributors !== undefined ||
+        data.some(
+          (element) =>
+            element.getAttribute("name") === "openmapx:savedPlace" &&
+            childText(element, "value") === "1",
+        );
+      const mwm = (name: string) =>
+        extended
+          ? Array.from(extended.getElementsByTagName("*"))
+              .find((e) => e.prefix === "mwm" && e.localName === name)
+              ?.textContent?.trim() || ""
+          : "";
+      const address =
+        childText(mark, "address") ||
+        (extended
+          ? [...elements(extended, "Data"), ...elements(extended, "SimpleData")]
+              .find((e) => e.getAttribute("name")?.toLowerCase() === "address")
+              ?.textContent?.trim()
+          : "") ||
+        "";
+      const description = plainText(
+        childText(mark, "description", !ownExport) || mwm("description"),
+        ownExport,
+      );
+      return [
+        makePlace({
+          name: childText(mark, "name") || mwm("name") || options.droppedPin || "Dropped pin",
+          lat,
+          lng,
+          status: "exact",
+          address,
+          fieldContributors,
+          note: ownExport
+            ? savedPlaceNoteFromDescription(description, { address, fieldContributors })
+            : description,
+        }),
+      ];
+    });
+    const list = fileList(filename, places, filename);
+    list.name = childText(root, "name") || list.name;
+    return list;
+  });
+  if (
+    !lists.some((list) => list.places.length) &&
+    (elements(doc, "LineString").length || elements(doc, "Track").length)
+  )
+    throw new ImportFileError("emptyTracks");
+  return lists;
+}

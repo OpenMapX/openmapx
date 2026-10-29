@@ -52,8 +52,6 @@
       "sourceId": "tfl",
       "name": "Transport for London",
       "url": "https://tfl.gov.uk/",
-      "license": "Proprietary (OGL v2 with TfL amendments)",
-      "licenseUrl": "https://tfl.gov.uk/corporate/terms-and-conditions/transport-data-service",
       "attribution": "<a href=\"https://tfl.gov.uk/\">Powered by TfL Open Data</a> Contains OS data © Crown copyright and database rights 2016 and Geomni UK Map data © and database rights [2019]",
       "commercialUse": "yes",
       "providerCountry": "UK",
@@ -61,7 +59,40 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "TfL supplied transport data",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:tfl",
+              "id": "LicenseRef-TfL-Transport-Data-Service",
+              "name": "TfL Transport Data Service licence (OGL v2.0 with TfL amendments)",
+              "url": "https://tfl.gov.uk/corporate/terms-and-conditions/transport-data-service"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "TfL account/API contract",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:tfl",
+              "id": "LicenseRef-Service-Terms",
+              "name": "TfL account/API contract terms",
+              "url": "https://tfl.gov.uk/corporate/terms-and-conditions/transport-data-service"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (OGL v2 with TfL amendments)",
+            "url": "https://tfl.gov.uk/corporate/terms-and-conditions/transport-data-service"
+          }
+        ]
+      }
     }
   ],
   "dependencies": ["transit"]

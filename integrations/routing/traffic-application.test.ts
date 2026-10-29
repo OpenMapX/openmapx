@@ -175,6 +175,9 @@ describe("engine application reconciliation", () => {
     expect(
       (await verifyRouteTraffic(ctx, routes, fallback, "routing-valhalla"))?.availability,
     ).toBe("current");
+    const malformed = { ...snapshot(), resolverVersion: undefined };
+    get.mockResolvedValueOnce(malformed);
+    expect(await verifyRouteTraffic(ctx, routes, fallback, "routing-valhalla")).toEqual(fallback);
     const legacyCtx = {
       ...ctx,
       getIntegrationsByDomain: () => [

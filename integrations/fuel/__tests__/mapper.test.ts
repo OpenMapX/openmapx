@@ -34,10 +34,14 @@ const OC_FUEL_GRADES = [
   "sp98_e10",
   "cng_bio",
   "lng_bio",
+  "sp100",
+  "b20",
+  "b30",
 ];
 
 function text(token: unknown, locale = "en"): string {
-  return resolveToken(token as Parameters<typeof resolveToken>[0], {
+  if (!isI18nToken(token)) return String(token);
+  return resolveToken(token, {
     locale,
     fallbackLocale: "en",
     shared: sharedStrings,
@@ -178,6 +182,17 @@ describe("mapFuelStationToResult", () => {
         );
       }
     }
+    for (const [grade, label] of [
+      ["sp100", "SP100"],
+      ["b20", "B20"],
+      ["b30", "B30"],
+    ]) {
+      const summary = mapFuelStationToResult(
+        makeStation({ products: [product({ grade, price: eur(1.899) })] }),
+      ).summary;
+      expect(text(summary, "en")).toBe(`${label} €1.899`);
+      expect(text(summary, "de")).toBe(`${label} 1,899${NB}€`);
+    }
     const kerosene = mapFuelStationToResult(
       makeStation({ products: [product({ grade: "kerosene", price: eur(2.1) })] }),
     ).summary;
@@ -216,6 +231,14 @@ describe("mapFuelStationToResult", () => {
 
   it("leaves branding unset for a brand the catalog does not hold", () => {
     expect(mapFuelStationToResult(makeStation({ brand: "Zzyzx Fuel" })).branding).toBeUndefined();
+  });
+
+  it("brands a station by its brand's Wikidata item before its name", () => {
+    const byItem = makeStation({ brand: "Zzyzx Fuel", brandWikidata: "Q565734" });
+    expect(mapFuelStationToResult(byItem).branding?.name).toBe("Aral AG");
+    // An item the catalog does not hold falls back to the name.
+    const unknownItem = makeStation({ brand: "Aral", country: "DE", brandWikidata: "Q1" });
+    expect(mapFuelStationToResult(unknownItem).branding?.name).toBe("Aral AG");
   });
 
   it("drops credit links that are not http(s)", () => {
@@ -315,6 +338,63 @@ describe("mapFuelStationToDetail", () => {
     expect(text(rows[1][0], "de")).toBe("Diesel (Lkw)");
   });
 
+  it("names every grade of the vocabulary in the price table, and an unknown one by its code", () => {
+    for (const grade of OC_FUEL_GRADES) {
+      const [label] = mapFuelStationToDetail(makeStation({ products: [product({ grade })] }))
+        .sections[0].rows[0];
+      for (const locale of ["en", "de"]) {
+        const shown = text(label, locale);
+        expect(shown, `${grade} ${locale}`).toBe(
+          ((locale === "en" ? en : de).fuel as Record<string, string>)[grade],
+        );
+        expect(shown, `${grade} ${locale}`).not.toContain("fuel.");
+      }
+    }
+    const rows = mapFuelStationToDetail(
+      makeStation({
+        products: [
+          product({ grade: "new_fuel" }),
+          product({ key: "new_fuel:hgv", grade: "new_fuel", vehicleScope: "hgv" }),
+        ],
+      }),
+    ).sections[0].rows;
+    expect(text(rows[0][0], "de")).toBe("NEW FUEL");
+    expect(text(rows[1][0], "en")).toBe("NEW FUEL (HGV)");
+  });
+
+  it("lists payment, lorry access and amenities in the reader's language", () => {
+    const detail = mapFuelStationToDetail(
+      makeStation({
+        payment: ["cash", "card", "app"],
+        truckSuitable: true,
+        amenities: ["shop", "compressed_air", "car_wash", "fuel_additives", "drone_port"],
+      }),
+    );
+    const services = detail.sections.find((s) => text(s.title) === "Services");
+    const rows = (locale: string) =>
+      services?.rows?.map(([label, value]) => [
+        text(label, locale),
+        Array.isArray(value) ? value.map((v) => text(v, locale)).join(", ") : text(value, locale),
+      ]);
+    expect(rows("en")).toEqual([
+      ["Payment", "Cash, Payment card, App"],
+      ["Suitable for HGVs", "Yes"],
+      ["Amenities", "Shop, Air pump, Car wash, Fuel additives, Drone port"],
+    ]);
+    expect(rows("de")).toEqual([
+      ["Bezahlung", "Bargeld, Zahlungskarte, App"],
+      ["Für Lkw geeignet", "Ja"],
+      ["Ausstattung", "Shop, Luftdruckstation, Autowäsche, Kraftstoffzusätze, Drone port"],
+    ]);
+    expect(text(services?.title, "de")).toBe("Service");
+
+    const noLorries = mapFuelStationToDetail(makeStation({ truckSuitable: false }));
+    expect(noLorries.sections.at(-1)?.rows).toEqual([
+      [{ $t: "row.truckSuitable" }, { $t: "shared.value.no" }],
+    ]);
+    expect(mapFuelStationToDetail(makeStation()).sections).toHaveLength(1);
+  });
+
   it("has no price table for a station without products", () => {
     expect(mapFuelStationToDetail(makeStation({ products: [] })).sections).toEqual([]);
   });
@@ -323,7 +403,7 @@ describe("mapFuelStationToDetail", () => {
     const detail = mapFuelStationToDetail(makeStation({ brand: "Aral", country: "DE" }));
     expect(detail.identity).toEqual({ brand: "Aral", operator: "Aral" });
     expect(detail.operator).toEqual({ name: "Aral" });
-    expect(detail.branding?.logoUrl).toBeTruthy();
+    expect(detail.branding?.logoUrl).toBeUndefined();
   });
 });
 
@@ -351,4 +431,28 @@ describe("fuel strings", () => {
     );
     expect(resolve({ $t: "product.service", values: { service: "served" } })).toBe("Served");
   });
+});
+
+it("captures complete canonical receipts before mapping results and details", () => {
+  const receipt = {
+    sourceId: "exact-feed",
+    name: "Publisher",
+    url: "https://example.com",
+    licensing: {
+      version: 1,
+      bindings: [
+        { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+      ],
+    } as const,
+    attributionText: "Required upstream notice",
+    publisher: { name: "Original publisher", url: "https://publisher.example" },
+  };
+  const record = makeStation({ attributions: [receipt] });
+  const result = mapFuelStationToResult(record);
+  const detail = mapFuelStationToDetail(record);
+  receipt.attributionText = "changed later";
+  expect(result.contributors).toEqual([
+    { ...receipt, attributionText: "Required upstream notice" },
+  ]);
+  expect(detail.contributors).toEqual(result.contributors);
 });

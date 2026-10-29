@@ -1,17 +1,11 @@
 "use client";
 
 import type * as maplibregl from "maplibre-gl";
-import { addLayerInSlot, unregisterLayerSlot } from "./layerStack";
 
-export interface HeatmapLayerOptions {
-  enabled: boolean;
-  layerId: string;
-  sourceId: string;
-  weightProperty: string;
-  weightMax: number;
-  order: number;
-}
-
+/**
+ * The shared heatmap paint, scaled to one source's weight property. Declare the
+ * layer in a `useMapLayerGroup` descriptor in the `overlay-heat` slot.
+ */
 export function createHeatmapPaint(
   weightProperty: string,
   weightMax: number,
@@ -39,37 +33,4 @@ export function createHeatmapPaint(
     "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 4, 9, 30],
     "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 7, 1, 12, 0],
   };
-}
-
-export function syncHeatmapLayer(map: maplibregl.Map, options: HeatmapLayerOptions): void {
-  try {
-    if (options.enabled) {
-      if (!map.getSource(options.sourceId) || map.getLayer(options.layerId)) return;
-      try {
-        addLayerInSlot(
-          map,
-          {
-            id: options.layerId,
-            type: "heatmap",
-            source: options.sourceId,
-            paint: createHeatmapPaint(options.weightProperty, options.weightMax),
-          },
-          "overlay-heat",
-          options.order,
-        );
-      } catch {
-        unregisterLayerSlot(options.layerId);
-      }
-      return;
-    }
-
-    if (!map.getLayer(options.layerId)) return;
-    try {
-      map.removeLayer(options.layerId);
-    } finally {
-      unregisterLayerSlot(options.layerId);
-    }
-  } catch {
-    return;
-  }
 }

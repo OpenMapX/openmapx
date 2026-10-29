@@ -1,16 +1,16 @@
 name: Duplicate-code audit
 
 on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
   schedule:
-    # Start with a periodic, non-blocking baseline. Clone findings need human
-    # review because provider adapters and platform-specific code can be
-    # intentionally similar without benefiting from a shared abstraction.
+    # Retain the full audit alongside the advisory PR comparisons.
     - cron: "47 6 * * 3"
   workflow_dispatch:
 
 concurrency:
-  group: duplicate-code-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  group: duplicate-code-${{ github.workflow }}-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -20,14 +20,19 @@ jobs:
     name: duplicated production code
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # PR findings and tool failures stay advisory; scheduled failures stay visible.
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # Analyze the submitted head, with the immutable base available locally.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -37,11 +42,46 @@ jobs:
       - name: Audit duplicate production code
         # upload-artifact skips hidden paths, so the report cannot live in the
         # gitignored .jscpd-report directory local runs use.
-        run: pnpm check-duplicates --reporters ai,html,markdown,json --output "$RUNNER_TEMP/jscpd-report"
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          comparison=()
+          if [ -n "$BASE_SHA" ]; then
+            comparison=(--baseline-from-ref "$BASE_SHA")
+          fi
+          pnpm check-duplicates "${comparison[@]}" --fail-on-empty \
+            --reporters ai,html,markdown,json --output "$RUNNER_TEMP/jscpd-report"
+
+      - name: Summarize duplicate-code report
+        if: always()
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          node --input-type=module <<'JS'
+          import { appendFileSync, existsSync, readFileSync } from "node:fs";
+          import { join } from "node:path";
+
+          const report = join(process.env.RUNNER_TEMP, "jscpd-report", "jscpd-report.json");
+          const base = process.env.BASE_SHA;
+          let summary = "## Duplicate-code audit\n\n";
+          if (!existsSync(report)) {
+            summary += "The scan did not produce a report. Check the job logs for the failure.\n";
+          } else {
+            const { statistics: { total } } = JSON.parse(readFileSync(report, "utf8"));
+            if (base) {
+              summary += `New clone regions: **${total.newClones}** against base \`${base}\`.\n\n`;
+              summary += `New duplicated lines: **${total.newDuplicatedLines}**.\n\n`;
+              summary += "This PR report is advisory and does not block merging.\n\n";
+            }
+            summary += `Full scan: ${total.clones} clone regions, ${total.duplicatedLines} duplicated lines in ${total.sources} files.\n\n`;
+            summary += "Download the duplicate-code-report artifact for HTML, Markdown and JSON details.\n";
+          }
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+          JS
 
       - name: Upload duplicate-code report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: duplicate-code-report
           path: ${{ runner.temp }}/jscpd-report

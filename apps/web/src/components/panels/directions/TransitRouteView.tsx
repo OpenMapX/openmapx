@@ -25,6 +25,7 @@ import {
 } from "@openmapx/core";
 import { changedFromPlatform, itineraryTransferRisk } from "@openmapx/core/navigation";
 import { apiClient } from "@openmapx/core/navigation/api";
+import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import type { OccupancyLevel, TripItinerary, TripLeg } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
@@ -32,6 +33,7 @@ import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicat
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RemarkChip } from "@/components/panels/transit/RemarkChip";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { BRAND, BRAND_HEX } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
@@ -39,6 +41,7 @@ import { useStartNavigation } from "@/lib/mobile/useStartNavigation";
 import { ensureNotificationPermission } from "@/lib/navigation/navNotify";
 import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
 import { formatCo2Emission } from "../../../lib/formatCo2";
+import { TransitAccessibilityIndicator } from "./TransitAccessibilityIndicator";
 
 const OCCUPANCY_RANK: Record<OccupancyLevel, number> = {
   low: 0,
@@ -121,6 +124,7 @@ function LegRemarks({ tripId }: { tripId: string }) {
   if (!journey?.remarks?.length) return null;
   return (
     <Box sx={{ mt: 0.5, display: "flex", flexDirection: "column", gap: 0.25 }}>
+      <AttributionStrip attributions={contributorsForRecords(journey.remarks)} variant="inline" />
       {journey.remarks.map((remark, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: static ordered remark list
         <RemarkChip key={i} remark={remark} inline />
@@ -146,6 +150,12 @@ function TransitLiveBadge({ tripId }: { tripId: string }) {
         bgcolor: `${BRAND_HEX}1a`,
       }}
     >
+      <AttributionStrip
+        attributions={contributorsForRecords(
+          journey?.stops.filter((stop) => stop.delaySeconds !== undefined) ?? [],
+        )}
+        variant="inline"
+      />
       <Box sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: "#4caf50", flexShrink: 0 }} />
       <Typography
         variant="caption"
@@ -192,6 +202,9 @@ function LiveStopTime({
       <Typography variant="caption" color={hasDelay ? "error.main" : "text.secondary"}>
         {displayTime}
       </Typography>
+      {hasDelay && (
+        <AttributionStrip attributions={contributorsForRecords([stop])} variant="inline" />
+      )}
       {hasDelay && (
         <Typography
           variant="caption"
@@ -314,9 +327,6 @@ export function TransitItineraryCard({
     (leg) => leg.mode !== "walking" && leg.mode !== "cycling" && leg.mode !== "driving",
   );
   const cancelledLegs = itinerary.legs.filter((leg) => leg.cancelled === true).length;
-  const wheelchairRestrictedLegs = itinerary.legs.filter(
-    (leg) => leg.wheelchairAccessible === false,
-  ).length;
   // Plan-time robustness cue: a very short scheduled transfer buffer.
   const tightTransfer = itineraryTransferRisk(itinerary.legs) !== null;
   // Resolve each offset label before formatting the time it gates: unlike
@@ -445,52 +455,33 @@ export function TransitItineraryCard({
         )}
       </Box>
       {firstBoardingLeg && <BoardingSummary leg={firstBoardingLeg} />}
-      {metaBits.length > 0 && (
-        <Typography
-          variant="caption"
-          sx={{
-            color: "text.secondary",
-            mt: 0.5,
-            display: "block",
-          }}
-        >
-          {metaBits.join(" · ")}
-        </Typography>
+      {(metaBits.length > 0 ||
+        itinerary.legs.some((leg) => leg.wheelchairAccessible === false)) && (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 0.5 }}>
+          {metaBits.length > 0 && (
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>
+              {metaBits.join(" · ")}
+            </Typography>
+          )}
+          <TransitAccessibilityIndicator itinerary={itinerary} />
+        </Box>
       )}
-      {(cancelledLegs > 0 || wheelchairRestrictedLegs > 0) && (
+      {cancelledLegs > 0 && (
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 0.75 }}>
-          {cancelledLegs > 0 && (
-            <Typography
-              variant="caption"
-              data-testid="transit-cancelled-summary"
-              sx={{
-                px: 0.75,
-                py: 0.25,
-                borderRadius: 99,
-                bgcolor: "error.main",
-                color: "error.contrastText",
-                fontWeight: 600,
-              }}
-            >
-              {t("cancelledServices", { count: cancelledLegs })}
-            </Typography>
-          )}
-          {wheelchairRestrictedLegs > 0 && (
-            <Typography
-              variant="caption"
-              data-testid="transit-accessibility-summary"
-              sx={{
-                px: 0.75,
-                py: 0.25,
-                borderRadius: 99,
-                bgcolor: "warning.main",
-                color: "warning.contrastText",
-                fontWeight: 600,
-              }}
-            >
-              {t("wheelchairRestrictedLegs", { count: wheelchairRestrictedLegs })}
-            </Typography>
-          )}
+          <Typography
+            variant="caption"
+            data-testid="transit-cancelled-summary"
+            sx={{
+              px: 0.75,
+              py: 0.25,
+              borderRadius: 99,
+              bgcolor: "error.main",
+              color: "error.contrastText",
+              fontWeight: 600,
+            }}
+          >
+            {t("cancelledServices", { count: cancelledLegs })}
+          </Typography>
         </Box>
       )}
       {tightTransfer && (

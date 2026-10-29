@@ -4,6 +4,7 @@ import {
   type FakeHttpRequest,
   fakeHttpClient,
 } from "@openmapx/integration-framework/testing";
+import { formatLicensing, licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, test } from "vitest";
 import { recordToCamera } from "../cameras/map.js";
 import { createCameraProvider } from "../cameras/provider.js";
@@ -53,7 +54,7 @@ const body = () => clone(featuresResponse) as unknown as Body & Rec;
 const recordOf = (b: Body) => b.records[0]!;
 const latestOf = (b: Body) => b.latest[CANONICAL_ID]! as unknown as LatestReading[];
 const readingOf = (b: Body, key: string) => latestOf(b).find((r) => r.componentKey === key)!;
-const viewValueOf = (b: Body, key: string) => rec(rec(readingOf(b, key).result)["value"]);
+const viewValueOf = (b: Body, key: string) => rec(rec(readingOf(b, key).result).value);
 
 /** The recorded answer with view C0150309's reading lapsed before the recording's time (07:20). */
 function withStaleView(): Body & Rec {
@@ -69,9 +70,9 @@ const EVERY_SOURCE: MediaSources = {
   ready: true,
   has: () => true,
   link: () => undefined,
-  licenseName: () => undefined,
+  crowd: () => undefined,
   noticeOf: () => undefined,
-  firmsSources: () => [],
+  fireSources: () => [],
   mediaHosts: (id) => HOSTS[id] ?? [],
 };
 
@@ -124,6 +125,7 @@ describe("cameras-openconditions", () => {
       "osm-cameras/0",
     ]);
     expect(camera.views[0]).toEqual({
+      contributors: expect.arrayContaining([expect.objectContaining({ sourceId: DIGITRAFFIC })]),
       key: "C0150301",
       name: "Inkooseen",
       imageUrl: "https://weathercam.digitraffic.fi/C0150301.jpg",
@@ -149,7 +151,16 @@ describe("cameras-openconditions", () => {
     expect(camera.attributions.map((a) => a.sourceId)).toEqual([DIGITRAFFIC, OSM]);
     expect(camera.attributions[0]).toMatchObject({
       name: "Source: Fintraffic / digitraffic.fi, license CC 4.0 BY",
-      spdxLicense: "CC-BY-4.0",
+      licensing: {
+        version: 1,
+        bindings: [
+          {
+            scope: "data",
+            subject: "Source: Fintraffic / digitraffic.fi, license CC 4.0 BY",
+            license: { kind: "spdx", expression: "CC-BY-4.0" },
+          },
+        ],
+      } as const,
     });
   });
 
@@ -158,49 +169,100 @@ describe("cameras-openconditions", () => {
     const TFL_LICENSE_NAME = "TfL Transport Data Service licence (OGL v2.0 with TfL amendments)";
     const TFL_TERMS = "https://tfl.gov.uk/corporate/terms-and-conditions/transport-data-service";
     const answer = body();
-    const provenance = recordOf(answer)["provenance"] as Rec;
+    const provenance = recordOf(answer).provenance as Rec;
     // The station's credit as a TfL camera's, with upstream publishers under
     // a named LicenseRef- licence, an unlisted one and an SPDX one.
-    provenance["attribution"] = {
+    provenance.attribution = {
       provider: "Transport for London",
       license: TFL_LICENSE,
       licenseUrl: TFL_TERMS,
+      licensing: {
+        version: 1,
+        bindings: [
+          {
+            scope: "data",
+            subject: "TfL data",
+            license: {
+              kind: "custom",
+              namespace: "openconditions:licences",
+              id: TFL_LICENSE,
+              name: TFL_LICENSE_NAME,
+              url: TFL_TERMS,
+            },
+          },
+        ],
+      },
     };
-    provenance["upstream"] = [
-      { publisher: "Borough A", license: TFL_LICENSE },
-      { publisher: "Borough B", license: "LicenseRef-Borough-B-Terms" },
-      { publisher: "Borough C", license: "CC-BY-4.0" },
+    provenance.upstream = [
+      {
+        publisher: "Borough A",
+        license: TFL_LICENSE,
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "TfL data",
+              license: {
+                kind: "custom",
+                namespace: "openconditions:licences",
+                id: TFL_LICENSE,
+                name: TFL_LICENSE_NAME,
+              },
+            },
+          ],
+        },
+      },
+      {
+        publisher: "Borough B",
+        license: "LicenseRef-Borough-B-Terms",
+        licensing: licensingFromDeclaration("LicenseRef-Borough-B-Terms", undefined),
+      },
+      {
+        publisher: "Borough C",
+        license: "CC-BY-4.0",
+        licensing: licensingFromDeclaration("CC-BY-4.0", undefined),
+      },
     ];
-    const names: Record<string, string> = {
+    const _names: Record<string, string> = {
       [TFL_LICENSE]: TFL_LICENSE_NAME,
       "CC-BY-4.0": "Creative Commons Attribution 4.0",
       "ODbL-1.0": "Open Data Commons Open Database License v1.0",
     };
-    const named: MediaSources = { ...EVERY_SOURCE, licenseName: (id) => names[id] };
+    const named: MediaSources = EVERY_SOURCE;
 
     const { attributions } = mapped(answer, named)!;
 
     expect(attributions[0]).toEqual({
       sourceId: DIGITRAFFIC,
+      modified: true,
       name: "Transport for London",
-      spdxLicense: TFL_LICENSE_NAME,
-      licenseUrl: TFL_TERMS,
+      licensing: provenance.attribution && (provenance.attribution as Rec).licensing,
+      attributionText: "Transport for London",
     });
-    expect(attributions.find((a) => a.sourceId === OSM)!.spdxLicense).toBe("ODbL-1.0");
+    expect(formatLicensing(attributions.find((a) => a.sourceId === OSM)!.licensing!)).toBe(
+      "ODbL-1.0",
+    );
     const upstream = (publisher: string) =>
       attributions.find((a) => a.publisher?.name === publisher)!;
-    expect(upstream("Borough A").spdxLicense).toBe(TFL_LICENSE_NAME);
-    expect(upstream("Borough A").licenseUrl).toBeUndefined();
-    expect(upstream("Borough B").spdxLicense).toBe("LicenseRef-Borough-B-Terms");
+    expect(formatLicensing(upstream("Borough A").licensing!)).toBe(TFL_LICENSE_NAME);
+    expect(upstream("Borough A").licensing?.bindings[0].license.url).toBeUndefined();
+    expect(formatLicensing(upstream("Borough B").licensing!)).toBe("LicenseRef-Borough-B-Terms");
     expect(upstream("Borough C")).toMatchObject({
-      spdxLicense: "CC-BY-4.0",
-      licenseUrl: "https://creativecommons.org/licenses/by/4.0/legalcode",
+      licensing: {
+        version: 1,
+        bindings: [
+          { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+        ],
+      } as const,
     });
 
     // Without names (before the first list) every id stays as it is.
     const unnamed = mapped(answer)!.attributions;
-    expect(unnamed[0]!.spdxLicense).toBe(TFL_LICENSE);
-    expect(unnamed.find((a) => a.publisher?.name === "Borough A")!.spdxLicense).toBe(TFL_LICENSE);
+    expect(formatLicensing(unnamed[0]!.licensing!)).toBe(TFL_LICENSE_NAME);
+    expect(
+      formatLicensing(unnamed.find((a) => a.publisher?.name === "Borough A")!.licensing!),
+    ).toBe(TFL_LICENSE_NAME);
   });
 
   test("an image whose host its source does not declare becomes its view's link", () => {
@@ -215,7 +277,7 @@ describe("cameras-openconditions", () => {
     // A camera with a page of its own keeps it, and its own views link it;
     // the member's undeclared still stays its view's link.
     const withPage = body();
-    (recordOf(withPage)["details"] as Rec)["detailUrl"] = "https://www.digitraffic.fi/C01503";
+    (recordOf(withPage).details as Rec).detailUrl = "https://www.digitraffic.fi/C01503";
     const linked = mapped(withPage)!;
     expect(linked.detailUrl).toBe("https://www.digitraffic.fi/C01503");
     expect(linked.views.map((v) => v.detailUrl)).toEqual([
@@ -243,10 +305,8 @@ describe("cameras-openconditions", () => {
   test("a member's view keeps its own publisher's page and image terms", () => {
     // As a Windy webcam linked into the station lists its view: Windy's page and terms on it.
     const answer = body();
-    const osmView = (recordOf(answer)["components"] as Rec[]).find(
-      (c) => c["key"] === "osm-cameras/0",
-    )!;
-    osmView["details"] = {
+    const osmView = (recordOf(answer).components as Rec[]).find((c) => c.key === "osm-cameras/0")!;
+    osmView.details = {
       v: 1,
       kind: "camera_view",
       detailUrl: "https://www.windy.com/webcams/1179853135",
@@ -263,14 +323,14 @@ describe("cameras-openconditions", () => {
     expect(camera.detailUrl).toBeUndefined();
 
     // A view page that is no web link is dropped.
-    osmView["details"] = { v: 1, kind: "camera_view", detailUrl: "javascript:alert(1)" };
+    osmView.details = { v: 1, kind: "camera_view", detailUrl: "javascript:alert(1)" };
     expect(mapped(answer)!.views[3]!.detailUrl).toBe(OSM_STILL);
   });
 
   test("a thumbnail goes with its undeclared still, even on a declared host", () => {
     const answer = body();
     const value = viewValueOf(answer, "osm-cameras/0");
-    value["thumbnailUrl"] = "https://weathercam.digitraffic.fi/C0150301.jpg?thumbnail=true";
+    value.thumbnailUrl = "https://weathercam.digitraffic.fi/C0150301.jpg?thumbnail=true";
     // OSM itself declares the thumbnail's host, but not the still's.
     const sources = { ...EVERY_SOURCE, mediaHosts: () => ["weathercam.digitraffic.fi"] };
     const view = mapped(answer, sources)!.views[3]!;
@@ -280,15 +340,15 @@ describe("cameras-openconditions", () => {
 
   test("links the browser opens are kept only when they are web links", () => {
     const answer = body();
-    viewValueOf(answer, "C0150301")["streamUrl"] = "javascript:alert(1)";
-    viewValueOf(answer, "C0150301")["streamType"] = "hls";
-    viewValueOf(answer, "C0150302")["streamUrl"] = "https://stream.example.org/c.m3u8";
-    viewValueOf(answer, "C0150302")["streamType"] = "hls";
-    recordOf(answer)["operator"] = {
+    viewValueOf(answer, "C0150301").streamUrl = "javascript:alert(1)";
+    viewValueOf(answer, "C0150301").streamType = "hls";
+    viewValueOf(answer, "C0150302").streamUrl = "https://stream.example.org/c.m3u8";
+    viewValueOf(answer, "C0150302").streamType = "hls";
+    recordOf(answer).operator = {
       name: [{ lang: "en", text: "Fintraffic" }],
       website: "javascript:alert(1)",
     };
-    (recordOf(answer)["details"] as Rec)["playerEmbedUrl"] = "data:text/html,<p>";
+    (recordOf(answer).details as Rec).playerEmbedUrl = "data:text/html,<p>";
     const camera = mapped(answer)!;
     expect(camera.views[0]).not.toHaveProperty("streamUrl");
     expect(camera.views[0]).not.toHaveProperty("streamType");
@@ -299,12 +359,12 @@ describe("cameras-openconditions", () => {
     expect(camera.operator).toEqual({ name: "Fintraffic" });
     expect(camera).not.toHaveProperty("playerEmbedUrl");
 
-    recordOf(answer)["operator"] = {
+    recordOf(answer).operator = {
       name: [{ lang: "en", text: "Fintraffic" }],
       website: "ftp://fintraffic.fi",
     };
     expect(mapped(answer)!.operator).toEqual({ name: "Fintraffic" });
-    recordOf(answer)["operator"] = {
+    recordOf(answer).operator = {
       name: [{ lang: "en", text: "Fintraffic" }],
       website: "https://www.fintraffic.fi",
     };
@@ -316,13 +376,13 @@ describe("cameras-openconditions", () => {
 
   test("a camera with no view left is no camera", () => {
     const answer = body();
-    recordOf(answer)["components"] = [];
+    recordOf(answer).components = [];
     expect(mapped(answer)).toBeNull();
 
     // Every view owned by an excluded member: here the survivor keeps none of its own.
     const merged = body();
-    recordOf(merged)["components"] = (recordOf(merged)["components"] as Rec[]).filter(
-      (c) => c["key"] === "osm-cameras/0",
+    recordOf(merged).components = (recordOf(merged).components as Rec[]).filter(
+      (c) => c.key === "osm-cameras/0",
     );
     expect(mapped(merged)).not.toBeNull();
     expect(mapped(merged, EVERY_SOURCE, (id) => id === OSM)).toBeNull();
@@ -332,7 +392,7 @@ describe("cameras-openconditions", () => {
     const answer = body();
     const reading = latestOf(answer).find((r) => r.componentKey === "osm-cameras/0")!;
     reading.contributors = [OSM, DIGITRAFFIC];
-    rec(rec(reading.result)["value"])["imageUrl"] = "https://weathercam.digitraffic.fi/X.jpg";
+    rec(rec(reading.result).value).imageUrl = "https://weathercam.digitraffic.fi/X.jpg";
     const camera = mapped(answer)!;
     expect(camera.views[3]!.imageUrl).toBe("https://weathercam.digitraffic.fi/X.jpg");
     expect(camera.detailUrl).toBeUndefined();
@@ -366,6 +426,7 @@ describe("cameras-openconditions", () => {
     ) as unknown as Rec[];
     const view = mapped(answer)!.views[1]!;
     expect(view).toEqual({
+      contributors: expect.arrayContaining([expect.objectContaining({ sourceId: DIGITRAFFIC })]),
       key: "C0150302",
       name: "Hankoon",
       imageRedistribution: "allowed",
@@ -377,27 +438,27 @@ describe("cameras-openconditions", () => {
 
   test("a reading that is not a camera status leaves the view unknown", () => {
     const answer = body();
-    rec(rec(latestOf(answer)[1]!.result)["value"])["status"] = "broken";
+    rec(rec(latestOf(answer)[1]!.result).value).status = "broken";
     expect(mapped(answer)!.views[0]!.status).toBe("unknown");
   });
 
   test("a feature that is not a camera is no camera", () => {
     const answer = body();
-    recordOf(answer)["kind"] = "charging_site";
+    recordOf(answer).kind = "charging_site";
     expect(mapped(answer)).toBeNull();
   });
 
   test("an unknown camera type reads other; a view with unknown terms states none", () => {
     const answer = body();
-    recordOf(answer)["type"] = "drone";
-    const [first] = recordOf(answer)["components"] as Rec[];
-    (first!["details"] as Rec)["imageRedistribution"] = "maybe";
+    recordOf(answer).type = "drone";
+    const [first] = recordOf(answer).components as Rec[];
+    (first?.details as Rec).imageRedistribution = "maybe";
     const camera = mapped(answer)!;
     expect(camera.type).toBe("other");
     // A survivor's view falls back to the camera's word, which is the survivor's.
     expect(camera.views[0]).toMatchObject({ imageRedistribution: "allowed" });
 
-    delete (recordOf(answer)["details"] as Rec)["imageRedistribution"];
+    delete (recordOf(answer).details as Rec).imageRedistribution;
     expect(mapped(answer)!.views[0]).not.toHaveProperty("imageRedistribution");
   });
 
@@ -410,19 +471,19 @@ describe("cameras-openconditions", () => {
   test("an OSM survivor is known by its member id, whose record id OpenConditions reduced", () => {
     // OSM's own record id is `node/701`; the member's feature id carries it as `node_701`.
     const answer = body();
-    const provenance = recordOf(answer)["provenance"] as Rec;
-    provenance["sourceId"] = OSM;
-    provenance["recordId"] = "node/701";
+    const provenance = recordOf(answer).provenance as Rec;
+    provenance.sourceId = OSM;
+    provenance.recordId = "node/701";
     expect(itemIdOf(recordOf(answer))).toBe("oc:feature:osm-cameras:node_701");
 
     // An id that is no member's in either form leaves the canonical id.
-    provenance["recordId"] = "node/702";
+    provenance.recordId = "node/702";
     expect(itemIdOf(recordOf(answer))).toBe(CANONICAL_ID);
   });
 
   test("coverage.partial is passed through as area", async () => {
     const answer = body();
-    answer["coverage"] = { partial: true, sources: [{ id: OSM, complete: false }] };
+    answer.coverage = { partial: true, sources: [{ id: OSM, complete: false }] };
     expect((await providerWith(listing(answer)).provider.searchCameras(BBOX)).partial).toBe("area");
   });
 
@@ -431,9 +492,9 @@ describe("cameras-openconditions", () => {
       ready: false,
       has: () => false,
       link: () => undefined,
-      licenseName: () => undefined,
+      crowd: () => undefined,
       noticeOf: () => undefined,
-      firmsSources: () => [],
+      fireSources: () => [],
       mediaHosts: () => [],
     });
     expect(await provider.searchCameras(BBOX)).toEqual({ cameras: [], partial: "unavailable" });
@@ -514,4 +575,25 @@ describe("data-flow disclosures", () => {
     expect(stringsEn.description).toMatch(/camera/i);
     expect(stringsDe.description).toMatch(/kamera/i);
   });
+});
+
+test("view receipt ownership follows the member and contributing readings, with explicit empty capture authoritative", () => {
+  const answer = body();
+  const camera = mapped(answer)!;
+  expect(camera.views[0]?.contributors?.map((a) => a.sourceId)).toEqual([DIGITRAFFIC]);
+  expect(camera.views[3]?.contributors?.map((a) => a.sourceId)).toContain(OSM);
+  const components = recordOf(answer).components as Rec[];
+  components[0]!.contributors = [];
+  expect(mapped(answer)!.views[0]?.contributors).toEqual([]);
+});
+
+test("keeps captured human identity separate from linked prescribed copyright wording", () => {
+  const answer = body();
+  const provenance = recordOf(answer).provenance as Rec;
+  const attribution = provenance.attribution as Rec;
+  attribution.name = "Camera dataset";
+  attribution.provider = '<a href="https://publisher.test/">Required publisher credit</a>';
+  const camera = mapped(answer)!;
+  expect(camera.attributions[0]?.name).toBe("Camera dataset");
+  expect(camera.attributions[0]?.attributionText).toContain("Required publisher credit");
 });

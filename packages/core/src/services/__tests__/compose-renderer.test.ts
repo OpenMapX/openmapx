@@ -67,6 +67,17 @@ describe("renderServiceSnippet GPU support", () => {
   });
 });
 
+describe("renderServiceSnippet stop grace period", () => {
+  it("gives a container the stop grace period its manifest declares, and Docker's default otherwise", () => {
+    const declared = makeService({ image: "postgis/postgis", tag: "18", stopGracePeriod: "5m" });
+    expect(renderServiceSnippet(declared, { existsSync: () => true }).stop_grace_period).toBe("5m");
+    const undeclared = makeService({ image: "busybox", tag: "latest" });
+    expect(renderServiceSnippet(undeclared, { existsSync: () => true })).not.toHaveProperty(
+      "stop_grace_period",
+    );
+  });
+});
+
 describe("service secret mounts", () => {
   it("wires secret keys into the service's secret mounts + <KEY>_FILE env", () => {
     const service = makeService({ image: "ghcr.io/openconditions/ingest", tag: "latest" });

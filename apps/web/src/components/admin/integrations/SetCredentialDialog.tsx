@@ -14,10 +14,10 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import type { CredentialSetup } from "@openmapx/integration-framework";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
+import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
+import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { CredentialSetupGuide } from "./CredentialSetupGuide";
 
 interface SetCredentialDialogProps {
@@ -39,38 +39,33 @@ export function SetCredentialDialog({
   description,
   setup,
 }: SetCredentialDialogProps) {
-  const env = useEnv();
-  const apiUrl = env.apiUrl;
-  const qc = useQueryClient();
+  const admin = useIntegrationAdmin();
+  const owner = useAdminMutationOwner(
+    admin.client,
+    JSON.stringify([integrationId, credentialKey, open]),
+  );
 
   const [value, setValue] = useState("");
   const [showValue, setShowValue] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const mutation = useMutation({
+    mutationKey: ["integration-credential", admin.apiUrl, integrationId, credentialKey, open],
+    retry: false,
     mutationFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/credentials/${integrationId}/${credentialKey}`, {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error((data as { error?: string })?.error ?? "Failed to save credential");
+      try {
+        await admin.setCredential(integrationId, credentialKey, value);
+        void admin.refresh();
+        if (!owner.active) return;
+        setValue("");
+        setShowValue(false);
+        setError(null);
+        onClose();
+      } catch (err) {
+        if (owner.active)
+          setError(err instanceof Error ? err.message : "Failed to save credential");
+        throw err;
       }
-      return res.json();
-    },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["admin", "integrations", integrationId] });
-      void invalidateIntegrationRuntime(qc, apiUrl);
-      setValue("");
-      setShowValue(false);
-      setError(null);
-      onClose();
-    },
-    onError: (err) => {
-      setError(err instanceof Error ? err.message : "Failed to save credential");
     },
   });
 

@@ -1,3 +1,4 @@
+import type { ContributingRecord } from "../contributors.js";
 import { fromWebMercator, toWebMercator } from "../mercator.js";
 import type { BBox } from "../types/geometry.js";
 
@@ -27,7 +28,9 @@ export interface IsochroneLattice {
  * orchestrator share one definition instead of two structurally identical ones
  * that could drift.
  */
-export interface TravelTimeField {
+export interface TravelTimeField extends ContributingRecord {
+  /** False if upstream durations omit actual timetable/walking lineage. */
+  lineageComplete?: boolean;
   lattice: IsochroneLattice;
   /** Best travel time in seconds per lattice point, row-major; `null` when unreachable. */
   values: (number | null)[];

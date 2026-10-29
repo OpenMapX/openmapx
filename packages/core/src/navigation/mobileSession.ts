@@ -63,6 +63,20 @@ const navTickStateSchema = z
     lastRerouteAtMs: safeInteger.nullable(),
     rerouteBackoffMs: z.number().finite().nonnegative(),
     spokenCues: z.array(z.string().max(128)).max(2_000),
+    speedEstimate: z
+      .object({
+        timestampMs: safeInteger,
+        weight: z.number().finite().positive(),
+        meanAgeSeconds: z.number().finite().nonpositive(),
+        meanAlongMeters: z.number().finite().nonnegative(),
+        varianceSeconds: z.number().finite().nonnegative(),
+        covarianceMetersSeconds: z.number().finite(),
+        reportedSpeedMps: z.number().finite().nonnegative(),
+        reportedSpeedWeight: z.number().finite().nonnegative().max(1),
+        speedMps: z.number().finite().nonnegative(),
+      })
+      .strict()
+      .optional(),
   })
   .passthrough();
 

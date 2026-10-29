@@ -48,6 +48,21 @@ class FakeWebGL2RenderingContext {
   readonly SCISSOR_TEST = 44;
   readonly COLOR_WRITEMASK = 45;
 
+  readonly ANY_SAMPLES_PASSED = 46;
+  readonly QUERY_RESULT_AVAILABLE = 47;
+  readonly QUERY_RESULT = 48;
+  queries: { available: boolean; result: boolean }[] = [];
+  createQuery() {
+    const query = { available: false, result: false };
+    this.queries.push(query);
+    return query;
+  }
+  beginQuery() {}
+  endQuery() {}
+  deleteQuery() {}
+  getQueryParameter(query: { available: boolean; result: boolean }, parameter: number) {
+    return parameter === this.QUERY_RESULT_AVAILABLE ? query.available : query.result;
+  }
   drawingBufferWidth = 320;
   drawingBufferHeight = 200;
   bufferDataCalls = 0;
@@ -244,7 +259,10 @@ describe("TransitFieldLayer WebGL lifecycle", () => {
   beforeEach(() => {
     vi.stubGlobal("WebGL2RenderingContext", FakeWebGL2RenderingContext);
   });
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
 
   it("uploads only changed instances, restores state, and releases owned resources", () => {
     const gl = new FakeWebGL2RenderingContext();
@@ -280,5 +298,165 @@ describe("TransitFieldLayer WebGL lifecycle", () => {
       framebuffers: 1,
       textures: 1,
     });
+  });
+  it("credits only seed receipts with proven positive winning field pixels", () => {
+    const gl = new FakeWebGL2RenderingContext();
+    const map = { triggerRepaint: vi.fn() };
+    const a = { sourceId: "a", name: "A", attributionText: "original notice" };
+    const layer = new TransitFieldLayer({
+      id: "field",
+      seeds: [
+        { lng: 0, lat: 0, arrivalSeconds: 0, contributors: [a] },
+        { lng: 1, lat: 1, arrivalSeconds: 30, contributors: [{ sourceId: "b", name: "B" }] },
+      ],
+      thresholdsMinutes: [15],
+    });
+    layer.onAdd(map as never, gl as never);
+    layer.prerender(gl as never, { modelViewProjectionMatrix: new Float32Array(16) } as never);
+    layer.render(gl as never);
+    expect(layer.renderedContributors()).toEqual([]);
+    expect(gl.queries).toHaveLength(2);
+    a.attributionText = "changed metadata";
+    const [first, second] = gl.queries;
+    if (!first || !second) throw new Error("Missing per-seed GPU query");
+    first.available = true;
+    first.result = true;
+    second.available = true;
+    second.result = false;
+    layer.render(gl as never);
+    expect(layer.renderedContributors()).toEqual([{ ...a, attributionText: "original notice" }]);
+    layer.setData([], [], []);
+    expect(layer.renderedContributors()).toEqual([]);
+    layer.onRemove(map as never, gl as never);
+    expect(layer.renderedContributors()).toEqual([]);
+  });
+  it("does not credit transparent/empty field query results", () => {
+    const gl = new FakeWebGL2RenderingContext();
+    const map = { triggerRepaint: vi.fn() };
+    const layer = new TransitFieldLayer({
+      id: "field",
+      seeds: [{ lng: 0, lat: 0, arrivalSeconds: 0, contributors: [{ sourceId: "a", name: "A" }] }],
+      thresholdsMinutes: [15],
+    });
+    layer.onAdd(map as never, gl as never);
+    layer.prerender(gl as never, { modelViewProjectionMatrix: new Float32Array(16) } as never);
+    layer.render(gl as never);
+    gl.queries.forEach((query) => {
+      query.available = true;
+      query.result = false;
+    });
+    layer.render(gl as never);
+    expect(layer.renderedContributors()).toEqual([]);
+  });
+  it("reuploads retained field instances when the engine re-adds the same layer after a style reset", () => {
+    const gl = new FakeWebGL2RenderingContext();
+    const map = { triggerRepaint: vi.fn() };
+    const layer = new TransitFieldLayer({
+      id: "field",
+      seeds: [{ lng: 0, lat: 0, arrivalSeconds: 0 }],
+      thresholdsMinutes: [15],
+    });
+    const args = { modelViewProjectionMatrix: new Float32Array(16) } as never;
+    layer.onAdd(map as never, gl as never);
+    layer.prerender(gl as never, args);
+    layer.onRemove(map as never, gl as never);
+    layer.onAdd(map as never, gl as never);
+    const before = gl.bufferDataCalls;
+    layer.prerender(gl as never, args);
+    expect(gl.bufferDataCalls).toBe(before + 1);
+  });
+  it.each(["matrix", "viewport", "target"])(
+    "rejects delayed old-paint positive tickets after the rendered %s changes",
+    (change) => {
+      const gl = new FakeWebGL2RenderingContext();
+      const layer = new TransitFieldLayer({
+        id: "field",
+        seeds: [
+          { lng: 0, lat: 0, arrivalSeconds: 0, contributors: [{ sourceId: "a", name: "A" }] },
+        ],
+        thresholdsMinutes: [15],
+      });
+      layer.onAdd({ triggerRepaint() {} } as never, gl as never);
+      const matrix = new Float32Array(16);
+      layer.prerender(gl as never, { modelViewProjectionMatrix: matrix } as never);
+      layer.render(gl as never);
+      const old = gl.queries[0];
+      if (!old) throw new Error("Missing GPU query");
+      if (change === "matrix") matrix[12] = 100;
+      if (change === "viewport") gl.drawingBufferWidth = 640;
+      if (change === "target") gl.bindFramebuffer(gl.FRAMEBUFFER, { target: "replacement" });
+      layer.prerender(gl as never, { modelViewProjectionMatrix: matrix } as never);
+      layer.render(gl as never);
+      old.available = true;
+      old.result = true;
+      layer.render(gl as never);
+      expect(layer.renderedContributors()).toEqual([]);
+    },
+  );
+  it("retains the actual old texture receipt when newer props arrive between prerender and render", () => {
+    const gl = new FakeWebGL2RenderingContext();
+    const layer = new TransitFieldLayer({
+      id: "field",
+      seeds: [
+        {
+          lng: 0,
+          lat: 0,
+          arrivalSeconds: 0,
+          contributors: [{ sourceId: "a", name: "A", attributionText: "old notice" }],
+        },
+      ],
+      thresholdsMinutes: [15],
+    });
+    layer.onAdd({ triggerRepaint() {} } as never, gl as never);
+    const args = { modelViewProjectionMatrix: new Float32Array(16) } as never;
+    layer.prerender(gl as never, args);
+    layer.render(gl as never);
+    const old = gl.queries[0];
+    if (!old) throw new Error("Missing GPU query");
+    layer.setData(
+      [{ lng: 0, lat: 0, arrivalSeconds: 0, contributors: [{ sourceId: "b", name: "B" }] }],
+      [30],
+    );
+    old.available = true;
+    old.result = true;
+    layer.render(gl as never);
+    expect(layer.renderedContributors()).toEqual([
+      { sourceId: "a", name: "A", attributionText: "old notice" },
+    ]);
+    layer.prerender(gl as never, args);
+    layer.render(gl as never);
+    expect(layer.renderedContributors()).toEqual([]);
+  });
+  it("clears already-proven credit immediately after changed-view paint and bounds new query batches", () => {
+    let now = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    const gl = new FakeWebGL2RenderingContext();
+    const layer = new TransitFieldLayer({
+      id: "field",
+      seeds: [{ lng: 0, lat: 0, arrivalSeconds: 0, contributors: [{ sourceId: "a", name: "A" }] }],
+      thresholdsMinutes: [15],
+    });
+    layer.onAdd({ triggerRepaint() {} } as never, gl as never);
+    const matrix = new Float32Array(16);
+    layer.prerender(gl as never, { modelViewProjectionMatrix: matrix } as never);
+    layer.render(gl as never);
+    const old = gl.queries[0];
+    if (!old) throw new Error("Missing GPU query");
+    old.available = true;
+    old.result = true;
+    layer.render(gl as never);
+    expect(layer.renderedContributors()).toHaveLength(1);
+    for (let i = 1; i <= 20; i++) {
+      now = i * 10;
+      matrix[12] = i;
+      layer.prerender(gl as never, { modelViewProjectionMatrix: matrix } as never);
+      layer.render(gl as never);
+      expect(layer.renderedContributors()).toEqual([]);
+    }
+    expect(gl.queries).toHaveLength(1);
+    now = 250;
+    layer.prerender(gl as never, { modelViewProjectionMatrix: matrix } as never);
+    layer.render(gl as never);
+    expect(gl.queries).toHaveLength(2);
   });
 });

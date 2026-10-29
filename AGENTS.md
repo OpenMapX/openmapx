@@ -37,3 +37,32 @@ configuration changes, follow the [service manifest contract](docs/docs/develope
 Select checks and shared test fixtures from [Contributing: Quality bar](CONTRIBUTING.md#quality-bar)
 and the affected packages' current scripts. Verify the affected runtime and report which
 checks ran, including any database, browser or native-device verification left unperformed.
+
+## Pull request writing and visual evidence
+
+Use the concise prompts in [Contributing](CONTRIBUTING.md#descriptions-and-visual-evidence).
+For changes that visibly affect the OpenMapX application UI, capture and inspect the
+actual rendered result. Documentation-only changes do not require screenshots. Put
+screenshots near the explanation in the PR:
+comparable labeled before/after for existing behavior, contextual after views for new
+surfaces, and relevant changed states/viewports. Recordings supplement screenshots.
+
+Use `gh pr create/edit --body-file ... --attach ...` to upload images and rewrite
+referenced local paths to hosted assets. Inspect the final description and each hosted
+image after upload; local paths are not delivered evidence. A partial upload can still
+create/edit the PR, so read back its state before retrying. Report unavailable platform
+checks accurately; a local preview does not establish native GitHub form acceptance.
+
+Own the accuracy and verification of authorized AI-assisted work. No declaration or
+model inventory is required; preserve meaningful provenance and never invent results.
+
+<!-- BEGIN:turborepo-agent-rules -->
+
+# This is NOT the Turborepo you know
+
+Turborepo configuration, task behavior, and CLI commands can vary between installed versions and may differ from your training data. Resolve the `turbo` package from this file's directory or relevant workspace; in monorepos, it may not be visible from the repository root. For example, run `node -p "require.resolve('turbo/package.json')"` from a workspace that depends on `turbo`.
+
+Read `docs/README.md` inside that installed package first, then read the relevant pages from its `docs/` directory before changing Turborepo configuration or commands. Heed deprecation notices. These bundled docs match the installed package version and are available without network access.
+
+This block is written and re-added by `turbo` before repository-scoped commands when an AI agent is detected. In the Turborepo source repository, its template is defined in `crates/turborepo-cli/src/cli/agent_guidance.rs`. Removing the managed block while updates are enabled means a later qualifying invocation will add it again. Set `"agentGuidance": false` in the root `turbo.json` or `turbo.jsonc` to opt out; this does not remove an existing block. Keep the block committed with your work to avoid an uncommitted change on the next agent invocation.
+<!-- END:turborepo-agent-rules -->

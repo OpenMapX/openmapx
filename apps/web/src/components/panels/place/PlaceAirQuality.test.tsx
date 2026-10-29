@@ -4,6 +4,7 @@ import type {
   AirQualityForecastResponse,
   AirQualityIndex,
 } from "@openmapx/core";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -101,7 +102,7 @@ function evidence(overrides: Partial<AirQualityEvidence> = {}): AirQualityEviden
         name: "Fixture authority",
         url: "https://example.test/data",
         owner: "Fixture ministry",
-        license: { name: "CC BY 4.0", url: "https://example.test/license" },
+        licensing: licensingFromDeclaration("CC BY 4.0", "https://example.test/license"),
         methodologyUrl: "https://example.test/method",
         attribution: "Fixture authority attribution",
       },
@@ -558,7 +559,8 @@ describe("PlaceAirQuality", () => {
     expect(within(frames).getByText("airQuality.frame.ok")).toBeVisible();
     expect(within(frames).getByText("airQuality.frame.partial")).toBeVisible();
     expect(within(frames).getByText("airQuality.frame.unavailable")).toBeVisible();
-    expect(screen.getAllByText("Fixture authority attribution").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole("button", { name: "footer.attributions" })[0]!);
+    expect(screen.getAllByText(/Fixture authority attribution/).length).toBeGreaterThan(0);
   });
 
   it("shows community, distance, and non-coverage context for secondary forecasts", () => {

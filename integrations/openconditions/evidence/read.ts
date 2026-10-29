@@ -1,4 +1,5 @@
 import type {
+  OperationalBindingReason,
   OperationalEvidence,
   OperationalFeedCoverage,
   OperationalFeedEvidence,
@@ -119,6 +120,29 @@ function bindingCounts(value: unknown): Record<string, number> | null {
   return entries.length > 0 ? Object.fromEntries(entries) : null;
 }
 
+const MAX_BINDING_REASONS = 64;
+
+/**
+ * Why the feed's current bindings that carry a reason were not bound, or
+ * kept off routing: one row per status and reason, counting the situations'
+ * own locations and the effects bound on their own. A malformed row is left
+ * out; an answer without reasons has none to give.
+ */
+function bindingReasons(value: unknown): OperationalBindingReason[] | null {
+  if (!value || typeof value !== "object") return null;
+  const rows = (value as { reasons?: unknown }).reasons;
+  if (!Array.isArray(rows)) return null;
+  const count = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : 0);
+  return rows.slice(0, MAX_BINDING_REASONS).flatMap((row: unknown) => {
+    if (!row || typeof row !== "object") return [];
+    const { status, reason, situations, effects } = row as Record<string, unknown>;
+    const s = stringOrNull(status);
+    const r = stringOrNull(reason);
+    if (!s || !r || s.length > 64 || r.length > 64) return [];
+    return [{ status: s, reason: r, situations: count(situations), effects: count(effects) }];
+  });
+}
+
 function changedCount(feed: RawFeedStatus): number | null {
   const values = [feed.lastInserted, feed.lastUpdated, feed.lastDeleted].map(numberOrNull);
   return values.every((value) => value == null)
@@ -148,6 +172,7 @@ export function operationalEvidenceOf(
     if (!sourceId) return [];
     const parentSourceId = stringOrNull(feed.parentSourceId);
     const name = stringOrNull(feed.name);
+    const reasons = bindingReasons(feed.binding);
     return [
       {
         sourceId,
@@ -167,6 +192,7 @@ export function operationalEvidenceOf(
         consecutiveFailures: numberOrNull(feed.consecutiveFailures),
         error: stringOrNull(feed.lastError),
         bindingCounts: bindingCounts(feed.binding),
+        ...(reasons ? { bindingReasons: reasons } : {}),
         graph,
         ...(opts.coverage ? { coverage: opts.coverage(sourceId) } : {}),
         ...operationalState(feed, opts.graphBound ? graph : null, collectedAt),

@@ -5,9 +5,11 @@ import Picker from "@emoji-mart/react";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import LockIcon from "@mui/icons-material/Lock";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import ShareIcon from "@mui/icons-material/Share";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -28,30 +30,29 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import type { SavedPlace } from "@openmapx/core";
 import {
-  createPlace,
-  idsFromPrimary,
   isSystemSavedList,
-  PANEL,
   useDeleteList,
-  usePlaceStore,
   useSavedListPlaces,
   useSavedLists,
   useSavedPlacesStore,
-  useSidebarStore,
   useUpdateList,
   useUpdatePlace,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type React from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { AttributionDetailsGroup } from "@/components/ui/AttributionDetailsGroup";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND, BRAND_LIGHT } from "@/integration-api/runtime/theme";
 import { exportSavedList } from "@/lib/exportSavedList";
 import { resolveListIcon } from "@/lib/listIcon";
-import { PlaceThumbnail } from "./PlaceThumbnail";
+import { openSavedPlace } from "@/lib/openSavedPlace";
+import { ImportPlacesPicker } from "./ImportPlacesPicker";
+import { SavedListRows } from "./SavedListRows";
 import { ShareListDialog } from "./ShareListDialog";
 
 export function SavedListDetail() {
+  const importInput = useRef<HTMLInputElement>(null);
   const t = useTranslations("saved");
   const tCommon = useTranslations("common");
 
@@ -59,7 +60,6 @@ export function SavedListDetail() {
 
   const selectedListId = useSavedPlacesStore((s) => s.selectedListId);
   const clearSelectedList = useSavedPlacesStore((s) => s.clearSelectedList);
-  const setSelectedPlace = usePlaceStore((s) => s.setSelectedPlace);
   const { flyTo } = useMap();
 
   const { data: lists } = useSavedLists();
@@ -76,8 +76,8 @@ export function SavedListDetail() {
   const [nameValue, setNameValue] = useState(list ? resolveListName(list.name) : "");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [iconAnchor, setIconAnchor] = useState<HTMLElement | null>(null);
-  const [noteEditId, setNoteEditId] = useState<string | null>(null);
-  const [noteValue, setNoteValue] = useState("");
+  // Each open or edit creates a new snapshot; a save may close only the snapshot it submitted.
+  const [noteEdit, setNoteEdit] = useState<{ placeId: string; value: string } | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState(tCommon("copied"));
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -125,35 +125,20 @@ export function SavedListDetail() {
     setDeleteDialogOpen(false);
   };
 
-  const handlePlaceClick = (place: SavedPlace) => {
-    const identity = (place.placeId ? idsFromPrimary(place.placeId) : null) ?? {
-      primaryScheme: "saved",
-      ids: { saved: place.id },
-    };
-    setSelectedPlace(
-      createPlace({
-        ...identity,
-        name: place.name,
-        address: place.address ?? "",
-        coordinates: [place.lng, place.lat],
-      }),
-    );
-    useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
-    flyTo([place.lng, place.lat], 15);
-  };
+  const handlePlaceClick = (place: SavedPlace) => openSavedPlace(place, flyTo);
 
   const handleAddNoteClick = (e: React.MouseEvent, place: SavedPlace) => {
     e.stopPropagation();
-    setNoteEditId(place.id);
-    setNoteValue(place.note ?? "");
+    setNoteEdit({ placeId: place.id, value: place.note ?? "" });
   };
 
   const handleNoteSubmit = () => {
-    if (!noteEditId) return;
-    const trimmed = noteValue.trim();
+    if (!noteEdit) return;
+    const submitted = noteEdit;
+    const trimmed = submitted.value.trim();
     updatePlaceMutation.mutate(
-      { id: noteEditId, note: trimmed || null },
-      { onSuccess: () => setNoteEditId(null) },
+      { id: submitted.placeId, note: trimmed || null },
+      { onSuccess: () => setNoteEdit((current) => (current === submitted ? null : current)) },
     );
   };
 
@@ -161,7 +146,7 @@ export function SavedListDetail() {
     if (e.key === "Enter") {
       handleNoteSubmit();
     } else if (e.key === "Escape") {
-      setNoteEditId(null);
+      setNoteEdit(null);
     }
   };
 
@@ -346,97 +331,68 @@ export function SavedListDetail() {
           {t("places", { count: 0 })}
         </Typography>
       ) : (
-        <Box>
-          {places.map((place) => (
-            <Box
-              key={place.id}
-              onClick={() => handlePlaceClick(place)}
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 1.5,
-                px: 2,
-                py: 1.5,
-                cursor: "pointer",
-                "&:hover": { bgcolor: "action.hover" },
-              }}
-            >
-              <PlaceThumbnail
-                lat={place.lat}
-                lng={place.lng}
-                name={place.name}
-                placeId={place.placeId}
-              />
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography
-                  variant="body2"
-                  noWrap
-                  sx={{
-                    fontWeight: 500,
+        <AttributionDetailsGroup placement="footer">
+          <SavedListRows
+            places={places}
+            onSelect={handlePlaceClick}
+            renderNote={(place) =>
+              noteEdit?.placeId === place.id ? (
+                <TextField
+                  fullWidth
+                  size="small"
+                  placeholder={t("note")}
+                  value={noteEdit.value}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setNoteEdit((current) => current && { ...current, value });
                   }}
-                >
-                  {place.name}
-                </Typography>
-                {place.address && (
+                  onBlur={handleNoteSubmit}
+                  onKeyDown={handleNoteKeyDown}
+                  autoFocus
+                  sx={{ mt: 0.5 }}
+                />
+              ) : place.note ? (
+                <Box sx={{ display: "flex", alignItems: "flex-start", gap: 0.5 }}>
                   <Typography
                     variant="caption"
-                    noWrap
                     sx={{
                       color: "text.secondary",
-                      display: "block",
-                    }}
-                  >
-                    {place.address}
-                  </Typography>
-                )}
-                {noteEditId === place.id ? (
-                  <TextField
-                    fullWidth
-                    size="small"
-                    placeholder={t("note")}
-                    value={noteValue}
-                    onChange={(e) => setNoteValue(e.target.value)}
-                    onBlur={handleNoteSubmit}
-                    onKeyDown={handleNoteKeyDown}
-                    onClick={(e) => e.stopPropagation()}
-                    autoFocus
-                    sx={{ mt: 0.5 }}
-                  />
-                ) : place.note ? (
-                  <Typography
-                    variant="caption"
-                    onClick={(e) => handleAddNoteClick(e, place)}
-                    sx={{
-                      color: BRAND,
-                      display: "block",
-                      mt: 0.25,
-                      cursor: "pointer",
-                      "&:hover": { textDecoration: "underline" },
+                      flex: 1,
+                      minWidth: 0,
+                      pt: 0.25,
+                      whiteSpace: "pre-wrap",
+                      overflowWrap: "anywhere",
                     }}
                   >
                     {place.note}
                   </Typography>
-                ) : null}
-              </Box>
-              {noteEditId !== place.id && !place.note && (
-                <Typography
-                  variant="caption"
+                  <IconButton
+                    size="small"
+                    aria-label={t("editNote")}
+                    onClick={(e) => handleAddNoteClick(e, place)}
+                    sx={{ p: 0.25, mr: -0.25 }}
+                  >
+                    <EditOutlinedIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Box>
+              ) : (
+                <Button
+                  size="small"
                   onClick={(e) => handleAddNoteClick(e, place)}
                   sx={{
                     color: BRAND,
-                    cursor: "pointer",
-                    flexShrink: 0,
-                    ml: 1,
-                    whiteSpace: "nowrap",
-                    "&:hover": { textDecoration: "underline" },
+                    p: 0,
+                    minWidth: 0,
+                    fontSize: 12,
+                    textTransform: "none",
                   }}
                 >
                   + {t("note")}
-                </Typography>
-              )}
-            </Box>
-          ))}
-        </Box>
+                </Button>
+              )
+            }
+          />
+        </AttributionDetailsGroup>
       )}
       <Menu
         anchorEl={menuAnchor}
@@ -455,6 +411,17 @@ export function SavedListDetail() {
             <ListItemText>{t("removeIcon")}</ListItemText>
           </MenuItem>
         )}
+        <MenuItem
+          onClick={() => {
+            handleMenuClose();
+            importInput.current?.click();
+          }}
+        >
+          <ListItemIcon>
+            <UploadFileIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>{t("importPlaces")}</ListItemText>
+        </MenuItem>
         <MenuItem onClick={() => handleExport("gpx")}>
           <ListItemIcon>
             <DownloadIcon fontSize="small" />
@@ -480,6 +447,7 @@ export function SavedListDetail() {
           <ListItemText>{t("deleteList")}</ListItemText>
         </MenuItem>
       </Menu>
+      <ImportPlacesPicker inputRef={importInput} targetListId={selectedListId || undefined} />
       <Popover
         open={Boolean(iconAnchor)}
         anchorEl={iconAnchor}

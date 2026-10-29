@@ -1,9 +1,21 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadPreviousRelease } from "./docker-release-plan.mjs";
+import {
+  loadPreviousRelease,
+  pullRequestTargets,
+  sameProducerPlan,
+} from "./docker-release-plan.mjs";
 
 const sha = "a".repeat(40);
 const digest = `sha256:${"b".repeat(64)}`;
@@ -14,10 +26,55 @@ const workflow = readFileSync(
 );
 const planner = resolve(import.meta.dirname, "docker-release-plan.mjs");
 
+describe("changed-image CLI input discovery", () => {
+  it("retains docs validation when a required input is renamed outside the docs context", () => {
+    const temp = mkdtempSync(join(tmpdir(), "openmapx-renamed-docs-"));
+    const env = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" };
+    const git = (...args: string[]) => {
+      const result = spawnSync("git", args, { cwd: temp, env, encoding: "utf8" });
+      expect(result.status, result.stderr).toBe(0);
+      return result.stdout.trim();
+    };
+    try {
+      git("init", "--initial-branch=main");
+      git("config", "user.name", "CI test");
+      git("config", "user.email", "ci@example.invalid");
+      for (const target of pullRequestTargets) {
+        const path = join(temp, target.dockerfile);
+        mkdirSync(dirname(path), { recursive: true });
+        writeFileSync(path, readFileSync(resolve(import.meta.dirname, "..", target.dockerfile)));
+      }
+      writeFileSync(join(temp, "docs/sidebars.ts"), "export default {};\n");
+      git("add", ".");
+      git("commit", "-m", "baseline");
+      const base = git("rev-parse", "HEAD");
+      mkdirSync(join(temp, "archive"));
+      renameSync(join(temp, "docs/sidebars.ts"), join(temp, "archive/sidebars.ts"));
+      git("add", "--all");
+      git("commit", "-m", "move required docs input");
+      const head = git("rev-parse", "HEAD");
+      expect(git("diff", "--name-status", `${base}...${head}`)).toBe(
+        "R100\tdocs/sidebars.ts\tarchive/sidebars.ts",
+      );
+      const output = join(temp, "output");
+      const result = spawnSync(process.execPath, [planner, "changed", base, head], {
+        cwd: temp,
+        env: { ...env, GITHUB_OUTPUT: output },
+        encoding: "utf8",
+      });
+      expect(result.status, result.stderr).toBe(0);
+      const apps: string[] = JSON.parse(readFileSync(output, "utf8").trim().slice("apps=".length));
+      expect(apps.filter((app) => app === "docs")).toEqual(["docs"]);
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("previous published release acquisition", () => {
   it("bootstraps only on an explicit missing manifest", () => {
     expect(
-      loadPreviousRelease("example.invalid/release-manifest:latest", () => ({
+      loadPreviousRelease("example.invalid/release-manifest:main", () => ({
         status: 1,
         stderr: "manifest unknown",
       })),
@@ -27,7 +84,7 @@ describe("previous published release acquisition", () => {
     "fails closed on %s",
     (stderr) => {
       expect(() =>
-        loadPreviousRelease("example.invalid/release-manifest:latest", () => ({
+        loadPreviousRelease("example.invalid/release-manifest:main", () => ({
           status: 1,
           stderr,
         })),
@@ -41,8 +98,9 @@ describe("previous published release acquisition", () => {
       const container = "c".repeat(64);
       let copiedTo = "";
       const acquire = () =>
-        loadPreviousRelease("example.invalid/release-manifest:latest", (args: string[]) => {
+        loadPreviousRelease("example.invalid/release-manifest:main", (args: string[]) => {
           calls.push(args);
+          if (args[0] === "pull") return { status: 0, stdout: `Digest: ${digest}` };
           if (args[0] === "image") return { status: 0, stdout: digest };
           if (args[0] === "create") return { status: 0, stdout: container };
           if (args[0] === "cp") {
@@ -102,21 +160,33 @@ describe("build selection and mandatory scanning", () => {
   it("exports the prior exact digest for reuse", () => {
     expect(select()).toEqual({
       status: 0,
-      output: `rebuild=false\nrefresh=false\ndigest=${digest}\n`,
+      output: `rebuild=false\nrefresh=false\ndigest=${digest}\nbundle_digest=\n`,
     });
   });
   it("does not expose a fallback digest for a required rebuild", () => {
     expect(select({}, { rebuild: true, refresh: true })).toEqual({
       status: 0,
-      output: "rebuild=true\nrefresh=true\ndigest=\n",
+      output: "rebuild=true\nrefresh=true\ndigest=\nbundle_digest=\n",
     });
   });
-  it.each([{ release: `${sha}-123-1` }, { sourceRevision: "b".repeat(40) }, { version: 2 }])(
+  it.each([{ release: `${sha}-124-1` }, { sourceRevision: "b".repeat(40) }, { version: 2 }])(
     "rejects another run, checkout, or schema: %s",
     (patch) => {
       expect(select(patch)).toEqual({ status: 1, output: "" });
     },
   );
+  it("exports the planned bundle digest for the build to check", () => {
+    expect(select({}, { rebuild: true, digest: "", bundleDigest: "d".repeat(64) })).toEqual({
+      status: 0,
+      output: `rebuild=true\nrefresh=false\ndigest=\nbundle_digest=${"d".repeat(64)}\n`,
+    });
+  });
+  it("rejects a malformed or injected bundle digest", () => {
+    expect(select({}, { bundleDigest: `${"d".repeat(64)}\nrebuild=false` })).toEqual({
+      status: 1,
+      output: "",
+    });
+  });
   it("rejects unpullable or injected reused image references", () => {
     expect(select({}, { digest: "latest\nrebuild=false" })).toEqual({ status: 1, output: "" });
   });
@@ -166,4 +236,11 @@ describe("build selection and mandatory scanning", () => {
       }
     },
   );
+});
+
+it("reuses only an earlier plan from the same source/run across producer attempts", () => {
+  expect(sameProducerPlan(`${sha}-123-1`, `${sha}-123-2`)).toBe(true);
+  expect(sameProducerPlan(`${sha}-123-3`, `${sha}-123-2`)).toBe(false);
+  expect(sameProducerPlan(`${sha}-124-1`, `${sha}-123-2`)).toBe(false);
+  expect(sameProducerPlan(`${"b".repeat(40)}-123-1`, `${sha}-123-2`)).toBe(false);
 });

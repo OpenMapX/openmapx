@@ -1,8 +1,12 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { get } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PassThrough, Readable } from "node:stream";
 import type { OfflineMapPackageManifest, OfflinePackageRequest } from "@openmapx/core";
+import { RollingStreamBudget } from "@openmapx/core/server";
 import Fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerApi } from "../src/api.js";
@@ -292,6 +296,215 @@ describe("data-manager offline package API", () => {
     await app.close();
   });
 
+  it("rejects overlapping archive streams before opening another storage handle", async () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-offline-delivery-capacity-"));
+    roots.push(root);
+    const { generator } = await createGenerator(root);
+    const openArchive = vi.spyOn(generator, "openArchive");
+    const blocked = new PassThrough();
+    const archiveStream = vi
+      .fn()
+      .mockReturnValueOnce(blocked)
+      .mockImplementation(() => Readable.from(archiveBytes));
+    const deliveryBudget = new RollingStreamBudget({
+      maxBytesPerKey: Buffer.byteLength(archiveBytes) * 3,
+      windowMs: 10_000,
+      maxConcurrentPerKey: 1,
+      maxConcurrentGlobal: 1,
+    });
+    const app = Fastify();
+    registerApi(app, {
+      dataDir: root,
+      offlinePackages: generator,
+      offlinePackageDeliveryBudget: deliveryBudget,
+      offlinePackageArchiveStream: archiveStream,
+    });
+    const packageId = `omp2-${"a".repeat(64)}`;
+
+    const first = app.inject({ method: "GET", url: `/offline/packages/${packageId}/archive` });
+    await vi.waitFor(() => expect(openArchive).toHaveBeenCalledOnce());
+    const overlapping = await app.inject({
+      method: "GET",
+      url: `/offline/packages/${packageId}/archive`,
+    });
+
+    expect(overlapping.statusCode).toBe(503);
+    expect(overlapping.headers["retry-after"]).toBe("10");
+    expect(openArchive).toHaveBeenCalledOnce();
+    expect(archiveStream).toHaveBeenCalledOnce();
+    blocked.end(archiveBytes);
+    expect((await first).statusCode).toBe(200);
+    expect(
+      (await app.inject({ method: "GET", url: `/offline/packages/${packageId}/archive` }))
+        .statusCode,
+    ).toBe(200);
+    await app.close();
+  });
+
+  it("serves HEAD and rejects an invalid range without opening archive storage", async () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-offline-delivery-metadata-"));
+    roots.push(root);
+    const { generator } = await createGenerator(root);
+    const openArchive = vi.spyOn(generator, "openArchive");
+    const archiveStream = vi.fn(() => Readable.from(archiveBytes));
+    const app = Fastify();
+    registerApi(app, {
+      dataDir: root,
+      offlinePackages: generator,
+      offlinePackageArchiveStream: archiveStream,
+    });
+    const packageId = `omp2-${"a".repeat(64)}`;
+
+    const head = await app.inject({
+      method: "HEAD",
+      url: `/offline/packages/${packageId}/archive`,
+    });
+    const invalid = await app.inject({
+      method: "GET",
+      url: `/offline/packages/${packageId}/archive`,
+      headers: { range: "bytes=999-1000" },
+    });
+
+    expect(head.statusCode).toBe(200);
+    expect(invalid.statusCode).toBe(416);
+    expect(openArchive).not.toHaveBeenCalled();
+    expect(archiveStream).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("charges only valid range bytes and rejects an If-Range fallback before storage", async () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-offline-delivery-bytes-"));
+    roots.push(root);
+    const { generator } = await createGenerator(root);
+    const openArchive = vi.spyOn(generator, "openArchive");
+    const archiveStream = vi.fn((_path: string, options?: { start?: number; end?: number }) =>
+      Readable.from(
+        options?.start === undefined
+          ? archiveBytes
+          : archiveBytes.slice(options.start, (options.end ?? archiveBytes.length - 1) + 1),
+      ),
+    );
+    const deliveryBudget = new RollingStreamBudget({
+      maxBytesPerKey: 4,
+      windowMs: 10_000,
+      maxConcurrentPerKey: 1,
+      maxConcurrentGlobal: 1,
+    });
+    const app = Fastify();
+    registerApi(app, {
+      dataDir: root,
+      offlinePackages: generator,
+      offlinePackageDeliveryBudget: deliveryBudget,
+      offlinePackageArchiveStream: archiveStream,
+    });
+    const packageId = `omp2-${"a".repeat(64)}`;
+
+    const suffix = await app.inject({
+      method: "GET",
+      url: `/offline/packages/${packageId}/archive`,
+      headers: { range: "bytes=-4" },
+    });
+    const fullFallback = await app.inject({
+      method: "GET",
+      url: `/offline/packages/${packageId}/archive`,
+      headers: { range: "bytes=-4", "if-range": "sha256-wrong" },
+    });
+
+    expect(suffix.statusCode).toBe(206);
+    expect(suffix.body).toBe(archiveBytes.slice(-4));
+    expect(fullFallback.statusCode).toBe(503);
+    expect(fullFallback.headers["retry-after"]).toBe("10");
+    expect(openArchive).toHaveBeenCalledOnce();
+    expect(archiveStream).toHaveBeenCalledOnce();
+    await app.close();
+  });
+
+  it("releases delivery capacity after a filesystem stream error", async () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-offline-delivery-error-"));
+    roots.push(root);
+    const { generator } = await createGenerator(root);
+    const failed = new PassThrough();
+    const archiveStream = vi
+      .fn()
+      .mockReturnValueOnce(failed)
+      .mockImplementation(() => Readable.from(archiveBytes));
+    const deliveryBudget = new RollingStreamBudget({
+      maxBytesPerKey: Buffer.byteLength(archiveBytes) * 3,
+      windowMs: 10_000,
+      maxConcurrentPerKey: 1,
+      maxConcurrentGlobal: 1,
+    });
+    const app = Fastify();
+    registerApi(app, {
+      dataDir: root,
+      offlinePackages: generator,
+      offlinePackageDeliveryBudget: deliveryBudget,
+      offlinePackageArchiveStream: archiveStream,
+    });
+    const packageId = `omp2-${"a".repeat(64)}`;
+
+    const first = app.inject({ method: "GET", url: `/offline/packages/${packageId}/archive` });
+    await vi.waitFor(() => expect(archiveStream).toHaveBeenCalledOnce());
+    failed.destroy(new Error("fixture stream failure"));
+    await first.catch(() => undefined);
+    const after = await app.inject({
+      method: "GET",
+      url: `/offline/packages/${packageId}/archive`,
+    });
+
+    expect(after.statusCode).toBe(200);
+    expect(archiveStream).toHaveBeenCalledTimes(2);
+    await app.close();
+  });
+
+  it("releases delivery capacity after a client disconnect", async () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-offline-delivery-disconnect-"));
+    roots.push(root);
+    const { generator } = await createGenerator(root);
+    const active = new PassThrough();
+    const archiveStream = vi
+      .fn()
+      .mockReturnValueOnce(active)
+      .mockImplementation(() => Readable.from(archiveBytes));
+    const deliveryBudget = new RollingStreamBudget({
+      maxBytesPerKey: Buffer.byteLength(archiveBytes) * 3,
+      windowMs: 10_000,
+      maxConcurrentPerKey: 1,
+      maxConcurrentGlobal: 1,
+    });
+    const app = Fastify();
+    registerApi(app, {
+      dataDir: root,
+      offlinePackages: generator,
+      offlinePackageDeliveryBudget: deliveryBudget,
+      offlinePackageArchiveStream: archiveStream,
+    });
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const packageId = `omp2-${"a".repeat(64)}`;
+    const address = app.server.address() as AddressInfo;
+    const request = get(
+      `http://127.0.0.1:${address.port}/offline/packages/${packageId}/archive`,
+      (response) => response.once("data", () => response.destroy()),
+    );
+    request.on("error", () => {});
+
+    try {
+      await vi.waitFor(() => expect(archiveStream).toHaveBeenCalledOnce());
+      active.write(archiveBytes.slice(0, 1));
+      await vi.waitFor(() => expect(active.destroyed).toBe(true));
+      const after = await app.inject({
+        method: "GET",
+        url: `/offline/packages/${packageId}/archive`,
+      });
+      expect(after.statusCode).toBe(200);
+      expect(archiveStream).toHaveBeenCalledTimes(2);
+    } finally {
+      active.destroy();
+      request.destroy();
+      await app.close();
+    }
+  });
+
   it("rejects missing, duplicate/comma, and malformed principals before allocating work", async () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-offline-principal-api-"));
     roots.push(root);
@@ -317,6 +530,44 @@ describe("data-manager offline package API", () => {
     expect(prepare).not.toHaveBeenCalled();
     await app.close();
   });
+
+  it.each(["directory", "file"])(
+    "rejects %s symlinks escaping the glyph root, including composed stacks",
+    async (kind) => {
+      const root = mkdtempSync(join(tmpdir(), "openmapx-offline-glyph-containment-"));
+      roots.push(root);
+      const fonts = join(root, "tile-fonts");
+      const outside = join(root, "outside");
+      mkdirSync(join(fonts, "Safe"), { recursive: true });
+      mkdirSync(outside);
+      writeFileSync(join(fonts, "Safe", "0-255.pbf"), glyphPbf("Safe", [65]));
+      writeFileSync(join(outside, "0-255.pbf"), glyphPbf("Escaping", [66]));
+      if (kind === "directory") symlinkSync(outside, join(fonts, "Escaping"));
+      else {
+        mkdirSync(join(fonts, "Escaping"));
+        symlinkSync(join(outside, "0-255.pbf"), join(fonts, "Escaping", "0-255.pbf"));
+      }
+      const generator = new OfflinePackageGenerator({
+        source: () => ({ ...source, fontsDirectory: fonts, packageRoot: join(root, "packages") }),
+        storage: new OfflinePackageStorage(join(root, "packages")),
+      });
+      const app = Fastify();
+      registerApi(app, { dataDir: root, offlinePackages: generator });
+      try {
+        for (const stack of ["Escaping", "Safe,Escaping"])
+          expect(
+            (await app.inject(`/offline/packages/glyphs/fixture-glyphs-v1/${stack}/0-255.pbf`))
+              .statusCode,
+          ).toBe(404);
+        expect(
+          (await app.inject("/offline/packages/glyphs/fixture-glyphs-v1/Safe/0-255.pbf"))
+            .statusCode,
+        ).toBe(200);
+      } finally {
+        await app.close();
+      }
+    },
+  );
 
   it("composes comma-separated font stacks from their individual glyph files", async () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-offline-fonts-"));

@@ -1,9 +1,51 @@
+import type { AmbientRegion } from "./ambient-places-region";
+
+export {
+  AMBIENT_GENERATION_PATTERN,
+  AMBIENT_GERMANY_REGION,
+  AMBIENT_PLANET_REGION,
+  type AmbientRegion,
+  validateAmbientRegion,
+} from "./ambient-places-region";
+
+import { type Attribution, OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
+import {
+  contributorsForRecordFields,
+  contributorsForRecords,
+  type FieldContributors,
+  parseContributors,
+  readCapturedContributors,
+  readCapturedFieldContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { CategoryPlace } from "./types/category";
 import type { Place } from "./types/place";
 import { haversineDistance } from "./utils/coordinates";
-import { overtureTaxonomyToOpenMapX } from "./utils/overtureCategoryMap";
+import { overtureTaxonomyCategoryEvidence } from "./utils/overtureCategoryMap";
+import { captureOvertureFieldContributors, type OvertureSourceItem } from "./utils/overtureSource";
 
 export const AMBIENT_POLICY_VERSION = 2;
+export const AMBIENT_FORMAT_VERSION = 2;
+/** Honest aggregate receipt for pre-capture Overture snapshots. */
+export const AMBIENT_LEGACY_OVERTURE_ATTRIBUTION: Readonly<Attribution> = Object.freeze({
+  sourceId: "overture",
+  name: "Overture Maps",
+  url: "https://overturemaps.org",
+  licensing: {
+    version: 1,
+    bindings: [
+      {
+        scope: "data",
+        subject: "Data",
+        license: {
+          kind: "spdx",
+          expression: "CDLA-Permissive-2.0",
+          url: "https://cdla.dev/permissive-2-0/",
+        },
+      },
+    ],
+  } as const,
+});
 export const AMBIENT_MAX_AGE_MS = 90 * 86400_000;
 export const AMBIENT_LIMITS = {
   places: 100_000,
@@ -16,21 +58,6 @@ export const AMBIENT_LIMITS = {
   maxZoom: 18,
   cacheSeconds: 7 * 86400,
 } as const;
-export interface AmbientRegion {
-  name: string;
-  bounds: [number, number, number, number];
-  coverage?: "germany" | "planet";
-}
-export const AMBIENT_GERMANY_REGION: AmbientRegion = {
-  name: "Germany",
-  bounds: [5.8, 47.2, 15.1, 55.1],
-  coverage: "germany",
-};
-export const AMBIENT_PLANET_REGION: AmbientRegion = {
-  name: "Planet",
-  bounds: [-180, -85.051129, 180, 85.051129],
-  coverage: "planet",
-};
 export interface AmbientPlace {
   id: string;
   gersId?: string;
@@ -42,9 +69,15 @@ export interface AmbientPlace {
   minZoom: number;
   tenant: boolean;
   sources: "osm" | "overture" | "osm,overture";
+  contributors?: Attribution[];
+  fieldContributors?: FieldContributors;
+  sourceLineage?: { sources: readonly OvertureSourceItem[]; release?: string };
+  /** Build-time precision diagnostic; raw lineage alone cannot prove notices. */
+  legacyAttribution?: boolean;
 }
 export interface AmbientManifest {
-  version: 1;
+  version: 1 | 2;
+  attributionPrecision?: "captured-fields" | "legacy-aggregate";
   policyVersion: number;
   generation: string;
   publishedAt: string;
@@ -71,8 +104,6 @@ export interface AmbientPlanetCandidate {
   startedAt: string;
   updatedAt: string;
 }
-export const AMBIENT_GENERATION_PATTERN =
-  "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$";
 export interface AmbientOsmRow {
   osm_type: string;
   osm_id: string;
@@ -95,40 +126,9 @@ export interface AmbientOvertureRow {
   names?: { common?: Record<string, string> | null } | null;
   confidence: number | null;
   operating_status: string | null;
-}
-export function validateAmbientRegion(value: unknown): AmbientRegion {
-  const region = value as AmbientRegion;
-  const b = region?.bounds;
-  const preset =
-    region?.coverage === "germany"
-      ? AMBIENT_GERMANY_REGION
-      : region?.coverage === "planet"
-        ? AMBIENT_PLANET_REGION
-        : null;
-  if (
-    typeof region?.name !== "string" ||
-    !region.name.trim() ||
-    region.name.length > 80 ||
-    !Array.isArray(b) ||
-    b.length !== 4 ||
-    !b.every(Number.isFinite) ||
-    b[0] < -180 ||
-    b[2] > 180 ||
-    b[1] < -85.051129 ||
-    b[3] > 85.051129 ||
-    b[2] <= b[0] ||
-    b[3] <= b[1] ||
-    (region.coverage !== undefined && !preset) ||
-    (preset ? !b.every((v, i) => v === preset.bounds[i]) : b[2] - b[0] > 0.5 || b[3] - b[1] > 0.5)
-  )
-    throw new Error(
-      "Choose the exact Germany/planet preset or an ordered world region no wider or higher than 0.5 degrees",
-    );
-  return {
-    name: region.name.trim(),
-    bounds: [...b],
-    ...(preset ? { coverage: preset.coverage } : {}),
-  };
+  sources?: OvertureSourceItem[] | null;
+  sources_catalogue?: Attribution[] | null;
+  release?: string;
 }
 
 const aliases: Record<string, string> = {
@@ -286,6 +286,16 @@ export function ambientPlaceFromOsm(row: AmbientOsmRow): AmbientPlace | null {
     ...policy(category, row.importance, tenant, landmark),
     tenant,
     sources: "osm",
+    contributors: snapshotContributors([OPENSTREETMAP_ATTRIBUTION]),
+    fieldContributors: Object.fromEntries(
+      [
+        "name",
+        ...Object.keys(names).map((lang) => `names.${lang}`),
+        "coordinates",
+        "category",
+        "id",
+      ].map((field) => [field, snapshotContributors([OPENSTREETMAP_ATTRIBUTION])]),
+    ),
   };
 }
 export function ambientPlaceFromOverture(row: AmbientOvertureRow): AmbientPlace | null {
@@ -305,17 +315,14 @@ export function ambientPlaceFromOverture(row: AmbientOvertureRow): AmbientPlace 
     const v = label(row.names?.common?.[lang]);
     if (v) names[lang] = v;
   }
-  const category = ambientCategory(
-    overtureTaxonomyToOpenMapX({
-      basicCategory: row.basic_category,
-      primary: row.taxonomy_primary,
-      hierarchy: row.taxonomy_hierarchy,
-      alternates: row.taxonomy_alternates,
-    }) ??
-      row.basic_category ??
-      "place",
-  );
-  return {
+  const categoryEvidence = overtureTaxonomyCategoryEvidence({
+    basicCategory: row.basic_category,
+    primary: row.taxonomy_primary,
+    hierarchy: row.taxonomy_hierarchy,
+    alternates: row.taxonomy_alternates,
+  });
+  const category = ambientCategory(categoryEvidence.category ?? row.basic_category ?? "place");
+  const place: AmbientPlace = {
     id: `overture:${row.gers_id}`,
     gersId: row.gers_id,
     name,
@@ -326,12 +333,41 @@ export function ambientPlaceFromOverture(row: AmbientOvertureRow): AmbientPlace 
     tenant: false,
     sources: "overture",
   };
+  const catalogue = parseContributors(row.sources_catalogue);
+  const sourceLineage = { sources: structuredClone(row.sources ?? []), release: row.release };
+  if (catalogue === undefined)
+    return {
+      ...place,
+      contributors: snapshotContributors([AMBIENT_LEGACY_OVERTURE_ATTRIBUTION]),
+      sourceLineage,
+      legacyAttribution: true,
+    };
+  const captured = captureOvertureFieldContributors(place, row.sources, catalogue, {
+    name: ["/names/primary"],
+    ...Object.fromEntries(
+      Object.keys(names).map((lang) => [`names.${lang}`, [`/names/common/${lang}`]]),
+    ),
+    coordinates: ["/geometry"],
+    category: categoryEvidence.category
+      ? categoryEvidence.propertyPointers
+      : row.basic_category
+        ? ["/basic_category"]
+        : [],
+  });
+  captured.fieldContributors.gersId = snapshotContributors(
+    catalogue.filter((r) => r.sourceId === "overture"),
+  );
+  captured.contributors = contributorsForRecords(
+    Object.values(captured.fieldContributors).map((contributors) => ({ contributors })),
+  );
+  return { ...captured, sourceLineage };
 }
 export function mergeAmbientPlaces(
   osm: AmbientPlace[],
   overture: AmbientPlace[],
   links: Map<string, string>,
   excludedOsm: ReadonlySet<string> = new Set(),
+  identityEvidence: ReadonlyMap<string, AmbientOvertureIdentityEvidence> = new Map(),
 ): AmbientPlace[] {
   const byGers = new Map(overture.map((p) => [p.gersId, p]));
   const consumed = new Set<string>();
@@ -340,11 +376,38 @@ export function mergeAmbientPlaces(
     if (!gersId) return p;
     consumed.add(gersId);
     const o = byGers.get(gersId);
+    const identity = o ?? identityEvidence.get(gersId);
+    const fieldContributors =
+      p.fieldContributors === undefined && o?.fieldContributors === undefined
+        ? undefined
+        : {
+            ...p.fieldContributors,
+            ...Object.fromEntries(
+              Object.keys(o?.names ?? {})
+                .filter((lang) => !p.names[lang])
+                .map((lang) => [
+                  `names.${lang}`,
+                  o?.fieldContributors?.[`names.${lang}`] ?? o?.contributors ?? [],
+                ]),
+            ),
+            gersId: identity?.fieldContributors?.gersId ?? [AMBIENT_LEGACY_OVERTURE_ATTRIBUTION],
+          };
     return {
       ...p,
       gersId,
       names: { ...o?.names, ...p.names },
       sources: o ? ("osm,overture" as const) : ("osm" as const),
+      fieldContributors,
+      contributors: fieldContributors
+        ? contributorsForRecords(
+            Object.values(fieldContributors).map((contributors) => ({ contributors })),
+          )
+        : snapshotContributors(
+            p.contributors ?? [],
+            identity?.fieldContributors?.gersId ?? [AMBIENT_LEGACY_OVERTURE_ATTRIBUTION],
+          ),
+      sourceLineage: identity?.sourceLineage,
+      legacyAttribution: identity?.legacyAttribution ?? !identity,
     };
   });
   const canonicalByGers = new Map([...links].map(([id, gers]) => [gers, id]));
@@ -356,6 +419,27 @@ export function mergeAmbientPlaces(
   }
   return result.sort((a, b) => b.rank - a.rank || a.id.localeCompare(b.id, "en"));
 }
+export type AmbientOvertureIdentityEvidence = Pick<
+  AmbientPlace,
+  "fieldContributors" | "sourceLineage" | "legacyAttribution"
+>;
+/** Accepted GERS identity does not depend on eligibility of display fields. */
+export function ambientOvertureIdentityEvidence(
+  row: Pick<AmbientOvertureRow, "sources" | "sources_catalogue" | "release">,
+): AmbientOvertureIdentityEvidence {
+  const catalogue = parseContributors(row.sources_catalogue);
+  return {
+    fieldContributors: {
+      gersId: snapshotContributors(
+        catalogue === undefined
+          ? [AMBIENT_LEGACY_OVERTURE_ATTRIBUTION]
+          : catalogue.filter((receipt) => receipt.sourceId === "overture"),
+      ),
+    },
+    sourceLineage: { sources: structuredClone(row.sources ?? []), release: row.release },
+    legacyAttribution: catalogue === undefined,
+  };
+}
 export function ambientPlaceToCategoryPlace(place: AmbientPlace, locale: string): CategoryPlace {
   return {
     id: place.id,
@@ -364,7 +448,40 @@ export function ambientPlaceToCategoryPlace(place: AmbientPlace, locale: string)
     names: place.names,
     coordinates: place.coordinates,
     category: place.category,
+    contributors: ambientPlaceContributors(place, locale),
+    fieldContributors:
+      place.fieldContributors === undefined
+        ? undefined
+        : {
+            ...place.fieldContributors,
+            name:
+              place.fieldContributors[
+                place.names[locale.split("-")[0]] ? `names.${locale.split("-")[0]}` : "name"
+              ] ?? [],
+          },
   };
+}
+/** Fields represented by the placed label, position, category and identity. */
+export function ambientPlaceContributors(place: AmbientPlace, locale: string): Attribution[] {
+  if (place.contributors !== undefined || place.fieldContributors !== undefined)
+    return contributorsForRecordFields(place, [
+      place.names[locale.split("-")[0]] ? `names.${locale.split("-")[0]}` : "name",
+      "coordinates",
+      "category",
+      "id",
+      "gersId",
+    ]);
+  return snapshotContributors(
+    ...(place.sources.includes("osm") ? [[OPENSTREETMAP_ATTRIBUTION]] : []),
+    ...(place.sources.includes("overture") ? [[AMBIENT_LEGACY_OVERTURE_ATTRIBUTION]] : []),
+  );
+}
+/** A v2 container may still carry honestly identified legacy source records. */
+export function ambientHasLegacyAttribution(places: readonly AmbientPlace[]): boolean {
+  return places.some(
+    (place) =>
+      place.legacyAttribution || (Boolean(place.gersId) && place.sourceLineage === undefined),
+  );
 }
 export function ambientIdentityKeys(
   place: Pick<Place, "id" | "ids"> | Pick<CategoryPlace, "id" | "gersId">,
@@ -449,5 +566,28 @@ export function ambientPlaceFromTile(
         : properties.sources === "overture"
           ? "overture"
           : "osm",
+    ...(Number(properties.format_version) === AMBIENT_FORMAT_VERSION
+      ? {
+          contributors: readCapturedContributors(properties._mapAttributions) ?? [],
+          fieldContributors: readCapturedFieldContributors(properties.field_contributors),
+          sourceLineage: parseAmbientSourceLineage(properties.source_lineage),
+        }
+      : {}),
   };
+}
+function parseAmbientSourceLineage(value: unknown): AmbientPlace["sourceLineage"] {
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return undefined;
+    }
+  }
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !Array.isArray((value as { sources?: unknown }).sources)
+  )
+    return undefined;
+  return structuredClone(value) as AmbientPlace["sourceLineage"];
 }

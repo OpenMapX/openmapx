@@ -10,6 +10,7 @@ import type { CoreRouteEntry } from "./build-document.js";
 
 export interface CoreRouteCollection {
   paths: Record<string, Record<string, unknown>>;
+  components: Record<string, unknown>;
   auth: CoreRouteEntry[];
 }
 
@@ -61,6 +62,11 @@ export async function collectCoreRoutes(): Promise<CoreRouteCollection> {
   });
 
   await app.register(fastifySwagger, {
+    refResolver: {
+      buildLocalReference(jsonSchema, _baseUri, _fragment, index) {
+        return typeof jsonSchema.$id === "string" ? jsonSchema.$id : `def-${index}`;
+      },
+    },
     openapi: {
       openapi: "3.1.0",
       info: { title: "OpenMapX API", version: "1.0.0" },
@@ -73,8 +79,22 @@ export async function collectCoreRoutes(): Promise<CoreRouteCollection> {
   });
 
   await app.ready();
-  const document = app.swagger() as { paths?: Record<string, Record<string, unknown>> };
+  const document = app.swagger() as {
+    paths?: Record<string, Record<string, unknown>>;
+    components?: Record<string, unknown>;
+  };
   const paths = document.paths ?? {};
+  // Swagger assumes every Fastify body schema is required. Our registrar uses
+  // canonical Zod parsing and records the actual optional-body contract.
+  for (const route of routes) {
+    if ((route.config as { adminOptionalBody?: boolean } | undefined)?.adminOptionalBody !== true)
+      continue;
+    const path = route.url.replace(/:([^/]+)/g, "{$1}");
+    const operation = paths[path]?.[route.method.toLowerCase()] as
+      | { requestBody?: { required?: boolean } }
+      | undefined;
+    if (operation?.requestBody) operation.requestBody.required = false;
+  }
   await app.close();
 
   // Resolved after `ready()`: the plugin-scoped declarations are recorded by
@@ -86,5 +106,5 @@ export async function collectCoreRoutes(): Promise<CoreRouteCollection> {
     auth: readAuthLevel(route.method, route.url, route.config),
   }));
 
-  return { paths, auth };
+  return { paths, auth, components: document.components ?? {} };
 }

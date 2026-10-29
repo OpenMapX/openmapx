@@ -46,10 +46,13 @@ import { fetch as undiciFetch } from "undici";
 import { createPinnedFetchTransport } from "../utils/pinned-fetch";
 import {
   assertResolvesToPublicIp,
+  resolvePublicConnectionAddresses,
   SafeFetchHttpError,
   safeDownload,
   safeFetchJson,
   safeFetchJsonResponse,
+  safeFetchStatus,
+  safeFetchText,
 } from "../utils/safe-download";
 
 // dnsLookup has overloads that confuse vi.mocked; cast to a simple mock.
@@ -327,6 +330,34 @@ describe("assertResolvesToPublicIp", () => {
     expect(error.message).toMatch(/non-public|private/i);
     expect(error.message).not.toContain("10.23.45.67");
   });
+
+  it("bounds public-address resolution with the caller signal", async () => {
+    lookupMock.mockImplementation(async () => await new Promise(() => {}));
+    const controller = new AbortController();
+    const resolution = resolvePublicConnectionAddresses(
+      new URL("https://fixture.test"),
+      controller.signal,
+    );
+
+    controller.abort(new DOMException("The operation timed out", "TimeoutError"));
+    const result = await Promise.race([
+      resolution.catch((error: unknown) => error),
+      new Promise((resolve) => setTimeout(() => resolve("still pending"), 50)),
+    ]);
+
+    expect(result).toMatchObject({ name: "TimeoutError" });
+  });
+
+  it("does not start DNS resolution for an already-aborted caller", async () => {
+    lookupMock.mockRejectedValue(new Error("late DNS failure"));
+    const controller = new AbortController();
+    controller.abort(new Error("caller already aborted"));
+
+    await expect(
+      resolvePublicConnectionAddresses(new URL("https://fixture.test"), controller.signal),
+    ).rejects.toThrow("caller already aborted");
+    expect(lookupMock).not.toHaveBeenCalled();
+  });
 });
 
 function makeResponse(opts: {
@@ -349,6 +380,133 @@ function stubFetchSequence(...responses: Response[]): ReturnType<typeof vi.fn> {
   for (const response of responses) undiciFetchMock.mockResolvedValueOnce(response);
   return undiciFetchMock;
 }
+
+describe("safeFetchStatus", () => {
+  it("returns successful response metadata without buffering the body", async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence({
+      ...makeResponse({
+        status: 204,
+        url: "https://status.test/health",
+        headers: { "x-request-id": "status-fixture" },
+      }),
+      body: { cancel },
+    } as unknown as Response);
+
+    const result = await safeFetchStatus("https://status.test/health");
+
+    expect(result).toMatchObject({ status: 204, finalUrl: "https://status.test/health" });
+    expect(result.headers.get("x-request-id")).toBe("status-fixture");
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("returns non-success status metadata instead of throwing", async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence({
+      ...makeResponse({ status: 503, url: "https://status.test/health" }),
+      body: { cancel },
+    } as unknown as Response);
+
+    await expect(safeFetchStatus("https://status.test/health")).resolves.toMatchObject({
+      status: 503,
+      finalUrl: "https://status.test/health",
+    });
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("follows a same-origin redirect and reports the final response", async () => {
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence(
+      makeResponse({
+        status: 302,
+        headers: { location: "https://status.test/ready" },
+      }),
+      makeResponse({ status: 200, url: "https://status.test/ready" }),
+    );
+
+    await expect(
+      safeFetchStatus("https://status.test/health", {
+        allowedRedirectOrigin: "https://status.test",
+      }),
+    ).resolves.toMatchObject({ status: 200, finalUrl: "https://status.test/ready" });
+    expect(undiciFetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a redirect to a private destination", async () => {
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence(
+      makeResponse({ status: 302, headers: { location: "http://127.0.0.1/internal" } }),
+    );
+
+    await expect(safeFetchStatus("https://status.test/health")).rejects.toThrow(/not allowed/i);
+    expect(undiciFetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("reports a canonical URL after exhausting redirects", async () => {
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence(
+      makeResponse({
+        status: 302,
+        headers: { location: "https://status.test/health?appid=fixture'secret" },
+      }),
+      makeResponse({
+        status: 302,
+        headers: { location: "https://status.test/health?appid=fixture'secret" },
+      }),
+    );
+
+    await expect(
+      safeFetchStatus("https://status.test/health?appid=fixture'secret", {
+        maxRedirects: 1,
+      }),
+    ).rejects.toThrow("fixture%27secret");
+  });
+
+  it("blocks DNS rebinding before the connection opens", async () => {
+    lookupMock
+      .mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }])
+      .mockResolvedValueOnce([{ address: "10.0.0.5", family: 4 }]);
+    const fetchMock = stubFetchSequence();
+
+    await expect(safeFetchStatus("https://rebind.test/health")).rejects.toThrow(/not allowed/i);
+    expect(lookupMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("uses caller abort to stop a pending connection-time lookup", async () => {
+    const lookupStarted = deferred();
+    const controller = new AbortController();
+    lookupMock
+      .mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }])
+      .mockImplementationOnce(async () => {
+        lookupStarted.resolve();
+        return await new Promise<never>(() => {});
+      });
+    const fetchMock = stubFetchSequence();
+    const operation = safeFetchStatus("https://status.test/health", {
+      signal: controller.signal,
+      timeoutMs: 10_000,
+    });
+    await lookupStarted.promise;
+
+    controller.abort(new Error("fixture abort"));
+
+    await expect(operation).rejects.toThrow(/fixture abort/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("closes the pinned dispatcher after canceling the final response", async () => {
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence(makeResponse({ status: 200, url: "https://status.test/health" }));
+
+    await safeFetchStatus("https://status.test/health");
+
+    expect(undiciLifecycle.close).toHaveBeenCalledOnce();
+    expect(undiciLifecycle.destroy).not.toHaveBeenCalled();
+  });
+});
 
 describe("safeFetchJson", () => {
   it("forwards a bounded JSON request method and body", async () => {
@@ -422,6 +580,23 @@ describe("safeFetchJson", () => {
       }),
     ).resolves.toMatchObject({ data: { type: "FeatureCollection" } });
   });
+
+  it.each(["text/xml", "application/html", "text/markdown"])(
+    "accepts the configured content-type substring for %s",
+    async (contentType) => {
+      lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+      stubFetchSequence(
+        makeResponse({ headers: { "content-type": contentType }, bodyText: "document" }),
+      );
+
+      await expect(
+        safeFetchText("https://ex.test/document", {
+          acceptedContentTypes: ["application/json"],
+          acceptedContentTypeSubstrings: ["html", "text"],
+        }),
+      ).resolves.toBe("document");
+    },
+  );
 
   it("rejects an unexpected HTML content type before buffering it", async () => {
     lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
@@ -601,6 +776,44 @@ describe("safeFetchJson", () => {
     await expect(safeFetchJson("https://ex.test/x.json", { maxBytes: 100 })).rejects.toThrow(
       /too large/i,
     );
+  });
+
+  it("truncates text at the byte limit and cancels the remaining body", async () => {
+    const reader = {
+      read: vi.fn().mockResolvedValueOnce({
+        done: false,
+        value: new TextEncoder().encode("abcdef"),
+      }),
+      cancel: vi.fn().mockResolvedValue(undefined),
+      releaseLock: vi.fn(),
+    };
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence({
+      ...makeResponse({ status: 200, headers: { "content-type": "text/html" } }),
+      body: { getReader: () => reader },
+    } as unknown as Response);
+
+    await expect(
+      safeFetchText("https://ex.test/page", { maxBytes: 4, truncate: true }),
+    ).resolves.toBe("abcd");
+    expect(reader.cancel).toHaveBeenCalledOnce();
+    expect(reader.releaseLock).toHaveBeenCalledOnce();
+    expect(undiciLifecycle.close).toHaveBeenCalledOnce();
+  });
+
+  it("permits an oversized declared text body when truncation is requested", async () => {
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence(
+      makeResponse({
+        status: 200,
+        headers: { "content-length": "100", "content-type": "text/html" },
+        bodyText: "abcdef",
+      }),
+    );
+
+    await expect(
+      safeFetchText("https://ex.test/page", { maxBytes: 4, truncate: true }),
+    ).resolves.toBe("abcd");
   });
 
   it("bounds a never-settling JSON reader cancellation and still settles the transport", async () => {

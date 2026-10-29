@@ -6,7 +6,7 @@ Run from the OpenMapX repository root (Docker and the installed workspace are re
 
 ```sh
 probe_dir=$(mktemp -d /tmp/openmapx-traffic-probe.XXXXXX)
-probe_image=ghcr.io/valhalla/valhalla-scripted@sha256:f9f12c3f835750fc657d1d030a392f7a548699c1c2a961d083ed761e0db8bc14
+probe_image=ghcr.io/valhalla/valhalla-scripted@sha256:6238809f9dc3057743d70a20efd3911ec38e458bfa13a0601909b58f68dfd956
 cp services/data-manager/src/__tests__/fixtures/traffic-engine/roads.osm.pbf "$probe_dir/roads.osm.pbf"
 docker run --rm --entrypoint valhalla_build_config "$probe_image" --mjolnir-tile-dir /probe/tiles --mjolnir-tile-extract /probe/tiles.tar --mjolnir-traffic-extract /probe/traffic.tar > "$probe_dir/valhalla.json"
 docker run --rm -v "$probe_dir:/probe" --entrypoint valhalla_build_tiles "$probe_image" -c /probe/valhalla.json -j 2 /probe/roads.osm.pbf
@@ -23,15 +23,40 @@ Wait for the disposable service's `/status` response before running the probe. I
 
 Image binary: `valhalla 3.8.3-49cd28bc5`, exact digest above. Baseline 1.919 km / 230.388 seconds; forward closure caused a 3.162 km detour for depart-now auto and motorcycle. Pedestrian and bicycle, requests without a routing time, and requests without `current` did not consume the closure. Reverse travel remained unaffected. Expiry restored the baseline through the same running engine mmap. A standalone cap with no measured/base reference was unapplied and did not increase speed.
 
-Future departure **and arrival** requests that include `current` consumed today's closure. OpenMapX therefore removes that source for these temporal modes; future condition protection remains explicitly unsupported where directed restrictions cannot be represented. An actuation receipt is not proof that a specific route request consumed that graph.
+Future departure **and arrival** requests that include `current` consumed today's closure. OpenMapX therefore removes that source for these temporal modes. An actuation receipt is not proof that a specific route request consumed that graph.
 
 Fault recovery measured 888 ms (killed writer), 490 ms (hung writer after forced stale-lock age), and 2167 ms for the two-second lease. Corrupt-journal recovery passed. These are fixture results, not a production SLO measurement. The supervising process checks every five seconds, fences its own writer after twenty seconds of lock ownership, and requests a verified stop of the fixed Valhalla service if clear/recovery fails. Deployment acceptance must separately measure the full 120-second lease plus cleanup bound under its filesystem, graph size and ops-agent permissions. Docker Desktop mmap propagation required bounded polling (maximum five seconds) rather than assuming an immediate read after a host write.
 
+## Closures for a planned trip
+
+A trip with a departure or arrival time gets no live-traffic closures. Instead,
+`GET /traffic/conditions/closures?west=&south=&east=&north=&at=` lists the bound
+closures in force at that instant, from the last good conditions set under the
+last policy lease. Each closure comes as directed samples along its spans: at
+most 100 m apart, at least 15 m from either end of a span, each with the heading
+of the span's travel direction. The endpoint answers 503 while the conditions
+set or the policy lease is stale. Its `mode` is the live-traffic cycle's: in
+`shadow`, the routing integration evaluates the closures without excluding them.
+
+The routing integration plans the trip, finds the closures a returned route
+travels (a route vertex within 12 m of a sample and heading within 45° of it),
+and plans again with those samples as `exclude_locations` carrying `heading` and
+`heading_tolerance: 45`. It repeats up to three times and stays within 40
+directed points, so the engine's limit of 50 keeps room for undirected
+points. A route still on a closure afterwards is reported as
+`planned_closure_on_route`, with `limited` availability.
+
+Verified against the production engine (`valhalla-scripted:3.9.1`) on
+2026-10-29, on a two-way section of the B19 near 49.216 N, 9.677 E. The baseline
+was 3.14 km northbound and 3.09 km southbound. A heading-0 exclusion lengthened
+only the northbound route, to 5.44 km. A heading-180 exclusion lengthened only
+the southbound route, to 5.37 km. Without a heading, both directions detoured.
+
 ## Engine-owned watchdog and container loss
 
-The pinned image already contains Python 3; `services/valhalla/scripts/traffic-watchdog.py` uses only its standard library. It is the engine container's PID 1 and owns the original image entrypoint process group. It takes the shared writer lock, validates every index/tile bound and clears retained records **before** starting Valhalla, preserving the tar inode. During serving it checks the journal every two seconds. Expired nonempty effect sets, a missing/corrupt journal or an impossible lease stop the engine group; container restart clears offline before serving again. This protects against losing the entire data-manager container, in addition to DM's independent worker supervisor.
+The pinned image already contains Python 3; `services/valhalla/scripts/traffic-watchdog.py` uses only its standard library. It is the engine container's PID 1 and owns the original image entrypoint process group. It takes the shared writer lock, validates every index/tile bound and clears retained records **before** starting Valhalla, preserving the tar inode. During serving it checks the journal every two seconds. A lapsed lease (expired nonempty effects, an abandoned pending write, an uncertain journal) is cleared in place under the writer lock while the engine keeps serving: every record is bounds-checked and cleared, and the state and journal say nothing is written, so the next data-manager write starts from a known empty extract. A lease renewed while the lock was awaited is left alone. Only a missing, corrupt or impossible journal, or a clear that fails, stops the engine group; container restart clears offline before serving again. This protects against losing the entire data-manager container, in addition to DM's independent worker supervisor, without taking routing down while data-manager restarts.
 
-The real pinned-container test applied an eight-second closure lease and performed no DM cleanup. The engine stopped at lease + 3261 ms (HTTP detection) with exit code 78. Restart restored the 1.919 km / 230.388-second baseline. This test uses the same `supervise` function, with a direct `valhalla_service` command so it can reuse the tiny synthetic graph rather than run the image's OSM bootstrap.
+The real pinned-container test applies an eight-second closure lease and performs no DM cleanup. On 2026-10-29 the closure reached the running engine, then the watchdog cleared it in place: the route was back to the 1.919 km baseline 532 ms after the deadline, every request was answered throughout, and the container kept running (exit code 0). Before 2026-10-29 the watchdog stopped the engine here instead (lease + 3261 ms, exit code 78), which took routing down for minutes whenever data-manager was restarted for longer than its lease. This test uses the same `supervise` function, with a direct `valhalla_service` command so it can reuse the tiny synthetic graph rather than run the image's OSM bootstrap.
 
 After the earlier engine probe has generated `probe-overrides.json` and its container has been removed:
 
@@ -39,13 +64,12 @@ After the earlier engine probe has generated `probe-overrides.json` and its cont
 docker run -d --name openmapx-watchdog-probe -p 127.0.0.1:51869:8002 -v "$probe_dir:/probe" -v "$PWD/services/valhalla/scripts/traffic-watchdog.py:/guard.py:ro" --entrypoint python3 "$probe_image" -c 'import runpy,sys; from pathlib import Path; guard=runpy.run_path("/guard.py"); sys.exit(guard["supervise"](["valhalla_service","/probe/valhalla.json","2"],Path("/probe"),Path("/probe/watchdog-state")))'
 pnpm --filter @openmapx/data-manager exec tsx scripts/verify-engine-watchdog.ts http://127.0.0.1:51869 "$probe_dir"
 docker inspect openmapx-watchdog-probe --format '{{.State.Status}} {{.State.ExitCode}}'
-docker start openmapx-watchdog-probe
-# Verify the baseline route again, then clean up the disposable container.
+# Expect "running 0", then clean up the disposable container.
 docker rm -f openmapx-watchdog-probe
 python3 -B -m unittest discover -s services/valhalla/tests
 ```
 
-Graph activation is separate from event freshness. `traffic-generations.json` must identify the same graph, extract and raw way-map generation; `traffic-engine.json` supplies the actual serving boot epoch. `.traffic-maintenance.json` quiesces the DM worker. A traced plan is rejected if its epoch changed before the locked write. An uncoordinated scripted-image restart invalidates the old graph manifest; only coordinated maintenance can re-attest it. Coordinated startup prevents the image from rebuilding base tiles after the authority's hash. Missing/mismatched generations withhold live effects and remain actionable operator evidence.
+Graph activation is separate from event freshness. `traffic-generations.json` must identify the same graph, extract and raw way-map generation; `traffic-engine.json` supplies the actual serving boot epoch. `.traffic-maintenance.json` quiesces the DM worker. A traced plan is rejected if its epoch changed before the locked write. An uncoordinated scripted-image restart (a recreate, crash or host reboot) withdraws the graph manifest as `traffic-generations.unverified.json` before announcing the new boot, since the image may rebuild base tiles; once the engine serves, the watchdog hashes the tile directory exactly as maintenance does and restores the manifest only if it still names that generation. Otherwise the manifest is dropped and the extract guard re-attests the graph through coordinated maintenance; while a withdrawn manifest awaits its check, `valhalla.traffic.inspect` reports `unknown` so no rebuild is requested. Coordinated startup prevents the image from rebuilding base tiles after the authority's hash. Missing/mismatched generations withhold live effects and remain actionable operator evidence.
 
 ## Coordinated maintenance probe
 

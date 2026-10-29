@@ -6,6 +6,17 @@ import {
 } from "../overtureSource";
 
 describe("Overture source provenance", () => {
+  it.each(["constructor", "Constructor", "con-structor"])(
+    "rejects inherited object members as contributor datasets: %s",
+    (dataset) => {
+      expect(() => overtureDatasetSourceId(dataset)).toThrow(/Unsupported Overture/);
+      expect(() => assertSupportedOvertureContributors(["Meta", dataset])).toThrow(
+        /unsupported contributor dataset/,
+      );
+      expect(() => normalizeOvertureProvenance([{ dataset }])).toThrow(/Unsupported Overture/);
+    },
+  );
+
   it("maps current dataset names to attribution ids", () => {
     expect(overtureDatasetSourceId("Foursquare")).toBe("foursquare");
     expect(overtureDatasetSourceId("meta")).toBe("meta-places");
@@ -67,4 +78,43 @@ describe("Overture source provenance", () => {
       },
     ]);
   });
+});
+
+it("selects the most specific Overture property supplier without unrelated root notices", async () => {
+  const { overturePropertyContributors } = await import("../overtureSource");
+  const receipt = (sourceId: string) => ({ sourceId, name: sourceId });
+  const sources = [
+    { property: "", dataset: "Meta" },
+    { property: "/names", dataset: "Microsoft" },
+    { property: "/names/common/de", dataset: "Foursquare" },
+    { property: "/phones/0", dataset: "BrightQuery" },
+  ];
+  const catalogue = [
+    "overture",
+    "meta-places",
+    "microsoft-places",
+    "foursquare",
+    "brightquery",
+  ].map(receipt);
+  expect(overturePropertyContributors(sources, catalogue, ["/geometry"])).toEqual([
+    receipt("overture"),
+    receipt("meta-places"),
+  ]);
+  expect(overturePropertyContributors(sources, catalogue, ["/names/common/de"])).toEqual([
+    receipt("overture"),
+    receipt("foursquare"),
+  ]);
+  expect(overturePropertyContributors(sources, catalogue, ["/names/primary"])).toEqual([
+    receipt("overture"),
+    receipt("microsoft-places"),
+  ]);
+  expect(
+    overturePropertyContributors(sources, catalogue, ["/names/common/de", "/phones/0"]),
+  ).toEqual([receipt("overture"), receipt("foursquare"), receipt("brightquery")]);
+  expect(overturePropertyContributors(sources, catalogue, [])).toEqual([]);
+  expect(
+    overturePropertyContributors([{ property: "/names", dataset: "Meta" }], catalogue, [
+      "/geometry",
+    ]),
+  ).toEqual([receipt("overture")]);
 });

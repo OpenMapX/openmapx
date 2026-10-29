@@ -3,9 +3,6 @@ import de from "../../packages/i18n/locales/de.json";
 import en from "../../packages/i18n/locales/en.json";
 
 vi.mock("@/integration-api/map/MapContext", () => ({ useMap: () => ({}) }));
-vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
-  useSourceAttributions: vi.fn(),
-}));
 vi.mock("next-intl", () => ({
   useLocale: () => "en",
   useTranslations: () => (key: string) => key,

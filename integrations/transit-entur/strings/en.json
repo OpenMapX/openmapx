@@ -3,9 +3,9 @@
   "description": "Norway-wide transit stops, boards, routes, trip planning, alerts, vehicles, and stop facilities via Entur",
   "dataSources": {
     "entur-journey-planner": {
-      "purpose": "Search Norwegian transit stops, fetch stop boards, line details, route sequences, realtime journeys, service alerts, live vehicles, and stop-facility metadata via Entur's public APIs",
-      "dataSent": "Coordinates, stop IDs, line IDs, service-journey IDs, time windows, optional Norway boundary filter, multimodal stop mode, ET-Client-Name header",
-      "dataReceived": "Journey Planner GraphQL stops, lines, trip patterns, estimated calls, service situations, encoded leg geometries, realtime vehicle positions, NSR stop accessibility/equipment/parking data"
+      "purpose": "Fetch nearby stops, stop boards, line details, route sequences, trip planning, realtime journeys, and service alerts through Entur Journey Planner",
+      "dataSent": "Coordinates, stop IDs, line IDs, service-journey IDs, time windows, travel preferences, and the ET-Client-Name header",
+      "dataReceived": "GraphQL stops, lines, trip patterns, estimated calls, service situations, and encoded leg geometries"
     },
     "entur-vehicles": {
       "purpose": "Track live positions of monitored Norwegian transit vehicles, either for a single line or within the map view, to show them on the map",
@@ -16,6 +16,16 @@
       "purpose": "Resolve detailed stop, quay, accessibility, facility, parking, and fare-zone metadata from Norway's National Stop Register",
       "dataSent": "A REST request containing the stop place or quay identifier in the URL path and the ET-Client-Name header; no user data",
       "dataReceived": "Stop place and quay records with coordinates, names, transport modes, platform codes, accessibility limitations, equipment, parking, and fare-zone details"
+    },
+    "entur-geocoder": {
+      "purpose": "Find public transport stops by name through Entur Geocoder v3",
+      "dataSent": "Search text, result limit, stopPlace layer and NSR source filters, optional lowercase ISO2 country, multimodal mode, and ET-Client-Name header",
+      "dataReceived": "Native GeoJSON features with structured names, coordinates, NSR IDs, stop types, transport modes, and supplier identity"
+    },
+    "entur-geocoder-nsr": {
+      "purpose": "Supply Entur National Stop Register geocoder data through Entur Geocoder v3",
+      "dataSent": "No direct request to this dataset supplier; search text, result limit, country, layer, source and multimodal filters are sent to Entur's API",
+      "dataReceived": "Native features supplied by Entur National Stop Register geocoder data, with names, coordinates, identifiers and available structured metadata"
     }
   }
 }

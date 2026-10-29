@@ -38,6 +38,8 @@ export function buildSchematicGroup(
         maxzoom: 14,
       },
     },
+    // Half-step orders give the network its own depth next to other overlays'
+    // layers in the same slots, instead of a tie decided by mount order.
     layers: [
       {
         id: "omx-schematic-transit-connections",
@@ -45,7 +47,7 @@ export function buildSchematicGroup(
         source: SCHEMATIC_SOURCE_ID,
         "source-layer": "inner-connections",
         slot: "overlay-lines",
-        order: 6,
+        order: 6.5,
         layout: { "line-cap": "round", "line-join": "round" },
         paint: { "line-color": lineColor, "line-width": lineWidth, "line-opacity": 0.8 },
       },
@@ -55,7 +57,7 @@ export function buildSchematicGroup(
         source: SCHEMATIC_SOURCE_ID,
         "source-layer": "lines",
         slot: "overlay-lines",
-        order: 7,
+        order: 7.5,
         layout: { "line-cap": "round", "line-join": "round" },
         paint: { "line-color": lineColor, "line-width": lineWidth },
       },
@@ -65,7 +67,7 @@ export function buildSchematicGroup(
         source: SCHEMATIC_SOURCE_ID,
         "source-layer": "stations",
         slot: "overlay-points",
-        order: 6,
+        order: 6.5,
         paint: { "fill-color": stationFill },
       },
       {
@@ -74,7 +76,7 @@ export function buildSchematicGroup(
         source: SCHEMATIC_SOURCE_ID,
         "source-layer": "stations",
         slot: "overlay-points",
-        order: 7,
+        order: 7.5,
         paint: { "line-color": stationOutline, "line-width": 1.5 },
       },
       {
@@ -83,7 +85,7 @@ export function buildSchematicGroup(
         source: SCHEMATIC_SOURCE_ID,
         "source-layer": "stations",
         slot: "overlay-markers",
-        order: 6,
+        order: 6.5,
         minzoom: 11,
         layout: {
           "text-field": ["get", "stationLabel"],

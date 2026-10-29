@@ -57,6 +57,7 @@ import { DENSITY_LAYER_ID, DENSITY_SOURCE_ID, HotspotLayer } from "./hotspot-lay
 const SOURCE_ID = "openmapx-wildfires-source";
 const CIRCLE_LAYER_ID = "openmapx-wildfires-circles";
 const HEATMAP_LAYER_ID = "openmapx-wildfires-heatmap";
+const DENSITY_HEATMAP_LAYER_ID = "openmapx-wildfires-density-heatmap";
 const EMPTY = { type: "FeatureCollection", features: [] };
 const BOUNDS = { west: -121, south: 37.5, east: -120, north: 38.5 };
 const VIEW_QUERY = "west=-121&south=37.5&east=-120&north=38.5";
@@ -105,6 +106,30 @@ const MODIS_COLLECTION = {
         instrument: "modis",
       },
       geometry: { type: "Point" as const, coordinates: [-120.3, 38.2] },
+    },
+  ],
+};
+
+const SLSTR_COLLECTION = {
+  type: "FeatureCollection" as const,
+  features: [
+    {
+      type: "Feature" as const,
+      id: "oc:observation:eumetsat-slstr-fires:1",
+      properties: {
+        latitude: 38.3,
+        longitude: -120.2,
+        brightness: 341.2,
+        frp: 42,
+        confidence: "nominal",
+        satellite: "S3B",
+        acqDate: "2026-10-09",
+        acqTime: "0915",
+        dayNight: "D",
+        ageMs: 1_000,
+        instrument: "slstr",
+      },
+      geometry: { type: "Point" as const, coordinates: [-120.2, 38.3] },
     },
   ],
 };
@@ -160,7 +185,12 @@ beforeEach(() => {
   fake = createFakeMap({ styleLoaded: true, zoom: 8, bounds: BOUNDS });
   mapContext.mapRef.current = fake.map;
   styleVersion = 0;
-  useWildfireStore.setState({ dayRange: 1, source: "viirs", showHeatmap: false });
+  useWildfireStore.setState({
+    dayRange: 1,
+    source: "viirs",
+    showHeatmap: false,
+    showLowConfidence: false,
+  });
   useWildfireStore.getState().resetSourceStatus("firms");
 });
 
@@ -189,10 +219,10 @@ describe("HotspotLayer", () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
-      `https://api.test/api/integrations/overlay-wildfires/wildfires?dayRange=1&instrument=viirs&${VIEW_QUERY}&zoom=8`,
+      `https://api.test/api/integrations/overlay-wildfires/wildfires?dayRange=1&instrument=viirs&lowConfidence=0&${VIEW_QUERY}&zoom=8`,
     );
     await waitFor(() => {
-      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION);
+      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(published(HOTSPOT_COLLECTION));
     });
     expect(fake.state.sources.get(DENSITY_SOURCE_ID)?.data).toEqual(EMPTY);
     expect(useWildfireStore.getState().statuses.firms).toMatchObject({
@@ -215,10 +245,12 @@ describe("HotspotLayer", () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
-      `https://api.test/api/integrations/overlay-wildfires/wildfires/density?dayRange=1&instrument=viirs&${VIEW_QUERY}&zoom=4`,
+      `https://api.test/api/integrations/overlay-wildfires/wildfires/density?dayRange=1&instrument=viirs&lowConfidence=0&${VIEW_QUERY}&zoom=4`,
     );
     await waitFor(() => {
-      expect(fake.state.sources.get(DENSITY_SOURCE_ID)?.data).toEqual(DENSITY_COLLECTION);
+      expect(fake.state.sources.get(DENSITY_SOURCE_ID)?.data).toEqual(
+        published(DENSITY_COLLECTION),
+      );
     });
     expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(EMPTY);
     expect(useWildfireStore.getState().statuses.firms).toMatchObject({
@@ -234,9 +266,26 @@ describe("HotspotLayer", () => {
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain("/overlay-wildfires/wildfires?");
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain("zoom=7");
     await waitFor(() => {
-      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION);
+      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(published(HOTSPOT_COLLECTION));
     });
     expect(fake.state.sources.get(DENSITY_SOURCE_ID)?.data).toEqual(EMPTY);
+  });
+
+  it("reloads the view with low-confidence detections when they are turned on", async () => {
+    const fetchMock = routeFetch();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<HotspotLayer active popupController={popupController()} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      useWildfireStore.getState().setShowLowConfidence(true);
+    });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe(
+      `https://api.test/api/integrations/overlay-wildfires/wildfires?dayRange=1&instrument=viirs&lowConfidence=1&${VIEW_QUERY}&zoom=8`,
+    );
   });
 
   it("registers density cells below the detections in the points slot", () => {
@@ -278,6 +327,41 @@ describe("HotspotLayer", () => {
       slot: "overlay-heat",
       order: 0,
     });
+  });
+
+  it("removes both heatmaps and releases their slots when the heatmap is turned off", () => {
+    vi.stubGlobal("fetch", routeFetch());
+    useWildfireStore.setState({ showHeatmap: true });
+    render(<HotspotLayer active popupController={popupController()} />);
+    expect(fake.state.layers.has(DENSITY_HEATMAP_LAYER_ID)).toBe(true);
+
+    act(() => {
+      useWildfireStore.getState().setShowHeatmap(false);
+    });
+
+    for (const id of [HEATMAP_LAYER_ID, DENSITY_HEATMAP_LAYER_ID]) {
+      expect(fake.state.layers.has(id)).toBe(false);
+      expect(layerRegistrations().some((entry) => entry.id === id)).toBe(false);
+    }
+    expect(fake.state.layers.has(CIRCLE_LAYER_ID)).toBe(true);
+    expect(fake.state.layers.has(DENSITY_LAYER_ID)).toBe(true);
+  });
+
+  it("redraws the heatmaps with the detections when the style is replaced", () => {
+    vi.stubGlobal("fetch", routeFetch());
+    useWildfireStore.setState({ showHeatmap: true });
+    render(<HotspotLayer active popupController={popupController()} />);
+
+    act(() => fake.map.setStyle({} as never));
+
+    for (const id of [
+      HEATMAP_LAYER_ID,
+      DENSITY_HEATMAP_LAYER_ID,
+      CIRCLE_LAYER_ID,
+      DENSITY_LAYER_ID,
+    ]) {
+      expect(fake.state.layers.has(id)).toBe(true);
+    }
   });
 
   it("keeps the exact detection circle and heatmap visual contract", () => {
@@ -388,19 +472,50 @@ describe("HotspotLayer", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<HotspotLayer active popupController={popupController()} />);
     await waitFor(() => {
-      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION);
+      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(published(HOTSPOT_COLLECTION));
     });
 
     act(() => useWildfireStore.getState().setSource("modis"));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION);
+    expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(published(HOTSPOT_COLLECTION));
 
     await act(async () => {
       resolveSecond?.(response(MODIS_COLLECTION, FRESH_HEADERS));
     });
     await waitFor(() => {
-      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(MODIS_COLLECTION);
+      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(published(MODIS_COLLECTION));
     });
+  });
+
+  it("draws SLSTR detections, whose confidence is a class, and refuses a percentage", async () => {
+    const headers = { ...FRESH_HEADERS, "X-OpenMapX-Sources": "eumetsat-slstr-fires" };
+    const percent = {
+      ...SLSTR_COLLECTION,
+      features: SLSTR_COLLECTION.features.map((feature) => ({
+        ...feature,
+        properties: { ...feature.properties, confidence: "76" },
+      })),
+    };
+    const fetchMock = vi.fn(async () =>
+      fetchMock.mock.calls.length === 1
+        ? response(SLSTR_COLLECTION, headers)
+        : response(percent, headers),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    useWildfireStore.setState({ source: "slstr" });
+    render(<HotspotLayer active popupController={popupController()} />);
+
+    await waitFor(() => {
+      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(published(SLSTR_COLLECTION));
+    });
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("dayRange=1&instrument=slstr");
+    expect(useWildfireStore.getState().statuses.firms.sources).toEqual(["eumetsat-slstr-fires"]);
+
+    act(() => useWildfireStore.getState().setDayRange(2));
+    await waitFor(() =>
+      expect(useWildfireStore.getState().statuses.firms.error).toBe("unavailable"),
+    );
+    expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(published(SLSTR_COLLECTION));
   });
 
   it("reports a stale and truncated answer from the response headers", async () => {
@@ -468,7 +583,7 @@ describe("HotspotLayer", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<HotspotLayer active popupController={popupController()} />);
     await waitFor(() =>
-      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION),
+      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(published(HOTSPOT_COLLECTION)),
     );
 
     act(() => useWildfireStore.getState().setSource("modis"));
@@ -476,7 +591,7 @@ describe("HotspotLayer", () => {
     await waitFor(() =>
       expect(useWildfireStore.getState().statuses.firms.error).toBe("unavailable"),
     );
-    expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION);
+    expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(published(HOTSPOT_COLLECTION));
     expect(useWildfireStore.getState().statuses.firms).toMatchObject({
       fetchedAt: Date.parse("2026-10-09T10:00:00.000Z"),
       featureCount: 1,
@@ -599,3 +714,13 @@ describe("HotspotLayer", () => {
     expect(popup?.html).toContain("totalFirePower: 21.5 MW");
   });
 });
+
+function published<T extends { features: { properties: object }[] }>(data: T) {
+  return {
+    ...data,
+    features: data.features.map((feature) => ({
+      ...feature,
+      properties: { ...feature.properties, _mapAttributions: "[]" },
+    })),
+  };
+}

@@ -8,14 +8,13 @@ import type {
   ParkingStatus,
   ParkingTrend,
 } from "@openmapx/integration-framework";
+import { snapshotContributors } from "@openmapx/integration-framework";
 import {
   addressOf,
   allowedReadings,
-  CROWD_CREDIT,
   type CreditSources,
   countryOf,
   credit,
-  crowdReported,
   firstText,
   instantOf,
   itemIdOf,
@@ -24,12 +23,16 @@ import {
   list,
   NO_SOURCES,
   newestReading,
+  osmOpeningHoursOf,
   pointOf,
   type Rec,
+  readingCredits,
   rec,
+  recordCredits,
   sourcesOf,
   splitKey,
   str,
+  stringsOf,
   upstreamCredits,
 } from "../features/record.js";
 
@@ -44,6 +47,7 @@ const LAYOUTS: ReadonlySet<string> = new Set<ParkingLayout>([
   "single_level",
   "multi_storey",
   "underground",
+  "underground_and_multi_storey",
   "surface",
   "automated",
   "covered",
@@ -196,7 +200,7 @@ function rateOf(offer: Rec): ParkingRate | undefined {
   }
   if (rows.length === 0 || currency === undefined) return undefined;
   const text = firstText(offer["displayText"]);
-  return { currency, rows, ...(text ? { text } : {}) };
+  return { currency, rows, ...(text ? { text } : {}), contributors: recordCredits(offer) };
 }
 
 /** Whether an area says more than that the site has such spaces. */
@@ -204,7 +208,9 @@ const counted = (area: ParkingArea) =>
   area.capacity !== undefined ||
   area.available !== undefined ||
   area.status !== undefined ||
-  area.trend !== undefined;
+  area.trend !== undefined ||
+  area.hours !== undefined ||
+  area.maxStayMin !== undefined;
 
 /**
  * An OpenConditions `parking_site` record with its readings in effect and its
@@ -240,7 +246,6 @@ export function recordToParkingSite(
   );
   const readings = allowedReadings(latest, excluded);
   const site = countsOf(readings, undefined, now);
-  let crowd = site.used.some(crowdReported);
 
   const areas: ParkingArea[] = [];
   for (const component of list(record["components"])) {
@@ -253,19 +258,23 @@ export function recordToParkingSite(
     const own = countsOf(readings, rawKey, now);
     if (excluded(source) && own.used.length === 0) continue;
     const capacity = countOf(details["capacity"]);
+    const hours = osmOpeningHoursOf(details["hours"]);
+    const maxStayMin = minutesOf(details["maxStay"]);
     const area: ParkingArea = {
       key: `${vehicleType}:${userGroup}`,
       vehicleType,
       userGroup,
       ...(capacity !== undefined ? { capacity } : {}),
+      ...(hours ? { hours } : {}),
+      ...(maxStayMin ? { maxStayMin } : {}),
       ...own.counts,
+      contributors: readingCredits(...own.used),
     };
     const held = areas.findIndex((a) => a.key === area.key);
     // Two areas under one key are one area: a counted one replaces one that only says it exists.
     if (held === -1) areas.push(area);
     else if (!counted(areas[held]!) && counted(area)) areas[held] = area;
     else continue;
-    crowd ||= own.used.some(crowdReported);
   }
 
   const rates = offers
@@ -287,10 +296,13 @@ export function recordToParkingSite(
   const address = addressOf(location) ?? str(rec(location["address"])["text"]);
   const operator = firstText(rec(record["operator"])["name"]);
   const website = str(details["website"]);
-  const openingHours = str(rec(record["openingHours"])["osm"]);
+  const openingHours = osmOpeningHoursOf(record["openingHours"]);
   const openingHoursText = firstText(details["openingHoursText"]);
   const audience = oneOf<NonNullable<ParkingSite["audience"]>>(AUDIENCES, access["audience"]);
   const heightLimitCm = heightLimitCmOf(details);
+  const maxStayMin = minutesOf(details["maxStay"]);
+  const reservation = details["reservation"];
+  const amenities = stringsOf(record["amenities"]);
   const tariffText = firstText(details["tariffText"]);
   const notes = firstText(record["description"]);
   return {
@@ -309,17 +321,22 @@ export function recordToParkingSite(
     ...(audience ? { audience } : {}),
     ...(payment.length > 0 ? { free: payment.includes("free") } : {}),
     ...(heightLimitCm !== undefined ? { heightLimitCm } : {}),
+    ...(maxStayMin ? { maxStayMin } : {}),
+    ...(typeof reservation === "boolean" ? { reservation } : {}),
+    ...(amenities.length > 0 ? { amenities } : {}),
     ...(capacity !== undefined ? { capacity } : {}),
     ...site.counts,
     areas,
     rates,
     ...(tariffText ? { tariffText } : {}),
     ...(notes ? { notes } : {}),
-    sources: kept.map((s) => s.id),
-    attributions: [
+    sources: [...new Set(kept.map((s) => s.id))],
+    attributions: snapshotContributors([
       ...kept.map((s) => credit(s, sources)),
       ...upstreamCredits(kept, sources),
-      ...(crowd ? [CROWD_CREDIT] : []),
-    ],
+      ...rates.flatMap((rate) => rate.contributors ?? []),
+      ...readingCredits(...site.used),
+      ...areas.flatMap((area) => area.contributors ?? []),
+    ]),
   };
 }

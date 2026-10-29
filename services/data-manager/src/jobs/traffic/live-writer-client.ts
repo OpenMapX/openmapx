@@ -1,6 +1,5 @@
-import { createRequire } from "node:module";
-import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
+import { entryExecArgv } from "../../utils/entry-module.js";
 import type { LiveWriterRequest, LiveWriterResponse } from "./live-writer-protocol.js";
 import type { WriteLiveTrafficDeps, WriteLiveTrafficResult } from "./write-live.js";
 
@@ -36,15 +35,8 @@ export function createLiveTrafficWriter(
   };
   const start = () => {
     if (worker) return worker;
-    const entry =
-      options.workerUrl ??
-      new URL(
-        import.meta.url.endsWith(".ts") ? "./live-writer-worker.ts" : "./live-writer-worker.js",
-        import.meta.url,
-      );
-    worker = new Worker(entry, {
-      execArgv: ["--import", pathToFileURL(createRequire(import.meta.url).resolve("tsx/esm")).href],
-    });
+    const entry = options.workerUrl ?? new URL("./live-writer-worker.ts", import.meta.url);
+    worker = new Worker(entry, { execArgv: entryExecArgv(entry) });
     worker.on("error", fail);
     worker.on("exit", (code) => {
       const error = failed ?? new Error(`Live traffic writer exited (${code})`);

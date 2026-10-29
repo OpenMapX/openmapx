@@ -10,6 +10,7 @@ import { createHash, randomBytes } from "node:crypto";
 import {
   chmodSync,
   cpSync,
+  type Dirent,
   existsSync,
   linkSync,
   lstatSync,
@@ -27,9 +28,18 @@ import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep 
 import { gunzipSync } from "node:zlib";
 import { scanLicenses } from "@openmapx/core/licenses";
 import { assertAllowedGitUrl, gitShallowClone, safeDownload } from "@openmapx/core/server";
+import { assertTrustedConfigurationSchema } from "@openmapx/core/services/configuration-schema";
+import {
+  assertTrustedIntegrationDirectory,
+  MAX_INTEGRATION_MANIFEST_BYTES,
+} from "@openmapx/core/services/trusted-integration-schemas";
+import {
+  type ArtifactMetadata,
+  validateArtifactMetadata as validatePortableArtifactMetadata,
+} from "@openmapx/extension-contracts/artifact";
 import { createDeterministicTarGz } from "./deterministic-tar";
 import { INTEGRATION_ID_REGEX, validateManifest } from "./manifest";
-import { PLATFORM_VERSION } from "./platform";
+import { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";
 
 export interface IntegrationSummary {
   id: string;
@@ -43,9 +53,112 @@ function customDir(rootDir: string): string {
   return join(rootDir, "custom_integrations");
 }
 
+// Installed files get these modes whatever the source, the archive or the
+// umask declared. The operations agent trusts installed integrations by the
+// digests it records, not by modes; fixed modes keep installs reproducible.
+const INSTALLED_DIRECTORY_MODE = 0o755;
+const INSTALLED_FILE_MODE = 0o644;
+const MAX_AGENT_INTEGRATION_ID_LENGTH = 64;
+
+/** Create `custom_integrations/` when it is missing; it must be a real directory. */
+function prepareCustomDir(rootDir: string): void {
+  const directory = customDir(rootDir);
+  mkdirSync(directory, { recursive: true, mode: INSTALLED_DIRECTORY_MODE });
+  if (!lstatSync(directory).isDirectory()) {
+    throw new Error(`${directory} must be a directory, not a symbolic link or a file`);
+  }
+}
+
+/** Refuse anything in a staged tree but directories and regular single-link files. */
+function assertOnlyFilesAndDirectories(directory: string, root = directory): void {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    const stats = lstatSync(path);
+    if (stats.isDirectory()) {
+      assertOnlyFilesAndDirectories(path, root);
+    } else if (!stats.isFile() || stats.nlink !== 1) {
+      throw new Error(
+        `${relative(root, path).split(sep).join("/")} must be a regular file: integration artifacts may not contain links`,
+      );
+    }
+  }
+}
+
+/** Give a staged tree the installed modes. Symbolic links are left as they are. */
+function applyInstalledModes(directory: string): void {
+  chmodSync(directory, INSTALLED_DIRECTORY_MODE);
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) applyInstalledModes(path);
+    else if (entry.isFile()) chmodSync(path, INSTALLED_FILE_MODE);
+  }
+}
+
+/**
+ * Refuse a `manifest.json` the agent would not read: a symbolic link, a file
+ * hard-linked to another, or one larger than the agent reads. Checked before
+ * the manifest is parsed, since parsing would follow a link.
+ */
+function assertManifestFile(directory: string): void {
+  let stats: ReturnType<typeof lstatSync>;
+  try {
+    stats = lstatSync(join(directory, "manifest.json"));
+  } catch {
+    return; // Missing: reported when the manifest is read.
+  }
+  if (stats.isSymbolicLink()) {
+    throw new Error("manifest.json must be a regular file, not a symbolic link");
+  }
+  if (!stats.isFile()) throw new Error("manifest.json must be a regular file");
+  if (stats.nlink !== 1) {
+    throw new Error("manifest.json must not be hard-linked to another file");
+  }
+  if (stats.size > MAX_INTEGRATION_MANIFEST_BYTES) {
+    throw new Error(`manifest.json exceeds the ${MAX_INTEGRATION_MANIFEST_BYTES / 1024} KiB limit`);
+  }
+}
+
+/**
+ * The checks the operations agent's loader applies, run on the staged tree
+ * after its modes are set: anything it would reject is refused here, before
+ * it replaces an installed integration.
+ */
+function assertAgentLoads(directory: string, id: string): void {
+  if (id.length > MAX_AGENT_INTEGRATION_ID_LENGTH) {
+    throw new Error(
+      `Integration id "${id}" is longer than the ${MAX_AGENT_INTEGRATION_ID_LENGTH} characters the operations agent loads`,
+    );
+  }
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(
+      readFileSync(join(directory, "manifest.json")),
+    );
+  } catch {
+    throw new Error("manifest.json is not valid UTF-8");
+  }
+  const manifest = readManifest(directory);
+  try {
+    assertTrustedConfigurationSchema(manifest?.configSchema as Record<string, unknown> | undefined);
+  } catch {
+    throw new Error("configSchema uses a construct the operations agent does not accept");
+  }
+  try {
+    assertTrustedIntegrationDirectory(directory, id);
+  } catch {
+    throw new Error("The operations agent would not load the installed files");
+  }
+}
+
 const STAGING_DIR_NAME = ".staging";
 const DEFAULT_MAX_ARTIFACT_BYTES = 200 * 1024 * 1024;
 const MAX_LAYER_SELECTOR_PREVIEW_BYTES = 64 * 1024;
+const TAR_BLOCK_BYTES = 512;
+// Header count includes PAX and GNU metadata headers.
+const MAX_TAR_HEADERS = 4096;
+const MAX_PAX_RECORDS = 256;
+const MAX_ARCHIVE_PATH_BYTES = 1024;
+const MAX_ARCHIVE_PATH_COMPONENTS = 32;
+const MAX_ARCHIVE_PATH_COMPONENT_BYTES = 255;
 
 function stagingDir(rootDir: string): string {
   return join(customDir(rootDir), STAGING_DIR_NAME);
@@ -95,6 +208,33 @@ function readManifest(directory: string): Record<string, unknown> | null {
     return JSON.parse(readFileSync(manifestPath, "utf-8")) as Record<string, unknown>;
   } catch {
     return null;
+  }
+}
+
+function builtInIntegrationIds(rootDir: string): Set<string> {
+  const ids = new Set<string>();
+  let entries: Dirent<string>[];
+  try {
+    entries = readdirSync(builtInDir(rootDir), { withFileTypes: true });
+  } catch {
+    return ids;
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const manifest = readManifest(join(builtInDir(rootDir), entry.name));
+    if (typeof manifest?.id === "string" && INTEGRATION_ID_REGEX.test(manifest.id)) {
+      ids.add(manifest.id);
+    }
+  }
+  return ids;
+}
+
+function assertDoesNotShadowBuiltIn(builtInIds: ReadonlySet<string>, id: string): void {
+  if (builtInIds.has(id)) {
+    throw new Error(
+      `Built-in integration id "${id}" is reserved and cannot be installed as a community integration`,
+    );
   }
 }
 
@@ -258,7 +398,7 @@ function resolveGitUrl(source: string): string | null {
 }
 
 export async function installIntegration(opts: InstallOptions): Promise<InstallResult> {
-  mkdirSync(customDir(opts.rootDir), { recursive: true });
+  prepareCustomDir(opts.rootDir);
 
   const allowLocal = opts.allowLocalSources ?? true;
   const sourceKind = opts.sourceKind ?? "source";
@@ -313,28 +453,17 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
   }
 
   try {
-    const manifest = readManifest(stage);
-    if (!manifest || typeof manifest.id !== "string") {
-      throw new Error("Source has no manifest.json with a string `id` at its root");
-    }
-
-    const validation = validateManifest(manifest);
-    if (!validation.valid) {
-      throw new Error(`Manifest validation failed:\n  - ${validation.errors.join("\n  - ")}`);
-    }
-    resolveLayerSelectorPreview(stage, manifest);
-    assertNoExecutableCommunityCode(stage, manifest);
+    const { id } = validateStagedIntegration(stage, {
+      builtInIds: builtInIntegrationIds(opts.rootDir),
+      artifact: sourceKind === "artifact",
+      allowLinks: true,
+    });
 
     // The schema regex already enforces the slug shape, but resolveInstallTarget
     // (via assertSafeId) gives a single point of defense if the schema ever
     // loosens AND verifies the resolved path stays under custom_integrations/.
-    const id = manifest.id;
     const target = resolveInstallTarget(opts.rootDir, id);
     const replaced = existsSync(target);
-    validateDeclarativeArtifact(stage);
-    if (sourceKind === "artifact") {
-      validateArtifactMetadata(stage, manifest);
-    }
     if (replaced) {
       rmSync(target, { recursive: true, force: true });
     }
@@ -343,6 +472,71 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
   } catch (err) {
     rmSync(stage, { recursive: true, force: true });
     throw err;
+  }
+}
+
+export interface StagedIntegrationOptions {
+  /** Ids an installed integration may not take: the built-in integrations. */
+  builtInIds: ReadonlySet<string>;
+  /** Whether the tree came from a release artifact, whose metadata is checked. */
+  artifact: boolean;
+  /** Keep internal symbolic links and hard links (local development installs). */
+  allowLinks?: boolean;
+}
+
+/**
+ * Every check an installed integration must pass, run on a staged tree before
+ * it replaces anything: the manifest, its protocol and id, the declarative-only
+ * policy, artifact metadata, and what the operations agent's loader requires.
+ * Gives the tree the installed modes on the way.
+ */
+export function validateStagedIntegration(
+  stage: string,
+  options: StagedIntegrationOptions,
+): { id: string; manifest: Record<string, unknown> } {
+  assertManifestFile(stage);
+  const manifest = readManifest(stage);
+  if (!manifest || typeof manifest.id !== "string") {
+    throw new Error("Source has no manifest.json with a string `id` at its root");
+  }
+  const validation = validateManifest(manifest);
+  if (!validation.valid) {
+    throw new Error(`Manifest validation failed:\n  - ${validation.errors.join("\n  - ")}`);
+  }
+  assertCompatibleManifestProtocol(manifest);
+  const id = manifest.id;
+  assertSafeId(id);
+  assertDoesNotShadowBuiltIn(options.builtInIds, id);
+  resolveLayerSelectorPreview(stage, manifest);
+  assertNoExecutableCommunityCode(stage, manifest);
+  validateDeclarativeArtifact(stage);
+  if (options.artifact) validateArtifactMetadata(stage, manifest);
+  if (!options.allowLinks) assertOnlyFilesAndDirectories(stage);
+  applyInstalledModes(stage);
+  assertAgentLoads(stage, id);
+  return { id, manifest };
+}
+
+/**
+ * Extract an integration `.tar.gz` into `extractRoot` (which must not exist),
+ * with the same path, link and size checks as an install. An archive whose
+ * only entry is a directory holding `manifest.json` is unwrapped to
+ * `promoted`. Returns the directory that holds the integration.
+ */
+export function extractIntegrationArchive(
+  archivePath: string,
+  extractRoot: string,
+  promoted: string,
+  maxBytes: number = DEFAULT_MAX_ARTIFACT_BYTES,
+): string {
+  assertArtifactFileSize(archivePath, maxBytes);
+  mkdirSync(extractRoot, { mode: INSTALLED_DIRECTORY_MODE });
+  try {
+    extractTarGz(archivePath, extractRoot, maxBytes);
+    return normalizeExtractedArtifactRoot(extractRoot, promoted);
+  } catch (error) {
+    rmSync(extractRoot, { recursive: true, force: true });
+    throw error;
   }
 }
 
@@ -379,9 +573,13 @@ async function stageArtifactSource(opts: InstallOptions): Promise<string> {
 
     assertArtifactFileSize(sourcePath, maxArtifactBytes);
     verifyArtifactSha256(sourcePath, opts.artifactSha256);
-    extractTarGz(sourcePath, extractRoot, maxArtifactBytes);
-
-    const stage = normalizeExtractedArtifactRoot(extractRoot, join(parent, `source-${token}`));
+    rmSync(extractRoot, { recursive: true, force: true });
+    const stage = extractIntegrationArchive(
+      sourcePath,
+      extractRoot,
+      join(parent, `source-${token}`),
+      maxArtifactBytes,
+    );
     if (sourcePath === archivePath) rmSync(archivePath, { force: true });
     return stage;
   } catch (err) {
@@ -429,6 +627,16 @@ function normalizeExtractedArtifactRoot(extractRoot: string, promoted: string): 
   return extractRoot;
 }
 
+type TarDescriptorType = "directory" | "file" | "hardlink" | "symlink";
+
+interface TarDescriptor {
+  type: TarDescriptorType;
+  path: string;
+  linkTarget?: string;
+  payloadOffset: number;
+  payloadLength: number;
+}
+
 function extractTarGz(archivePath: string, destDir: string, maxBytes: number): void {
   let data: Buffer;
   try {
@@ -440,23 +648,52 @@ function extractTarGz(archivePath: string, destDir: string, maxBytes: number): v
     throw err;
   }
 
+  const descriptors = validateTarDescriptors(data, destDir);
+  materializeTarDescriptors(data, destDir, descriptors);
+}
+
+function validateTarDescriptors(data: Buffer, destDir: string): TarDescriptor[] {
+  const descriptors: TarDescriptor[] = [];
   let pendingPath: string | undefined;
   let pendingLinkPath: string | undefined;
   const base = resolve(destDir);
-  for (let offset = 0; offset + 512 <= data.length; ) {
-    const header = data.subarray(offset, offset + 512);
-    offset += 512;
-    if (isZeroBlock(header)) break;
+  let headerCount = 0;
+  let offset = 0;
+  let reachedEndBlock = false;
+  for (; offset + TAR_BLOCK_BYTES <= data.length; ) {
+    const header = data.subarray(offset, offset + TAR_BLOCK_BYTES);
+    offset += TAR_BLOCK_BYTES;
+    if (isZeroBlock(header)) {
+      reachedEndBlock = true;
+      break;
+    }
+    headerCount += 1;
+    if (headerCount > MAX_TAR_HEADERS) {
+      throw new Error(
+        `Artifact tar header limit exceeded: maximum ${MAX_TAR_HEADERS.toLocaleString("en-US")}`,
+      );
+    }
 
     const name = readTarString(header, 0, 100);
     const prefix = readTarString(header, 345, 155);
     const headerPath = prefix ? `${prefix}/${name}` : name;
     const headerLinkPath = readTarString(header, 157, 100);
     const size = parseTarOctal(header, 124, 12);
-    const mode = parseTarOctal(header, 100, 8);
+    // The entry's mode (offset 100) is not used: installed files get fixed modes.
     const typeflag = readTarString(header, 156, 1) || "0";
-    const fileData = data.subarray(offset, offset + size);
-    offset += Math.ceil(size / 512) * 512;
+    const payloadOffset = offset;
+    if (size > data.length - payloadOffset) {
+      throw new Error(`Artifact tar payload is truncated for ${headerPath || "unnamed entry"}`);
+    }
+    const payloadEnd = payloadOffset + size;
+    const paddingLength = (TAR_BLOCK_BYTES - (size % TAR_BLOCK_BYTES)) % TAR_BLOCK_BYTES;
+    if (paddingLength > data.length - payloadEnd) {
+      throw new Error(
+        `Artifact tar payload padding is truncated for ${headerPath || "unnamed entry"}`,
+      );
+    }
+    const fileData = data.subarray(payloadOffset, payloadEnd);
+    offset = payloadEnd + paddingLength;
 
     if (typeflag === "x") {
       const records = parsePaxRecords(fileData);
@@ -464,12 +701,17 @@ function extractTarGz(archivePath: string, destDir: string, maxBytes: number): v
       pendingLinkPath = records.linkpath ?? pendingLinkPath;
       continue;
     }
-    if (typeflag === "g") continue; // Global PAX metadata does not carry per-entry paths.
+    if (typeflag === "g") {
+      parsePaxRecords(fileData, false);
+      continue; // Global PAX metadata does not carry per-entry paths.
+    }
     if (typeflag === "L") {
+      assertMetadataPathPayloadSize(fileData, "Artifact path");
       pendingPath = readTarPayloadString(fileData);
       continue;
     }
     if (typeflag === "K") {
+      assertMetadataPathPayloadSize(fileData, "Artifact link target");
       pendingLinkPath = readTarPayloadString(fileData);
       continue;
     }
@@ -479,49 +721,102 @@ function extractTarGz(archivePath: string, destDir: string, maxBytes: number): v
     pendingPath = undefined;
     pendingLinkPath = undefined;
     const safePath = safeArchivePath(rawPath);
+    assertArchivePathStructure(safePath, "Artifact path");
     const target = resolve(destDir, safePath);
     if (target !== base && !target.startsWith(`${base}${sep}`)) {
       throw new Error(`Artifact entry escapes extraction directory: ${rawPath}`);
     }
 
     if (typeflag === "5") {
-      assertPathNotThroughSymlink(base, target);
-      mkdirSync(target, { recursive: true });
+      descriptors.push({
+        type: "directory",
+        path: safePath,
+        payloadOffset,
+        payloadLength: size,
+      });
       continue;
     }
     if (typeflag === "2") {
       const linkTarget = resolveSymlinkTarget(base, target, rawLinkPath);
-      assertPathNotThroughSymlink(base, dirname(target));
-      mkdirSync(dirname(target), { recursive: true });
-      if (existsSync(target)) {
-        throw new Error(`Artifact link target already exists: ${rawPath}`);
-      }
-      symlinkSync(linkTarget.raw, target);
+      descriptors.push({
+        type: "symlink",
+        path: safePath,
+        linkTarget: linkTarget.raw,
+        payloadOffset,
+        payloadLength: size,
+      });
       continue;
     }
     if (typeflag === "1") {
-      const linkTarget = resolveHardlinkTarget(base, rawLinkPath);
-      assertPathNotThroughSymlink(base, dirname(target));
-      mkdirSync(dirname(target), { recursive: true });
-      assertPathNotThroughSymlink(base, target);
-      linkSync(linkTarget, target);
+      const linkTarget = validateHardlinkTarget(base, rawLinkPath);
+      descriptors.push({
+        type: "hardlink",
+        path: safePath,
+        linkTarget,
+        payloadOffset,
+        payloadLength: size,
+      });
       continue;
     }
     if (typeflag !== "0") {
       throw new Error(`Unsupported artifact entry type '${typeflag}' for ${rawPath}`);
     }
 
+    descriptors.push({
+      type: "file",
+      path: safePath,
+      payloadOffset,
+      payloadLength: size,
+    });
+  }
+  if (!reachedEndBlock && offset !== data.length) {
+    throw new Error("Artifact contains a partial tar header");
+  }
+  return descriptors;
+}
+
+function materializeTarDescriptors(
+  data: Buffer,
+  destDir: string,
+  descriptors: TarDescriptor[],
+): void {
+  const base = resolve(destDir);
+  for (const descriptor of descriptors) {
+    const target = resolve(destDir, descriptor.path);
+    if (descriptor.type === "directory") {
+      assertPathNotThroughSymlink(base, target);
+      mkdirSync(target, { recursive: true });
+      continue;
+    }
+    if (descriptor.type === "symlink") {
+      if (!descriptor.linkTarget) throw new Error("Validated artifact symlink has no target");
+      resolveSymlinkTarget(base, target, descriptor.linkTarget);
+      assertPathNotThroughSymlink(base, dirname(target));
+      mkdirSync(dirname(target), { recursive: true });
+      if (existsSync(target)) {
+        throw new Error(`Artifact link target already exists: ${descriptor.path}`);
+      }
+      symlinkSync(descriptor.linkTarget, target);
+      continue;
+    }
+    if (descriptor.type === "hardlink") {
+      if (!descriptor.linkTarget) throw new Error("Validated artifact hardlink has no target");
+      const linkTarget = resolveHardlinkTarget(base, descriptor.linkTarget);
+      assertPathNotThroughSymlink(base, dirname(target));
+      mkdirSync(dirname(target), { recursive: true });
+      assertPathNotThroughSymlink(base, target);
+      linkSync(linkTarget, target);
+      continue;
+    }
+
     assertPathNotThroughSymlink(base, dirname(target));
     mkdirSync(dirname(target), { recursive: true });
     assertPathNotThroughSymlink(base, target);
-    writeFileSync(target, fileData);
-    if (mode > 0) {
-      try {
-        chmodSync(target, mode & 0o777);
-      } catch {
-        // Non-fatal on filesystems that do not support chmod.
-      }
-    }
+    writeFileSync(
+      target,
+      data.subarray(descriptor.payloadOffset, descriptor.payloadOffset + descriptor.payloadLength),
+      { mode: INSTALLED_FILE_MODE },
+    );
   }
 }
 
@@ -545,7 +840,7 @@ function parseTarOctal(block: Buffer, start: number, length: number): number {
   const raw = readTarString(block, start, length).replace(/\0/g, "").trim();
   if (!raw) return 0;
   const value = Number.parseInt(raw, 8);
-  if (!Number.isFinite(value) || value < 0) {
+  if (!Number.isSafeInteger(value) || value < 0) {
     throw new Error(`Invalid tar numeric field: ${raw}`);
   }
   return value;
@@ -559,31 +854,80 @@ function readTarPayloadString(data: Buffer): string {
     .trimEnd();
 }
 
-function parsePaxRecords(data: Buffer): Record<string, string> {
+function parsePaxRecords(data: Buffer, capturePaths = true): Record<string, string> {
   const records: Record<string, string> = {};
   let offset = 0;
+  let count = 0;
   while (offset < data.length) {
     const space = data.indexOf(0x20, offset);
-    if (space < 0) break;
+    if (space < 0) throw new Error("Invalid PAX payload: unterminated trailing data");
+    if (space - offset > 20) throw new Error("Invalid PAX record length");
     const lengthRaw = data.subarray(offset, space).toString("utf-8");
+    if (!/^\d+$/.test(lengthRaw)) throw new Error(`Invalid PAX record length: ${lengthRaw}`);
     const length = Number.parseInt(lengthRaw, 10);
     if (!Number.isInteger(length) || length <= 0 || offset + length > data.length) {
       throw new Error(`Invalid PAX record length: ${lengthRaw}`);
     }
-
-    let record = data.subarray(space + 1, offset + length);
-    if (record.length > 0 && record[record.length - 1] === 10) {
-      record = record.subarray(0, -1);
+    count += 1;
+    if (count > MAX_PAX_RECORDS) {
+      throw new Error(`PAX payload exceeds ${MAX_PAX_RECORDS} records`);
     }
+
+    const recordEnd = offset + length;
+    if (recordEnd <= space + 1 || data[recordEnd - 1] !== 10) {
+      throw new Error("Invalid PAX record: declared length must include a terminating newline");
+    }
+    const record = data.subarray(space + 1, recordEnd - 1);
     const equals = record.indexOf(0x3d);
-    if (equals > 0) {
-      const key = record.subarray(0, equals).toString("utf-8");
-      const value = record.subarray(equals + 1).toString("utf-8");
-      records[key] = value;
+    if (equals <= 0) throw new Error("Invalid PAX record: missing key/value separator");
+    if (capturePaths) {
+      const keyBytes = record.subarray(0, equals);
+      const valueBytes = record.subarray(equals + 1);
+      if (keyBytes.equals(Buffer.from("path"))) {
+        assertArchiveTextBytes(valueBytes, "Artifact path");
+        records.path = valueBytes.toString("utf-8");
+      } else if (keyBytes.equals(Buffer.from("linkpath"))) {
+        assertArchiveTextBytes(valueBytes, "Artifact link target");
+        records.linkpath = valueBytes.toString("utf-8");
+      }
     }
     offset += length;
   }
   return records;
+}
+
+function assertMetadataPathPayloadSize(data: Buffer, label: string): void {
+  const trailingNul = data.length > 0 && data[data.length - 1] === 0 ? 1 : 0;
+  if (data.length - trailingNul > MAX_ARCHIVE_PATH_BYTES) {
+    throw new Error(
+      `${label} exceeds ${MAX_ARCHIVE_PATH_BYTES.toLocaleString("en-US")} UTF-8 bytes`,
+    );
+  }
+}
+
+function assertArchiveTextBytes(data: Buffer, label: string): void {
+  if (data.length > MAX_ARCHIVE_PATH_BYTES) {
+    throw new Error(
+      `${label} exceeds ${MAX_ARCHIVE_PATH_BYTES.toLocaleString("en-US")} UTF-8 bytes`,
+    );
+  }
+}
+
+function assertArchivePathStructure(path: string, label: string): void {
+  if (Buffer.byteLength(path, "utf-8") > MAX_ARCHIVE_PATH_BYTES) {
+    throw new Error(
+      `${label} exceeds ${MAX_ARCHIVE_PATH_BYTES.toLocaleString("en-US")} UTF-8 bytes`,
+    );
+  }
+  const components = path.split(sep).filter((component) => component && component !== ".");
+  if (components.length > MAX_ARCHIVE_PATH_COMPONENTS) {
+    throw new Error(`${label} exceeds ${MAX_ARCHIVE_PATH_COMPONENTS} components`);
+  }
+  for (const component of components) {
+    if (Buffer.byteLength(component, "utf-8") > MAX_ARCHIVE_PATH_COMPONENT_BYTES) {
+      throw new Error(`${label} component exceeds ${MAX_ARCHIVE_PATH_COMPONENT_BYTES} UTF-8 bytes`);
+    }
+  }
 }
 
 function safeArchivePath(path: string): string {
@@ -639,6 +983,7 @@ function resolveSymlinkTarget(
   rawLinkPath: string,
 ): { raw: string; resolved: string } {
   const raw = assertSafeLinkText(rawLinkPath);
+  assertArchivePathStructure(normalize(raw), "Artifact link target");
   const resolved = resolve(dirname(linkPath), raw);
   if (resolved !== base && !resolved.startsWith(`${base}${sep}`)) {
     throw new Error(`Artifact symlink target escapes extraction directory: ${rawLinkPath}`);
@@ -646,13 +991,20 @@ function resolveSymlinkTarget(
   return { raw, resolved };
 }
 
-function resolveHardlinkTarget(base: string, rawLinkPath: string): string {
+function validateHardlinkTarget(base: string, rawLinkPath: string): string {
   const linkPath = assertSafeLinkText(rawLinkPath);
   const safePath = safeArchivePath(linkPath);
+  assertArchivePathStructure(safePath, "Artifact link target");
   const resolved = resolve(base, safePath);
   if (resolved !== base && !resolved.startsWith(`${base}${sep}`)) {
     throw new Error(`Artifact hardlink target escapes extraction directory: ${rawLinkPath}`);
   }
+  return safePath;
+}
+
+function resolveHardlinkTarget(base: string, rawLinkPath: string): string {
+  const safePath = validateHardlinkTarget(base, rawLinkPath);
+  const resolved = resolve(base, safePath);
   assertPathNotThroughSymlink(base, resolved);
   if (!existsSync(resolved)) {
     throw new Error(`Artifact hardlink target is missing: ${rawLinkPath}`);
@@ -717,6 +1069,7 @@ export function restoreInstalledIntegration(
   const restoreStage = createStagePath(rootDir, `restore-${backup.id}`);
   try {
     cpSync(backupDirectory, restoreStage, { recursive: true, errorOnExist: true, force: false });
+    applyInstalledModes(restoreStage);
     if (existsSync(target)) rmSync(target, { recursive: true, force: true });
     renameSync(restoreStage, target);
   } catch (error) {
@@ -834,7 +1187,14 @@ function collectArtifactFiles(
   generated: { metadata: string; licenses: string | null },
 ): StagedFile[] {
   const files: StagedFile[] = [];
-  const manifestFile = collectStagedFile(directory, "manifest.json", MAX_LEGAL_BYTES, true);
+  // The operations agent reads no larger manifest; an artifact with one would
+  // install nowhere.
+  const manifestFile = collectStagedFile(
+    directory,
+    "manifest.json",
+    MAX_INTEGRATION_MANIFEST_BYTES,
+    true,
+  );
   if (manifestFile) files.push(manifestFile);
 
   files.push({
@@ -905,13 +1265,6 @@ function regularDirectory(absolute: string): boolean {
   }
 }
 
-interface ArtifactMetadata {
-  schemaVersion: 1;
-  id: string;
-  platformVersion: string;
-  builtAt: string;
-}
-
 const BACKEND_BUNDLE_PATH = ["dist", "backend", "index.mjs"] as const;
 const ARTIFACT_METADATA_FILE = "openmapx-artifact.json";
 // Fixed build stamp so the same source always produces byte-identical output.
@@ -966,6 +1319,14 @@ export function integrationBackendBundlePath(directory: string): string {
   return join(directory, ...BACKEND_BUNDLE_PATH);
 }
 
+function assertCompatibleManifestProtocol(manifest: Record<string, unknown>): void {
+  if (typeof manifest.platform === "string" && !satisfiesPlatformVersion(manifest.platform)) {
+    throw new Error(
+      `Extension protocol ${manifest.platform} is not compatible with ${PLATFORM_VERSION}`,
+    );
+  }
+}
+
 function validateDeclarativeArtifact(directory: string): void {
   if (existsSync(join(directory, "node_modules"))) {
     throw new Error("Declarative integration artifacts must not ship a node_modules/ directory.");
@@ -998,34 +1359,8 @@ function validateArtifactMetadata(directory: string, manifest: Record<string, un
     throw new Error(`${ARTIFACT_METADATA_FILE} is not valid JSON`);
   }
 
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${ARTIFACT_METADATA_FILE} has an invalid shape`);
-  }
-  const metadata = value as Record<string, unknown>;
-  if (
-    Object.keys(metadata).sort().join(",") !== "builtAt,id,platformVersion,schemaVersion" ||
-    typeof metadata.id !== "string" ||
-    typeof metadata.platformVersion !== "string" ||
-    typeof metadata.builtAt !== "string"
-  ) {
-    throw new Error(`${ARTIFACT_METADATA_FILE} has an invalid shape`);
-  }
-
-  if (metadata.schemaVersion !== 1) {
-    throw new Error(
-      `Unsupported ${ARTIFACT_METADATA_FILE} schemaVersion: ${metadata.schemaVersion}`,
-    );
-  }
-  if (typeof manifest.id === "string" && metadata.id !== manifest.id) {
-    throw new Error(
-      `${ARTIFACT_METADATA_FILE} id mismatch: metadata has ${metadata.id}, manifest has ${manifest.id}`,
-    );
-  }
-  if (metadata.platformVersion !== PLATFORM_VERSION) {
-    throw new Error(
-      `${ARTIFACT_METADATA_FILE} platform version mismatch: expected ${PLATFORM_VERSION}`,
-    );
-  }
+  const result = validatePortableArtifactMetadata(value, String(manifest.id));
+  if (!result.valid) throw new Error(`${ARTIFACT_METADATA_FILE}: ${result.errors.join("; ")}`);
 }
 
 export async function packageIntegration(opts: PackageOptions): Promise<PackageResult> {
@@ -1047,10 +1382,13 @@ export async function packageIntegration(opts: PackageOptions): Promise<PackageR
   if (!validation.valid) {
     throw new Error(`Manifest validation failed:\n  - ${validation.errors.join("\n  - ")}`);
   }
+  assertCompatibleManifestProtocol(manifest);
   resolveLayerSelectorPreview(directory, manifest);
   assertNoExecutableCommunityCode(directory, manifest);
 
-  validateDeclarativeArtifact(directory);
+  // Authoring dependencies may exist in the source tree. The explicit file
+  // allowlist below never stages node_modules; received artifacts are still
+  // rejected by validateDeclarativeArtifact before installation.
 
   // Generated in memory, not written into the caller's tree: packaging must
   // leave the source directory byte-for-byte unchanged.

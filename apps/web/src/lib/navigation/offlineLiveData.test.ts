@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 
-import { useNavigationStore, useSettingsStore } from "@openmapx/core";
+import {
+  cumulativeDistances,
+  type NavProgress,
+  type Route,
+  type RouteMatchWindow,
+  useNavigationStore,
+  useSettingsStore,
+} from "@openmapx/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useNavAlerts } from "./useNavAlerts";
@@ -26,7 +33,7 @@ const geometry: [number, number][] = [
   [13, 52],
   [13.01, 52],
 ];
-const route = {
+const route: Route = {
   distance: 700,
   duration: 90,
   geometry,
@@ -41,7 +48,7 @@ const route = {
       speedLimit: 50,
     },
   ],
-} as never;
+};
 
 function startNavigation() {
   useNavigationStore.getState().startGroundNavigation(route, "driving", geometry);
@@ -67,6 +74,8 @@ describe("offline live-data gating", () => {
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
     useNavigationStore.getState().stopNavigation();
     useSettingsStore.setState({
       incidentAlerts: true,
@@ -136,5 +145,154 @@ describe("offline live-data gating", () => {
       expect(fetchRouteMatchWindow).toHaveBeenCalled();
       expect(fetchRoadAlerts).toHaveBeenCalled();
     });
+  });
+
+  it("fetches distance-bounded windows and publishes later limits at their route indices", async () => {
+    const long: [number, number][] = [
+      [0, 0],
+      [0, 0.3],
+      [0, 0.6],
+      [0, 0.9],
+      [0, 1.2],
+      [0, 1.5],
+    ];
+    const cum = cumulativeDistances(long);
+    fetchRouteMatchWindow.mockImplementation(async (...args: unknown[]) => {
+      const trace = args[0] as [number, number][];
+      return {
+        signals: [],
+        speedLimitsByPoint: trace.map(() => (trace[0][1] === 0 ? 30 : 70)),
+        countriesByPoint: trace.map(() => "DE"),
+      };
+    });
+    useNavigationStore
+      .getState()
+      .startGroundNavigation({ ...route, geometry: long }, "driving", [long[0], long[5]]);
+    useNavigationStore.getState().setConnectivity("online");
+    renderHook(() => useNavTrafficSignals());
+
+    await waitFor(() =>
+      expect(useNavigationStore.getState().liveSpeedLimits).toEqual([30, 30, 30, null, null, null]),
+    );
+
+    act(() => useNavigationStore.setState({ progress: { alongMeters: cum[2] } as NavProgress }));
+    await waitFor(() =>
+      expect(useNavigationStore.getState().liveSpeedLimits).toEqual([30, 30, 70, 70, 70, null]),
+    );
+
+    act(() => useNavigationStore.setState({ progress: { alongMeters: cum[4] } as NavProgress }));
+    await waitFor(() =>
+      expect(useNavigationStore.getState().liveSpeedLimits).toEqual([30, 30, 70, 70, 70, 70]),
+    );
+  });
+
+  it.each(["offline", "reroute", "unmount"])(
+    "cancels obsolete window requests on %s and ignores late results",
+    async (change) => {
+      const resolveRequests: ((result: RouteMatchWindow) => void)[] = [];
+      fetchRouteMatchWindow.mockImplementation(
+        () =>
+          new Promise<RouteMatchWindow>((resolve) => {
+            resolveRequests.push(resolve);
+          }),
+      );
+      useNavigationStore.getState().setConnectivity("online");
+      const { unmount } = renderHook(() => useNavTrafficSignals());
+      const signal = (
+        fetchRouteMatchWindow.mock.calls[0][2] as { signal?: AbortSignal } | undefined
+      )?.signal;
+      expect(signal?.aborted).toBe(false);
+
+      act(() => {
+        if (change === "offline") useNavigationStore.getState().setConnectivity("offline");
+        else if (change === "reroute") useNavigationStore.getState().applyReroute({ ...route });
+        else unmount();
+      });
+      expect(signal?.aborted).toBe(true);
+      await act(async () =>
+        resolveRequests[0]({
+          signals: [geometry[0]],
+          speedLimitsByPoint: [90, 90],
+          countriesByPoint: ["DE", "DE"],
+        }),
+      );
+      expect(useNavigationStore.getState().liveSpeedLimits).toBeNull();
+      if (change === "reroute") {
+        const replacementSignal = (
+          fetchRouteMatchWindow.mock.calls[1][2] as { signal: AbortSignal }
+        ).signal;
+        expect(replacementSignal.aborted).toBe(false);
+        await act(async () =>
+          resolveRequests[1]({
+            signals: [],
+            speedLimitsByPoint: [70, 70],
+            countriesByPoint: ["DE", "DE"],
+          }),
+        );
+        expect(useNavigationStore.getState().liveSpeedLimits).toEqual([70, 70]);
+      }
+    },
+  );
+
+  it("recovers a later window through the real API client without skipping it", async () => {
+    const actual = await vi.importActual<typeof import("@openmapx/core")>("@openmapx/core");
+    actual.configureApiClient({ baseUrl: "https://openmapx.example" });
+    fetchRouteMatchWindow.mockImplementation((...args: unknown[]) =>
+      actual.fetchRouteMatchWindow(
+        args[0] as [number, number][],
+        "driving",
+        args[2] as { signal?: AbortSignal },
+      ),
+    );
+    const long: [number, number][] = [
+      [0, 0],
+      [0, 0.3],
+      [0, 0.6],
+      [0, 0.9],
+      [0, 1.2],
+      [0, 1.5],
+    ];
+    const cum = cumulativeDistances(long);
+    const requested: { lat: number; lng: number }[][] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((...args: unknown[]) => {
+        const init = args[1] as RequestInit;
+        const trace = JSON.parse(String(init.body)).trace as { lat: number; lng: number }[];
+        requested.push(trace);
+        if (requested.length === 2) return Promise.resolve(new Response("", { status: 503 }));
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              mode: "driving",
+              provider: "routing-valhalla",
+              geometry: [],
+              edges: [{ speedLimit: trace[0].lat === 0 ? 50 : 70, endNodeCountryCode: "DE" }],
+              points: trace.map(({ lat, lng }) => ({ lat, lng, type: "matched", edgeIndex: 0 })),
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }),
+    );
+    useNavigationStore
+      .getState()
+      .startGroundNavigation({ ...route, geometry: long }, "driving", [long[0], long[5]]);
+    useNavigationStore.getState().setConnectivity("online");
+    vi.useFakeTimers();
+    const { unmount } = renderHook(() => useNavTrafficSignals());
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(useNavigationStore.getState().liveSpeedLimits).toEqual([50, 50, 50, null, null, null]);
+    act(() => useNavigationStore.setState({ progress: { alongMeters: cum[2] } as NavProgress }));
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(requested).toHaveLength(2);
+    expect(useNavigationStore.getState().liveSpeedLimits).toEqual([50, 50, 50, null, null, null]);
+    // Further GPS progress during backoff must not skip this window or start another request.
+    act(() => useNavigationStore.setState({ progress: { alongMeters: cum[3] } as NavProgress }));
+    await act(async () => vi.advanceTimersByTimeAsync(1000));
+    expect(requested).toHaveLength(3);
+    expect(requested[2]).toEqual(requested[1]);
+    expect(useNavigationStore.getState().liveSpeedLimits).toEqual([50, 50, 70, 70, 70, null]);
+    unmount();
   });
 });

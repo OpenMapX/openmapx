@@ -1,4 +1,10 @@
+import { createNoopLogger } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  createEnturClient,
+  createEnturGeocoderSources,
+} from "../../../../../packages/entur-client/src/index";
+import { createHttpClient } from "../../integration-clients";
 import { streamedJsonResponse } from "../../test/streamed-response.js";
 
 vi.mock("@openmapx/core", async () => {
@@ -26,7 +32,7 @@ afterEach(() => {
 });
 
 function mockOk(data: unknown) {
-  return streamedJsonResponse(data);
+  return streamedJsonResponse(data, { headers: { "Content-Type": "application/json" } });
 }
 
 function nsrPolygon(...coordinates: number[]) {
@@ -46,18 +52,31 @@ function nsrPolygon(...coordinates: number[]) {
 }
 
 async function loadModule() {
-  vi.resetModules();
   const mod = await import("@integrations/transit-entur/provider.js");
-  mod.setEnturTransitConfig({
-    geocoderEndpoint: "https://api.entur.io/geocoder/v1",
-    journeyPlannerEndpoint: "https://api.entur.io/journey-planner/v3/graphql",
-    vehiclesEndpoint: "https://api.entur.io/realtime/v2/vehicles/graphql",
-    nsrEndpoint: "https://api.entur.io/stop-places/v1/read",
-    clientName: "openmapx-tests",
-    boundaryCountry: "NOR",
+  const client = createEnturClient({
+    http: createHttpClient(createNoopLogger()),
+    upstreamRuntime: {
+      admitSharedRequest: async () => ({ allowed: true }),
+      deferSharedRequests: async () => {},
+    } as never,
+    config: { clientName: "openmapx-tests" },
+    sourceIds: {
+      journeyPlanner: "planner",
+      vehicles: "vehicles",
+      nsr: "nsr",
+      geocoder: "geocoder",
+    },
+    contributors: { "entur-geocoder-nsr": [] },
+    isSourceAllowed: async () => true,
+  });
+  return mod.createEnturTransitProvider(client, new AbortController().signal, {
+    geocoderSources: createEnturGeocoderSources({
+      contributors: client.contributors,
+      isSourceAllowed: async () => true,
+    }),
+    boundaryCountry: "no",
     multiModal: "parent",
   });
-  return mod;
 }
 
 describe("Entur transit stop discovery", () => {
@@ -114,16 +133,23 @@ describe("Entur transit stop discovery", () => {
   it("uses the Entur geocoder for stop-name search and keeps NSR ids", async () => {
     mockFetch.mockResolvedValueOnce(
       mockOk({
+        type: "FeatureCollection",
+        metadata: {
+          query: { limit: 5, lang: "en" },
+          resultCount: 1,
+          timestamp: "2026-10-19T10:00:00Z",
+        },
         features: [
           {
-            geometry: { coordinates: [10.753051, 59.910357] },
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [10.753051, 59.910357] },
             properties: {
               id: "NSR:StopPlace:59872",
-              source_id: "NSR:StopPlace:59872",
-              layer: "venue",
-              name: "Oslo S",
-              category: ["railStation", "onstreetBus"],
-              mode: [{ rail: null }, { bus: null }],
+              source: "nsr",
+              layer: "stopPlace",
+              names: { default: "Oslo S", display: "Oslo S, Oslo" },
+              stopPlaceTypes: ["railStation", "onstreetBus"],
+              transportModes: [{ mode: "rail" }, { mode: "bus" }],
             },
           },
         ],
@@ -147,14 +173,15 @@ describe("Entur transit stop discovery", () => {
         lng: 10.753051,
         modes: ["rail", "bus"],
         provider: "entur",
+        contributors: [],
       },
     ]);
 
     const [url] = mockFetch.mock.calls[0];
     const parsed = new URL(url);
-    expect(parsed.pathname).toBe("/geocoder/v1/autocomplete");
-    expect(parsed.searchParams.get("boundary.country")).toBe("NOR");
-    expect(parsed.searchParams.get("multiModal")).toBe("parent");
+    expect(parsed.pathname).toBe("/geocoder/v3/autocomplete");
+    expect(parsed.searchParams.get("countries")).toBe("no");
+    expect(parsed.searchParams.get("multimodal")).toBe("parent");
   });
 });
 
@@ -167,6 +194,7 @@ describe("Entur boards and trip planning", () => {
             situations: [],
             estimatedCalls: [
               {
+                date: "2026-04-21",
                 aimedDepartureTime: "2026-04-21T22:04:00+02:00",
                 expectedDepartureTime: "2026-04-21T22:06:00+02:00",
                 aimedArrivalTime: "2026-04-21T22:01:00+02:00",
@@ -373,6 +401,7 @@ describe("Entur route, vehicles, journey, and facilities", () => {
             operator: { id: "VYG:Operator:VY", name: "VY" },
             presentation: { colour: "DF2027", textColour: "FFFFFF" },
             journeyPatterns: [
+              null,
               {
                 id: "VYG:JourneyPattern:R14-1061",
                 name: "ASR-KVG",
@@ -420,6 +449,7 @@ describe("Entur route, vehicles, journey, and facilities", () => {
             transportMode: "rail",
             transportSubmode: "unknown",
             journeyPatterns: [
+              null,
               {
                 id: "VYG:JourneyPattern:R14-1061",
                 name: "ASR-KVG",
@@ -477,6 +507,7 @@ describe("Entur route, vehicles, journey, and facilities", () => {
       mockOk({
         data: {
           vehicles: [
+            null,
             {
               vehicleId: "1035-2026-04-21",
               lastUpdated: "2026-04-21T20:05:19.286Z",
@@ -1202,5 +1233,436 @@ describe("Entur route, vehicles, journey, and facilities", () => {
         }),
       ]),
     );
+  });
+});
+
+const contractStop = {
+  id: "NSR:StopPlace:337",
+  name: "Oslo S",
+  latitude: 59.911,
+  longitude: 10.753,
+  transportMode: ["rail"],
+  transportSubmode: ["unknown"],
+};
+const contractQuay = {
+  id: "NSR:Quay:571",
+  name: "Oslo S platform 11",
+  publicCode: "11",
+  latitude: 59.911,
+  longitude: 10.753,
+  stopPlace: contractStop,
+};
+const contractLine = {
+  id: "VYG:Line:R14",
+  publicCode: "R14",
+  name: "Oslo–Kongsvinger",
+  transportMode: "rail",
+  authority: null,
+  operator: null,
+  presentation: null,
+};
+function contractCall() {
+  return {
+    date: "2026-04-21",
+    quay: contractQuay,
+    aimedArrivalTime: "2026-04-22T00:01:00+02:00",
+    expectedArrivalTime: "2026-04-22T00:03:00+02:00",
+    aimedDepartureTime: "2026-04-22T00:04:00+02:00",
+    expectedDepartureTime: "2026-04-22T00:06:00+02:00",
+    actualArrivalTime: null,
+    actualDepartureTime: null,
+    realtime: true,
+    occupancyStatus: "standingAvailable",
+    cancellation: true,
+    forBoarding: true,
+    forAlighting: true,
+    destinationDisplay: { frontText: "Kongsvinger" },
+    serviceJourney: { id: "VYG:ServiceJourney:night", line: contractLine },
+    situations: [],
+  };
+}
+function contractSituation() {
+  return {
+    id: "VYG:Situation:1",
+    summary: [{ value: "Signal failure", language: "en" }],
+    description: [],
+    severity: "severe",
+    reportType: "incident",
+    validityPeriods: [
+      { startTime: "2026-04-21T22:00:00Z", endTime: "2026-04-21T23:00:00Z" },
+      { startTime: "2026-04-22T22:00:00Z", endTime: null },
+      { startTime: null, endTime: "2026-04-23T22:00:00Z" },
+    ],
+    affects: [
+      {
+        __typename: "AffectedStopPlaceOnLine",
+        line: { id: "VYG:Line:R14" },
+        stopPlace: contractStop,
+        quay: contractQuay,
+      },
+    ],
+  };
+}
+function sentVariables(index = 0): Record<string, unknown> {
+  return JSON.parse((mockFetch.mock.calls[index]?.[1] as RequestInit).body as string).variables;
+}
+
+describe("Entur generated-operation behavior", () => {
+  it.each([
+    ["departures", "2026-04-22T00:04:00+02:00", "2026-04-22T00:06:00+02:00"],
+    ["arrivals", "2026-04-22T00:01:00+02:00", "2026-04-22T00:03:00+02:00"],
+  ] as const)(
+    "keeps the operating date and %s times on a quay board",
+    async (kind, scheduledAt, expectedAt) => {
+      mockFetch.mockResolvedValueOnce(
+        mockOk({ data: { quay: { situations: [], estimatedCalls: [contractCall()] } } }),
+      );
+      const mod = await loadModule();
+      const rows =
+        kind === "arrivals"
+          ? await mod.getArrivals("entur:NSR:Quay:571", 15)
+          : await mod.getDepartures("entur:NSR:Quay:571", 15);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        tripId: "entur:2026-04-21|VYG:ServiceJourney:night",
+        scheduledAt,
+        expectedAt,
+        delaySeconds: 120,
+        canceled: true,
+        platform: "11",
+      });
+      expect(sentVariables()).toMatchObject({
+        id: "NSR:Quay:571",
+        arrivalDeparture: kind,
+        timeRange: 900,
+        numberOfDepartures: 45,
+      });
+    },
+  );
+
+  it("looks up a quay and retains its parent identity and platform", async () => {
+    mockFetch.mockResolvedValueOnce(mockOk({ data: { quay: contractQuay } }));
+    const { getStop } = await loadModule();
+    expect(await getStop("entur:NSR:Quay:571")).toMatchObject({
+      id: "entur:NSR:Quay:571",
+      parentStationId: "entur:NSR:StopPlace:337",
+      platformCode: "11",
+      modes: ["rail"],
+    });
+    expect(sentVariables()).toEqual({ id: "NSR:Quay:571" });
+  });
+
+  it("keeps valid platforms alongside a nullable quay entry", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk({ data: { stopPlace: { ...contractStop, quays: [null, contractQuay] } } }),
+    );
+    const { getStopPlatforms } = await loadModule();
+    const platforms = await getStopPlatforms("entur:NSR:StopPlace:337");
+    expect(platforms.map((platform) => platform.id)).toEqual(["entur:NSR:Quay:571"]);
+  });
+
+  it("requests the full selected timetable day without replacing the service date", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk({ data: { stopPlace: { situations: [], estimatedCalls: [contractCall()] } } }),
+    );
+    const { getStopTimetable } = await loadModule();
+    const rows = await getStopTimetable("entur:NSR:StopPlace:337", "2026-04-21");
+    expect(rows[0]?.tripId).toBe("entur:2026-04-21|VYG:ServiceJourney:night");
+    expect(sentVariables()).toMatchObject({
+      id: "NSR:StopPlace:337",
+      startTime: "2026-04-21T00:00:00Z",
+      timeRange: 86400,
+      numberOfDepartures: 500,
+      arrivalDeparture: "departures",
+    });
+  });
+
+  it.each(["route", "stop", "national"] as const)(
+    "maps current situation affects and every validity period for %s alerts",
+    async (scope) => {
+      const situation = contractSituation();
+      const data =
+        scope === "route"
+          ? { line: { situations: [situation] } }
+          : scope === "stop"
+            ? { stopPlace: { situations: [situation], estimatedCalls: [] } }
+            : {
+                situations: [
+                  situation,
+                  {
+                    ...situation,
+                    id: "far",
+                    affects: [
+                      {
+                        __typename: "AffectedStopPlace",
+                        stopPlace: { ...contractStop, latitude: 0, longitude: 0 },
+                        quay: null,
+                      },
+                    ],
+                  },
+                ],
+              };
+      mockFetch.mockResolvedValueOnce(mockOk({ data }));
+      const mod = await loadModule();
+      const alerts =
+        scope === "route"
+          ? await mod.getRouteAlerts("entur:VYG:Line:R14")
+          : scope === "stop"
+            ? await mod.getStopAlerts("entur:NSR:StopPlace:337")
+            : await mod.getAlerts([10, 59, 11, 60]);
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0]).toMatchObject({
+        id: "entur:VYG:Situation:1",
+        title: "Signal failure",
+        severity: "severe",
+        affectedRouteIds: ["entur:VYG:Line:R14"],
+        affectedStopIds: ["entur:NSR:StopPlace:337", "entur:NSR:Quay:571"],
+        activePeriods: [
+          { start: "2026-04-21T22:00:00Z", end: "2026-04-21T23:00:00Z" },
+          { start: "2026-04-22T22:00:00Z", end: undefined },
+          { start: undefined, end: "2026-04-23T22:00:00Z" },
+        ],
+      });
+    },
+  );
+
+  it("maps radar bbox axes and keeps a valid vehicle beside null", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        data: {
+          vehicles: [
+            null,
+            {
+              vehicleId: "night",
+              lastUpdated: "2026-04-21T22:00:00Z",
+              location: { latitude: 59.911, longitude: 10.753 },
+              serviceJourney: { id: "VYG:ServiceJourney:night", date: "2026-04-21" },
+            },
+          ],
+        },
+      }),
+    );
+    const { getVehicleRadar } = await loadModule();
+    const rows = await getVehicleRadar([10, 59, 11, 60]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.tripId).toBe("entur:2026-04-21|VYG:ServiceJourney:night");
+    expect(sentVariables()).toEqual({
+      minLat: 59,
+      minLon: 10,
+      maxLat: 60,
+      maxLon: 11,
+      maxDataAge: "PT30M",
+    });
+  });
+
+  it("slices journey geometry between requested parent stops", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        data: {
+          serviceJourney: {
+            id: "VYG:ServiceJourney:night",
+            pointsOnLink: { points: "encoded" },
+            estimatedCalls: [
+              {
+                quay: {
+                  ...contractQuay,
+                  stopPlace: {
+                    ...contractStop,
+                    id: "NSR:StopPlace:1",
+                    latitude: 59.915,
+                    longitude: 10.728,
+                  },
+                },
+              },
+              { quay: { ...contractQuay, stopPlace: contractStop } },
+            ],
+          },
+        },
+      }),
+    );
+    const { getLegGeometry } = await loadModule();
+    expect(
+      await getLegGeometry(
+        "entur:2026-04-21|VYG:ServiceJourney:night",
+        "entur:NSR:StopPlace:1",
+        "entur:NSR:StopPlace:337",
+      ),
+    ).toEqual({
+      type: "LineString",
+      coordinates: [
+        [10.728, 59.915],
+        [10.753, 59.911],
+      ],
+    });
+    expect(sentVariables()).toEqual({ id: "VYG:ServiceJourney:night", date: "2026-04-21" });
+  });
+
+  it("requires the planner probe stop and rejects partial GraphQL errors", async () => {
+    mockFetch.mockResolvedValueOnce(mockOk({ data: { stopPlace: { id: "NSR:StopPlace:337" } } }));
+    mockFetch
+      .mockResolvedValueOnce(mockOk({ data: { vehicles: [] } }))
+      .mockResolvedValueOnce(mockOk({ id: "NSR:StopPlace:337" }));
+    const { isEnturTransitAvailable } = await loadModule();
+    expect(await isEnturTransitAvailable()).toBe(true);
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        data: { stopPlace: { id: "NSR:StopPlace:337" } },
+        errors: [{ message: "upstream failure" }],
+      }),
+    );
+    mockFetch
+      .mockResolvedValueOnce(mockOk({ data: { vehicles: [] } }))
+      .mockResolvedValueOnce(mockOk({ id: "NSR:StopPlace:337" }));
+    expect(await isEnturTransitAvailable()).toBe(false);
+  });
+});
+
+describe("Entur operation request semantics", () => {
+  it.each(["NSR:StopPlace:337", "NSR:Quay:571"])(
+    "deduplicates line identities for %s",
+    async (id) => {
+      const data = id.startsWith("NSR:Quay")
+        ? { quay: { id, lines: [contractLine, contractLine] } }
+        : {
+            stopPlace: {
+              id,
+              quays: [
+                null,
+                { id: "NSR:Quay:571", lines: [contractLine] },
+                { id: "NSR:Quay:572", lines: [contractLine] },
+              ],
+            },
+          };
+      mockFetch.mockResolvedValueOnce(mockOk({ data }));
+      const { getRoutesForStop } = await loadModule();
+      const routes = await getRoutesForStop(`entur:${id}`);
+      expect(routes.map((route) => route.id)).toEqual(["entur:VYG:Line:R14"]);
+      expect(sentVariables()).toEqual({ id });
+    },
+  );
+
+  it("uses arrival planning time, requested count and the generated transport-mode input", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        data: {
+          trip: {
+            fromPlace: { name: "Origin", latitude: 59.9, longitude: 10.7 },
+            toPlace: { name: "Destination", latitude: 60, longitude: 11 },
+            tripPatterns: [],
+          },
+        },
+      }),
+    );
+    const { planTrip } = await loadModule();
+    expect(
+      await planTrip({
+        from: { lat: 59.9, lng: 10.7 },
+        to: { lat: 60, lng: 11 },
+        departureTime: "2026-04-21T22:00:00Z",
+        arrivalTime: "2026-04-21T23:00:00Z",
+        modes: ["REGIONAL_RAIL", "SUBWAY", "SUBURBAN"],
+        numItineraries: 5,
+      }),
+    ).toBeNull();
+    expect(sentVariables()).toEqual({
+      fromLat: 59.9,
+      fromLon: 10.7,
+      toLat: 60,
+      toLon: 11,
+      dateTime: "2026-04-21T23:00:00Z",
+      arriveBy: true,
+      numTripPatterns: 5,
+      modes: { transportModes: [{ transportMode: "rail" }, { transportMode: "metro" }] },
+    });
+  });
+});
+
+describe("Entur instance acquisition failure semantics", () => {
+  it.each([
+    ["searchByName", ["Oslo", 10]],
+    ["getStopsNearby", [60, 10, 1000]],
+    ["getStop", ["NSR:StopPlace:337"]],
+    ["getStopInfrastructure", ["NSR:StopPlace:337"]],
+    ["getStopPlatforms", ["NSR:StopPlace:337"]],
+    ["getDepartures", ["NSR:StopPlace:337", 60]],
+    ["getArrivals", ["NSR:Quay:1", 60]],
+    ["getStopTimetable", ["NSR:StopPlace:337", "2026-10-19"]],
+    ["getRoutesForStop", ["NSR:StopPlace:337"]],
+    ["getRoute", ["RUT:Line:1"]],
+    ["getRouteStops", ["RUT:Line:1"]],
+    ["planTrip", [{ from: { lat: 60, lng: 10 }, to: { lat: 61, lng: 11 } }]],
+    ["getLegGeometry", ["RUT:ServiceJourney:1"]],
+    ["getVehicleJourney", ["RUT:ServiceJourney:1", ["RUT:ServiceJourney:2"]]],
+    ["getVehiclePositions", ["RUT:Line:1"]],
+    ["getVehicleRadar", [[4, 57, 32, 71.5]]],
+    ["getRouteAlerts", ["RUT:Line:1"]],
+    ["getStopAlerts", ["NSR:StopPlace:337"]],
+    ["getAlerts", [[4, 57, 32, 71.5]]],
+    ["getFacilities", ["NSR:StopPlace:337"]],
+  ])(
+    "%s rejects unavailable acquisition instead of synthetic empty success",
+    async (method, args) => {
+      mockFetch.mockImplementation(async () => new Response("unavailable", { status: 503 }));
+      const instance = await loadModule();
+      const invoke = instance[method as keyof typeof instance] as (
+        ...args: unknown[]
+      ) => Promise<unknown>;
+      await expect(invoke(...args)).rejects.toMatchObject({ kind: "http", status: 503 });
+      expect(mockFetch).toHaveBeenCalledOnce();
+    },
+  );
+  it.each(["children", "parkings", "fare-zones", "topographic-places"])(
+    "only treats optional NSR 404 as absence for %s",
+    async (branch) => {
+      const stop = {
+        id: "NSR:StopPlace:337",
+        name: { value: "Oslo" },
+        centroid: { location: { latitude: 60, longitude: 10 } },
+        tariffZones: { tariffZoneRef: [{ ref: "RUT:FareZone:1" }] },
+        topographicPlaceRef: { ref: "KVE:TopographicPlace:1" },
+      };
+      let status = 404;
+      mockFetch.mockImplementation(async (input: string) => {
+        const path = new URL(input).pathname;
+        if (path.includes(branch)) return new Response("optional record", { status });
+        return mockOk(
+          path.endsWith("/337") || path.endsWith("%3A337")
+            ? stop
+            : path.includes("children") || path.includes("parkings")
+              ? []
+              : {},
+        );
+      });
+      const { getStopInfrastructure } = await loadModule();
+      expect((await getStopInfrastructure("NSR:StopPlace:337"))?.canonicalStop.name).toBe("Oslo");
+      status = 503;
+      await expect(getStopInfrastructure("NSR:StopPlace:337")).rejects.toMatchObject({
+        kind: "http",
+        status: 503,
+      });
+      status = 429;
+      await expect(getStopInfrastructure("NSR:StopPlace:337")).rejects.toMatchObject({
+        kind: "http",
+        status: 429,
+      });
+    },
+  );
+  it("combines caller search cancellation with the generation lifetime and retains its reason", async () => {
+    const reason = new Error("search caller left");
+    const caller = new AbortController();
+    mockFetch.mockImplementation(
+      async (_url: string, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), {
+            once: true,
+          });
+        }),
+    );
+    const { searchByName } = await loadModule();
+    const pending = searchByName("Oslo", 10, caller.signal);
+    const outcome = expect(pending).rejects.toMatchObject({ kind: "abort", cause: reason });
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledOnce());
+    caller.abort(reason);
+    await outcome;
   });
 });

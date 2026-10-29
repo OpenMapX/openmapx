@@ -5,6 +5,7 @@ import type {
   LoadedIntegration,
   RouteHandler,
 } from "@openmapx/integration-framework";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 
 export function evidence(input: {
   at: string;
@@ -81,7 +82,7 @@ export function evidence(input: {
         name: "Fixture source",
         url: "https://example.test/data",
         owner: "Fixture authority",
-        license: { name: "CC BY 4.0", url: "https://creativecommons.org/licenses/by/4.0/" },
+        licensing: licensingFromDeclaration("CC-BY-4.0"),
         methodologyUrl: "https://example.test/method",
         attribution: "Fixture authority",
       },

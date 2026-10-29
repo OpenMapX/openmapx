@@ -1,12 +1,14 @@
 "use client";
 
 import BoltIcon from "@mui/icons-material/Bolt";
+import ConstructionIcon from "@mui/icons-material/Construction";
 import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
 import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import InfoIcon from "@mui/icons-material/Info";
 import LocalGasStationIcon from "@mui/icons-material/LocalGasStation";
 import PaymentsIcon from "@mui/icons-material/Payments";
+import ThermostatIcon from "@mui/icons-material/Thermostat";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Box from "@mui/material/Box";
@@ -18,13 +20,16 @@ import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import { type PricingPlanEntry, proxyImageUrl, safeHref } from "@openmapx/core";
 import { formatMoney } from "@openmapx/integration-framework/strings";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { useLocale, useTranslations } from "next-intl";
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { HlsVideo } from "@/components/ui/HlsVideo";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 
 export interface StructuredSection {
+  contributors?: readonly Attribution[];
   id?: string;
   title: string;
   /** Optional subtitle rendered beneath the section header (e.g. live availability). */
@@ -89,6 +94,10 @@ function renderSectionIcon(sectionIcon?: ReactNode | string): ReactNode {
       return <VideocamIcon sx={{ fontSize: 18 }} />;
     case "warning":
       return <WarningAmberIcon sx={{ fontSize: 18 }} />;
+    case "thermostat":
+      return <ThermostatIcon sx={{ fontSize: 18 }} />;
+    case "construction":
+      return <ConstructionIcon sx={{ fontSize: 18 }} />;
     default:
       return <BoltIcon />;
   }
@@ -448,6 +457,12 @@ function ImageSection({ section }: { section: StructuredSection }) {
       ) : (
         image
       )}
+      <AttributionStrip
+        attributions={[...(section.contributors ?? [])]}
+        surface="image"
+        variant="plain"
+        provenanceDisplay="details"
+      />
     </Box>
   );
 }
@@ -533,6 +548,12 @@ function ExternalMediaEmbed({ section }: { section: StructuredSection }) {
           muted
           style={{ width: "100%", borderRadius: 8, display: "block" }}
         />
+        <AttributionStrip
+          attributions={[...(section.contributors ?? [])]}
+          surface="image"
+          variant="plain"
+          provenanceDisplay="details"
+        />
       </Box>
     );
   }
@@ -551,6 +572,12 @@ function ExternalMediaEmbed({ section }: { section: StructuredSection }) {
           borderRadius: 2,
           display: "block",
         }}
+      />
+      <AttributionStrip
+        attributions={[...(section.contributors ?? [])]}
+        surface="image"
+        variant="plain"
+        provenanceDisplay="details"
       />
     </Box>
   );

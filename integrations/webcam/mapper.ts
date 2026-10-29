@@ -1,11 +1,12 @@
 import {
-  type DataSourceAttribution,
+  type Attribution,
   type DataSourceDetail,
   type DataSourceDetailSection,
   type DataSourceResult,
   isSafeHttpUrl,
   validObservedAt,
 } from "@openmapx/core";
+import { siteAttributions } from "@openmapx/integration-framework";
 import {
   type I18nToken,
   sharedT,
@@ -13,6 +14,7 @@ import {
   token,
 } from "@openmapx/integration-framework/strings";
 import type { Camera, CameraView } from "@openmapx/mobility-core/camera";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 
 type Row = [I18nToken, Translatable];
 
@@ -66,14 +68,9 @@ function fallbackNameOf(camera: Camera): { fallbackName?: I18nToken } {
  * declares no sources of its own, so every credit comes from the providers.
  * Their links come from upstream data, so only http(s) ones are kept.
  */
-function cameraCredits(camera: Camera): DataSourceAttribution[] | undefined {
+function cameraCredits(camera: Camera): Attribution[] | undefined {
   if (camera.attributions.length === 0) return undefined;
-  return camera.attributions.map((a) => ({
-    text: a.name,
-    url: isSafeHttpUrl(a.url) ? a.url : "",
-    ...(a.spdxLicense ? { license: a.spdxLicense } : {}),
-    ...(isSafeHttpUrl(a.licenseUrl) ? { licenseUrl: a.licenseUrl } : {}),
-  }));
+  return snapshotContributors(camera.attributions);
 }
 
 /**
@@ -124,6 +121,7 @@ function imageSection(
   return {
     title,
     type: "image",
+    contributors: view.contributors ?? [],
     sectionIcon: "videocam",
     imageUrl,
     imageAlt: token("imageAlt.webcam", { name: camera.name || title }),
@@ -149,6 +147,7 @@ function streamSection(
     type: "embed",
     sectionIcon: "videocam",
     embedUrl: view.streamUrl,
+    contributors: view.contributors ?? [],
     embedType: view.streamType && VIDEO_STREAMS.has(view.streamType) ? "video" : "iframe",
   };
 }
@@ -185,7 +184,8 @@ export function mapCameraToResult(camera: Camera): DataSourceResult {
     ...fallbackNameOf(camera),
     coordinates: camera.coordinates,
     source: camera.sources[0] ?? "unknown",
-    sources: camera.sources,
+    sources: [...camera.sources],
+    contributors: siteAttributions([camera]),
     variant: camera.type,
     status: statusOf(camera),
     summary: summaryOf(camera),
@@ -222,6 +222,7 @@ export function mapCameraToDetail(camera: Camera): DataSourceDetail {
       type: "embed",
       sectionIcon: "open_in_new",
       embedUrl: camera.playerEmbedUrl,
+      contributors: camera.playerContributors ?? [],
       embedType: "iframe",
     });
   }
@@ -233,7 +234,8 @@ export function mapCameraToDetail(camera: Camera): DataSourceDetail {
     : undefined;
   const detail: DataSourceDetail = {
     id: camera.id,
-    sources: camera.sources,
+    sources: [...camera.sources],
+    contributors: siteAttributions([camera]),
     name: camera.name,
     ...fallbackNameOf(camera),
     coordinates: camera.coordinates,

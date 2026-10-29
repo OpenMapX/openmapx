@@ -6,7 +6,12 @@
   "type": "module",
   "dependencies": {
     "@openmapx/core": "workspace:^",
+    "@openmapx/entur-client": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
-    "@openmapx/mobility-core": "workspace:^"
+    "@openmapx/mobility-core": "workspace:^",
+    "@openmapx/mobility-formats": "workspace:^"
+  },
+  "devDependencies": {
+    "@graphql-typed-document-node/core": "3.2.0"
   }
 }

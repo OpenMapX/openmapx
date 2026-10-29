@@ -17,7 +17,6 @@ import { isAbsolute, join, relative, sep } from "node:path";
 import { PassThrough, type Readable } from "node:stream";
 import {
   isPrivacyBackupCollectorImage,
-  PRIVACY_BACKUP_MAX_OUTPUT_BYTES,
   type PrivacyBackupSubjectExportRequest,
 } from "@openmapx/core/ops";
 import {
@@ -30,7 +29,13 @@ import { PrivacyBackupExtractionError as BackupError } from "./privacy-backup-ex
 
 const SAFE_BACKUP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const SCRATCH_MARKER = "openmapx-privacy-backup-extraction-v1";
-const SCRATCH_ROOT_RELATIVE = ["infra", "docker", "data", "privacy-extraction"] as const;
+const SCRATCH_ROOT_RELATIVE = [
+  "infra",
+  "docker",
+  "state",
+  "ops-agent",
+  "privacy-extraction",
+] as const;
 const DEPLOYMENT_SCRATCH_ROOT = "/var/lib/openmapx/privacy-extraction";
 const COLLECTOR_ENTRYPOINT = "/usr/local/bin/openmapx-backup-subject-export";
 const MAX_RUNTIME_SECONDS = 15 * 60;
@@ -366,7 +371,7 @@ export function createPrivacyBackupExtractionRuntime(options: PrivacyBackupRunti
             input.serviceId === "postgis"
               ? "openmapx-v1"
               : input.serviceId === "dawarich-app"
-                ? "dawarich-storage-1.15.2"
+                ? "dawarich-storage-1.15.3"
                 : verified.manifest.privacySourceProvenance?.managedDawarich?.schemaContract,
         }));
       if (sources.length < 1 || sources.some((source) => !source.schemaContract))
@@ -461,7 +466,7 @@ export async function probePrivacyBackupRuntime(
   };
 }
 
-export function privacyBackupScratchRoot(rootDir: string, scratchRoot?: string): string {
+function privacyBackupScratchRoot(rootDir: string, scratchRoot?: string): string {
   return scratchRoot?.trim() || join(rootDir, ...SCRATCH_ROOT_RELATIVE);
 }
 
@@ -529,5 +534,3 @@ export function janitorPrivacyBackupScratch(
   if (entries.length > 256) retained += entries.length - 256;
   return { removed, retained };
 }
-
-export const PRIVACY_BACKUP_RUNTIME_MAX_OUTPUT_BYTES = PRIVACY_BACKUP_MAX_OUTPUT_BYTES;

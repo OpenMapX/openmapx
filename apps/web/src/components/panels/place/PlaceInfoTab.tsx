@@ -14,12 +14,16 @@ import Skeleton from "@mui/material/Skeleton";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
-import { buildAttributionHtml, formatPaymentMethodLabel, safeHref } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import { formatPaymentMethodLabel, safeHref } from "@openmapx/core";
+import {
+  contributorsForField,
+  contributorsForRecords,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
-import { attributionsForSources } from "@/lib/attributionForProviders";
+import { useAttributionGroupPlacement } from "@/components/ui/attributionGroupContext";
 import { humanizeOsmTagValue } from "@/lib/humanizeOsmTagValue";
 import { buildExternalRefs, type ExternalRef } from "./externalIdLinks";
 import { getOverviewConsumedKeys } from "./PlaceTagDetails";
@@ -271,19 +275,30 @@ function ExternalRefRow({ ref }: { ref: ExternalRef }) {
 }
 
 export function PlaceInfoTab({ place, isLoading }: Props) {
+  const creditPlacement = useAttributionGroupPlacement();
   const t = useTranslations("place");
   const [rawTagsExpanded, setRawTagsExpanded] = useState(false);
-  const registry = useIntegrationRegistry();
   const infoDescription = place.wikipediaExtract ?? place.description;
   const hasDescription = Boolean(infoDescription);
   const hasFacts = Boolean(place.facts?.length);
   const hasOsmTags = Boolean(place.osmTags && Object.keys(place.osmTags).length > 0);
   const externalRefs = buildExternalRefs(place.ids, place.coordinates);
   const hasExternalRefs = externalRefs.length > 0;
-  const placeAttributions = attributionsForSources(
-    registry,
-    place.provenance?.map((source) => source.sourceId) ?? [],
+  const osmGroups = hasOsmTags ? buildGroups(place.osmTags as Record<string, string>) : [];
+  const displayedTagKeys = rawTagsExpanded
+    ? Object.keys(place.osmTags ?? {})
+    : osmGroups.flatMap((group) => group.entries.map((entry) => entry.key));
+  const placeAttributions = snapshotContributors(
+    hasDescription
+      ? contributorsForField(place, place.wikipediaExtract ? "wikipediaExtract" : "description")
+      : [],
+    contributorsForRecords(place.facts ?? []),
+    ...displayedTagKeys.map((key) => contributorsForField(place, `osmTags.${key}`)),
+    ...externalRefs.map((ref) =>
+      contributorsForField(place, place.ids[ref.scheme] ? `ids.${ref.scheme}` : "coordinates"),
+    ),
   );
+  const hasInlineCredits = placeAttributions.length > 0 && creditPlacement !== "footer";
   const hasAnyContent =
     hasDescription || hasFacts || hasOsmTags || hasExternalRefs || placeAttributions.length > 0;
 
@@ -331,7 +346,6 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
     );
   }
 
-  const osmGroups = hasOsmTags ? buildGroups(place.osmTags as Record<string, string>) : [];
   const showDividerBeforeOsm = hasDescription || hasFacts;
 
   return (
@@ -347,33 +361,6 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
           >
             {infoDescription}
           </Typography>
-          {(() => {
-            const sources =
-              place.wikipediaExtractSource ??
-              (place.wikipediaExtract ? "knowledge-wikipedia" : "knowledge-wikidata");
-            const ids = Array.isArray(sources) ? sources : [sources];
-            const parts = ids
-              .map((id) => {
-                const meta = registry.get(id);
-                const ds = meta?.dataSources?.[0];
-                return ds ? buildAttributionHtml(ds) : "";
-              })
-              .filter(Boolean);
-            if (!parts.length) return null;
-            return (
-              <Typography
-                variant="caption"
-                // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from integration manifests
-                dangerouslySetInnerHTML={{ __html: `${t("source")}: ${parts.join(", ")}` }}
-                sx={{
-                  color: "text.secondary",
-                  mt: 0.5,
-                  display: "block",
-                  fontSize: 10.5,
-                }}
-              />
-            );
-          })()}
         </Box>
       )}
       {/* Wikidata facts */}
@@ -413,26 +400,6 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
                 </Box>
               ))}
             </Box>
-            {place.osmTags?.wikidata &&
-              (() => {
-                const meta = registry.get("knowledge-wikidata");
-                const ds = meta?.dataSources?.[0];
-                const html = ds ? buildAttributionHtml(ds) : "";
-                if (!html) return null;
-                return (
-                  <Typography
-                    variant="caption"
-                    // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from integration manifests
-                    dangerouslySetInnerHTML={{ __html: `${t("source")}: ${html}` }}
-                    sx={{
-                      color: "text.secondary",
-                      mt: 0.5,
-                      display: "block",
-                      fontSize: 10.5,
-                    }}
-                  />
-                );
-              })()}
           </Box>
         </>
       )}
@@ -488,7 +455,8 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
       )}
       {placeAttributions.length > 0 && (
         <>
-          {(hasDescription || hasFacts || osmGroups.length > 0 || hasExternalRefs) && <Divider />}
+          {hasInlineCredits &&
+            (hasDescription || hasFacts || osmGroups.length > 0 || hasExternalRefs) && <Divider />}
           <AttributionStrip
             attributions={placeAttributions}
             variant="panel-header"
@@ -503,7 +471,7 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
             hasFacts ||
             osmGroups.length > 0 ||
             hasExternalRefs ||
-            placeAttributions.length > 0) && <Divider />}
+            hasInlineCredits) && <Divider />}
           <Box
             component="button"
             type="button"

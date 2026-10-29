@@ -298,7 +298,45 @@ describe("conditionsToEdges", () => {
       W2E,
     );
     expect(r.overrides.size).toBe(0);
-    expect(r.skipped).toEqual({ notRelevant: 1, crowdNotEligible: 1, noEffect: 4 });
+    expect(r.skipped).toEqual({
+      binding: 1,
+      crowdNotEligible: 1,
+      noEffect: 4,
+      ineligible: 0,
+      incompleteSpans: 0,
+    });
+    expect(r.ineligibleReasons).toEqual({});
+  });
+  it("names the routing decision's reasons and separates spans it cannot map", () => {
+    const unreviewed = cond({}, effect(), "unreviewed");
+    unreviewed.routingEvidence = {
+      ...unreviewed.routingEvidence,
+      rights: { ...unreviewed.routingEvidence.rights, reviewed_at: null },
+    };
+    const r = conditionsToEdges(
+      [
+        unreviewed,
+        cond({ segments: [{ ...SPAN, wayId: 99 }] }, effect(), "unmapped"),
+        cond({ segments: [{ ...SPAN, startFraction: 0.5 }] }, effect(), "untraced"),
+      ],
+      W2E,
+    );
+    expect(r.overrides.size).toBe(0);
+    expect(r.skipped).toMatchObject({ ineligible: 1, incompleteSpans: 2 });
+    expect(r.ineligibleReasons).toEqual({ unverified_rights: 1 });
+    expect(r.missingWayIds).toEqual(new Set([99]));
+  });
+  it("routes a source of unclear rights only when the operator's policy admits it", () => {
+    const unclear = cond({}, effect(), "unclear");
+    unclear.routingEvidence = {
+      ...unclear.routingEvidence,
+      rights: { ...unclear.routingEvidence.rights, derived_redistribution: "unknown" },
+    };
+    expect(conditionsToEdges([unclear], W2E).overrides.size).toBe(0);
+    const admitted = conditionsToEdges([unclear], W2E, undefined, {
+      rightsPolicy: { allowGreyArea: true, allowNonCommercial: false },
+    });
+    expect(admitted.overrides.get("0:1:5")).toMatchObject({ closed: true });
   });
   // The same table pins the OpenConditions Valhalla exclusions
   // (publishers valhalla.ts): both must close the road for the same applicability.

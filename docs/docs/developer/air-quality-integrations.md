@@ -1,11 +1,32 @@
 ---
+description: Implement source-evidence providers using shared air-quality contracts, attribution, and release gates.
 title: Air quality integrations
 sidebar_position: 9
 ---
 
 # Air quality integrations
 
-OpenMapX air-quality providers return source evidence. They do not choose the place headline and must not silently convert a provider field into a regional standard. The pure `@openmapx/air-quality` package owns normalization, standards, jurisdiction, deduplication, and deterministic selection; `@openmapx/integration-framework` owns the provider capability contract.
+OpenMapX air-quality providers return source evidence. They do not choose the place headline and must not silently convert a provider field into a regional standard. The `@openmapx/air-quality` package owns normalization, standards, jurisdiction, deduplication, and deterministic selection; `@openmapx/integration-framework` owns the provider capability contract.
+
+## Add or change a provider
+
+1. Declare source IDs, licensing, privacy disclosures, and capabilities in the
+   integration manifest. Keep the English and German source-ID disclosures in
+   sync. Read the [integration guide](./writing-an-integration.md) for host setup.
+2. Implement the evidence contract below. Use `IntegrationContext.http` for
+   upstream I/O and `upstreamRuntime` for quota-bound acquisition. Pass
+   `ProviderCallContext.signal` through every request and cache refresh.
+3. Add captured or clearly synthetic fixtures for units, timestamps, spatial
+   identity, malformed input, cancellation, and complete attribution. A native
+   index name alone does not prove standard conformance.
+4. Run focused provider and normalization/selection tests from the repository
+   root, plus the affected package type check. Verify the provider's credentials,
+   source permissions, coverage and live responses on the target deployment.
+
+The canonical contract is
+`packages/integration-framework/src/contracts/air-quality-provider.ts`. The
+orchestrator lives in `integrations/air-quality/`; calculated standards and their
+pinned evidence live in `packages/air-quality/src/standards/` and `src/data/standards/`.
 
 ## Evidence and coherence
 
@@ -36,10 +57,10 @@ A field called `us_aqi` or `european_aqi` is not enough to claim an OpenMapX sta
 
 ## Standards and windows
 
-Call `registerBuiltinStandardAdapters()` once during orchestrator initialization, then resolve by evidence time. Current aliases resolve to pinned revisions and the resolved revision belongs in cache keys. The launch registry contains:
+Call `registerBuiltinStandardAdapters()` once during orchestrator initialization, then resolve by evidence time. Current aliases resolve to pinned revisions and the resolved revision belongs in cache keys. The built-in registry contains these pinned methods:
 
 - US EPA May 2024 AQI, including the 2024 PM2.5 bands and particle NowCast;
-- current EEA European AQI with station-type qualification and disclosed CAMS gap filling;
+- the reviewed EEA European AQI snapshot with station-type qualification and disclosed CAMS gap filling;
 - UK DAQI from 13 April 2026 with 24-hour PM, eight-hour O3, hourly NO2, and 15-minute SO2;
 - CPCB NAQI with its pollutant-count, particle, window, and completeness rules;
 - HJ 633-2026, effective 1 March 2026 in China;
@@ -95,7 +116,7 @@ ctx.registerAirQualityProvider({
 
 ## Selection and forecasts
 
-Selection is lexicographic and permutation-invariant. Freshness comes first, followed by evidence class (agency-published local, qualifying OpenMapX ground calculation, validated model), publication basis, point coverage, monitor class, whole-metre distance, newer evidence time, lower provider priority, and stable index ID. A computed monitor must be stationary, reference/regulatory, complete, and within 50 km. Evidence from 50–100 km is secondary context. Mobile and low-cost evidence stays visible but cannot become a computed headline.
+Selection is lexicographic and permutation-invariant. Freshness comes first, followed by evidence class (agency-published local, qualifying OpenMapX ground calculation, validated model), publication basis, point coverage, monitor class, whole-metre distance, newer evidence time, lower provider priority, and stable index ID. A computed monitor must be stationary, reference/regulatory, complete, and within 50 km. Evidence from 50 to 100 km is secondary context. Mobile and low-cost evidence stays visible but cannot become a computed headline.
 
 Raw fallback uses its own tuple and sets `primaryEvidenceId` while leaving `primaryIndexId` null. Explicit comparison indices never replace the automatically resolved local standard. Forecast frames are the request-window start plus unique provider validity starts; a daily official value is not interpolated into invented hourly values.
 
@@ -103,7 +124,7 @@ Raw fallback uses its own tuple and sets `primaryEvidenceId` while leaving `prim
 
 Every standard snapshot records official URLs, document anchors, retrieval/effective dates, a SHA-256 of the canonical transcription, and the independent fixture-derivation record. Boundary tests cover every supported program country, supported overseas/island geometry, international boundaries, disputes, all Canadian provinces/territories, Québec, ocean, and hint mismatch.
 
-The jurisdiction generator never downloads `latest`. Obtain exactly these Natural Earth archives and verify the recorded hashes in `src/data/jurisdiction/metadata.json`:
+The jurisdiction generator never downloads `latest`. Obtain exactly these Natural Earth archives and verify the recorded hashes in `packages/air-quality/src/data/jurisdiction/metadata.json`:
 
 ```bash
 curl -fL -o /tmp/ne-admin0-5.1.1.zip https://naturalearth.s3.amazonaws.com/5.1.1/10m_cultural/ne_10m_admin_0_countries.zip
@@ -135,8 +156,7 @@ intervals. Canonical envelopes are capped at 32 current or 1,024 forecast
 evidence objects and two MiB. Truncation removes whole evidence/features and is
 reported; it never slices provenance fields.
 
-Normalization is the trust boundary. Provider payloads are strict runtime
-schemas, source IDs must have matching attribution and origin records, time and
+Normalization is the trust boundary. Provider payloads pass runtime schema validation, source IDs must have matching attribution and origin records, time and
 spatial identities must cohere, and official published-standard claims pass the
 registered adapter's validator. Unknown provider-native methods remain visible
 with `standardId: null` and can never win the local-standard sort.
@@ -149,10 +169,32 @@ Station pagination stores an ordered, projected snapshot for five minutes in
 the distributed runtime (maximum 2,000 features/eight MiB). Signed cursors hold
 only snapshot ID, query hash, schema revision, and offset.
 
+## OpenAQ contributor metadata
+
+OpenAQ distinguishes the station owner from the provider sharing its data. Its
+[official Del Norte example](https://docs.openaq.org/resources/locations) uses
+`Unknown Governmental Organization` for both the owner and licence attribution,
+while identifying AirNow as the provider. The OpenAQ producer treats that exact
+placeholder (ignoring surrounding whitespace and case) as missing. An unknown
+owner stays `null`; a provider must not be relabelled as a station owner.
+
+Credits retain a real supplied licence notice first, then fall back to a known
+owner, a known provider, or OpenAQ. The source name also retains OpenAQ and the
+known provider. Distinct names, licence declarations, terms URLs and attribution
+links are preserved; arbitrary names containing “unknown” are not filtered.
+[OpenAQ terms](https://docs.openaq.org/about/terms) continue to require OpenAQ
+credit and compliance with the original sources' applicable terms.
+
+Provider metadata is cached without rewriting its original names, so previously
+cached raw locations receive this normalization on their next evaluation.
+Already projected point responses normally refresh after five minutes and can
+remain available as stale-if-error for up to three hours; existing station cursor
+snapshots expire after five minutes. No upstream metadata refresh or cache flush
+is needed to normalize a raw location.
+
 ## Open-Meteo modeled evidence
 
-`weather-open-meteo-air-quality` now registers a global modeled provider rather
-than a weather-domain dependency. It requests bounded current/hourly fields via
+`weather-open-meteo-air-quality` registers a global modeled air-quality provider. It requests bounded current/hourly fields via
 the framework HTTP client and preserves the returned CAMS grid coordinate,
 hourly cadence, near-surface level, UTC/time-zone metadata, model basis, and
 Open-Meteo/CAMS attribution. Current cache windows are 15 minutes/one hour/three

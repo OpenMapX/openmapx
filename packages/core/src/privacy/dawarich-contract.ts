@@ -1,13 +1,13 @@
 import z from "zod/v4";
 
 /** The only managed Dawarich runtime accepted by the controller. */
-export const DAWARICH_SUPPORTED_IMAGE = "freikin/dawarich:1.15.2" as const;
+export const DAWARICH_SUPPORTED_IMAGE = "freikin/dawarich:1.15.3" as const;
 export const DAWARICH_SUPPORTED_IMAGE_DIGEST =
-  "sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d" as const;
-export const DAWARICH_SUPPORTED_COMMIT = "d81abc4fc467e119f542c56602c78488fbab86fb" as const;
+  "sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498" as const;
+export const DAWARICH_SUPPORTED_COMMIT = "e32b70701b2467b862d4b5bc27ac428999997c1b" as const;
 export const DAWARICH_PROTOCOL_VERSION = 1 as const;
 export const DAWARICH_TAR_MEDIA_TYPE = "application/vnd.openmapx.dawarich-subject-tar.v1" as const;
-/** SHA-256 of the reviewed 1.15.2 ownership/schema projection.  The Ruby
+/** SHA-256 of the reviewed 1.15.3 ownership/schema projection.  The Ruby
  * collector emits this value only after validating the live Rails schema;
  * accepting a different digest would make a changed source look complete. */
 export const DAWARICH_EXPECTED_SCHEMA_FINGERPRINT =

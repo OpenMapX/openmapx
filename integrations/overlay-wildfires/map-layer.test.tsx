@@ -1,13 +1,11 @@
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
 import { useWildfireStore } from "./store";
 
 const popupState = vi.hoisted(() => ({
   instances: [] as Array<{ removeCalls: number }>,
-}));
-const attributionState = vi.hoisted(() => ({
-  filtered: vi.fn(),
 }));
 const mapContext = vi.hoisted(() => ({ mapRef: { current: null as FakeMap["map"] | null } }));
 
@@ -23,10 +21,6 @@ vi.mock("@/integration-api/map/MapContext", () => ({
 
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "https://api.test" }),
-}));
-
-vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
-  useSourceAttributions: attributionState.filtered,
 }));
 
 vi.mock("next-intl", () => ({
@@ -146,7 +140,7 @@ beforeEach(() => {
     dayRange: 1,
     source: "viirs",
   });
-  attributionState.filtered.mockClear();
+  useMapAttributionStore.setState({ byLayer: {} });
 });
 
 afterEach(() => {
@@ -154,7 +148,7 @@ afterEach(() => {
 });
 
 describe("WildfireLayer hotspot composition", () => {
-  it("composes both polygon sources and credits exactly the sources they drew", async () => {
+  it("composes both polygon sources without crediting offscreen geometry", async () => {
     useWildfireStore.setState({ showNifcPerimeters: true, showEffisBurnedAreas: true });
     vi.stubGlobal(
       "fetch",
@@ -185,10 +179,12 @@ describe("WildfireLayer hotspot composition", () => {
       expect(fake.state.sources.has("openmapx-wildfires-effis-source")).toBe(true),
     );
     await waitFor(() => {
-      expect(attributionState.filtered).toHaveBeenLastCalledWith("wildfires", [
-        "eu-effis-fires",
-        "us-nifc-fires",
-      ]);
+      // Loaded data with no rendered query hits owes no credits.
+      expect(
+        Object.values(useMapAttributionStore.getState().byLayer)
+          .flat()
+          .map((entry) => entry.fullHtml),
+      ).toEqual([]);
     });
   });
 

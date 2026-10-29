@@ -1,10 +1,12 @@
-import { readBoundedResponseText } from "@openmapx/core";
+import { type RoadConditionRightsPolicy, readBoundedResponseText } from "@openmapx/core";
 import { services } from "@openmapx/core/server";
 
 export interface TrafficPolicy {
   revision: string;
   validUntil: string;
   disallowedSourceIds: string[];
+  /** Whether sources of unclear or non-commercial rights may route; strict when absent. */
+  rightsPolicy?: RoadConditionRightsPolicy;
 }
 
 /** Read the existing deployment authority; never grant a lease after a failed read. */
@@ -47,5 +49,10 @@ export async function fetchTrafficPolicy(
     revision: body.revision,
     validUntil: body.validUntil as string,
     disallowedSourceIds: body.disallowedSourceIds as string[],
+    // An authority that does not state a flag grants nothing by it.
+    rightsPolicy: {
+      allowGreyArea: body.allowGreyArea === true,
+      allowNonCommercial: body.allowNonCommercial === true,
+    },
   };
 }

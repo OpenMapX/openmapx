@@ -34,15 +34,90 @@
       "sourceId": "irail",
       "name": "iRail",
       "url": "https://api.irail.be/",
-      "license": "AGPL-3.0 (software); CC0 (log data)",
-      "licenseUrl": "https://docs.irail.be/",
       "commercialUse": "yes",
       "providerCountry": "BE",
       "providerPrivacyUrl": "-",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "software",
+            "subject": "iRail software",
+            "license": {
+              "kind": "unknown",
+              "raw": "AGPL-3.0"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "iRail logs/feedback only",
+            "license": {
+              "kind": "unknown",
+              "raw": "CC0"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://docs.irail.be/",
+                "https://github.com/iRail/stations/blob/master/README.md",
+                "https://github.com/irail/irail"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "NMBS timetable/liveboards/connections",
+            "license": {
+              "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://docs.irail.be/",
+                "https://github.com/iRail/stations/blob/master/README.md",
+                "https://github.com/irail/irail"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "iRail timetable endpoint",
+            "license": {
+              "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://docs.irail.be/",
+                "https://github.com/iRail/stations/blob/master/README.md",
+                "https://github.com/irail/irail"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "AGPL-3.0 (software); CC0 (log data)",
+            "url": "https://docs.irail.be/"
+          }
+        ]
+      }
     }
   ],
   "dependencies": ["transit"]

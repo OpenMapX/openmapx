@@ -1,8 +1,9 @@
 import type { MapLayerMouseEvent } from "maplibre-gl";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { registerMapOverlayInteraction } from "@/integration-api/map/mapInteractionArbiter";
-import { createFakeMap, type FakeMap, render } from "@/test";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
+import { act, createFakeMap, type FakeMap, render } from "@/test";
 import { useTrafficFlowStore } from "../store";
 
 let fake: FakeMap;
@@ -23,7 +24,7 @@ vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
 // `t(key)` under the mock above returns "trafficFlow.<key>" — assertions below
 // check for those stable keys rather than the real translated copy.
-const popupState = vi.hoisted(() => ({ html: "" }));
+const popupState = vi.hoisted(() => ({ html: "", closed: [] as Array<() => void> }));
 vi.mock("maplibre-gl", () => ({
   Popup: class FakePopup {
     setLngLat() {
@@ -31,6 +32,10 @@ vi.mock("maplibre-gl", () => ({
     }
     setHTML(html: string) {
       popupState.html = html;
+      return this;
+    }
+    on(event: string, callback: () => void) {
+      if (event === "close") popupState.closed.push(callback);
       return this;
     }
     addTo() {
@@ -82,10 +87,32 @@ const COLOR_EXPR = [
   ],
 ];
 
+/** A Martin `/catalog` answer that serves the flow source. */
+const SERVING_CATALOG = { tiles: { segment_flow: { content_type: "application/x-protobuf" } } };
+
+/** Stubs `fetch`; a throwing `response` stands for a network failure, which rejects. */
+function stubCatalog(response: () => Response) {
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => response());
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+const flushCatalog = () =>
+  act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 beforeEach(() => {
   fake = createFakeMap();
-  useTrafficFlowStore.setState({ panelOpen: false, layerVisible: false });
+  stubCatalog(() => Response.json(SERVING_CATALOG));
+  useTrafficFlowStore.setState({ panelOpen: false, layerVisible: false, unavailable: false });
   popupState.html = "";
+  popupState.closed = [];
+  useMapAttributionStore.setState({ byLayer: {} });
   INTERACTIVE_LAYER_IDS.delete(COLOR);
   INTERACTIVE_LAYER_IDS.delete(INCIDENT);
 });
@@ -222,5 +249,184 @@ describe("TrafficFlowLayer", () => {
     expect(fake.map.getCanvasContainer().style.cursor).toBe("pointer");
 
     unmount();
+  });
+});
+
+it("keeps visible field credits separate from popup-only credits", () => {
+  vi.useFakeTimers();
+  try {
+    useTrafficFlowStore.setState({ panelOpen: true, layerVisible: true });
+    render(<TrafficFlowLayer />);
+    const credit = (sourceId: string) => ({ sourceId, name: sourceId });
+    const feature = {
+      type: "Feature" as const,
+      geometry: {
+        type: "LineString" as const,
+        coordinates: [
+          [5, 52],
+          [5.01, 52],
+        ],
+      },
+      properties: {
+        speed_ratio: 0.5,
+        current_kph: 20,
+        free_flow_kph: 40,
+        los: "queuing",
+        confidence: "measured",
+        field_contributors: JSON.stringify({
+          geometry: [credit("geometry")],
+          ratio: [credit("ratio-a")],
+          speed: [credit("ratio-a")],
+          freeFlow: [credit("geometry")],
+          los: [credit("popup-los-b")],
+          confidence: [credit("ratio-a")],
+        }),
+      },
+    };
+    fake.setRenderedFeatures(COLOR, [feature] as never); // Click query remains exact.
+    const query = vi.spyOn(fake.map, "queryRenderedFeatures");
+    const buckets = new Set([COLOR, CASING]);
+    for (const id of [COLOR, CASING])
+      Object.assign(fake.map.getLayer(id) ?? {}, { sourceLayer: "segment_flow" });
+    Object.assign(fake.map, {
+      style: {
+        getLayer: (id: string) => ({
+          ...fake.map.getLayer(id),
+          paint: { get: () => ({ value: 1 }) },
+        }),
+        tileManagers: {
+          [SRC]: {
+            getSource: () => fake.map.getSource(SRC),
+            getVisibleCoordinates: () => [1],
+            getTile: () => ({
+              hasData: () => true,
+              getBucket: (layer: { id: string }) =>
+                buckets.has(layer.id) ? { uploaded: true, isEmpty: () => false } : undefined,
+              latestFeatureIndex: {
+                rawTileData: new ArrayBuffer(8),
+                encoding: "mvt",
+                loadVTLayers: () => ({ segment_flow: { length: 1, feature: () => feature } }),
+              },
+            }),
+          },
+        },
+      },
+    });
+    const html = () =>
+      Object.values(useMapAttributionStore.getState().byLayer)
+        .flat()
+        .map((entry) => entry.fullHtml)
+        .join(" ");
+    act(() => {
+      fake.emit("render");
+      vi.advanceTimersByTime(250);
+    });
+    expect(html()).toContain("ratio-a");
+    expect(html()).not.toContain("popup-los-b");
+    expect(query).not.toHaveBeenCalled();
+    act(() => fake.emit("click", { point: { x: 10, y: 10 }, lngLat: { lng: 5, lat: 52 } }));
+    expect(html()).toContain("popup-los-b");
+    act(() =>
+      popupState.closed.forEach((close) => {
+        close();
+      }),
+    );
+    expect(html()).not.toContain("popup-los-b");
+    expect(html()).toContain("ratio-a");
+    buckets.delete(COLOR);
+    act(() => {
+      fake.emit("render");
+      vi.advanceTimersByTime(250);
+    });
+    expect(html()).not.toContain("ratio-a");
+    expect(html()).toContain("geometry");
+    buckets.delete(CASING);
+    act(() => {
+      fake.emit("render");
+      vi.advanceTimersByTime(250);
+    });
+    expect(html()).toBe("");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+describe("TrafficFlowLayer tile availability", () => {
+  const unavailable = () => useTrafficFlowStore.getState().unavailable;
+
+  it("asks Martin's catalog, uncached, and stays available when it serves the flow source", async () => {
+    const fetchMock = stubCatalog(() => Response.json(SERVING_CATALOG));
+    useTrafficFlowStore.setState({ panelOpen: true, layerVisible: true, unavailable: true });
+    render(<TrafficFlowLayer />);
+    await flushCatalog();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.test/martin/catalog");
+    expect(fetchMock.mock.calls[0]?.[1]?.cache).toBe("no-store");
+    expect(unavailable()).toBe(false);
+  });
+
+  it.each([
+    ["a catalog without the flow source", () => Response.json({ tiles: { other: {} } })],
+    ["a missing Martin route", () => new Response("404 page not found", { status: 404 })],
+    [
+      "an unreachable Martin",
+      () => {
+        throw new TypeError("Failed to fetch");
+      },
+    ],
+  ])("marks the overlay unavailable for %s", async (_, response) => {
+    stubCatalog(response);
+    useTrafficFlowStore.setState({ panelOpen: true, layerVisible: true });
+    render(<TrafficFlowLayer />);
+    await flushCatalog();
+
+    expect(unavailable()).toBe(true);
+  });
+
+  it("marks a failed tile of its own source unavailable and ignores other sources' errors", async () => {
+    useTrafficFlowStore.setState({ panelOpen: true, layerVisible: true });
+    render(<TrafficFlowLayer />);
+    await flushCatalog();
+
+    act(() => fake.emit("error", { error: new Error("tile 500"), sourceId: "basemap" }));
+    act(() => fake.emit("error", { error: new Error("style") }));
+    expect(unavailable()).toBe(false);
+
+    act(() => fake.emit("error", { error: new Error("tile 500"), sourceId: SRC, tile: {} }));
+    expect(unavailable()).toBe(true);
+  });
+
+  it("clears the state once a tile of its own source loads", async () => {
+    useTrafficFlowStore.setState({ panelOpen: true, layerVisible: true });
+    render(<TrafficFlowLayer />);
+    await flushCatalog();
+    act(() => fake.emit("error", { error: new Error("tile 502"), sourceId: SRC, tile: {} }));
+
+    act(() => fake.emit("sourcedata", { sourceId: SRC, dataType: "source" }));
+    act(() => fake.emit("sourcedata", { sourceId: "basemap", dataType: "source", tile: {} }));
+    expect(unavailable()).toBe(true);
+
+    act(() => fake.emit("sourcedata", { sourceId: SRC, dataType: "source", tile: {} }));
+    expect(unavailable()).toBe(false);
+  });
+
+  it("neither probes nor listens while hidden, and stops listening on unmount", async () => {
+    const fetchMock = stubCatalog(() => Response.json({ tiles: {} }));
+    const hidden = render(<TrafficFlowLayer />);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fake.state.handlers.get("error")?.size ?? 0).toBe(0);
+    hidden.unmount();
+
+    useTrafficFlowStore.setState({ panelOpen: true, layerVisible: true });
+    const { unmount } = render(<TrafficFlowLayer />);
+    expect(fake.state.handlers.get("error")?.size).toBe(1);
+    expect(fake.state.handlers.get("sourcedata")?.size).toBe(1);
+    unmount();
+    await flushCatalog();
+
+    expect(fake.state.handlers.get("error")?.size ?? 0).toBe(0);
+    expect(fake.state.handlers.get("sourcedata")?.size ?? 0).toBe(0);
+    expect(unavailable()).toBe(false);
   });
 });

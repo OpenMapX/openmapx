@@ -89,7 +89,7 @@ const ATTRIBUTION_COLUMNS: { key: keyof AttributionRow; label: string; field: st
     label: "Description",
     field: "strings/<locale> description (or manifest description)",
   },
-  { key: "license", label: "License", field: "manifest dataSources[].license" },
+  { key: "licensing", label: "License", field: "manifest dataSources[].licensing" },
 ];
 
 export interface DiscoveredIntegration {

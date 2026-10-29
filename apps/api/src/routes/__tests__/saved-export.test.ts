@@ -17,6 +17,7 @@ const placeRows: Array<Record<string, unknown>> = [
     lng: 13.3777,
     placeId: "p-1",
     note: "Meet here",
+    fieldContributors: { lat: [{ sourceId: "file", name: "Original source" }], lng: [] },
     sortOrder: 0,
     createdAt: new Date(),
   },
@@ -58,7 +59,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await app.close();
+  await app?.close();
 });
 
 function primeListAndPlaces() {
@@ -74,6 +75,7 @@ describe("GET /api/saved/lists/:id/export", () => {
     expect(res.headers["content-type"]).toContain("application/geo+json");
     const fc = res.json();
     expect(fc.type).toBe("FeatureCollection");
+    expect(fc.features[0].properties.fieldContributors).toEqual(placeRows[0].fieldContributors);
     expect(fc.features[0].geometry.coordinates).toEqual([13.3777, 52.5163]);
   });
 
@@ -86,6 +88,8 @@ describe("GET /api/saved/lists/:id/export", () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toContain("application/gpx+xml");
     expect(res.headers["content-disposition"]).toContain('filename="favorites.gpx"');
+    expect(res.body).toContain("<omx:address>Pariser Platz</omx:address>");
+    expect(res.body).toContain("omx:fieldContributors");
     expect(res.body).toContain('<wpt lat="52.5163" lon="13.3777">');
   });
 
@@ -97,6 +101,8 @@ describe("GET /api/saved/lists/:id/export", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toContain("kml");
+    expect(res.body).toContain("<address>Pariser Platz</address>");
+    expect(res.body).toContain('Data name="fieldContributors"');
     expect(res.body).toContain("<coordinates>13.3777,52.5163</coordinates>");
   });
 

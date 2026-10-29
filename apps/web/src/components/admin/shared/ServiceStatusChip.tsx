@@ -1,21 +1,23 @@
 "use client";
 
 import Chip from "@mui/material/Chip";
-import type { ServiceStatus } from "@/hooks/useServices";
+import type { AdminServiceStatus } from "@openmapx/core/api-contracts";
 
-export function statusColor(status: ServiceStatus): "success" | "warning" | "error" | "default" {
+export function statusColor(
+  status: AdminServiceStatus,
+): "success" | "warning" | "error" | "default" {
   if (status === "running") return "success";
   if (status === "restarting") return "warning";
   if (status === "exited") return "error";
   return "default";
 }
 
-export function statusLabel(status: ServiceStatus): string {
+export function statusLabel(status: AdminServiceStatus): string {
   if (status === "not-running") return "Not running";
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
-export function ServiceStatusChip({ status }: { status: ServiceStatus }) {
+export function ServiceStatusChip({ status }: { status: AdminServiceStatus }) {
   return (
     <Chip
       label={statusLabel(status)}

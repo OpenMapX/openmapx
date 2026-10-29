@@ -186,12 +186,12 @@ export function sharedMobilityProviderContract(
       const result = await options.provider.search(createSharedMobilityBbox());
 
       expect(enrichEnturMobilityItems).toHaveBeenCalledWith(
-        [station],
-        [vehicle],
+        [expect.objectContaining(station)],
+        [expect.objectContaining(vehicle)],
         expect.objectContaining({ transport: expect.any(Object), scope: "map" }),
       );
-      expect(mapStationToResult).toHaveBeenCalledWith(station);
-      expect(mapVehicleToResult).toHaveBeenCalledWith(vehicle);
+      expect(mapStationToResult).toHaveBeenCalledWith(expect.objectContaining(station));
+      expect(mapVehicleToResult).toHaveBeenCalledWith(expect.objectContaining(vehicle));
       expect(result.data.map((item) => item.id)).toEqual([station.id, vehicle.id]);
     });
 
@@ -205,6 +205,7 @@ export function sharedMobilityProviderContract(
         new Set(options.formFactors),
         expect.any(Object),
         options.mapContextOptions,
+        expect.any(Function),
       );
     });
   });

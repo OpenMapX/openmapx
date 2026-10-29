@@ -71,6 +71,18 @@ updates:
       - dependency-name: "react-native"
       - dependency-name: "@react-native/jest-preset"
         # Kept aligned with react-native; Expo upgrades both as one reviewed stack.
+      # An Expo SDK major moves every expo-* module, React Native and the
+      # native modules Expo pins (such as react-native-webview) together, so
+      # it lands as one `expo install --fix` upgrade, not module by module.
+      - dependency-name: "expo"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "expo-*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "babel-preset-expo"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "jest-expo"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-native-webview"
 
   # The documentation site is a standalone pnpm workspace and is therefore
   # not covered by the root npm configuration above.
@@ -85,7 +97,7 @@ updates:
       default-days: 7
     open-pull-requests-limit: 10
     versioning-strategy: increase-if-necessary
-    labels: [dependencies, docs]
+    labels: [dependencies, documentation]
     commit-message:
       prefix: chore
       include: scope

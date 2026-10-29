@@ -1,9 +1,10 @@
 import { join } from "node:path";
 import { Command } from "commander";
-import { type BundleOptions, runBundle } from "./commands/bundle.js";
+import packageInfo from "../package.json";
+import { type BundleCommandOptions, runBundle } from "./commands/bundle.js";
 import { runPackage } from "./commands/package.js";
 import { scaffoldIntegration, scaffoldService } from "./commands/scaffold.js";
-import { runValidate } from "./commands/validate.js";
+import { type AuthoringKind, runValidate } from "./commands/validate.js";
 
 function collect(value: string, previous: string[]): string[] {
   return [...previous, value];
@@ -14,7 +15,9 @@ const program = new Command();
 program
   .name("openmapx-ext")
   .description("OpenMapX extension authoring CLI — scaffold, package, and validate integrations")
-  .version("0.1.0");
+  // Keep the global --version before subcommands; bundle owns --version as metadata.
+  .enablePositionalOptions()
+  .version(packageInfo.version);
 
 const scaffold = program
   .command("scaffold")
@@ -78,18 +81,23 @@ program
 
 program
   .command("validate <source>")
-  .description("Validate an integration directory against the manifest schema")
-  .action(async (source: string) => {
-    await runValidate(source);
+  .description("Validate community integration, service, extension or contributor input")
+  .option("--kind <kind>", "integration | service | extension | contributors", "integration")
+  .action(async (source: string, options: { kind: AuthoringKind }) => {
+    await runValidate(source, options.kind);
   });
 
 program
   .command("bundle")
   .description("Emit an extension.json bundle (N services + N integrations) for the store")
-  .requiredOption("--id <id>", "Extension id (lowercase, hyphenated)")
-  .requiredOption("--name <name>", "Display name")
-  .requiredOption("--version <version>", "Bundle version (SemVer)")
-  .option("--platform <version>", "Minimum platform version")
+  .option("--id <id>", "Extension id (lowercase, hyphenated)")
+  .option("--name <name>", "Display name")
+  .option("--version <version>", "Bundle version (SemVer)")
+  .option(
+    "--input <file>",
+    "Complete extension manifest, including config and readiness; excludes other input flags",
+  )
+  .option("--platform <version>", "Minimum extension protocol version")
   .option("--description <text>", "Description")
   .option("--license <spdx>", "SPDX license id")
   .option("--homepage <url>", "Homepage URL")
@@ -101,7 +109,7 @@ program
     [],
   )
   .option("--out <file>", "Output path", "extension.json")
-  .action((options: BundleOptions & { out: string }) => {
+  .action((options: BundleCommandOptions) => {
     try {
       const out = runBundle(options);
       console.log(`Wrote ${out}`);

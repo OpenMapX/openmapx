@@ -30,22 +30,26 @@ describe("transit result merging", () => {
     expect(Date.parse(result.freshness.fetchedAt)).toBeGreaterThanOrEqual(before);
   });
 
-  it("deduplicates fallback attribution in first-seen order", () => {
+  it("preserves distinct wording for one source in captured receipt order", () => {
     const first = attribution("first", "First");
     const duplicate = attribution("first", "Duplicate");
     const second = attribution("second", "Second");
 
-    expect(mergeAttributions(undefined, [first], [duplicate, second])).toEqual([first, second]);
+    expect(mergeAttributions(undefined, [first], [duplicate, second])).toEqual([
+      first,
+      duplicate,
+      second,
+    ]);
     expect(mergeAttributions(undefined)).toEqual([]);
   });
 
-  it("delegates flattened attribution to the host index", () => {
+  it("preserves acquisition snapshots instead of re-resolving current host metadata", () => {
     const ordered = [attribution("curated")];
     const dedupAndOrder = vi.fn(() => ordered);
     const input = [attribution("second"), attribution("first")];
 
-    expect(mergeAttributions({ dedupAndOrder }, [input[0]], [input[1]])).toBe(ordered);
-    expect(dedupAndOrder).toHaveBeenCalledWith(input);
+    expect(mergeAttributions({ dedupAndOrder }, [input[0]], [input[1]])).toEqual(input);
+    expect(dedupAndOrder).not.toHaveBeenCalled();
   });
 
   it("uses the oldest timestamps and strongest realtime and stale signals", () => {
@@ -66,6 +70,24 @@ describe("transit result merging", () => {
     });
   });
 
+  it("does not borrow known upstream age for an unknown-age realtime source", () => {
+    const fetched = "2026-08-31T12:00:00Z";
+    expect(
+      mergeFreshness(
+        freshness(fetched, { hasRealtimeData: true, dataAsOf: "2026-08-31T11:59:30Z" }),
+        freshness(fetched, { hasRealtimeData: true }),
+      ).dataAsOf,
+    ).toBeUndefined();
+  });
+
+  it("preserves incomplete coverage separately from age", () => {
+    const partial = { ...freshness("2026-08-31T12:00:00Z"), isPartial: true };
+    expect(mergeFreshness(partial, freshness("2026-08-31T12:00:00Z"))).toMatchObject({
+      isPartial: true,
+      isStale: false,
+    });
+  });
+
   it("returns current static freshness for an empty merge", () => {
     const before = Date.now();
     const merged = mergeFreshness();
@@ -73,4 +95,25 @@ describe("transit result merging", () => {
     expect(merged).toMatchObject({ hasRealtimeData: false, isStale: false });
     expect(Date.parse(merged.fetchedAt)).toBeGreaterThanOrEqual(before);
   });
+});
+
+it("does not hide a future realtime contributor behind an older valid timestamp", () => {
+  const now = Date.parse("2026-10-07T08:00:00Z");
+  const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+  try {
+    expect(
+      mergeFreshness(
+        freshness(new Date(now).toISOString(), {
+          hasRealtimeData: true,
+          dataAsOf: "2026-10-07T07:59:30Z",
+        }),
+        freshness(new Date(now).toISOString(), {
+          hasRealtimeData: true,
+          dataAsOf: "2026-10-07T08:10:00Z",
+        }),
+      ).dataAsOf,
+    ).toBeUndefined();
+  } finally {
+    clock.mockRestore();
+  }
 });

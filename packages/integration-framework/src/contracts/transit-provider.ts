@@ -40,12 +40,7 @@ import type { ProviderCallContext } from "../provider-execution.js";
  * frontend can render the correct license chip via the `/providers`
  * endpoint.
  */
-export interface ProviderAttribution {
-  label: string;
-  url?: string;
-  license?: string;
-  licenseUrl?: string;
-}
+export type ProviderAttribution = import("@openmapx/mobility-core/attribution").Attribution;
 
 export interface TransitCapabilities {
   stops: {

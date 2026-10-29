@@ -57,7 +57,7 @@ export const isochroneRoute: FastifyPluginAsync = async (fastify) => {
 
       const sorted = [...contourMinutes].sort((a, b) => a - b);
 
-      const key = hashKey("cache:isochrone", {
+      const key = hashKey("cache:isochrone:contributors-v2", {
         lat: round(lat, 3),
         lng: round(lng, 3),
         mode,

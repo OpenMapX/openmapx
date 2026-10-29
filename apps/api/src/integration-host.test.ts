@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 /**
  * Characterization tests for integration-host.ts — loader, route dispatch, and
  * reload/shutdown. These tests pin observable behavior so plan-012 refactors
@@ -6,6 +7,8 @@
  * All tests exercise only the public API; no internals are imported or patched.
  */
 
+import { createHash } from "node:crypto";
+import * as fs from "node:fs";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,6 +21,20 @@ import {
   getIntegrationHealthMocks,
   createIntegrationHostTestApp as makeApp,
 } from "./__tests__/support/integration-host-environment.js";
+
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  return { ...actual, createHash: vi.fn(actual.createHash) };
+});
+
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...actual,
+    readFileSync: vi.fn(actual.readFileSync),
+    statSync: vi.fn(actual.statSync),
+  };
+});
 
 // The fixtures directory that contains our test integrations.
 // import.meta.url points to this file: apps/api/src/integration-host.test.ts
@@ -32,11 +49,24 @@ import {
   reloadIntegrations,
   shutdownIntegrations,
 } from "./integration-host.js";
-import { setIntegrationRouteRateLimits } from "./integration-routes.js";
+import { registerIntegrationRoute, setIntegrationRouteRateLimits } from "./integration-routes.js";
+import { makeRateLimitTierHook, type RateLimitTiers } from "./server-wiring.js";
 import { isSecretsConfigured } from "./services/secrets.js";
 import { resolveRequiresForIntegration } from "./services/service-registry.js";
+import { RateLimiter } from "./utils/rate-limit.js";
 
 const integrationHealthMocks = getIntegrationHealthMocks();
+
+function writeTestIntegration(
+  root: string,
+  directoryName: string,
+  manifest: Record<string, unknown>,
+): string {
+  const directory = join(root, directoryName);
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, "manifest.json"), JSON.stringify(manifest));
+  return directory;
+}
 
 // Clear module-level state (the integration map, route list, _fastify ref) by
 // shutting down after every test so tests don't bleed into each other.
@@ -83,6 +113,215 @@ describe("integration route rate tiers", () => {
   });
 });
 
+describe("host and dispatcher request tier ownership", () => {
+  function installTiers(app: FastifyInstance, max = 2) {
+    const buckets = {
+      public: new RateLimiter({ max, windowMs: 60_000 }),
+      expensive: new RateLimiter({ max, windowMs: 60_000 }),
+      tile: new RateLimiter({ max, windowMs: 60_000 }),
+    };
+    const tiers: RateLimitTiers = {
+      public: buckets.public.preHandler(),
+      expensive: buckets.expensive.preHandler(),
+      tile: buckets.tile.preHandler(),
+      auth: vi.fn(),
+      integrationIngress: vi.fn(),
+      status: vi.fn(),
+    };
+    app.addHook("onRequest", makeRateLimitTierHook(tiers));
+    setIntegrationRouteRateLimits(tiers);
+    app.addHook("onClose", async () => {
+      for (const bucket of Object.values(buckets)) bucket.destroy();
+    });
+  }
+
+  it.each([
+    ["/api/integrations", 304],
+    ["/api/integrations/health", 200],
+    ["/api/integrations/alpha/preview", 304],
+  ])(
+    "limits host-owned %s before repeated work, including validators and query strings",
+    async (url, conditionalStatus) => {
+      const app = makeApp();
+      installTiers(app);
+      await initIntegrations(app, [FIXTURES_DIR]);
+      const read = vi.mocked(fs.readFileSync);
+      const stat = vi.mocked(fs.statSync);
+      try {
+        const request = { method: "GET" as const, url, remoteAddress: "198.51.100.40" };
+        const first = await app.inject(request);
+        expect(first.statusCode).toBe(200);
+        const conditional = {
+          ...request,
+          url: `${url}?fixture=1`,
+          headers: {
+            "if-none-match": String(first.headers.etag ?? "*"),
+            "x-forwarded-for": "127.0.0.1",
+          },
+        };
+        expect((await app.inject(conditional)).statusCode).toBe(conditionalStatus);
+        const hashesBefore = vi.mocked(createHash).mock.calls.length;
+        const readsBefore = read.mock.calls.length;
+        const statsBefore = stat.mock.calls.length;
+        const healthReadsBefore =
+          integrationHealthMocks.getCachedIntegrationHealthSnapshot.mock.calls.length;
+        const exhausted = await app.inject(conditional);
+        expect(exhausted.statusCode).toBe(429);
+        expect(exhausted.headers["retry-after"]).toBeDefined();
+        expect(vi.mocked(createHash).mock.calls.length).toBe(hashesBefore);
+        expect(read.mock.calls.length).toBe(readsBefore);
+        expect(stat.mock.calls.length).toBe(statsBefore);
+        expect(integrationHealthMocks.getCachedIntegrationHealthSnapshot.mock.calls.length).toBe(
+          healthReadsBefore,
+        );
+      } finally {
+        await app.close();
+      }
+    },
+  );
+
+  it("rejects exhausted body ingress before parsing, matching, and the declared tier", async () => {
+    const app = makeApp();
+    const ingress = new RateLimiter({ max: 1, windowMs: 60_000 });
+    const parseBody = vi.fn((_request, body, done) => done(null, body));
+    const latePublic = vi.fn(async () => undefined);
+    const unexpectedTier = vi.fn(async () => {
+      throw new Error("Wrong rate-limit tier");
+    });
+    const handler = vi.fn(async (request, reply) => {
+      reply.send({ body: request.body });
+    });
+    const tiers: RateLimitTiers = {
+      auth: unexpectedTier,
+      tile: unexpectedTier,
+      expensive: unexpectedTier,
+      integrationIngress: ingress.preHandler(),
+      status: unexpectedTier,
+      public: latePublic,
+    };
+    app.addContentTypeParser("application/x-integration-probe", { parseAs: "string" }, parseBody);
+    app.addHook("onRequest", makeRateLimitTierHook(tiers));
+    setIntegrationRouteRateLimits(tiers);
+    await initIntegrations(app, [FIXTURES_DIR]);
+    registerIntegrationRoute("alpha", "POST", "/body-probe", handler);
+
+    const request = {
+      method: "POST" as const,
+      remoteAddress: "198.51.100.42",
+      headers: { "content-type": "application/x-integration-probe" },
+      payload: "synthetic body",
+    };
+    try {
+      const admitted = await app.inject({
+        ...request,
+        url: "/api/integrations/alpha/body-probe",
+      });
+      expect(admitted.statusCode).toBe(200);
+      expect(admitted.json()).toEqual({ body: "synthetic body" });
+      expect(parseBody).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(latePublic).toHaveBeenCalledTimes(1);
+
+      for (const attempt of [
+        { ...request, url: "/api/integrations/alpha/body-probe" },
+        { ...request, url: "/api/integrations/missing/body-probe" },
+        { ...request, url: "/api/integrations/alpha/missing" },
+        {
+          method: "POST" as const,
+          url: "/api/integrations/alpha/body-probe",
+          remoteAddress: "198.51.100.42",
+          headers: { "content-type": "application/json" },
+          payload: "{",
+        },
+      ]) {
+        const rejected = await app.inject(attempt);
+        expect(rejected.statusCode).toBe(429);
+        expect(rejected.json()).toMatchObject({
+          error: "Too many requests",
+          retryAfter: expect.any(Number),
+        });
+        expect(Number(rejected.headers["retry-after"])).toBeGreaterThan(0);
+      }
+      expect(parseBody).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(latePublic).toHaveBeenCalledTimes(1);
+      expect(unexpectedTier).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+      ingress.destroy();
+    }
+  });
+
+  it.each([
+    ["public", false],
+    ["expensive", false],
+    ["tile", false],
+    ["public", true],
+    ["expensive", true],
+    ["tile", true],
+  ] as const)(
+    "charges actual dispatcher requests exactly once to %s (root route: %s)",
+    async (tier, rootRoute) => {
+      const app = makeApp();
+      installTiers(app);
+      app.get("/api/floor", async () => ({ ok: true }));
+      await initIntegrations(app, [FIXTURES_DIR]);
+      if (rootRoute) {
+        registerIntegrationRoute(
+          "alpha",
+          "GET",
+          "/",
+          async (_request, reply) => {
+            reply.send({ invoked: true });
+          },
+          { rateLimitTier: tier },
+        );
+      }
+      try {
+        const request = {
+          method: "GET" as const,
+          url: rootRoute
+            ? "/api/integrations/alpha?fixture=1"
+            : `/api/integrations/alpha/tier-${tier}?fixture=1`,
+          remoteAddress: "198.51.100.41",
+        };
+        for (let i = 0; i < 2; i++) {
+          const response = await app.inject(request);
+          expect(response.statusCode).toBe(200);
+          expect(response.json()).toEqual({ invoked: true });
+        }
+        expect((await app.inject(request)).statusCode).toBe(429);
+        const floorRequest = { ...request, url: "/api/floor" };
+        if (tier === "public") {
+          expect((await app.inject(floorRequest)).statusCode).toBe(429);
+        } else {
+          expect((await app.inject(floorRequest)).statusCode).toBe(200);
+          expect((await app.inject(floorRequest)).statusCode).toBe(200);
+          expect((await app.inject(floorRequest)).statusCode).toBe(429);
+        }
+      } finally {
+        await app.close();
+      }
+    },
+  );
+
+  it.each(["/api/integrations", "/api/integrations/health", "/api/integrations/alpha/preview"])(
+    "preserves the loopback exemption for host-owned %s",
+    async (url) => {
+      const app = makeApp();
+      installTiers(app, 1);
+      await initIntegrations(app, [FIXTURES_DIR]);
+      try {
+        for (let i = 0; i < 3; i++) {
+          expect((await app.inject({ url, remoteAddress: "127.0.0.1" })).statusCode).toBe(200);
+        }
+      } finally {
+        await app.close();
+      }
+    },
+  );
+});
+
 // ---------------------------------------------------------------------------
 // Step 2: Loader tests
 // ---------------------------------------------------------------------------
@@ -98,6 +337,178 @@ describe("initIntegrations — loader", () => {
     expect(ids).toContain("beta");
   });
 
+  it.each(["built-in-first", "community-first"] as const)(
+    "prefers a built-in integration over a colliding community integration (%s)",
+    async (order) => {
+      const parent = mkdtempSync(join(tmpdir(), "omx-integration-id-collision-"));
+      const builtInRoot = join(parent, "built-in");
+      const communityRoot = join(parent, "community");
+      const builtInDirectory = writeTestIntegration(builtInRoot, "trusted", {
+        id: "shared-identity",
+        name: "Trusted built-in",
+        version: "1.0.0",
+        licensing: licensingFromDeclaration("MIT", undefined),
+        domains: ["knowledge"],
+        quality: "built-in",
+      });
+      writeTestIntegration(communityRoot, "untrusted", {
+        id: "shared-identity",
+        name: "Untrusted community",
+        version: "1.0.0",
+        licensing: licensingFromDeclaration("MIT", undefined),
+        domains: ["knowledge"],
+        quality: "community",
+        dependencies: ["missing-community-dependency"],
+      });
+      const builtIn = { directory: builtInRoot, isBuiltIn: true };
+      const community = { directory: communityRoot, isBuiltIn: false };
+      const app = makeApp();
+
+      try {
+        await initIntegrations(
+          app,
+          order === "built-in-first" ? [builtIn, community] : [community, builtIn],
+        );
+
+        const loaded = getIntegration("shared-identity");
+        expect(loaded).toMatchObject({ directory: builtInDirectory, isBuiltIn: true });
+        expect(loaded?.manifest.name).toBe("Trusted built-in");
+      } finally {
+        rmSync(parent, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("ignores secret requirements declared only by a colliding community integration", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "omx-integration-secret-collision-"));
+    const builtInRoot = join(parent, "built-in");
+    const communityRoot = join(parent, "community");
+    const builtInDirectory = writeTestIntegration(builtInRoot, "trusted", {
+      id: "shared-secret-identity",
+      name: "Trusted built-in",
+      version: "1.0.0",
+      licensing: licensingFromDeclaration("MIT", undefined),
+      domains: ["knowledge"],
+      quality: "built-in",
+    });
+    writeTestIntegration(communityRoot, "untrusted", {
+      id: "shared-secret-identity",
+      name: "Untrusted community",
+      version: "1.0.0",
+      licensing: licensingFromDeclaration("MIT", undefined),
+      domains: ["knowledge"],
+      quality: "community",
+      configSchema: {
+        properties: {
+          apiKey: {
+            type: "string",
+            "x-openmapx-secret": true,
+          },
+        },
+      },
+    });
+    vi.mocked(isSecretsConfigured).mockReturnValue(false);
+    const app = makeApp();
+
+    try {
+      await initIntegrations(app, [
+        { directory: builtInRoot, isBuiltIn: true },
+        { directory: communityRoot, isBuiltIn: false },
+      ]);
+
+      expect(getIntegration("shared-secret-identity")).toMatchObject({
+        directory: builtInDirectory,
+        isBuiltIn: true,
+      });
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the first integration when duplicate identities have the same trust", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "omx-same-trust-duplicate-"));
+    const firstRoot = join(parent, "first");
+    const secondRoot = join(parent, "second");
+    const firstDirectory = writeTestIntegration(firstRoot, "first", {
+      id: "duplicate-community",
+      name: "First community",
+      version: "1.0.0",
+      licensing: licensingFromDeclaration("MIT", undefined),
+      domains: ["knowledge"],
+      quality: "community",
+    });
+    writeTestIntegration(secondRoot, "second", {
+      id: "duplicate-community",
+      name: "Second community",
+      version: "1.0.0",
+      licensing: licensingFromDeclaration("MIT", undefined),
+      domains: ["knowledge"],
+      quality: "community",
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const app = makeApp();
+
+    try {
+      await initIntegrations(app, [
+        { directory: firstRoot, isBuiltIn: false },
+        { directory: secondRoot, isBuiltIn: false },
+      ]);
+
+      const loaded = getIntegration("duplicate-community");
+      expect(loaded).toMatchObject({ directory: firstDirectory, isBuiltIn: false });
+      expect(loaded?.manifest.name).toBe("First community");
+      const warningText = warn.mock.calls.flat().join(" ");
+      expect(warningText).toContain('duplicate integration id "duplicate-community"');
+      expect(warningText).not.toContain(parent);
+    } finally {
+      warn.mockRestore();
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  it("retains a built-in integration when reload discovers a colliding community identity", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "omx-reload-id-collision-"));
+    const builtInRoot = join(parent, "built-in");
+    const communityRoot = join(parent, "community");
+    mkdirSync(communityRoot, { recursive: true });
+    const builtInDirectory = writeTestIntegration(builtInRoot, "trusted", {
+      id: "reload-identity",
+      name: "Trusted built-in",
+      version: "1.0.0",
+      licensing: licensingFromDeclaration("MIT", undefined),
+      domains: ["knowledge"],
+      quality: "built-in",
+    });
+    const app = makeApp();
+
+    try {
+      await initIntegrations(app, [
+        { directory: builtInRoot, isBuiltIn: true },
+        { directory: communityRoot, isBuiltIn: false },
+      ]);
+      expect(getIntegration("reload-identity")).toMatchObject({
+        directory: builtInDirectory,
+        isBuiltIn: true,
+      });
+
+      writeTestIntegration(communityRoot, "untrusted", {
+        id: "reload-identity",
+        name: "Untrusted community",
+        version: "1.0.0",
+        licensing: licensingFromDeclaration("MIT", undefined),
+        domains: ["knowledge"],
+        quality: "community",
+      });
+      await reloadIntegrations();
+
+      const loaded = getIntegration("reload-identity");
+      expect(loaded).toMatchObject({ directory: builtInDirectory, isBuiltIn: true });
+      expect(loaded?.manifest.name).toBe("Trusted built-in");
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
   it("discovers, validates, stores, and reloads air-quality providers", async () => {
     const parent = mkdtempSync(join(tmpdir(), "omx-air-quality-provider-"));
     const directory = join(parent, "air-quality-probe");
@@ -108,7 +519,7 @@ describe("initIntegrations — loader", () => {
         id: "air-quality-probe",
         version: "1.0.0",
         author: "Test",
-        license: "MIT",
+        licensing: licensingFromDeclaration("MIT", undefined),
         domains: ["air-quality"],
         quality: "built-in",
         dataSources: [
@@ -116,7 +527,7 @@ describe("initIntegrations — loader", () => {
             sourceId: "official-aq",
             name: "Official AQ",
             url: "https://example.test/data",
-            license: "Test",
+            licensing: licensingFromDeclaration("Test", undefined, "Official AQ"),
             providerCountry: "US",
             providerPrivacyUrl: "https://example.test/privacy",
           },
@@ -160,7 +571,7 @@ describe("initIntegrations — loader", () => {
         id: "parking-site-probe",
         version: "1.0.0",
         author: "Test",
-        license: "MIT",
+        licensing: licensingFromDeclaration("MIT", undefined),
         domains: ["data-source"],
         quality: "built-in",
       }),
@@ -197,7 +608,7 @@ describe("initIntegrations — loader", () => {
         id: "charging-site-probe",
         version: "1.0.0",
         author: "Test",
-        license: "MIT",
+        licensing: licensingFromDeclaration("MIT", undefined),
         domains: ["data-source"],
         quality: "built-in",
       }),
@@ -234,7 +645,7 @@ describe("initIntegrations — loader", () => {
         id: "camera-probe",
         version: "1.0.0",
         author: "Test",
-        license: "MIT",
+        licensing: licensingFromDeclaration("MIT", undefined),
         domains: ["data-source"],
         quality: "built-in",
       }),
@@ -261,6 +672,84 @@ describe("initIntegrations — loader", () => {
     }
   });
 
+  it("stores message-sign providers under the message-signs key", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "omx-sign-provider-"));
+    const directory = join(parent, "sign-probe");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(
+      join(directory, "manifest.json"),
+      JSON.stringify({
+        id: "sign-probe",
+        version: "1.0.0",
+        author: "Test",
+        licensing: licensingFromDeclaration("MIT", undefined),
+        domains: ["data-source"],
+        quality: "built-in",
+      }),
+    );
+    writeFileSync(
+      join(directory, "index.js"),
+      [
+        "export function setup(ctx) {",
+        "  ctx.registerMessageSignProvider({",
+        "    id: 'probe', coverage: { all: true },",
+        "    searchSigns: async () => ({ signs: [] }), getSign: async () => null,",
+        "  });",
+        "}",
+      ].join("\n"),
+    );
+    const app = makeApp();
+    try {
+      await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
+      expect(getIntegrationProviders<{ id: string }>("sign-probe", "message-signs")).toMatchObject([
+        { id: "probe" },
+      ]);
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["registerRoadWeatherProvider", "road-weather", "searchStations", "getStation"],
+    ["registerServiceVehicleProvider", "service-vehicles", "searchVehicles", "getVehicle"],
+    ["registerBorderCrossingProvider", "border-crossings", "searchCrossings", "getCrossing"],
+  ])("%s stores its providers under the %s key", async (registrar, key, search, get) => {
+    const parent = mkdtempSync(join(tmpdir(), "omx-conditions-provider-"));
+    const directory = join(parent, "conditions-probe");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(
+      join(directory, "manifest.json"),
+      JSON.stringify({
+        id: "conditions-probe",
+        version: "1.0.0",
+        author: "Test",
+        licensing: licensingFromDeclaration("MIT", undefined),
+        domains: ["data-source"],
+        quality: "built-in",
+      }),
+    );
+    writeFileSync(
+      join(directory, "index.js"),
+      [
+        "export function setup(ctx) {",
+        `  ctx.${registrar}({`,
+        "    id: 'probe', coverage: { all: true },",
+        `    ${search}: async () => ({}), ${get}: async () => null,`,
+        "  });",
+        "}",
+      ].join("\n"),
+    );
+    const app = makeApp();
+    try {
+      await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
+      expect(getIntegrationProviders<{ id: string }>("conditions-probe", key)).toMatchObject([
+        { id: "probe" },
+      ]);
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
   it("stores hazards providers under the hazards key", async () => {
     const parent = mkdtempSync(join(tmpdir(), "omx-hazards-provider-"));
     const directory = join(parent, "hazards-probe");
@@ -271,7 +760,7 @@ describe("initIntegrations — loader", () => {
         id: "hazards-probe",
         version: "1.0.0",
         author: "Test",
-        license: "MIT",
+        licensing: licensingFromDeclaration("MIT", undefined),
         domains: ["data-source"],
         quality: "built-in",
       }),
@@ -615,6 +1104,31 @@ describe("integration layer previews", () => {
 // ---------------------------------------------------------------------------
 // Step 4: Reload and shutdown tests
 // ---------------------------------------------------------------------------
+
+describe("resolved service cache identity", () => {
+  it("captures immutable bindings for initial and reloaded provider generations", async () => {
+    const service = { serviceId: "photon", url: "https://first.example", enabled: true };
+    vi.mocked(resolveRequiresForIntegration).mockReturnValue(new Map([["geocoder", service]]));
+    const app = makeApp();
+    try {
+      await initIntegrations(app, [FIXTURES_DIR]);
+      const initial = getIntegration("alpha");
+      expect(initial?.resolvedServices?.geocoder?.url).toBe("https://first.example");
+      service.url = "https://second.example";
+      expect(initial?.resolvedServices?.geocoder?.url).toBe("https://first.example");
+      expect(Object.isFrozen(initial?.resolvedServices)).toBe(true);
+      expect(Object.isFrozen(initial?.resolvedServices?.geocoder)).toBe(true);
+      await reloadIntegrations();
+      expect(getIntegration("alpha")?.resolvedServices?.geocoder?.url).toBe(
+        "https://second.example",
+      );
+      expect(initial?.resolvedServices?.geocoder?.url).toBe("https://first.example");
+    } finally {
+      vi.mocked(resolveRequiresForIntegration).mockReturnValue(new Map());
+      await app.close();
+    }
+  });
+});
 
 describe("reloadIntegrations", () => {
   it("after reload getAllIntegrations still returns both fixtures", async () => {

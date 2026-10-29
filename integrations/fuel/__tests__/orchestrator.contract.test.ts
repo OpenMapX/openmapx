@@ -278,12 +278,12 @@ describe("fuel orchestrator", () => {
     expect((await source.getDetail("a:1")).data).toBeNull();
   });
 
-  test("results and a cold detail carry the brand's logo", async () => {
+  test("results and a cold detail defer the uncredited Commons brand logo", async () => {
     const aral = station({ id: "a:1", name: "Aral Berlin", brand: "Aral", country: "DE" });
     const source = createFuelDataSource(ctxWith([provider("a", [aral])]));
 
     const detail = (await source.getDetail("a:1")).data;
-    expect(detail?.branding?.logoUrl).toMatch(/^https:\/\/commons\.wikimedia\.org\//);
+    expect(detail?.branding?.logoUrl).toBeUndefined();
     expect(detail?.branding?.name).toBe("Aral AG");
 
     const [result] = (await source.search(BBOX)).data;
@@ -315,11 +315,25 @@ describe("fuel orchestrator", () => {
   });
 
   test("an upstream publisher's credit under its feed reaches the search's attributions", async () => {
-    const feed = { sourceId: "src-c", name: "MobiData BW", spdxLicense: "DL-DE-BY-2.0" };
+    const feed = {
+      sourceId: "src-c",
+      name: "MobiData BW",
+      licensing: {
+        version: 1,
+        bindings: [
+          { scope: "data", subject: "Data", license: { kind: "spdx", expression: "DL-DE-BY-2.0" } },
+        ],
+      } as const,
+    };
     const upstream = {
       sourceId: "src-c",
       name: "MobiData BW – Stadtwerke Karlsruhe",
-      spdxLicense: "CC-BY-4.0",
+      licensing: {
+        version: 1,
+        bindings: [
+          { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+        ],
+      } as const,
       publisher: { name: "Stadtwerke Karlsruhe" },
     };
     const source = createFuelDataSource(
@@ -344,8 +358,20 @@ describe("fuel orchestrator", () => {
           sourceId: "de-mtsk",
           name: "MTS-K via Tankerkönig",
           url: "https://creativecommons.tankerkoenig.de/",
-          spdxLicense: "CC-BY-4.0",
-          licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+          licensing: {
+            version: 1,
+            bindings: [
+              {
+                scope: "data",
+                subject: "Data",
+                license: {
+                  kind: "spdx",
+                  expression: "CC-BY-4.0",
+                  url: "https://creativecommons.org/licenses/by/4.0/",
+                },
+              },
+            ],
+          } as const,
         },
         { sourceId: "osm", name: "OpenStreetMap contributors" },
       ],
@@ -353,12 +379,25 @@ describe("fuel orchestrator", () => {
     const source = createFuelDataSource(ctxWith([provider("a", [credited])]));
     const expected = [
       {
-        text: "MTS-K via Tankerkönig",
+        sourceId: "de-mtsk",
+        name: "MTS-K via Tankerkönig",
         url: "https://creativecommons.tankerkoenig.de/",
-        license: "CC-BY-4.0",
-        licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Data",
+              license: {
+                kind: "spdx",
+                expression: "CC-BY-4.0",
+                url: "https://creativecommons.org/licenses/by/4.0/",
+              },
+            },
+          ],
+        } as const,
       },
-      { text: "OpenStreetMap contributors", url: "" },
+      { sourceId: "osm", name: "OpenStreetMap contributors" },
     ];
 
     const [result] = (await source.search(BBOX)).data;

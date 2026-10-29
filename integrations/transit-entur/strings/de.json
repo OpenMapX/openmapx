@@ -3,9 +3,9 @@
   "description": "Norwegenweite ÖPNV-Haltestellen, Abfahrtstafeln, Linien, Reiseplanung, Störungen, Fahrzeuge und Haltestellen-Facilities über Entur",
   "dataSources": {
     "entur-journey-planner": {
-      "purpose": "Suche nach norwegischen Haltestellen sowie Abruf von Abfahrtstafeln, Liniendetails, Haltestellenfolgen, Echtzeitfahrten, Störungsmeldungen, Live-Fahrzeugen und Haltestellen-Metadaten über Enturs öffentliche APIs",
-      "dataSent": "Koordinaten, Haltestellen-IDs, Linien-IDs, Service-Journey-IDs, Zeitfenster, optionaler Norwegen-Filter, Modus für multimodale Haltestellen, ET-Client-Name-Header",
-      "dataReceived": "Journey-Planner-GraphQL-Haltestellen, Linien, Trip-Patterns, Estimated Calls, Situations, codierte Liniengeometrien, Echtzeit-Fahrzeugpositionen sowie NSR-Daten zu Barrierefreiheit, Ausstattung und Parkmöglichkeiten"
+      "purpose": "Abruf naher Haltestellen, Abfahrtstafeln, Liniendetails, Haltestellenfolgen, Reiseplanung, Echtzeitfahrten und Störungsmeldungen über Entur Journey Planner",
+      "dataSent": "Koordinaten, Haltestellen-IDs, Linien-IDs, Service-Journey-IDs, Zeitfenster, Reisepräferenzen und ET-Client-Name-Header",
+      "dataReceived": "GraphQL-Haltestellen, Linien, Trip-Patterns, Estimated Calls, Situations und codierte Liniengeometrien"
     },
     "entur-vehicles": {
       "purpose": "Verfolgung der Echtzeitpositionen überwachter norwegischer ÖPNV-Fahrzeuge, entweder für eine einzelne Linie oder innerhalb des Kartenausschnitts, zur Darstellung auf der Karte",
@@ -16,6 +16,16 @@
       "purpose": "Abruf detaillierter Metadaten zu Haltestellen, Bahnsteigen, Barrierefreiheit, Ausstattung, Parkmöglichkeiten und Tarifzonen aus dem norwegischen National Stop Register",
       "dataSent": "Eine REST-Anfrage mit der Haltestellen- oder Bahnsteigkennung im URL-Pfad sowie dem ET-Client-Name-Header; keine Nutzerdaten",
       "dataReceived": "Haltestellen- und Bahnsteigdatensätze mit Koordinaten, Namen, Verkehrsmitteln, Bahnsteigcodes, Einschränkungen der Barrierefreiheit, Ausstattung, Parkmöglichkeiten und Tarifzonendetails"
+    },
+    "entur-geocoder": {
+      "purpose": "Namenssuche nach ÖPNV-Haltestellen über Entur Geocoder v3",
+      "dataSent": "Suchtext, Ergebnislimit, stopPlace-Layer und NSR-Quellenfilter, optionales kleingeschriebenes ISO2-Land, Multimodal-Modus und ET-Client-Name-Header",
+      "dataReceived": "Native GeoJSON-Features mit strukturierten Namen, Koordinaten, NSR-IDs, Haltestellentypen, Verkehrsmitteln und Datenquelle"
+    },
+    "entur-geocoder-nsr": {
+      "purpose": "Bereitstellung von Entur National Stop Register geocoder data über Entur Geocoder v3",
+      "dataSent": "Keine direkte Anfrage an diesen Datenlieferanten; Suchtext, Ergebnislimit sowie Länder-, Layer-, Quellen- und Multimodal-Filter werden an die Entur-API gesendet",
+      "dataReceived": "Native Features von Entur National Stop Register geocoder data mit Namen, Koordinaten, Kennungen und verfügbaren strukturierten Metadaten"
     }
   }
 }

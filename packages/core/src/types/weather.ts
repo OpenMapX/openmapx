@@ -1,3 +1,4 @@
+import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
 import type { LngLat } from "./geometry";
 
 export interface WeatherOptions {
@@ -20,7 +21,7 @@ export interface CurrentWeather {
   time: string;
 }
 
-export interface HourlyForecastPoint {
+export interface HourlyForecastPoint extends ContributingRecord {
   time: string;
   temperature: number;
   weatherCode: number;
@@ -32,7 +33,7 @@ export interface HourlyForecastPoint {
   pressure: number;
 }
 
-export interface DailyForecastPoint {
+export interface DailyForecastPoint extends ContributingRecord {
   date: string;
   weatherCode: number;
   temperatureMax: number;
@@ -43,7 +44,14 @@ export interface DailyForecastPoint {
   sunset?: string;
 }
 
-export interface WeatherResponse {
+/** A selected forecast acquisition; point receipts survive filtering and serialization. */
+export interface WeatherForecastResponse<T extends ContributingRecord> extends ContributingRecord {
+  points: T[];
+  /** Exact serving source, or null when no provider returned a forecast. */
+  source: string | null;
+}
+
+export interface WeatherResponse extends ContributingRecord {
   location: LngLat;
   current: CurrentWeather;
   hourly?: HourlyForecastPoint[];

@@ -6,7 +6,10 @@
 
 import type { BoundingBox, DataSourceMeta } from "@openmapx/core";
 import type { IntegrationDataSource } from "@openmapx/integration-framework";
-import { createSharedMobilityProvider } from "@openmapx/integration-framework/shared-mobility-provider";
+import {
+  createSharedMobilityContributorResolver,
+  createSharedMobilityProvider,
+} from "@openmapx/integration-framework/shared-mobility-provider";
 import type { VehicleFormFactor } from "@openmapx/mobility-core/shared-mobility";
 import type { SharedMobilityRuntime } from "@openmapx/mobility-core/shared-mobility-runtime";
 import type { createDeNwMobidromScooterClient } from "./de-nw-mobidrom-scooter-client.js";
@@ -49,9 +52,11 @@ export function createScooterSharingProvider(options: {
   searchDeNwMobidromScooter: ReturnType<typeof createDeNwMobidromScooterClient>;
   searchFelyx: typeof searchFelyx;
 }) {
+  const resolveContributors = createSharedMobilityContributorResolver(options.dataSources);
   const loadScooterInventory = (bbox: BoundingBox) =>
     options.runtime.orchestrate(bbox, {
       category: "scooter",
+      resolveContributors,
       motisFormFactors: ["scooter_standing", "scooter_seated", "moped"],
       adapters: [
         {
@@ -74,7 +79,7 @@ export function createScooterSharingProvider(options: {
           kind: "proprietary",
           fetch: async (bounds) => ({
             stations: [],
-            vehicles: await options.searchFelyx(bounds),
+            vehicles: await options.searchFelyx(bounds, resolveContributors(["felyx"])),
           }),
         },
         {

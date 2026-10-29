@@ -1,217 +1,179 @@
 ---
 title: Admin panel
-description: A tour of /admin — how access is gated and what each section of the operations surface is for.
+description: Access the administration panel and choose the tools for your operator task.
 sidebar_position: 1
 ---
 
 # Admin panel
 
-The admin panel at `/admin` is the operations surface for everything that
-doesn't belong on the user-facing map: managing services and integrations,
-installing community extensions, looking after users, watching system health,
-and tuning instance settings. It runs inside the same web app as the map, but
-behind a role check — ordinary users never see it.
+Open `/admin` after signing in with an administrator account. Use it to manage
+users, integrations, extensions, services and privacy requests.
 
-This page is a map of the panel. Each section below is a one- or two-line tour;
-where a subsystem has its own page, that's where the detail lives.
+For a new deployment, [create and promote the first
+administrator](./users-and-access.md#the-first-admin), then configure email and
+review the instance settings.
 
 ## How access works
 
-Two layers gate the panel, and they line up.
+The browser checks the session before rendering administration pages. The API
+enforces permissions separately:
 
-- **In the browser**, the `/admin` route checks your session before it renders.
-  If you're not signed in, or your account doesn't have the `admin` role, you're
-  redirected back to the map. Roles are managed in [Users and
-  access](./users-and-access.md) — the first account on a fresh instance is
-  promoted to admin during setup.
-- **On the API**, every admin endpoint runs behind a `requireAdmin` check that
-  re-verifies the session and role on the server, so a forged client can't reach
-  the data the panel shows. Each state-changing action is also written to the
-  audit log with the actor and target (see [Monitoring](./monitoring.md)).
+| Role            | Access                                                                             |
+| --------------- | ---------------------------------------------------------------------------------- |
+| `user`          | Personal account features; no administration pages                                 |
+| `privacy_admin` | Privacy casework at `/admin/privacy`; no general operations or deployment settings |
+| `admin`         | Full administration, including privacy setup and role management                   |
+
+A privacy administrator opening a general administration page is redirected to
+privacy casework. See [Users and access](./users-and-access.md) for assigning
+roles and [Data-subject requests](./data-subject-requests.md) for privacy work.
 
 ### The local admin escape hatch
 
-There's one deliberate bypass for tooling. A request that arrives over the
-**loopback interface** (`127.0.0.1` / `::1`) from a process on the same host is
-treated as admin without a session — this is how the `openmapx` CLI calls admin
-endpoints without first acquiring login cookies. The trust assumption is that
-anyone with a shell on the API host already has the API's own level of access.
+Some CLI commands call the admin API without a browser session. This requires
+both an actual loopback TCP peer (`127.0.0.1`, `::1`, or its IPv4-mapped form)
+and the `x-openmapx-local-admin` header. `X-Forwarded-For` cannot grant access.
 
-The short-circuit reads the real TCP peer address (not a spoofable
-`X-Forwarded-For` header) and, to block localhost CSRF, requires a custom
-`x-openmapx-local-admin` header that browsers can't set on a cross-origin form.
-In production you set `OPENMAPX_LOCAL_ADMIN_TOKEN` so the header's value must
-match. On a multi-tenant host where loopback isn't a trust boundary, disable the
-bypass entirely with `OPENMAPX_DISABLE_LOCALHOST_AUTH=1`.
+In production, configure `OPENMAPX_LOCAL_ADMIN_TOKEN` on the API and in the CLI
+environment. Without a token, production rejects this shortcut. Development
+accepts a present, empty header when no token is configured. Set
+`OPENMAPX_DISABLE_LOCALHOST_AUTH=1` to disable it on a host where other tenants
+can reach loopback. A remote API URL and token alone do not satisfy the peer
+check. Privacy approvals and privacy-role changes require an attributable
+signed-in administrator and reject the synthetic loopback identity.
+
+The `openmapx users` recovery commands use Docker and PostgreSQL directly;
+they do not use this HTTP shortcut.
 
 ## Self-hosted vs. hosted
 
-The panel adapts to how the instance is deployed. When OpenMapX is running its
-own Docker stack, the **Services** section (and its sub-pages) appears, because
-those tools drive `docker compose` on the host. On a managed deployment with no
-Docker control plane, that section is hidden — there are no containers for the
-panel to start or stop. Everything else in the sidebar is present either way.
+Services and Maintenance appear when the deployment exposes Docker host control
+through the operations agent. On a deployment without that control plane, use
+the host's deployment tooling for container operations. Docker sockets and
+registry credentials belong to the operations agent.
 
 ## The sections
 
-The sidebar lists each area of the panel. Here's what each one is for.
-
 ### Overview
 
-The landing dashboard. It rolls up system health, user counts, integration
-status (enabled, unhealthy, missing credentials), and — on a self-hosted
-instance — running service counts, alongside an **attention** list of things
-that need a look: failing health checks, failed jobs, unconfigured credentials.
-It's the page to open first when something feels off, and it links out to the
-full `/status` health snapshot (see [Monitoring](./monitoring.md)).
+Start here when a feature fails. The dashboard shows health, user and integration
+counts, failed jobs, missing credentials and, where available, service counts.
+Open `/status` for the public health snapshot or **Activity** for execution logs.
 
 ### Users
 
-Better Auth user management — list and search accounts, view a single user's
-sessions, set roles, ban, and impersonate. This is where admin access itself is
-granted. See [Users and access](./users-and-access.md).
+Search accounts, edit names and roles, inspect or revoke sessions, ban users,
+send password-reset email and impersonate an account for support. See
+[Users and access](./users-and-access.md).
 
 ### Integrations
 
-The list of every loaded integration — the app-level features (geocoding,
-routing, transit, weather, and the rest) — with their domains, enabled state,
-health, and whether their credentials and required services are satisfied. Click
-into one to edit its config, set secrets, and bind it to a backend service; a
-bulk page configures every integration at once. See [Integrations
-administration](./integrations-administration.md).
+Enable features, edit non-secret configuration, set credentials, select
+capability bindings and run health checks. See
+[Integrations administration](./integrations-administration.md).
 
 ### Extensions
 
-The unified extension store: browse, install, update, and remove third-party
-extensions — integrations, services, and bundles of both — across **Browse**,
-**Installed**, and **Sources** tabs. Each entry shows its trust tier
-(built-in / verified / community) and, for services, a security rating before you
-confirm. See [Community extensions](./community-extensions.md).
+Use **Browse**, **Installed** and **Sources** to inspect and manage community
+integrations, services and bundles. Review the exact service commit, effective
+host ports and security rating before confirming. A verified catalog entry is
+not a security audit. See [Community extensions](./community-extensions.md).
 
 ### Services _(self-hosted only)_
 
-The backend control plane, with sub-pages for the day-to-day work:
+- **Catalog:** service selection, container state, configuration, credentials
+  and lifecycle actions.
+- **Compose preview:** generated Compose configuration and stack actions.
+- **Data workflows:** source acquisition, transit publication, engine builds,
+  Overture, search indexes and map-place publication. Forms and previews come
+  from the API's operation catalog; destructive operations require confirmation.
+- **Backups:** create, inspect, restore and delete retained snapshots.
 
-- **Catalog** — every installed service (built-in or extension-installed), its
-  capabilities and container state, with start/stop/restart.
-- **Compose preview** — the generated `docker-compose` file, so you can see what
-  the renderer will do before bringing the stack up.
-- **Data workflows** — the inventory of downloaded data (OSM extracts, GTFS
-  feeds, glyph fonts), GTFS import controls, and Overture Places release and
-  durable OSM↔GERS link operations. The operation cards are rendered from a
-  server-side catalog: the API declares each operation's fields, defaults,
-  validation, and risk level, and the form only mirrors that contract. Queueing
-  an operation first asks the API for a preview of what it will do; destructive
-  operations add an explicit warning to that confirmation step.
-- **Backups** — the on-disk snapshot manager. See [Backup and
-  restore](./backup-and-restore.md).
-
-The full picture of services and the `openmapx` CLI that backs these pages is in
-[Services administration](./services-administration.md) and [Managing
-services](../install/managing-services.md).
+See [Services administration](./services-administration.md) for procedures.
 
 ### Maintenance _(self-hosted only)_
 
-Stages current core images without restarting containers, compares them with
-the running application, and updates Data Manager, Web, API, Ops Agent, and
-Transitous Runner in a controlled order. Updates create a database backup by default
-and checkpoint the operation before replacing the API, so the new API process can
-finalize the job after its migrations succeed. The pre-update backup is recommended
-but optional in the confirmation dialog. The same page runs the CLI-equivalent deep service probes.
+Check the selected release against running image digests, download an update,
+or run deep service probes. A release check does not download application images.
+Updates offer a pre-update database backup, replace the operations agent when
+needed, and checkpoint progress before replacing the API so the new process can
+finish after migrations. Inspect the job outcome before retrying an interrupted
+update. See [Upgrading](../install/upgrading.md).
+
+You can start the update as soon as a check finishes. Checks have their own
+once-per-30-seconds throttle, separate from the one shared by updates and
+diagnostics. If the API rejects a request as too frequent, the page says so, keeps the update
+confirmation open with your choices, and re-enables the action when the server's wait
+is over. Nothing is retried automatically; press the button again when it is available.
 
 ### Transit
 
-The public-transit data pipeline: the Transitous feed snapshot, audited catalog
-pin changes, per-feed import state and expiry, provider health, and the recent
-and in-flight pipeline jobs that keep the transit engine's data fresh.
+Inspect the Transitous catalog pin, feed/import state, provider health and
+pipeline jobs. Pin changes require review. See
+[MOTIS operations profiles](./motis-operations-profiles.md) and
+[Public transit](../features/public-transit.md).
 
 ### Coverage & freshness
 
-The evidence-backed `/admin/coverage` view answers which registered operations
-have usable data in a selected region. Its seven domain columns cover Addresses,
-POIs, Transit, EV, Parking, Fuel, and Traffic. It keeps publication, freshness,
-runtime, geographic relation, and usage-rights evidence separate; **Unknown**
-means an observation is missing or cannot be verified, not that the capability
-is absent. See [Coverage & freshness](./coverage-freshness.md) for the clocks,
-limitations, and repair links behind the table.
+`/admin/coverage` reports eight domains: Addresses, POIs, Transit, EV, Parking,
+Fuel, Cameras and Traffic. Publication, freshness, runtime, geography and rights
+remain separate observations. **Unknown** means evidence is missing or cannot
+be verified. See [Coverage & freshness](./coverage-freshness.md).
 
 ### Cache
 
-The Redis/Valkey cache inspector — list the cache namespaces (geocoding
-results, provider responses, and the rest) with their key counts, and clear one
-namespace or the whole cache. Handy after switching a provider or credential so
-stale responses don't linger.
+Inspect and clear application-owned Redis/Valkey namespaces. **Clear all** is
+limited to OpenMapX cache prefixes; it does not run `FLUSHDB` or `FLUSHALL` on a
+possibly shared Redis instance. Clear only the affected namespace when possible.
 
 ### Activity
 
-The audit and jobs view: the running and recently finished background jobs
-(installs, reloads, restarts, imports) with their logs, and the audit log of
-every state-changing admin action — who did what, to what, and when. Opening a
-running application job streams its status, progress, and log lines live; a
-small chip next to the status shows whether the view is live, reconnecting, or
-has fallen back to polling. See [Monitoring](./monitoring.md).
+Follow queued jobs and inspect **Audit Log** or **Application Logs**. Application
+job details stream live with reconnect and polling fallback; Data Manager jobs
+use polling. A queued response is acceptance, so wait for a terminal job result.
+See [Monitoring](./monitoring.md).
 
 ### Settings
 
-Instance-wide configuration, grouped into **General** (instance name and URL,
-default locale, default map center), **Authentication** (email verification,
-session duration, two-factor, password policy), **Email** (the From address and
-the EmailLabs / Lettermint / SMTP provider that sends it, with a test-send
-button), **Map** (the base-style provider and its key), and **Data-Use Policy**
-(toggles that include or exclude non-commercial-only and undocumented-terms data
-sources).
+Edit instance details, email, map settings, data-use policy and legal/controller
+facts. Valid environment values take precedence over saved values, then defaults.
+Environment overrides appear read-only; empty or invalid environment values do
+not necessarily override a valid saved setting. JSON export excludes secrets.
 
-Each setting resolves through the same three-layer cascade the rest of OpenMapX
-uses — an environment variable wins over a value saved here, which wins over the
-built-in default — and the form shows which source is in effect for every field.
-A field pinned by an env var is read-only, because the environment always wins.
-Settings can be exported and re-imported as JSON (secrets excluded). For how the
-cascade and `infra/docker/.env` fit together, see
-[Configuration](../install/configuration.md).
+The Authentication group exposes saved policy fields, but the current Better
+Auth configuration does not consume its email-verification, session-duration,
+two-factor or minimum-password-length values. Do not rely on those controls to
+change enforcement. See [Authentication methods](./users-and-access.md#authentication-methods).
 
 ### Privacy setup
 
-Full administrators can open **Privacy setup** (`/admin/privacy-setup`) to
-configure controller details, email, retention and privacy sources using the
-same settings editor. The readiness checklist links failed checks to their
-settings or operational tools. Independent reviewers record their decisions
-against the current evidence version; a changed version requires a fresh
-review. Privacy administrators can handle cases and inspect readiness, while
-deployment settings remain restricted to full administrators. See
-[Data-subject requests](./data-subject-requests.md) for the setup and release
-requirements.
+Full administrators use `/admin/privacy-setup` for controller details, email,
+retention, source declarations and independent reviews. Privacy administrators
+handle cases and inspect readiness through privacy casework. A release install
+does not approve generation for the deployment. See
+[Data-subject requests](./data-subject-requests.md).
 
 ## CLI coverage and deliberate exclusions
 
-The panel covers the routine operator workflows while keeping development-only
-and unusually destructive primitives in the CLI.
+| Task                                                       | Admin location            |
+| ---------------------------------------------------------- | ------------------------- |
+| Service selection, status, lifecycle, builds and logs      | Services                  |
+| Release check/update and deep probes                       | Maintenance               |
+| Source downloads, transit sync, indexes, links and cleanup | Services → Data workflows |
+| Extension install/update/removal                           | Extensions                |
+| Account administration                                     | Users                     |
+| Snapshot create/list/restore/delete                        | Services → Backups        |
+| Application cache clearing                                 | Cache                     |
+| Transitous pin inspection and approval                     | Transit                   |
 
-| CLI area                                                                        | Admin equivalent                      |
-| ------------------------------------------------------------------------------- | ------------------------------------- |
-| Service discovery, selection, lifecycle, builds, status, and logs               | **Services** catalog and detail pages |
-| Core image pull/update and deep checks                                          | **Maintenance**                       |
-| OSM, GTFS, styles, builds, links, cleanup, and Overture full sync/resume/status | **Services → Data workflows**         |
-| Extension browse/install/update/remove                                          | **Extensions**                        |
-| User roles and account administration                                           | **Users**                             |
-| Backup create/list/restore/delete                                               | **Services → Backups**                |
-| Cache inspection and safe namespace clearing                                    | **Cache**                             |
-| Transitous lock inspection and audited pin bump                                 | **Transit**                           |
-
-Integration scaffolding, validation, building, and packaging remain CLI-only
-because they are developer workflows, not production administration. Raw
-`compose down --volumes`, unrestricted Redis `FLUSHDB`, and individual low-level
-Overture pull/ingest/extract phases are also deliberately not exposed; the panel
-offers the safer orchestrated operation instead.
+Integration scaffolding, validation, building and packaging remain developer CLI
+workflows. The panel excludes `compose down --volumes`, unrestricted Redis flushes
+and individual low-level Overture phases. Use the documented orchestrated data
+operations for routine administration.
 
 ## Where to go next
 
-- **[Services administration](./services-administration.md)** — the backend
-  control plane in depth.
-- **[Integrations administration](./integrations-administration.md)** —
-  configuring features, secrets, and capability bindings.
-- **[Community extensions](./community-extensions.md)** — installing from the
-  unified Extensions store.
-- **[Users and access](./users-and-access.md)** — roles, sessions, and
-  moderation.
-- **[Monitoring](./monitoring.md)** — health, jobs, and the audit log.
-- **[Backup and restore](./backup-and-restore.md)** — snapshots and recovery.
+Choose [Services](./services-administration.md),
+[Integrations](./integrations-administration.md),
+[Extensions](./community-extensions.md), [Users](./users-and-access.md),
+[Monitoring](./monitoring.md) or [Backup and restore](./backup-and-restore.md).

@@ -135,9 +135,10 @@ describe("Open-Meteo weather provider", () => {
     mockFetch.mockResolvedValueOnce(mockOk(data));
 
     const hourly = await getProvider().getHourlyForecast(COORDS, 2);
+    expect(hourly.source).toBe("open-meteo");
 
-    expect(hourly).toHaveLength(2);
-    expect(hourly[0]).toEqual({
+    expect(hourly.points).toHaveLength(2);
+    expect(hourly.points[0]).toEqual({
       time: "2026-03-10T10:00",
       temperature: 10,
       weatherCode: 1,
@@ -148,13 +149,16 @@ describe("Open-Meteo weather provider", () => {
       cloudCover: 10,
       pressure: 1015,
     });
-    expect(hourly[1]?.weatherCode).toBe(2);
+    expect(hourly.points[1]?.weatherCode).toBe(2);
     expect(String(mockFetch.mock.calls[0]?.[0])).toContain("&hourly=temperature_2m");
   });
 
   it("returns an empty hourly array when the response omits hourly data", async () => {
     mockFetch.mockResolvedValueOnce(mockOk(currentResponse()));
-    expect(await getProvider().getHourlyForecast(COORDS, 12)).toEqual([]);
+    expect(await getProvider().getHourlyForecast(COORDS, 12)).toEqual({
+      source: "open-meteo",
+      points: [],
+    });
   });
 
   it("maps daily arrays including sunrise/sunset and slices to the requested days", async () => {
@@ -174,9 +178,10 @@ describe("Open-Meteo weather provider", () => {
     mockFetch.mockResolvedValueOnce(mockOk(data));
 
     const daily = await getProvider().getDailyForecast(COORDS, 2);
+    expect(daily.source).toBe("open-meteo");
 
-    expect(daily).toHaveLength(2);
-    expect(daily[0]).toEqual({
+    expect(daily.points).toHaveLength(2);
+    expect(daily.points[0]).toEqual({
       date: "2026-03-10",
       weatherCode: 61,
       temperatureMax: 12,
@@ -186,12 +191,15 @@ describe("Open-Meteo weather provider", () => {
       sunrise: "2026-03-10T06:30",
       sunset: "2026-03-10T18:00",
     });
-    expect(daily[1]?.weatherCode).toBe(73);
+    expect(daily.points[1]?.weatherCode).toBe(73);
     expect(String(mockFetch.mock.calls[0]?.[0])).toContain("&daily=weather_code");
   });
 
   it("returns an empty daily array when the response omits daily data", async () => {
     mockFetch.mockResolvedValueOnce(mockOk(currentResponse()));
-    expect(await getProvider().getDailyForecast(COORDS, 5)).toEqual([]);
+    expect(await getProvider().getDailyForecast(COORDS, 5)).toEqual({
+      source: "open-meteo",
+      points: [],
+    });
   });
 });

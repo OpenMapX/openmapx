@@ -1,8 +1,8 @@
 import type { BBox } from "@openmapx/core";
 import {
+  captureTransitContributors,
   type IntegrationContext,
   type MetricsRecorder,
-  mapSettledWithConcurrency,
   type ProviderCallContext,
   type ProviderCallOutcome,
   type ProviderHealthHandle,
@@ -10,6 +10,7 @@ import {
   type TripPlanRequest,
   type TripRefreshRequest,
 } from "@openmapx/integration-framework";
+import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import type { TravelTimeField } from "@openmapx/mobility-core/isoline";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
@@ -35,9 +36,10 @@ import type {
   TransitReachabilitySurface,
   TransitReachabilitySurfaceRequest,
 } from "@openmapx/mobility-core/transit-reachability";
+import { pMapSettled } from "p-map";
 import { deduplicateStops, isTripNumber } from "./dedup.js";
 import { enrichDeparturesWithRealtime } from "./realtime.js";
-import { emptyResult, mergeAttributions, mergeFreshness } from "./result-merge.js";
+import { emptyResult, mergeFreshness } from "./result-merge.js";
 
 function bboxesOverlap(a: BBox, b: BBox): boolean {
   return a[2] > b[0] && b[2] > a[0] && a[3] > b[1] && b[3] > a[1];
@@ -127,9 +129,6 @@ function supportsPlanningRequest(provider: TransitProvider, required: string[]):
  * e.g. the per-operator dynamic-registry providers that don't serve the place.
  * Crediting those would attribute data they never contributed.
  */
-function resultsWithData<T>(results: MobilityResult<T[]>[]): MobilityResult<T[]>[] {
-  return results.filter((r) => r.data.length > 0);
-}
 
 /**
  * Local fallback when the host doesn't wire a ProviderHealthHandle (e.g.
@@ -212,7 +211,17 @@ async function timed<T>(
 ): Promise<{ ok: true; value: T } | { ok: false; error: unknown }> {
   const start = performance.now();
   try {
-    const value = await fn();
+    const rawValue = await fn();
+    const value =
+      rawValue && typeof rawValue === "object" && "data" in rawValue && "attributions" in rawValue
+        ? ({
+            ...rawValue,
+            data: captureTransitContributors(
+              rawValue.data,
+              rawValue.attributions as import("@openmapx/mobility-core/attribution").Attribution[],
+            ),
+          } as T)
+        : rawValue;
     const elapsed = performance.now() - start;
     await health.recordSuccess(providerId, elapsed);
     metrics.recordProviderCall({ providerId, method, outcome: classifyOutcome(value) }, elapsed);
@@ -374,10 +383,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
 
     return {
       data: filtered,
-      attributions: mergeAttributions(
-        ctx.attributionIndex,
-        ...resultsWithData(ok).map((r) => r.attributions),
-      ),
+      attributions: contributorsForRecords(filtered),
       freshness: mergeFreshness(...ok.map((r) => r.freshness)),
     };
   }
@@ -393,14 +399,13 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     minutes: number,
   ): Promise<MobilityResult<Departure[]>> {
     const provider = await resolveByPrefix(stopId);
-    if (!provider?.getDepartures) return emptyResult<Departure[]>([], { hasRealtimeData: true });
+    if (!provider?.getDepartures) throw new Error("Transit timetable source unavailable");
     const fn = provider.getDepartures.bind(provider);
     const outcome = await timed(providerHealth, metricsRecorder, provider.id, "getDepartures", () =>
       fn(stopId, minutes),
     );
-    const base = outcome.ok
-      ? outcome.value
-      : emptyResult<Departure[]>([], { hasRealtimeData: true });
+    if (!outcome.ok) throw new Error("Transit timetable source unavailable");
+    const base = outcome.value;
     return enrichDeparturesWithRealtime({ ctx, timed: boundTimed }, base, { stopId });
   }
 
@@ -409,14 +414,13 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     minutes: number,
   ): Promise<MobilityResult<Departure[]>> {
     const provider = await resolveByPrefix(stopId);
-    if (!provider?.getArrivals) return emptyResult<Departure[]>([], { hasRealtimeData: true });
+    if (!provider?.getArrivals) throw new Error("Transit timetable source unavailable");
     const fn = provider.getArrivals.bind(provider);
     const outcome = await timed(providerHealth, metricsRecorder, provider.id, "getArrivals", () =>
       fn(stopId, minutes),
     );
-    const base = outcome.ok
-      ? outcome.value
-      : emptyResult<Departure[]>([], { hasRealtimeData: true });
+    if (!outcome.ok) throw new Error("Transit timetable source unavailable");
+    const base = outcome.value;
     return enrichDeparturesWithRealtime({ ctx, timed: boundTimed }, base, { stopId });
   }
 
@@ -440,7 +444,11 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       0,
       limit,
     );
-    return { data: deduped, attributions: raw.attributions, freshness: raw.freshness };
+    return {
+      data: deduped,
+      attributions: contributorsForRecords(deduped),
+      freshness: raw.freshness,
+    };
   }
 
   /**
@@ -459,15 +467,23 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       : await filterHealthy(collectProviders().sort((a, b) => a.priority - b.priority));
     const withSearch = baseProviders.filter((p) => p.searchStopsByName);
 
-    const results = await mapSettledWithConcurrency(withSearch, 4, async (p) => {
-      context?.signal.throwIfAborted();
-      if (!p.searchStopsByName) return null;
-      const fn = p.searchStopsByName.bind(p);
-      const outcome = await timed(providerHealth, metricsRecorder, p.id, "searchStopsByName", () =>
-        fn(query, limit, context),
-      );
-      return outcome.ok ? outcome.value : null;
-    });
+    const results = await pMapSettled(
+      withSearch,
+      async (p) => {
+        context?.signal.throwIfAborted();
+        if (!p.searchStopsByName) return null;
+        const fn = p.searchStopsByName.bind(p);
+        const outcome = await timed(
+          providerHealth,
+          metricsRecorder,
+          p.id,
+          "searchStopsByName",
+          () => fn(query, limit, context),
+        );
+        return outcome.ok ? outcome.value : null;
+      },
+      { concurrency: 4, signal: context?.signal },
+    );
 
     const ok = results
       .map((r) => (r.status === "fulfilled" ? r.value : null))
@@ -475,10 +491,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
 
     return {
       data: ok.flatMap((r) => r.data),
-      attributions: mergeAttributions(
-        ctx.attributionIndex,
-        ...resultsWithData(ok).map((r) => r.attributions),
-      ),
+      attributions: contributorsForRecords(ok.flatMap((r) => r.data)),
       freshness: mergeFreshness(...ok.map((r) => r.freshness)),
     };
   }
@@ -522,7 +535,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
         recordDecision("plan", provider, "selected");
         return {
           data: { ...first, provider: first.provider ?? provider.prefix.replace(/:$/, "") },
-          attributions: res?.attributions ?? [],
+          attributions: contributorsForRecords(first.itineraries),
           freshness: res?.freshness ?? freshnessNow(),
         };
       }
@@ -537,7 +550,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
             itineraries: [],
             provider: provider.prefix.replace(/:$/, ""),
           },
-          attributions: res?.attributions ?? [],
+          attributions: [],
           freshness: res?.freshness ?? freshnessNow(),
         };
       }
@@ -592,10 +605,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
 
     return {
       data: ok.flatMap((r) => r.data),
-      attributions: mergeAttributions(
-        ctx.attributionIndex,
-        ...resultsWithData(ok).map((r) => r.attributions),
-      ),
+      attributions: contributorsForRecords(ok.flatMap((r) => r.data)),
       freshness: mergeFreshness(...ok.map((r) => r.freshness)),
     };
   }
@@ -620,10 +630,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
 
     return {
       data: ok.flatMap((r) => r.data),
-      attributions: mergeAttributions(
-        ctx.attributionIndex,
-        ...resultsWithData(ok).map((r) => r.attributions),
-      ),
+      attributions: contributorsForRecords(ok.flatMap((r) => r.data)),
       freshness: mergeFreshness(...ok.map((r) => r.freshness)),
     };
   }
@@ -741,6 +748,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       if (byRouteId.has(dep.route.id)) continue;
       if (isTripNumber(dep.route.shortName)) continue;
       byRouteId.set(dep.route.id, {
+        contributors: dep.route.contributors ?? dep.contributors,
         id: dep.route.id,
         shortName: dep.route.shortName,
         longName: dep.route.longName,
@@ -751,7 +759,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     }
     return {
       data: Array.from(byRouteId.values()),
-      attributions: depRes?.attributions ?? [],
+      attributions: contributorsForRecords(byRouteId.values()),
       freshness: depRes?.freshness ?? freshnessNow(),
     };
   }
@@ -878,9 +886,11 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
           lat: number;
           lng: number;
           platform?: string;
+          contributors?: readonly import("@openmapx/mobility-core/attribution").Attribution[];
         }>;
       }
     ).stops.map((s, i) => ({
+      contributors: s.contributors,
       id: s.stopId,
       name: s.name,
       lat: s.lat,
@@ -892,11 +902,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     }));
     return {
       data: stops,
-      attributions: mergeAttributions(
-        ctx.attributionIndex,
-        depRes?.attributions ?? [],
-        journeyRes?.attributions ?? [],
-      ),
+      attributions: contributorsForRecords(stops),
       freshness: mergeFreshness(
         depRes?.freshness ?? freshnessNow(),
         journeyRes?.freshness ?? freshnessNow(),

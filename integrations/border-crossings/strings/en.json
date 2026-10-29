@@ -1,0 +1,66 @@
+{
+  "name": "Border crossings",
+  "description": "Land border crossings and how long their queues are, each way across",
+  "fallbackName": "Border crossing",
+  "summary": {
+    "two": "{first} · {second}",
+    "three": "{first} · {second} · {third}",
+    "mode": "{mode}: {wait}",
+    "closed": "Closed",
+    "unknown": "No current wait times"
+  },
+  "into": {
+    "CA": "Into Canada: {wait}",
+    "US": "Into the US: {wait}",
+    "MX": "Into Mexico: {wait}",
+    "other": "Into {country}: {wait}"
+  },
+  "section": {
+    "into": {
+      "CA": "Into Canada",
+      "US": "Into the United States",
+      "MX": "Into Mexico",
+      "other": "Into {country}"
+    },
+    "waits": "Wait times"
+  },
+  "caption": {
+    "updated": "Updated"
+  },
+  "text": {
+    "noQueues": "No wait times are published for this crossing."
+  },
+  "mode": {
+    "passenger": "Cars",
+    "commercial": "Trucks",
+    "pedestrian": "Pedestrians",
+    "bus": "Buses",
+    "rail": "Trains"
+  },
+  "program": {
+    "standard": "Standard lanes",
+    "trusted_traveller": "NEXUS/SENTRI",
+    "ready_lane": "Ready Lane",
+    "fast": "FAST"
+  },
+  "queue": {
+    "program": "{mode}, {program}"
+  },
+  "wait": {
+    "none": "No delay",
+    "delayed": "Delays",
+    "minutes": "{minutes, number} min",
+    "hours": "{hours, number} h {minutes, number} min",
+    "wholeHours": "{hours, number} h",
+    "closed": "Closed",
+    "unknown": "Not stated",
+    "stale": "No current wait",
+    "withLanes": "{wait} · {lanes, plural, one {# lane} other {# lanes}} open"
+  },
+  "row": {
+    "status": "Status",
+    "location": "Location",
+    "provider": "Provider",
+    "providers": "Providers"
+  }
+}

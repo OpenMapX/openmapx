@@ -38,7 +38,9 @@ describe("createLiveTransitOrchestrator", () => {
       log: { warn: vi.fn() },
     } as never);
 
-    await expect(orchestrator.getVehicles([0, 0, 1, 1])).resolves.toEqual([expected]);
+    await expect(orchestrator.getVehicles([0, 0, 1, 1])).resolves.toEqual([
+      { ...expected, contributors: [] },
+    ]);
   });
 });
 
@@ -72,4 +74,33 @@ describe("preferObservedByTrip", () => {
     const interpolated = vehicle({ id: "ms:6", tripId: "trip-6", positionKind: "interpolated" });
     expect(preferObservedByTrip([observed, interpolated])).toHaveLength(2);
   });
+});
+
+it("captures serving vehicle receipts before observed replacements discard estimates", async () => {
+  const a = { sourceId: "a", name: "A" };
+  const b = { sourceId: "b", name: "B" };
+  const providers = [a, b].map((receipt, i) => ({
+    id: receipt.sourceId,
+    priority: i,
+    coverage: { all: true },
+    getVehiclePositions: async () => ({
+      data: [
+        vehicle({
+          id: `${i}`,
+          tripId: "same",
+          sourceId: receipt.sourceId,
+          positionKind: i === 0 ? "interpolated" : "observed",
+        }),
+      ],
+      attributions: [receipt],
+      freshness: {},
+    }),
+  })) as RealtimeProvider[];
+  const orchestrator = createLiveTransitOrchestrator({
+    getIntegrationsByDomain: () => [{ providers: new Map([["live-transit", providers]]) }],
+    log: { warn: vi.fn() },
+  } as never);
+  const out = await orchestrator.getVehicles([0, 0, 1, 1]);
+  expect(out).toHaveLength(1);
+  expect(out[0].contributors).toEqual([b]);
 });

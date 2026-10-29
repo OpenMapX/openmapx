@@ -1,7 +1,7 @@
 import { existsSync, statfsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { atomicWriteJsonSync } from "../../utils/atomic-write.js";
-import type { MotisOperationsPolicy } from "./operations-profile.js";
+import { isTransitousHostname, type MotisOperationsPolicy } from "./operations-profile.js";
 import { writeTransitSourceManifest } from "./source-manifest.js";
 import type { StageFn, StageResult } from "./types.js";
 
@@ -118,7 +118,7 @@ export function runMotisPreflight(input: RunMotisPreflightInput): MotisPreflight
         : (input.sourceUrls ?? []);
     const hosted = urls.filter((url) => {
       try {
-        return new URL(url).hostname.endsWith("transitous.org");
+        return isTransitousHostname(new URL(url).hostname);
       } catch {
         return true;
       }

@@ -81,22 +81,53 @@
       "sourceId": "rainviewer",
       "name": "RainViewer",
       "url": "https://www.rainviewer.com/",
-      "license": "Proprietary (personal/educational use only)",
-      "licenseUrl": "https://www.rainviewer.com/terms.html",
       "commercialUse": "no",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.rainviewer.com/privacy.html",
       "endUserExposure": "proxied",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "RainViewer material",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "RainViewer access/account contract",
+            "license": {
+              "kind": "unknown",
+              "url": "https://www.rainviewer.com/terms.html"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://www.rainviewer.com/api.html"],
+              "reason": "FAQ says visible mandatory credit; same page terms softer request wording",
+              "compactText": "<a href=\"https://www.rainviewer.com/\">RainViewer</a>"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (personal/educational use only)",
+            "url": "https://www.rainviewer.com/terms.html"
+          }
+        ]
+      }
     },
     {
       "sourceId": "openweathermap",
       "name": "OpenWeather",
       "url": "https://openweathermap.org/",
-      "license": "ODbL",
-      "licenseUrl": "https://openweathermap.org/full-price",
       "attribution": "© <a href=\"https://openweathermap.org/\">OpenWeather</a>",
       "commercialUse": "yes",
       "providerCountry": "UK",
@@ -104,7 +135,37 @@
       "endUserExposure": "proxied",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "OpenWeather material",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0",
+              "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["content", "map"],
+              "basis": "provider-terms",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://docs.openweather.co.uk/faq"],
+              "reason": "Standard Free-Professional plan; accepted enterprise contract unreviewed",
+              "compactText": "Weather data provided by <a href=\"https://openweathermap.org/\">OpenWeather</a> (<a href=\"https://opendatacommons.org/licenses/odbl/1-0/\">ODbL-1.0</a>)",
+              "logo": "openweather"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "ODbL-1.0",
+            "url": "https://openweathermap.org/full-price"
+          }
+        ]
+      }
     }
   ]
 }

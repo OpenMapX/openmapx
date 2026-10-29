@@ -1,18 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildNetexTransitGraph,
-  listNetexCodes,
-  listNetexElementsByName,
   listSiriDeliveryStatuses,
   listSiriMonitoredStopVisitRecords,
   listSiriSituations,
   listSiriVehicleActivityRecords,
-  resolveNetexJourneyPatternForServiceJourney,
-  resolveNetexLineForServiceJourney,
-  resolveNetexQuaysForScheduledStopPoint,
-  resolveNetexRouteForServiceJourney,
-  resolveNetexScheduledStopPointsForJourneyPattern,
-  resolveNetexStopPlacesForScheduledStopPoint,
 } from "../index.js";
 
 describe("SIRI transit adapter", () => {
@@ -233,132 +224,5 @@ describe("SIRI transit adapter", () => {
         vehicleRefs: ["BUS:1"],
       }),
     ]);
-  });
-});
-
-describe("NeTEx transit graph adapter", () => {
-  it("builds a stop and journey graph with codes and ref resolution", () => {
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<PublicationDelivery xmlns="http://www.netex.org.uk/netex" version="1.0">
-  <PublicationTimestamp>2026-04-21T10:00:00Z</PublicationTimestamp>
-  <ParticipantRef>ENTUR</ParticipantRef>
-  <dataObjects>
-    <CompositeFrame id="CF:1" version="1">
-      <frames>
-        <SiteFrame id="SF:1" version="1">
-          <stopPlaces>
-            <StopPlace id="SP:1" version="1">
-              <Name>Central Station</Name>
-              <PublicCode>CEN</PublicCode>
-              <keys>
-                <KeyValue>
-                  <Key>nsrStopPlaceId</Key>
-                  <Value>NSR:StopPlace:1</Value>
-                </KeyValue>
-              </keys>
-              <quays>
-                <Quay id="Q:1" version="1">
-                  <Name>Platform 1</Name>
-                  <PublicCode>1</PublicCode>
-                </Quay>
-              </quays>
-            </StopPlace>
-          </stopPlaces>
-        </SiteFrame>
-        <ServiceFrame id="SV:1" version="1">
-          <scheduledStopPoints>
-            <ScheduledStopPoint id="SSP:1" version="1">
-              <Name>Central Point</Name>
-              <PrivateCode>STOP:1</PrivateCode>
-            </ScheduledStopPoint>
-          </scheduledStopPoints>
-          <stopAssignments>
-            <PassengerStopAssignment id="PSA:1" version="1">
-              <Order>1</Order>
-              <ScheduledStopPointRef ref="SSP:1" />
-              <QuayRef ref="Q:1" />
-            </PassengerStopAssignment>
-          </stopAssignments>
-          <lines>
-            <Line id="L:1" version="1">
-              <Name>Line 1</Name>
-              <PublicCode>1</PublicCode>
-              <TransportMode>bus</TransportMode>
-              <OperatorRef ref="OP:1" />
-            </Line>
-          </lines>
-          <routes>
-            <Route id="R:1" version="1">
-              <Name>Outbound</Name>
-              <LineRef ref="L:1" />
-              <pointsInSequence>
-                <PointOnRoute id="POR:1">
-                  <Order>1</Order>
-                  <ScheduledStopPointRef ref="SSP:1" />
-                </PointOnRoute>
-              </pointsInSequence>
-            </Route>
-          </routes>
-          <journeyPatterns>
-            <JourneyPattern id="JP:1" version="1">
-              <Name>Outbound Pattern</Name>
-              <RouteRef ref="R:1" />
-              <pointsInSequence>
-                <StopPointInJourneyPattern id="SPJP:1">
-                  <Order>1</Order>
-                  <ScheduledStopPointRef ref="SSP:1" />
-                  <ForBoarding>true</ForBoarding>
-                  <ForAlighting>true</ForAlighting>
-                </StopPointInJourneyPattern>
-              </pointsInSequence>
-            </JourneyPattern>
-          </journeyPatterns>
-          <serviceJourneys>
-            <ServiceJourney id="SJ:1" version="1">
-              <Name>Trip 1</Name>
-              <LineRef ref="L:1" />
-              <JourneyPatternRef ref="JP:1" />
-              <passingTimes>
-                <TimetabledPassingTime id="TPT:1">
-                  <Order>1</Order>
-                  <StopPointInJourneyPatternRef ref="SPJP:1" />
-                  <ArrivalTime>08:00:00</ArrivalTime>
-                  <DepartureTime>08:01:00</DepartureTime>
-                </TimetabledPassingTime>
-              </passingTimes>
-            </ServiceJourney>
-          </serviceJourneys>
-        </ServiceFrame>
-      </frames>
-    </CompositeFrame>
-  </dataObjects>
-</PublicationDelivery>`;
-
-    const stopPlace = listNetexElementsByName(xml, "StopPlace")[0];
-    const graph = buildNetexTransitGraph(xml);
-
-    expect(listNetexCodes(stopPlace)).toEqual(
-      expect.arrayContaining([
-        { type: "publicCode", value: "CEN" },
-        { key: "nsrStopPlaceId", type: "keyValue", value: "NSR:StopPlace:1" },
-      ]),
-    );
-    expect(graph.stopPlacesById["SP:1"]?.quayRefs).toEqual(["Q:1"]);
-    expect(resolveNetexQuaysForScheduledStopPoint(graph, "SSP:1").map((quay) => quay.id)).toEqual([
-      "Q:1",
-    ]);
-    expect(
-      resolveNetexStopPlacesForScheduledStopPoint(graph, "SSP:1").map(
-        (stopPlaceRecord) => stopPlaceRecord.id,
-      ),
-    ).toEqual(["SP:1"]);
-    expect(resolveNetexJourneyPatternForServiceJourney(graph, "SJ:1")?.id).toBe("JP:1");
-    expect(resolveNetexRouteForServiceJourney(graph, "SJ:1")?.id).toBe("R:1");
-    expect(resolveNetexLineForServiceJourney(graph, "SJ:1")?.id).toBe("L:1");
-    expect(
-      resolveNetexScheduledStopPointsForJourneyPattern(graph, "JP:1").map(
-        (stopPoint) => stopPoint.id,
-      ),
-    ).toEqual(["SSP:1"]);
   });
 });

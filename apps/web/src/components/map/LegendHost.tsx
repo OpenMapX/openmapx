@@ -12,9 +12,20 @@ import { useTranslations } from "next-intl";
 import { type ComponentType, lazy, Suspense, useMemo, useState } from "react";
 import { useAnyOverlayPanelOpen } from "@/integration-api/overlay/useOverlayStoreState";
 import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
-import { LEGEND_TOGGLE_WIDTH, useMapFooterCenterCovered } from "@/lib/mapFooterCenter";
-import { useMapObstructionInsets } from "@/lib/mapObstructions";
+import {
+  LEGEND_TOGGLE_WIDTH,
+  MAP_FOOTER_OBSTRUCTION_ID,
+  useMapFooterBox,
+  useMapFooterCenterCovered,
+} from "@/lib/mapFooterCenter";
+import { useMapObstructionExtent } from "@/lib/mapObstructions";
 import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
+import {
+  planAboveFooter,
+  planSheetFollow,
+  sheetFollowSx,
+  useSheetFollowTrack,
+} from "@/lib/sheetFollow";
 import { DeclarativeLegend } from "./overlay/DeclarativeLegend";
 import { dedupeSharedMapLayers } from "./sharedIntegrationLayer";
 
@@ -89,8 +100,10 @@ export function LegendHost() {
   // so there is no per-context clearance to keep in sync. 0 on desktop.
   const vh = useWindowHeight();
   const followHeight = useMobilePanelClearance(vh);
-  const { bottom: bottomInset } = useMapObstructionInsets();
+  const footerExtent = useMapObstructionExtent(MAP_FOOTER_OBSTRUCTION_ID);
   const footerCoversCenter = useMapFooterCenterCovered();
+  const footerBox = useMapFooterBox();
+  const followTrack = useSheetFollowTrack();
 
   // Declarative legends (manifest `frontend.overlay.legend` data) are rendered by
   // the host; they take precedence over the code legend path.
@@ -111,14 +124,27 @@ export function LegendHost() {
 
   if (!anyPanelOpen && !anyStandaloneToolbarActive) return null;
 
-  // The tab normally sits flush on the map's bottom edge, over the gap between
-  // the footer's legal links and credits. Only when footer text runs under it
-  // (long or wrapped overlay credits) does the stack stand on the footer instead.
-  const footerClearance = footerCoversCenter && bottomInset > 0 ? `${bottomInset}px` : FLUSH_BOTTOM;
+  // The tab normally sits flush on the map's bottom edge (on phones the top of
+  // the sheet), over the gap between the footer's legal links and credits.
+  // Only when footer text runs under it (long or wrapped credits, as on most
+  // phones) does the stack stand on the footer instead, which on phones rides
+  // on top of the sheet. Both edges are read as they move, and `bottom` is not
+  // transitioned: an eased transition restarted on every frame of a sheet drag
+  // lags the sheet and the footer by a few hundred pixels.
+  const onFooter = footerCoversCenter && footerExtent > 0 ? `${footerExtent}px` : null;
+  // While a sheet drives the follow, the same two edges come from its track
+  // and the tab rides them on the compositor (see lib/sheetFollow).
+  const follow = !followTrack
+    ? null
+    : footerCoversCenter
+      ? planAboveFooter(followTrack, footerBox, 0, 0)
+      : planSheetFollow(followTrack, { offset: 0, min: 0 });
   const bottom = {
     // The visible sheet height already includes its safe-area padding.
-    xs: followHeight > 0 ? `${followHeight}px` : footerClearance,
-    sm: footerClearance,
+    xs: follow
+      ? `${follow.base}px`
+      : (onFooter ?? (followHeight > 0 ? `${followHeight}px` : FLUSH_BOTTOM)),
+    sm: onFooter ?? FLUSH_BOTTOM,
   };
 
   return (
@@ -128,7 +154,9 @@ export function LegendHost() {
         bottom,
         left: { xs: "50%", sm: shifted ? `calc(50% + ${PANEL_WIDTH / 2}px)` : "50%" },
         transform: "translateX(-50%)",
-        transition: "left 0.25s ease, bottom 0.25s ease",
+        // Matches the footer's own `left` transition as the sidebar shifts.
+        transition: "left 0.25s ease",
+        ...sheetFollowSx(follow),
         zIndex: 10,
         // column-reverse: the toggle (first child) sits flush at the bottom edge
         // and the legends stack upward above it.

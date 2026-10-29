@@ -1,6 +1,7 @@
 import type { TrustedConfigurationPayload } from "@openmapx/core/ops";
 import {
   OPS_OPERATION_KINDS,
+  OPS_PUBLIC_ERROR_MESSAGES,
   type OpsOperation,
   type OpsOperationKind,
   type OpsResultFor,
@@ -14,10 +15,27 @@ export class OpsNotWiredError extends Error {
   }
 }
 
+export class OpsHostUpdateRequiredError extends Error {
+  constructor() {
+    super(OPS_PUBLIC_ERROR_MESSAGES.host_update_required);
+    this.name = "OpsHostUpdateRequiredError";
+  }
+}
+
+/** The agent cannot be replaced while it runs other operations. */
+export class OpsAgentBusyError extends Error {
+  constructor() {
+    super(OPS_PUBLIC_ERROR_MESSAGES.busy);
+    this.name = "OpsAgentBusyError";
+  }
+}
+
 export interface OpsExecutionContext {
   signal: AbortSignal;
   emitLog(stream: "stdout" | "stderr", message: string): void;
   claim: OpsTrustedClaim;
+  /** Unfinished operations other than this one; replacing the agent would end them. */
+  otherActiveOperations?(): number;
 }
 
 export interface OpsTrustedClaim {

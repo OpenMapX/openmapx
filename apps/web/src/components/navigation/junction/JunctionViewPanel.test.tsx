@@ -1,5 +1,8 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { installMeasuredLayout } from "@/test/measuredLayout";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
@@ -184,7 +187,7 @@ describe("JunctionViewPanel photo integration", () => {
     fovDeg: 70,
     assets: {},
     author: "motocultrice",
-    license: "CC BY-SA 4.0",
+    licensing: licensingFromDeclaration("CC BY-SA 4.0"),
   };
 
   it.each([false, true])(
@@ -262,9 +265,7 @@ describe("JunctionViewPanel photo integration", () => {
     expect(html).toContain('data-testid="junction-photo"');
     expect(html).not.toContain("data-panel");
     expect(html).not.toContain('data-testid="junction-schematic"');
-    expect(html).toContain(
-      'aria-label="navigation.junctionViewLabel, navigation.junctionPhotoCaption"',
-    );
+    expect(html).toContain('aria-label="navigation.junctionViewLabel"');
   });
 
   it.each<{ name: string; photo?: JunctionPhotoState }>([
@@ -347,4 +348,306 @@ it("keeps the selected route first when alternative lane boards remain in use", 
   const html = renderToStaticMarkup(<JunctionViewPanel point={point} gantry={model} />);
   expect(html.match(/aria-label="([^"]+)"/)?.[1]).toContain("Düsseldorf");
   expect(html.match(/aria-label="([^"]+)"/)?.[1]).not.toContain("Heinsberg");
+});
+
+function preparedFor(image: StreetLevelImage): typeof prepared {
+  return {
+    ...prepared,
+    aspectRatio: image.aspectRatio ?? 4 / 3,
+    path: {
+      ...prepared.path,
+      visible: true,
+      points: [
+        { xPercent: 50, yPercent: 80, widthPercent: 5, distanceMeters: 5 },
+        { xPercent: 50, yPercent: 60, widthPercent: 2, distanceMeters: 20 },
+      ],
+    },
+  };
+}
+
+const capturedImage: StreetLevelImage = {
+  id: "captured-A",
+  providerId: "panoramax",
+  lngLat: [6.679, 51.1786],
+  heading: 283,
+  isPano: false,
+  fovDeg: 70,
+  assets: {},
+  capturedAt: "2019-09-10",
+  contributors: [
+    {
+      sourceId: "image-source",
+      name: "Photo A",
+      url: "https://image.test/a",
+      publisher: { name: "Photographer A", url: "https://image.test/author-a" },
+      licensing: {
+        version: 1,
+        bindings: [
+          {
+            scope: "imagery",
+            subject: "Image A",
+            license: { kind: "spdx", expression: "CC-BY-SA-4.0" },
+            notice: "Complete required image notice A that must wrap in a narrow navigation panel",
+            conditions: ["Preserve the embedded notice"],
+            attribution: {
+              placement: "visible",
+              surfaces: ["image"],
+              basis: "provider-terms",
+              reviewedAt: "2026-10-14",
+              evidenceUrls: ["https://image.test/terms"],
+              reason: "Image-bound branding",
+              logo: "mapillary",
+            },
+          },
+        ],
+      },
+    },
+  ],
+};
+const replacementImage: StreetLevelImage = {
+  ...capturedImage,
+  id: "captured-B",
+  aspectRatio: 16 / 9,
+  contributors: [
+    { sourceId: "image-source", name: "Photo B", attributionText: "Required image notice B" },
+  ],
+};
+function photoPanel(image = capturedImage, objectUrl = "blob:captured") {
+  return (
+    <JunctionViewPanel
+      point={a57Point}
+      gantry={threePanels}
+      photo={{ status: "ready", image, objectUrl, prepared: preparedFor(image) }}
+      geometry={a57Route.geometry}
+    />
+  );
+}
+
+it("keeps required captured image credits outside the graphic with full one-action details", async () => {
+  const { container } = render(photoPanel());
+  const graphic = screen.getByRole("img", { name: /Neuss-Zentrum/ });
+  expect(graphic.querySelector("button,a")).toBeNull();
+  const credits = screen.getByRole("contentinfo");
+  expect(graphic.contains(credits)).toBe(false);
+  expect(credits.textContent).toContain("Complete required image notice A");
+  expect(credits.querySelector('img[alt="Mapillary"]')).not.toBeNull();
+  expect(credits.querySelector("[data-source-id]")).toHaveStyle({
+    whiteSpace: "normal",
+    overflowWrap: "anywhere",
+  });
+  expect(container.textContent).toContain("navigation.junctionPhotoDate");
+  const trigger = within(credits).getByRole("button", { name: "footer.attributions" });
+  trigger.focus();
+  fireEvent.click(trigger);
+  const dialog = screen.getByRole("dialog");
+  expect(dialog.contains(document.activeElement)).toBe(true);
+  expect(dialog.textContent).toContain("Photographer A");
+  expect(dialog.textContent).toContain("CC-BY-SA-4.0");
+  expect(dialog.textContent).toContain("Preserve the embedded notice");
+  expect(dialog.querySelector('a[href="https://image.test/a"]')).not.toBeNull();
+  expect(dialog.querySelector('img[alt="Mapillary"]')).not.toBeNull();
+  const shortcuts = vi.fn();
+  window.addEventListener("keydown", shortcuts);
+  try {
+    fireEvent.keyDown(dialog, { key: "ArrowRight" });
+    expect(shortcuts).not.toHaveBeenCalled();
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(trigger).toHaveFocus());
+  } finally {
+    window.removeEventListener("keydown", shortcuts);
+  }
+});
+
+it.each(["image", "provider"])(
+  "resets prepared aspect and attribution dialog when the %s identity changes",
+  (identity) => {
+    const { container, rerender } = render(photoPanel());
+    expect(container.querySelector("[data-photo-path]")?.getAttribute("viewBox")).toBe(
+      "0 0 100 75",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "footer.attributions" }));
+    const next =
+      identity === "image"
+        ? replacementImage
+        : { ...replacementImage, id: capturedImage.id, providerId: "another" };
+    rerender(photoPanel(next));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(container.textContent).not.toContain("Complete required image notice A");
+    expect(container.textContent).toContain("Required image notice B");
+    expect(container.querySelector("[data-photo-path]")?.getAttribute("viewBox")).toBe(
+      "0 0 100 56.25",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "footer.attributions" }));
+    expect(screen.getByRole("dialog").textContent).toContain("Photo B");
+    expect(screen.getByRole("dialog").textContent).not.toContain("Photographer A");
+  },
+);
+
+it.each(["loading", "missing-url", "missing-geometry"])(
+  "removes image credits and open details when the displayed photo becomes %s",
+  (state) => {
+    const { container, rerender } = render(photoPanel());
+    fireEvent.click(screen.getByRole("button", { name: "footer.attributions" }));
+    rerender(
+      <JunctionViewPanel
+        point={a57Point}
+        gantry={threePanels}
+        photo={
+          state === "loading"
+            ? { status: "loading" }
+            : {
+                status: "ready",
+                image: capturedImage,
+                prepared: preparedFor(capturedImage),
+                objectUrl: state === "missing-url" ? undefined : "blob:captured",
+              }
+        }
+        geometry={state === "missing-geometry" ? undefined : a57Route.geometry}
+      />,
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("contentinfo")).toBeNull();
+    expect(container.querySelector('[data-testid="junction-schematic"]')).toBeNull();
+    expect(container.textContent).not.toContain("Complete required image notice A");
+  },
+);
+
+it("treats an empty captured receipt list as authoritative despite legacy image fields", () => {
+  const { container } = render(
+    photoPanel({
+      ...capturedImage,
+      contributors: [],
+      author: "Invented legacy author",
+      licensing: licensingFromDeclaration("CC-BY-SA-4.0"),
+    }),
+  );
+  expect(screen.queryByRole("contentinfo")).toBeNull();
+  expect(container.textContent).not.toContain("Invented legacy author");
+  expect(container.textContent).toContain("navigation.junctionPhotoDate");
+});
+
+it("keeps signs alone until the full photo fits its measured budget and restores it without a stale dialog", () => {
+  let candidateHeight = 500;
+  const layout = installMeasuredLayout(
+    (el) =>
+      new DOMRect(
+        0,
+        0,
+        358,
+        el.dataset.testid === "junction-photo-measurement" ? candidateHeight : 250,
+      ),
+  );
+  try {
+    const panel = (height: number | null, image = capturedImage) => (
+      <JunctionViewPanel
+        point={a57Point}
+        gantry={threePanels}
+        photo={{ status: "ready", image, objectUrl: "blob:captured", prepared: preparedFor(image) }}
+        geometry={a57Route.geometry}
+        availableHeight={height}
+      />
+    );
+    const { container, rerender } = render(panel(null));
+    const measurement = container.querySelector('[data-testid="junction-photo-measurement"]');
+    expect(measurement).toHaveAttribute("inert");
+    expect(measurement).toHaveAttribute("aria-hidden", "true");
+    expect(measurement).toHaveStyle({
+      visibility: "hidden",
+      position: "absolute",
+      pointerEvents: "none",
+    });
+    expect(screen.queryByRole("contentinfo")).toBeNull();
+    rerender(panel(500));
+    expect(screen.getByRole("contentinfo").textContent).toContain(
+      "Complete required image notice A",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "footer.attributions" }));
+    expect(screen.getByRole("dialog")).not.toBeNull();
+    rerender(panel(499));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("contentinfo")).toBeNull();
+    expect(container.querySelector('[data-testid="junction-schematic"]')).toBeNull();
+    act(() => {
+      layout.resize();
+      layout.resize();
+    });
+    expect(screen.queryByRole("contentinfo")).toBeNull();
+    rerender(panel(501));
+    expect(screen.getByRole("contentinfo")).not.toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    act(() => {
+      candidateHeight = 600;
+      layout.resize();
+    });
+    expect(screen.queryByRole("contentinfo")).toBeNull();
+    act(() => {
+      candidateHeight = 350;
+      layout.resize();
+    });
+    expect(screen.getByRole("contentinfo")).not.toBeNull();
+    rerender(panel(400, { ...replacementImage, contributors: [] }));
+    expect(screen.queryByRole("contentinfo")).toBeNull();
+    const visibleGraphic = screen.getByRole("img", {
+      name: /Neuss-Zentrum/,
+    });
+    expect(visibleGraphic.querySelector('[data-testid="junction-photo"]')).not.toBeNull();
+    expect(visibleGraphic.querySelector('[data-testid="junction-schematic"]')).toBeNull();
+  } finally {
+    layout.restore();
+  }
+});
+
+it("keeps an initially signs-only card safe after the host budget becomes available", () => {
+  const { container } = render(
+    <JunctionViewPanel point={a57Point} gantry={threePanels} availableHeight={500} />,
+  );
+  expect(container.querySelector('[data-testid="junction-schematic"]')).toBeNull();
+  expect(container.querySelector('[data-testid="junction-photo-measurement"]')).toBeNull();
+  expect(screen.queryByRole("contentinfo")).toBeNull();
+});
+
+it("keeps each measured and visible route ribbon bound to its own gradient", () => {
+  const layout = installMeasuredLayout(() => new DOMRect(0, 0, 358, 400));
+  try {
+    const { container } = render(
+      <JunctionViewPanel
+        point={a57Point}
+        gantry={threePanels}
+        photo={{
+          status: "ready",
+          image: capturedImage,
+          objectUrl: "blob:captured",
+          prepared: preparedFor(capturedImage),
+        }}
+        geometry={a57Route.geometry}
+        availableHeight={500}
+      />,
+    );
+    const gradients = [...container.querySelectorAll("linearGradient")];
+    expect(gradients).toHaveLength(2);
+    expect(new Set(gradients.map((gradient) => gradient.id)).size).toBe(2);
+    for (const gradient of gradients) {
+      expect(gradient.closest("svg")?.querySelector("polygon")).toHaveAttribute(
+        "fill",
+        `url(#${gradient.id})`,
+      );
+    }
+  } finally {
+    layout.restore();
+  }
+});
+
+it("removes captured credits and their open dialog when the displayed photo errors", () => {
+  const { container } = render(photoPanel());
+  fireEvent.click(screen.getByRole("button", { name: "footer.attributions" }));
+  expect(screen.getByRole("dialog")).toBeTruthy();
+  const photo = container.querySelector('[data-testid="junction-photo"] img');
+  if (!photo) throw new Error("Expected displayed junction photo");
+  fireEvent.error(photo);
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.queryByRole("contentinfo")).toBeNull();
+  expect(container.querySelector('[data-testid="junction-photo"]')).toBeNull();
+  expect(container.querySelector("[data-panel]")).not.toBeNull();
+  expect(container.querySelector('[data-testid="junction-schematic"]')).toBeNull();
 });

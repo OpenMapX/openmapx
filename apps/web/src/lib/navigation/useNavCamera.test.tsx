@@ -25,6 +25,7 @@ vi.mock("maplibre-gl", () => {
   const markers: unknown[] = [];
   class FakeMarker {
     element: HTMLElement;
+    options: Record<string, unknown>;
     map: unknown = null;
     lngLat: [number, number] = [0, 0];
     rotation = 0;
@@ -36,6 +37,7 @@ vi.mock("maplibre-gl", () => {
 
     constructor(options: { element: HTMLElement }) {
       this.element = options.element;
+      this.options = options;
       markers.push(this);
     }
 
@@ -83,6 +85,7 @@ import { CAMERA_ZOOM_EPSILON } from "./navCameraScheduler";
 import { useNavCamera } from "./useNavCamera";
 
 interface MarkerRecord {
+  options: Record<string, unknown>;
   map: unknown;
   lngLat: [number, number];
   rotation: number;
@@ -167,7 +170,29 @@ const route = {
   geometry,
   legs: [],
   mode: "driving",
-  steps: [],
+  steps: [
+    {
+      instruction: "Head east",
+      distance: cum[1],
+      duration: 60,
+      coordinates: geometry.slice(0, 2),
+      maneuver: { type: "depart" },
+    },
+    {
+      instruction: "Keep left",
+      distance: routeLengthMeters - cum[1],
+      duration: 140,
+      coordinates: geometry.slice(1),
+      maneuver: { type: "keep", modifier: "left" },
+    },
+    {
+      instruction: "Arrive",
+      distance: 0,
+      duration: 0,
+      coordinates: [],
+      maneuver: { type: "arrive" },
+    },
+  ],
 } as unknown as Route;
 
 const CLOCK_START = 1000;
@@ -707,6 +732,13 @@ describe("useNavCamera lifecycle", () => {
     expect(markerTest.markers[0]?.addToCount ?? 0).toBe(0);
   });
 
+  it("positions the puck at subpixel precision so it can't flicker against the camera", async () => {
+    // MapLibre otherwise rounds a marker to whole pixels on every update except
+    // `move`, so a puck centred on a half pixel alternates between neighbours.
+    const { marker } = await mountNavCamera();
+    expect(marker().options.subpixelPositioning).toBe(true);
+  });
+
   it("fades the puck element while coasting", async () => {
     const { marker } = await mountNavCamera();
     act(() => useNavigationStore.getState().setCoasting(true));
@@ -1008,6 +1040,86 @@ describe("useNavCamera approach camera", () => {
     const options = lastJump(harness.fake);
     expect(options?.pitch).toBe(55);
     expect(options?.zoom).toBeLessThan(PLAIN_ZOOM + 0.3);
+  });
+
+  it("keeps approaching the same maneuver through motorway speed jitter", async () => {
+    const harness = await mountNavCamera();
+    applyApproachFix(START_ALONG, 33, 4000);
+    harness.frames.flush(1200, FRAME_MS);
+
+    for (const [along, speed, distance] of [
+      [600, 33, 3050],
+      [633, 34, 3017],
+      [667, 33, 2983],
+      [700, 34, 2950],
+    ]) {
+      applyApproachFix(along, speed, distance);
+      harness.frames.flush(60, FRAME_MS);
+    }
+    // Both speeds have the same plain zoom (14). Once approach has started,
+    // even the 33 m/s fix must keep closing toward 15 rather than reversing.
+    expect(lastJump(harness.fake)?.zoom).toBeGreaterThan(14.7);
+    expect(lastJump(harness.fake)?.pitch).toBeGreaterThan(59);
+  });
+
+  it("keeps approach emphasis when slowing before the same maneuver", async () => {
+    const harness = await mountNavCamera();
+    applyApproachFix(START_ALONG, 33, 2900);
+    harness.frames.flush(300, FRAME_MS);
+    applyApproachFix(START_ALONG + 100, 0, 2800);
+    harness.frames.flush(1200, FRAME_MS);
+    expect(lastJump(harness.fake)?.pitch).toBeGreaterThan(59.5);
+    expect(lastJump(harness.fake)?.zoom).toBeGreaterThan(17.4);
+  });
+
+  it("releases approach after retreating beyond the entry margin", async () => {
+    const harness = await mountNavCamera();
+    applyApproachFix(START_ALONG, 33, 2900);
+    harness.frames.flush(300, FRAME_MS);
+    applyApproachFix(START_ALONG, 33, 3400);
+    harness.frames.flush(600, FRAME_MS);
+    expect(lastJump(harness.fake)?.pitch).toBeLessThan(55.2);
+    expect(lastJump(harness.fake)?.zoom).toBeLessThan(14.1);
+  });
+
+  it("does not carry approach emphasis into the next maneuver", async () => {
+    const harness = await mountNavCamera();
+    applyApproachFix(START_ALONG, 33, 2900);
+    harness.frames.flush(300, FRAME_MS);
+    act(() => {
+      useNavigationStore.getState().applyProgress({
+        ...makeProgress(START_ALONG + 100, 0, 2800),
+        currentStepIndex: 1,
+      });
+    });
+    harness.frames.flush(1200, FRAME_MS);
+    expect(lastJump(harness.fake)?.pitch).toBeLessThan(55.2);
+    expect(lastJump(harness.fake)?.zoom).toBeLessThan(17.1);
+  });
+
+  it("resets approach on a replacement route with the same step index", async () => {
+    const harness = await mountNavCamera();
+    applyApproachFix(START_ALONG, 33, 2900);
+    harness.frames.flush(300, FRAME_MS);
+    act(() => {
+      useNavigationStore.setState({
+        route: { ...route },
+        progress: makeProgress(START_ALONG, 0, 2800),
+      });
+    });
+    harness.frames.flush(1200, FRAME_MS);
+    expect(lastJump(harness.fake)?.pitch).toBeLessThan(55.2);
+  });
+
+  it("does not invent an approach maneuver on a geometry-only route", async () => {
+    const harness = await mountNavCamera();
+    act(() => {
+      useNavigationStore.setState({ route: { ...route, steps: [] } });
+    });
+    applyApproachFix(START_ALONG, APPROACH_SPEED, 200);
+    harness.frames.flush(300, FRAME_MS);
+    expect(lastJump(harness.fake)?.pitch).toBe(55);
+    expect(lastJump(harness.fake)?.zoom).toBeLessThan(PLAIN_ZOOM + 0.2);
   });
 
   it("brings the tilt all the way back for a traveller stopped when the window closes", async () => {

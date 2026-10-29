@@ -53,8 +53,6 @@
       "sourceId": "loom-tiles",
       "name": "LOOM Transit Maps (University of Freiburg)",
       "url": "https://loom.cs.uni-freiburg.de/tiles",
-      "license": "ODbL-1.0",
-      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
       "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>, rendered by <a href=\"https://loom.cs.uni-freiburg.de/tiles\">LOOM</a> (University of Freiburg)",
       "commercialUse": "unknown",
       "providerCountry": "DE",
@@ -62,7 +60,27 @@
       "endUserExposure": "proxied",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "LOOM Transit Maps (University of Freiburg) material",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0",
+              "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "ODbL-1.0",
+            "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+          }
+        ]
+      }
     }
   ]
 }

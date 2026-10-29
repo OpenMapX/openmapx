@@ -521,6 +521,117 @@ describe("osrmService", () => {
       expect(result?.optimizedOrder).toEqual([0, 2, 1, 3]);
     });
 
+    const fiveWaypoints: [number, number][] = [
+      origin,
+      [13.39, 52.52],
+      [13.395, 52.525],
+      [13.4, 52.53],
+      destination,
+    ];
+
+    function tripPositions(positions: unknown[], waypointCount = positions.length) {
+      return makeOsrmTripResponse({
+        waypoints: positions.slice(0, waypointCount).map((waypoint_index, i) => ({
+          waypoint_index,
+          trips_index: 0,
+          location: fiveWaypoints[i],
+        })),
+      });
+    }
+
+    async function optimizeFive(positions: unknown[], waypointCount?: number) {
+      mockFetch.mockResolvedValueOnce(mockOk(tripPositions(positions, waypointCount)));
+      const { osrmService } = await loadModule();
+      return osrmService.optimizeRoute?.(fiveWaypoints, "driving");
+    }
+
+    it("inverts trip positions into input indexes in visit order", async () => {
+      const result = await optimizeFive([0, 3, 1, 2, 4]);
+
+      expect(result?.waypoints).toEqual(fiveWaypoints);
+      expect(result?.optimizedOrder).toEqual([0, 2, 3, 1, 4]);
+      expect(result?.optimizedOrder?.map((index) => fiveWaypoints[index])).toEqual([
+        origin,
+        [13.395, 52.525],
+        [13.4, 52.53],
+        [13.39, 52.52],
+        destination,
+      ]);
+    });
+
+    it("keeps an identity trip unchanged", async () => {
+      const result = await optimizeFive([0, 1, 2, 3, 4]);
+
+      expect(result?.optimizedOrder).toEqual([0, 1, 2, 3, 4]);
+    });
+
+    it("keeps a swapped pair unchanged", async () => {
+      const result = await optimizeFive([0, 2, 1, 3, 4]);
+
+      expect(result?.optimizedOrder).toEqual([0, 2, 1, 3, 4]);
+    });
+
+    it.each([
+      ["a duplicate position", [0, 1, 1, 3, 4]],
+      ["a missing position", [0, 1, 2, 3, 3]],
+      ["a non-integer position", [0, 1, 2.5, 3, 4]],
+      ["a non-numeric position", [0, 1, "2", 3, 4]],
+      ["a negative position", [0, 1, 2, 3, -1]],
+      ["an out-of-range position", [0, 1, 2, 3, 5]],
+      ["a moved source", [1, 0, 2, 3, 4]],
+      ["a moved destination", [0, 1, 2, 4, 3]],
+    ])("rejects %s", async (_label, positions) => {
+      await expect(optimizeFive(positions)).rejects.toThrow("OSRM returned an invalid trip order");
+    });
+
+    it("rejects a waypoint list that does not match the request", async () => {
+      await expect(optimizeFive([0, 1, 2, 3, 4], 4)).rejects.toThrow(
+        "OSRM returned an invalid trip order",
+      );
+    });
+
+    it("rejects a response without a waypoint list", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk({ code: "Ok", trips: [makeOsrmRoute()] }));
+      const { osrmService } = await loadModule();
+
+      await expect(osrmService.optimizeRoute?.(fiveWaypoints, "driving")).rejects.toThrow(
+        "OSRM returned an invalid trip order",
+      );
+    });
+
+    it.each([1, -1, "0", undefined])(
+      "rejects a waypoint referencing trip %s",
+      async (trips_index) => {
+        mockFetch.mockResolvedValueOnce(
+          mockOk(
+            makeOsrmTripResponse({
+              waypoints: fiveWaypoints.map((location, waypoint_index) => ({
+                waypoint_index,
+                trips_index: waypoint_index === 2 ? trips_index : 0,
+                location,
+              })),
+            }),
+          ),
+        );
+        const { osrmService } = await loadModule();
+
+        await expect(osrmService.optimizeRoute?.(fiveWaypoints, "driving")).rejects.toThrow(
+          "OSRM returned an invalid trip order",
+        );
+      },
+    );
+
+    it("rejects multiple trips instead of treating them as alternative routes", async () => {
+      mockFetch.mockResolvedValueOnce(
+        mockOk({ ...tripPositions([0, 1, 2, 3, 4]), trips: [makeOsrmRoute(), makeOsrmRoute()] }),
+      );
+      const { osrmService } = await loadModule();
+
+      await expect(osrmService.optimizeRoute?.(fiveWaypoints, "driving")).rejects.toThrow(
+        "OSRM returned an invalid trip order",
+      );
+    });
+
     it("returns routes from trips array", async () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeOsrmTripResponse()));
 

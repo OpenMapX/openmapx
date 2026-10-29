@@ -154,7 +154,9 @@ describe("runEvPlan", () => {
     });
     expect(result.stops.length).toBeGreaterThanOrEqual(1);
     expect(result.stops[0].station.id).toBe(SITE_ID);
-    expect(result.stops[0].attributions).toEqual([{ text: "Open Charge Map", url: "" }]);
+    expect(result.stops[0].attributions).toEqual([
+      { sourceId: "ocm-charging", name: "Open Charge Map" },
+    ]);
     expect(result.stops[0].availability).toEqual({
       available: 1,
       total: 1,
@@ -571,8 +573,20 @@ describe("runEvPlan", () => {
           sourceId: "nl-ndw-charging",
           name: "NDW",
           url: "javascript:alert(1)",
-          spdxLicense: "CC0-1.0",
-          licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/",
+          licensing: {
+            version: 1,
+            bindings: [
+              {
+                scope: "data",
+                subject: "Data",
+                license: {
+                  kind: "spdx",
+                  expression: "CC0-1.0",
+                  url: "https://creativecommons.org/publicdomain/zero/1.0/",
+                },
+              },
+            ],
+          } as const,
         },
       ],
     });
@@ -591,10 +605,22 @@ describe("runEvPlan", () => {
     });
     expect(result.stops[0]?.attributions).toEqual([
       {
-        text: "NDW",
-        url: "",
-        license: "CC0-1.0",
-        licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/",
+        sourceId: "nl-ndw-charging",
+        name: "NDW",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Data",
+              license: {
+                kind: "spdx",
+                expression: "CC0-1.0",
+                url: "https://creativecommons.org/publicdomain/zero/1.0/",
+              },
+            },
+          ],
+        } as const,
       },
     ]);
   });
@@ -721,4 +747,204 @@ describe("runEvPlan", () => {
     expect((await plan("2026-10-05T20:00")).stops[0].tariffPrice?.amount).toBe(0.29);
     expect((await plan("2026-10-05T08:00")).stops[0].tariffPrice?.amount).toBe(0.59);
   });
+});
+
+it("carries the selected charger acquisition receipt into the stop and station preview", async () => {
+  const receipt = {
+    sourceId: "charger",
+    name: "Acquired charger",
+    attributionText: "Original mandatory notice",
+  };
+  const ctx = fakeCtx({
+    getIntegrationsByDomain: chargingDomain(
+      sitesProvider([chargingSite({ attributions: [receipt] })]),
+    ),
+  });
+  const result = await runEvPlan(
+    ctx as unknown as IntegrationContext,
+    () => [{ integrationId: "valhalla", provider: ctx._valhalla }],
+    {
+      waypoints: [
+        [0, 50],
+        [2.7, 50],
+      ],
+      vehicleId: "tesla:model_3:2024:model_3_long_range",
+      socStartPct: 40,
+      avoidClosures: false,
+    },
+  );
+  expect(result.stops[0].contributors).toEqual([receipt]);
+  expect(result.stops[0].station.contributors).toEqual([receipt]);
+  receipt.attributionText = "Changed metadata";
+  expect(result.stops[0].contributors?.[0].attributionText).toBe("Original mandatory notice");
+});
+
+it("projects selected connector receipts without borrowing an unused connector supplier", async () => {
+  const a = { sourceId: "station", name: "Station" };
+  const c = { sourceId: "chosen", name: "Chosen connector" };
+  const d = { sourceId: "unused", name: "Unused connector" };
+  const site = chargingSite({
+    contributors: [a, c, d],
+    fieldContributors: {
+      id: [a],
+      name: [a],
+      coordinates: [a],
+      "evses.0.status": [c],
+      "evses.0.connectors.0": [c],
+      "evses.0.connectors.1": [d],
+    },
+  });
+  site.evses[0].connectors.push({ ...site.evses[0].connectors[0], key: "e1/2", maxPowerKw: 10 });
+  const ctx = fakeCtx({ getIntegrationsByDomain: chargingDomain(sitesProvider([site])) });
+  const result = await runEvPlan(
+    ctx as unknown as IntegrationContext,
+    () => [{ integrationId: "valhalla", provider: ctx._valhalla }],
+    {
+      waypoints: [
+        [0, 50],
+        [2.7, 50],
+      ],
+      vehicleId: "tesla:model_3:2024:model_3_long_range",
+      socStartPct: 40,
+      avoidClosures: false,
+    },
+  );
+  expect(result.stops[0].fieldContributors?.powerKw).toEqual([c]);
+  expect(result.stops[0].station.contributors).toEqual([a]);
+  expect(result.stops[0].contributors).not.toContainEqual(d);
+});
+
+it("keeps planned model and total receipts from the base acquisition after rerouting", async () => {
+  const base = { sourceId: "same", name: "Engine", attributionText: "Base model notice" };
+  const final = { sourceId: "same", name: "Engine", attributionText: "Reroute notice" };
+  const matrix = { sourceId: "matrix", name: "Matrix" };
+  const ctx = fakeCtx({
+    getIntegrationsByDomain: chargingDomain(
+      sitesProvider([chargingSite({ tariffs: [energyTariff("price", 0.4)] })]),
+    ),
+  });
+  const resultRoute = await ctx._valhalla.getRoute();
+  ctx._valhalla.getRoute
+    .mockReset()
+    .mockResolvedValueOnce({
+      ...resultRoute,
+      routes: resultRoute.routes.map((r) => ({ ...r, contributors: [base] })),
+    })
+    .mockResolvedValue({
+      ...resultRoute,
+      routes: resultRoute.routes.map((r) => ({ ...r, contributors: [final] })),
+    });
+  ctx._valhalla.getMatrix.mockImplementation(async (s: unknown[], t: unknown[]) =>
+    s.map(() => t.map(() => ({ seconds: 120, km: 2, contributors: [matrix] }))),
+  );
+  const result = await runEvPlan(
+    ctx as unknown as IntegrationContext,
+    () => [{ integrationId: "valhalla", provider: ctx._valhalla }],
+    {
+      waypoints: [
+        [0, 50],
+        [2.7, 50],
+      ],
+      vehicleId: "tesla:model_3:2024:model_3_long_range",
+      socStartPct: 40,
+      avoidClosures: false,
+      homePricePerKwh: 0.3,
+      homeCurrency: "EUR",
+    },
+  );
+  expect(result.stops.length).toBeGreaterThan(0);
+  expect(result.routes[0].contributors).toEqual([final]);
+  expect(result.stops[0].fieldContributors?.arriveSocPct).toContainEqual(base);
+  expect(result.stops[0].fieldContributors?.arriveSocPct).toContainEqual(matrix);
+  expect(result.stops[0].fieldContributors?.arriveSocPct).not.toContainEqual(final);
+  expect(result.totals.fieldContributors?.energyKwh).toEqual([base]);
+  expect(result.totals.fieldContributors?.driveSeconds).toEqual([final]);
+  expect(result.totals.fieldContributors?.estimatedCost).toContainEqual(base);
+  expect(result.totals.fieldContributors?.estimatedCost).not.toContainEqual(final);
+});
+
+it.each([false, true])(
+  "credits exactly the winning fresh availability status (own=%s)",
+  async (own) => {
+    const status = { sourceId: "live", name: "Winner status" };
+    const unused = { sourceId: "unused-status", name: "Unused status" };
+    const site = chargingSite({
+      contributors: [],
+      fieldContributors: {
+        "evses.0.status": own ? [status] : [unused],
+        "evses.0.connectors.0.status": own ? [unused] : [status],
+        "evses.0.connectors.1.status": [unused],
+        "evses.0.connectors.0.stale": [],
+        "evses.0.connectors.0.statusAt": [],
+        "evses.0.connectors": [unused],
+      },
+    });
+    if (!own) site.evses[0].status = undefined;
+    site.evses[0].connectors[0].status = "available";
+    site.evses[0].connectors.push({
+      ...site.evses[0].connectors[0],
+      key: "e1/2",
+      status: "available",
+      stale: true,
+    });
+    const ctx = fakeCtx({ getIntegrationsByDomain: chargingDomain(sitesProvider([site])) });
+    const result = await runEvPlan(
+      ctx as unknown as IntegrationContext,
+      () => [{ integrationId: "valhalla", provider: ctx._valhalla }],
+      {
+        waypoints: [
+          [0, 50],
+          [2.7, 50],
+        ],
+        vehicleId: "tesla:model_3:2024:model_3_long_range",
+        socStartPct: 40,
+        avoidClosures: false,
+      },
+    );
+    expect(result.stops[0].availability?.available).toBe(1);
+    expect(result.stops[0].fieldContributors?.availability).toEqual([status]);
+  },
+);
+
+it("keeps only selected approach matrix receipts in modeled values and exact energy inputs in totals", async () => {
+  const used = { sourceId: "matrix", name: "Approach", attributionText: "Selected cell" };
+  const unused = { sourceId: "other-matrix", name: "Unconsumed matrix cell" };
+  const geometry = { sourceId: "geometry", name: "Model geometry" };
+  const distance = { sourceId: "distance", name: "Unused scalar distance" };
+  const ctx = fakeCtx();
+  const routeResult = await ctx._valhalla.getRoute();
+  ctx._valhalla.getRoute.mockResolvedValue({
+    ...routeResult,
+    routes: routeResult.routes.map((r) => ({
+      ...r,
+      fieldContributors: { geometry: [geometry], distance: [distance] },
+      contributors: [geometry, distance],
+    })),
+  });
+  ctx._valhalla.getMatrix.mockImplementation(async (s: unknown[], t: unknown[]) =>
+    s.map((_, i) =>
+      t.map((_, j) => ({
+        seconds: 120,
+        km: 2,
+        contributors: i === 0 && j === 0 ? [used] : [unused],
+      })),
+    ),
+  );
+  const result = await runEvPlan(
+    ctx as unknown as IntegrationContext,
+    () => [{ integrationId: "valhalla", provider: ctx._valhalla }],
+    {
+      waypoints: [
+        [0, 50],
+        [2.7, 50],
+      ],
+      vehicleId: "tesla:model_3:2024:model_3_long_range",
+      socStartPct: 40,
+      avoidClosures: false,
+    },
+  );
+  expect(result.stops[0].fieldContributors?.arriveSocPct).toContainEqual(used);
+  expect(result.stops[0].fieldContributors?.arriveSocPct).not.toContainEqual(unused);
+  expect(result.stops[0].fieldContributors?.arriveSocPct).not.toContainEqual(distance);
+  expect(result.totals.fieldContributors.energyKwh).toEqual([geometry]);
 });

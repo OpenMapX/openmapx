@@ -71,15 +71,59 @@
       "sourceId": "db-ris-routing",
       "name": "Deutsche Bahn RIS Routing",
       "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/",
-      "license": "Proprietary (bilateral license)",
-      "licenseUrl": "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen",
       "commercialUse": "conditional",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://developers.deutschebahn.com/db-api-marketplace/apis/privacypolicy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Deutsche Bahn RIS Routing material",
+            "license": {
+              "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Deutsche Bahn RIS Routing access/account contract",
+            "license": {
+              "kind": "unknown",
+              "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (bilateral license)",
+            "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen"
+          }
+        ]
+      }
     }
   ],
   "dependencies": ["transit"]

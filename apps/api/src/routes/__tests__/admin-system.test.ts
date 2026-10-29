@@ -11,7 +11,13 @@ const systemInspection = {
   dockerReachable: true,
   composeReady: true,
   maintenanceReady: true,
-  release: { currentReleaseId: "release-old", availableReleaseId: "release-123" },
+  release: {
+    configuredSelector: "preview",
+    currentReleaseId: "release-old",
+    availableReleaseId: "release-123",
+    availableVersion: "0.1.0-alpha.1",
+    availableDigest: "a".repeat(64),
+  },
   services: [
     {
       serviceId: "app-api",
@@ -31,7 +37,8 @@ const opsClient = {};
 
 vi.mock("@openmapx/core/server", () => ({
   repoPaths: () => ({
-    composePath: "/repo/.trusted-config-current/docker-compose.generated.yml",
+    composePath:
+      "/repo/infra/docker/state/ops-agent/configuration/current/docker-compose.generated.yml",
   }),
 }));
 
@@ -44,6 +51,7 @@ vi.mock("../../utils/audit-log", () => ({
 }));
 vi.mock("../../utils/rate-limit", () => ({
   systemMaintenanceLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
+  systemUpdateCheckLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
 }));
 vi.mock("../../services/ops-client", () => ({
   createApiOpsClient: () => opsClient,
@@ -71,7 +79,7 @@ beforeAll(async () => {
   await app.ready();
 });
 
-afterAll(() => app.close());
+afterAll(() => app?.close());
 afterEach(() => {
   enqueue.mockClear();
   findActive.mockReset().mockResolvedValue(null);
@@ -97,6 +105,7 @@ describe("admin system routes", () => {
     const response = await app.inject({ method: "GET", url: "/admin/system" });
     expect(response.statusCode).toBe(200);
     expect(response.json().deployment.maintenanceReady).toBe(true);
+    expect(response.json().release).toEqual(systemInspection.release);
     expect(response.json().images[0]).toEqual({
       id: "app-api",
       name: "app-api",
@@ -108,10 +117,7 @@ describe("admin system routes", () => {
       releaseMember: true,
       status: "update-available",
     });
-    expect(response.json().release).toEqual({
-      currentReleaseId: "release-old",
-      availableReleaseId: "release-123",
-    });
+    expect(response.json().release).toEqual(systemInspection.release);
     expect(executeAndWait.mock.calls.map((call) => (call[1] as { kind: string }).kind)).toEqual([
       "system.inspect",
     ]);
@@ -158,12 +164,22 @@ describe("admin system routes", () => {
     const response = await app.inject({
       method: "POST",
       url: "/admin/system/updates/apply",
-      payload: { confirmation: "UPDATE OPENMAPX", createBackup: true },
+      payload: {
+        confirmation: "UPDATE OPENMAPX",
+        createBackup: true,
+        releaseId: "release-123",
+        expectedDigest: "a".repeat(64),
+      },
     });
     expect(response.statusCode).toBe(200);
     expect(enqueue).toHaveBeenCalledWith(
       "system.update",
-      { operation: "apply", createBackup: true },
+      {
+        operation: "apply",
+        createBackup: true,
+        releaseId: "release-123",
+        expectedDigest: "a".repeat(64),
+      },
       session.user.id,
     );
     expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: "system.update.apply" }));
@@ -173,18 +189,28 @@ describe("admin system routes", () => {
     const response = await app.inject({
       method: "POST",
       url: "/admin/system/updates/apply",
-      payload: { confirmation: "UPDATE OPENMAPX", createBackup: false },
+      payload: {
+        confirmation: "UPDATE OPENMAPX",
+        createBackup: false,
+        releaseId: "release-123",
+        expectedDigest: "a".repeat(64),
+      },
     });
     expect(response.statusCode).toBe(200);
     expect(enqueue).toHaveBeenCalledWith(
       "system.update",
-      { operation: "apply", createBackup: false },
+      {
+        operation: "apply",
+        createBackup: false,
+        releaseId: "release-123",
+        expectedDigest: "a".repeat(64),
+      },
       session.user.id,
     );
     expect(audit).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "system.update.apply",
-        details: { createBackup: false },
+        details: { createBackup: false, releaseId: "release-123", expectedDigest: "a".repeat(64) },
       }),
     );
   });
@@ -206,10 +232,34 @@ describe("admin system routes", () => {
     const response = await app.inject({
       method: "POST",
       url: "/admin/system/updates/apply",
-      payload: { confirmation: "UPDATE OPENMAPX", createBackup: false },
+      payload: {
+        confirmation: "UPDATE OPENMAPX",
+        createBackup: false,
+        releaseId: "release-123",
+        expectedDigest: "a".repeat(64),
+      },
     });
     expect(response.statusCode).toBe(409);
     expect(response.json().jobId).toBe("backup-running");
     expect(enqueue).not.toHaveBeenCalled();
   });
 });
+
+it.each([{ registry: "attacker.invalid" }, { createBackup: "false" }, { releaseId: 123 }])(
+  "rejects unknown or coerced fields before validation can discard/change them: %j",
+  async (extra) => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/admin/system/updates/apply",
+      payload: {
+        confirmation: "UPDATE OPENMAPX",
+        releaseId: "release-123",
+        expectedDigest: "a".repeat(64),
+        createBackup: false,
+        ...extra,
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(enqueue).not.toHaveBeenCalled();
+  },
+);

@@ -14,6 +14,7 @@ export const API_ENDPOINTS = {
   navigationJunctions: "/api/integrations/routing/navigation/junctions",
   roadConditions: "/api/integrations/road-conditions/events",
   roadConditionsFlowRoute: "/api/integrations/road-conditions/flow-along-route",
+  roadConditionBindings: "/api/integrations/road-conditions/bindings",
   crowdReportsSubmit: "/api/integrations/crowd-reports/reports",
   crowdReportsVote: "/api/integrations/crowd-reports/reports", // used as `${base}/${class}/${id}/${action}`
   crowdReportsEnroll: "/api/integrations/crowd-reports/enroll",
@@ -101,11 +102,7 @@ export const API_ENDPOINTS = {
   savedPlaces: "/api/saved/places",
   savedLabels: "/api/saved/labels",
   savedCheck: "/api/saved/check",
-  vehicles: "/api/vehicles",
-  parking: "/api/parking",
   // Public resolve is `${base}/${token}`; rotate is `${base}/${id}/rotate`.
-  shares: "/api/shares",
-  capabilities: "/api/capabilities",
   timelineConnection: "/api/timeline/connection",
   timelineConnectionTest: "/api/timeline/connection/test",
   timelineDay: "/api/timeline/day",

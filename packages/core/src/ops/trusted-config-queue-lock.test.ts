@@ -25,10 +25,31 @@ const roots: string[] = [];
 const children: ChildProcess[] = [];
 const token = Buffer.alloc(32, 0x6a).toString("base64url");
 
-afterEach(() => {
-  for (const child of children.splice(0)) child.kill("SIGKILL");
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+/** A short-lease holder may already have exited on its own after a scheduler stall. */
+async function killAndWait(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  const exited = once(child, "exit");
+  child.kill("SIGKILL");
+  await exited;
+}
+
+afterEach(async () => {
+  await Promise.all(children.splice(0).map(killAndWait));
+  for (const root of roots.splice(0)) {
+    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  }
 });
+
+/** Manual lease clock so expiry is decided by the test, not by scheduler latency. */
+function leaseClock() {
+  let current = Date.parse("2026-08-24T08:00:00.000Z");
+  return {
+    now: () => current,
+    advance: (ms: number) => {
+      current += ms;
+    },
+  };
+}
 
 async function liveHolder(root: string, ttlMs = 100): Promise<ChildProcess> {
   const moduleUrl = pathToFileURL(join(import.meta.dirname, "trusted-config-queue-lock.ts")).href;
@@ -149,6 +170,7 @@ describe("trusted configuration retained-budget lock", () => {
     "recovers an exact failed publication after %s",
     async (transition) => {
       const root = directory();
+      const clock = leaseClock();
       const crashing = {
         directory: root,
         token,
@@ -158,6 +180,7 @@ describe("trusted configuration retained-budget lock", () => {
         operationKey: "opk1_0123456789abcdef",
         ttlMs: 50,
         acquireTimeoutMs: 0,
+        now: clock.now,
         [transition]: () => {
           throw new Error("simulated publication crash");
         },
@@ -166,7 +189,7 @@ describe("trusted configuration retained-budget lock", () => {
         "Trusted configuration queue busy",
       );
       expect(readdirSync(root).length).toBeGreaterThan(0);
-      await delay(75);
+      clock.advance(51);
       const recovered = await acquireTrustedConfigurationQueueLock({
         directory: root,
         token,
@@ -176,6 +199,7 @@ describe("trusted configuration retained-budget lock", () => {
         operationKey: "opk1_fedcba9876543210",
         ttlMs: 50,
         acquireTimeoutMs: 500,
+        now: clock.now,
       });
       recovered.release();
       expect(readdirSync(root)).toEqual([]);
@@ -376,7 +400,9 @@ describe("trusted configuration retained-budget lock", () => {
 
   it("does not reclaim a live multiprocess holder beyond its original expiry", async () => {
     const root = directory();
-    const holderTtlMs = 1_000;
+    // The child renews every 25 ms, so only a scheduler stall longer than its
+    // whole lease would let the parent legitimately take over.
+    const holderTtlMs = 3_000;
     const child = await liveHolder(root, holderTtlMs);
     const heartbeatPath = join(root, OPS_TRUSTED_CONFIG_QUEUE_LOCK_NAME, "heartbeat.json");
     const initialHeartbeat = JSON.parse(readFileSync(heartbeatPath, "utf8")) as {
@@ -394,7 +420,7 @@ describe("trusted configuration retained-budget lock", () => {
             current.sequence > initialHeartbeat.sequence
           );
         },
-        { interval: 25, timeout: 5_000 },
+        { interval: 25, timeout: 15_000 },
       )
       .toBe(true);
     expect(child.exitCode).toBeNull();
@@ -416,13 +442,12 @@ describe("trusted configuration retained-budget lock", () => {
     await recovered?.release();
     expect(recovered).toBeUndefined();
     expect(child.exitCode).toBeNull();
-  });
+  }, 30_000);
 
   it("recovers a crashed multiprocess holder without either participant restarting", async () => {
     const root = directory();
     const child = await liveHolder(root);
-    child.kill("SIGKILL");
-    await once(child, "exit");
+    await killAndWait(child);
     await delay(150);
     const recovered = await acquireTrustedConfigurationQueueLock({
       directory: root,
@@ -466,6 +491,7 @@ describe("trusted configuration retained-budget lock", () => {
 
   it("recovers an expired same-participant crash without process restart", async () => {
     const root = directory();
+    const clock = leaseClock();
     const options = {
       directory: root,
       token,
@@ -475,23 +501,24 @@ describe("trusted configuration retained-budget lock", () => {
       operationKey: "opk1_0123456789abcdef",
       ttlMs: 500,
       acquireTimeoutMs: 0,
+      now: clock.now,
     };
     const crashed = await acquireTrustedConfigurationQueueLock(options);
     crashed.abandon();
     await expect(acquireTrustedConfigurationQueueLock(options)).rejects.toThrow(
       "Trusted configuration queue busy",
     );
-    await delay(20);
+    clock.advance(501);
     const recovered = await acquireTrustedConfigurationQueueLock({
       ...options,
       operationKey: "opk1_fedcba9876543210",
-      acquireTimeoutMs: 750,
     });
     recovered.release();
   });
 
   it("does not treat a live reused PID as authority for an expired generation", async () => {
     const root = directory();
+    const clock = leaseClock();
     const common = {
       directory: root,
       token,
@@ -500,10 +527,11 @@ describe("trusted configuration retained-budget lock", () => {
       operationKey: "opk1_0123456789abcdef",
       ttlMs: 50,
       acquireTimeoutMs: 250,
+      now: clock.now,
     };
     const crashed = await acquireTrustedConfigurationQueueLock({ ...common, participant: "api" });
     crashed.abandon();
-    await delay(75);
+    clock.advance(51);
     const recovered = await acquireTrustedConfigurationQueueLock({
       ...common,
       participant: "ops-agent",
@@ -580,6 +608,7 @@ describe("trusted configuration retained-budget lock", () => {
 
   it("recovers a crashed heartbeat temporary only after its authenticated lease expires", async () => {
     const root = directory();
+    const clock = leaseClock();
     const held = await acquireTrustedConfigurationQueueLock({
       directory: root,
       token,
@@ -589,6 +618,7 @@ describe("trusted configuration retained-budget lock", () => {
       operationKey: "opk1_0123456789abcdef",
       ttlMs: 500,
       acquireTimeoutMs: 0,
+      now: clock.now,
       afterHeartbeatRecordWrite: () => {
         throw new Error("simulated heartbeat crash");
       },
@@ -605,9 +635,10 @@ describe("trusted configuration retained-budget lock", () => {
         operationKey: "opk1_fedcba9876543210",
         ttlMs: 500,
         acquireTimeoutMs: 0,
+        now: clock.now,
       }),
     ).rejects.toThrow("Trusted configuration queue busy");
-    await delay(550);
+    clock.advance(501);
     const recovered = await acquireTrustedConfigurationQueueLock({
       directory: root,
       token,
@@ -616,13 +647,15 @@ describe("trusted configuration retained-budget lock", () => {
       participant: "ops-agent",
       operationKey: "opk1_fedcba9876543210",
       ttlMs: 500,
-      acquireTimeoutMs: 750,
+      acquireTimeoutMs: 0,
+      now: clock.now,
     });
     recovered.release();
   });
 
   it("reconciles an authenticated quarantine crash after heartbeat unlink", async () => {
     const root = directory();
+    const clock = leaseClock();
     const held = await acquireTrustedConfigurationQueueLock({
       directory: root,
       token,
@@ -631,11 +664,13 @@ describe("trusted configuration retained-budget lock", () => {
       participant: "api",
       operationKey: "opk1_0123456789abcdef",
       ttlMs: 50,
+      now: clock.now,
       afterRecoveryHeartbeatUnlink: () => {
         throw new Error("simulated quarantine crash");
       },
     });
     expect(() => held.release()).toThrow("Trusted configuration queue busy");
+    clock.advance(51);
     const recovered = await acquireTrustedConfigurationQueueLock({
       directory: root,
       token,
@@ -645,6 +680,7 @@ describe("trusted configuration retained-budget lock", () => {
       operationKey: "opk1_fedcba9876543210",
       ttlMs: 50,
       acquireTimeoutMs: 250,
+      now: clock.now,
     });
     recovered.release();
   });
@@ -653,6 +689,7 @@ describe("trusted configuration retained-budget lock", () => {
     "reconciles an authenticated quarantine crash after %s unlink",
     async (transition) => {
       const root = directory();
+      const clock = leaseClock();
       const crash = (): never => {
         throw new Error("simulated quarantine crash");
       };
@@ -664,11 +701,13 @@ describe("trusted configuration retained-budget lock", () => {
         participant: "api",
         operationKey: "opk1_0123456789abcdef",
         ttlMs: 50,
+        now: clock.now,
         ...(transition === "owner"
           ? { afterRecoveryOwnerUnlink: crash }
           : { afterRecoveryRetirementUnlink: crash }),
       });
       expect(() => held.release()).toThrow("Trusted configuration queue busy");
+      clock.advance(51);
       const recovered = await acquireTrustedConfigurationQueueLock({
         directory: root,
         token,
@@ -678,6 +717,7 @@ describe("trusted configuration retained-budget lock", () => {
         operationKey: "opk1_fedcba9876543210",
         ttlMs: 50,
         acquireTimeoutMs: 250,
+        now: clock.now,
       });
       recovered.release();
     },

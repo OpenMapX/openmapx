@@ -4,7 +4,9 @@ import { addLayerInSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useStyleSyncedLayer } from "@/integration-api/map/useStyleSyncedLayer";
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
-import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { addAttributedRasterSource } from "@/integration-api/overlay/rasterMapContribution";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
+import { useRasterMapAttributions } from "@/integration-api/overlay/useRasterMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useTrafficStore } from "./store";
 
@@ -19,7 +21,18 @@ export function TrafficLayer() {
   // gate the layer selector applies — below it MapLibre requests no tiles.
   const minZoom = useOverlayMinZoom("traffic");
   const showTraffic = useTrafficStore((s) => s.panelOpen && s.layerVisible);
-  useIntegrationAttribution("overlay-traffic-tomtom", showTraffic);
+  const resolve = useContributorResolver();
+  useRasterMapAttributions(
+    "traffic",
+    [
+      {
+        sourceId: TRAFFIC_SOURCE_ID,
+        layerId: TRAFFIC_LAYER_ID,
+        contributors: resolve({ sourceIds: ["tomtom"] }),
+      },
+    ],
+    showTraffic,
+  );
 
   useStyleSyncedLayer({
     map,
@@ -27,11 +40,16 @@ export function TrafficLayer() {
     sourceId: TRAFFIC_SOURCE_ID,
     layerId: TRAFFIC_LAYER_ID,
     addSource: (m) => {
-      m.addSource(TRAFFIC_SOURCE_ID, {
-        type: "raster",
-        tiles: [env.trafficTileUrlTemplate],
-        tileSize: 256,
-      });
+      addAttributedRasterSource(
+        m,
+        TRAFFIC_SOURCE_ID,
+        {
+          type: "raster",
+          tiles: [env.trafficTileUrlTemplate],
+          tileSize: 256,
+        },
+        resolve({ sourceIds: ["tomtom"] }),
+      );
     },
     addLayer: (m) => {
       addLayerInSlot(

@@ -1,3 +1,5 @@
+import { parseContributors } from "@openmapx/mobility-core/contributors";
+import { parseLicensing } from "@openmapx/mobility-core/licensing";
 import { z } from "zod";
 
 export const airQualityStandardIdSchema = z.enum([
@@ -111,7 +113,15 @@ export const airQualitySourceRefSchema = z
     name: boundedString,
     url: z.url().nullable(),
     owner: z.string().max(512).nullable(),
-    license: z.object({ name: boundedString, url: z.url().nullable() }).strict().nullable(),
+    licensing: z.unknown().transform((value, ctx) => {
+      if (value === null) return null;
+      const licensing = parseLicensing(value);
+      if (!licensing) {
+        ctx.addIssue({ code: "custom", message: "Invalid licensing" });
+        return z.NEVER;
+      }
+      return licensing;
+    }),
     methodologyUrl: z.url().nullable(),
     attribution: z.string().max(1_024).nullable(),
   })
@@ -351,6 +361,17 @@ export const airQualityStationFeatureSchema = z
       .strict(),
     properties: z
       .object({
+        contributors: z
+          .unknown()
+          .transform((value, ctx) => {
+            const receipts = parseContributors(value);
+            if (!receipts) {
+              ctx.addIssue({ code: "custom", message: "Invalid contributors" });
+              return z.NEVER;
+            }
+            return receipts;
+          })
+          .optional(),
         stationId: stationIdSchema,
         name: z.string().max(512).nullable(),
         pollutant: pollutantSchema,

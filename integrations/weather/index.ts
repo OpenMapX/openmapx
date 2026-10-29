@@ -24,7 +24,7 @@ export function setup(ctx: IntegrationContext): void {
       units: (scalarQueries(req.query).units as "metric" | "imperial") ?? "metric",
     };
 
-    const key = `weather:current:${roundCoord2(lat)},${roundCoord2(lng)}:${options.units}`;
+    const key = `weather:current:contributors-v2:${roundCoord2(lat)},${roundCoord2(lng)}:${options.units}`;
 
     try {
       const result = await ctx.cache.withCache(key, 300, async () => {
@@ -56,9 +56,12 @@ export function setup(ctx: IntegrationContext): void {
       units: (scalarQueries(req.query).units as "metric" | "imperial") ?? "metric",
     };
 
-    const key = `weather:forecast:${roundCoord2(lat)},${roundCoord2(lng)}:${hours}:${days}:${options.units}`;
-
     try {
+      // A policy change must reacquire from eligible fallbacks, rather than
+      // replaying a cached supplier the host response filter would remove.
+      const disallowed = (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
+      const policyKey = JSON.stringify([...disallowed].sort());
+      const key = `weather:forecast:contributors-v1:${roundCoord2(lat)},${roundCoord2(lng)}:${hours}:${days}:${options.units}:${policyKey}`;
       const result = await ctx.cache.withCache(key, 600, async () => {
         const [hourly, daily] = await Promise.all([
           orchestrator.getHourlyForecast(coords, hours, options),

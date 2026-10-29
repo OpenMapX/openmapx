@@ -307,3 +307,26 @@ describe("useMonitorStations", () => {
     expect(replaced.features[0]?.properties.value).toBe(27);
   });
 });
+
+it("keeps distinct per-page captured monitor receipts without collecting unrelated response suppliers", async () => {
+  const a = feature("a");
+  a.properties.sourceIds = ["a"];
+  a.properties.contributors = [{ sourceId: "a", name: "Captured A" }];
+  const b = feature("b");
+  b.properties.sourceIds = ["b"];
+  b.properties.contributors = [{ sourceId: "b", name: "Captured B" }];
+  vi.spyOn(apiClient, "get")
+    .mockResolvedValueOnce(page({ features: [a], nextCursor: "page-b" }))
+    .mockResolvedValueOnce(page({ features: [b] }));
+  renderHook(() => useMonitorStations());
+  await waitFor(() => expect(useAirQualityStore.getState().hasData).toBe(true));
+  const data = fake.state.sources.get(MONITOR_SOURCE_ID)?.data as GeoJSON.FeatureCollection;
+  expect(data.features.map((f) => JSON.parse(String(f.properties?._mapAttributions)))).toEqual([
+    [{ sourceId: "a", name: "Captured A" }],
+    [{ sourceId: "b", name: "Captured B" }],
+  ]);
+  a.properties.contributors[0]!.name = "Metadata updated";
+  expect(JSON.parse(String(data.features[0]?.properties?._mapAttributions))[0]?.name).toBe(
+    "Captured A",
+  );
+});

@@ -1,72 +1,83 @@
 // @vitest-environment jsdom
-
+import { OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { OPENMAPTILES_ATTRIBUTION } from "@/lib/map";
 import { MapCredits } from "./MapCredits";
 
-vi.mock("next-intl", () => ({
-  useTranslations: () => (key: string) => key,
-}));
-
-const CREDITS = [
-  '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-  "© MapTiler",
-];
-
+vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
+const CREDITS = [OPENSTREETMAP_ATTRIBUTION, OPENMAPTILES_ATTRIBUTION];
 describe("MapCredits", () => {
-  it("renders every credit inline for a regular embedded map", () => {
-    render(<MapCredits html={CREDITS} />);
+  it("keeps required OSM and schema credits permanently present even on minimaps", () => {
+    render(<MapCredits attributions={CREDITS} />);
     const strip = screen.getByTestId("map-credits");
     expect(strip.textContent).toContain("OpenStreetMap");
-    expect(strip.textContent).toContain("MapTiler");
+    expect(strip.textContent).toContain("OpenMapTiles");
+    expect(strip.querySelector('a[href="https://openmaptiles.org/"]')).not.toBeNull();
   });
-
   it("renders nothing when there are no credits", () => {
-    const { container } = render(<MapCredits html={[]} />);
-    expect(container.innerHTML).toBe("");
+    expect(render(<MapCredits attributions={[]} />).container.innerHTML).toBe("");
   });
-
-  it("starts collapsed on a minimap and expands on click without triggering the map's own click", () => {
+  it("opens complete details in one action without navigating the host map", async () => {
     const onMapClick = vi.fn();
     render(
-      // biome-ignore lint/a11y/noStaticElementInteractions: stands in for the clickable minimap wrapper
-      // biome-ignore lint/a11y/useKeyWithClickEvents: stands in for the clickable minimap wrapper
-      <div onClick={onMapClick}>
-        <MapCredits html={CREDITS} compact />
+      // biome-ignore lint/a11y/noStaticElementInteractions: Simulates the map parent click listener, not a product control.
+      <div role="presentation" onClick={onMapClick}>
+        <MapCredits attributions={CREDITS} />
       </div>,
     );
-    expect(screen.queryByTestId("map-credits")).toBeNull();
-
     fireEvent.click(screen.getByRole("button", { name: "credits" }));
-
-    expect(screen.getByTestId("map-credits").textContent).toContain("OpenStreetMap");
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain("BSD-3-Clause");
+    expect(dialog.textContent).toContain("ODbL-1.0");
     expect(onMapClick).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "close" }));
+    expect(screen.getByTestId("map-credits").textContent).toContain("OpenMapTiles");
   });
-
-  it("keeps the toggle reachable while expanded so the credits can be collapsed again", () => {
-    render(<MapCredits html={CREDITS} compact />);
-    const toggle = () => screen.getByRole("button", { name: "credits" });
-
-    fireEvent.click(toggle());
-    expect(screen.queryByTestId("map-credits")).not.toBeNull();
-    // Regression: the expanded strip used to replace the toggle, leaving no way
-    // to close it again.
-    expect(toggle().getAttribute("aria-expanded")).toBe("true");
-
-    fireEvent.click(toggle());
-    expect(screen.queryByTestId("map-credits")).toBeNull();
-  });
-
-  it("does not navigate the host map when the expanded strip is clicked", () => {
+  it("never makes a required source link navigate the enclosing map", () => {
     const onMapClick = vi.fn();
     render(
-      // biome-ignore lint/a11y/noStaticElementInteractions: stands in for the clickable minimap wrapper
-      // biome-ignore lint/a11y/useKeyWithClickEvents: stands in for the clickable minimap wrapper
-      <div onClick={onMapClick}>
-        <MapCredits html={CREDITS} />
+      // biome-ignore lint/a11y/noStaticElementInteractions: Simulates the map parent click listener, not a product control.
+      <div role="presentation" onClick={onMapClick}>
+        <MapCredits attributions={CREDITS} />
       </div>,
     );
     fireEvent.click(screen.getByTestId("map-credits"));
     expect(onMapClick).not.toHaveBeenCalled();
   });
+});
+
+it("links distinct captured terms in details with a short label and keeps raw URLs out of credit copy", async () => {
+  const url = "https://historical.example/original-terms";
+  render(
+    <MapCredits
+      attributions={[
+        {
+          sourceId: "history",
+          name: "Historical source",
+          licensing: {
+            version: 1,
+            bindings: [
+              {
+                scope: "data",
+                subject: "Historical data",
+                license: { kind: "spdx", expression: "CC-BY-4.0" },
+              },
+            ],
+            declarations: [
+              { text: "CC-BY-4.0", url },
+              { text: "Repeated declaration", url },
+            ],
+          },
+        },
+      ]}
+    />,
+  );
+  expect(screen.getByTestId("map-credits").textContent).not.toContain(url);
+  fireEvent.click(screen.getByRole("button", { name: "credits" }));
+  await screen.findByRole("dialog");
+  const links = screen.getAllByRole("link", { name: "termsOfUse" });
+  expect(links).toHaveLength(1);
+  expect(links[0].getAttribute("href")).toBe(url);
+  expect(screen.queryByText(url)).toBeNull();
 });

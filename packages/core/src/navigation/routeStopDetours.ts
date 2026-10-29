@@ -1,8 +1,18 @@
+import {
+  contributorsForField,
+  type FieldContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { LngLat } from "../types/geometry";
 import type { DirectionsResult, Route } from "../types/routing";
-import { haversineDistance } from "../utils/coordinates";
-import { cumulativeDistances, positionAt } from "./deadReckon";
-import { asRouteMatcher, type RouteMatcherInput, snapPreparedRoute } from "./routeMatcher";
+import type { RouteMatcherInput } from "./routeMatcher";
+import {
+  projectWaypointAfter,
+  type WaypointOccurrence as RouteStopWaypointPosition,
+  resolveWaypointOccurrences as routeStopWaypointPositions,
+} from "./waypointOccurrences";
+
+export { type RouteStopWaypointPosition, routeStopWaypointPositions };
 
 export const ROUTE_STOP_LIMIT = 6;
 export const ROUTE_STOP_CONCURRENCY = 2;
@@ -20,6 +30,7 @@ interface RouteStopDetourBase {
   id: string;
   access: { kind: "entrance" | "coordinate"; coordinates: LngLat };
   waypoints: LngLat[];
+  fieldContributors?: FieldContributors;
 }
 
 export type RouteStopDetour = RouteStopDetourBase &
@@ -32,49 +43,6 @@ export function routeStopAccess(candidate: RouteStopCandidate): RouteStopDetour[
   return candidate.routingEntrance
     ? { kind: "entrance", coordinates: candidate.routingEntrance }
     : { kind: "coordinate", coordinates: candidate.coordinates };
-}
-
-/** Project onto the future suffix, rather than an earlier visit to the same road. */
-function projectAfter(route: RouteMatcherInput, target: LngLat, fromAlongMeters: number) {
-  const matcher = asRouteMatcher(route);
-  if (fromAlongMeters <= 0) return snapPreparedRoute(matcher, target);
-  const geometry = matcher.geometry;
-  const cumulative = cumulativeDistances(geometry);
-  const total = cumulative.at(-1) ?? 0;
-  const from = Math.min(fromAlongMeters, total);
-  const start = positionAt(geometry, cumulative, from).point;
-  const suffix = [start, ...geometry.filter((_, i) => cumulative[i] > from)];
-  if (suffix.length < 2)
-    return {
-      snapped: start,
-      alongMeters: total,
-      deviationMeters: haversineDistance(start, target),
-      segmentIndex: Math.max(0, geometry.length - 2),
-    };
-  const projected = snapPreparedRoute(asRouteMatcher(suffix), target);
-  return { ...projected, alongMeters: from + projected.alongMeters };
-}
-
-export interface RouteStopWaypointPosition {
-  coordinates: LngLat;
-  alongMeters: number;
-  final: boolean;
-}
-
-/** Resolve waypoint occurrences in itinerary order, including on retraced roads. */
-export function routeStopWaypointPositions(
-  route: RouteMatcherInput,
-  waypoints: LngLat[],
-  fromAlongMeters = 0,
-): RouteStopWaypointPosition[] {
-  const geometry = asRouteMatcher(route).geometry;
-  const total = cumulativeDistances(geometry).at(-1) ?? 0;
-  let cursor = fromAlongMeters;
-  return waypoints.slice(1).map((coordinates, index) => {
-    const final = index === waypoints.length - 2;
-    cursor = final ? total : projectAfter(route, coordinates, cursor).alongMeters;
-    return { coordinates, alongMeters: cursor, final };
-  });
 }
 
 export function remainingRouteStopWaypoints(
@@ -99,7 +67,7 @@ export function insertRouteStop(
 ): LngLat[] {
   if (remaining.length < 2) return [];
   if (remaining.length === 2) return [remaining[0], target, remaining[1]];
-  const along = projectAfter(route, target, fromAlongMeters).alongMeters;
+  const along = projectWaypointAfter(route, target, fromAlongMeters).alongMeters;
   const positions = routeStopWaypointPositions(route, remaining, fromAlongMeters);
   let index = remaining.length - 1;
   for (let i = 1; i < remaining.length - 1; i++) {
@@ -167,6 +135,7 @@ export async function evaluateRouteStopDetours(
     });
   if (results.length === 0 || waypoints.length < 2) return results;
   let baseline: Route;
+  let baselineFields: FieldContributors;
   let provider: string;
   try {
     const response = await requestRoute({ waypoints, provider: input.provider, signal });
@@ -175,6 +144,10 @@ export async function evaluateRouteStopDetours(
     if (!selected || !response.provider || (input.provider && response.provider !== input.provider))
       return results;
     baseline = selected;
+    baselineFields = {
+      duration: contributorsForField(selected, "duration"),
+      distance: contributorsForField(selected, "distance"),
+    };
     provider = response.provider;
   } catch {
     checkAbort(signal);
@@ -200,6 +173,16 @@ export async function evaluateRouteStopDetours(
           ...result,
           kind: "network",
           provider,
+          fieldContributors: {
+            seconds: snapshotContributors(
+              baselineFields.duration,
+              contributorsForField(candidate, "duration"),
+            ),
+            meters: snapshotContributors(
+              baselineFields.distance,
+              contributorsForField(candidate, "distance"),
+            ),
+          },
           seconds: Math.max(0, candidate.duration - baseline.duration),
           meters: Math.max(0, candidate.distance - baseline.distance),
         };

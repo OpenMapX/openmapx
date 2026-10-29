@@ -11,9 +11,7 @@ http:
           Cache-Control: "public, max-age=86400, stale-while-revalidate=604800"
 
     # Override of `tiles-cache` above for ONE Martin source: `segment_flow`,
-    # the traffic-flow overlay's live tiles (see
-    # docs/plans/conditions/speed-congestion/10-traffic-flow-overlay.md).
-    # That source is rebuilt from PostGIS every ~5 minutes by the congestion
+    # the traffic-flow overlay's live tiles. That source is rebuilt from PostGIS every ~5 minutes by the congestion
     # sweep, so the 24h `tiles-cache` max-age above would leave browsers
     # showing a day-old snapshot. Wired to `/martin/segment_flow` only, via
     # the higher-priority `martin-r1` router that `additionalRoutes` on

@@ -3,6 +3,7 @@ import {
   getRoadConditionRoutingDecision,
   type RoadConditionEffect,
   type RoadConditionEvent,
+  type RoadConditionRightsPolicy,
   type RoadConditionRouteImpact,
   type Route,
   type RoutingTrafficProof,
@@ -10,7 +11,11 @@ import {
   type TrafficApplicationReceipt,
   type TrafficApplicationSnapshot,
 } from "@openmapx/core";
-import { services as coreServices } from "@openmapx/core/server";
+import { dataManagerOperations } from "@openmapx/core/data-manager-contracts";
+import {
+  getGetAppliedTrafficConditionsUrl,
+  validateDataManagerBaseUrl,
+} from "@openmapx/core/data-manager-sdk";
 import { envString } from "@openmapx/core/server-env";
 import type { IntegrationContext, RoadConditionsProvider } from "@openmapx/integration-framework";
 import { assessRoadConditionForRoute } from "./road-condition-routing.js";
@@ -24,6 +29,19 @@ export function engineEffectOf(
 ): TrafficApplicationReceipt["effect"] | null {
   if (closesRoadForCars(effect)) return "closure";
   return speedCapKph(effect) !== undefined ? "speed_cap" : null;
+}
+
+/**
+ * The operator's data-use policy for routing, from an authoritative policy
+ * snapshot; a snapshot that does not state a flag grants nothing by it.
+ */
+export function rightsPolicyOf(
+  policy: { allowGreyArea?: boolean; allowNonCommercial?: boolean } | undefined,
+): RoadConditionRightsPolicy {
+  return {
+    allowGreyArea: policy?.allowGreyArea === true,
+    allowNonCommercial: policy?.allowNonCommercial === true,
+  };
 }
 
 /** A receipt names one effect of one situation: `<situationId>#<effectId>`, as the wire does. */
@@ -41,6 +59,7 @@ export function receiptCoversEffect(
   proof: RoutingTrafficProof,
   disallowed: ReadonlySet<string>,
   now: number,
+  rightsPolicy?: RoadConditionRightsPolicy,
 ): boolean {
   const e = event.routingEvidence?.[effect.id];
   const applied = engineEffectOf(effect);
@@ -52,6 +71,7 @@ export function receiptCoversEffect(
       travelAt: now,
       disallowedSources: disallowed,
       sharedTraffic: true,
+      ...(rightsPolicy ? { rightsPolicy } : {}),
     }).eligible
   )
     return false;
@@ -114,16 +134,17 @@ async function readSnapshot(ctx: IntegrationContext): Promise<TrafficApplication
   try {
     const token = envString("DATA_MANAGER_AUTH_TOKEN", "").trim();
     if (!token) return null;
-    const base = coreServices.validateDataManagerBaseUrl(
+    const base = validateDataManagerBaseUrl(
       ctx.getRequiredService("data-manager")?.url ??
         envString("DATA_MANAGER_URL", "http://localhost:4000"),
     );
-    return await ctx.http.get<TrafficApplicationSnapshot>(`${base}/traffic/conditions/applied`, {
+    const response = await ctx.http.get<unknown>(`${base}${getGetAppliedTrafficConditionsUrl()}`, {
       timeoutMs: 2_000,
       maxResponseBytes: 8 * 1024 * 1024,
       cache: { ttl: 0 },
       headers: { Authorization: `Bearer ${token}`, "Cache-Control": "no-cache" },
     });
+    return dataManagerOperations.getAppliedTrafficConditions.responses[200].schema.parse(response);
   } catch {
     return null;
   }
@@ -184,6 +205,7 @@ async function reconcileRouteTraffic(
     ...policy.disallowedSourceIds,
     ...((await ctx.getDisallowedSourceIds?.()) ?? []),
   ]);
+  const rightsPolicy = rightsPolicyOf(policy);
   if (
     snapshot.receipts.some(
       (r) => disallowed.has(r.sourceId) || r.policyRevision !== policy.revision,
@@ -231,6 +253,7 @@ async function reconcileRouteTraffic(
           travelAt: now,
           disallowedSources: disallowed,
           sharedTraffic: true,
+          rightsPolicy,
         });
         if (!decision.eligible) {
           for (const reason of decision.reasons) reasons.add(reason);
@@ -241,7 +264,7 @@ async function reconcileRouteTraffic(
         const effectReceipts = receiptsById.get(receiptObservationId(event, effect)) ?? [];
         const effectSnapshot = { ...snapshot, receipts: effectReceipts };
         const covered = proofs.every((p) =>
-          receiptCoversEffect(event, effect, effectSnapshot, p, disallowed, now),
+          receiptCoversEffect(event, effect, effectSnapshot, p, disallowed, now, rightsPolicy),
         );
         if (!covered) reasons.add("incomplete_engine_application");
         for (const route of routes) {
@@ -251,6 +274,7 @@ async function reconcileRouteTraffic(
             mode: route.mode,
             sharedTrafficApplied: covered,
             disallowedSources: disallowed,
+            rightsPolicy,
           });
           for (const reason of assessment.reasons) reasons.add(reason);
         }

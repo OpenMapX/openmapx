@@ -1,10 +1,20 @@
-import type { TravelMode } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import type { DirectionsResult, TravelMode } from "@openmapx/core";
+import {
+  captureResultContributors,
+  dataSourceToAttribution,
+  type IntegrationContext,
+  readCapturedFieldContributors,
+  snapshotContributors,
+} from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { captureGeometryContributors } from "@openmapx/mobility-core/geometry-contributors";
 import type { RoutingProvider } from "./types.js";
 
 export interface ResolvedProvider {
   provider: RoutingProvider;
   integrationId: string;
+  /** Metadata captured from the integration that actually supplies this call. */
+  contributors?: readonly Attribution[];
 }
 
 /**
@@ -32,7 +42,13 @@ export function createRoutingOrchestrator(ctx: IntegrationContext) {
     for (const integration of routingIntegrations) {
       const registered = (integration.providers.get("routing") ?? []) as RoutingProvider[];
       for (const provider of registered) {
-        resolved.push({ provider, integrationId: integration.id });
+        resolved.push({
+          provider,
+          integrationId: integration.id,
+          contributors: snapshotContributors(
+            (integration.manifest?.dataSources ?? []).map(dataSourceToAttribution),
+          ),
+        });
       }
     }
 
@@ -116,5 +132,29 @@ export function createRoutingOrchestrator(ctx: IntegrationContext) {
     getOptimizeProvider,
     getOptimizeProviders,
     getMatchProvider,
+  };
+}
+
+/** Trusted successful-call boundary. Never reconstruct cached receipts later. */
+export function captureRoutingResult(
+  result: DirectionsResult,
+  served: ResolvedProvider,
+): DirectionsResult {
+  return {
+    ...result,
+    provider: served.integrationId,
+    routes: result.routes.map((route) => ({
+      ...route,
+      ...(route.geometryContributors === undefined
+        ? {}
+        : { geometryContributors: captureGeometryContributors(route) }),
+      contributors: captureResultContributors(
+        { ...route, sourceIds: route.sourceIds ?? [] },
+        served.contributors ?? [],
+      ),
+      ...(route.fieldContributors === undefined
+        ? {}
+        : { fieldContributors: readCapturedFieldContributors(route.fieldContributors) }),
+    })),
   };
 }

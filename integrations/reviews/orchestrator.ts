@@ -1,4 +1,7 @@
-import type { LoadedIntegration } from "@openmapx/integration-framework";
+import {
+  captureReviewProviderContributors,
+  type LoadedIntegration,
+} from "@openmapx/integration-framework";
 import { normalizeOsmElementRef } from "@openmapx/mangrove-client";
 import type { Review, ReviewAggregate, ReviewProvider, ReviewSubject } from "./types.js";
 
@@ -7,7 +10,7 @@ export function getReviewProviders(integrations: LoadedIntegration[]): ReviewPro
   for (const integration of integrations) {
     if (!integration.enabled || !integration.manifest.domains.includes("reviews")) continue;
     for (const p of (integration.providers.get("reviews") ?? []) as ReviewProvider[]) {
-      providers.push(p);
+      providers.push(captureReviewProviderContributors(integration, p));
     }
   }
   return providers;
@@ -127,4 +130,9 @@ export function cacheKeyForSubject(subject: ReviewSubject): string {
     .slice(0, 60);
   const osm = normalizeOsmElementRef(subject.osmId)?.replace("/", "-") ?? "no-osm";
   return `${lat}:${lng}:${nameSlug}:${osm}`;
+}
+
+/** Receipt-bearing reads and post-write invalidation share one versioned namespace. */
+export function reviewCacheKey(kind: "list" | "agg", subject: ReviewSubject): string {
+  return `cache:reviews:contributors-v1:${kind}:${cacheKeyForSubject(subject)}`;
 }

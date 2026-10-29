@@ -1,9 +1,12 @@
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
+
 export type { EvVehicleSpec } from "@openmapx/core";
 
 import type { ConnectorStandard, EvVehicleSpec, LngLat, Route, TariffPrice } from "@openmapx/core";
 import type { ChargingSite, Evse } from "@openmapx/mobility-core/ev-charging";
 
-export interface MatrixCell {
+export interface MatrixCell extends ContributingRecord {
   seconds: number;
   km: number;
 }
@@ -60,10 +63,14 @@ export interface SessionCost {
 }
 
 export interface PlannedStop {
+  /** Receipts for the selected approach matrix cells used by this model, including earlier stop timing. */
+  matrixContributors?: Attribution[];
   site: ChargingSite;
   /** The charge point the session is planned on. */
   evse: Evse;
   connector: ConnectorStandard;
+  /** Exact raw connector retained by selection, for provenance projection. */
+  connectorKey?: string;
   powerKw: number;
   coordinates: LngLat;
   arriveSocKwh: number;

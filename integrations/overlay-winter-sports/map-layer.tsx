@@ -1,14 +1,25 @@
 "use client";
 
 import { escapeHtml, useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  readCapturedContributors,
+  withFeatureContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
-import { useCallback, useEffect, useRef } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { addLayerInSlot, removeSlottedLayers } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
-import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useSlottedLayersCleanup } from "@/integration-api/map/useSlottedLayersCleanup";
+import { addAttributedRasterSource } from "@/integration-api/overlay/rasterMapContribution";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
+import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
+import { useRasterMapAttributions } from "@/integration-api/overlay/useRasterMapAttributions";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useWinterSportsStore } from "./store";
 
@@ -21,6 +32,16 @@ const LIFT_LAYER_ID = "openmapx-winter-lifts";
 const LIFT_HIGHLIGHT_LAYER_ID = "openmapx-winter-lift-highlight";
 const AREA_LAYER_ID = "openmapx-winter-areas";
 const INTERACTIVE_LAYERS = [PISTE_LAYER_ID, LIFT_LAYER_ID] as const;
+/** Every layer this overlay adds, top-most first, and the sources they read. */
+const OWNED_LAYERS = [
+  PISTE_HIGHLIGHT_LAYER_ID,
+  LIFT_HIGHLIGHT_LAYER_ID,
+  PISTE_LAYER_ID,
+  LIFT_LAYER_ID,
+  AREA_LAYER_ID,
+  RASTER_LAYER_ID,
+];
+const OWNED_SOURCES = [VECTOR_SOURCE_ID, RASTER_SOURCE_ID];
 const VECTOR_MIN_ZOOM = 10;
 
 const PISTE_DIFFICULTY_COLORS: Record<string, string> = {
@@ -112,9 +133,29 @@ function liftPopupHtml(props: Record<string, string | number | boolean>): string
 
 export function WinterSportsLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
+  useSlottedLayersCleanup(mapRef, () => ({ layerIds: OWNED_LAYERS, sourceIds: OWNED_SOURCES }));
   const env = useEnv();
   const layerVisible = useWinterSportsStore((s) => s.layerVisible);
-  useIntegrationAttribution("overlay-winter-sports", layerVisible);
+  const resolve = useContributorResolver();
+  const rasterCredits = resolve({ sourceIds: ["opensnowmap"] });
+  useRasterMapAttributions(
+    "winter-sports-raster",
+    [{ sourceId: RASTER_SOURCE_ID, layerId: RASTER_LAYER_ID, contributors: rasterCredits }],
+    layerVisible,
+  );
+  useRenderedMapAttributions(
+    "winter-sports-vector",
+    [
+      PISTE_LAYER_ID,
+      LIFT_LAYER_ID,
+      AREA_LAYER_ID,
+      PISTE_HIGHLIGHT_LAYER_ID,
+      LIFT_HIGHLIGHT_LAYER_ID,
+    ],
+    layerVisible,
+  );
+  const [popupCredits, setPopupCredits] = useState<Attribution[]>([]);
+  useMapAttributions("winter-sports-popup", layerVisible ? popupCredits : []);
   const setLoading = useWinterSportsStore((s) => s.setLoading);
   const selectFeature = useWinterSportsStore((s) => s.selectFeature);
   useOverlayExclusion("winter-sports", layerVisible);
@@ -146,49 +187,64 @@ export function WinterSportsLayer() {
       const features: GeoJSON.Feature[] = [];
 
       for (const piste of data.pistes ?? []) {
-        features.push({
-          type: "Feature",
-          geometry: piste.geometry,
-          properties: {
-            id: piste.id,
-            featureKind: "piste",
-            name: piste.name,
-            pisteType: piste.type,
-            difficulty: piste.difficulty,
-            grooming: piste.grooming,
-            lit: piste.lit,
-            snowmaking: piste.snowmaking,
-            ref: piste.ref,
-          },
-        });
+        features.push(
+          withFeatureContributors(
+            {
+              type: "Feature",
+              geometry: piste.geometry,
+              properties: {
+                id: piste.id,
+                featureKind: "piste",
+                name: piste.name,
+                pisteType: piste.type,
+                difficulty: piste.difficulty,
+                grooming: piste.grooming,
+                lit: piste.lit,
+                snowmaking: piste.snowmaking,
+                ref: piste.ref,
+              },
+            },
+            readCapturedContributors(piste.contributors) ?? [],
+          ),
+        );
       }
 
       for (const lift of data.lifts ?? []) {
-        features.push({
-          type: "Feature",
-          geometry: lift.geometry,
-          properties: {
-            id: lift.id,
-            featureKind: "lift",
-            name: lift.name,
-            aerialway: lift.aerialway,
-            occupancy: lift.occupancy,
-            capacity: lift.capacity,
-            duration: lift.duration,
-          },
-        });
+        features.push(
+          withFeatureContributors(
+            {
+              type: "Feature",
+              geometry: lift.geometry,
+              properties: {
+                id: lift.id,
+                featureKind: "lift",
+                name: lift.name,
+                aerialway: lift.aerialway,
+                occupancy: lift.occupancy,
+                capacity: lift.capacity,
+                duration: lift.duration,
+              },
+            },
+            readCapturedContributors(lift.contributors) ?? [],
+          ),
+        );
       }
 
       for (const area of data.areas ?? []) {
-        features.push({
-          type: "Feature",
-          geometry: area.geometry,
-          properties: {
-            id: area.id,
-            featureKind: "area",
-            name: area.name,
-          },
-        });
+        features.push(
+          withFeatureContributors(
+            {
+              type: "Feature",
+              geometry: area.geometry,
+              properties: {
+                id: area.id,
+                featureKind: "area",
+                name: area.name,
+              },
+            },
+            readCapturedContributors(area.contributors) ?? [],
+          ),
+        );
       }
 
       const geojson: GeoJSON.FeatureCollection = {
@@ -212,46 +268,25 @@ export function WinterSportsLayer() {
 
     const syncLayers = () => {
       if (!layerVisible) {
-        try {
-          for (const id of [
-            PISTE_HIGHLIGHT_LAYER_ID,
-            LIFT_HIGHLIGHT_LAYER_ID,
-            PISTE_LAYER_ID,
-            LIFT_LAYER_ID,
-            AREA_LAYER_ID,
-            RASTER_LAYER_ID,
-          ]) {
-            if (map.getLayer(id)) map.removeLayer(id);
-          }
-          if (map.getSource(VECTOR_SOURCE_ID)) map.removeSource(VECTOR_SOURCE_ID);
-          if (map.getSource(RASTER_SOURCE_ID)) map.removeSource(RASTER_SOURCE_ID);
-        } catch {
-          // In-flight tiles
-        }
-        unregisterLayerSlot(RASTER_LAYER_ID);
-        unregisterLayerSlot(AREA_LAYER_ID);
-        unregisterLayerSlot(PISTE_LAYER_ID);
-        unregisterLayerSlot(PISTE_HIGHLIGHT_LAYER_ID);
-        unregisterLayerSlot(LIFT_LAYER_ID);
-        unregisterLayerSlot(LIFT_HIGHLIGHT_LAYER_ID);
+        removeSlottedLayers(map, OWNED_LAYERS, OWNED_SOURCES);
         popupRef.current?.remove();
         fetchedRef.current = false;
         return;
       }
 
-      if (!map.isStyleLoaded()) {
-        map.once("idle", syncLayers);
-        return;
-      }
-
       // Raster source (OpenSnowMap)
       if (!map.getSource(RASTER_SOURCE_ID)) {
-        map.addSource(RASTER_SOURCE_ID, {
-          type: "raster",
-          tiles: [`${env.apiUrl}/api/integrations/overlay-winter-sports/tiles/{z}/{x}/{y}.png`],
-          tileSize: 256,
-          maxzoom: 16,
-        });
+        addAttributedRasterSource(
+          map,
+          RASTER_SOURCE_ID,
+          {
+            type: "raster",
+            tiles: [`${env.apiUrl}/api/integrations/overlay-winter-sports/tiles/{z}/{x}/{y}.png`],
+            tileSize: 256,
+            maxzoom: 16,
+          },
+          rasterCredits,
+        );
       }
 
       if (!map.getLayer(RASTER_LAYER_ID)) {
@@ -397,17 +432,8 @@ export function WinterSportsLayer() {
       }
     };
 
-    if (!layerVisible) {
-      syncLayers();
-      return;
-    }
-
-    syncLayers();
-    map.on("styledata", syncLayers);
-    return () => {
-      map.off("styledata", syncLayers);
-    };
-  }, [mapReady, styleVersion, mapRef, layerVisible, fetchFeatures]);
+    return subscribeStyleLoaded(map, syncLayers);
+  }, [mapReady, styleVersion, mapRef, layerVisible, fetchFeatures, resolve]);
 
   // Refetch on move
   const debouncedFetch = useDebouncedCallback(() => fetchFeatures(), 800);
@@ -441,6 +467,7 @@ export function WinterSportsLayer() {
       const html = kind === "lift" ? liftPopupHtml(props) : pistePopupHtml(props);
 
       popupRef.current?.remove();
+      setPopupCredits(readCapturedContributors(f.properties?._mapAttributions) ?? []);
       popupRef.current = new maplibregl.Popup({
         closeButton: true,
         maxWidth: "300px",
@@ -449,6 +476,7 @@ export function WinterSportsLayer() {
         .setLngLat(e.lngLat)
         .setHTML(html)
         .addTo(map);
+      popupRef.current.on("close", () => setPopupCredits([]));
     };
 
     const onMouseMove = (e: MapMouseEvent) => {

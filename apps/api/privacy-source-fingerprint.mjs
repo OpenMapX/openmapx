@@ -4,6 +4,12 @@ import { basename, join, relative } from "node:path";
 
 const TARGETS = [
   ".github/workflows/docker.yml",
+  ".github/workflows/product-release.yml",
+  "scripts/product-release-config.mjs",
+  "scripts/product-release-plan.mjs",
+  "scripts/product-release.mjs",
+  "scripts/product-release-io.mjs",
+
   "apps/api/privacy-source-fingerprint.mjs",
   "apps/api/esbuild.config.mjs",
   "apps/api/Dockerfile",
@@ -38,7 +44,8 @@ const TARGETS = [
   "apps/ops-agent/Dockerfile",
   "apps/ops-agent/package.json",
   "apps/ops-agent/tsconfig.json",
-  "apps/ops-agent/tsconfig.build.json",
+  "scripts/build-runtime-bundles.mjs",
+  "scripts/module-specifiers.mjs",
   "apps/web/src/app/(legal)",
   "apps/web/src/app/admin/(full-admin)/privacy-setup",
   "apps/web/src/components/admin/settings",

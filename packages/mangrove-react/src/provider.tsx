@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, type ReactNode, useContext } from "react";
+import { MangroveSignerProvider } from "./signerProvider";
 import type { MangroveCurrentUser, MangroveTransport } from "./transport";
 
 interface MangroveContextValue {
@@ -39,7 +40,16 @@ export function MangroveProvider({
 }: MangroveProviderProps) {
   return (
     <MangroveContext.Provider value={{ transport, currentUser, webauthnKeyName }}>
-      {children}
+      <MangroveSignerProvider
+        owner={
+          currentUser
+            ? JSON.stringify([currentUser.id, currentUser.authorityId ?? currentUser.id])
+            : null
+        }
+        transport={transport.signer}
+      >
+        {children}
+      </MangroveSignerProvider>
     </MangroveContext.Provider>
   );
 }

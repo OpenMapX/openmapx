@@ -1,6 +1,9 @@
 import type { Mode, OneToManyIntermodalResponse, Place } from "@motis-project/motis-client";
 import { oneToAll, oneToManyIntermodalPost } from "@motis-project/motis-client";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import type { MotisInstance } from "@openmapx/mobility-core/motis-client";
+import { captureTransitContributors } from "@openmapx/mobility-core/transit-contributors";
 import {
   TRANSIT_WALK_PROFILE,
   type TransitReachabilityCapabilities,
@@ -120,6 +123,24 @@ function placeSeed(
       provider: instance.provider,
     },
   };
+}
+
+/** This transport exposes stop locations and a duration, without traversed graph/feed IDs. */
+export function captureDurationOnlyReachabilitySeeds(
+  seeds: TransitReachabilitySeed[],
+  receipts: readonly Attribution[],
+): TransitReachabilitySeed[] {
+  return captureTransitContributors(seeds, receipts).map((seed) => ({
+    ...seed,
+    lineageComplete: false,
+    fieldContributors: {
+      ...seed.fieldContributors,
+      lat: snapshotContributors(seed.fieldContributors?.lat ?? seed.contributors ?? []),
+      lng: snapshotContributors(seed.fieldContributors?.lng ?? seed.contributors ?? []),
+      stop: snapshotContributors(seed.stop?.contributors ?? []),
+      arrivalSeconds: [],
+    },
+  }));
 }
 
 export async function getMotisReachabilitySeeds(

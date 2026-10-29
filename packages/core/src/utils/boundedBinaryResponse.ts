@@ -53,7 +53,13 @@ export function createBoundedBinaryProxyStream(
   response: Response,
   options: BoundedBinaryResponseOptions,
 ): BoundedBinaryProxy {
-  const contentType = validateOptions(response, options);
+  let contentType: string;
+  try {
+    contentType = validateOptions(response, options);
+  } catch (error) {
+    if (response.body) void response.body.cancel().catch(() => undefined);
+    throw error;
+  }
   const label = options.label ?? "binary response";
   let total = 0;
   const limiter = new Transform({

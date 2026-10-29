@@ -8,11 +8,12 @@ import { describe, expect, test } from "vitest";
 import { recordToChargingSite } from "../charging/map.js";
 import { createChargingSiteProvider } from "../charging/provider.js";
 import { createOpenConditionsClient } from "../client.js";
-import { CROWD_CREDIT, type LatestReading, NO_SOURCES } from "../features/record.js";
+import { type LatestReading, NO_SOURCES } from "../features/record.js";
 import { setup } from "../index.js";
 import type { LiveSources } from "../sources.js";
 import stringsDe from "../strings/de.json" with { type: "json" };
 import stringsEn from "../strings/en.json" with { type: "json" };
+import { CROWD_PROVENANCE, CROWD_READING_CREDIT, CROWD_SOURCES } from "./fixtures/crowd.js";
 import featureResponse from "./fixtures/feature-charging.json" with { type: "json" };
 import featuresResponse from "./fixtures/features-charging.json" with { type: "json" };
 
@@ -59,9 +60,9 @@ const EVERY_SOURCE: LiveSources = {
   ready: true,
   has: () => true,
   link: () => undefined,
-  licenseName: () => undefined,
+  crowd: () => undefined,
   noticeOf: () => undefined,
-  firmsSources: () => [],
+  fireSources: () => [],
 };
 
 function providerWith(respond: Responder, sources: LiveSources = EVERY_SOURCE, now = FRESH) {
@@ -118,6 +119,7 @@ describe("charging-sites-openconditions", () => {
     const [first, second] = site.evses;
     expect(first).toEqual({
       key: "EVSE-1",
+      contributors: [],
       evseId: "DE*BWE*E1001*1",
       quantity: 1,
       lifecycle: "operational",
@@ -129,6 +131,7 @@ describe("charging-sites-openconditions", () => {
       connectors: [
         {
           key: "EVSE-1/1",
+          contributors: [],
           standard: "IEC_62196_T2",
           format: "socket",
           powerType: "AC_3_PHASE",
@@ -154,6 +157,9 @@ describe("charging-sites-openconditions", () => {
       }),
     ]);
     expect(site.tariffs[0]).toEqual({
+      contributors: [
+        expect.objectContaining({ sourceId: MOBIDATA, licensing: expect.any(Object) }),
+      ],
       id: TARIFF,
       currency: "EUR",
       type: "ad_hoc",
@@ -249,8 +255,16 @@ describe("charging-sites-openconditions", () => {
     ]);
     expect(all.attributions[2]).toMatchObject({
       sourceId: MOBIDATA,
-      spdxLicense: "CC-BY-4.0",
-      licenseUrl: expect.any(String),
+      licensing: {
+        version: 1,
+        bindings: [
+          {
+            scope: "data",
+            subject: "EnBW",
+            license: { kind: "spdx", expression: "CC-BY-4.0", url: expect.any(String) },
+          },
+        ],
+      } as const,
       publisher: { name: "EnBW" },
     });
 
@@ -271,29 +285,45 @@ describe("charging-sites-openconditions", () => {
 
   test("lifecycle closes or plans the site and its EVSEs", () => {
     const closed = body();
-    recordOf(closed)["lifecycle"] = "temporarily_closed";
+    recordOf(closed).lifecycle = "temporarily_closed";
     expect(mapped(closed)).toMatchObject({ closed: true, planned: false });
-    recordOf(closed)["lifecycle"] = "decommissioned";
+    recordOf(closed).lifecycle = "decommissioned";
     expect(mapped(closed)).toMatchObject({ closed: true });
-    recordOf(closed)["lifecycle"] = "planned";
+    recordOf(closed).lifecycle = "planned";
     expect(mapped(closed)).toMatchObject({ closed: false, planned: true });
   });
 
-  test("crowd reports are credited", () => {
+  test("crowd reports retain the expanded observation capture", () => {
     const answer = body();
     latestOf(answer)[0]!.contributors = [MOBIDATA, "crowd"];
-    expect(mapped(answer)!.attributions.at(-1)).toEqual(CROWD_CREDIT);
+    latestOf(answer)[0]!.provenance = CROWD_PROVENANCE;
+    const site = recordToChargingSite(
+      recordOf(answer),
+      latestOf(answer),
+      offersOf(answer),
+      () => false,
+      CROWD_SOURCES,
+      FRESH,
+    )!;
+    expect(site.attributions.at(-1)).toEqual(CROWD_READING_CREDIT);
+  });
+
+  test("a crowd reading is left out while /sources states no crowd credit", () => {
+    const answer = body();
+    latestOf(answer)[0]!.contributors = [MOBIDATA, "crowd"];
+    const site = mapped(answer, (sourceId) => sourceId === "crowd")!;
+    expect(site.attributions.map((a) => a.sourceId)).not.toContain("crowd");
   });
 
   test("a feature that is not a charging site is not a site", () => {
     const answer = body();
-    recordOf(answer)["kind"] = "fuel_station";
+    recordOf(answer).kind = "fuel_station";
     expect(mapped(answer)).toBeNull();
   });
 
   test("coverage.partial is passed through as area", async () => {
     const answer = body();
-    answer["coverage"] = { partial: true, sources: [{ id: OSM, complete: false }] };
+    answer.coverage = { partial: true, sources: [{ id: OSM, complete: false }] };
     expect((await providerWith(listing(answer)).provider.searchSites(BBOX)).partial).toBe("area");
   });
 
@@ -302,9 +332,9 @@ describe("charging-sites-openconditions", () => {
       ready: false,
       has: () => false,
       link: () => undefined,
-      licenseName: () => undefined,
+      crowd: () => undefined,
       noticeOf: () => undefined,
-      firmsSources: () => [],
+      fireSources: () => [],
     });
     expect(await provider.searchSites(BBOX)).toEqual({ sites: [], partial: "unavailable" });
     expect(await provider.getSite(MOBIDATA_MEMBER)).toBeNull();
@@ -318,12 +348,12 @@ describe("charging-sites-openconditions", () => {
       answer.records = Array.from({ length: 9000 }, (_, i) => {
         const copy = clone(site);
         const recordId = `KA-${i}`;
-        (copy["provenance"] as Rec)["recordId"] = recordId;
-        (copy["provenance"] as Rec)["derivedFrom"] = {
+        (copy.provenance as Rec).recordId = recordId;
+        (copy.provenance as Rec).derivedFrom = {
           records: [{ class: "feature", id: `oc:feature:${MOBIDATA}:${recordId}` }],
         };
-        (copy["provenance"] as Rec)["mergedSources"] = [];
-        copy["id"] = `oc:feature:test.local:${i}`;
+        (copy.provenance as Rec).mergedSources = [];
+        copy.id = `oc:feature:test.local:${i}`;
         return copy;
       });
       answer.latest = {};
@@ -372,7 +402,7 @@ describe("charging-sites-openconditions", () => {
     expect(opened).toMatchObject({ id: SITE_ID, sources: [MOBIDATA, OSM] });
     const reread = http.calls.at(-1)!;
     expect(reread.url).toBe(`${BASE_URL}/features`);
-    const [w, s, e, n] = String(reread.options?.params?.["bbox"]).split(",").map(Number) as [
+    const [w, s, e, n] = String(reread.options?.params?.bbox).split(",").map(Number) as [
       number,
       number,
       number,
@@ -382,6 +412,120 @@ describe("charging-sites-openconditions", () => {
     expect(e).toBeGreaterThan(8.4112);
     expect(s).toBeLessThan(49.0088);
     expect(n).toBeGreaterThan(49.0088);
+  });
+
+  test("carries the site's hours exceptions still to come, charging when closed, parking type and amenities", () => {
+    const answer = body();
+    const record = recordOf(answer);
+    record.openingHours = {
+      osm: "Mo-Fr 07:00-21:00",
+      timezone: "Europe/Berlin",
+      chargingWhenClosed: true,
+      exceptions: [
+        { start: "2026-12-24T13:00:00Z", end: "2026-12-26T07:00:00Z", open: false },
+        // Ended before now.
+        { start: "2026-10-01T00:00:00Z", end: "2026-10-02T00:00:00Z", open: false },
+        // Under way at now.
+        { start: "2026-10-06T00:00:00Z", end: "2026-10-07T00:00:00Z", open: true },
+        { start: "not a time", end: "2026-12-31T00:00:00Z", open: false },
+        { start: "2026-12-31T00:00:00Z", end: "2026-12-30T00:00:00Z", open: false },
+      ],
+    };
+    record.details = { ...(record.details as Rec), parkingType: "parking_garage" };
+    record.amenities = ["restaurant", "wifi"];
+    expect(mapped(answer)).toMatchObject({
+      openingHours: "Mo-Fr 07:00-21:00",
+      timeZone: "Europe/Berlin",
+      chargingWhenClosed: true,
+      openingHoursExceptions: [
+        { start: "2026-10-06T00:00:00Z", end: "2026-10-07T00:00:00Z", open: true },
+        { start: "2026-12-24T13:00:00Z", end: "2026-12-26T07:00:00Z", open: false },
+      ],
+      parkingType: "parking_garage",
+      amenities: ["restaurant", "wifi"],
+    });
+
+    const bare = mapped(body())!;
+    for (const field of [
+      "openingHoursExceptions",
+      "chargingWhenClosed",
+      "parkingType",
+      "amenities",
+      "energyMix",
+    ]) {
+      expect(bare).not.toHaveProperty(field);
+    }
+  });
+
+  test("structured opening hours stand in for a missing OSM string", () => {
+    const answer = body();
+    recordOf(answer).openingHours = { twentyFourSeven: true };
+    expect(mapped(answer)!.openingHours).toBe("24/7");
+  });
+
+  test("the site's and each tariff's energy mix are read, what cannot be read left out", () => {
+    const answer = body();
+    const record = recordOf(answer);
+    record.details = {
+      ...(record.details as Rec),
+      energyMix: {
+        isGreen: true,
+        supplierName: "EnBW",
+        productName: "Ökostrom",
+        sources: [
+          { source: "wind", pct: 60 },
+          { source: "solar", pct: 40 },
+          { source: "coal", pct: 140 },
+          { pct: 5 },
+        ],
+        impacts: [
+          { category: "carbon_dioxide", gPerKwh: 0 },
+          { category: "nuclear_waste", gPerKwh: -1 },
+        ],
+      },
+    };
+    offersOf(answer)[0]!.energyMix = { isGreen: false };
+    const site = mapped(answer)!;
+    expect(site.energyMix).toEqual({
+      isGreen: true,
+      supplierName: "EnBW",
+      productName: "Ökostrom",
+      sources: [
+        { source: "wind", pct: 60 },
+        { source: "solar", pct: 40 },
+      ],
+      impacts: [{ category: "carbon_dioxide", gPerKwh: 0 }],
+    });
+    expect(site.tariffs[0]!.energyMix).toEqual({ isGreen: false, sources: [], impacts: [] });
+
+    (record.details as Rec).energyMix = { sources: [{ source: "wind", pct: "60" }] };
+    expect(mapped(answer)).not.toHaveProperty("energyMix");
+  });
+
+  test("a tariff element priced for a booking says which part of it", () => {
+    const answer = body();
+    const tariff = offersOf(answer)[0]!;
+    tariff.elements = [
+      {
+        components: [{ type: "flat", price: { amount: "5.00", currency: "EUR" } }],
+        restrictions: { booking: "booking_cancellation_fees" },
+      },
+    ];
+    expect(mapped(answer)!.tariffs[0]!.elements[0]!.restrictions).toEqual({
+      booking: "booking_cancellation_fees",
+    });
+  });
+
+  test("each EVSE carries its parking restrictions", () => {
+    const answer = body();
+    const evse = (recordOf(answer).components as Rec[]).find((c) => c.key === "EVSE-2")!;
+    evse.details = { ...(evse.details as Rec), parkingRestrictions: ["taxis", "tenants"] };
+    const evses = mapped(answer)!.evses;
+    expect(evses.find((e) => e.key === "EVSE-1")!.parkingRestrictions).toEqual(["ev_only"]);
+    expect(evses.find((e) => e.key === "EVSE-2")!.parkingRestrictions).toEqual([
+      "taxis",
+      "tenants",
+    ]);
   });
 
   test("a site opens without a disallowed source, as the search listed it", async () => {

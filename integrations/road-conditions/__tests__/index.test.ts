@@ -29,15 +29,17 @@ function handlerFor(routes: Map<string, Handler>, path: string): Handler {
 /**
  * Drives the `/events` route with a stub host: records the cache key each call
  * derives and the query options the aggregation would run under. Defaults to
- * no providers registered and a pass-through cache; both can be overridden to
- * exercise partial-provider-failure and total-aggregation-failure paths.
+ * one provider with nothing to report and a pass-through cache; both can be
+ * overridden to exercise no-source, partial-provider-failure and
+ * total-aggregation-failure paths.
  */
 function eventsHarness(opts?: {
   providers?: RoadConditionsProvider[];
   withCache?: <T>(key: string, ttl: number, fn: () => Promise<T>) => Promise<T>;
 }) {
   const cacheKeys: string[] = [];
-  const integrations = (opts?.providers ?? []).map((p) => ({
+  const providers = opts?.providers ?? [eventsProvider("road-conditions-empty", async () => [])];
+  const integrations = providers.map((p) => ({
     id: p.id,
     providers: new Map<string, RoadConditionsProvider[]>([["road-conditions", [p]]]),
   }));
@@ -188,6 +190,10 @@ describe("parseBbox", () => {
     expect(parseBbox(undefined)).toBeNull();
   });
 
+  it("returns null for a repeated parameter, which the query parser hands over as an array", () => {
+    expect(parseBbox(["-1,51,1,52", "0,0,1,1"] as unknown as string)).toBeNull();
+  });
+
   it("rejects a blank segment instead of silently substituting 0", () => {
     expect(parseBbox("1,,3,4")).toBeNull();
   });
@@ -271,6 +277,35 @@ describe("GET /events failure semantics", () => {
     expect(res.status).toBe(200);
     expect(res.headers["Cache-Control"]).toBe("public, max-age=60, s-maxage=60");
     expect(res.body).toEqual({ type: "FeatureCollection", features: [] });
+  });
+
+  it("responds 503 with no-cache when no provider is configured: no source is not no incidents", async () => {
+    const h = eventsHarness({ providers: [] });
+    const res = await h.get({ bbox: BBOX });
+    expect(res.status).toBe(503);
+    expect(res.headers["Cache-Control"]).toBe("no-cache");
+    expect(res.body).toEqual({ error: "no road-conditions source is configured" });
+    expect(h.cacheKeys).toEqual([]);
+  });
+
+  it("responds 200 with an empty collection when the configured providers do not cover the bbox", async () => {
+    let asked = false;
+    const h = eventsHarness({
+      providers: [
+        {
+          ...eventsProvider("road-conditions-elsewhere", async () => {
+            asked = true;
+            return [event({ id: "elsewhere:1" })];
+          }),
+          coverage: { bbox: [5, 47, 15, 55] },
+        },
+      ],
+    });
+    const res = await h.get({ bbox: "-74.1,40.6,-73.9,40.8" });
+    expect(res.status).toBe(200);
+    expect(res.headers["Cache-Control"]).toBe("public, max-age=60, s-maxage=60");
+    expect(res.body).toEqual({ type: "FeatureCollection", features: [] });
+    expect(asked).toBe(false);
   });
 
   it("responds 200 with the surviving providers' events when only some providers fail", async () => {
@@ -383,7 +418,7 @@ describe("POST /flow-along-route", () => {
     // Simulate a failure that has nothing to do with any provider (e.g. a
     // cache backend error) for r0's cache key specifically, so a pass on r1
     // in the same request proves the failure is scoped to one route.
-    const failingKey = `conditions:query:flowroute:${routeFingerprint(r0Geometry)}`;
+    const failingKey = `conditions:query:flowroute:v2:${routeFingerprint(r0Geometry)}`;
     const harness = flowRouteHarness({
       providers: [
         flowProvider("congestion", async (bbox) => {
@@ -481,12 +516,168 @@ describe("GET /events filters", () => {
     const served = event({ id: "oc:1", kind: "closure", type: "closure" });
     const h = eventsHarness({ providers: [eventsProvider("p", async () => [served])] });
     const res = await h.get({ bbox: BBOX });
-    const { geometry, ...properties } = served;
+    const { geometry, ...properties } = {
+      ...served,
+      contributors: [
+        {
+          sourceId: "s",
+          name: "NDW",
+          licensing: {
+            version: 1,
+            declarations: [{ text: "CC0-1.0" }],
+            bindings: [
+              { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC0-1.0" } },
+            ],
+          } as const,
+        },
+      ],
+    };
     expect(res.body).toEqual({
       type: "FeatureCollection",
       features: [
         { type: "Feature", id: "oc:1", geometry, properties: { ...properties, provider: "p" } },
       ],
+    });
+  });
+});
+
+describe("GET /bindings", () => {
+  /**
+   * Drives `/bindings` with a stub host whose cache keeps each entry as JSON,
+   * as a shared cache does, so what the route caches is what it reads back.
+   */
+  function bindingsHarness(providers: RoadConditionsProvider[], disallowed: string[] = []) {
+    const routes = new Map<string, Handler>();
+    const stored = new Map<string, string>();
+    const ctx = {
+      registerRoute(_method: string, path: string, handler: Handler) {
+        routes.set(path, handler);
+      },
+      cache: {
+        async withCache<T>(key: string, _ttl: number, fn: () => Promise<T>): Promise<T> {
+          const hit = stored.get(key);
+          if (hit !== undefined) return JSON.parse(hit) as T;
+          const value = await fn();
+          stored.set(key, JSON.stringify(value));
+          return value;
+        },
+      },
+      getIntegrationsByDomain: () =>
+        providers.map((p) => ({
+          id: p.id,
+          providers: new Map<string, RoadConditionsProvider[]>([["road-conditions", [p]]]),
+        })),
+      getDisallowedSourceIds: async () => new Set(disallowed),
+      log: { warn() {}, error() {}, info() {}, debug() {} },
+    } as unknown as IntegrationContext;
+    setup(ctx);
+    return async (query: Record<string, string | undefined>) => {
+      let status = 200;
+      let body: unknown;
+      await handlerFor(routes, "/bindings")(
+        { query, body: undefined },
+        {
+          status: (code) => {
+            status = code;
+            return { send: (b: unknown) => (body = b) };
+          },
+          header: () => {},
+          send: (b: unknown) => (body = b),
+        },
+      );
+      return { status, body };
+    };
+  }
+
+  const detail = {
+    situation: { status: "ambiguous", reason: "direction_undecided" },
+    effects: {},
+  };
+
+  it("asks the named provider for the situation's bindings, excluding disallowed sources", async () => {
+    const asked: Array<[string, unknown]> = [];
+    const get = bindingsHarness(
+      [
+        {
+          id: "oc",
+          getEvents: async () => [],
+          getBindings: async (id, opts) => {
+            asked.push([id, opts]);
+            return detail;
+          },
+        },
+      ],
+      ["grey"],
+    );
+    expect(await get({ provider: "oc", id: "oc:situation:a" })).toEqual({
+      status: 200,
+      body: detail,
+    });
+    expect(asked).toEqual([["oc:situation:a", { excludedSourceIds: ["grey"] }]]);
+  });
+
+  it("refuses an id that is not an OpenConditions situation's before asking anyone", async () => {
+    let asked = 0;
+    const get = bindingsHarness([
+      {
+        id: "oc",
+        getEvents: async () => [],
+        getBindings: async () => {
+          asked += 1;
+          return detail;
+        },
+      },
+    ]);
+    for (const id of ["x", "..", ".", "oc:situation:a/../../feeds", "oc:feature:a", undefined]) {
+      expect((await get({ provider: "oc", id })).status).toBe(400);
+    }
+    expect(asked).toBe(0);
+  });
+
+  it("answers 404 for an unknown provider, one without bindings or an unknown situation", async () => {
+    const get = bindingsHarness([
+      { id: "plain", getEvents: async () => [] },
+      { id: "oc", getEvents: async () => [], getBindings: async () => null },
+    ]);
+    expect((await get({ provider: "nope", id: "oc:situation:x" })).status).toBe(404);
+    expect((await get({ provider: "plain", id: "oc:situation:x" })).status).toBe(404);
+    expect((await get({ provider: "oc", id: "oc:situation:x" })).status).toBe(404);
+  });
+
+  it("caches a situation without bindings, so asking again reads no provider", async () => {
+    let asked = 0;
+    const get = bindingsHarness([
+      {
+        id: "oc",
+        getEvents: async () => [],
+        getBindings: async () => {
+          asked += 1;
+          return null;
+        },
+      },
+    ]);
+    expect((await get({ provider: "oc", id: "oc:situation:gone" })).status).toBe(404);
+    expect((await get({ provider: "oc", id: "oc:situation:gone" })).status).toBe(404);
+    expect(asked).toBe(1);
+  });
+
+  it("answers 503 when the provider cannot answer yet, and asks again next time", async () => {
+    let asked = 0;
+    const get = bindingsHarness([
+      {
+        id: "oc",
+        getEvents: async () => [],
+        getBindings: async () => {
+          asked += 1;
+          if (asked === 1) throw new Error("OpenConditions source list not read yet");
+          return detail;
+        },
+      },
+    ]);
+    expect((await get({ provider: "oc", id: "oc:situation:a" })).status).toBe(503);
+    expect(await get({ provider: "oc", id: "oc:situation:a" })).toEqual({
+      status: 200,
+      body: detail,
     });
   });
 });

@@ -367,3 +367,49 @@ describe("knowledge-overture provider lookup", () => {
     expect(elapsed).toBeLessThan(2000);
   }, 3000);
 });
+
+it("keeps contact property suppliers separate from discarded Overture name data", async () => {
+  const manifest = structuredClone((await import("../manifest.json")).default);
+  const db = makeDb(
+    vi.fn().mockResolvedValue([
+      {
+        gers_id: "overture-abc-123",
+        name: "Hidden name",
+        sources_catalogue: manifest.dataSources.map((source) => ({
+          sourceId: source.sourceId,
+          name: source.name,
+        })),
+        names: null,
+        brand: null,
+        phones: ["123"],
+        websites: null,
+        socials: null,
+        emails: null,
+        addresses: null,
+        sources: [
+          { property: "", dataset: "Meta" },
+          { property: "/phones/0", dataset: "Foursquare" },
+        ],
+        release: "2026-07-22.0",
+      },
+    ]),
+  );
+  const ctx = makeCtx(db);
+  ctx.manifest = manifest as never;
+  const { setup } = await import("../index.js");
+  setup(ctx);
+  const { overtureKnowledgeSource } = await import("../provider.js");
+  const result = await overtureKnowledgeSource.lookup({}, "en", {
+    coordinates: [13.4, 52.5],
+    name: "Cafe",
+    ids: { overture: "overture-abc-123" },
+  });
+  expect(result?.fieldContributors?.phone?.map((receipt) => receipt.sourceId).sort()).toEqual([
+    "foursquare",
+    "overture",
+  ]);
+  expect(
+    result?.fieldContributors?.["externalIds.gers"]?.map((receipt) => receipt.sourceId),
+  ).toEqual(["overture"]);
+  expect(result?.contributors?.some((receipt) => receipt.sourceId === "meta-places")).toBe(false);
+});

@@ -4,6 +4,12 @@ import { fireEvent, render, screen } from "@/test";
 
 const isMobileRef = { current: true };
 const sourcesRef: { current: Array<{ id: string; categoryChipLabel: string }> } = { current: [] };
+const integrationsRef: {
+  current: Array<{ frontend: { searchCategory: { id: string; showInChipBar?: boolean } } }>;
+} = { current: [] };
+vi.mock("@openmapx/integration-framework/react", () => ({
+  useIntegrationRegistry: () => ({ getAll: () => integrationsRef.current }),
+}));
 vi.mock("@mui/material/useMediaQuery", () => ({ default: () => isMobileRef.current }));
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 vi.mock("@openmapx/core", async (importOriginal) => {
@@ -56,6 +62,7 @@ describe("CategoryChips map obstruction", () => {
     stubLayout();
     isMobileRef.current = true;
     sourcesRef.current = [];
+    integrationsRef.current = [];
     // The store's default zoom is 2, which is below the chip row's own
     // visibility threshold.
     useMapStore.setState({ zoom: 12 });
@@ -132,6 +139,26 @@ describe("CategoryChips discovery order", () => {
       "ATMs",
       "Webcams",
     ]);
+  });
+
+  it("leaves out sources whose manifest keeps them out of the chip bar", () => {
+    sourcesRef.current = [
+      { id: "webcam", categoryChipLabel: "Webcams" },
+      { id: "road-weather", categoryChipLabel: "Road weather" },
+      { id: "car-sharing", categoryChipLabel: "Car Sharing" },
+    ];
+    integrationsRef.current = [
+      { frontend: { searchCategory: { id: "webcam", showInChipBar: true } } },
+      { frontend: { searchCategory: { id: "car-sharing" } } },
+      { frontend: { searchCategory: { id: "road-weather", showInChipBar: false } } },
+    ];
+
+    render(<CategoryChips />);
+    const labels = screen.getAllByRole("button").map((button) => button.textContent);
+    expect(labels).toContain("Webcams");
+    // A manifest that does not say keeps its chip.
+    expect(labels).toContain("Car Sharing");
+    expect(labels).not.toContain("Road weather");
   });
 
   it("skips unavailable sources and retains separate actions when a source shares a category id", () => {

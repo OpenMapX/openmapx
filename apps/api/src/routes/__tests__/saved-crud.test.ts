@@ -80,7 +80,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await app.close();
+  await app?.close();
 });
 
 beforeEach(() => {
@@ -172,6 +172,7 @@ describe("saved lists", () => {
         icon: null,
         isPrivate: true,
         sortOrder: 0,
+        placeCount: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       },
@@ -322,4 +323,36 @@ describe("labels and check", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().listIds).toEqual(["list-1"]);
   });
+});
+
+it("serializes exact saved captures and rejects malformed or unbounded public field maps", async () => {
+  const fieldContributors = {
+    name: [{ sourceId: "original", name: "Original publisher", attributionText: "Original terms" }],
+    address: [],
+    lat: [],
+    lng: [],
+  };
+  prime([{ id: "list-1" }]);
+  const saved = await app.inject({
+    method: "POST",
+    url: "/api/saved/lists/list-1/places",
+    payload: { name: "Name", address: null, lat: 50, lng: 8, fieldContributors },
+  });
+  expect(saved.statusCode).toBe(200);
+  expect(saved.json().fieldContributors).toEqual(fieldContributors);
+  expect(saved.json().address).toBeNull();
+  for (const capture of [
+    { name: [{}] },
+    { phone: [] },
+    { name: Array(33).fill(fieldContributors.name[0]) },
+    { name: [{ ...fieldContributors.name[0], notes: "x".repeat(65536) }] },
+  ]) {
+    prime([{ id: "list-1" }]);
+    const invalid = await app.inject({
+      method: "POST",
+      url: "/api/saved/lists/list-1/places",
+      payload: { name: "Name", lat: 50, lng: 8, fieldContributors: capture },
+    });
+    expect(invalid.statusCode).toBe(400);
+  }
 });

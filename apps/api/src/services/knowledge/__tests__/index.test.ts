@@ -143,6 +143,24 @@ describe("getPlaceKnowledge", () => {
     );
   });
 
+  it("preserves exact winning scalar and item receipts through the real fan-out", async () => {
+    const first = { sourceId: "first", name: "First supplier" };
+    const second = { sourceId: "second", name: "Second supplier" };
+    wikidataLookup.mockResolvedValueOnce({ description: "Winner", contributors: [first] });
+    wikipediaLookup.mockResolvedValueOnce({
+      description: "Discarded",
+      phone: "+49",
+      contributors: [second],
+      photos: [{ url: "https://example.com/photo", source: "file", contributors: [second] }],
+    });
+    const { getPlaceKnowledge } = await import("../index.js");
+    const result = await getPlaceKnowledge(makePlace({ wikidata: "Q42" }));
+    expect(result.fieldContributors?.description).toEqual([first]);
+    expect(result.fieldContributors?.phone).toEqual([second]);
+    expect(result.photos?.[0]?.contributors).toEqual([second]);
+    expect(result.contributors).toEqual([first, second]);
+  });
+
   it("scalar fields: first non-null description wins", async () => {
     wikidataLookup.mockResolvedValueOnce({ description: "Wikidata desc" });
     wikipediaLookup.mockResolvedValueOnce({ description: "Wikipedia desc" });
@@ -252,6 +270,36 @@ describe("getPlaceKnowledge", () => {
     const { getPlaceKnowledge } = await import("../index.js");
     const result = await getPlaceKnowledge(makePlace({ wikidata: "Q42" }));
     expect(result).toEqual({});
+  });
+
+  it("forwards the caller's request-local JSON scope to every enabled source, and only when supplied", async () => {
+    wikidataLookup.mockResolvedValue(null);
+    wikipediaLookup.mockResolvedValue(null);
+    const { createRequestJsonScope } = await import("@openmapx/core");
+    const { getPlaceKnowledge } = await import("../index.js");
+    const jsonScope = createRequestJsonScope();
+
+    await getPlaceKnowledge(makePlace({ wikidata: "Q42" }), "en", { jsonScope });
+    for (const lookup of [wikidataLookup, wikipediaLookup]) {
+      expect(lookup.mock.calls[0]?.[2].jsonScope).toBe(jsonScope);
+    }
+
+    wikidataLookup.mockClear();
+    await getPlaceKnowledge(makePlace({ wikidata: "Q42" }), "en");
+    expect(wikidataLookup.mock.calls[0]?.[2]).not.toHaveProperty("jsonScope");
+  });
+
+  it("does not hand the JSON scope to a policy-disallowed integration", async () => {
+    gatedIntegrationsMock.mockResolvedValueOnce(new Set(["knowledge-wikipedia"]));
+    wikidataLookup.mockResolvedValueOnce(null);
+    const { createRequestJsonScope } = await import("@openmapx/core");
+    const { getPlaceKnowledge } = await import("../index.js");
+    const jsonScope = createRequestJsonScope();
+
+    await getPlaceKnowledge(makePlace({ wikipedia: "en:Article" }), "en", { jsonScope });
+
+    expect(wikipediaLookup).not.toHaveBeenCalled();
+    expect(wikidataLookup.mock.calls[0]?.[2].jsonScope).toBe(jsonScope);
   });
 
   it("skips knowledge sources from policy-disallowed integrations", async () => {

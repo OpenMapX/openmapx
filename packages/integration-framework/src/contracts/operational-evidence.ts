@@ -29,6 +29,8 @@ export interface OperationalFeedEvidence {
   consecutiveFailures: number | null;
   error: string | null;
   bindingCounts: Record<string, number> | null;
+  /** Why current bindings were not bound or were kept off routing, by status and reason. */
+  bindingReasons?: OperationalBindingReason[];
   graph: {
     generation: string | null;
     status: "ready" | "partial" | "missing" | "unknown";
@@ -43,6 +45,19 @@ export interface OperationalFeedEvidence {
   coverage?: OperationalFeedCoverage[];
   status: string;
   action: string | null;
+}
+
+/**
+ * How many of a feed's current bindings carry one reason under one status:
+ * `situations` counts situations' own locations, `effects` effects bound on
+ * their own. Reasons are the producer's machine codes (`no_candidates`,
+ * `direction_undecided`, …); a reader labels the ones it knows.
+ */
+export interface OperationalBindingReason {
+  status: string;
+  reason: string;
+  situations: number;
+  effects: number;
 }
 
 export interface OperationalFeedCoverage {

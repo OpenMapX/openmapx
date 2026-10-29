@@ -1,8 +1,11 @@
+import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
+
 /** Which `*:wikidata` OSM key carries this identity. */
 export type BrandKind = "brand" | "operator" | "network";
 
 /** Everything the UI needs to render a brand in a list row, a chip, or a pin. */
-export interface BrandSummary {
+export interface BrandSummary extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   /** Wikidata QID, e.g. "Q37158". */
   qid: string;
   /** Wikidata label, falling back to the NSI display name. */

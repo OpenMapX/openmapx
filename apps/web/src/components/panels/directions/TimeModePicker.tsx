@@ -3,7 +3,7 @@
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { useTranslations } from "next-intl";
-import type { ChangeEvent } from "react";
+import { DateTimeField } from "@/components/ui/DateTimeField";
 import { BRAND } from "@/integration-api/runtime/theme";
 
 export type TimeMode = "now" | "depart" | "arrive";
@@ -15,7 +15,7 @@ export function toDateTimeLocalString(d: Date): string {
 }
 
 /**
- * The "Depart now / Depart at / Arrive by" tab row + datetime input, shared by
+ * The "Depart now / Depart at / Arrive by" tab row + date and time fields, shared by
  * the transit and driving directions flows. Controlled: the caller owns the
  * `timeMode` + `value` and maps them to its own state (the transit store vs the
  * local driving state), so the two flows stay independent.
@@ -63,29 +63,11 @@ export function TimeModePicker({
         ))}
       </Box>
       {timeMode !== "now" && (
-        <Box
-          component="input"
-          type="datetime-local"
+        <DateTimeField
+          label={timeMode === "depart" ? t("departAt") : t("arriveBy")}
           value={value ? toDateTimeLocalString(value) : ""}
-          onChange={(e: ChangeEvent<HTMLInputElement>) => {
-            const val = e.target.value;
-            if (!val) return;
-            onValueChange(new Date(val));
-          }}
-          sx={{
-            border: "1px solid",
-            borderColor: "divider",
-            borderRadius: "8px",
-            px: 1.5,
-            py: 0.75,
-            fontSize: "0.875rem",
-            fontFamily: "inherit",
-            color: "text.primary",
-            bgcolor: "background.paper",
-            outline: "none",
-            "&:focus": { borderColor: BRAND },
-            width: "100%",
-            boxSizing: "border-box",
+          onChange={(next) => {
+            if (next) onValueChange(new Date(next));
           }}
         />
       )}

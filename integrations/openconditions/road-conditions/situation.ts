@@ -1,3 +1,4 @@
+import { ROAD_CONDITION_SEVERITY_LABELS } from "@openmapx/core";
 import type {
   LocalizedText,
   RoadConditionEffect,
@@ -5,7 +6,9 @@ import type {
   RoadConditionRoadRef,
   RoadConditionValidity,
 } from "@openmapx/integration-framework";
-import { type CreditSources, licenseText, NO_SOURCES } from "../features/record.js";
+import { snapshotContributors } from "@openmapx/integration-framework";
+import { parseLicensing } from "@openmapx/mobility-core/licensing";
+import { locationTableCredits, recordCredits } from "../features/record.js";
 
 type Rec = Record<string, unknown>;
 
@@ -25,7 +28,7 @@ const records = (v: unknown): Rec[] =>
 function hostEffect(effect: Rec, validity?: unknown): RoadConditionEffect {
   const { source: _source, ...rest } = effect;
   return (
-    rest["validity"] === undefined && validity !== undefined ? { ...rest, validity } : rest
+    rest.validity === undefined && validity !== undefined ? { ...rest, validity } : rest
   ) as RoadConditionEffect;
 }
 
@@ -34,108 +37,141 @@ function hostEffect(effect: Rec, validity?: unknown): RoadConditionEffect {
  * window of its own holds during its phase, so it takes the phase's.
  */
 function effectsOf(record: Rec): RoadConditionEffect[] {
-  const own = records(record["effects"]).map((e) => hostEffect(e));
-  const phases = records(obj(record["details"])?.["phases"]);
+  const own = records(record.effects).map((e) => hostEffect(e));
+  const phases = records(obj(record.details)?.phases);
   return [
     ...own,
-    ...phases.flatMap((phase) =>
-      records(phase["effects"]).map((e) => hostEffect(e, phase["validity"])),
-    ),
+    ...phases.flatMap((phase) => records(phase.effects).map((e) => hostEffect(e, phase.validity))),
   ];
 }
 
 function roadsOf(location: Rec): RoadConditionRoadRef[] | undefined {
-  const roads = records(location["roads"]);
+  const roads = records(location.roads);
   if (!roads.length) return undefined;
   return roads.map((r) => ({
-    ...strField("ref", r["ref"]),
-    ...(r["name"] ? { name: r["name"] as LocalizedText } : {}),
-    ...strField("class", r["class"]),
-    ...strField("from", r["from"]),
-    ...strField("to", r["to"]),
+    ...strField("ref", r.ref),
+    ...(r.name ? { name: r.name as LocalizedText } : {}),
+    ...strField("class", r.class),
+    ...strField("from", r.from),
+    ...strField("to", r.to),
   }));
 }
 
+/** A value of `values`, else `fallback`: a label this host does not know never passes unread. */
+function oneOf<T extends string>(values: readonly T[], v: unknown, fallback: T): T {
+  return values.includes(v as T) ? (v as T) : fallback;
+}
+
+const VALIDITY_STATUSES = [
+  "planned",
+  "active",
+  "suspended",
+  "ended",
+  "cancelled",
+  "unknown",
+] as const satisfies readonly RoadConditionValidity["status"][];
+
+/**
+ * A validity as the host reads it. A status it does not know reads as
+ * `unknown`, which establishes nothing: such a validity never holds.
+ */
 function validityOf(raw: Rec): RoadConditionValidity {
   const keys = ["start", "end", "estimatedEnd", "periods", "exceptions"] as const;
   return {
-    status: raw["status"] as RoadConditionValidity["status"],
+    status: oneOf(VALIDITY_STATUSES, raw.status, "unknown"),
     ...Object.fromEntries(keys.filter((k) => raw[k] !== undefined).map((k) => [k, raw[k]])),
+    ...strField("endedReason", raw.endedReason),
   };
 }
 
 /**
  * One OpenConditions situation record as the host's `RoadConditionEvent`,
  * field for field. A record not yet placed (no geometry) cannot be shown or
- * routed: null. Its credit takes the licence name from `sources`.
+ * routed: null. Its credit projects only the record's captured suppliers.
  */
 export function situationToRoadConditionEvent(
   record: Rec,
   provider = "",
-  sources: Pick<CreditSources, "licenseName"> = NO_SOURCES,
 ): RoadConditionEvent | null {
-  const location = obj(record["location"]) ?? {};
-  const geometry = obj(location["geometry"]);
+  const location = obj(record.location) ?? {};
+  const geometry = obj(location.geometry);
   if (geometry === undefined) return null;
-  const provenance = obj(record["provenance"]) ?? {};
-  const attribution = obj(provenance["attribution"]) ?? {};
-  const freshness = obj(record["freshness"]) ?? {};
-  const severity = obj(record["severity"]) ?? {};
-  const evidence = obj(record["evidence"]);
-  const license = str(attribution["license"]);
-  const direction = obj(location["direction"]);
+  const provenance = obj(record.provenance) ?? {};
+  const attribution = obj(provenance.attribution) ?? {};
+  const freshness = obj(record.freshness) ?? {};
+  const severity = obj(record.severity) ?? {};
+  const evidence = obj(record.evidence);
+  const licensing = parseLicensing(attribution.licensing);
+  const parentSourceId = str(attribution.parentSourceId);
+  const notice = str(attribution.notice);
+  const sourceId = parentSourceId ?? str(provenance.sourceId);
+  // A named location table is additional captured evidence, including with native receipts.
+  const contributors = snapshotContributors(
+    recordCredits(record),
+    locationTableCredits(record, sourceId),
+  );
+  const direction = obj(location.direction);
   const roads = roadsOf(location);
   return {
-    id: String(record["id"]),
-    source: String(provenance["sourceId"]),
+    id: String(record.id),
+    contributors,
+    source: String(provenance.sourceId),
     provider,
-    ...strField("groupId", record["groupId"]),
-    kind: String(record["kind"]),
-    type: String(record["type"]),
-    ...strField("subtype", record["subtype"]),
+    ...strField("groupId", record.groupId),
+    kind: String(record.kind),
+    type: String(record.type),
+    ...strField("subtype", record.subtype),
     severity: {
-      label: (str(severity["label"]) ?? "unknown") as RoadConditionEvent["severity"]["label"],
-      ...(typeof severity["level"] === "number" ? { level: severity["level"] } : {}),
+      label: oneOf(ROAD_CONDITION_SEVERITY_LABELS, severity.label, "unknown"),
+      ...(typeof severity.level === "number" ? { level: severity.level } : {}),
     },
-    certainty: (str(record["certainty"]) ?? "unknown") as RoadConditionEvent["certainty"],
-    temporality: (str(record["temporality"]) ?? "live") as RoadConditionEvent["temporality"],
-    planned: record["planned"] === true,
-    ...(record["headline"] ? { headline: record["headline"] as LocalizedText } : {}),
-    ...(record["description"] ? { description: record["description"] as LocalizedText } : {}),
+    certainty: (str(record.certainty) ?? "unknown") as RoadConditionEvent["certainty"],
+    temporality: (str(record.temporality) ?? "live") as RoadConditionEvent["temporality"],
+    planned: record.planned === true,
+    ...(record.headline ? { headline: record.headline as LocalizedText } : {}),
+    ...(record.description ? { description: record.description as LocalizedText } : {}),
     geometry: geometry as unknown as RoadConditionEvent["geometry"],
     ...(roads ? { roads } : {}),
     ...(direction
       ? {
           direction: {
-            value: String(direction["value"]),
-            ...strField("compass", direction["compass"]),
-            ...strField("text", direction["text"]),
+            value: String(direction.value),
+            ...strField("basis", direction.basis),
+            ...strField("compass", direction.compass),
+            ...(typeof direction.bearingDeg === "number" && Number.isFinite(direction.bearingDeg)
+              ? { bearingDeg: direction.bearingDeg }
+              : {}),
+            ...strField("loop", direction.loop),
+            ...strField("toward", direction.toward),
+            ...strField("text", direction.text),
           },
         }
       : {}),
-    validity: validityOf(obj(record["validity"]) ?? { status: "unknown" }),
+    validity: validityOf(obj(record.validity) ?? { status: "unknown" }),
     effects: effectsOf(record),
-    origin: (str(provenance["origin"]) ?? "feed") as RoadConditionEvent["origin"],
+    origin: (str(provenance.origin) ?? "feed") as RoadConditionEvent["origin"],
     ...(evidence
       ? {
           evidence: {
-            state: String(evidence["state"]),
-            ...(typeof evidence["confidenceScore"] === "number"
-              ? { confidenceScore: evidence["confidenceScore"] }
+            state: String(evidence.state),
+            ...(typeof evidence.confidenceScore === "number"
+              ? { confidenceScore: evidence.confidenceScore }
               : {}),
-            ...(typeof evidence["routingEligible"] === "boolean"
-              ? { routingEligible: evidence["routingEligible"] }
+            ...(typeof evidence.routingEligible === "boolean"
+              ? { routingEligible: evidence.routingEligible }
               : {}),
           },
         }
       : {}),
     attribution: {
-      provider: str(attribution["provider"]) ?? String(provenance["sourceId"]),
-      ...(license ? { license: licenseText(license, sources) } : {}),
-      ...strField("url", str(attribution["licenseUrl"]) ?? attribution["url"]),
+      provider: str(attribution.provider) ?? String(provenance.sourceId),
+      ...(licensing ? { licensing } : {}),
+      ...strField("url", attribution.url),
+      ...(parentSourceId ? { sourceId: parentSourceId } : {}),
+      ...(notice ? { notice } : {}),
     },
-    ...strField("updatedAt", provenance["sourceUpdatedAt"]),
-    fetchedAt: String(freshness["fetchedAt"]),
-    ...strField("expiresAt", freshness["expiresAt"]),
+    ...strField("updatedAt", provenance.sourceUpdatedAt),
+    fetchedAt: String(freshness.fetchedAt),
+    ...strField("expiresAt", freshness.expiresAt),
   };
 }

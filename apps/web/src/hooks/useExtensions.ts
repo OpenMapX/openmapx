@@ -1,278 +1,178 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import type { ApiClient } from "@openmapx/core";
+import * as sdk from "@openmapx/core/api-admin-sdk";
+import type {
+  AdminExtensionCatalogQuery,
+  AdminExtensionInstallRequest,
+} from "@openmapx/core/api-contracts";
+import {
+  type QueryClient,
+  useMutation,
+  useMutationState,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useActivityClient } from "@/components/admin/activity/activityQueries";
+import { useAdminJobRegistration } from "@/lib/admin/adminJobEffects";
+import {
+  EXTENSION_RESOLUTION_TIMEOUT_MS,
+  type ExtensionAdministrationClient,
+  extensionAdminQueries,
+  extensionOrThrow,
+  invalidateExtensionAdministration,
+} from "@/lib/admin/extensionAdmin";
 
-export interface ExtensionSecurityRating {
-  score: number;
-  requiresBuiltIn: boolean;
-  hostPorts: number;
-  secretCount: number;
-  factors: string[];
+export function useExtensionCatalog(params: AdminExtensionCatalogQuery) {
+  const { client, apiUrl } = useActivityClient();
+  return useQuery(extensionAdminQueries(client, apiUrl).catalog(params));
 }
-
-export interface ExtensionCatalogView {
-  id: string;
-  name: string;
-  summary?: string;
-  description?: string;
-  author?: string;
-  homepage?: string;
-  icon?: string;
-  screenshots?: string[];
-  categories?: string[];
-  tags?: string[];
-  /** Resolved live from the manifest; absent if the manifest fetch failed. */
-  version?: string;
-  minPlatform?: string;
-  lastUpdated?: string;
-  trust?: "built-in" | "verified" | "community";
-  featured?: boolean;
-  components: { services: number; integrations: number };
-  compatible: boolean;
-  platformVersion: string;
-  installed: boolean;
-  installedVersion: string | null;
-  hasUpdate: boolean;
-  removed: string | null;
-  critical: { reason: string; maxVersion?: string } | null;
-}
-
-export interface InstalledExtensionComponentView {
-  kind: string;
-  componentId: string;
-  enabled?: boolean;
-  securityRating?: ExtensionSecurityRating;
-}
-
-export interface InstalledExtensionView {
-  id: string;
-  name: string;
-  sourceTrust: string;
-  installedVersion: string;
-  sourceUrl: string | null;
-  installedAt: string;
-  updatedAt: string;
-  components: InstalledExtensionComponentView[];
-  hasUpdate: boolean;
-  latestVersion: string | null;
-}
-
-export interface ExtensionSource {
-  url: string;
-  label: string;
-  isDefault: boolean;
-}
-
-export interface ExtensionInstallPreview {
-  extension: { id: string; name: string; version: string };
-  sourceTrust: "built-in" | "verified" | "community";
-  services: Array<{
-    id: string;
-    name: string;
-    version: string;
-    repositoryCommit: string;
-    hostPorts: Array<{
-      host: number;
-      container: number;
-      protocol: "tcp" | "udp";
-      bindAddress: string;
-    }>;
-    securityRating: ExtensionSecurityRating;
-  }>;
-  requiresHostPortConfirmation: boolean;
-  confirmation: string;
-}
-
-export interface ExtensionInstallRequest {
-  id?: string;
-  manifestUrl?: string;
-  hostPortConfirmation?: string;
-}
-
-const CATALOG_KEY = ["admin", "extensions", "catalog"];
-const INSTALLED_KEY = ["admin", "extensions", "installed"];
-const SOURCES_KEY = ["admin", "extensions", "sources"];
-
-export function useExtensionCatalog(params: { q?: string; trust?: string; type?: string }) {
-  const { apiUrl } = useEnv();
-  return useQuery({
-    queryKey: [...CATALOG_KEY, params],
-    queryFn: async () => {
-      const sp = new URLSearchParams();
-      if (params.q) sp.set("q", params.q);
-      if (params.trust) sp.set("trust", params.trust);
-      if (params.type) sp.set("type", params.type);
-      const res = await fetch(`${apiUrl}/api/admin/extensions/catalog?${sp}`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return (await res.json()) as { entries: ExtensionCatalogView[]; total: number };
-    },
-  });
-}
-
 export function useInstalledExtensions() {
-  const { apiUrl } = useEnv();
-  return useQuery({
-    queryKey: INSTALLED_KEY,
-    queryFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/extensions/installed`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return (await res.json()) as { extensions: InstalledExtensionView[] };
-    },
-  });
+  const { client, apiUrl } = useActivityClient();
+  return useQuery(extensionAdminQueries(client, apiUrl).installed());
 }
-
 export function useExtensionSources() {
-  const { apiUrl } = useEnv();
-  return useQuery({
-    queryKey: SOURCES_KEY,
-    queryFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/extensions/sources`, { credentials: "include" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return (await res.json()) as { sources: ExtensionSource[] };
-    },
-  });
+  const { client, apiUrl } = useActivityClient();
+  return useQuery(extensionAdminQueries(client, apiUrl).sources());
 }
-
-function useInvalidate() {
-  const qc = useQueryClient();
+type RemovalOperation = "extension" | "source";
+// View/observer disposal must not release an executing request. Each QueryClient
+// has its own ephemeral owners; weak keys do not retain disposed client instances.
+const removalOwners = new WeakMap<QueryClient, Set<string>>();
+function acquireRemoval(
+  qc: QueryClient,
+  apiUrl: string,
+  operation: RemovalOperation,
+  target: string,
+) {
+  let owners = removalOwners.get(qc);
+  if (!owners) {
+    owners = new Set();
+    removalOwners.set(qc, owners);
+  }
+  const key = JSON.stringify([apiUrl, operation, target]);
+  if (owners.has(key)) throw new Error("Removal already pending for this target");
+  owners.add(key);
   return () => {
-    void qc.invalidateQueries({ queryKey: CATALOG_KEY });
-    void qc.invalidateQueries({ queryKey: INSTALLED_KEY });
+    owners.delete(key);
+    if (!owners.size) removalOwners.delete(qc);
   };
 }
 
-export function useInstallExtension() {
-  const { apiUrl } = useEnv();
-  const invalidate = useInvalidate();
+function useExtensionWrite<T extends object, V = void>(
+  run: (client: ApiClient, values: V) => Promise<T>,
+  binding?: ExtensionAdministrationClient,
+  removal?: { operation: RemovalOperation; target: (values: V) => string },
+) {
+  const local = useActivityClient();
+  const { client, apiUrl } = binding ?? local;
+  const qc = useQueryClient();
+  const register = useAdminJobRegistration();
   return useMutation({
-    mutationFn: async (body: ExtensionInstallRequest) => {
-      const res = await fetch(`${apiUrl}/api/admin/extensions/install`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
-      return data as { jobId: string };
+    mutationKey: removal
+      ? ["extension-removal", apiUrl, removal.operation]
+      : ["extension-write", apiUrl],
+    retry: false,
+    mutationFn: async (values: V) => {
+      // Essential effects capture execution ownership here and survive view disposal.
+      // Acquire synchronously, before request construction/acquisition. A stale UI
+      // or another observer cannot send a second request or release the first owner.
+      const release = removal
+        ? acquireRemoval(qc, apiUrl, removal.operation, removal.target(values))
+        : undefined;
+      try {
+        const result = await run(client, values);
+        if ("jobId" in result && typeof result.jobId === "string")
+          register({
+            client,
+            apiUrl,
+            jobId: result.jobId,
+            onSettled: () => invalidateExtensionAdministration(qc, apiUrl, "components"),
+          });
+        else await invalidateExtensionAdministration(qc, apiUrl, "snapshot");
+        return result;
+      } finally {
+        release?.();
+      }
     },
-    onSuccess: invalidate,
   });
 }
-
-export function usePreviewExtensionInstall() {
-  const { apiUrl } = useEnv();
+const options = (client: ApiClient) => ({ client, timeoutMs: EXTENSION_RESOLUTION_TIMEOUT_MS });
+export function useInstallExtension(binding?: ExtensionAdministrationClient) {
+  return useExtensionWrite(
+    (client, body: AdminExtensionInstallRequest) =>
+      extensionOrThrow(sdk.installAdminExtension(body, options(client))),
+    binding,
+  );
+}
+export function usePreviewExtensionInstall(binding?: ExtensionAdministrationClient) {
+  const local = useActivityClient();
+  const { client, apiUrl } = binding ?? local;
   return useMutation({
-    mutationFn: async (body: ExtensionInstallRequest) => {
-      const res = await fetch(`${apiUrl}/api/admin/extensions/install-preview`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
-      return data as ExtensionInstallPreview;
-    },
+    mutationKey: ["extension-preview", apiUrl],
+    retry: false,
+    mutationFn: (body: AdminExtensionInstallRequest) =>
+      extensionOrThrow(sdk.previewAdminExtensionInstall(body, options(client))),
   });
 }
-
-export function useUpdateExtension() {
-  const { apiUrl } = useEnv();
-  const invalidate = useInvalidate();
-  return useMutation({
-    mutationFn: async (request: { id: string; hostPortConfirmation?: string }) => {
-      const res = await fetch(`${apiUrl}/api/admin/extensions/update/${request.id}`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hostPortConfirmation: request.hostPortConfirmation }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
-      return data as { jobId: string };
-    },
-    onSuccess: invalidate,
-  });
+export function useUpdateExtension(binding?: ExtensionAdministrationClient) {
+  return useExtensionWrite(
+    (client, request: { id: string; hostPortConfirmation?: string }) =>
+      extensionOrThrow(
+        sdk.updateAdminExtension(
+          request.id,
+          request.hostPortConfirmation === undefined
+            ? undefined
+            : { hostPortConfirmation: request.hostPortConfirmation },
+          options(client),
+        ),
+      ),
+    binding,
+  );
 }
-
+/** The MutationCache outlives tab observers. Select all removal scopes so raw
+ * identity changes are reflected immediately, independently of cache notifications.
+ */
+function useExtensionRemoval<T extends object>(
+  operation: RemovalOperation,
+  run: (client: ApiClient, target: string) => Promise<T>,
+) {
+  const { apiUrl } = useActivityClient();
+  const pending = useMutationState({
+    filters: { mutationKey: ["extension-removal"], status: "pending" },
+    select: (mutation) =>
+      [
+        mutation.options.mutationKey?.[1],
+        mutation.options.mutationKey?.[2],
+        mutation.state.variables,
+      ] as const,
+  });
+  const mutation = useExtensionWrite(run, undefined, { operation, target: (value) => value });
+  return {
+    ...mutation,
+    isPendingFor: (target: string) =>
+      pending.some(
+        ([origin, kind, value]) => origin === apiUrl && kind === operation && value === target,
+      ),
+  };
+}
 export function useRemoveExtension() {
-  const { apiUrl } = useEnv();
-  const invalidate = useInvalidate();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`${apiUrl}/api/admin/extensions/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
-      return data as { jobId: string };
-    },
-    onSuccess: invalidate,
-  });
+  return useExtensionRemoval("extension", (client, id) =>
+    extensionOrThrow(sdk.removeAdminExtension(id, undefined, options(client))),
+  );
 }
-
 export function useRefreshExtensionCatalog() {
-  const { apiUrl } = useEnv();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/extensions/refresh-catalog`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return (await res.json()) as { entries: number };
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: CATALOG_KEY }),
-  });
+  return useExtensionWrite((client) =>
+    extensionOrThrow(sdk.refreshAdminExtensionCatalog(undefined, options(client))),
+  );
 }
-
 export function useAddExtensionSource() {
-  const { apiUrl } = useEnv();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (body: { url: string; label: string }) => {
-      const res = await fetch(`${apiUrl}/api/admin/extensions/sources`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
-      return data;
-    },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: SOURCES_KEY });
-      void qc.invalidateQueries({ queryKey: CATALOG_KEY });
-    },
-  });
+  return useExtensionWrite((client, body: Parameters<typeof sdk.addAdminExtensionSource>[0]) =>
+    extensionOrThrow(sdk.addAdminExtensionSource(body, options(client))),
+  );
 }
-
 export function useRemoveExtensionSource() {
-  const { apiUrl } = useEnv();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (url: string) => {
-      const res = await fetch(`${apiUrl}/api/admin/extensions/sources`, {
-        method: "DELETE",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.json();
-    },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: SOURCES_KEY });
-      void qc.invalidateQueries({ queryKey: CATALOG_KEY });
-    },
-  });
+  return useExtensionRemoval("source", (client, url) =>
+    extensionOrThrow(sdk.removeAdminExtensionSource({ url }, options(client))),
+  );
 }

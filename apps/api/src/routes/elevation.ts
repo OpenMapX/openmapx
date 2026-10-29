@@ -40,7 +40,10 @@ export const elevationRoute: FastifyPluginAsync = async (fastify) => {
         ([lng, lat]) =>
           [Math.round(lng * 1e4) / 1e4, Math.round(lat * 1e4) / 1e4] as [number, number],
       );
-      const key = hashKey("cache:elevation", { coords: rounded, dist: routeDistance });
+      const key = hashKey("cache:elevation:v2-contributors", {
+        coords: rounded,
+        dist: routeDistance,
+      });
 
       try {
         const result = await withCache(key, TTL.elevation, async () => {

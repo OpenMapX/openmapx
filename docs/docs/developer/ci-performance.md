@@ -1,0 +1,286 @@
+---
+title: Measuring CI performance
+description: Current build-cache and release-planner contracts, with dated measurements and a repeatable CI comparison method.
+---
+
+# Measuring CI performance
+
+Keep the required `lint / types / test` context and its full validation coverage
+while optimizing CI. Measure queue delay, execution time and summed runner time
+separately. A faster cache export can still make the next build slower.
+
+## Measure a change
+
+1. Select at least ten comparable normal CI runs before and after the change.
+   Record revision, event, affected targets, toolchain, runner class, and cache
+   availability.
+2. Measure queue delay, required-gate elapsed time, and summed runner seconds
+   separately. Keep failed, cancelled, and cold-refresh runs identifiable.
+3. Inspect BuildKit step and cache-export times. A dependency install can miss
+   because the cache was unavailable or because its inputs changed.
+4. Confirm that the required `lint / types / test` aggregate still requires
+   every applicable validation job. A timing improvement cannot remove coverage.
+
+The receipts below describe earlier controlled experiments and replay estimates.
+They are not fresh CI measurements or production latency percentiles.
+
+## API cache export policy
+
+API validation and trusted image builds export the minimal cache (`mode=min`).
+They keep the existing `api` scope and cache imports. Other image targets retain
+`mode=max`; the comparison measured the API only. Release provenance, SBOMs,
+scans and the full required validation gate remain in place. The release planner
+still cold-builds an image when its last cold refresh is at least seven days old.
+
+At revision `c710f887e0e89085018e4e3b10a78a1ed89d570d`, the [qualification run](https://github.com/OpenMapX/openmapx/actions/runs/39052091932)
+completed nine builds.
+The [two-replicate comparison](https://github.com/OpenMapX/openmapx/actions/runs/39053132883)
+at the same revision completed all 18 builds and validated comparable inputs,
+resolved materials and toolchains. Each replicate measured a cold build,
+an unchanged rebuild and a source-only rebuild, using isolated cache scopes
+and a fresh builder for each build. The temporary benchmark tooling was removed
+after collecting these results.
+
+Phase medians and mean times per three-build chain were:
+
+| Policy                      | Cold median (s) | Unchanged median (s) | Source-only median (s) | Mean chain action time (s) | Mean worker time (s) |
+| --------------------------- | --------------: | -------------------: | ---------------------: | -------------------------: | -------------------: |
+| max                         |          442.70 |                56.11 |                 124.68 |                     626.12 |               685.50 |
+| min                         |          171.68 |                52.71 |                 126.22 |                     353.30 |               440.00 |
+| no PR export, no main cache |          106.83 |                99.11 |                  97.19 |                     305.51 |               424.50 |
+
+Build durations include cache export. Chain action time sums the three build
+intervals; worker time also includes setup, collection and cleanup. These were
+cache-only builds, not release publication or deployment rehearsals.
+
+The cold export median fell from 343.78 to 58.87 seconds with `min`. The
+source-only build median differed by 1.54 seconds. This supports reducing API
+export overhead while preserving fast unchanged rebuilds. The no-export baseline
+used fewer worker seconds, but its unchanged build median was 46.40 seconds
+slower than `min`. It did not restore a real trusted-main cache; that policy
+needs separate qualification and remains a possible further improvement.
+
+These controlled samples do not establish an overall CI speedup or production
+percentiles. Measure at least ten comparable normal CI runs before reporting
+p50/p90 improvement. Re-evaluate the cache choice after changes to the Dockerfile
+layout or build toolchain.
+
+References: [Docker cache modes](https://docs.docker.com/build/cache/backends/)
+and [GitHub cache backend](https://docs.docker.com/build/cache/backends/gha/).
+
+## Release cache backend
+
+Trusted main releases keep their layer cache in the registry, as
+`ghcr.io/openmapx/<app>:buildcache`, with the same per-image modes. The shared
+Actions cache is capped at 10 GB per repository. On 2026-10-20 it held 10.79 GB,
+8.18 GB of it main BuildKit blobs, and the next release's ops-agent, API and
+data-manager builds reused no step. A rebuilt layer is not byte-identical, so
+every host update then downloaded nearly all layers again. Registry export uses
+`ignore-error=true`: a cache-export failure does not fail release publication.
+Missing cache entries can force a later cold build.
+PR validation builds keep their PR-scoped Actions cache because PR jobs hold no
+registry credentials. See the [registry cache backend](https://docs.docker.com/build/cache/backends/registry/).
+
+## Dependency-layer inputs
+
+The API and web images stage integration `package.json` files before installing
+dependencies. The ops-agent and transitous-runner images stage only the manifests
+of the workspace packages they use, so the dependency stage is scoped to those workspaces. The runtime-package
+projection described below narrows the final image further.
+[`COPY --parents`](https://docs.docker.com/reference/dockerfile/#copy---parents)
+preserves their directory layout without copying source; these Dockerfiles require
+the stable Dockerfile 1.20 frontend.
+
+Source is copied into later build stages and, where loaded directly at runtime,
+into the final image. The API needs both integration source and the production
+workspace links; copying only the installed manifests would break its dynamic
+integration loader.
+
+When cache is available, a source-only edit should reuse the dependency-install
+layers. A changed package manifest, lockfile or install configuration should
+invalidate them. Cache eviction or a missing remote cache can still force a fresh
+install; distinguish cache availability from input invalidation when measuring. Keep workspace
+install lifecycle scripts independent of application source, or explicitly stage
+the inputs they need before installation and verify the cache behavior again.
+The external dependency build allowlist in `pnpm-workspace.yaml` still applies.
+
+## Release planner inputs
+
+The planner (`scripts/docker-release-plan.mjs`) rebuilds an image only when the
+files its Dockerfile copies change; otherwise the release reuses the published
+digest. Hosts then neither download nor restart that service.
+
+- A `*` or `?` glob covers only what it matches: `packages/*/package.json` is the
+  manifests, not every package's source.
+- The bundle stages of ops-agent, data-manager and transitous-runner copy only
+  the workspace packages their bundles reach, not all of `packages/` or
+  `services/`.
+- The lockfile counts only for what an image installs: the importers whose
+  `package.json` it copies, the workspace importers they link, and every
+  snapshot and package reachable from them, plus the lockfile settings. If the
+  planner cannot follow an entry, it counts the whole file. The plan job installs
+  the workspace for the `yaml` parser.
+- `ci.yml` is not an input: it passes nothing to `docker.yml`.
+
+In the recorded 200-main-commit planner replay, the same planner rules would have
+rebuilt ops-agent 106 times instead of 139, transitous-runner 97 instead of 121,
+data-manager 118 instead of 130, transitous-tools 10 instead of 18, and
+privacy-backup 8 instead of 17. API and web include every integration and change
+in most commits anyway. Most remaining rebuilds come from `packages/core`: every
+image uses it, and ops-agent's CLI imports its barrel, which reaches about 1,000
+of its files. File-level inputs would mostly help transitous-runner, which reaches
+3 core files. They are not used, because computed imports and file reads cannot
+all be followed, and a missed one would let a release reuse an image with stale code.
+
+## Runtime bundles
+
+ops-agent, data-manager and transitous-runner run runtime bundles with plain
+`node` instead of workspace TypeScript under tsx. ops-agent ships its agent
+(`dist/agent.mjs`), its update helper (`dist/agent-handoff-main.mjs`) and its
+fixed CLI (`dist/cli.mjs`). A recorded local measurement put bundled CLI startup at about 0.2 s versus
+about 0.8 s under tsx, and the agent starts it for every CLI-backed operation.
+data-manager ships its supervisor, the service it starts, and the live traffic
+writer and offline package extractor worker threads.
+A bundle evaluates all of its npm imports before any bundled code, so an import of
+another entry's source loads that entry's output as its own module. data-manager's
+`index.mjs` imports `undici-fetch.mjs` and then `service.mjs`: the fetch globals
+are replaced before any module of the service is evaluated, as under tsx.
+`scripts/build-runtime-bundles.mjs` bundles an image's own code and the
+workspace code it reaches with esbuild:
+
+- npm packages stay installed in the image, but every import is pinned. The script
+  resolves it from the importing package's location with Node's conditions and
+  main field, as Node does in the pnpm layout, and rewrites it to a path relative
+  to the output directory. The bundle therefore loads the same dependency files
+  as before.
+- The image installs only the npm packages the bundle loads. The script follows
+  every literal `import` and `require` from the pinned files through the
+  installed packages and lists the package directories it reaches in
+  `runtime-packages.json`. A computed `import()` or `require()` in any of them
+  fails the build, because its targets cannot be listed. The image's
+  `runtime-packages` stage runs `scripts/copy-runtime-packages.mjs` to copy
+  those directories whole, so a package keeps the files it reads by path and
+  its license, along with the node_modules links between them. It copies from
+  the same install the `bundle` stage analyzed, so whether a workspace manifest
+  lists a dependency as production or development does not change the image.
+  A production install for these images would be about 870 MB, mostly web and
+  mobile tooling that workspace manifests or peer dependencies pull in. The
+  images keep 24 MB of it for transitous-runner, 43 MB for ops-agent and 70 MB
+  for data-manager.
+- A literal `new URL("…", import.meta.url)` asset is copied into `dist/assets/`.
+  A URL naming another entry of the same bundle, such as a worker's source file,
+  points at that entry's `.mjs` instead. `entryExecArgv` in data-manager adds tsx
+  only when the entry is TypeScript source, in development and tests.
+  A `require` created with `createRequire(import.meta.url)` may only be called with
+  literal specifiers, which are pinned like imports.
+- Workspace modules are treated as side-effect free. A module none of whose
+  exports the bundle uses is left out, with the dependencies only it imports, so
+  editing code a bundle does not use leaves the bundle unchanged. A module whose
+  top-level code must run on import is an entry or is listed in its bundle's
+  `sideEffectModules` (data-manager: its database module, which checks the
+  production database secret). The build rejects any other module that runs
+  top-level statements besides declarations, so the list cannot fall behind.
+  It also rejects a listed module the bundle no longer includes.
+- A bundle's `replaceModules` swaps a workspace module for a bundle variant.
+  ops-agent replaces `embedded-built-in-services.ts`, which returns nothing, with
+  `embedded-built-in-services.bundle.ts`, whose asset URLs embed every built-in
+  `service.json`. Only the ops-agent bundle therefore embeds the manifests, and
+  a manifest change rebuilds only that image. The build fails if a replacement is
+  missing or nothing imports the replaced module.
+- A computed `import()` or `require()`, any other use of `import.meta` or the
+  module's location, and any esbuild warning fail the build. Among the warnings
+  is a bare `import "…"` of a module not in `sideEffectModules`.
+- `scripts/build-runtime-bundles.test.ts` checks byte-identical output across
+  builds and checkout locations.
+
+The release planner fingerprints a bundled image by its bundle digest instead of
+by the stages that only feed the `bundle` stage. The digest also covers the
+packages the image keeps: `runtime-packages.json` names each by its store
+directory, which pins its version and peers. Package manifests and the lockfile
+therefore count only through the digest. The exception is the root manifest's
+`packageManager`, which selects the pnpm the base stage activates. A dependency
+change that leaves every kept package as it was rebuilds none of these images.
+In the recorded 200-main-commit replay, ignoring bundle changes, that
+cut rebuilds from 34 to 20 for data-manager, 31 to 15 for ops-agent and 32 to
+18 for transitous-runner. Some of the dropped rebuilds updated a kept package
+and still rebuild through the digest: at most 6, 4 and 3 respectively.
+The plan job builds the bundles. A release build passes the planned digest as
+`EXPECTED_BUNDLE_DIGEST`, and the `bundle` stage fails when its bundle differs.
+Pull-request image builds do not pass it, because their jobs have no workspace
+install, so a difference between the image's partial install and the full one
+only surfaces in the release build on main.
+`runtime-externals.json` lists the dependency files the output loads, and the
+runner checks that each exists among the copied packages.
+`check-dockerfile-workspace-sync` builds every bundle, checks that the `bundle`
+stage copies every file the bundle reads (sources, assets and tsconfig files),
+and rejects a bundled runner that copies workspace source or the whole
+dependency install.
+
+In the recorded 200-main-commit replay, bundles would have rebuilt
+transitous-runner 24 times instead of 97 (its bundle never changed; the rest are
+Dockerfile, workflow and dependency changes), ops-agent 57 times instead of 106
+and data-manager 58 times instead of 118. Leaving unused workspace modules out
+brings the replay to an estimated 44 for ops-agent and 47 for data-manager. It
+also makes the bundles smaller: the ops-agent CLI goes from 1.0 MB to 0.73 MB,
+data-manager's service from 1.38 MB to 1.17 MB, and its traffic worker from
+254 kB to 27 kB.
+
+Changesets excludes package-root `Dockerfile` edits from release detection;
+these private deployment-image changes do not need empty package notes. Source,
+package manifests and nested Dockerfile fixtures still participate in the gate.
+The wider package/release baseline is handled separately.
+
+## Database groups
+
+Database validation runs in three jobs on separate GitHub-hosted runners:
+
+| Group            | Coverage                                                                         | Additional prerequisites                                |
+| ---------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `api-privacy`    | Authentication, API routes, privacy lifecycle, core database and migration tests | Migrated PostGIS                                        |
+| `ingestion`      | Data-manager accounting, search, Overture and ambient publication                | Test-owned PostGIS containers                           |
+| `export-restore` | Controller-wide export and backup restore replay                                 | Exact-image Dawarich export and retained-backup archive |
+
+Each runner gets the same pinned PostgreSQL 18 / PostGIS 3.6 service and applies
+all production migrations. Testcontainers, Compose fixtures and archive paths are
+owned by that runner. No database or archive is shared between jobs. Within each
+group Vitest uses one worker; increasing that can corrupt shared fixture state.
+
+The matrix does not cancel other groups when one fails. The required
+`lint / types / test` aggregate still requires the database matrix to succeed;
+a failure, cancellation or skipped database job cannot pass it. The three privacy
+fixture steps run only in `export-restore`, where the archive is consumed directly
+by controller-wide export. Missing or empty archive input is an error, rather than
+a switch to the synthetic fixture.
+
+Run `pnpm test:database <group>` locally, or omit the group to run the full union
+serially. See [Contributing](https://github.com/OpenMapX/openmapx/blob/main/CONTRIBUTING.md#testing)
+for disposable-database setup and archive preparation. The checked-in inventory
+is validated against discovered opt-in tests and actual Vitest file selection.
+Dawarich's exact-image test remains a separate explicit command in the export job.
+
+The groups run concurrently and repeat runner setup three times. Compare normal-run gate time, queue delay and summed runner seconds before
+claiming an overall improvement. Local correctness checks do not establish CI
+latency or cost; the ten-run comparison remains required.
+
+## Docs validation
+
+Matching pull requests build docs once in required CI's `build Docker (docs)` job.
+The shared `docs/Dockerfile` runs `pnpm typecheck` followed by `pnpm build`, so
+either TypeScript errors or site compilation errors fail the image build. This
+job uses read-only permissions and does not log into a registry or publish images.
+
+The Docker target selector retains the previous docs workflow's PR coverage:
+`docs/**`, `.github/workflows/docs.yml`, `.trivyignore.yaml` and `.nvmrc`.
+These inputs add docs validation without narrowing other image targets. CI runs
+on every PR, and the stable `lint / types / test` aggregate rejects a failed,
+cancelled or missing applicable Docker build.
+
+The dedicated docs workflow publishes only from trusted main. It resolves current
+main before checkout and builds independently through the same Dockerfile; it
+does not reuse an untrusted PR artifact or wait for application publication.
+Exact-digest vulnerability scans still precede alias promotion. Weekly scheduled
+builds and forced refreshes retain uncached builds for fresh OS packages.
+
+PR docs validation runs through the required Docker build job; trusted-main
+publication remains separate. Use the normal-run protocol above to measure
+latency or runner cost.

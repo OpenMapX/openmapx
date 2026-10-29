@@ -66,11 +66,19 @@ function normalizeText(raw: string, label: string): string {
   return value;
 }
 
+const OPENING_HOURS_SYNTAX_NOMINATIM = {
+  lat: 48.137,
+  lon: 11.576,
+  address: { country_code: "de", state: "Bayern" },
+};
+
 function validateOpeningHours(raw: string): string {
   const value = normalizeText(raw, "Opening hours");
   try {
     // Syntax only. This asserts nothing about whether the schedule is correct.
-    new opening_hours(value);
+    // A synthetic Nominatim context is required so `opening_hours` does not
+    // reject valid `PH` / `SH` / solar rules for lacking a country code.
+    new opening_hours(value, OPENING_HOURS_SYNTAX_NOMINATIM, 2);
   } catch {
     invalid("Opening hours are not valid OpenStreetMap syntax");
   }

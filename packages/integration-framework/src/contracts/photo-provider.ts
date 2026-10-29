@@ -1,6 +1,8 @@
-import type { PlacePhoto } from "@openmapx/core";
+import type { PlacePhoto, RequestJsonScope } from "@openmapx/core";
 
 export interface PhotoQuery {
+  /** Host/cache operation cancellation for acquisition; never sent upstream as data. */
+  signal?: AbortSignal;
   lat: number;
   lng: number;
   /** Place name — used by sources that support text search. */
@@ -22,6 +24,15 @@ export interface PhotoProvider {
   searchByTags?(
     osmTags: Record<string, string>,
     limit?: number,
-    options?: { strict?: boolean; signal?: AbortSignal },
+    options?: {
+      strict?: boolean;
+      signal?: AbortSignal;
+      /**
+       * Optional request-local strict JSON acquisition owned by the caller for one
+       * enrichment. A provider may use it only for public, identical, uncancelled
+       * lookups; it carries no source permission and is never retained.
+       */
+      getJson?: RequestJsonScope["getJson"];
+    },
   ): Promise<PlacePhoto[]>;
 }

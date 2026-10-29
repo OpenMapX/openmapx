@@ -3,10 +3,8 @@
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { integrationIdToOverlayId } from "@openmapx/core";
-import type {
-  IntegrationOverlayLegend,
-  LoadedIntegrationMeta,
-} from "@openmapx/integration-framework";
+import type { IntegrationMetadata } from "@openmapx/core/api-contracts";
+import type { IntegrationOverlayLegend } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
@@ -27,7 +25,7 @@ import {
  * is the wrong surface for them anyway — legends can be collapsed away entirely
  * from `LegendHost`, while the strip is always on.
  */
-export function DeclarativeLegend({ integration }: { integration: LoadedIntegrationMeta }) {
+export function DeclarativeLegend({ integration }: { integration: IntegrationMetadata }) {
   const legend = integration.frontend?.overlay?.legend;
   if (!legend) return null;
   return <DeclarativeLegendInner integration={integration} legend={legend} />;
@@ -37,7 +35,7 @@ function DeclarativeLegendInner({
   integration,
   legend,
 }: {
-  integration: LoadedIntegrationMeta;
+  integration: IntegrationMetadata;
   legend: IntegrationOverlayLegend;
 }) {
   const t = useTranslations();

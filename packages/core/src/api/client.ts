@@ -94,7 +94,7 @@ function isJsonMediaType(contentType: string | null): boolean {
   return essence === "application/json" || essence.endsWith("+json");
 }
 
-function parseRetryAfter(header: string | null): number | null {
+export function parseRetryAfter(header: string | null): number | null {
   if (!header) return null;
   const trimmed = header.trim();
   if (trimmed === "") return null;
@@ -183,6 +183,13 @@ export interface ApiRequestOptions {
   timeoutMs?: number;
   /** Additional per-request headers (for example an idempotency key). */
   headers?: HeadersInit;
+  /** Explicit fetch cache policy, including uncached server metadata reads. */
+  cache?: RequestCache;
+}
+
+export interface ApiResponseOptions extends ApiRequestOptions {
+  /** SDK-owned status validation; `all` passes every response to the consumer. */
+  acceptedStatuses?: readonly number[] | "all";
 }
 
 /**
@@ -231,6 +238,33 @@ export class ApiClient {
     return url.toString();
   }
 
+  /** Native EventSource cannot omit same-origin cookies or send custom headers. */
+  connectionTarget(path: string): { url: string; withCredentials: boolean } {
+    const cfg = this.config();
+    if ((cfg.credentials ?? "omit") === "omit")
+      throw new Error("EventSource cannot honor omitted credentials");
+    if (Array.from(new Headers(cfg.headerInterceptor?.()).keys()).length)
+      throw new Error("EventSource cannot honor client headers");
+    let target: URL;
+    try {
+      const base = new URL(cfg.baseUrl);
+      if (
+        !/^https?:$/.test(base.protocol) ||
+        base.username ||
+        base.password ||
+        !path.startsWith("/") ||
+        path.startsWith("//")
+      )
+        throw new Error();
+      target = new URL(path, base);
+      if (target.origin !== base.origin || target.username || target.password || target.hash)
+        throw new Error();
+    } catch {
+      throw new Error("Invalid EventSource connection target");
+    }
+    return { url: target.toString(), withCredentials: cfg.credentials === "include" };
+  }
+
   /**
    * Runs one fetch and consumes its response with a merged abort signal and a
    * guaranteed timer cleanup. Headers alone do not complete the request: the
@@ -242,7 +276,7 @@ export class ApiClient {
     url: string,
     init: RequestInit,
     options: ApiRequestOptions,
-    consume: (response: Response) => Promise<T>,
+    consume: (response: Response, signal: AbortSignal) => Promise<T>,
   ): Promise<T> {
     const cfg = this.config();
     const controller = new AbortController();
@@ -261,20 +295,28 @@ export class ApiClient {
       }, options.timeoutMs);
     }
 
+    let response: Response | undefined;
     try {
-      const response = await fetch(url, {
+      const headers = new Headers({ Accept: "application/json" });
+      for (const source of [init.headers, options.headers, cfg.headerInterceptor?.()]) {
+        new Headers(source).forEach((value, key) => {
+          headers.set(key, value);
+        });
+      }
+      response = await fetch(url, {
         ...init,
-        headers: {
-          Accept: "application/json",
-          ...init.headers,
-          ...options.headers,
-          ...cfg.headerInterceptor?.(),
-        },
+        ...(options.cache === undefined ? {} : { cache: options.cache }),
+        headers,
         credentials: cfg.credentials ?? "omit",
         signal: controller.signal,
       });
-      return await consume(response);
+      const result = await consume(response, controller.signal);
+      // Consumption may finish in a continuation after caller cancellation.
+      // Never publish that result after the effective lifetime has ended.
+      controller.signal.throwIfAborted();
+      return result;
     } catch (error) {
+      if (response) discardBody(response);
       if (controller.signal.aborted) {
         throw new ApiRequestAbortedError(timedOut ? "timeout" : "aborted");
       }
@@ -283,6 +325,27 @@ export class ApiClient {
       if (timer !== undefined) clearTimeout(timer);
       options.signal?.removeEventListener("abort", abortFromCaller);
     }
+  }
+
+  /**
+   * Shared SDK boundary. The consumer runs inside the same abort/deadline
+   * lifecycle as acquisition; its second argument carries the effective signal
+   * for bounded readers. Returning Response early would lose that guard.
+   */
+  async request<T>(
+    path: string,
+    init: RequestInit,
+    consume: (response: Response, signal: AbortSignal) => Promise<T>,
+    options: ApiResponseOptions = {},
+  ): Promise<T> {
+    return this.send(this.buildUrl(path), init, options, async (response, signal) => {
+      if (
+        options.acceptedStatuses !== "all" &&
+        !options.acceptedStatuses?.includes(response.status)
+      )
+        await assertOk(response);
+      return consume(response, signal);
+    });
   }
 
   async get<T>(path: string, params?: ApiQueryParams, options: ApiRequestOptions = {}): Promise<T> {

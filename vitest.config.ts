@@ -24,6 +24,10 @@ const shared = {
     // decrypt) and the conformance test's 84 per-integration dynamic imports.
     // 15s keeps headroom while still catching a genuine hang.
     testTimeout: 15_000,
+    // Suite hooks boot whole Fastify apps and their route plugin graphs once per
+    // file, which under the same saturation outlasts a single test. A hook that
+    // times out leaves its fixtures unassigned for the teardown hooks.
+    hookTimeout: 30_000,
     server: { deps: { inline: [/@mui\/material/] } },
   },
 };
@@ -66,6 +70,7 @@ export default defineConfig({
             "apps/api/src/**/*.test.ts",
             "apps/api/scripts/**/*.test.ts",
             "apps/ops-agent/src/**/*.test.ts",
+            "apps/ops-agent/scripts/traffic-maintenance-fixture.test.ts",
             "apps/transitous-runner/src/**/*.test.ts",
             // Mobile Node-side config/plugin tests only. React Native component
             // and coordinator tests run under `apps/mobile`'s own jest-expo
@@ -85,6 +90,7 @@ export default defineConfig({
             "services/data-manager/**/*.test.ts",
             "services/motis-feed-proxy/**/*.test.ts",
             "services/valhalla/**/*.test.ts",
+            "services/brouter/**/*.test.ts",
           ],
           // jsdom-owned paths run in the `web` project below — exclude here so
           // they don't run twice.

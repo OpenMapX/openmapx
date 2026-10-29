@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "packages": [
+    {
+      "name": "@openmapx/extension-contracts",
+      "directory": "packages/extension-contracts",
+      "bundleWorkspaceDependencies": false,
+      "versionedSchemas": "schemas"
+    },
+    {
+      "name": "@openmapx/extension-cli",
+      "directory": "packages/extension-cli",
+      "bundleWorkspaceDependencies": true
+    }
+  ]
+}

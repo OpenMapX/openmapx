@@ -92,7 +92,7 @@ beforeAll(async () => {
   app = await createAdminTestApp(adminCoverageRoute, { coverageService: serviceFor() });
 });
 
-afterAll(() => app.close());
+afterAll(() => app?.close());
 beforeEach(() => requireAdmin.mockResolvedValue(session));
 
 describe("admin coverage routes", () => {

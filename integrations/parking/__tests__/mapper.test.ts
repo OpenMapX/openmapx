@@ -51,10 +51,42 @@ function section(sections: DataSourceDetailSection[], title: string) {
   return sections.find((s) => isI18nToken(s.title) && text(s.title) === title);
 }
 
-/** Each row as plain English text, label and value. */
-function rowsOf(s: DataSourceDetailSection | undefined): [string, string][] {
-  return (s?.rows ?? []).map((row) => [text(row[0]), text(row[1])]);
+/** Each row as plain text, label and value; a list value joined as the client joins it. */
+function rowsOf(s: DataSourceDetailSection | undefined, locale = "en"): [string, string][] {
+  return (s?.rows ?? []).map((row) => [
+    text(row[0], locale),
+    Array.isArray(row[1])
+      ? row[1].map((cell) => text(cell, locale)).join(", ")
+      : text(row[1], locale),
+  ]);
 }
+
+/** OpenConditions' `PARKING_VEHICLE_TYPES` and `PARKING_USER_GROUPS`. */
+const OC_VEHICLE_TYPES = [
+  "car",
+  "truck",
+  "bus",
+  "coach",
+  "motorcycle",
+  "bicycle",
+  "cargo_bike",
+  "caravan",
+  "any",
+];
+const OC_USER_GROUPS = [
+  "disabled",
+  "women",
+  "family",
+  "ev_charging",
+  "car_sharing",
+  "residents",
+  "customers",
+  "taxi",
+  "delivery",
+  "short_term",
+  "long_term",
+  "hazmat",
+];
 
 describe("mapParkingSiteToResult", () => {
   it("a stale reading shows as unknown with the stale summary, never as available", () => {
@@ -131,7 +163,7 @@ describe("mapParkingSiteToResult", () => {
     expect(mapParkingSiteToResult(makeSite()).summary).toBeUndefined();
   });
 
-  it("carries the operator's logo, the credits and a fallback name", () => {
+  it("keeps the operator, credits and fallback name without uncredited Commons bytes", () => {
     const result = mapParkingSiteToResult(
       makeSite({
         name: "",
@@ -141,16 +173,39 @@ describe("mapParkingSiteToResult", () => {
             sourceId: "de-bw-mobidata-parking",
             name: "MobiData BW",
             url: "https://mobidata-bw.de",
-            spdxLicense: "DL-DE-BY-2.0",
+            licensing: {
+              version: 1,
+              bindings: [
+                {
+                  scope: "data",
+                  subject: "Data",
+                  license: { kind: "spdx", expression: "DL-DE-BY-2.0" },
+                },
+              ],
+            } as const,
           },
         ],
       }),
     );
 
     expect(result.operator).toBe("APCOA");
-    expect(result.branding?.logoUrl).toMatch(/^https:\/\/commons\.wikimedia\.org\//);
+    expect(result.branding?.logoUrl).toBeUndefined();
     expect(result.attributions).toEqual([
-      { text: "MobiData BW", url: "https://mobidata-bw.de", license: "DL-DE-BY-2.0" },
+      {
+        sourceId: "de-bw-mobidata-parking",
+        name: "MobiData BW",
+        url: "https://mobidata-bw.de",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Data",
+              license: { kind: "spdx", expression: "DL-DE-BY-2.0" },
+            },
+          ],
+        } as const,
+      },
     ]);
     expect(result.fallbackName).toEqual({ $t: "siteFallbackName" });
     expect(mapParkingSiteToResult(makeSite())).not.toHaveProperty("fallbackName");
@@ -195,6 +250,112 @@ describe("mapParkingSiteToDetail", () => {
       ["Women's Spaces", "12"],
       ["EV Charging", "Available"],
       ["Trucks", "20"],
+    ]);
+  });
+
+  it("labels every vehicle type, user group and layout OpenConditions sends, in every locale", () => {
+    const detail = mapParkingSiteToDetail(
+      makeSite({
+        layout: "underground_and_multi_storey",
+        areas: [
+          area("cargo_bike", "any", { capacity: 6 }),
+          area("car", "customers", { capacity: 20 }),
+          area("car", "taxi", { capacity: 3 }),
+          area("truck", "delivery", { capacity: 2 }),
+          area("hovercraft", "astronauts"),
+        ],
+      }),
+    );
+    expect(rowsOf(section(detail.sections, "Facility"))).toEqual([
+      ["Layout", "Underground and Multi-Storey Garage"],
+      ["Cargo Bikes", "6"],
+      ["Customers", "20"],
+      ["Taxis", "3"],
+      ["Deliveries (Trucks)", "2"],
+      ["astronauts (hovercraft)", "Available"],
+    ]);
+    expect(rowsOf(detail.sections[0], "de")).toEqual([
+      ["Bauart", "Tief- und Hochgarage"],
+      ["Lastenräder", "6"],
+      ["Kunden", "20"],
+      ["Taxis", "3"],
+      ["Lieferverkehr (Lkw)", "2"],
+      ["astronauts (hovercraft)", "Vorhanden"],
+    ]);
+  });
+
+  it("shows an area's maximum stay and hours, and the site's maximum stay, reservation and amenities", () => {
+    const detail = mapParkingSiteToDetail(
+      makeSite({
+        capacity: 100,
+        available: 40,
+        maxStayMin: 1_440,
+        reservation: false,
+        amenities: ["toilets", "shower", "truck_wash", "moon_base"],
+        areas: [
+          area("car", "disabled", {
+            capacity: 4,
+            available: 1,
+            maxStayMin: 180,
+            hours: "Mo-Fr 08:00-18:00",
+          }),
+          area("car", "delivery", { capacity: 2, maxStayMin: 30 }),
+          area("car", "short_term", { hours: "Mo-Sa 09:00-20:00" }),
+          area("car", "any", { capacity: 100, available: 40, maxStayMin: 240 }),
+        ],
+      }),
+    );
+    expect(rowsOf(section(detail.sections, "Availability"))).toEqual([
+      ["Free Spaces", "40 / 100"],
+      ["Occupancy", "60%"],
+      ["Disabled Spaces", "1 / 4, max. 3 hours, applies Mo-Fr 08:00-18:00"],
+      ["Cars", "40 / 100, max. 4 hours"],
+    ]);
+    expect(rowsOf(section(detail.sections, "Facility"))).toEqual([
+      ["Capacity", "100"],
+      ["Max Stay", "1 day"],
+      ["Deliveries", "2 spaces, max. 30 min"],
+      ["Short-Term", "Available, applies Mo-Sa 09:00-20:00"],
+      ["Reservable", "No"],
+      ["Amenities", "Toilets, Showers, Truck wash, Moon base"],
+    ]);
+    expect(rowsOf(detail.sections[1], "de")).toEqual([
+      ["Kapazität", "100"],
+      ["Höchstparkdauer", "1 Tag"],
+      ["Lieferverkehr", "2 Plätze, höchstens 30 Min."],
+      ["Kurzparker", "Vorhanden, gilt Mo-Sa 09:00-20:00"],
+      ["Reservierbar", "Nein"],
+      ["Ausstattung", "Toiletten, Duschen, Lkw-Wäsche, Moon base"],
+    ]);
+  });
+
+  it("an area open around the clock or the same hours daily reads in the reader's clock", () => {
+    const detail = mapParkingSiteToDetail(
+      makeSite({
+        areas: [
+          area("car", "short_term", { hours: "07:00-22:30" }),
+          area("car", "disabled", { hours: "24/7" }),
+          area("car", "family", { hours: "Mo-Su 00:00-24:00" }),
+          area("car", "ev_charging", { hours: "Mo-Su 06:30-24:00" }),
+          area("car", "delivery", { hours: "Mo-Fr 06:30-22:15; Sa 08:30-22:15" }),
+        ],
+      }),
+    );
+    const facility = section(detail.sections, "Facility");
+
+    expect(rowsOf(facility)).toEqual([
+      ["Short-Term", "Available, applies 7:00 AM–10:30 PM"],
+      ["Disabled Spaces", "Available, around the clock"],
+      ["Families", "Available, around the clock"],
+      ["EV Charging", "Available, applies 6:30 AM–12:00 AM"],
+      ["Deliveries", "Available, applies Mo-Fr 06:30-22:15; Sa 08:30-22:15"],
+    ]);
+    expect(rowsOf(facility, "de")).toEqual([
+      ["Kurzparker", "Vorhanden, gilt 07:00–22:30"],
+      ["Behindertenplätze", "Vorhanden, rund um die Uhr"],
+      ["Familien", "Vorhanden, rund um die Uhr"],
+      ["E-Ladeplätze", "Vorhanden, gilt 06:30–00:00"],
+      ["Lieferverkehr", "Vorhanden, gilt Mo-Fr 06:30-22:15; Sa 08:30-22:15"],
     ]);
   });
 
@@ -316,7 +477,7 @@ describe("mapParkingSiteToDetail", () => {
     ]);
     expect(detail.operator).toEqual({ name: "APCOA", url: "https://apcoa.de" });
     expect(detail.identity).toEqual({ operator: "APCOA" });
-    expect(detail.branding?.logoUrl).toMatch(/^https:\/\/commons\.wikimedia\.org\//);
+    expect(detail.branding?.logoUrl).toBeUndefined();
     expect(detail.parkAndRide).toBeUndefined();
   });
 
@@ -335,7 +496,7 @@ describe("mapParkingSiteToDetail", () => {
     });
     const emitted = JSON.stringify([mapParkingSiteToResult(site), mapParkingSiteToDetail(site)]);
 
-    expect(emitted).not.toMatch(/javascript:|data:/);
+    expect(emitted).not.toMatch(/"(?:javascript:|data:)/);
     expect(mapParkingSiteToDetail(site).operator).toEqual({ name: "APCOA" });
   });
 });
@@ -381,21 +542,13 @@ describe("parking strings", () => {
       openingHoursText: "daily",
       notes: "note",
       heightLimitCm: 200,
+      maxStayMin: 120,
+      reservation: true,
+      amenities: ["toilets"],
       areas: [
-        ...["car", "truck", "bus", "coach", "motorcycle", "bicycle", "caravan", "any"].map((v) =>
-          area(v, "any", { capacity: 5, available: 1 }),
-        ),
-        ...[
-          "disabled",
-          "women",
-          "family",
-          "ev_charging",
-          "car_sharing",
-          "residents",
-          "short_term",
-          "long_term",
-          "hazmat",
-        ].flatMap((g) => [area("car", g), area("truck", g, { capacity: 2 })]),
+        ...OC_VEHICLE_TYPES.map((v) => area(v, "any", { capacity: 5, available: 1 })),
+        ...OC_USER_GROUPS.flatMap((g) => [area("car", g), area("truck", g, { capacity: 2 })]),
+        area("bus", "taxi", { capacity: 2, maxStayMin: 30, hours: "Mo-Fr 08:00-18:00" }),
       ],
       rates: [
         {
@@ -423,6 +576,7 @@ describe("parking strings", () => {
       "single_level",
       "multi_storey",
       "underground",
+      "underground_and_multi_storey",
       "surface",
       "automated",
       "covered",
@@ -482,4 +636,28 @@ describe("parking strings", () => {
     expect(en).not.toHaveProperty("dataSources");
     expect(en).not.toHaveProperty("quality");
   });
+});
+
+it("captures complete canonical receipts before mapping results and details", () => {
+  const receipt = {
+    sourceId: "exact-feed",
+    name: "Publisher",
+    url: "https://example.com",
+    licensing: {
+      version: 1,
+      bindings: [
+        { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+      ],
+    } as const,
+    attributionText: "Required upstream notice",
+    publisher: { name: "Original publisher", url: "https://publisher.example" },
+  };
+  const record = makeSite({ attributions: [receipt] });
+  const result = mapParkingSiteToResult(record);
+  const detail = mapParkingSiteToDetail(record);
+  receipt.attributionText = "changed later";
+  expect(result.contributors).toEqual([
+    { ...receipt, attributionText: "Required upstream notice" },
+  ]);
+  expect(detail.contributors).toEqual(result.contributors);
 });

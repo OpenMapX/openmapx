@@ -3,12 +3,16 @@
 import { useMeasurementStore } from "@integrations/overlay-tool-measurement/store";
 import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
 import { useNavigationStore, useSidebarStore } from "@openmapx/core";
-import type { LoadedIntegrationMeta } from "@openmapx/integration-framework";
+import type { IntegrationMetadata } from "@openmapx/core/api-contracts";
 import { IntegrationRegistry } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { publishMapFooterCenterCovered } from "@/lib/mapFooterCenter";
+import {
+  MAP_FOOTER_OBSTRUCTION_ID,
+  publishMapFooterBox,
+  publishMapFooterCenterCovered,
+} from "@/lib/mapFooterCenter";
 import { publishMapObstruction } from "@/lib/mapObstructions";
 import { LegendHost } from "./LegendHost";
 
@@ -16,9 +20,19 @@ vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
 }));
 
+const sheet = vi.hoisted(() => ({
+  clearance: 0,
+  track: null as import("@/lib/sheetFollow").SheetFollowTrack | null,
+}));
+
 vi.mock("@/lib/mobilePanelHeight", () => ({
-  useMobilePanelClearance: () => 0,
+  useMobilePanelClearance: () => sheet.clearance,
   useWindowHeight: () => 800,
+}));
+
+vi.mock("@/lib/sheetFollow", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/sheetFollow")>()),
+  useSheetFollowTrack: () => sheet.track,
 }));
 
 const registry = new IntegrationRegistry([
@@ -60,7 +74,7 @@ const registry = new IntegrationRegistry([
       overlay: { excludes: [] },
     },
   },
-] satisfies LoadedIntegrationMeta[]);
+] satisfies IntegrationMetadata[]);
 
 function renderHost() {
   return render(
@@ -76,9 +90,13 @@ afterEach(() => {
     useTravelTimeStore.getState().deactivate();
     useSidebarStore.getState().closeAll();
     useNavigationStore.setState({ status: "idle" });
-    publishMapObstruction("legend-test-footer", "bottom", null);
+    publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", null);
+    publishMapObstruction("legend-test-sheet", "bottom", null);
     publishMapFooterCenterCovered(false);
   });
+  sheet.clearance = 0;
+  sheet.track = null;
+  act(() => publishMapFooterBox({ docked: false, height: 0 }));
 });
 
 describe("LegendHost", () => {
@@ -102,6 +120,14 @@ describe("LegendHost", () => {
     expect(screen.queryByRole("button", { name: "hideLegend" })).not.toBeNull();
   });
 
+  function hostRules(): string {
+    const host = screen.getByRole("button", { name: "hideLegend" }).parentElement;
+    return [...document.querySelectorAll("style")]
+      .map((style) => style.textContent ?? "")
+      .filter((css) => css.includes(`.${host?.classList[1]}{`))
+      .join(" ");
+  }
+
   function bottomRule(): string {
     const host = screen.getByRole("button", { name: "hideLegend" }).parentElement;
     return [...document.querySelectorAll("style")]
@@ -112,7 +138,7 @@ describe("LegendHost", () => {
 
   it("keeps the toggle flush on the map edge while the footer leaves its column free", () => {
     useMeasurementStore.getState().activate();
-    act(() => publishMapObstruction("legend-test-footer", "bottom", 22));
+    act(() => publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 22));
     renderHost();
 
     expect(bottomRule()).toContain("bottom:var(--omx-safe-bottom)");
@@ -121,16 +147,98 @@ describe("LegendHost", () => {
   it("stands the legend on a footer whose credits run under the toggle", () => {
     useMeasurementStore.getState().activate();
     act(() => {
-      publishMapObstruction("legend-test-footer", "bottom", 34);
+      publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 34);
       publishMapFooterCenterCovered(true);
     });
     renderHost();
     expect(bottomRule()).toContain("bottom:34px");
 
-    act(() => publishMapObstruction("legend-test-footer", "bottom", 60));
+    act(() => publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 60));
     expect(bottomRule()).toContain("bottom:60px");
 
     act(() => publishMapFooterCenterCovered(false));
     expect(bottomRule()).toContain("bottom:var(--omx-safe-bottom)");
+  });
+
+  it("rides a phone sheet's top edge while the footer leaves its column free", () => {
+    sheet.clearance = 240;
+    useMeasurementStore.getState().activate();
+    act(() => publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 274));
+    renderHost();
+
+    // Phones ride the sheet; wider screens, which have no sheet, stay flush.
+    expect(bottomRule()).toMatch(
+      /min-width:0px\)\{[^}]*\{bottom:240px;.*min-width:600px\)\{[^}]*\{bottom:var\(--omx-safe-bottom\);/,
+    );
+  });
+
+  it("stands on the footer riding a phone sheet instead of covering its credits", () => {
+    sheet.clearance = 240;
+    useMeasurementStore.getState().activate();
+    act(() => {
+      publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 274);
+      publishMapFooterCenterCovered(true);
+    });
+    renderHost();
+
+    expect(bottomRule()).toContain("bottom:274px");
+    expect(bottomRule()).not.toContain("bottom:240px");
+  });
+
+  it("follows the footer itself, not a moving sheet's settled extent", () => {
+    useMeasurementStore.getState().activate();
+    act(() => {
+      publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 274);
+      publishMapObstruction("legend-test-sheet", "bottom", 500);
+      publishMapFooterCenterCovered(true);
+    });
+    renderHost();
+    expect(bottomRule()).toContain("bottom:274px");
+
+    // The sheet's own registration keeps its settled height for the camera
+    // while the footer already rides the sheet down.
+    act(() => publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 180));
+    expect(bottomRule()).toContain("bottom:180px");
+  });
+
+  it("moves with its anchor in the same frame instead of easing after it", () => {
+    useMeasurementStore.getState().activate();
+    renderHost();
+
+    expect(hostRules()).toContain("transition:left 0.25s ease;");
+    expect(hostRules()).not.toMatch(/transition:[^;]*bottom/);
+  });
+
+  describe("while a sheet drives the follow on the compositor", () => {
+    const track = { scrollStart: 4, cap: 440, lift: 0, floor: 0 };
+
+    it("rides the sheet's top edge over the sheet's scroll range", () => {
+      sheet.clearance = 240;
+      sheet.track = track;
+      useMeasurementStore.getState().activate();
+      renderHost();
+
+      // Static at the zero-height edge; the scroll timeline lifts it by the sheet.
+      expect(bottomRule()).toMatch(/min-width:0px\)\{[^}]*\{bottom:0px;/);
+      expect(hostRules()).toContain("animation-timeline:--omx-sheet-follow;");
+      expect(hostRules()).toContain("animation-range:4px 444px;");
+      expect(hostRules()).toContain("--omx-sheet-follow-travel:440px;");
+    });
+
+    it("stands on the undocked footer, by its height, when its credits run under the tab", () => {
+      sheet.clearance = 240;
+      sheet.track = track;
+      useMeasurementStore.getState().activate();
+      act(() => {
+        publishMapFooterBox({ docked: false, height: 34 });
+        publishMapFooterCenterCovered(true);
+        // The live extent moves with the sheet; the follow must not read it.
+        publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 274);
+      });
+      renderHost();
+
+      expect(bottomRule()).toMatch(/min-width:0px\)\{[^}]*\{bottom:34px;/);
+      expect(hostRules()).toContain("animation-range:4px 444px;");
+    });
   });
 });

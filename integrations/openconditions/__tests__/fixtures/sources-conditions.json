@@ -1,0 +1,220 @@
+{
+  "generatedAt": "2026-10-15T00:00:00Z",
+  "scope": "public",
+  "sources": [
+    {
+      "id": "ca-cbsa-waits",
+      "name": "CBSA border wait times",
+      "domain": "border",
+      "product": "waits",
+      "format": "cbsa-bwt",
+      "operator": "cbsa",
+      "region": "ca",
+      "country": "CA",
+      "accessMode": "bulk",
+      "restricted": false,
+      "license": "OGL-Canada-2.0",
+      "licensing": {
+        "version": 1,
+        "declarations": [
+          {
+            "text": "OGL-Canada-2.0",
+            "url": "https://open.canada.ca/en/open-government-licence-canada"
+          }
+        ],
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "CBSA border wait times",
+            "license": {
+              "kind": "spdx",
+              "expression": "OGL-Canada-2.0",
+              "url": "https://open.canada.ca/en/open-government-licence-canada"
+            },
+            "conditions": [
+              "The Open Government Portal publishes this CSV as the \"Current Border Wait Times\" dataset under the Open Government Licence – Canada, which overrides the CBSA website's terms on commercial reproduction. CBSA names no attribution statement, so the licence's own is used."
+            ]
+          }
+        ]
+      },
+      "attribution": "Canada Border Services Agency. Contains information licensed under the Open Government Licence – Canada.",
+      "homepage": "https://www.cbsa-asfc.gc.ca/bwt-taf/menu-eng.html",
+      "privacyUrl": "https://www.canada.ca/en/transparency/privacy.html",
+      "terms": {
+        "url": "https://open.canada.ca/data/en/dataset/d4a716f5-a2fc-4c3c-88ed-451fe05900e4",
+        "reviewedAt": "2026-10-14",
+        "note": "The Open Government Portal publishes this CSV as the \"Current Border Wait Times\" dataset under the Open Government Licence – Canada, which overrides the CBSA website's terms on commercial reproduction. CBSA names no attribution statement, so the licence's own is used."
+      },
+      "rights": {
+        "redistribution": true,
+        "derivedRedistribution": true,
+        "commercialUse": true,
+        "attributionRequired": true,
+        "retention": true,
+        "shareAlike": false
+      },
+      "coverage": {
+        "countries": ["CA"]
+      }
+    },
+    {
+      "id": "fi-digitraffic-maintenance",
+      "name": "Fintraffic Digitraffic road maintenance tracking",
+      "domain": "vehicles",
+      "product": "maintenance",
+      "format": "digitraffic",
+      "operator": "digitraffic",
+      "region": "fi",
+      "country": "FI",
+      "accessMode": "bulk",
+      "restricted": false,
+      "license": "CC-BY-4.0",
+      "licensing": {
+        "version": 1,
+        "declarations": [
+          {
+            "text": "CC-BY-4.0",
+            "url": "https://creativecommons.org/licenses/by/4.0/"
+          }
+        ],
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Fintraffic Digitraffic road maintenance tracking",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-4.0",
+              "url": "https://creativecommons.org/licenses/by/4.0/"
+            }
+          }
+        ]
+      },
+      "attribution": "Source: Fintraffic / digitraffic.fi, license CC 4.0 BY",
+      "homepage": "https://www.digitraffic.fi/en/road-traffic/",
+      "privacyUrl": "https://www.digitraffic.fi/en/privacy-policy/",
+      "terms": {
+        "url": "https://www.digitraffic.fi/en/terms-of-service/",
+        "reviewedAt": "2026-10-15"
+      },
+      "rights": {
+        "redistribution": true,
+        "derivedRedistribution": true,
+        "commercialUse": true,
+        "attributionRequired": true,
+        "retention": true,
+        "shareAlike": false
+      },
+      "coverage": {
+        "countries": ["FI"]
+      }
+    },
+    {
+      "id": "fi-digitraffic-weather",
+      "name": "Fintraffic Digitraffic road weather stations",
+      "domain": "weather",
+      "product": "weather",
+      "format": "digitraffic-weather",
+      "operator": "digitraffic",
+      "region": "fi",
+      "country": "FI",
+      "accessMode": "bulk",
+      "restricted": false,
+      "license": "CC-BY-4.0",
+      "licensing": {
+        "version": 1,
+        "declarations": [
+          {
+            "text": "CC-BY-4.0",
+            "url": "https://creativecommons.org/licenses/by/4.0/"
+          }
+        ],
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Fintraffic Digitraffic road weather stations",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-4.0",
+              "url": "https://creativecommons.org/licenses/by/4.0/"
+            }
+          }
+        ]
+      },
+      "attribution": "Source: Fintraffic / digitraffic.fi, license CC 4.0 BY",
+      "homepage": "https://www.digitraffic.fi/en/",
+      "privacyUrl": "https://www.digitraffic.fi/en/privacy-policy/",
+      "terms": {
+        "url": "https://www.digitraffic.fi/en/terms-of-service/",
+        "reviewedAt": "2026-10-15"
+      },
+      "rights": {
+        "redistribution": true,
+        "derivedRedistribution": true,
+        "commercialUse": true,
+        "attributionRequired": true,
+        "retention": true,
+        "shareAlike": false
+      },
+      "coverage": {
+        "countries": ["FI"]
+      }
+    },
+    {
+      "id": "us-cbp-waits",
+      "name": "CBP border wait times",
+      "domain": "border",
+      "product": "waits",
+      "format": "cbp-bwt",
+      "operator": "cbp",
+      "region": "us",
+      "country": "US",
+      "accessMode": "bulk",
+      "restricted": false,
+      "license": "LicenseRef-US-Gov-Public-Domain",
+      "licensing": {
+        "version": 1,
+        "declarations": [
+          {
+            "text": "LicenseRef-US-Gov-Public-Domain",
+            "url": "https://www.cbp.gov/site-policy-notices/copyright-notice"
+          }
+        ],
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "CBP border wait times",
+            "license": {
+              "kind": "custom",
+              "id": "LicenseRef-US-Gov-Public-Domain",
+              "namespace": "openconditions:licences",
+              "name": "U.S. Government Public Domain (17 U.S.C. §105)",
+              "url": "https://www.cbp.gov/site-policy-notices/copyright-notice"
+            },
+            "conditions": [
+              "Information on the CBP website is in the public domain unless a copyright is indicated; CBP asks to be cited as the source."
+            ]
+          }
+        ]
+      },
+      "attribution": "U.S. Customs and Border Protection",
+      "homepage": "https://bwt.cbp.gov/",
+      "privacyUrl": "https://www.cbp.gov/site-policy-notices/privacy-policy",
+      "terms": {
+        "url": "https://www.cbp.gov/site-policy-notices/copyright-notice",
+        "reviewedAt": "2026-10-14",
+        "note": "Information on the CBP website is in the public domain unless a copyright is indicated; CBP asks to be cited as the source."
+      },
+      "rights": {
+        "redistribution": true,
+        "derivedRedistribution": true,
+        "commercialUse": true,
+        "attributionRequired": false,
+        "retention": true,
+        "shareAlike": false
+      },
+      "coverage": {
+        "countries": ["US"]
+      }
+    }
+  ]
+}

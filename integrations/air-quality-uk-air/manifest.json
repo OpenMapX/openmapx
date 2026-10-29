@@ -42,8 +42,6 @@
       "credentialOwner": "none",
       "reviewedAt": "2026-08-30",
       "apiHosts": ["uk-air.defra.gov.uk", "www.nationalarchives.gov.uk"],
-      "license": "Open Government Licence v3.0",
-      "licenseUrl": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
       "attribution": "Department for Environment, Food & Rural Affairs (Defra), UK-AIR",
       "commercialUse": "yes",
       "notes": "Official preliminary station-level DAQI from the current-site RSS feed. OpenMapX does not recompute DAQI from this feed and only associates a site with a request within 25 km.",
@@ -52,7 +50,27 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "UK-AIR current site pollution levels material",
+            "license": {
+              "kind": "spdx",
+              "expression": "OGL-UK-3.0",
+              "url": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "OGL-UK-3.0",
+            "url": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
+          }
+        ]
+      }
     }
   ]
 }

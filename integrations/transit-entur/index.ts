@@ -1,29 +1,79 @@
-import { defineTransitProvider, type IntegrationContext } from "@openmapx/integration-framework";
-import * as entur from "./provider.js";
+import { createEnturClient, createEnturGeocoderSources } from "@openmapx/entur-client";
+import {
+  captureTransitContributors,
+  type IntegrationContext,
+  resolveIntegrationContributors,
+  snapshotContributors,
+} from "@openmapx/integration-framework";
+import { freshnessNow } from "@openmapx/mobility-core/freshness";
+import { withAttribution } from "@openmapx/mobility-core/result";
+import { transitDataContributors } from "@openmapx/mobility-core/transit-contributors";
+import { createEnturTransitProvider } from "./provider.js";
 
 const NORWAY_BBOX: [number, number, number, number] = [4.0, 57.0, 32.0, 71.5];
 
-const { attribution, wrap, wrapRT, init } = defineTransitProvider();
-
 export function setup(ctx: IntegrationContext): void {
-  init(ctx);
-  ctx.onActivate(() => {
-    entur.setEnturTransitConfig({
-      geocoderEndpoint: ctx.config.geocoderEndpoint as string | undefined,
-      journeyPlannerEndpoint: ctx.config.journeyPlannerEndpoint as string | undefined,
-      vehiclesEndpoint: ctx.config.vehiclesEndpoint as string | undefined,
-      nsrEndpoint: ctx.config.nsrEndpoint as string | undefined,
-      clientName: ctx.config.clientName as string | undefined,
-      boundaryCountry: ctx.config.boundaryCountry as string | undefined,
-      multiModal: ctx.config.multiModal as "parent" | "child" | "all" | undefined,
-    });
+  const { id, http, upstreamRuntime } = ctx;
+  const generation = new AbortController();
+  const sourceIds = {
+    journeyPlanner: "entur-journey-planner",
+    vehicles: "entur-vehicles",
+    geocoder: "entur-geocoder",
+    nsr: "entur-nsr",
+  } as const;
+  const isSourceAllowed = async (sourceId: string) => {
+    const denied = await ctx.getDisallowedSourceIds?.();
+    return !denied?.has(sourceId) && !denied?.has(id);
+  };
+  const geocoderSources = createEnturGeocoderSources({
+    contributors: Object.fromEntries(
+      ["entur-geocoder", "entur-geocoder-nsr"]
+        .filter((sourceId) =>
+          ctx.manifest.dataSources?.some((source) => source.sourceId === sourceId),
+        )
+        .map((sourceId) => [sourceId, resolveIntegrationContributors(ctx, [sourceId])]),
+    ),
+    isSourceAllowed,
   });
-
+  const client = createEnturClient({
+    http,
+    upstreamRuntime,
+    config: { ...ctx.config },
+    sourceIds,
+    contributors: Object.fromEntries(
+      Object.values(sourceIds).map((sourceId) => [
+        sourceId,
+        resolveIntegrationContributors(ctx, [sourceId]),
+      ]),
+    ),
+    isSourceAllowed,
+  });
+  const entur = createEnturTransitProvider(client, generation.signal, {
+    geocoderSources,
+    boundaryCountry: ctx.config.boundaryCountry as string | undefined,
+    multiModal: ctx.config.multiModal as "parent" | "child" | "all" | undefined,
+  });
+  ctx.onShutdown(async () => {
+    generation.abort(new Error("Entur transit generation retired"));
+  });
+  const receipts = (ids: readonly string[]) =>
+    snapshotContributors(...ids.map((id) => client.contributors[id] ?? []));
+  const wrapSource = <T>(data: T, ids: readonly string[], realtime = false) => {
+    const captured = captureTransitContributors(data, receipts(ids));
+    return withAttribution(
+      captured,
+      transitDataContributors(captured),
+      freshnessNow({ hasRealtimeData: realtime }),
+    );
+  };
+  const wrapRealtimeSource = <T>(data: T, ids: readonly string[]) => wrapSource(data, ids, true);
+  const wrap = <T>(data: T) => wrapSource(data, [sourceIds.journeyPlanner]);
+  const wrapRT = <T>(data: T) => wrapRealtimeSource(data, [sourceIds.journeyPlanner]);
   ctx.registerHealthCheck(async () => {
     const available = await entur.isEnturTransitAvailable();
     return available
       ? { status: "up" as const }
-      : { status: "down" as const, error: "Journey Planner probe failed" };
+      : { status: "down" as const, error: "Entur transit API probe failed" };
   });
 
   ctx.registerTransitProvider({
@@ -32,7 +82,7 @@ export function setup(ctx: IntegrationContext): void {
     coverage: { bbox: NORWAY_BBOX },
     priority: 1,
     role: "regional",
-    attribution: attribution.all(),
+    attribution: receipts(Object.values(sourceIds)),
     capabilities: {
       stops: {
         lookup: true,
@@ -56,13 +106,18 @@ export function setup(ctx: IntegrationContext): void {
       return wrap(await entur.getStopsNearby(lat, lng, radiusMeters));
     },
     async searchStopsByName(query, limit, context) {
-      return wrap(await entur.searchByName(query, limit ?? 10, context?.signal));
+      return wrapSource(await entur.searchByName(query, limit ?? 10, context?.signal), [
+        "entur-geocoder",
+      ]);
     },
     async getStop(stopId) {
       return wrap(await entur.getStop(stopId));
     },
     async getStopInfrastructure(stopId) {
-      return wrap(await entur.getStopInfrastructure(stopId));
+      const data = await entur.getStopInfrastructure(stopId);
+      return wrapSource(data ? { ...data, contributors: receipts(["entur-nsr"]) } : data, [
+        "entur-nsr",
+      ]);
     },
     async getStopPlatforms(stopId) {
       return wrap(await entur.getStopPlatforms(stopId));
@@ -88,6 +143,7 @@ export function setup(ctx: IntegrationContext): void {
       const stops = await entur.getRouteStops(routeId, hintStopId);
       return wrap(
         stops.map((s) => ({
+          contributors: s.contributors,
           id: s.id,
           name: s.name,
           lat: s.lat,
@@ -116,16 +172,16 @@ export function setup(ctx: IntegrationContext): void {
       return wrapRT(await entur.getRouteAlerts(routeId));
     },
     async getVehiclePositions(routeId) {
-      return wrapRT(await entur.getVehiclePositions(routeId));
+      return wrapRealtimeSource(await entur.getVehiclePositions(routeId), ["entur-vehicles"]);
     },
     async getVehicleRadar(bbox) {
-      return wrapRT(await entur.getVehicleRadar(bbox));
+      return wrapRealtimeSource(await entur.getVehicleRadar(bbox), ["entur-vehicles"]);
     },
     async getVehicleJourney(tripId, fallbackIds) {
       return wrapRT(await entur.getVehicleJourney(tripId, fallbackIds));
     },
     async getFacilities(stopId) {
-      return wrap(await entur.getFacilities(stopId));
+      return wrapSource(await entur.getFacilities(stopId), ["entur-nsr"]);
     },
   });
 }

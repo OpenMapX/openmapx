@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/integration-api/map/MapContext", () => ({ useMap: () => ({}) }));
-vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
-  useSourceAttributions: vi.fn(),
-}));
 vi.mock("next-intl", () => ({
   useLocale: () => "en",
   useTranslations: () => (key: string) => key,

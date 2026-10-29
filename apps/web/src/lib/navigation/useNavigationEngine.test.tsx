@@ -4,12 +4,15 @@ import type { Route } from "@integrations/routing/types";
 import {
   type FixInput,
   type IncidentAlert,
+  type RouteStep,
   readRouteMatcherCounters,
+  remainingWaypoints,
   resetRouteMatcherCounters,
   setRouteMatcherCounting,
   useNavigationStore,
   useSettingsStore,
 } from "@openmapx/core";
+import { createTranslator } from "@openmapx/i18n";
 import type { NavIncidentResource } from "@openmapx/integration-framework/react";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -44,9 +47,11 @@ function closureIncident(id: string): IncidentAlert {
   };
 }
 
+let locale = "en";
+
 vi.mock("next-intl", () => ({
-  useTranslations: () => (key: string) => key,
-  useLocale: () => "en",
+  useTranslations: () => createTranslator(locale, "navigation"),
+  useLocale: () => locale,
 }));
 
 let fixHandler: ((fix: FixInput) => void) | null = null;
@@ -55,7 +60,8 @@ vi.mock("../useWatchPosition", () => ({
     fixHandler = onFix;
   },
 }));
-vi.mock("./useNavigationVoice", () => ({ useNavigationVoice: () => vi.fn() }));
+const speak = vi.fn();
+vi.mock("./useNavigationVoice", () => ({ useNavigationVoice: () => speak }));
 const fetchDirections = vi.fn();
 vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core")>();
@@ -108,7 +114,70 @@ describe("useNavigationEngine", () => {
     useSettingsStore.setState({ incidentAlerts: false, avoidIncidents: false });
     fixHandler = null;
     fetchDirections.mockReset();
+    speak.mockClear();
+    locale = "en";
+    useNavigationStore.setState({ voiceEnabled: true });
+    useSettingsStore.setState({ units: "metric" });
   });
+
+  function speakManeuver(step: Partial<RouteStep>, longitude = 0.0011) {
+    const withSpeech = { ...route, steps: [route.steps[0], { ...route.steps[1], ...step }] };
+    useNavigationStore.getState().startGroundNavigation(withSpeech, "driving", [
+      [0, 0],
+      [0.004, 0],
+    ]);
+    renderHook(() => useNavigationEngine(disabledResource));
+    act(() => fixHandler?.({ coords: [longitude, 0], accuracy: 5, speed: 0, timestampMs: 1000 }));
+    return useNavigationStore.getState().progress;
+  }
+
+  it.each([
+    ["en", "metric", "In 100 metres, Advance alert"],
+    ["de", "metric", "In 100 Meter, Advance alert"],
+    ["en", "imperial", "In 350 feet, Advance alert"],
+    ["de", "imperial", "In 350 Fuß, Advance alert"],
+  ] as const)("formats advance speech in %s with %s units", (language, units, expected) => {
+    locale = language;
+    useSettingsStore.setState({ units });
+    speakManeuver({
+      instruction: "Written",
+      verbalAlert: "Advance alert",
+      verbalPre: "Pre-transition",
+      verbalSuccinct: "Succinct",
+    });
+    expect(speak).toHaveBeenCalledTimes(1);
+    expect(speak).toHaveBeenCalledWith(expected);
+  });
+
+  it("speaks pre-transition text without distance at the imminent turn", () => {
+    speakManeuver(
+      { instruction: "Written", verbalAlert: "Alert", verbalPre: "Pre-transition" },
+      0.0018,
+    );
+    expect(speak).toHaveBeenCalledTimes(1);
+    expect(speak).toHaveBeenCalledWith("Pre-transition");
+  });
+
+  it.each([
+    [
+      { instruction: "Written", verbalAlert: " ", verbalPre: "  Pre-transition  " },
+      "In 100 metres, Pre-transition",
+    ],
+    [{ instruction: "Written", verbalAlert: 42, verbalPre: null }, "In 100 metres, Written"],
+  ] as const)("skips malformed or blank verbal fields", (step, expected) => {
+    speakManeuver(step as Partial<RouteStep>);
+    expect(speak).toHaveBeenCalledTimes(1);
+    expect(speak).toHaveBeenCalledWith(expected);
+  });
+
+  it.each(["", "   ", "x".repeat(241)])(
+    "preserves navigation progression without unusable speech",
+    (instruction) => {
+      const progress = speakManeuver({ instruction });
+      expect(progress?.currentStepIndex).toBe(0);
+      expect(speak).not.toHaveBeenCalled();
+    },
+  );
 
   it("writes progress to the store on each on-route fix", () => {
     useNavigationStore.getState().startGroundNavigation(route, "driving", [
@@ -142,6 +211,27 @@ describe("useNavigationEngine", () => {
       }),
     );
     expect(useNavigationStore.getState().route?.distance).toBe(999);
+  });
+
+  it("adopts the captured remaining itinerary and cannot resurrect visited stops", async () => {
+    const a: [number, number] = [0.001, 0];
+    const b: [number, number] = [0.003, 0];
+    const destination: [number, number] = [0.004, 0];
+    useNavigationStore
+      .getState()
+      .startGroundNavigation(route, "driving", [[0, 0], a, b, destination]);
+    const replacement = { ...route, geometry: [[0.0018, 0.002], b, destination] } as Route;
+    fetchDirections.mockResolvedValue({ routes: [replacement], activeRouteIndex: 0 });
+    renderHook(() => useNavigationEngine(disabledResource));
+    const fixes = await triggerOffRoute();
+    const captured = [fixes[4].coords, b, destination];
+    expect(fetchDirections).toHaveBeenCalledWith(expect.objectContaining({ waypoints: captured }));
+    const state = useNavigationStore.getState();
+    expect(state.destinationWaypoints).toEqual(captured);
+    expect(state.progress).toBeNull();
+    expect(
+      remainingWaypoints(replacement.geometry, state.destinationWaypoints, [0.002, 0.002], 0),
+    ).toEqual([[0.002, 0.002], b, destination]);
   });
 
   it("keeps the old route and suppresses directions while offline", async () => {
@@ -188,6 +278,10 @@ describe("useNavigationEngine", () => {
     const state = useNavigationStore.getState();
     expect(state.status).toBe("navigating");
     expect(state.route).toBe(route);
+    expect(state.destinationWaypoints).toEqual([
+      [0, 0],
+      [0.004, 0],
+    ]);
     expect(state.rerouteFailedNonce).toBe(1);
     expect(state.rerouteUnavailable).toBe(true);
   });
@@ -240,6 +334,41 @@ describe("useNavigationEngine", () => {
 
     expect(useNavigationStore.getState().status).toBe("navigating");
     expect(useNavigationStore.getState().route).toBe(route);
+    expect(useNavigationStore.getState().destinationWaypoints).toEqual([
+      [0, 0],
+      [0.004, 0],
+    ]);
+  });
+
+  it("cannot replace the itinerary after another route wins", async () => {
+    useNavigationStore.getState().startGroundNavigation(route, "driving", [
+      [0, 0],
+      [0.004, 0],
+    ]);
+    let resolveResponse: (response: { routes: Route[]; activeRouteIndex: number }) => void =
+      () => {};
+    fetchDirections.mockReturnValue(
+      new Promise((resolve) => {
+        resolveResponse = resolve;
+      }),
+    );
+    renderHook(() => useNavigationEngine(disabledResource));
+    await triggerOffRoute();
+    const captured: [number, number][] = [
+      [0.003, 0.002],
+      [0.004, 0],
+    ];
+    const replacement = { ...route, geometry: captured } as Route;
+    act(() =>
+      useNavigationStore
+        .getState()
+        .applyReroute(replacement, undefined, undefined, undefined, captured),
+    );
+    await act(async () => {
+      resolveResponse({ routes: [{ ...route, distance: 999 } as Route], activeRouteIndex: 0 });
+    });
+    expect(useNavigationStore.getState().route).toBe(replacement);
+    expect(useNavigationStore.getState().destinationWaypoints).toEqual(captured);
   });
 
   it("suppresses concurrent reroute attempts", async () => {
@@ -306,6 +435,10 @@ describe("useNavigationEngine fix publications", () => {
     useSettingsStore.setState({ incidentAlerts: false, avoidIncidents: false });
     fixHandler = null;
     fetchDirections.mockReset();
+    speak.mockClear();
+    locale = "en";
+    useNavigationStore.setState({ voiceEnabled: true });
+    useSettingsStore.setState({ units: "metric" });
   });
 
   /** Deliver one fix and report how many times the store notified subscribers. */
@@ -417,6 +550,10 @@ describe("useNavigationEngine route index ownership", () => {
     useSettingsStore.setState({ incidentAlerts: false, avoidIncidents: false });
     fixHandler = null;
     fetchDirections.mockReset();
+    speak.mockClear();
+    locale = "en";
+    useNavigationStore.setState({ voiceEnabled: true });
+    useSettingsStore.setState({ units: "metric" });
     resetRouteMatcherCounters();
     setRouteMatcherCounting(true);
   });
@@ -520,6 +657,10 @@ describe("useNavigationEngine incident-resource baseline", () => {
     useSettingsStore.setState({ incidentAlerts: true, avoidIncidents: true });
     fixHandler = null;
     fetchDirections.mockReset();
+    speak.mockClear();
+    locale = "en";
+    useNavigationStore.setState({ voiceEnabled: true });
+    useSettingsStore.setState({ units: "metric" });
     fetchDirections.mockResolvedValue({ routes: [route], activeRouteIndex: 0 });
   });
 
@@ -568,6 +709,52 @@ describe("useNavigationEngine incident-resource baseline", () => {
 
     expect(fetchDirections).toHaveBeenCalledWith(expect.objectContaining({ avoidClosures: true }));
   });
+
+  it.each([1500, 2500])(
+    "retains ordered retraced stops in a closure replacement at %im",
+    async (alongMeters) => {
+      const origin: [number, number] = [0, 0];
+      const a: [number, number] = [0.02, 0];
+      const b: [number, number] = [0.01, 0];
+      const destination: [number, number] = [0.03, 0];
+      const from: [number, number] = [0.0175, 0];
+      const retraced = { ...route, geometry: [origin, b, a, b, destination] } as Route;
+      const captured = alongMeters === 1500 ? [from, a, b, destination] : [from, b, destination];
+      const replacement = { ...route, geometry: captured } as Route;
+      fetchDirections.mockResolvedValue({ routes: [replacement], activeRouteIndex: 0 });
+      useNavigationStore
+        .getState()
+        .startGroundNavigation(retraced, "driving", [origin, a, b, destination]);
+      const { rerender } = renderHook(({ resource }) => useNavigationEngine(resource), {
+        initialProps: { resource: resourceWith({ status: "fresh", successfulRevision: 1 }) },
+      });
+      act(() =>
+        useNavigationStore.getState().applyProgress({ snapped: from, alongMeters } as never),
+      );
+      await act(async () => {
+        rerender({
+          resource: resourceWith({
+            status: "fresh",
+            successfulRevision: 2,
+            incidents: [closureIncident("future-closure")],
+          }),
+        });
+      });
+      expect(fetchDirections).toHaveBeenCalledWith(
+        expect.objectContaining({ waypoints: captured, avoidClosures: true }),
+      );
+      expect(useNavigationStore.getState().destinationWaypoints).toEqual(captured);
+      expect(useNavigationStore.getState().route).toBe(replacement);
+      expect(
+        remainingWaypoints(
+          replacement.geometry,
+          useNavigationStore.getState().destinationWaypoints,
+          from,
+          0,
+        ),
+      ).toEqual(captured);
+    },
+  );
 
   it("a stale revision never arms an empty baseline nor triggers a reroute", () => {
     useNavigationStore.getState().startGroundNavigation(route, "driving", waypoints);

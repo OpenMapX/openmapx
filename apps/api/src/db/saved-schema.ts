@@ -1,9 +1,11 @@
+import type { SavedPlaceFieldContributors } from "@openmapx/core/saved-place-contributors";
 import { relations } from "drizzle-orm";
 import {
   boolean,
   doublePrecision,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -46,6 +48,7 @@ export const savedPlace = pgTable(
     lat: doublePrecision("lat").notNull(),
     lng: doublePrecision("lng").notNull(),
     placeId: text("place_id"),
+    fieldContributors: jsonb("field_contributors").$type<SavedPlaceFieldContributors>(),
     note: text("note"),
     sortOrder: integer("sort_order").default(0).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -67,6 +70,7 @@ export const labeledPlace = pgTable(
     lat: doublePrecision("lat").notNull(),
     lng: doublePrecision("lng").notNull(),
     placeId: text("place_id"),
+    fieldContributors: jsonb("field_contributors").$type<SavedPlaceFieldContributors>(),
   },
   (table) => [
     index("labeledPlace_userId_idx").on(table.userId),

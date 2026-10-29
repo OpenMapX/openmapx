@@ -9,7 +9,8 @@ import { addLayerInSlot } from "@/integration-api/map/layerStack";
 import { setLayerVisibility } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
-import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
+import { addAttributedRasterSource } from "@/integration-api/overlay/rasterMapContribution";
+import { useRasterMapAttributions } from "@/integration-api/overlay/useRasterMapAttributions";
 
 type RasterPaint = Extract<LayerSpecification, { type: "raster" }>["paint"];
 
@@ -21,11 +22,11 @@ interface RasterBaseLayerProps {
   tileSize?: number;
   maxzoom?: number;
   /**
-   * Attributions to register via `useMapAttributions` while this layer is
-   * the active base. Each entry becomes its own atomic side-channel source so
-   * MapLibre's substring dedup collapses identical credits across layers.
+   * Capture the supplier at tile acquisition and credit retained painted tiles.
    */
   attributions: Attribution[];
+  /** HTTP producer supplies the canonical receipt with each tile response. */
+  receiptMode?: "uniform" | "response";
   paint?: RasterPaint;
 }
 
@@ -37,13 +38,18 @@ export function RasterBaseLayer({
   tileSize = 256,
   maxzoom = 20,
   attributions,
+  receiptMode = "uniform",
   paint,
 }: RasterBaseLayerProps) {
   const { mapRef, mapReady, styleVersion } = useMap();
   const activeLayer = useLayerStore((s) => s.activeLayer);
   const shouldShow = activeLayer === activeWhen;
 
-  useMapAttributions(`raster-${sourceId}`, shouldShow ? attributions : []);
+  useRasterMapAttributions(
+    `base-${sourceId}`,
+    [{ sourceId, layerId, contributors: attributions }],
+    shouldShow,
+  );
 
   useEffect(() => {
     void styleVersion;
@@ -54,12 +60,18 @@ export function RasterBaseLayer({
       if (tiles.length === 0) return;
 
       if (shouldShow && !map.getSource(sourceId)) {
-        map.addSource(sourceId, {
-          type: "raster",
-          tiles,
-          tileSize,
-          maxzoom,
-        });
+        addAttributedRasterSource(
+          map,
+          sourceId,
+          {
+            type: "raster",
+            tiles,
+            tileSize,
+            maxzoom,
+          },
+          attributions,
+          receiptMode,
+        );
       }
 
       if (shouldShow && !map.getLayer(layerId)) {
@@ -91,6 +103,8 @@ export function RasterBaseLayer({
     tileSize,
     maxzoom,
     paint,
+    attributions,
+    receiptMode,
   ]);
 
   return null;

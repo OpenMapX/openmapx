@@ -1,3 +1,5 @@
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+
 export interface ReviewSubject {
   /** Latitude, WGS84. */
   lat: number;
@@ -10,6 +12,8 @@ export interface ReviewSubject {
 }
 
 export interface ReviewAggregate {
+  /** Exact supplier receipts captured when this aggregate was acquired. [] is authoritative. */
+  contributors?: readonly Attribution[];
   /** Total number of reviews (including opinion-only and edits). */
   count: number;
   /** Reviews with a numeric rating; absent when a provider cannot report this sample size. */
@@ -60,6 +64,8 @@ export interface ReviewMetadata {
 }
 
 export interface Review {
+  /** Exact supplier receipts captured when this review was acquired. [] is authoritative. */
+  contributors?: readonly Attribution[];
   /** Unique id = the review's JWT signature segment. */
   id: string;
   subject: ReviewSubject;

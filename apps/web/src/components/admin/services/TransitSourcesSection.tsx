@@ -21,47 +21,19 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { safeHref } from "@openmapx/core";
+import { createApiClient, safeHref } from "@openmapx/core";
+import * as sdk from "@openmapx/core/api-admin-sdk";
+import type { TransitSource } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { formatBytes } from "@/lib/storageFormat";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { TableEmptyState } from "../shared/TableEmptyState";
 import { TableSearchField, TableToolbar } from "../shared/TableToolbar";
 import { useClientPagination, useTextFilter } from "../shared/tableHooks";
 
-export interface TransitSource {
-  id: string;
-  region: string;
-  name: string;
-  format: "gtfs" | "netex";
-  origin: "catalog" | "operator";
-  originUrl?: string;
-  requested: boolean;
-  active: boolean;
-  activeEpoch?: string;
-  artifact?: { sizeBytes: number; retrievedAt: string };
-  lastFetchedAt?: string;
-  lastImportedAt?: string;
-  validationStatus?: string;
-  validationMessage?: string;
-  lifecycle:
-    | "active"
-    | "add-pending"
-    | "update-pending"
-    | "removal-pending"
-    | "disabled"
-    | "failed"
-    | "stale";
-}
-
-interface TransitCatalogSource {
-  id: string;
-  name: string;
-  source: string;
-  countryCode: string;
-}
+export type { TransitSource };
 
 export function sourceStateLabel(source: TransitSource): string {
   if (source.lifecycle === "removal-pending") return "Removal pending · active";
@@ -95,14 +67,12 @@ function formatDate(value: string): string {
   });
 }
 
-async function responseJson<T>(response: Response, fallback: string): Promise<T> {
-  const body = (await response.json().catch(() => ({}))) as T & { error?: string };
-  if (!response.ok) throw new Error(body.error ?? `${fallback} (HTTP ${response.status})`);
-  return body;
-}
-
 export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
   const queryClient = useQueryClient();
+  const client = useMemo(
+    () => createApiClient({ baseUrl: apiUrl, credentials: "include" }),
+    [apiUrl],
+  );
   const [toast, setToast] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [url, setUrl] = useState("");
@@ -114,31 +84,30 @@ export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
   const [catalogSearch, setCatalogSearch] = useState("");
   const [lastJobId, setLastJobId] = useState<string | null>(null);
 
-  const sourcesQuery = useQuery<{ sources: TransitSource[]; total: number }>({
+  const sourcesQuery = useQuery({
     queryKey: ["admin", "transit", "sources"],
-    queryFn: () =>
-      fetch(`${apiUrl}/api/data-manager/transit/sources?limit=500`, {
-        credentials: "include",
-      }).then((response) => responseJson(response, "Failed to load transit sources")),
+    queryFn: async ({ signal }) =>
+      sdk.unwrapAdminResponse(
+        await sdk.getApiDataManagerTransitSources({ limit: 500 }, { client, signal }),
+      ),
     refetchInterval: 30_000,
   });
-  const stateQuery = useQuery<{ currentJob: { jobId: string } | null }>({
+  const stateQuery = useQuery({
     queryKey: ["admin", "transit", "state"],
-    queryFn: () =>
-      fetch(`${apiUrl}/api/data-manager/transit/state`, { credentials: "include" }).then(
-        (response) => responseJson(response, "Failed to load transit sync state"),
-      ),
+    queryFn: async ({ signal }) =>
+      sdk.unwrapAdminResponse(await sdk.getApiDataManagerTransitState({ client, signal })),
     refetchInterval: 10_000,
   });
-  const catalogQuery = useQuery<{ sources: TransitCatalogSource[] }>({
+  const catalogQuery = useQuery({
     queryKey: ["admin", "transit", "catalog", catalogSearch],
     enabled: dialogOpen && catalogSearch.trim().length >= 2,
-    queryFn: () => {
-      const params = new URLSearchParams({ search: catalogSearch.trim() });
-      return fetch(`${apiUrl}/api/data-manager/transit/catalog?${params}`, {
-        credentials: "include",
-      }).then((response) => responseJson(response, "Failed to search the transit catalog"));
-    },
+    queryFn: async ({ signal }) =>
+      sdk.unwrapAdminResponse(
+        await sdk.getApiDataManagerTransitCatalog(
+          { search: catalogSearch.trim() },
+          { client, signal },
+        ),
+      ),
   });
 
   const reportJob = (jobId: string, message: string) => {
@@ -147,22 +116,22 @@ export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
     void queryClient.invalidateQueries({ queryKey: ["admin", "transit"] });
   };
   const addMutation = useMutation({
-    mutationFn: () =>
-      fetch(`${apiUrl}/api/data-manager/transit/sources`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: url.trim(),
-          name: name.trim(),
-          region: region.trim(),
-          license: {
-            attribution: attribution.trim(),
-            ...(licenseSpdx.trim() ? { spdxIdentifier: licenseSpdx.trim() } : {}),
-            ...(licenseUrl.trim() ? { url: licenseUrl.trim() } : {}),
+    mutationFn: async () =>
+      sdk.unwrapAdminResponse(
+        await sdk.postApiDataManagerTransitSources(
+          {
+            url: url.trim(),
+            name: name.trim(),
+            region: region.trim(),
+            license: {
+              attribution: attribution.trim(),
+              ...(licenseSpdx.trim() ? { spdxIdentifier: licenseSpdx.trim() } : {}),
+              ...(licenseUrl.trim() ? { url: licenseUrl.trim() } : {}),
+            },
           },
-        }),
-      }).then((response) => responseJson<{ jobId: string }>(response, "Failed to add source")),
+          { client },
+        ),
+      ),
     onSuccess: ({ jobId }) => {
       reportJob(jobId, `Source change queued as ${jobId}.`);
       setDialogOpen(false);
@@ -173,36 +142,23 @@ export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
       setLicenseUrl("");
       setAttribution("");
     },
-    onError: (error) => setToast((error as Error).message),
+    onError: (error) => setToast(sdk.adminErrorMessage(error, error.message)),
   });
   const sourceMutation = useMutation({
-    mutationFn: ({ sourceId, method }: { sourceId: string; method: "DELETE" | "POST" }) => {
-      const suffix = method === "POST" ? "/enable" : "";
-      return fetch(
-        `${apiUrl}/api/data-manager/transit/sources/${encodeURIComponent(sourceId)}${suffix}`,
-        {
-          method,
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: "{}",
-        },
-      ).then((response) =>
-        responseJson<{ jobId: string; sourceId: string }>(response, "Failed to change source"),
-      );
-    },
+    mutationFn: async ({ sourceId, method }: { sourceId: string; method: "DELETE" | "POST" }) =>
+      sdk.unwrapAdminResponse(
+        await (method === "DELETE"
+          ? sdk.deleteApiDataManagerTransitSourcesSourceId(sourceId, {}, { client })
+          : sdk.postApiDataManagerTransitSourcesSourceIdEnable(sourceId, {}, { client })),
+      ),
     onSuccess: ({ jobId, sourceId }) => reportJob(jobId, `${sourceId} queued as ${jobId}.`),
-    onError: (error) => setToast((error as Error).message),
+    onError: (error) => setToast(sdk.adminErrorMessage(error, error.message)),
   });
   const syncMutation = useMutation({
-    mutationFn: () =>
-      fetch(`${apiUrl}/api/data-manager/transit/sync`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-      }).then((response) => responseJson<{ jobId: string }>(response, "Failed to sync sources")),
+    mutationFn: async () =>
+      sdk.unwrapAdminResponse(await sdk.postApiDataManagerTransitSync({}, { client })),
     onSuccess: ({ jobId }) => reportJob(jobId, `Transit sync queued as ${jobId}.`),
-    onError: (error) => setToast((error as Error).message),
+    onError: (error) => setToast(sdk.adminErrorMessage(error, error.message)),
   });
 
   const sources = sourcesQuery.data?.sources ?? [];

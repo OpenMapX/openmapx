@@ -8,6 +8,7 @@
 
 import { decodePolyline } from "@openmapx/core";
 import { mobilityHttpTransport } from "@openmapx/core/mobility-http-transport";
+import { parseElapsedDurationSeconds } from "@openmapx/mobility-core/duration";
 import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
 import { createRisClient, type RisCredentials } from "@openmapx/mobility-core/ris-client";
 import type {
@@ -62,7 +63,7 @@ interface RisLeg {
   destination?: RisStopEvent;
   departure?: RisStopEvent;
   arrival?: RisStopEvent;
-  duration?: string; // ISO-8601 PT duration
+  duration?: string; // Fixed elapsed ISO-8601 day/time duration
   transport?: RisTransport;
   polyline?: string; // Google Encoded Polyline
   journeyID?: string;
@@ -103,13 +104,10 @@ const CATEGORY_MODE: Record<string, TransportMode> = {
   FERRY: "ferry",
 };
 
-// ISO-8601 duration parsing (PT1H23M40S → seconds)
+// Keep the provider's zero fallback while sharing the elapsed-duration grammar.
 
 export function parseDuration(iso: string | undefined): number {
-  if (!iso) return 0;
-  const m = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(iso);
-  if (!m) return 0;
-  return Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0);
+  return parseElapsedDurationSeconds(iso) ?? 0;
 }
 
 // Language mapping

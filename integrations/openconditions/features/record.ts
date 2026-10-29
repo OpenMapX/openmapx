@@ -1,5 +1,16 @@
 import type { FuelStation } from "@openmapx/integration-framework";
-import { licenseUrlForSpdx } from "@openmapx/mobility-core/license";
+import {
+  readCapturedContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
+import {
+  canonicalLicenseExpression,
+  isSafeAttributionUrl,
+  type LicenseDescriptor,
+  type Licensing,
+  licensingLinks,
+  parseLicensing,
+} from "@openmapx/mobility-core/licensing";
 
 /**
  * What every OpenConditions feature domain reads the same way: a canonical
@@ -27,22 +38,23 @@ export interface LatestReading {
    */
   source: string;
   contributors?: string[];
+  /** Immutable, privacy-safe credit snapshot of this selected observation. */
+  provenance?: {
+    sourceId: string;
+    attribution: Rec;
+    upstream?: Rec[];
+    mergedSources?: Rec[];
+  };
 }
 
 const FUSED = new Set(["@fused", "@fused-public"]);
 
-/** The contributor id OpenConditions gives its own crowd reports. */
-export const CROWD = "crowd";
-
 /**
- * The credit of the OpenConditions instance's community reports. They are no
- * feed, so `/sources` never lists them; they are public in every scope.
+ * The contributor id OpenConditions gives its own crowd reports. They are no
+ * feed: `/sources` states their credit beside the feeds, and they are public
+ * in every scope.
  */
-export const CROWD_CREDIT: Attribution = {
-  sourceId: CROWD,
-  name: "OpenConditions community reports",
-  url: "https://openconditions.org",
-};
+export const CROWD = "crowd";
 
 export function rec(value: unknown): Rec {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Rec) : {};
@@ -56,10 +68,17 @@ export function list(value: unknown): Rec[] {
   return Array.isArray(value) ? value.map(rec) : [];
 }
 
+/** The non-empty strings of a list, in order; nothing for a value that is not a list. */
+export function stringsOf(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((v): v is string => typeof v === "string" && v !== "")
+    : [];
+}
+
 /** The first text of a multilingual `[{ lang, text }]` value. */
 export function firstText(value: unknown): string | undefined {
   return list(value)
-    .map((t) => str(t["text"]))
+    .map((t) => str(t.text))
     .find(Boolean);
 }
 
@@ -74,28 +93,33 @@ export interface RecordSource {
 }
 
 export function sourcesOf(record: Rec): RecordSource[] {
-  const provenance = rec(record["provenance"]);
+  const provenance = rec(record.provenance);
   const out: RecordSource[] = [];
+  const seen = new Set<string>();
   const add = (id: unknown, attribution: unknown, upstream: unknown) => {
     const sourceId = str(id);
     if (!sourceId) return;
-    const held = out.find((s) => s.id === sourceId);
-    if (held) held.upstream.push(...list(upstream));
-    else out.push({ id: sourceId, attribution: rec(attribution), upstream: list(upstream) });
+    const captured = { id: sourceId, attribution: rec(attribution), upstream: list(upstream) };
+    // Identity selects/filter sources; it cannot collapse different acquisition notices.
+    const key = JSON.stringify(captured);
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(structuredClone(captured));
+    }
   };
-  add(provenance["sourceId"], provenance["attribution"], provenance["upstream"]);
-  for (const merged of list(provenance["mergedSources"])) {
-    add(merged["source"], merged["attribution"], merged["upstream"]);
+  add(provenance.sourceId, provenance.attribution, provenance.upstream);
+  for (const merged of list(provenance.mergedSources)) {
+    add(merged.source, merged.attribution, merged.upstream);
   }
   return out;
 }
 
 /** The ids of the records a canonical feature was built from: its members and merged records. */
 export function memberIdsOf(record: Rec): string[] {
-  const provenance = rec(record["provenance"]);
+  const provenance = rec(record.provenance);
   const ids = [
-    ...list(rec(provenance["derivedFrom"])["records"]).map((r) => r["id"]),
-    ...list(provenance["mergedSources"]).map((m) => m["recordId"]),
+    ...list(rec(provenance.derivedFrom).records).map((r) => r.id),
+    ...list(provenance.mergedSources).map((m) => m.recordId),
   ];
   return [...new Set(ids.filter((id): id is string => typeof id === "string"))];
 }
@@ -112,9 +136,9 @@ export function memberIdsOf(record: Rec): string[] {
  * two forms is actually a member, the record id as is first.
  */
 export function itemIdOf(record: Rec): string | undefined {
-  const provenance = rec(record["provenance"]);
-  const sourceId = str(provenance["sourceId"]);
-  const recordId = str(provenance["recordId"]);
+  const provenance = rec(record.provenance);
+  const sourceId = str(provenance.sourceId);
+  const recordId = str(provenance.recordId);
   if (sourceId && recordId) {
     const members = memberIdsOf(record);
     const forms = [recordId, recordId.replace(/[^A-Za-z0-9._:-]/g, "_")];
@@ -123,7 +147,7 @@ export function itemIdOf(record: Rec): string | undefined {
       .find((id) => members.includes(id));
     if (survivor !== undefined) return survivor;
   }
-  return str(record["id"]);
+  return str(record.id);
 }
 
 /** The sources behind a reading: its own, or every contributor of a fused one. */
@@ -136,14 +160,39 @@ export function readingFeeds(reading: LatestReading): string[] {
   return readingSources(reading).filter((id) => id !== CROWD);
 }
 
-/** Whether crowd reports contributed to a reading. */
-export function crowdReported(reading: LatestReading | undefined): boolean {
-  return reading !== undefined && readingSources(reading).includes(CROWD);
-}
-
 export function instantOf(time: unknown): string | undefined {
   const t = rec(time);
-  return str(t["instant"]) ?? str(t["end"]) ?? str(t["start"]);
+  return str(t.instant) ?? str(t.end) ?? str(t.start);
+}
+
+/**
+ * The properties OpenConditions keeps only the changes of (`retention.changeOnly`
+ * in its model: model-weather, model-facilities and model-roads). A reading of
+ * one is written once per change, so its `phenomenonTime` is when the value
+ * last changed, however long ago; OpenConditions serves it with the
+ * `validUntil` its source's polling gives it (`withPolledValidity`).
+ */
+export const CHANGE_ONLY_PROPERTIES: ReadonlySet<string> = new Set([
+  "weather.precipitation_type",
+  "road.surface_state",
+  "facility.open_status",
+  "traffic.los",
+  "vms.display",
+  "camera.image",
+  "device.status",
+]);
+
+/**
+ * Whether a reading is in effect at `now` (epoch milliseconds). A change-only
+ * reading is while its `validUntil` lies ahead, however old it is; any other
+ * reading while it was observed within `freshMs` and is not past a
+ * `validUntil` it states.
+ */
+export function readingCurrent(reading: LatestReading, now: number, freshMs: number): boolean {
+  const until = reading.validUntil === undefined ? Number.NaN : Date.parse(reading.validUntil);
+  if (CHANGE_ONLY_PROPERTIES.has(reading.property)) return Number.isFinite(until) && until > now;
+  if (Number.isFinite(until) && until < now) return false;
+  return now - observedAt(reading) <= freshMs;
 }
 
 /** When a reading was observed, in epoch milliseconds; -Infinity when it does not say. */
@@ -176,56 +225,129 @@ export function newestReading(
  * The readings that may be shown when `excluded` sources are taken out. A
  * fused reading is one value OpenConditions computed from all its
  * contributors; the excluded source's share cannot be taken out of it, so the
- * whole reading goes, even when an allowed contributor agreed with it.
+ * whole reading goes, even when an allowed contributor agreed with it. The
+ * crowd is excluded as a feed is: while `/sources` states no crowd credit,
+ * no reading the crowd contributed to is shown.
  */
 export function allowedReadings(
   latest: readonly LatestReading[],
   excluded: (sourceId: string) => boolean,
 ): LatestReading[] {
-  return latest.filter((r) => !readingFeeds(r).some(excluded));
+  return latest.filter((r) => !readingSources(r).some(excluded));
 }
 
 /** What a credit reads from the live data sources. */
 export interface CreditSources {
   /** A source's link by source id. */
   link(sourceId: string): string | undefined;
-  /** A licence's readable name by licence id, where a listed source gives one. */
-  licenseName(licenseId: string): string | undefined;
+  /** The crowd's credit, as `/sources` states it. */
+  crowd(): Attribution | undefined;
+  /** The notice a source's publisher requires to accompany any display of its data. */
+  noticeOf?(sourceId: string): string | undefined;
 }
 
-/** No live data sources: no links, and every licence shown by its id. */
+/** One credit per notice the publishers of the kept sources require to accompany their data. */
+export function noticeCredits(
+  kept: readonly RecordSource[],
+  sources: CreditSources,
+): Attribution[] {
+  return kept.flatMap((source) => {
+    const notice = sources.noticeOf?.(source.id);
+    return notice ? [{ sourceId: source.id, name: notice }] : [];
+  });
+}
+
+/** No live data sources: no links and no crowd credit. */
 export const NO_SOURCES: CreditSources = {
   link: () => undefined,
-  licenseName: () => undefined,
+  crowd: () => undefined,
 };
 
-/**
- * A licence as a credit shows it. A `LicenseRef-` id is OpenConditions' own
- * and means nothing to a reader, so it shows by the name the live list gives
- * it, and stays as it is where no listed source names it. Any other id is
- * SPDX's, which readers know and which fits a credit chip: it stays as it is.
+/** Selected observation credits never borrow a feature's or the current source catalogue's terms. */
+export function readingCredits(
+  ...readings: readonly (LatestReading | null | undefined)[]
+): Attribution[] {
+  return snapshotContributors(
+    ...readings.map((reading) => {
+      const captured = sourcesOf({ provenance: reading?.provenance }).filter(
+        (source) => !FUSED.has(source.id),
+      );
+      return snapshotContributors(
+        captured.map((source) => credit(source, NO_SOURCES)),
+        upstreamCredits(captured, NO_SOURCES),
+      );
+    }),
+  );
+}
+
+/** Captured record/offer suppliers, independent of the current source catalogue. */
+export function recordCredits(record: Rec): Attribution[] {
+  const native = readCapturedContributors(record.contributors);
+  if (native !== undefined) return snapshotContributors(native);
+  const captured = sourcesOf(record).map((source) => ({
+    ...source,
+    id: str(source.attribution.parentSourceId) ?? source.id,
+  }));
+  return snapshotContributors(
+    captured.map((source) => credit(source, NO_SOURCES)),
+    upstreamCredits(captured, NO_SOURCES),
+    captured.flatMap((source) => {
+      const notice = str(source.attribution.notice);
+      return notice ? [{ sourceId: source.id, name: notice }] : [];
+    }),
+  );
+}
+
+/** Normalize the model's independently captured terms URL into portable evidence.
+ * Matches OpenConditions creditLicensingOf; existing grants/notices stay authoritative.
  */
-export function licenseText(
-  licenseId: string,
-  sources: Pick<CreditSources, "licenseName">,
-): string {
-  return licenseId.startsWith("LicenseRef-")
-    ? (sources.licenseName(licenseId) ?? licenseId)
-    : licenseId;
+function capturedCreditLicensing(captured: Rec): Licensing | undefined {
+  const licensing = parseLicensing(captured.licensing);
+  const url = str(captured.licenseUrl);
+  if (
+    !url ||
+    !isSafeAttributionUrl(url) ||
+    licensing?.declarations?.some((d) => d.url === url) ||
+    licensing?.bindings.some((b) => b.license.url === url)
+  )
+    return licensing;
+  const declarations = [...(licensing?.declarations ?? [])];
+  const license = str(captured.license);
+  const matched =
+    license === undefined
+      ? -1
+      : declarations.findIndex((d) => d.text === license && d.url === undefined);
+  if (matched >= 0) declarations[matched] = { ...declarations[matched], url };
+  else declarations.push({ ...(license ? { text: license } : {}), url });
+  return parseLicensing({ ...(licensing ?? { version: 1, bindings: [] }), declarations });
 }
 
 /** A source's credit; without a link of its own it takes the source's link from `sources`. */
+/**
+ * A feed's credit. OpenConditions normalises every record into its model, so
+ * what it serves is changed from what the feed published: the credit says so,
+ * as change-notice licences require.
+ */
 export function credit(source: RecordSource, sources: CreditSources): Attribution {
   const a = source.attribution;
-  const url = str(a["url"]) ?? sources.link(source.id);
-  const license = str(a["license"]);
-  const licenseUrl = str(a["licenseUrl"]);
+  const url = str(a.url) ?? sources.link(source.id);
+  const licensing = capturedCreditLicensing(a);
   return {
     sourceId: source.id,
-    name: str(a["provider"]) ?? source.id,
+    name: str(a.name) ?? str(a.provider) ?? source.id,
     ...(url ? { url } : {}),
-    ...(license ? { spdxLicense: licenseText(license, sources) } : {}),
-    ...(licenseUrl ? { licenseUrl } : {}),
+    ...(licensing ? { licensing } : {}),
+    ...(str(rec(a.publisher).name)
+      ? {
+          publisher: {
+            name: str(rec(a.publisher).name)!,
+            ...(str(rec(a.publisher).url) ? { url: str(rec(a.publisher).url) } : {}),
+          },
+        }
+      : {}),
+    ...(str(a.provider) ? { attributionText: str(a.provider) } : {}),
+    // Crowd reports are the instance's own; nothing was taken and changed.
+    ...(source.id === CROWD ? {} : { modified: true as const }),
   };
 }
 
@@ -244,43 +366,152 @@ export function upstreamCredits(
   for (const source of kept) {
     const feed = credit(source, sources);
     for (const u of source.upstream) {
-      const publisher = str(u["publisher"]);
+      const original = rec(u.source);
+      const originalId = str(original.sourceId);
+      if (originalId) {
+        const attribution = rec(original.attribution);
+        out.push(
+          credit(
+            { id: str(attribution.parentSourceId) ?? originalId, attribution, upstream: [] },
+            NO_SOURCES,
+          ),
+        );
+        continue;
+      }
+      const publisher = str(u.publisher);
       if (!publisher) continue;
-      const license = str(u["license"]);
+      const licensing = parseLicensing(u.licensing);
       const name = `${feed.name} – ${publisher}`;
-      if (out.some((a) => a.sourceId === source.id && a.name === name)) continue;
-      const licenseUrl = license ? licenseUrlForSpdx(license) : undefined;
       out.push({
         sourceId: source.id,
         name,
-        ...(feed.url ? { url: feed.url } : {}),
-        ...(license ? { spdxLicense: licenseText(license, sources) } : {}),
-        ...(licenseUrl ? { licenseUrl } : {}),
+        ...(licensing ? { licensing } : {}),
         publisher: { name: publisher },
+        ...(str(u.attribution) ? { attributionText: str(u.attribution) } : {}),
+        modified: true,
       });
     }
   }
-  return out;
+  return snapshotContributors(out);
+}
+
+/**
+ * The OpenConditions licences a location table is published under that SPDX
+ * does not list, as OpenConditions' licence catalogue defines them.
+ */
+const LOCATION_TABLE_LICENCES: Readonly<Record<string, { name: string; url: string }>> = {
+  "LicenseRef-OD-HR": {
+    name: "Otvorena dozvola / Open Licence (Croatia)",
+    url: "https://data.gov.hr/otvorena-dozvola",
+  },
+};
+
+/**
+ * A location table's licence id as a licence: an SPDX id as itself, a
+ * licence OpenConditions defines with that definition, anything else as an
+ * unknown licence that keeps the id it was stated with.
+ */
+function locationTableLicensing(subject: string, id: string): Licensing {
+  const spdx = canonicalLicenseExpression(id);
+  const custom = LOCATION_TABLE_LICENCES[id];
+  const license: LicenseDescriptor = spdx
+    ? { kind: "spdx", expression: spdx }
+    : custom
+      ? { kind: "custom", namespace: "openconditions:licences", id, ...custom }
+      : { kind: "unknown", raw: id };
+  return {
+    version: 1,
+    bindings: [{ scope: "data", subject, license }],
+    declarations: [{ text: id }],
+  };
+}
+
+/**
+ * The credit of the location table a record was placed with, as
+ * `location.locationTable` states it: a TMC location code list, or the
+ * administrative boundaries an alert's area was drawn from. It is credited
+ * under `sourceId`, the feed whose record the location belongs to, since the
+ * table came to OpenMapX inside that feed's records and OpenMapX contacts no
+ * one for it. The table's own notice is kept verbatim and the credit links
+ * its licence. A table that states no notice is credited by no one.
+ */
+export function locationTableCredits(record: Rec, sourceId: string | undefined): Attribution[] {
+  const table = rec(rec(record.location).locationTable);
+  const ref = str(table.ref);
+  const version = str(table.version);
+  const notice = str(table.attribution);
+  if (!sourceId || !ref || !version || !notice) return [];
+  const name = `${ref} (${version})`;
+  const id = str(table.license);
+  const licensing = id ? parseLicensing(locationTableLicensing(name, id)) : undefined;
+  const url = licensing ? licensingLinks(licensing)[0]?.url : undefined;
+  return [
+    {
+      sourceId,
+      name,
+      ...(url ? { url } : {}),
+      ...(licensing ? { licensing } : {}),
+      attributionText: notice,
+      // The table's codes are resolved into the record's geometry and names.
+      modified: true,
+    },
+  ];
 }
 
 export function addressOf(location: Rec): string | undefined {
-  const address = rec(location["address"]);
-  const street = [str(address["street"]), str(address["houseNumber"])].filter(Boolean).join(" ");
-  const place = [str(address["postalCode"]), str(address["city"])].filter(Boolean).join(" ");
+  const address = rec(location.address);
+  const street = [str(address.street), str(address.houseNumber)].filter(Boolean).join(" ");
+  const place = [str(address.postalCode), str(address.city)].filter(Boolean).join(" ");
   const line = [street, place].filter(Boolean).join(", ");
   return line.length > 0 ? line : undefined;
 }
 
+/** OpenConditions' opening days as OpenStreetMap writes them. */
+const OSM_DAYS: Readonly<Record<string, string>> = {
+  MO: "Mo",
+  TU: "Tu",
+  WE: "We",
+  TH: "Th",
+  FR: "Fr",
+  SA: "Sa",
+  SU: "Su",
+  PH: "PH",
+};
+const LOCAL_TIME = /^(?:[01]\d|2[0-4]):[0-5]\d$/;
+
+/**
+ * An OpenConditions `OpeningHours` as an OpenStreetMap `opening_hours`
+ * string: its own `osm`, else `24/7` for a place always open, else its weekly
+ * spec, each entry a rule added to the others ("Mo,Tu 08:00-12:00, Mo,Tu
+ * 14:00-18:00"). Undefined when it says nothing that can be read.
+ */
+export function osmOpeningHoursOf(value: unknown): string | undefined {
+  const hours = rec(value);
+  const osm = str(hours.osm);
+  if (osm) return osm;
+  if (hours.twentyFourSeven === true) return "24/7";
+  const rules = list(hours.spec).flatMap((entry) => {
+    const days = (Array.isArray(entry.days) ? entry.days : []).flatMap((day) =>
+      typeof day === "string" && OSM_DAYS[day] ? [OSM_DAYS[day]] : [],
+    );
+    const opens = str(entry.opens);
+    const closes = str(entry.closes);
+    if (days.length === 0 || !opens || !closes) return [];
+    if (!LOCAL_TIME.test(opens) || !LOCAL_TIME.test(closes)) return [];
+    return [`${days.join(",")} ${opens}-${closes}`];
+  });
+  return rules.length > 0 ? rules.join(", ") : undefined;
+}
+
 export function countryOf(location: Rec): string | undefined {
-  const country =
-    str(rec(location["address"])["country"]) ?? str(rec(location["admin"])["country"]);
+  const country = str(rec(location.address).country) ?? str(rec(location.admin).country);
   return country && /^[a-z]{2}$/i.test(country) ? country.toUpperCase() : undefined;
 }
 
 export function pointOf(location: Rec): [number, number] | undefined {
-  const geometry = rec(location["geometry"]);
-  const coordinates = geometry["coordinates"];
-  if (geometry["type"] !== "Point" || !Array.isArray(coordinates)) return undefined;
+  const geometry = rec(location.geometry);
+  const coordinates = geometry.coordinates;
+  if (geometry.type !== "Point" || !Array.isArray(coordinates)) return undefined;
   const [lon, lat] = coordinates;
   return typeof lon === "number" && typeof lat === "number" ? [lon, lat] : undefined;
 }

@@ -1,0 +1,47 @@
+{
+  "api-privacy": [
+    "apps/api/src/auth-postgres.test.ts",
+    "apps/api/src/db/__tests__/drop-poi-ingest.migration.test.ts",
+    "apps/api/src/db/__tests__/extension-component-ownership-migration.test.ts",
+    "apps/api/src/db/__tests__/garage-isolation-postgres.test.ts",
+    "apps/api/src/db/__tests__/user-erasure-postgres.test.ts",
+    "apps/api/src/db/__tests__/vehicles-parking-postgres.test.ts",
+    "apps/api/src/privacy/assisted-workflow-postgres.test.ts",
+    "apps/api/src/privacy/backup-omission-review-postgres.test.ts",
+    "apps/api/src/privacy/delivery-postgres.test.ts",
+    "apps/api/src/privacy/email-challenge-postgres.test.ts",
+    "apps/api/src/privacy/lifecycle-postgres.test.ts",
+    "apps/api/src/privacy/preservation-postgres.test.ts",
+    "apps/api/src/privacy/primary-db-archive-memory-postgres.test.ts",
+    "apps/api/src/privacy/primary-streaming-postgres.test.ts",
+    "apps/api/src/privacy/receipt-preservation-postgres.test.ts",
+    "apps/api/src/routes/__tests__/reviews-keypair-postgres.test.ts",
+    "apps/api/src/routes/__tests__/saved-import-postgres.test.ts",
+    "apps/api/src/routes/__tests__/shares-postgres.test.ts",
+    "apps/api/src/services/__tests__/extension-store-valkey.test.ts",
+    "apps/api/src/services/__tests__/health-history.integration.test.ts",
+    "apps/api/src/services/capability-bindings.test.ts",
+    "apps/api/src/services/integration-config-store-postgres.test.ts",
+    "apps/api/src/services/mobileAuthHandoff.test.ts",
+    "apps/api/src/services/service-config-writer-postgres.test.ts"
+  ],
+  "ingestion": [
+    "services/data-manager/__tests__/ambient-places/api-postgres.test.ts",
+    "services/data-manager/__tests__/ambient-places/extractor-postgres.test.ts",
+    "services/data-manager/__tests__/ambient-places/germany-postgres.test.ts",
+    "services/data-manager/__tests__/ambient-places/planet-postgres.test.ts",
+    "services/data-manager/__tests__/ambient-places/planet-serving-postgres.test.ts",
+    "services/data-manager/__tests__/ambient-places/publish-postgres.test.ts",
+    "services/data-manager/__tests__/notable-places/build-postgres.test.ts",
+    "services/data-manager/__tests__/offline-package-postgres-accounting.test.ts",
+    "services/data-manager/__tests__/overture/global-conflation-postgres.test.ts",
+    "services/data-manager/__tests__/overture/runtime-postgres.test.ts",
+    "services/data-manager/__tests__/overture/schema-postgres.test.ts",
+    "services/data-manager/__tests__/search-index/build-postgres.test.ts",
+    "services/data-manager/__tests__/search-index/schema-postgres.test.ts"
+  ],
+  "export-restore": [
+    "apps/api/src/privacy/controller-wide-export-postgres.test.ts",
+    "packages/cli/__tests__/backup-restore-postgres.integration.test.ts"
+  ]
+}

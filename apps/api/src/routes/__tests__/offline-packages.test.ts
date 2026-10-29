@@ -1,4 +1,7 @@
+import { get } from "node:http";
+import type { AddressInfo } from "node:net";
 import { Readable } from "node:stream";
+import { RollingStreamBudget } from "@openmapx/core/server";
 import Fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -52,17 +55,35 @@ const request = {
   provider: "openmapx",
 };
 
+const canonicalRequest = {
+  request,
+  effective: { bbox: request.bbox, minZoom: request.minZoom, maxZoom: request.maxZoom },
+  source: {
+    datasetId: "openmapx",
+    datasetVersion: "dataset-v1",
+    sourceMaxZoom: 14,
+    sourceBounds: { west: 0, south: 0, east: 10, north: 10 },
+    tileSchema: "openmaptiles",
+    glyphsVersion: "glyphs-v1",
+    packageAlgorithmVersion: "pmtiles-area-v4",
+    attribution: [...manifest.attribution],
+  },
+  requestKey: "fixture",
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   auth.userId = "user-a";
 });
 
-function routeOptions() {
+function routeOptions(deliveryBudget?: RollingStreamBudget) {
   return {
     principalKey: Buffer.alloc(32, 7),
     prepareLimiter: {
       consume: vi.fn().mockResolvedValue({ allowed: true, retryAfterSeconds: 0 }),
     },
+    ...(deliveryBudget ? { deliveryBudget } : {}),
   };
 }
 
@@ -74,23 +95,58 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("offline package public API", () => {
+  it("rejects an unsafe internal destination without sending service credentials", async () => {
+    vi.stubEnv("DATA_MANAGER_URL", "http://untrusted.example.test:4000");
+    vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", "private-token");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        available: true,
+        provider: "openmapx",
+      }),
+    );
+    const app = Fastify();
+    await app.register(createOfflinePackagesRoute(routeOptions()));
+    const response = await app.inject({ method: "GET", url: "/offline/packages/capability" });
+    expect(response.statusCode).toBe(502);
+    expect(fetchMock).not.toHaveBeenCalled();
+    await app.close();
+  });
   it("validates requests and proxies capability, preparation, and manifests", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.endsWith("/offline/packages/capability")) {
-        return jsonResponse({ available: true, provider: "openmapx", sourceMaxZoom: 14 });
+        return jsonResponse({
+          available: true,
+          provider: "openmapx",
+          sourceMaxZoom: 14,
+          datasetVersion: "dataset-v1",
+          glyphsVersion: "glyphs-v1",
+          sourceBounds: canonicalRequest.source.sourceBounds,
+        });
       }
       if (url.endsWith("/offline/packages/prepare")) {
         expect(init?.body).toBe(JSON.stringify(request));
-        expect((init?.headers as Record<string, string>)["x-offline-package-principal"]).toMatch(
+        expect(new Headers(init?.headers).get("x-offline-package-principal")).toMatch(
           /^[a-f0-9]{64}$/,
         );
         expect(JSON.stringify(init)).not.toContain("user-a");
-        return jsonResponse({ status: "ready-to-download", request, manifest, packageId }, 200);
+        return jsonResponse(
+          {
+            jobId: "job-a",
+            status: "ready-to-download",
+            request: canonicalRequest,
+            manifest,
+            packageId,
+          },
+          200,
+        );
       }
       if (url.endsWith(`/offline/packages/${packageId}/manifest`)) return jsonResponse(manifest);
       if (url.endsWith("/offline/packages/glyphs/glyphs-v1/catalog.json")) {
-        return jsonResponse({ Metropolis: ["0-255"] });
+        return Response.json(
+          { Metropolis: ["0-255"] },
+          { headers: { "cache-control": "public, max-age=31536000, immutable" } },
+        );
       }
       if (url.includes("/offline/packages/glyphs/glyphs-v1/")) {
         return new Response("fixture-font", {
@@ -169,10 +225,20 @@ describe("offline package public API", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.endsWith("/offline/packages/capability")) {
-        return jsonResponse({ available: true, provider: "openmapx" });
+        return jsonResponse({
+          available: true,
+          provider: "openmapx",
+          sourceMaxZoom: 14,
+          datasetVersion: "dataset-v1",
+          glyphsVersion: "glyphs-v1",
+          sourceBounds: canonicalRequest.source.sourceBounds,
+        });
       }
-      upstreamHeaders.push(init?.headers as Record<string, string>);
-      return jsonResponse({ jobId: "job-a", status: "preparing", request }, 202);
+      upstreamHeaders.push(Object.fromEntries(new Headers(init?.headers).entries()));
+      return jsonResponse(
+        { jobId: "job-a", status: "preparing", packageId, request: canonicalRequest },
+        url.endsWith("/offline/packages/prepare") ? 202 : 200,
+      );
     });
     const options = routeOptions();
     const app = Fastify();
@@ -204,7 +270,7 @@ describe("offline package public API", () => {
     ).toBe(202);
     expect(
       (await app.inject({ method: "GET", url: "/offline/packages/jobs/job-a" })).statusCode,
-    ).toBe(202);
+    ).toBe(200);
     expect(upstreamHeaders).toHaveLength(2);
     expect(upstreamHeaders[0]?.["x-offline-package-principal"]).toBe(
       upstreamHeaders[1]?.["x-offline-package-principal"],
@@ -221,7 +287,10 @@ describe("offline package public API", () => {
       .mockResolvedValueOnce({ allowed: false, retryAfterSeconds: 599 })
       .mockResolvedValueOnce({ allowed: true, retryAfterSeconds: 0 });
     vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
-      jsonResponse({ jobId: "job", status: "preparing", request }, 202),
+      jsonResponse(
+        { jobId: "job", status: "preparing", packageId, request: canonicalRequest },
+        202,
+      ),
     );
     const app = Fastify({ trustProxy: true });
     await app.register(createOfflinePackagesRoute(options));
@@ -330,9 +399,68 @@ describe("offline package public API", () => {
     await app.close();
   });
 
-  it("forwards archive HEAD and range responses without buffering them", async () => {
+  it("forwards explicit archive HEAD, If-Range and unsatisfiable ranges", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      const headers = new Headers(init?.headers);
+      expect(headers.get("range")).toBe("bytes=999-");
+      expect(headers.get("if-range")).toBe('"archive-v1"');
+      expect(init?.method).toBe("HEAD");
+      expect(init?.redirect).toBe("error");
+      return new Response(null, {
+        status: 416,
+        headers: {
+          "content-range": `bytes */${archive.byteLength}`,
+          "accept-ranges": "bytes",
+          etag: manifest.archive.etag,
+        },
+      });
+    });
+    const app = Fastify();
+    await app.register(createOfflinePackagesRoute(routeOptions()));
+    const response = await app.inject({
+      method: "HEAD",
+      url: `/offline/packages/${packageId}/archive`,
+      headers: { range: "bytes=999-", "if-range": '"archive-v1"' },
+    });
+    expect(response.statusCode).toBe(416);
+    expect(response.body).toBe("");
+    expect(response.headers["content-range"]).toBe(`bytes */${archive.byteLength}`);
+    expect(response.headers.etag).toBe(manifest.archive.etag);
+    expect(fetch).toHaveBeenCalledOnce();
+    await app.close();
+  });
+
+  it("uses encoded named glyph parameters for spaces, commas and Unicode", async () => {
+    const fontstack = "Noto Sans,中文字";
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      expect(String(input)).toContain(
+        `/glyphs/glyphs-v1/${encodeURIComponent(fontstack)}/0-255.pbf`,
+      );
+      expect(init?.redirect).toBe("error");
+      return new Response("glyph", {
+        headers: {
+          "content-type": "application/x-protobuf",
+          "content-length": "5",
+          "cache-control": "public, max-age=31536000, immutable",
+          etag: "glyph-v1",
+        },
+      });
+    });
+    const app = Fastify();
+    await app.register(createOfflinePackagesRoute(routeOptions()));
+    const response = await app.inject({
+      method: "GET",
+      url: `/offline/packages/glyphs/glyphs-v1/${encodeURIComponent(fontstack)}/0-255.pbf`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toBe("glyph");
+    expect(response.headers.etag).toBe("glyph-v1");
+    await app.close();
+  });
+
+  it("forwards archive range responses without buffering them", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
-      expect(init?.headers).toMatchObject({ Range: "bytes=2-" });
+      expect(new Headers(init?.headers).get("range")).toBe("bytes=2-");
       return new Response(
         Readable.toWeb(Readable.from(Buffer.from(archive.slice(2)))) as ReadableStream,
         {
@@ -368,5 +496,551 @@ describe("offline package public API", () => {
     });
     expect(missing.statusCode).toBe(400);
     await app.close();
+  });
+
+  it("rejects overlapping streams per network before another upstream fetch", async () => {
+    let finishFirst!: () => void;
+    const firstBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(archive);
+        let finished = false;
+        finishFirst = () => {
+          if (finished) return;
+          finished = true;
+          controller.close();
+        };
+      },
+    });
+    const responseHeaders = {
+      "accept-ranges": "bytes",
+      "cache-control": "public, max-age=31536000, immutable",
+      "content-length": String(archive.byteLength),
+      "content-type": "application/vnd.pmtiles",
+      etag: manifest.archive.etag,
+    };
+    let getCount = 0;
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      if (init?.method === "HEAD") return new Response(null, { headers: responseHeaders });
+      getCount += 1;
+      return getCount === 1
+        ? new Response(firstBody, { headers: responseHeaders })
+        : new Response(archive, { headers: responseHeaders });
+    });
+    const deliveryBudget = new RollingStreamBudget({
+      maxBytesPerKey: archive.byteLength * 3,
+      windowMs: 10_000,
+      maxConcurrentPerKey: 1,
+      maxConcurrentGlobal: 2,
+    });
+    const app = Fastify();
+    await app.register(createOfflinePackagesRoute(routeOptions(deliveryBudget)));
+
+    const first = app.inject({
+      method: "GET",
+      url: `/offline/packages/${packageId}/archive`,
+      remoteAddress: "198.51.100.30",
+    });
+    await vi.waitFor(() => expect(getCount).toBe(1));
+    try {
+      const overlapping = await app.inject({
+        method: "GET",
+        url: `/offline/packages/${packageId}/archive`,
+        remoteAddress: "198.51.100.30",
+      });
+
+      expect(overlapping.statusCode).toBe(429);
+      expect(overlapping.headers["retry-after"]).toBe("10");
+      expect(getCount).toBe(1);
+      expect(fetch).toHaveBeenCalledTimes(3);
+      finishFirst();
+      expect((await first).statusCode).toBe(200);
+      expect(
+        (
+          await app.inject({
+            method: "GET",
+            url: `/offline/packages/${packageId}/archive`,
+            remoteAddress: "198.51.100.30",
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(getCount).toBe(2);
+      expect(fetch).toHaveBeenCalledTimes(5);
+    } finally {
+      finishFirst();
+      await first.catch(() => {});
+      await app.close();
+    }
+  });
+
+  it("returns 503 when process-wide archive stream capacity is exhausted", async () => {
+    let finishFirst!: () => void;
+    const firstBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(archive);
+        finishFirst = () => controller.close();
+      },
+    });
+    const responseHeaders = {
+      "accept-ranges": "bytes",
+      "cache-control": "public, max-age=31536000, immutable",
+      "content-length": String(archive.byteLength),
+      "content-type": "application/vnd.pmtiles",
+      etag: manifest.archive.etag,
+    };
+    let getCount = 0;
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      if (init?.method === "HEAD") return new Response(null, { headers: responseHeaders });
+      getCount += 1;
+      return new Response(firstBody, { headers: responseHeaders });
+    });
+    const deliveryBudget = new RollingStreamBudget({
+      maxBytesPerKey: archive.byteLength * 2,
+      windowMs: 10_000,
+      maxConcurrentPerKey: 2,
+      maxConcurrentGlobal: 1,
+    });
+    const app = Fastify();
+    await app.register(createOfflinePackagesRoute(routeOptions(deliveryBudget)));
+
+    const first = app.inject({
+      method: "GET",
+      url: `/offline/packages/${packageId}/archive`,
+      remoteAddress: "198.51.100.31",
+    });
+    await vi.waitFor(() => expect(getCount).toBe(1));
+    try {
+      const overlapping = await app.inject({
+        method: "GET",
+        url: `/offline/packages/${packageId}/archive`,
+        remoteAddress: "198.51.100.32",
+      });
+
+      expect(overlapping.statusCode).toBe(503);
+      expect(overlapping.headers["retry-after"]).toBe("10");
+      expect(getCount).toBe(1);
+      expect(fetch).toHaveBeenCalledTimes(3);
+    } finally {
+      finishFirst();
+      await first.catch(() => {});
+      await app.close();
+    }
+  });
+
+  it("charges range bytes and rejects a full response before its archive GET", async () => {
+    const cancel = vi.fn();
+    const rejectedBody = new ReadableStream<Uint8Array>({ cancel });
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      const isHead = init?.method === "HEAD";
+      if (new Headers(init?.headers).has("range")) {
+        return new Response(isHead ? null : archive.slice(2), {
+          status: 206,
+          headers: {
+            "accept-ranges": "bytes",
+            "cache-control": "public, max-age=31536000, immutable",
+            "content-length": String(archive.byteLength - 2),
+            "content-range": `bytes 2-${archive.byteLength - 1}/${archive.byteLength}`,
+            "content-type": "application/vnd.pmtiles",
+            etag: manifest.archive.etag,
+          },
+        });
+      }
+      return new Response(isHead ? null : rejectedBody, {
+        headers: {
+          "accept-ranges": "bytes",
+          "cache-control": "public, max-age=31536000, immutable",
+          "content-length": String(archive.byteLength),
+          "content-type": "application/vnd.pmtiles",
+          etag: manifest.archive.etag,
+        },
+      });
+    });
+    const deliveryBudget = new RollingStreamBudget({
+      maxBytesPerKey: archive.byteLength - 2,
+      windowMs: 10_000,
+      maxConcurrentPerKey: 1,
+      maxConcurrentGlobal: 2,
+    });
+    const app = Fastify();
+    await app.register(createOfflinePackagesRoute(routeOptions(deliveryBudget)));
+
+    const range = await app.inject({
+      method: "GET",
+      url: `/offline/packages/${packageId}/archive`,
+      headers: { range: "bytes=2-" },
+      remoteAddress: "198.51.100.33",
+    });
+    const full = await app.inject({
+      method: "GET",
+      url: `/offline/packages/${packageId}/archive`,
+      remoteAddress: "198.51.100.33",
+    });
+
+    expect(range.statusCode).toBe(206);
+    expect(full.statusCode).toBe(429);
+    expect(full.headers["retry-after"]).toBe("10");
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(cancel).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("reserves response bytes before issuing the archive GET", async () => {
+    const methods: string[] = [];
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      methods.push(init?.method ?? "GET");
+      if (init?.method === "HEAD") {
+        return new Response(null, {
+          headers: {
+            "accept-ranges": "bytes",
+            "cache-control": "public, max-age=31536000, immutable",
+            "content-length": String(archive.byteLength),
+            "content-type": "application/vnd.pmtiles",
+            etag: manifest.archive.etag,
+          },
+        });
+      }
+      return new Response(archive, {
+        headers: {
+          "accept-ranges": "bytes",
+          "cache-control": "public, max-age=31536000, immutable",
+          "content-length": String(archive.byteLength),
+          "content-type": "application/vnd.pmtiles",
+          etag: manifest.archive.etag,
+        },
+      });
+    });
+    const deliveryBudget = new RollingStreamBudget({
+      maxBytesPerKey: archive.byteLength,
+      windowMs: 10_000,
+      maxConcurrentPerKey: 1,
+      maxConcurrentGlobal: 1,
+    });
+    const app = Fastify();
+    await app.register(createOfflinePackagesRoute(routeOptions(deliveryBudget)));
+
+    const admitted = await app.inject({
+      method: "GET",
+      url: `/offline/packages/${packageId}/archive`,
+      remoteAddress: "198.51.100.35",
+    });
+    const rejected = await app.inject({
+      method: "GET",
+      url: `/offline/packages/${packageId}/archive`,
+      remoteAddress: "198.51.100.35",
+    });
+
+    expect(admitted.statusCode).toBe(200);
+    expect(rejected.statusCode).toBe(429);
+    expect(methods).toEqual(["HEAD", "GET", "HEAD"]);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    await app.close();
+  });
+
+  it("cancels a changed archive response and refunds its reservation", async () => {
+    const cancel = vi.fn();
+    let getCount = 0;
+    const responseHeaders = {
+      "accept-ranges": "bytes",
+      "cache-control": "public, max-age=31536000, immutable",
+      "content-length": String(archive.byteLength),
+      "content-type": "application/vnd.pmtiles",
+      etag: manifest.archive.etag,
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      if (init?.method === "HEAD") return new Response(null, { headers: responseHeaders });
+      getCount += 1;
+      if (getCount === 1) {
+        return new Response(new ReadableStream<Uint8Array>({ cancel }), {
+          headers: { ...responseHeaders, "content-length": String(archive.byteLength - 1) },
+        });
+      }
+      return new Response(archive, { headers: responseHeaders });
+    });
+    const deliveryBudget = new RollingStreamBudget({
+      maxBytesPerKey: archive.byteLength,
+      windowMs: 10_000,
+      maxConcurrentPerKey: 1,
+      maxConcurrentGlobal: 1,
+    });
+    const app = Fastify();
+    await app.register(createOfflinePackagesRoute(routeOptions(deliveryBudget)));
+
+    const changed = await app.inject({
+      method: "GET",
+      url: `/offline/packages/${packageId}/archive`,
+      remoteAddress: "198.51.100.36",
+    });
+    const after = await app.inject({
+      method: "GET",
+      url: `/offline/packages/${packageId}/archive`,
+      remoteAddress: "198.51.100.36",
+    });
+
+    expect(changed.statusCode).toBe(502);
+    expect(changed.json()).toEqual({ error: "Archive response changed after preflight" });
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(after.statusCode).toBe(200);
+    expect(getCount).toBe(2);
+    await app.close();
+  });
+
+  it("releases archive capacity when the client disconnects during upstream acquisition", async () => {
+    let resolveFirstGet!: (response: Response) => void;
+    let firstGetSignal: AbortSignal | null = null;
+    let getCount = 0;
+    const firstGet = new Promise<Response>((resolve) => {
+      resolveFirstGet = resolve;
+    });
+    const responseHeaders = {
+      "accept-ranges": "bytes",
+      "cache-control": "public, max-age=31536000, immutable",
+      "content-length": String(archive.byteLength),
+      "content-type": "application/vnd.pmtiles",
+      etag: manifest.archive.etag,
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      if (init?.method === "HEAD") return new Response(null, { headers: responseHeaders });
+      getCount += 1;
+      if (getCount === 1) {
+        firstGetSignal = init?.signal ?? null;
+        return await firstGet;
+      }
+      return new Response(archive, { headers: responseHeaders });
+    });
+    const deliveryBudget = new RollingStreamBudget({
+      maxBytesPerKey: archive.byteLength * 2,
+      windowMs: 10_000,
+      maxConcurrentPerKey: 1,
+      maxConcurrentGlobal: 1,
+    });
+    const app = Fastify();
+    await app.register(createOfflinePackagesRoute(routeOptions(deliveryBudget)));
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const address = app.server.address() as AddressInfo;
+    const request = get(`http://127.0.0.1:${address.port}/offline/packages/${packageId}/archive`);
+    request.on("error", () => {});
+
+    try {
+      await vi.waitFor(() => expect(getCount).toBe(1));
+      request.destroy();
+      await vi.waitFor(() => expect(firstGetSignal?.aborted).toBe(true));
+      const after = await app.inject({
+        method: "GET",
+        url: `/offline/packages/${packageId}/archive`,
+        remoteAddress: "127.0.0.1",
+      });
+      expect(after.statusCode).toBe(200);
+      expect(getCount).toBe(2);
+    } finally {
+      resolveFirstGet(new Response(archive, { headers: responseHeaders }));
+      request.destroy();
+      await app.close();
+    }
+  });
+
+  it("does not acquire delivery capacity for an unsatisfiable archive GET", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, {
+        status: 416,
+        headers: {
+          "accept-ranges": "bytes",
+          "content-range": `bytes */${archive.byteLength}`,
+          etag: manifest.archive.etag,
+        },
+      }),
+    );
+    const deliveryBudget = new RollingStreamBudget({
+      maxBytesPerKey: archive.byteLength,
+      windowMs: 10_000,
+      maxConcurrentPerKey: 1,
+      maxConcurrentGlobal: 1,
+    });
+    const tryAcquire = vi.spyOn(deliveryBudget, "tryAcquire");
+    const app = Fastify();
+    await app.register(createOfflinePackagesRoute(routeOptions(deliveryBudget)));
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/offline/packages/${packageId}/archive`,
+      headers: { range: "bytes=999-" },
+    });
+
+    expect(response.statusCode).toBe(416);
+    expect(tryAcquire).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("forwards a data-manager delivery rejection and releases the API lease", async () => {
+    const responseHeaders = {
+      "accept-ranges": "bytes",
+      "cache-control": "public, max-age=31536000, immutable",
+      "content-length": String(archive.byteLength),
+      "content-type": "application/vnd.pmtiles",
+      etag: manifest.archive.etag,
+    };
+    let getCount = 0;
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      if (init?.method === "HEAD") return new Response(null, { headers: responseHeaders });
+      getCount += 1;
+      if (getCount === 1) {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            error: "offline package delivery capacity exceeded",
+          }),
+          {
+            status: 503,
+            headers: { "content-type": "application/json", "retry-after": "10" },
+          },
+        );
+      }
+      return new Response(archive, { headers: responseHeaders });
+    });
+    const deliveryBudget = new RollingStreamBudget({
+      maxBytesPerKey: archive.byteLength * 2,
+      windowMs: 10_000,
+      maxConcurrentPerKey: 1,
+      maxConcurrentGlobal: 1,
+    });
+    const app = Fastify();
+    await app.register(createOfflinePackagesRoute(routeOptions(deliveryBudget)));
+
+    const rejected = await app.inject({
+      method: "GET",
+      url: `/offline/packages/${packageId}/archive`,
+      remoteAddress: "198.51.100.34",
+    });
+    const after = await app.inject({
+      method: "GET",
+      url: `/offline/packages/${packageId}/archive`,
+      remoteAddress: "198.51.100.34",
+    });
+
+    expect(rejected.statusCode).toBe(503);
+    expect(rejected.headers["retry-after"]).toBe("10");
+    expect(rejected.json()).toEqual({
+      ok: false,
+      error: "offline package delivery capacity exceeded",
+    });
+    expect(after.statusCode).toBe(200);
+    expect(fetch).toHaveBeenCalledTimes(4);
+    await app.close();
+  });
+
+  it("cancels a successful response with an unsafe declared length", async () => {
+    const cancel = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(new ReadableStream<Uint8Array>({ cancel }), {
+        headers: {
+          "accept-ranges": "bytes",
+          "cache-control": "public, max-age=31536000, immutable",
+          "content-length": String(Number.MAX_SAFE_INTEGER + 1),
+          "content-type": "application/vnd.pmtiles",
+          etag: manifest.archive.etag,
+        },
+      }),
+    );
+    const app = Fastify();
+    await app.register(createOfflinePackagesRoute(routeOptions()));
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/offline/packages/${packageId}/archive`,
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual({ error: "Invalid archive response length" });
+    expect(cancel).toHaveBeenCalledOnce();
+    await app.close();
+  });
+
+  it("does not acquire delivery capacity for archive HEAD", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, {
+        headers: {
+          "accept-ranges": "bytes",
+          "cache-control": "public, max-age=31536000, immutable",
+          "content-length": String(archive.byteLength),
+          "content-type": "application/vnd.pmtiles",
+          etag: manifest.archive.etag,
+        },
+      }),
+    );
+    const deliveryBudget = new RollingStreamBudget({
+      maxBytesPerKey: archive.byteLength,
+      windowMs: 10_000,
+      maxConcurrentPerKey: 1,
+      maxConcurrentGlobal: 1,
+    });
+    expect(deliveryBudget.tryAcquire("held").allowed).toBe(true);
+    const app = Fastify();
+    await app.register(createOfflinePackagesRoute(routeOptions(deliveryBudget)));
+
+    const response = await app.inject({
+      method: "HEAD",
+      url: `/offline/packages/${packageId}/archive`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-length"]).toBe(String(archive.byteLength));
+    await app.close();
+  });
+
+  it("releases archive capacity and cancels the body after a client disconnect", async () => {
+    let upstreamCancelled = false;
+    let finishStream: (() => void) | undefined;
+    const hangingBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(archive.slice(0, 1));
+        finishStream = () => controller.close();
+      },
+      cancel() {
+        upstreamCancelled = true;
+      },
+    });
+    const responseHeaders = {
+      "accept-ranges": "bytes",
+      "cache-control": "public, max-age=31536000, immutable",
+      "content-length": String(archive.byteLength),
+      "content-type": "application/vnd.pmtiles",
+      etag: manifest.archive.etag,
+    };
+    let getCount = 0;
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      if (init?.method === "HEAD") return new Response(null, { headers: responseHeaders });
+      getCount += 1;
+      return getCount === 1
+        ? new Response(hangingBody, { headers: responseHeaders })
+        : new Response(archive, { headers: responseHeaders });
+    });
+    const deliveryBudget = new RollingStreamBudget({
+      maxBytesPerKey: archive.byteLength * 2,
+      windowMs: 10_000,
+      maxConcurrentPerKey: 1,
+      maxConcurrentGlobal: 1,
+    });
+    const app = Fastify();
+    await app.register(createOfflinePackagesRoute(routeOptions(deliveryBudget)));
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const address = app.server.address() as AddressInfo;
+    const request = get(
+      `http://127.0.0.1:${address.port}/offline/packages/${packageId}/archive`,
+      (response) => response.once("data", () => response.destroy()),
+    );
+    request.on("error", () => {});
+
+    try {
+      await vi.waitFor(() => expect(upstreamCancelled).toBe(true));
+      const after = await app.inject({
+        method: "GET",
+        url: `/offline/packages/${packageId}/archive`,
+        remoteAddress: "127.0.0.1",
+      });
+      expect(after.statusCode).toBe(200);
+      expect(fetch).toHaveBeenCalledTimes(4);
+    } finally {
+      if (!upstreamCancelled) finishStream?.();
+      request.destroy();
+      await app.close();
+    }
   });
 });

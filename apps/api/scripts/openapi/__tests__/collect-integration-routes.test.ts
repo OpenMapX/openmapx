@@ -173,6 +173,64 @@ describe("collectIntegrationRoutes", () => {
     }
   });
 
+  describe("static authentication options", () => {
+    function scanOptions(options: string) {
+      const root = mkdtempSync(join(tmpdir(), "openmapx-openapi-auth-"));
+      try {
+        writeFixture(root, "integrations/auth/manifest.json", '{ "id": "auth" }');
+        writeFixture(
+          root,
+          "integrations/auth/index.ts",
+          `
+          ctx.registerRoute("GET", "/auth", async () => {}${options ? `, ${options}` : ""});
+        `,
+        );
+        return collectIntegrationRoutes(root);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }
+
+    it.each([
+      ["omitted", "", false],
+      ["empty object", "{}", false],
+      ["unrelated options", '{ rateLimitTier: "expensive" }', false],
+      ["true", "{ requireAuth: true }", true],
+      ["false", "{ requireAuth: false }", false],
+      ["quoted name", '{ "requireAuth": true }', true],
+      ["unrelated shorthand", "{ rateLimitTier, requireAuth: true }", true],
+    ] as const)("classifies %s", (_label, options, requireAuth) => {
+      expect(scanOptions(options)).toEqual([
+        expect.objectContaining({ routePath: "/auth", requireAuth }),
+      ]);
+    });
+
+    it.each([
+      ["options identifier", "options"],
+      ["explicit undefined options", "undefined"],
+      ["boolean identifier", "{ requireAuth: REQUIRED }"],
+      ["shorthand auth", "{ requireAuth }"],
+      ["spread alone", "{ ...options }"],
+      ["spread after auth", "{ requireAuth: true, ...options }"],
+      ["spread before auth", "{ ...options, requireAuth: true }"],
+      ["computed name", "{ [key]: true }"],
+      ["computed literal name", '{ ["requireAuth"]: true }'],
+      ["duplicate auth", "{ requireAuth: true, requireAuth: false }"],
+      ["getter auth", "{ get requireAuth() { return true; } }"],
+      ["method auth", "{ requireAuth() {} }"],
+      ["null auth", "{ requireAuth: null }"],
+      ["undefined auth", "{ requireAuth: undefined }"],
+      ["numeric auth", "{ requireAuth: 1 }"],
+      ["string auth", '{ requireAuth: "true" }'],
+      ["conditional auth", "{ requireAuth: flag ? true : false }"],
+      ["inherited auth", "{ __proto__: options }"],
+    ] as const)("rejects unclassified %s with a route diagnostic", (_label, options) => {
+      expect(() => scanOptions(options)).toThrow(
+        /integrations\/auth\/index\.ts: GET \/auth:.*authentication.*statically/,
+      );
+    });
+  });
+
   it("throws when a registerRoute call cannot be read statically", () => {
     const badRoot = mkdtempSync(join(tmpdir(), "openmapx-openapi-bad-"));
     writeFixture(badRoot, "integrations/dynamic/manifest.json", '{ "id": "dynamic" }');

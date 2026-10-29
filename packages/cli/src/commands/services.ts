@@ -1,8 +1,13 @@
 import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
 import kleur from "kleur";
+import { refuseAgentSwitchOrExit } from "../lib/agent-layout";
 import { dockerComposeStream } from "../lib/docker";
-import { applyGeneratedHardlinks } from "../lib/hardlinks";
+import {
+  applyGeneratedHardlinks,
+  applyGeneratedHardlinksBeforeStart,
+  logAppliedHardlinks,
+} from "../lib/hardlinks";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import { expandPresets, UnknownPresetError } from "../lib/presets";
@@ -211,7 +216,7 @@ export function registerServicesCommands(program: Command): void {
     .description(`Persistently add services to ${SERVICE_SELECTION_FILE}`)
     .action(async (ids: string[]) => {
       try {
-        const state = enableSelectedServices(ids);
+        const state = await enableSelectedServices(ids);
         const applied = await getServiceSelectionSummary();
         log.ok(`Selected roots → ${formatServiceIdList(state.selected) || "(none)"}`);
         log.dim(`Effective services → ${formatServiceIdList(applied.selection.enabledIdsOrdered)}`);
@@ -230,7 +235,7 @@ export function registerServicesCommands(program: Command): void {
     .description(`Persistently remove services from ${SERVICE_SELECTION_FILE}`)
     .action(async (ids: string[]) => {
       try {
-        const state = disableSelectedServices(ids);
+        const state = await disableSelectedServices(ids);
         const applied = await getServiceSelectionSummary();
         log.ok(`Selected roots → ${formatServiceIdList(state.selected) || "(none)"}`);
         log.dim(`Effective services → ${formatServiceIdList(applied.selection.enabledIdsOrdered)}`);
@@ -298,10 +303,7 @@ export function registerServicesCommands(program: Command): void {
             domain: process.env.DOMAIN ?? "localhost",
           });
           for (const warning of rendered.selectionWarnings) log.warn(warning);
-          const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
-          log.ok(
-            `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
-          );
+          logAppliedHardlinks(await applyGeneratedHardlinks({ prune: true, requirePlan: true }));
         }
         if (result.failures.length > 0) {
           log.err(
@@ -348,10 +350,7 @@ export function registerServicesCommands(program: Command): void {
               domain: process.env.DOMAIN ?? "localhost",
             });
             for (const warning of rendered.selectionWarnings) log.warn(warning);
-            const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
-            log.ok(
-              `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
-            );
+            logAppliedHardlinks(await applyGeneratedHardlinks({ prune: true, requirePlan: true }));
           }
           if (result.failures.length > 0) {
             log.err(
@@ -391,10 +390,7 @@ export function registerServicesCommands(program: Command): void {
           domain: process.env.DOMAIN ?? "localhost",
         });
         for (const warning of rendered.selectionWarnings) log.warn(warning);
-        const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
-        log.ok(
-          `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
-        );
+        await applyGeneratedHardlinksBeforeStart();
       } catch (err) {
         log.err(`prepare/start failed: ${(err as Error).message}`);
         process.exit(1);
@@ -408,12 +404,14 @@ export function registerServicesCommands(program: Command): void {
         } else if (overlay.status === "unpinned") {
           log.err(unpinnedReleaseWarning(overlay.reason));
           process.exit(1);
+        } else if (overlay.status === "held") {
+          log.err(overlay.reason);
+          process.exit(1);
         } else if (overlay.status === "disabled") {
-          log.dim(
-            "Release pinning disabled (OPENMAPX_RELEASE_MANIFEST_IMAGE is empty); using manifest image tags.",
-          );
+          log.dim("Release pinning disabled (OPENMAPX_RELEASE=local); using manifest image tags.");
         }
       }
+      await refuseAgentSwitchOrExit(allIds);
       const code = await dockerComposeStream(["up", "-d", ...allIds]);
       process.exit(code);
     });
@@ -469,10 +467,7 @@ export function registerServicesCommands(program: Command): void {
           domain: process.env.DOMAIN ?? "localhost",
         });
         for (const warning of rendered.selectionWarnings) log.warn(warning);
-        const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
-        log.ok(
-          `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
-        );
+        await applyGeneratedHardlinksBeforeStart();
       } catch (err) {
         log.err(`prepare/update failed: ${(err as Error).message}`);
         process.exit(1);
@@ -490,9 +485,12 @@ export function registerServicesCommands(program: Command): void {
         } else if (overlay.status === "unpinned") {
           log.err(unpinnedReleaseWarning(overlay.reason));
           process.exit(1);
+        } else if (overlay.status === "held") {
+          log.err(overlay.reason);
+          process.exit(1);
         } else if (overlay.status === "disabled") {
           log.warn(
-            "Release pinning is disabled (OPENMAPX_RELEASE_MANIFEST_IMAGE is empty); this update uses the manifest image tags instead of a digest-pinned release.",
+            "Release pinning is disabled (OPENMAPX_RELEASE=local); this update uses the manifest image tags instead of a digest-pinned release.",
           );
         }
       }
@@ -506,6 +504,8 @@ export function registerServicesCommands(program: Command): void {
         log.warn("Some images could not be pulled (service may be locally built). Continuing.");
       }
 
+      // With its dependencies, the agent may be recreated too.
+      await refuseAgentSwitchOrExit(options.deps === false ? allIds : "all");
       const code = await dockerComposeStream([
         "up",
         "-d",

@@ -1,75 +1,76 @@
 "use client";
 
 import { routeColor, usePlaceStore, useRouteLive, useTransitRoute } from "@openmapx/core";
-import { useEffect } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
-import { useMap } from "@/integration-api/map/MapContext";
+import {
+  contributorsForField,
+  serializeContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
+import { useMemo } from "react";
+import type { MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
 
 const SOURCE_ID = "vehicle-live-source";
 const LAYER_ID = "vehicle-live-layer";
 
-export function VehicleLiveLayer() {
-  const { mapRef, mapReady, styleVersion } = useMap();
-  const activeRouteId = usePlaceStore((s) => s.activeRouteId);
-  const { data: liveData } = useRouteLive(activeRouteId);
-  const { data: route } = useTransitRoute(activeRouteId);
+type RouteLive = NonNullable<ReturnType<typeof useRouteLive>["data"]>;
+type TransitRoute = ReturnType<typeof useTransitRoute>["data"];
 
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-
-    const cleanup = () => {
-      if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      unregisterLayerSlot(LAYER_ID);
-    };
-
-    if (!activeRouteId || !liveData?.vehicles.length) {
-      cleanup();
-      return;
-    }
-
-    const lineColor = routeColor(route, PRIMARY_BLUE_HEX);
-
-    const geojson = {
-      type: "FeatureCollection" as const,
-      features: liveData.vehicles.map((v) => ({
-        type: "Feature" as const,
-        properties: {
-          id: v.id,
-          label: v.label ?? "",
+function vehicleLiveGroup(vehicles: RouteLive["vehicles"], route: TransitRoute): MapLayerGroup {
+  return {
+    sources: {
+      [SOURCE_ID]: {
+        type: "geojson",
+        data: {
+          type: "FeatureCollection",
+          features: vehicles.map((v) => ({
+            type: "Feature" as const,
+            properties: {
+              _mapAttributions: serializeContributors(
+                snapshotContributors(
+                  v.contributors ?? [],
+                  route ? contributorsForField(route, route.color ? "color" : "mode") : [],
+                ),
+              ),
+              id: v.id,
+              label: v.label ?? "",
+            },
+            geometry: { type: "Point" as const, coordinates: [v.lng, v.lat] },
+          })),
         },
-        geometry: { type: "Point" as const, coordinates: [v.lng, v.lat] },
-      })),
-    };
-
-    cleanup();
-
-    map.addSource(SOURCE_ID, { type: "geojson", data: geojson });
-
-    // Vehicle dot
-    addLayerInSlot(
-      map,
+      },
+    },
+    layers: [
       {
         id: LAYER_ID,
         type: "circle",
         source: SOURCE_ID,
+        slot: "overlay-points",
+        order: 21,
         paint: {
           "circle-radius": 10,
-          "circle-color": lineColor,
+          "circle-color": routeColor(route, PRIMARY_BLUE_HEX),
           "circle-stroke-width": 2.5,
           "circle-stroke-color": "#fff",
           "circle-opacity": 0.95,
         },
       },
-      "overlay-points",
-      21,
-    );
+    ],
+  };
+}
 
-    return cleanup;
-  }, [mapRef, mapReady, styleVersion, activeRouteId, liveData, route]);
+export function VehicleLiveLayer() {
+  const activeRouteId = usePlaceStore((s) => s.activeRouteId);
+  const { data: liveData } = useRouteLive(activeRouteId);
+  const { data: route } = useTransitRoute(activeRouteId);
+  const vehicles = activeRouteId ? liveData?.vehicles : undefined;
+
+  useRenderedMapAttributions("transit-vehicle-live", [LAYER_ID], Boolean(activeRouteId));
+  useMapLayerGroup(
+    useMemo(() => (vehicles?.length ? vehicleLiveGroup(vehicles, route) : null), [vehicles, route]),
+  );
 
   return null;
 }

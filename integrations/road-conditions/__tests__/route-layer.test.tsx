@@ -1,11 +1,13 @@
 import { fetchRoadConditions } from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
 import { useRoadConditionsStore } from "../store";
 import { effect, situation, text } from "./fixtures";
 
 let fake: FakeMap;
+let mockStyleVersion = 0;
 
 const closure = { kind: "closure", type: "closure", severity: { label: "critical" as const } };
 const works = { kind: "roadworks", type: "works", severity: { label: "moderate" as const } };
@@ -39,7 +41,7 @@ const MAP_REF = {
   },
 };
 vi.mock("@/integration-api/map/MapContext", () => ({
-  useMap: () => ({ mapRef: MAP_REF, mapReady: true, styleVersion: 0 }),
+  useMap: () => ({ mapRef: MAP_REF, mapReady: true, styleVersion: mockStyleVersion }),
 }));
 // A value distinct from any plausible hardcoded zoom threshold (e.g. 10), so a
 // passing `maxzoom` assertion actually proves the layer reads this hook rather
@@ -133,6 +135,7 @@ function sourceFeatures(geometryType: GeoJSON.Geometry["type"]): GeoJSON.Feature
 }
 
 beforeEach(() => {
+  mockStyleVersion = 0;
   // Below the mocked minZoom (7) by default, so tests that don't care about
   // the zoom gate still see a fetch happen.
   fake = createFakeMap({ styleLoaded: true, zoom: 5 });
@@ -140,20 +143,96 @@ beforeEach(() => {
   fetchMock.mockResolvedValue(events);
   useRoadConditionsStore.setState({ routeFetchStatus: "idle" });
   popupState.html = "";
+  useMapAttributionStore.setState({ byLayer: {} });
   INTERACTIVE_LAYER_IDS.delete("omx-road-conditions-route-markers");
   INTERACTIVE_LAYER_IDS.delete("omx-road-conditions-route-line");
 });
 
 describe("RouteConditionsLayer", () => {
+  it.each([
+    {
+      contributors: [
+        { sourceId: "old", name: "Captured publisher", attributionText: "Old required notice" },
+      ],
+    },
+    { contributors: [] },
+  ])(
+    "preserves cached canonical receipts during style republishing: $contributors",
+    async ({ contributors }) => {
+      fetchMock.mockResolvedValue([{ ...events[0]!, contributors }]);
+      const view = render(<RouteConditionsLayer />);
+      await waitFor(() => expect(sourceFeatures("LineString")).toHaveLength(1));
+      expect(JSON.parse(sourceFeatures("LineString")[0]!.properties!._mapAttributions)).toEqual(
+        contributors,
+      );
+      mockStyleVersion++;
+      view.rerender(<RouteConditionsLayer />);
+      await waitFor(() => expect(sourceFeatures("LineString")).toHaveLength(1));
+      expect(JSON.parse(sourceFeatures("LineString")[0]!.properties!._mapAttributions)).toEqual(
+        contributors,
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      view.unmount();
+    },
+  );
+  it("credits a visible route line when its marker is offscreen, only in the route zoom band", async () => {
+    fetchMock.mockResolvedValue([
+      {
+        ...events[0]!,
+        attribution: { provider: "Route publisher", license: "CC0-1.0" },
+      },
+    ]);
+    const view = render(<RouteConditionsLayer />);
+    await waitFor(() => expect(sourceFeatures("LineString")).toHaveLength(1));
+    const line = sourceFeatures("LineString")[0]!;
+    fake.setRenderedFeatures("omx-road-conditions-route-line", [
+      {
+        ...line,
+        layer: { id: "omx-road-conditions-route-line", type: "line" },
+        source: SOURCE,
+      } as never,
+    ]);
+    act(() => {
+      fake.emit("sourcedata", { sourceId: SOURCE });
+      fake.emit("render");
+      fake.emit("idle");
+    });
+    await waitFor(() =>
+      expect(
+        Object.values(useMapAttributionStore.getState().byLayer)
+          .flat()
+          .map((entry) => entry.fullHtml)
+          .join(" "),
+      ).toContain("Route publisher"),
+    );
+    fake.state.zoom = 7;
+    act(() => {
+      fake.emit("move");
+      fake.emit("render");
+    });
+    await waitFor(() =>
+      expect(
+        Object.values(useMapAttributionStore.getState().byLayer)
+          .flat()
+          .map((entry) => entry.fullHtml),
+      ).toEqual([]),
+    );
+    view.unmount();
+  });
   it("replays route data received before the map sources become ready", async () => {
     fake = createFakeMap({ styleLoaded: false, zoom: 5 });
+    const parsedStyle = fake.map.getStyle();
+    vi.spyOn(fake.map, "getStyle").mockImplementation(() =>
+      fake.state.styleLoaded ? parsedStyle : (undefined as never),
+    );
 
     render(<RouteConditionsLayer />);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(fake.state.sources.has(SOURCE)).toBe(false);
 
     fake.state.styleLoaded = true;
-    fake.emit("idle");
+    fake.emit("styledata");
+    fake.emit("style.load");
 
     await waitFor(() => {
       expect(sourceFeatures("Point")).toHaveLength(1);
@@ -530,4 +609,12 @@ describe("RouteConditionsLayer", () => {
     await Promise.resolve();
     expect(fetchMock).not.toHaveBeenCalled();
   });
+});
+
+it("installs route incident layers while unrelated sources are pending without idle", () => {
+  fake.state.styleLoaded = false;
+  const view = render(<RouteConditionsLayer />);
+  expect(fake.map.getLayer("omx-road-conditions-route-markers")).toBeDefined();
+  expect(fake.map.getLayer("omx-road-conditions-route-line")).toBeDefined();
+  view.unmount();
 });

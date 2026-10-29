@@ -1,10 +1,12 @@
-# syntax=docker/dockerfile:1.19
+# syntax=docker/dockerfile:1.20
 
-FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS base
+FROM node:24.22.1-alpine@sha256:6a1c190e17215d844926b0677f4bf87273ff7d5e54db06d3b5b5863ab0b09a3d AS base
 # Read the pnpm version directly from the repo root package.json to ensure
 # lockfile resolution stays reproducible across local and CI Docker builds.
 COPY package.json /tmp/package.json
-RUN corepack enable && corepack prepare "$(node -e "console.log(require('/tmp/package.json').packageManager)")" --activate
+RUN corepack enable && \
+    corepack prepare "$(node -e "console.log(require('/tmp/package.json').packageManager)")" --activate && \
+    pnpm --version
 
 # Install dependencies
 FROM base AS deps
@@ -12,6 +14,7 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/command-palette/package.json packages/command-palette/
 COPY packages/core/package.json packages/core/
+COPY packages/extension-contracts/package.json packages/extension-contracts/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
 COPY packages/air-quality/package.json packages/air-quality/
@@ -21,6 +24,8 @@ COPY packages/mangrove-react/package.json packages/mangrove-react/
 COPY packages/mobility-core/package.json packages/mobility-core/
 COPY packages/ev-charge-planner/package.json packages/ev-charge-planner/
 COPY packages/mobility-formats/package.json packages/mobility-formats/
+COPY packages/entur-client/package.json packages/entur-client/
+COPY packages/otp-client/package.json packages/otp-client/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
 COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
 COPY packages/ourairports-data/package.json packages/ourairports-data/
@@ -29,7 +34,8 @@ COPY packages/presets/package.json packages/presets/
 COPY packages/brands/package.json packages/brands/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY apps/web/package.json apps/web/
-COPY integrations/ integrations/
+# Keep integration source changes out of the dependency-install cache key.
+COPY --parents integrations/*/package.json ./
 RUN pnpm install --frozen-lockfile
 
 # Build
@@ -64,7 +70,7 @@ ENV SW_BUILD_ID=$SW_BUILD_ID
 RUN pnpm build
 
 # Production image
-FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS runner
+FROM node:24.22.1-alpine@sha256:6a1c190e17215d844926b0677f4bf87273ff7d5e54db06d3b5b5863ab0b09a3d AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production

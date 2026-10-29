@@ -4,6 +4,7 @@ import {
   type IntegrationContext,
   type RouteHandler,
   scalarQueries,
+  snapshotContributors,
 } from "@openmapx/integration-framework";
 import type { FirePixel, NaturalHazard } from "@openmapx/mobility-core/hazards";
 import {
@@ -36,7 +37,7 @@ const WORLD: BBox = [-180, -90, 180, 90];
 const DAY_MS = 86_400_000;
 const ACRES_TO_HECTARES = 0.40468564224;
 const DAY_RANGES: readonly FirmsDayRange[] = [1, 2, 3];
-const INSTRUMENTS: readonly FirmsInstrument[] = ["viirs", "modis"];
+const INSTRUMENTS: readonly FirmsInstrument[] = ["viirs", "modis", "slstr"];
 /** The most detections one view loads; the response says when there were more. */
 const HOTSPOT_LIMIT = 20_000;
 /**
@@ -98,9 +99,12 @@ function cellCount(view: NormalizedViewport, cellDeg: number): number {
   return columns * span(view.south, view.north);
 }
 
-/** The confidence in the instrument's own terms: VIIRS's rating, MODIS's percentage. */
+/**
+ * The confidence in the instrument's own terms: VIIRS's and SLSTR's class, MODIS's percentage.
+ * SLSTR's class is its verdict; its percentage does not follow it.
+ */
 function confidenceLabel(pixel: FirePixel): string | null {
-  if (pixel.instrument === "viirs") return pixel.confidence?.level ?? null;
+  if (pixel.instrument !== "modis") return pixel.confidence?.level ?? null;
   const percent = pixel.confidence?.percent;
   return percent !== undefined && Number.isInteger(percent) && percent >= 0 && percent <= 100
     ? String(percent)
@@ -132,6 +136,10 @@ function pixelToFeature(pixel: FirePixel): AgelessFireFeature | null {
       acqTime: `${observed.slice(11, 13)}${observed.slice(14, 16)}`,
       dayNight: pixel.dayNight === "day" ? "D" : pixel.dayNight === "night" ? "N" : null,
       instrument: pixel.instrument,
+      sources: [...pixel.sources],
+      ...(pixel.contributors === undefined
+        ? {}
+        : { contributors: snapshotContributors(pixel.contributors) }),
     },
   };
 }
@@ -178,7 +186,18 @@ function nifcFeature(hazard: NaturalHazard): GeoJSON.Feature | null {
   if (hazard.containmentPct !== undefined) properties.containmentPercent = hazard.containmentPct;
   if (hazard.region) properties.region = hazard.region;
   if (hazard.ignitionCause) properties.cause = hazard.ignitionCause;
-  return { type: "Feature", id, geometry: hazard.geometry, properties: { ...properties } };
+  return {
+    type: "Feature",
+    id,
+    geometry: hazard.geometry,
+    properties: {
+      ...properties,
+      sources: [...hazard.sources],
+      ...(hazard.contributors === undefined
+        ? {}
+        : { contributors: snapshotContributors(hazard.contributors) }),
+    },
+  };
 }
 
 function effisFeature(hazard: NaturalHazard): GeoJSON.Feature | null {
@@ -197,7 +216,18 @@ function effisFeature(hazard: NaturalHazard): GeoJSON.Feature | null {
   if (hazard.region) properties.region = hazard.region;
   if (hazard.locality) properties.locality = hazard.locality;
   if (hazard.areaHa !== undefined) properties.areaHectares = hazard.areaHa;
-  return { type: "Feature", id, geometry: hazard.geometry, properties: { ...properties } };
+  return {
+    type: "Feature",
+    id,
+    geometry: hazard.geometry,
+    properties: {
+      ...properties,
+      sources: [...hazard.sources],
+      ...(hazard.contributors === undefined
+        ? {}
+        : { contributors: snapshotContributors(hazard.contributors) }),
+    },
+  };
 }
 
 function smokeFeature(hazard: NaturalHazard): GeoJSON.Feature | null {
@@ -215,7 +245,18 @@ function smokeFeature(hazard: NaturalHazard): GeoJSON.Feature | null {
   if (startedAt) properties.startedAt = startedAt;
   const endedAt = canonicalInstant(hazard.detection?.end);
   if (endedAt) properties.endedAt = endedAt;
-  return { type: "Feature", id, geometry: hazard.geometry, properties: { ...properties } };
+  return {
+    type: "Feature",
+    id,
+    geometry: hazard.geometry,
+    properties: {
+      ...properties,
+      sources: [...hazard.sources],
+      ...(hazard.contributors === undefined
+        ? {}
+        : { contributors: snapshotContributors(hazard.contributors) }),
+    },
+  };
 }
 
 interface LayerRoute {
@@ -250,14 +291,31 @@ const SMOKE_ROUTE: LayerRoute = {
   toFeature: smokeFeature,
 };
 
+/**
+ * Whether the instrument rates the detection low confidence: VIIRS's and SLSTR's `low`, MODIS
+ * below 30%. A class decides over a percentage the detection also carries.
+ */
+function isLowConfidence(pixel: FirePixel): boolean {
+  const { level, percent } = pixel.confidence ?? {};
+  if (level !== undefined) return level === "low";
+  return percent !== undefined && percent < 30;
+}
+
 function parseFireQuery(
   query: Record<string, string>,
-): { dayRange: FirmsDayRange; instrument: FirmsInstrument } | string {
+): { dayRange: FirmsDayRange; instrument: FirmsInstrument; lowConfidence: boolean } | string {
   const dayRange = Number(query.dayRange ?? "1") as FirmsDayRange;
   const instrument = (query.instrument ?? "viirs") as FirmsInstrument;
+  const lowConfidence = query.lowConfidence ?? "0";
   if (!DAY_RANGES.includes(dayRange)) return "Invalid dayRange (1-3)";
   if (!INSTRUMENTS.includes(instrument)) return "Invalid instrument";
-  return { dayRange, instrument };
+  if (lowConfidence !== "0" && lowConfidence !== "1") return "Invalid lowConfidence (0 or 1)";
+  return { dayRange, instrument, lowConfidence: lowConfidence === "1" };
+}
+
+/** The part of a fire read's cache key that says whether low-confidence detections are in it. */
+function confidenceKey(lowConfidence: boolean): string {
+  return lowConfidence ? "all" : "confident";
 }
 
 export function setup(ctx: IntegrationContext): void {
@@ -282,7 +340,7 @@ export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/wildfires", async (req, reply) => {
     const request = fireRequest(req.query);
     if (typeof request === "string") return badRequest(reply, request);
-    const { dayRange, instrument, view, since } = request;
+    const { dayRange, instrument, lowConfidence, view, since } = request;
     if (view.zoom < HOTSPOT_POINTS_MIN_ZOOM) {
       return badRequest(
         reply,
@@ -292,21 +350,26 @@ export function setup(ctx: IntegrationContext): void {
 
     // The view is quantized, so nearby views share an entry. Namespaced by the response
     // shape: an entry cached in an older shape must not be served against the new one.
-    const key = `wildfires:hotspots-v2:${instrument}:${dayRange}:${viewKey(view)}`;
+    const key = `wildfires:hotspots-v3:${instrument}:${dayRange}:${confidenceKey(lowConfidence)}:${viewKey(view)}`;
     try {
       const read = await ctx.cache.withCache<HotspotRead>(key, HOTSPOT_TTL_S, async () => {
         const { pixels, partial } = await hazards.firePixels(bboxOf(view), {
           since: since(),
           instrument,
           limit: HOTSPOT_LIMIT,
+          excludeLowConfidence: !lowConfidence,
         });
         // Nothing back from a failed read is not "no fires": caching it would hide them.
         if (partial === "unavailable" && pixels.length === 0) {
           throw new Error("every hazards provider failed");
         }
         // The credits name the sources of the detections served, not of those left out.
+        // OpenConditions leaves out low-confidence detections itself; another hazards
+        // provider whose upstream cannot may still return them, so they are dropped here.
         const served = pixels.flatMap((pixel) => {
-          const feature = pixel.instrument === instrument ? pixelToFeature(pixel) : null;
+          const kept =
+            pixel.instrument === instrument && (lowConfidence || !isLowConfidence(pixel));
+          const feature = kept ? pixelToFeature(pixel) : null;
           return feature ? [{ feature, sources: pixel.sources }] : [];
         });
         return {
@@ -332,19 +395,20 @@ export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/wildfires/density", async (req, reply) => {
     const request = fireRequest(req.query);
     if (typeof request === "string") return badRequest(reply, request);
-    const { dayRange, instrument, view, since } = request;
+    const { dayRange, instrument, lowConfidence, view, since } = request;
     const cellDeg = densityCellDeg(Math.floor(view.zoom));
     if (cellCount(view, cellDeg) > MAX_DENSITY_CELLS) {
       return badRequest(reply, "Viewport too large for its zoom");
     }
 
-    const key = `wildfires:density-v1:${instrument}:${dayRange}:${cellDeg}:${viewKey(view)}`;
+    const key = `wildfires:density-v2:${instrument}:${dayRange}:${confidenceKey(lowConfidence)}:${cellDeg}:${viewKey(view)}`;
     try {
       const read = await ctx.cache.withCache(key, HOTSPOT_TTL_S, async () => {
         const { cells, sources, partial } = await hazards.fireDensity(bboxOf(view), {
           since: since(),
           instrument,
           cellDeg,
+          excludeLowConfidence: !lowConfidence,
         });
         if (partial === "unavailable" && cells.length === 0) {
           throw new Error("every hazards provider failed");
@@ -354,7 +418,16 @@ export function setup(ctx: IntegrationContext): void {
           features: cells.map((cell) => ({
             type: "Feature",
             geometry: { type: "Point", coordinates: cell.point },
-            properties: { count: cell.count, frpSum: cell.frpSumMW, frpMax: cell.frpMaxMW },
+            properties: {
+              count: cell.count,
+              ...(cell.lineageComplete === undefined
+                ? {}
+                : { lineageComplete: cell.lineageComplete }),
+              frpSum: cell.frpSumMW,
+              frpMax: cell.frpMaxMW,
+              sources: [...(cell.sources ?? [])],
+              contributors: snapshotContributors(cell.contributors ?? []),
+            },
           })),
           sources: [...sources].sort(),
         };
@@ -380,7 +453,7 @@ export function setup(ctx: IntegrationContext): void {
     return async (req, reply) => {
       let bbox = WORLD;
       let simplifyDeg: number | undefined;
-      let key = `wildfires:${route.layer}-v2:world`;
+      let key = `wildfires:${route.layer}-v3:world`;
       if (route.viewport) {
         let view: NormalizedViewport;
         try {
@@ -391,7 +464,7 @@ export function setup(ctx: IntegrationContext): void {
         bbox = bboxOf(view);
         // Keyed on the tolerance, one of four values, rather than on the client's zoom.
         simplifyDeg = perimeterSimplifyDeg(view.zoom);
-        key = `wildfires:${route.layer}-v3:${simplifyDeg}:${viewKey(view)}`;
+        key = `wildfires:${route.layer}-v4:${simplifyDeg}:${viewKey(view)}`;
       }
 
       const ttl = LAYER_TTL_S[route.layer];

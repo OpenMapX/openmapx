@@ -4,6 +4,10 @@ import { render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OfflinePackageRecord } from "@/lib/offlineAreas";
 
+import { act, createFakeMap } from "@/test";
+
+const pendingMaps: ReturnType<typeof createFakeMap>[] = [];
+
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ styleProvider: "openmapx", tilesUrl: "" }),
 }));
@@ -14,7 +18,7 @@ vi.mock("@mui/material/styles", async (importOriginal) => ({
 }));
 
 vi.mock("@/lib/map", () => ({
-  baseMapCreditsHtml: () => [],
+  baseMapVectorCredits: () => [],
   loadOpenMapXStyle: vi.fn().mockResolvedValue({
     version: 8,
     sources: { openmaptiles: { type: "vector", tiles: [] } },
@@ -44,6 +48,10 @@ vi.mock("maplibre-gl", () => {
     remove = vi.fn();
 
     constructor() {
+      const pending = createFakeMap({ styleLoaded: false });
+      pendingMaps.push(pending);
+      vi.spyOn(pending.map, "fitBounds");
+      Object.assign(this, pending.map, { trigger: pending.emit });
       FakeMap.workerUrlsAtConstruction.push(workerUrl);
     }
   }
@@ -83,6 +91,7 @@ const record = {
 } as OfflinePackageRecord;
 
 afterEach(() => {
+  pendingMaps.length = 0;
   fakeMapClass.workerUrlsAtConstruction.length = 0;
   vi.clearAllMocks();
 });
@@ -97,4 +106,17 @@ describe("OfflineMapView", () => {
       "/runtime/maplibre-gl/6.1.0/maplibre-gl-worker.mjs",
     ]);
   });
+});
+
+it("installs and restores offline coverage without waiting for archive tiles", async () => {
+  const view = render(<OfflineMapView packages={[record]} />);
+  await waitFor(() => expect(pendingMaps).toHaveLength(1));
+  const pending = pendingMaps[0];
+  expect(pending.map.getLayer("offline-packages-line")).toBeDefined();
+  const source = pending.state.sources.get("offline-packages-source")?.data;
+  act(() => pending.map.setStyle({} as never));
+  expect(pending.map.getLayer("offline-packages-line")).toBeDefined();
+  expect(pending.state.sources.get("offline-packages-source")?.data).toEqual(source);
+  view.unmount();
+  expect(pending.state.handlers.get("styledata")?.size ?? 0).toBe(0);
 });

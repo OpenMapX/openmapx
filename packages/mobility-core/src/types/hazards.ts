@@ -1,3 +1,4 @@
+import type { ContributingRecord } from "../contributors.js";
 import type { Attribution } from "./attribution.js";
 
 /** CAP's severity scale. */
@@ -7,7 +8,7 @@ export type CapSeverity = "Extreme" | "Severe" | "Moderate" | "Minor" | "Unknown
  * A weather or civil-protection alert, from the OpenConditions `alert`
  * situations. Alerts without a geometry are not returned.
  */
-export interface HazardAlert {
+export interface HazardAlert extends ContributingRecord {
   id: string;
   /** Alerts of one CAP message, or of one update chain, share it. */
   groupId?: string;
@@ -51,7 +52,7 @@ export type NaturalHazardType =
   | "sea_ice";
 
 /** A natural hazard from the OpenConditions `natural_hazard` situations. */
-export interface NaturalHazard {
+export interface NaturalHazard extends ContributingRecord {
   id: string;
   type: NaturalHazardType;
   subtype?: string;
@@ -66,7 +67,8 @@ export interface NaturalHazard {
   ended: boolean;
   updatedAt?: string;
   severity?: {
-    label: "minor" | "moderate" | "major" | "critical" | "unknown";
+    /** `none`: the publisher states it has no impact. */
+    label: "none" | "minor" | "moderate" | "major" | "critical" | "unknown";
     level?: number;
     /** The publisher's own word for it, e.g. a GDACS alert level. */
     declared?: string;
@@ -95,10 +97,11 @@ export interface NaturalHazard {
   attributions: Attribution[];
 }
 
-export type FireInstrument = "viirs" | "modis";
+/** VIIRS (NOAA-20 and -21), MODIS (Terra and Aqua) or SLSTR (Sentinel-3A and -3B). */
+export type FireInstrument = "viirs" | "modis" | "slstr";
 
 /** One satellite fire detection. */
-export interface FirePixel {
+export interface FirePixel extends ContributingRecord {
   id: string;
   /** `[lon, lat]`. */
   point: [number, number];
@@ -113,7 +116,13 @@ export interface FirePixel {
 }
 
 /** Fire detections aggregated into one grid cell. */
-export interface FireDensityCell {
+export interface FireDensityCell extends ContributingRecord {
+  /** Exact native input IDs for policy, separate from canonical display identities. */
+  nativeSources?: readonly string[];
+  /** False when some counted historical inputs have no captured receipt. */
+  lineageComplete?: boolean;
+  /** Exact cell suppliers, independent of whole-grid diagnostic sources. */
+  sources?: readonly string[];
   /** The cell's position, `[lon, lat]`. */
   point: [number, number];
   count: number;

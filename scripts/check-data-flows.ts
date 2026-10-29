@@ -93,7 +93,9 @@ const MULTI_SUFFIX = new Set([
 const ALLOWED_DOMAINS = new Set([
   // License / spec / docs
   "creativecommons.org",
+  "cdla.dev", // CDLA licence links retained in captured contributor metadata
   "opendatacommons.org",
+  "osmfoundation.org", // Captured attribution-guideline evidence; not an automatic provider request.
   "w3.org",
   "schema.org",
   "spdx.org",

@@ -8,16 +8,18 @@ import CircularProgress from "@mui/material/CircularProgress";
 import LinearProgress from "@mui/material/LinearProgress";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import { cancelAdminActivityJob, unwrapAdminResponse } from "@openmapx/core/api-admin-sdk";
+import type { AdminActivityJobSource } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { DataManagerJobStages } from "../shared/DataManagerJobStages";
 import { JobStatusChip } from "../shared/JobStatusChip";
 import {
-  type JobDetailData,
-  type JobStreamConnection,
-  useJobEventStream,
-} from "./useJobEventStream";
+  ACTIVITY_READ_TIMEOUT_MS,
+  activityJobQueryOptions,
+  useActivityClient,
+} from "./activityQueries";
+import { type JobStreamConnection, useJobEventStream } from "./useJobEventStream";
 
 const CONNECTION_LABEL: Record<JobStreamConnection, string | null> = {
   connecting: "Connecting",
@@ -40,40 +42,26 @@ function formatDuration(startedAt: string | null, finishedAt: string | null): st
   return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
 }
 
-function isActive(status: string) {
+function isCancelable(status: string) {
   return status === "running" || status === "queued";
 }
 
-export function JobDetail({
-  jobId,
-  source,
-}: {
-  jobId: string;
-  source: "application" | "data-manager";
-}) {
-  const env = useEnv();
+function isActive(status: string) {
+  return isCancelable(status) || status === "cancel_pending";
+}
+
+export function JobDetail({ jobId, source }: { jobId: string; source: AdminActivityJobSource }) {
+  const { apiUrl, client } = useActivityClient();
   const queryClient = useQueryClient();
   const logEndRef = useRef<HTMLDivElement>(null);
 
   // Application jobs stream their state; data-manager jobs are written by
   // another process and keep the query below as their only source.
-  const streamUrl =
-    source === "application"
-      ? `${env.apiUrl}/api/admin/jobs/${encodeURIComponent(jobId)}/events?source=application`
-      : null;
-  const stream = useJobEventStream(streamUrl);
+  const stream = useJobEventStream(client, source === "application" ? jobId : null);
   const polling = stream.connection === "polling";
 
-  const query = useQuery<JobDetailData>({
-    queryKey: ["admin", "jobs", source, jobId],
-    queryFn: async () => {
-      const params = new URLSearchParams({ source });
-      const res = await fetch(`${env.apiUrl}/api/admin/jobs/${jobId}?${params}`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to load job");
-      return res.json();
-    },
+  const query = useQuery({
+    ...activityJobQueryOptions(client, apiUrl, jobId, source),
     // While the stream is healthy the initial fetch still seeds the view
     // quickly; only the polling fallback keeps refetching afterwards.
     refetchInterval: (query) => {
@@ -102,14 +90,15 @@ export function JobDetail({
   }, [stream.connection, queryClient]);
 
   const cancel = useMutation({
-    mutationFn: async () => {
-      const params = new URLSearchParams({ source });
-      const res = await fetch(`${env.apiUrl}/api/admin/jobs/${jobId}/cancel?${params}`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Cancel failed");
-    },
+    mutationFn: async () =>
+      unwrapAdminResponse(
+        await cancelAdminActivityJob(
+          jobId,
+          { source },
+          { client, timeoutMs: ACTIVITY_READ_TIMEOUT_MS },
+        ),
+      ),
+    retry: false,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
     },
@@ -176,7 +165,7 @@ export function JobDetail({
         >
           Duration: {formatDuration(data.startedAt, data.finishedAt)}
         </Typography>
-        {data.cancelable && isActive(data.status) && (
+        {data.cancelable && isCancelable(data.status) && (
           <Button
             size="small"
             color="error"

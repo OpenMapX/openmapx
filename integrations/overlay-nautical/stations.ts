@@ -10,7 +10,9 @@
  *  - **Kartverket** Sehavnivå (Norway) — predictions + observations
  *  - **WSV Pegelonline** (Germany) — coastal/estuarine observations
  *
- * All networks: free, no API key, commercial use permitted (verified 2026-05-18).
+ * No API key is required. IOC data/products are offered for non-commercial use;
+ * commercial use requires permission from the relevant data originators,
+ * unverified for this operator. Other networks retain their own terms.
  *
  * Dedup priority when stations overlap within ~500m, highest first:
  *   NOAA > Canada (IWLS) > Norway (Kartverket) > Pegelonline > EMODnet > IOC
@@ -20,13 +22,35 @@
  * normalises its data through national QC pipelines.
  */
 import { fetchJson, haversineKm } from "@openmapx/core";
-import type { CacheClient, Logger } from "@openmapx/integration-framework";
+import {
+  type CacheClient,
+  type ContributingRecord,
+  dataSourceToAttribution,
+  type Logger,
+  snapshotContributors,
+  withContributors,
+} from "@openmapx/integration-framework";
+import manifest from "./manifest.json";
+
+export function stationContributors(network: TideNetwork) {
+  const ids: Record<TideNetwork, string> = {
+    noaa: "noaa-co-ops",
+    "ca-iwls": "dfo-iwls",
+    kartverket: "kartverket-sehavniva",
+    pegel: "wsv-pegelonline",
+    emodnet: "emodnet-physics",
+    ioc: "ioc-sealevel",
+  };
+  return snapshotContributors(
+    manifest.dataSources.filter((s) => s.sourceId === ids[network]).map(dataSourceToAttribution),
+  );
+}
 
 export type TideNetwork = "noaa" | "ca-iwls" | "kartverket" | "pegel" | "emodnet" | "ioc";
 
 export type TideStationCapability = "tide-predictions" | "water-level" | "currents";
 
-export interface MergedTideStation {
+export interface MergedTideStation extends ContributingRecord {
   /** Network this station belongs to. Drives the place-panel scheme. */
   network: TideNetwork;
   /** Network-local station identifier (NOT URL-encoded). */
@@ -82,7 +106,7 @@ async function loadIocStations(
   log: Logger,
   ua: string,
 ): Promise<MergedTideStation[]> {
-  const cacheKey = "catalog:ioc";
+  const cacheKey = "catalog:contributors-v1:ioc";
   const cached = await cache.get<MergedTideStation[]>(cacheKey);
   if (cached) return cached;
 
@@ -110,8 +134,9 @@ async function loadIocStations(
     });
   }
   const stations = Array.from(seenByCode.values());
-  await cache.set(cacheKey, stations, CATALOG_TTL);
-  return stations;
+  const captured = stations.map((s) => withContributors(s, stationContributors(s.network)));
+  await cache.set(cacheKey, captured, CATALOG_TTL);
+  return captured;
 }
 
 // ISO-3166 alpha-3 → alpha-2 for the ~30 codes IOC uses heavily. Falls back to
@@ -186,7 +211,7 @@ async function loadEmodnetStations(
   log: Logger,
   ua: string,
 ): Promise<MergedTideStation[]> {
-  const cacheKey = "catalog:emodnet";
+  const cacheKey = "catalog:contributors-v1:emodnet";
   const cached = await cache.get<MergedTideStation[]>(cacheKey);
   if (cached) return cached;
 
@@ -220,8 +245,9 @@ async function loadEmodnetStations(
       types: ["water-level"],
     });
   }
-  await cache.set(cacheKey, stations, CATALOG_TTL);
-  return stations;
+  const captured = stations.map((s) => withContributors(s, stationContributors(s.network)));
+  await cache.set(cacheKey, captured, CATALOG_TTL);
+  return captured;
 }
 
 // -------- DFO IWLS (Canada) ---------------------------------------------
@@ -246,7 +272,7 @@ async function loadCanadaStations(
   log: Logger,
   ua: string,
 ): Promise<MergedTideStation[]> {
-  const cacheKey = "catalog:ca-iwls";
+  const cacheKey = "catalog:contributors-v1:ca-iwls";
   const cached = await cache.get<MergedTideStation[]>(cacheKey);
   if (cached) return cached;
 
@@ -275,8 +301,9 @@ async function loadCanadaStations(
         country: "CA",
       };
     });
-  await cache.set(cacheKey, stations, CATALOG_TTL);
-  return stations;
+  const captured = stations.map((s) => withContributors(s, stationContributors(s.network)));
+  await cache.set(cacheKey, captured, CATALOG_TTL);
+  return captured;
 }
 
 // -------- Kartverket Sehavnivå (Norway) ---------------------------------
@@ -288,7 +315,7 @@ async function loadNorwayStations(
   log: Logger,
   ua: string,
 ): Promise<MergedTideStation[]> {
-  const cacheKey = "catalog:kartverket";
+  const cacheKey = "catalog:contributors-v1:kartverket";
   const cached = await cache.get<MergedTideStation[]>(cacheKey);
   if (cached) return cached;
 
@@ -325,8 +352,9 @@ async function loadNorwayStations(
         country: "NO",
       });
     }
-    await cache.set(cacheKey, stations, CATALOG_TTL);
-    return stations;
+    const captured = stations.map((s) => withContributors(s, stationContributors(s.network)));
+    await cache.set(cacheKey, captured, CATALOG_TTL);
+    return captured;
   } catch {
     return [];
   }
@@ -350,7 +378,7 @@ async function loadPegelonlineStations(
   log: Logger,
   ua: string,
 ): Promise<MergedTideStation[]> {
-  const cacheKey = "catalog:pegel";
+  const cacheKey = "catalog:contributors-v1:pegel";
   const cached = await cache.get<MergedTideStation[]>(cacheKey);
   if (cached) return cached;
 
@@ -372,8 +400,9 @@ async function loadPegelonlineStations(
       types: ["water-level"] as TideStationCapability[],
       country: "DE",
     }));
-  await cache.set(cacheKey, stations, CATALOG_TTL);
-  return stations;
+  const captured = stations.map((s) => withContributors(s, stationContributors(s.network)));
+  await cache.set(cacheKey, captured, CATALOG_TTL);
+  return captured;
 }
 
 // -------- Top-level: load everything in parallel + dedup -----------------

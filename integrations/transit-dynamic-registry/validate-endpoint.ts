@@ -16,8 +16,7 @@ export function hasCredential(options: Record<string, unknown>): boolean {
 /**
  * Returns null when the options are safe to use, or the reason to drop the
  * entry. Absent endpoints are allowed through unchanged: entries for protocols
- * we have no adapter for legitimately omit one, and the OTP adapter already
- * no-ops on an empty endpoint.
+ * we have no adapter for legitimately omit one, while the OTP adapter rejects missing or unreviewed endpoint profiles.
  */
 export function registryEndpointRejection(
   options: Record<string, unknown>,

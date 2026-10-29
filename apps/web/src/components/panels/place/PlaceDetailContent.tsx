@@ -10,6 +10,7 @@ import Tabs from "@mui/material/Tabs";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
 import {
+  brandForPlaceLogo,
   firstBrandIdentity,
   isCityOrSmaller,
   isLodging,
@@ -17,10 +18,16 @@ import {
   usePlaceStore,
 } from "@openmapx/core";
 import { useReviewAggregate } from "@openmapx/mangrove-react";
+import {
+  contributorsForRecordFields,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { MergedRoute, TransportMode } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { BrandLogo } from "@/components/search/BrandLogo";
+import { AttributionDetailsGroup } from "@/components/ui/AttributionDetailsGroup";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useDetailChrome } from "../DetailShell";
 import { useFloatingMobileSheetHandle } from "../sheet/mobileSheetShared";
@@ -195,6 +202,21 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
       : place.rating
         ? { rating: place.rating, count: place.reviewCount ?? 0 }
         : null;
+  const headerAttributions = snapshotContributors(
+    contributorsForRecordFields(place, [
+      "name",
+      ...(place.category ? ["category"] : []),
+      ...(place.openingHoursInfo?.status ? ["openingHoursInfo.status"] : []),
+    ]),
+    detent !== "peek" && headerReviewStats
+      ? headerAggregateQuery.data !== undefined
+        ? (headerAggregateQuery.data.contributors ?? [])
+        : contributorsForRecordFields(place, [
+            "rating",
+            ...(place.reviewCount !== undefined ? ["reviewCount"] : []),
+          ])
+      : [],
+  );
   const placePhotos = place.photos ?? [];
   // Skip photos that already failed to load so the hero advances through any
   // remaining candidates and, when none load, falls back to the no-photo layout.
@@ -343,7 +365,7 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
   const titleSx = { fontWeight: 600, pr: onClose && !showHeaderWeather ? 4 : 0 };
 
   return (
-    <>
+    <AttributionDetailsGroup placement="footer">
       {/* Header photo with "View photos" — hidden at peek so the collapsed
           sheet shows the marked [data-omx-peek] subtree (title + chips)
           instead of a cropped slice of the photo. The photo sits ABOVE that
@@ -412,29 +434,31 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
           </IconButton>
         )}
 
-        <Box sx={{ display: "flex", alignItems: "flex-start" }}>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            {/* The brand logo adds a flex row around the title; every other
-                place keeps the plain, unwrapped `Typography` — no wrapper, no
-                extra sx — so unbranded results (still the large majority)
-                render unchanged. Both branches share `titleProps`/`titleSx`
-                above so they can't drift apart on the props they have in
-                common. */}
+        <Box
+          sx={{
+            display: "grid",
+            // Weather descriptions wrap before they can crowd out the place.
+            gridTemplateColumns: "minmax(0, 1fr) fit-content(32%)",
+            alignItems: "start",
+          }}
+        >
+          <Box sx={{ minWidth: 0 }}>
+            {/* The mark and title share one row; all logo credits use the full
+                width below it so required notices cannot squeeze the title. */}
             {brandQid ? (
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <BrandLogo
-                  brand={{
-                    qid: brandQid,
-                    name: place.brand?.name ?? place.name,
-                    logoFile: brandDetail?.logoFile,
-                    kind: brandIdentity ? [brandIdentity.kind] : ["brand"],
-                  }}
-                  size={24}
-                />
+              <BrandLogo
+                brand={brandForPlaceLogo(
+                  place,
+                  brandDetail,
+                  brandQid,
+                  brandIdentity?.kind ?? "brand",
+                )}
+                size={24}
+              >
                 <Typography {...titleProps} sx={{ ...titleSx, flex: 1, minWidth: 0 }}>
                   {place.name}
                 </Typography>
-              </Box>
+              </BrandLogo>
             ) : (
               <Typography {...titleProps} sx={titleSx}>
                 {place.name}
@@ -468,13 +492,15 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
             </Box>
           </Box>
           {showHeaderWeather && (
-            // Shift down past the absolute close button when the hero isn't
-            // showing, so the weather icon never sits under it.
-            <Box sx={{ mt: onClose && !showHero ? 4 : 0 }}>
-              <PlaceHeaderWeather lat={place.coordinates[1]} lng={place.coordinates[0]} />
-            </Box>
+            <PlaceHeaderWeather
+              lat={place.coordinates[1]}
+              lng={place.coordinates[0]}
+              clearCloseButton={Boolean(onClose && !showHero)}
+            />
           )}
         </Box>
+
+        <AttributionStrip attributions={headerAttributions} provenanceDisplay="details" />
 
         {/* Inline action row, sheet only. It sits above the tabs here so it
             falls inside the peek-collapsed subtree and stays reachable
@@ -564,6 +590,6 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
       {tab === 1 && <PlaceReviewsTab place={place} />}
       {showPrices && tab === pricesIndex && <PlaceHotelPricesTab place={place} />}
       {tab === infoIndex && <PlaceInfoTab place={place} isLoading={isLoading} />}
-    </>
+    </AttributionDetailsGroup>
   );
 }

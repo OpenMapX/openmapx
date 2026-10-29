@@ -2,13 +2,13 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { resolveTransitOverlayPath } from "../src/jobs/transitous/internal.js";
 import { safeOriginUrl } from "../src/jobs/transitous/source-manifest.js";
 import {
   listTransitSources,
   prepareAddTransitSource,
   prepareEnableTransitSource,
   prepareRemoveTransitSource,
-  resolveTransitOverlayPath,
 } from "../src/transit-sources.js";
 
 let tmp: string | undefined;

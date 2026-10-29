@@ -1,10 +1,11 @@
 {
   "name": "@openmapx/integration-__ID__",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
-  "dependencies": {
-    "@openmapx/core": "workspace:^",
-    "@openmapx/integration-framework": "workspace:^"
-  }
+  "scripts": {
+    "validate": "openmapx-ext validate .",
+    "package": "openmapx-ext package . --out ../__ID__.tar.gz"
+  },
+  "devDependencies": { "@openmapx/extension-cli": "__CLI_VERSION__" }
 }

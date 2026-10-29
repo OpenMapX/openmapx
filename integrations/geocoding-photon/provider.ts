@@ -29,9 +29,9 @@ export function setPhotonUrl(url: string): void {
  * Manifest sourceId of the endpoint that answers, so a result credits Komoot
  * only when Komoot's public instance served it.
  */
-export function photonSourceIds(): string[] {
+export function photonSourceIds(endpoint = PHOTON_URL): string[] {
   try {
-    const host = new URL(PHOTON_URL).hostname.toLowerCase();
+    const host = new URL(endpoint).hostname.toLowerCase();
     if (host === "komoot.io" || host.endsWith(".komoot.io")) return ["komoot"];
   } catch {
     // An unparsable endpoint is not Komoot's.
@@ -125,8 +125,9 @@ async function fetchPhoton(
   params: Record<string, string>,
   path = "/api",
   lang?: string,
+  endpoint = PHOTON_URL,
 ): Promise<PhotonResponse> {
-  const url = new URL(`${PHOTON_URL}${path}`);
+  const url = new URL(`${endpoint}${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
   return fetchJson<PhotonResponse>(url.toString(), {
@@ -139,13 +140,14 @@ async function fetchPhoton(
 
 export const photonService: GeocodingProviderImpl = {
   async geocode(query: string, lang?: string, proximity?: LngLat): Promise<SearchResult[]> {
+    const endpoint = PHOTON_URL;
     const params: Record<string, string> = { q: query, limit: "10", lang: lang ?? "en" };
     if (proximity) {
       params.lat = String(proximity[1]);
       params.lon = String(proximity[0]);
     }
-    const data = await fetchPhoton(params, "/api", lang);
-    const sourceIds = photonSourceIds();
+    const data = await fetchPhoton(params, "/api", lang, endpoint);
+    const sourceIds = photonSourceIds(endpoint);
     return data.features.map((f) => ({
       id: makeId(f.properties),
       label: buildLabel(f.properties),
@@ -162,17 +164,19 @@ export const photonService: GeocodingProviderImpl = {
     lng: number,
     lang?: string,
   ): Promise<ReverseGeocodingResult | null> {
+    const endpoint = PHOTON_URL;
     const data = await fetchPhoton(
       { lat: String(lat), lon: String(lng), limit: "1" },
       "/reverse",
       lang,
+      endpoint,
     );
     const f = data.features[0];
     if (!f) return null;
 
     const p = f.properties;
     const city = [p.city, p.state].filter(Boolean).join(", ");
-    return { address: buildLabel(p), city };
+    return { address: buildLabel(p), city, sourceIds: photonSourceIds(endpoint) };
   },
 
   async autocomplete(
@@ -180,12 +184,13 @@ export const photonService: GeocodingProviderImpl = {
     lang?: string,
     bias?: GeocodingBias,
   ): Promise<AutocompleteResult[]> {
+    const endpoint = PHOTON_URL;
     const base = { q: query, lang: lang ?? "en" };
     let features: PhotonFeature[];
     if (bias) {
       const lookups = await Promise.allSettled([
-        fetchPhoton({ ...base, ...biasParams(bias, LOCAL_BIAS) }, "/api", lang),
-        fetchPhoton({ ...base, ...biasParams(bias, WIDE_BIAS) }, "/api", lang),
+        fetchPhoton({ ...base, ...biasParams(bias, LOCAL_BIAS) }, "/api", lang, endpoint),
+        fetchPhoton({ ...base, ...biasParams(bias, WIDE_BIAS) }, "/api", lang, endpoint),
       ]);
       const answered = lookups.flatMap((lookup) =>
         lookup.status === "fulfilled" ? [lookup.value] : [],
@@ -202,13 +207,19 @@ export const photonService: GeocodingProviderImpl = {
           return true;
         });
     } else {
-      features = (await fetchPhoton({ ...base, limit: UNBIASED_LIMIT }, "/api", lang)).features;
+      features = (await fetchPhoton({ ...base, limit: UNBIASED_LIMIT }, "/api", lang, endpoint))
+        .features;
     }
-    const nativeNames = await nativeNamesFor(features, query, {
-      ...base,
-      ...(bias ? biasParams(bias, WIDE_BIAS) : { limit: UNBIASED_LIMIT }),
-    });
-    const sourceIds = photonSourceIds();
+    const nativeNames = await nativeNamesFor(
+      features,
+      query,
+      {
+        ...base,
+        ...(bias ? biasParams(bias, WIDE_BIAS) : { limit: UNBIASED_LIMIT }),
+      },
+      endpoint,
+    );
+    const sourceIds = photonSourceIds(endpoint);
     return features.map((f) => {
       const short = f.properties.name ?? buildLabel(f.properties);
       const full = buildLabel(f.properties);
@@ -251,12 +262,18 @@ async function nativeNamesFor(
   features: readonly PhotonFeature[],
   query: string,
   params: Record<string, string>,
+  endpoint: string,
 ): Promise<Map<string, string>> {
   const names = new Map<string, string>();
   if (params.lang === NATIVE_LANG) return names;
   if (features.every((f) => nameStartsWith(f.properties.name, query))) return names;
   try {
-    const native = await fetchPhoton({ ...params, lang: NATIVE_LANG }, "/api", NATIVE_LANG);
+    const native = await fetchPhoton(
+      { ...params, lang: NATIVE_LANG },
+      "/api",
+      NATIVE_LANG,
+      endpoint,
+    );
     for (const f of native.features) {
       if (f.properties.name && nameStartsWith(f.properties.name, query)) {
         names.set(makeId(f.properties), f.properties.name);

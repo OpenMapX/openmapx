@@ -8,12 +8,15 @@ import {
 } from "@openmapx/core/privacy";
 import type { CollectorSourcePartEntry } from "./collectors.js";
 import { EncryptedSourceSpool } from "./encrypted-source-spool.js";
+import {
+  SOURCE_TAR_LIMITS,
+  type SourceTarErrorCode,
+  SourceTarReader,
+} from "./source-tar-reader.js";
 
-const BLOCK = 512;
-const MAX_ENTRIES = 256;
-const MAX_ENTRY_BYTES = 256 * 1024 * 1024;
-const MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024;
-const MAX_MANIFEST_BYTES = 256 * 1024;
+const MAX_ENTRIES = SOURCE_TAR_LIMITS.maxEntries;
+const MAX_ENTRY_BYTES = SOURCE_TAR_LIMITS.maxEntryBytes;
+const MAX_MANIFEST_BYTES = SOURCE_TAR_LIMITS.maxManifestBytes;
 
 const OPENMAPX_ENTRY_IDS = new Set([
   "account-profile",
@@ -55,18 +58,7 @@ const OPENMAPX_PORTABLE_IDS = new Set([
 ]);
 
 export class BackupSourcePartError extends Error {
-  constructor(
-    readonly code:
-      | "truncated"
-      | "invalid_header"
-      | "checksum"
-      | "unsafe_path"
-      | "duplicate"
-      | "unsupported_type"
-      | "limit_exceeded"
-      | "manifest_mismatch"
-      | "trailing_data",
-  ) {
+  constructor(readonly code: SourceTarErrorCode | "manifest_mismatch") {
     super(code);
   }
 }
@@ -89,112 +81,6 @@ interface OuterManifest {
   subjectUserIdDigest: string;
   entries: OuterDeclaration[];
   warnings: string[];
-}
-
-function octal(bytes: Uint8Array, start: number, length: number): number {
-  const text = Buffer.from(bytes.subarray(start, start + length))
-    .toString("utf8")
-    .replace(/\0.*$/u, "")
-    .trim();
-  if (!text || !/^[0-7]+$/.test(text)) throw new BackupSourcePartError("invalid_header");
-  const value = Number.parseInt(text, 8);
-  if (!Number.isSafeInteger(value)) throw new BackupSourcePartError("invalid_header");
-  return value;
-}
-
-function headerName(header: Uint8Array): string {
-  const name = Buffer.from(header.subarray(0, 100)).toString("utf8").replace(/\0.*$/u, "");
-  const prefix = Buffer.from(header.subarray(345, 500)).toString("utf8").replace(/\0.*$/u, "");
-  const full = prefix ? `${prefix}/${name}` : name;
-  if (
-    !full ||
-    full.includes("\\") ||
-    full.includes("\0") ||
-    full.startsWith("/") ||
-    full.split("/").some((part) => part === "" || part === "." || part === "..")
-  )
-    throw new BackupSourcePartError("unsafe_path");
-  return full;
-}
-
-function verifyChecksum(header: Uint8Array): void {
-  const provided = octal(header, 148, 8);
-  let sum = 0;
-  for (let index = 0; index < header.length; index += 1)
-    sum += index >= 148 && index < 156 ? 0x20 : header[index];
-  if (sum !== provided) throw new BackupSourcePartError("checksum");
-}
-
-async function* chunks(input: AsyncIterable<Uint8Array> | Readable) {
-  for await (const chunk of input as AsyncIterable<Uint8Array>) {
-    if (!(chunk instanceof Uint8Array)) throw new BackupSourcePartError("invalid_header");
-    yield Buffer.from(chunk);
-  }
-}
-
-class TarByteReader {
-  private readonly iterator: AsyncIterator<Buffer>;
-  private buffer = Buffer.alloc(0);
-  private ended = false;
-  private received = 0;
-
-  constructor(
-    input: AsyncIterable<Uint8Array> | Readable,
-    private readonly rawLimit: number,
-  ) {
-    this.iterator = chunks(input)[Symbol.asyncIterator]();
-  }
-
-  private async fill(minimum: number): Promise<void> {
-    while (!this.ended && this.buffer.byteLength < minimum) {
-      const next = await this.iterator.next();
-      if (next.done) {
-        this.ended = true;
-        break;
-      }
-      this.received += next.value.byteLength;
-      if (this.received > this.rawLimit) throw new BackupSourcePartError("limit_exceeded");
-      this.buffer = this.buffer.byteLength
-        ? Buffer.concat([this.buffer, next.value])
-        : Buffer.from(next.value);
-    }
-  }
-
-  async readExact(length: number): Promise<Buffer | null> {
-    if (length === 0) return Buffer.alloc(0);
-    await this.fill(length);
-    if (this.buffer.byteLength === 0 && this.ended) return null;
-    if (this.buffer.byteLength < length) throw new BackupSourcePartError("truncated");
-    const value = this.buffer.subarray(0, length);
-    this.buffer = this.buffer.subarray(length);
-    return value;
-  }
-
-  async *readChunks(length: number): AsyncIterable<Buffer> {
-    let remaining = length;
-    while (remaining > 0) {
-      await this.fill(1);
-      if (!this.buffer.byteLength) throw new BackupSourcePartError("truncated");
-      const size = Math.min(remaining, this.buffer.byteLength);
-      const value = this.buffer.subarray(0, size);
-      this.buffer = this.buffer.subarray(size);
-      remaining -= size;
-      yield value;
-    }
-  }
-
-  async drainZeros(): Promise<void> {
-    while (this.buffer.byteLength || !this.ended) {
-      if (!this.buffer.byteLength) await this.fill(1);
-      if (this.buffer.some((value) => value !== 0))
-        throw new BackupSourcePartError("trailing_data");
-      this.buffer = Buffer.alloc(0);
-    }
-  }
-
-  async close(): Promise<void> {
-    await this.iterator.return?.();
-  }
 }
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -332,60 +218,45 @@ export async function spoolBackupSourceTar(
   warnings: string[];
   dispose: () => Promise<void>;
 }> {
-  const spool = await EncryptedSourceSpool.create({
-    parentDirectory: options.spoolParentDirectory,
-  });
-  const reader = new TarByteReader(input, MAX_TOTAL_BYTES + MAX_ENTRIES * BLOCK * 2 + BLOCK * 2);
+  let spool: EncryptedSourceSpool | undefined;
+  const reader = new SourceTarReader(
+    input,
+    SOURCE_TAR_LIMITS,
+    (code) => new BackupSourcePartError(code),
+  );
   const observed = new Map<
     string,
     { bytes: number; sha256: string; stored: CollectorSourcePartEntry; content?: Buffer }
   >();
   let outerContent: Buffer | undefined;
-  let total = 0;
-  let sawEnd = false;
   try {
     if (options.namespace !== undefined && !/^[a-f0-9]{64}$/.test(options.namespace))
       throw new BackupSourcePartError("manifest_mismatch");
-    while (true) {
-      const header = await reader.readExact(BLOCK);
-      if (!header) break;
-      if (header.every((value) => value === 0)) {
-        const second = await reader.readExact(BLOCK);
-        if (!second?.every((value) => value === 0))
-          throw new BackupSourcePartError("trailing_data");
-        await reader.drainZeros();
-        sawEnd = true;
-        break;
-      }
+    await reader.read(async ({ path, bytes: size, content: body }) => {
       if (outerContent) throw new BackupSourcePartError("manifest_mismatch");
-      verifyChecksum(header);
-      const path = headerName(header);
       const identity =
         path === "backup/source-manifest.json"
           ? { family: "backup" as const, id: "source-manifest" }
           : pathIdentity(path);
       if (!identity) throw new BackupSourcePartError("unsafe_path");
       if (observed.has(path)) throw new BackupSourcePartError("duplicate");
-      const type = header[156];
-      if (type !== 0 && type !== 48) throw new BackupSourcePartError("unsupported_type");
-      const size = octal(header, 124, 12);
       if (
-        size > MAX_ENTRY_BYTES ||
-        ((path === "backup/source-manifest.json" || path === "dawarich/source-manifest.json") &&
-          size > MAX_MANIFEST_BYTES) ||
-        total + size > MAX_TOTAL_BYTES ||
-        observed.size >= MAX_ENTRIES
+        (path === "backup/source-manifest.json" || path === "dawarich/source-manifest.json") &&
+        size > MAX_MANIFEST_BYTES
       )
         throw new BackupSourcePartError("limit_exceeded");
       const captured: Buffer[] = [];
       const capture =
         path === "backup/source-manifest.json" || path === "dawarich/source-manifest.json";
       const content = (async function* () {
-        for await (const chunk of reader.readChunks(size)) {
+        for await (const chunk of body) {
           if (capture) captured.push(Buffer.from(chunk));
           yield chunk;
         }
       })();
+      spool ??= await EncryptedSourceSpool.create({
+        parentDirectory: options.spoolParentDirectory,
+      });
       const stored = await spool.write({
         logicalId: "pending-backup-source",
         content,
@@ -401,13 +272,7 @@ export async function spoolBackupSourceTar(
         stored,
         content: manifestContent,
       });
-      total += size;
-      const padding = (BLOCK - (size % BLOCK)) % BLOCK;
-      const paddingBytes = await reader.readExact(padding);
-      if (!paddingBytes || paddingBytes.some((value) => value !== 0))
-        throw new BackupSourcePartError("invalid_header");
-    }
-    if (!sawEnd) throw new BackupSourcePartError("truncated");
+    });
     if (!outerContent) throw new BackupSourcePartError("manifest_mismatch");
     const outer = parseOuterManifest(outerContent, options.expected);
     const declarations = new Map(outer.entries.map((entry) => [entry.path, entry]));
@@ -526,12 +391,13 @@ export async function spoolBackupSourceTar(
         : "backup-source-manifest",
       schemaId: "backup-source-v1",
     });
-    return { entries, warnings: outer.warnings, dispose: () => spool.dispose() };
+    if (!spool) throw new BackupSourcePartError("manifest_mismatch");
+    const completedSpool = spool;
+    return { entries, warnings: outer.warnings, dispose: () => completedSpool.dispose() };
   } catch (error) {
-    await spool.dispose();
+    await spool?.dispose();
+    await reader.close().catch(() => {});
     throw error;
-  } finally {
-    await reader.close();
   }
 }
 

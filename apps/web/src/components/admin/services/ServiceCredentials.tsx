@@ -14,37 +14,52 @@ import DialogTitle from "@mui/material/DialogTitle";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import type {
+  AdminServiceCredential,
+  AdminServiceCredentialChanged,
+} from "@openmapx/core/api-contracts";
 import { useState } from "react";
 import {
-  type ServiceCredentialApplyResult,
-  type ServiceCredentialStatus,
   useDeleteServiceCredential,
   useServiceCredentials,
   useSetServiceCredential,
 } from "@/hooks/useServices";
+import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
+import { useActivityClient } from "../activity/activityQueries";
 import { CredentialSetupGuide } from "../integrations/CredentialSetupGuide";
 import { useAdminToast } from "../shared/AdminToast";
 
-function applyToast(result: ServiceCredentialApplyResult): {
+function applyToast(result: AdminServiceCredentialChanged): {
   message: string;
   severity: "success" | "info";
 } {
-  if (result.needsRender) {
+  if ("needsRender" in result && result.needsRender) {
     return {
       message: "Saved. Render and apply the service on the host (no Docker host-control).",
       severity: "info",
     };
   }
-  return { message: "Saved — applying the service credentials…", severity: "success" };
+  return { message: "Saved — service credential application queued.", severity: "success" };
 }
 
 export function ServiceCredentials({ serviceId }: { serviceId: string }) {
+  const { apiUrl } = useActivityClient();
+  return <ServiceCredentialsView key={JSON.stringify([apiUrl, serviceId])} serviceId={serviceId} />;
+}
+
+function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
+  const { client } = useActivityClient();
   const query = useServiceCredentials(serviceId);
   const setCred = useSetServiceCredential(serviceId);
   const deleteCred = useDeleteServiceCredential(serviceId);
   const showToast = useAdminToast();
-  const [editing, setEditing] = useState<ServiceCredentialStatus | null>(null);
+  const [editing, setEditing] = useState<AdminServiceCredential | null>(null);
   const [value, setValue] = useState("");
+  const [dialogVersion, setDialogVersion] = useState(0);
+  const owner = useAdminMutationOwner(
+    client,
+    JSON.stringify([serviceId, editing?.key, dialogVersion]),
+  );
 
   if (query.isLoading) {
     return (
@@ -73,23 +88,29 @@ export function ServiceCredentials({ serviceId }: { serviceId: string }) {
 
   async function handleSave() {
     if (!editing) return;
+    const execution = owner;
     try {
       const result = await setCred.mutateAsync({ key: editing.key, value });
+      if (!execution.active) return;
       const { message, severity } = applyToast(result);
       showToast(message, severity);
       setEditing(null);
       setValue("");
     } catch (err) {
+      if (!execution.active) return;
       showToast(err instanceof Error ? err.message : "Failed to save credential", "error");
     }
   }
 
   async function handleDelete(key: string) {
+    const execution = owner;
     try {
       const result = await deleteCred.mutateAsync(key);
+      if (!execution.active) return;
       const { message, severity } = applyToast(result);
       showToast(message, severity);
     } catch (err) {
+      if (!execution.active) return;
       showToast(err instanceof Error ? err.message : "Failed to remove credential", "error");
     }
   }
@@ -163,6 +184,8 @@ export function ServiceCredentials({ serviceId }: { serviceId: string }) {
                     variant="contained"
                     disabled={!secretsConfigured}
                     onClick={() => {
+                      setCred.reset();
+                      setDialogVersion((v) => v + 1);
                       setEditing(cred);
                       setValue("");
                     }}

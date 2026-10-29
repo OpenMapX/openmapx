@@ -1,3 +1,7 @@
+import {
+  type ContributingRecord,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { LngLat } from "../types/geometry";
 import type {
   LocalizedText,
@@ -17,7 +21,7 @@ import {
 } from "./routeMatcher";
 
 /** A road-condition event projected onto the active route as an approach alert. */
-export interface IncidentAlert extends RoadAlert {
+export interface IncidentAlert extends RoadAlert, ContributingRecord {
   type: "traffic_incident";
   /** Registry kind and type of the situation. */
   kind: string;
@@ -46,22 +50,23 @@ const SEVERITY_APPROACH: Record<
   major: { leadSec: 20, minM: 400, maxM: 1500 },
   moderate: { leadSec: 14, minM: 250, maxM: 1000 },
   minor: { leadSec: 10, minM: 150, maxM: 600 },
+  none: { leadSec: 10, minM: 150, maxM: 600 },
   unknown: { leadSec: 12, minM: 200, maxM: 800 },
 };
 
-/** The delay a situation's delay effect in force at `at` reports, in seconds. */
-function delaySecondsOf(event: RoadConditionEvent, at: Date): number | undefined {
+/** The delay a situation's delay effect in force at `at`, judged at `clock`, reports, in seconds. */
+function delaySecondsOf(event: RoadConditionEvent, at: Date, clock: Date): number | undefined {
   for (const effect of event.effects) {
     if (effect.kind !== "delay" || effect.delay?.unit !== "s") continue;
-    if (effectInForceAt(event, effect, at)) return effect.delay.value;
+    if (effectInForceAt(event, effect, at, clock)) return effect.delay.value;
   }
   return undefined;
 }
 
-/** Whether an effect of the situation in force at `at` closes the road to cars. */
-function closesRoadAt(event: RoadConditionEvent, at: Date): boolean {
+/** Whether an effect of the situation in force at `at`, judged at `clock`, closes the road to cars. */
+function closesRoadAt(event: RoadConditionEvent, at: Date, clock: Date): boolean {
   return event.effects.some(
-    (effect) => closesRoadForCars(effect) && effectInForceAt(event, effect, at),
+    (effect) => closesRoadForCars(effect) && effectInForceAt(event, effect, at, clock),
   );
 }
 
@@ -84,6 +89,12 @@ export interface ProjectEventsOptions {
   routeMatcher?: PreparedRouteMatcher;
   /** The instant a situation's effects are evaluated at; default now. */
   now?: Date;
+  /**
+   * The wall clock a planned start is weighed against: an effect announced
+   * for later counts at an evaluation instant inside its window while its
+   * start is still ahead of this. Default the present.
+   */
+  clock?: Date;
 }
 
 const DEFAULT_CORRIDOR_M = 20;
@@ -395,6 +406,7 @@ export function projectEventsToRoute(
   const matcher = routeMatcherFor(routeGeometry, opts.routeMatcher);
   const stepMatchers = prepareStepMatchers(opts.routeSteps);
   const now = opts.now ?? new Date();
+  const clock = opts.clock ?? new Date();
 
   const out: IncidentAlert[] = [];
   for (const event of events) {
@@ -424,9 +436,12 @@ export function projectEventsToRoute(
             tolerance,
           );
     if (!candidate) continue;
-    const delay = delaySecondsOf(event, now);
+    const delay = delaySecondsOf(event, now, clock);
     out.push({
       id: event.id,
+      ...(event.contributors === undefined
+        ? {}
+        : { contributors: snapshotContributors(event.contributors) }),
       type: "traffic_incident",
       coord: candidate.coord,
       alongMeters: candidate.alongMeters,
@@ -437,7 +452,7 @@ export function projectEventsToRoute(
       ...(event.headline ? { headline: event.headline } : {}),
       ...(event.groupId ? { groupId: event.groupId } : {}),
       ...(delay !== undefined ? { delaySeconds: delay } : {}),
-      closesRoad: closesRoadAt(event, now),
+      closesRoad: closesRoadAt(event, now, clock),
       geometry: event.geometry,
       approach: SEVERITY_APPROACH[event.severity.label],
     });

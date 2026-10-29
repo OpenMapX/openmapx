@@ -15,12 +15,18 @@
  * Adding a workspace package is a repo-level act with obligations in every
  * baking Dockerfile, and it belongs to no single feature task.
  *
- * The data-manager image does not bake `integrations/`; it is held to its own
- * dependency closure the same way, since it runs workspace source under tsx.
+ * The data-manager, ops-agent and transitous-runner images run a bundle of
+ * their code instead (scripts/build-runtime-bundles.mjs). Their installs must
+ * stage their manifest closure, so the bundle's pinned npm dependencies are
+ * installed. Their bundles must build, their runners must not copy workspace
+ * source or the whole install, and the planner relies on the runner reaching
+ * the stage named `bundle`.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildRuntimeBundle, RUNTIME_BUNDLES } from "./build-runtime-bundles.mjs";
+import { coversPath, dockerInputs, dockerStages, stageInputs } from "./docker-inputs.mjs";
 
 const HERE = typeof __dirname !== "undefined" ? __dirname : dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
@@ -29,42 +35,53 @@ const read = (rel: string): string => readFileSync(join(ROOT, rel), "utf-8");
 const readJson = (rel: string): { name?: string; dependencies?: Record<string, string> } =>
   JSON.parse(read(rel));
 
-/**
- * Extracts the set of `packages/<name>` source directories a Dockerfile's
- * `runner` stage bakes in, i.e. lines shaped `COPY packages/<name>/ <dest>`
- * (source copies, not `--from=` node_modules copies or package.json-only
- * copies used by the deps/builder stages).
- */
-function runnerPackages(relPath: string): Set<string> {
+function runnerSection(relPath: string): string {
   const content = read(relPath);
   const runnerIdx = content.search(/^FROM\s+\S+\s+AS\s+runner\s*$/im);
   if (runnerIdx === -1) {
     throw new Error(`${relPath}: could not find a "FROM ... AS runner" stage`);
   }
-  const runnerSection = content.slice(runnerIdx);
+  return content.slice(runnerIdx);
+}
+
+const ALL_PACKAGES = readdirSync(join(ROOT, "packages"));
+
+/**
+ * The `packages/<name>` directories a set of Dockerfile instructions copies
+ * from the build context, read with the release planner's COPY parser (which
+ * understands flags, `--parents`, multiple sources and globs). A copy of the
+ * whole `packages/` directory, or syntax the parser widens to the context,
+ * counts as every package.
+ */
+function copiedPackages(instructions: string, file: (name: string) => string): Set<string> {
   const pkgs = new Set<string>();
-  const lineRegex = /^COPY\s+packages\/([a-z0-9-]+)\/\s+\S+\s*$/gm;
-  for (const match of runnerSection.matchAll(lineRegex)) {
-    const name = match[1];
-    if (name) pkgs.add(name);
+  for (const input of dockerInputs(instructions, ".") as string[]) {
+    if (input === "." || input === "packages") {
+      for (const name of ALL_PACKAGES) pkgs.add(name);
+      continue;
+    }
+    for (const name of ALL_PACKAGES) {
+      if (coversPath([input], `packages/${name}/${file(name)}`)) pkgs.add(name);
+    }
   }
   return pkgs;
 }
 
 /**
- * Extracts the `packages/<name>` set a Dockerfile stages a `package.json` for,
- * i.e. lines shaped `COPY packages/<name>/package.json <dest>`. These are what
- * `pnpm install --frozen-lockfile` needs present to resolve the workspace link;
- * without one the install fails outright, before any runtime concern.
+ * The `packages/<name>` source directories a Dockerfile's `runner` stage bakes
+ * in (source copies, not `--from=` node_modules copies).
+ */
+function runnerPackages(relPath: string): Set<string> {
+  return copiedPackages(runnerSection(relPath), () => "src/index.ts");
+}
+
+/**
+ * The `packages/<name>` set a Dockerfile stages a `package.json` for. These are
+ * what `pnpm install --frozen-lockfile` needs present to resolve the workspace
+ * link; without one the install fails outright, before any runtime concern.
  */
 function manifestPackages(relPath: string): Set<string> {
-  const pkgs = new Set<string>();
-  const lineRegex = /^COPY\s+packages\/([a-z0-9-]+)\/package\.json\s+\S+\s*$/gm;
-  for (const match of read(relPath).matchAll(lineRegex)) {
-    const name = match[1];
-    if (name) pkgs.add(name);
-  }
-  return pkgs;
+  return copiedPackages(read(relPath), () => "package.json");
 }
 
 /** Maps workspace package name (`@openmapx/core`) to its directory (`core`). */
@@ -127,20 +144,35 @@ const integrationClosure = requiredPackages(integrationDependencies());
 
 /**
  * Every image checked, with the closure it must stage: the images that bake
- * `integrations/` need the integrations' closure, the data-manager image its
- * own. `stagesSource` marks the ones whose runner imports workspace code under
- * tsx and therefore needs the package *source*, not just its manifest —
- * `apps/web` does not, because Next's standalone output bundles workspace
- * packages at build time.
+ * `integrations/` need the integrations' closure, each bundled image its own.
+ * `stagesSource` marks the ones whose runner imports workspace code under tsx
+ * and therefore needs the package *source*, not just its manifest — `apps/web`
+ * and the bundled images do not, because their builds bundle workspace code.
  */
 const IMAGES: { path: string; stagesSource: boolean; required: Set<string> }[] = [
   { path: "apps/api/Dockerfile", stagesSource: true, required: integrationClosure },
   { path: "apps/web/Dockerfile", stagesSource: false, required: integrationClosure },
   {
     path: "services/data-manager/Dockerfile",
-    stagesSource: true,
+    stagesSource: false,
     required: requiredPackages(
       Object.keys(readJson("services/data-manager/package.json").dependencies ?? {}),
+    ),
+  },
+  {
+    path: "apps/ops-agent/Dockerfile",
+    stagesSource: false,
+    // The agent's image bundles its fixed CLI, so it installs the CLI's closure too.
+    required: requiredPackages([
+      ...Object.keys(readJson("apps/ops-agent/package.json").dependencies ?? {}),
+      "@openmapx/cli",
+    ]),
+  },
+  {
+    path: "apps/transitous-runner/Dockerfile",
+    stagesSource: false,
+    required: requiredPackages(
+      Object.keys(readJson("apps/transitous-runner/package.json").dependencies ?? {}),
     ),
   },
 ];
@@ -182,16 +214,93 @@ for (const { path: dockerfile, stagesSource, required } of IMAGES) {
   }
 }
 
-if (completenessErrors.length > 0) {
-  console.error(
-    `✗ Workspace packages an image's code reaches are missing from its build:\n\n` +
-      `${completenessErrors.map((e) => `  • ${e}`).join("\n\n")}\n`,
-  );
-  process.exit(1);
+/** The Dockerfile of each bundled image, by bundle name. */
+const BUNDLED_DOCKERFILES: Record<string, string> = {
+  "data-manager": "services/data-manager/Dockerfile",
+  "ops-agent": "apps/ops-agent/Dockerfile",
+  "transitous-runner": "apps/transitous-runner/Dockerfile",
+};
+const SOURCE_PREFIXES = [
+  /^packages\//,
+  /^apps\/[^/]+\/src(?:\/|$)/,
+  /^services\/[^/]+\/src(?:\/|$)/,
+  /^integrations\//,
+];
+
+async function checkBundledImages(): Promise<void> {
+  const bundled = Object.keys(RUNTIME_BUNDLES).sort();
+  if (JSON.stringify(Object.keys(BUNDLED_DOCKERFILES).sort()) !== JSON.stringify(bundled)) {
+    completenessErrors.push(
+      `BUNDLED_DOCKERFILES must name the Dockerfile of every runtime bundle: ${bundled.join(", ")}.`,
+    );
+  }
+  for (const dockerfile of [
+    "apps/api/Dockerfile",
+    "apps/web/Dockerfile",
+    ...Object.values(BUNDLED_DOCKERFILES),
+  ]) {
+    const hasBundleStage = dockerStages(read(dockerfile)).some((stage) => stage.name === "bundle");
+    if (hasBundleStage && !Object.values(BUNDLED_DOCKERFILES).includes(dockerfile)) {
+      completenessErrors.push(`${dockerfile} has a bundle stage but no runtime bundle definition.`);
+    }
+  }
+  for (const [image, dockerfile] of Object.entries(BUNDLED_DOCKERFILES)) {
+    const content = read(dockerfile);
+    if (!stageInputs(content, ".", "bundle").reachesReplaced) {
+      completenessErrors.push(
+        `${dockerfile}: the runner must be built from a stage named "bundle".`,
+      );
+    }
+    const copied = (dockerInputs(runnerSection(dockerfile), ".") as string[]).filter(
+      (input) => input === "." || SOURCE_PREFIXES.some((prefix) => prefix.test(input)),
+    );
+    if (copied.length > 0) {
+      completenessErrors.push(
+        `${dockerfile}'s runner copies workspace source (${copied.join(", ")}); a bundled image ` +
+          "runs its bundle, so the copy only makes source changes rebuild the image.",
+      );
+    }
+    if (/^\s*COPY\s[^\n]*--from=(?:prod-deps|deps)\s/im.test(runnerSection(dockerfile))) {
+      completenessErrors.push(
+        `${dockerfile}'s runner copies the whole dependency install; copy the output of ` +
+          "scripts/copy-runtime-packages.mjs, which keeps only the packages its bundles load.",
+      );
+    }
+    let bundle: Awaited<ReturnType<typeof buildRuntimeBundle>>;
+    try {
+      bundle = await buildRuntimeBundle(ROOT, image);
+    } catch (error) {
+      completenessErrors.push(error instanceof Error ? error.message : String(error));
+      continue;
+    }
+    // The bundle stage builds from a partial checkout: it must copy every file
+    // the bundle reads, or the release build fails after merge.
+    const staged = stageInputs(content, ".", undefined, "bundle").inputs as string[];
+    const unstaged = bundle.sources.filter((file) => !coversPath(staged, file));
+    if (unstaged.length > 0) {
+      completenessErrors.push(
+        `${dockerfile}'s bundle stage never copies files its bundle reads: ` +
+          `${unstaged.slice(0, 8).join(", ")}${unstaged.length > 8 ? ` (+${unstaged.length - 8} more)` : ""}`,
+      );
+    }
+  }
 }
 
-console.log(
-  `✓ Dockerfile workspace packages complete — ${IMAGES.map(
-    (image) => `${image.path}: ${image.required.size}`,
-  ).join(", ")} packages staged.`,
-);
+async function report(): Promise<void> {
+  await checkBundledImages();
+  if (completenessErrors.length > 0) {
+    console.error(
+      `✗ Workspace packages an image's code reaches are missing from its build:\n\n` +
+        `${completenessErrors.map((e) => `  • ${e}`).join("\n\n")}\n`,
+    );
+    process.exit(1);
+  }
+  console.log(
+    `✓ Dockerfile workspace packages complete — ${IMAGES.map(
+      (image) => `${image.path}: ${image.required.size}`,
+    ).join(", ")} packages staged; bundles build for ${Object.keys(RUNTIME_BUNDLES).join(", ")}.`,
+  );
+}
+
+// No top-level await: this script is compiled as CommonJS.
+void report();

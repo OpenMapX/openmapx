@@ -1,9 +1,87 @@
+import { personalTimelineDayV1Schema } from "@openmapx/core";
 import { describe, expect, it } from "vitest";
 import { timelineDayFixture } from "../__fixtures__/timeline-day";
 import { tracksPageFixture } from "../__fixtures__/tracks-page";
 import { normalizeDawarichDay } from "../normalize";
 
 describe("normalizeDawarichDay", () => {
+  it.each([
+    {},
+    { trackFetchFailed: true },
+    { tracks: tracksPageFixture, acceptedPartialTrackPageLimit: true },
+    { tracks: tracksPageFixture },
+  ])("produces application-wire data accepted without changing partial geometry", (options) => {
+    const output = normalizeDawarichDay({
+      day: timelineDayFixture,
+      selectedDate: "2026-01-02",
+      timeZone: "Etc/UTC",
+      distanceUnit: "km",
+      ...options,
+    });
+    expect(personalTimelineDayV1Schema.parse(output)).toEqual(output);
+  });
+
+  it("preserves optional signed metrics, continued journeys and elevation dimensions", () => {
+    const output = normalizeDawarichDay({
+      day: {
+        ...timelineDayFixture,
+        entries: timelineDayFixture.entries.map((entry) =>
+          entry.type === "visit"
+            ? { ...entry, place: null, name: null, status: null }
+            : {
+                ...entry,
+                continuation_of_date: "2026-01-01",
+                distance: -1,
+                avg_speed: -2,
+                speed_unit: "",
+                elevation_gain: -3,
+                elevation_loss: -4,
+                day_distance: -5,
+                day_duration: 1,
+              },
+        ),
+      },
+      selectedDate: "2026-01-02",
+      timeZone: "Etc/UTC",
+      distanceUnit: "km",
+      tracks: {
+        ...tracksPageFixture,
+        features: tracksPageFixture.features.map((feature) => ({
+          ...feature,
+          geometry: {
+            ...feature.geometry,
+            coordinates: [
+              [12.4, 45.7, -3],
+              [12.5, 45.8, 4, 5],
+            ],
+          },
+        })),
+      },
+    });
+    const parsed = personalTimelineDayV1Schema.parse(output);
+    expect(parsed).toEqual(output);
+    expect(parsed.entries[1]).toMatchObject({
+      continuationOfDate: "2026-01-01",
+      distance: -1,
+      dayDurationSeconds: 1,
+    });
+    expect(parsed.map.tracks.features[0].geometry.coordinates[1]).toEqual([12.5, 45.8, 4, 5]);
+  });
+
+  it("accepts a complete empty normalized day", () => {
+    const output = normalizeDawarichDay({
+      day: { ...timelineDayFixture, entries: [], bounds: null },
+      selectedDate: "2026-01-02",
+      timeZone: "Etc/UTC",
+      distanceUnit: "km",
+    });
+    expect(personalTimelineDayV1Schema.parse(output)).toEqual(output);
+    expect(output.map).toEqual({
+      tracks: { type: "FeatureCollection", features: [] },
+      visits: { type: "FeatureCollection", features: [] },
+    });
+  });
+
   it("keeps visit minutes and journey seconds distinct while sorting chronologically", () => {
     const dayWithAdditiveField = { ...timelineDayFixture, future_entry_field: true };
     const result = normalizeDawarichDay({

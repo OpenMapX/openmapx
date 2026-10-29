@@ -1,7 +1,9 @@
 import {
   chmodSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   renameSync,
   rmSync,
   symlinkSync,
@@ -9,7 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { services } from "@openmapx/core/server";
+import { services } from "@openmapx/core/server";
 import { afterEach, describe, expect, it } from "vitest";
 import { createTrustedConfigurationAuthorityLoader } from "./trusted-configuration-authority";
 
@@ -37,35 +39,93 @@ function fixture(): string {
   const root = mkdtempSync(join(tmpdir(), "openmapx-live-authority-"));
   roots.push(root);
   chmodSync(root, 0o755);
-  mkdirSync(join(root, "services", ".community"), { recursive: true, mode: 0o755 });
-  mkdirSync(join(root, "custom_integrations"), { mode: 0o755 });
+  mkdirSync(join(root, "infra", "docker", "state", "ops-agent", "community"), {
+    recursive: true,
+    mode: 0o755,
+  });
+  mkdirSync(join(root, "infra", "docker", "state", "ops-agent", "custom-integrations"), {
+    recursive: true,
+    mode: 0o755,
+  });
   return root;
 }
 
-function installService(root: string): string {
-  const directory = join(root, "services", ".community", "0123456789abcdef", "services", "live");
-  mkdirSync(directory, { recursive: true, mode: 0o755 });
+const REPOSITORY = "0123456789abcdef";
+
+function serviceManifest(id = "community-live"): string {
+  return JSON.stringify({
+    id,
+    name: "Community Live",
+    version: "1.0.0",
+    quality: "community",
+    container: {
+      image: `registry.example.test/${id}`,
+      tag: "1.0.0",
+      digest: `sha256:${"a".repeat(64)}`,
+    },
+    configSchema: { type: "object", properties: { region: { enum: ["eu"] } } },
+  });
+}
+
+/** What the agent's record holds once it has published `paths`. */
+function writeRecord(root: string, paths: string[]): void {
+  const repository = join(root, "infra", "docker", "state", "ops-agent", "community", REPOSITORY);
   writeFileSync(
-    join(directory, "service.json"),
+    join(
+      root,
+      "infra",
+      "docker",
+      "state",
+      "ops-agent",
+      "community",
+      services.communityRecordFileName(REPOSITORY),
+    ),
     JSON.stringify({
-      id: "community-live",
-      name: "Community Live",
-      version: "1.0.0",
-      quality: "community",
-      container: {
-        image: "registry.example.test/community-live",
-        tag: "1.0.0",
-        digest: `sha256:${"a".repeat(64)}`,
-      },
-      configSchema: { type: "object", properties: { region: { enum: ["eu"] } } },
+      version: services.COMMUNITY_RECORD_VERSION,
+      repository: REPOSITORY,
+      url: "https://example.test/live.git",
+      commit: "c".repeat(40),
+      extensionId: "live-extension",
+      manifests: paths.map((path) => ({
+        path,
+        sha256: services.manifestSha256(readFileSync(join(repository, path, "service.json"))),
+      })),
+      pending: null,
     }),
     { mode: 0o644 },
   );
+}
+
+/** A repository installed and recorded the way the agent publishes one. */
+function installService(root: string): string {
+  const directory = join(
+    root,
+    "infra",
+    "docker",
+    "state",
+    "ops-agent",
+    "community",
+    REPOSITORY,
+    "services",
+    "live",
+  );
+  mkdirSync(directory, { recursive: true, mode: 0o755 });
+  writeFileSync(join(directory, "service.json"), serviceManifest(), { mode: 0o644 });
+  writeRecord(root, ["services/live"]);
   return directory;
 }
 
+/** An integration installed and recorded the way the agent installs one. */
 function installIntegration(root: string, allowed = "eu"): string {
-  const directory = join(root, "custom_integrations", "integration-live");
+  const directory = join(
+    root,
+    "infra",
+    "docker",
+    "state",
+    "ops-agent",
+    "custom-integrations",
+    "integration-live",
+  );
   mkdirSync(directory, { recursive: true, mode: 0o755 });
   writeFileSync(
     join(directory, "manifest.json"),
@@ -74,6 +134,27 @@ function installIntegration(root: string, allowed = "eu"): string {
       configSchema: { type: "object", properties: { region: { enum: [allowed] } } },
     }),
     { mode: 0o644 },
+  );
+  const records = services.integrationRecordsDirectory(join(root, "infra", "docker"));
+  mkdirSync(records, { recursive: true, mode: 0o700 });
+  writeFileSync(
+    join(records, "integration-live.json"),
+    JSON.stringify({
+      version: services.INTEGRATION_RECORD_VERSION,
+      integrationId: "integration-live",
+      extensionId: "live-extension",
+      status: "ok",
+      reason: null,
+      source: { kind: "upload", sha256: "e".repeat(64) },
+      files: [
+        {
+          path: "manifest.json",
+          sha256: services.sha256Hex(readFileSync(join(directory, "manifest.json"))),
+        },
+      ],
+      pending: null,
+    }),
+    { mode: 0o600 },
   );
   return directory;
 }
@@ -89,7 +170,7 @@ describe("refreshed trusted configuration authority", () => {
     expect(initial.services.map((service) => service.manifest.id)).toEqual(["alpha"]);
     expect(initial.integrationSchemas).toEqual(new Map());
 
-    const serviceDirectory = installService(root);
+    installService(root);
     const integrationDirectory = installIntegration(root);
     const installed = await load();
     expect(installed.services.map((service) => service.manifest.id).sort()).toEqual([
@@ -108,15 +189,34 @@ describe("refreshed trusted configuration authority", () => {
     });
     expect(updated.revisionId).not.toBe(installed.revisionId);
 
-    rmSync(serviceDirectory, { recursive: true });
+    rmSync(join(root, "infra", "docker", "state", "ops-agent", "community", REPOSITORY), {
+      recursive: true,
+    });
+    rmSync(
+      join(
+        root,
+        "infra",
+        "docker",
+        "state",
+        "ops-agent",
+        "community",
+        services.communityRecordFileName(REPOSITORY),
+      ),
+    );
     rmSync(integrationDirectory, { recursive: true });
+    rmSync(
+      join(
+        services.integrationRecordsDirectory(join(root, "infra", "docker")),
+        "integration-live.json",
+      ),
+    );
     const removed = await load();
     expect(removed.services.map((service) => service.manifest.id)).toEqual(["alpha"]);
     expect(removed.integrationSchemas).toEqual(new Map());
     expect(removed.revisionId).not.toBe(updated.revisionId);
   });
 
-  it("rejects symbolic or writable custom authority instead of following it", async () => {
+  it("rejects symbolic service authority, and trusts integrations by bytes, not modes", async () => {
     const root = fixture();
     const serviceDirectory = installService(root);
     const load = createTrustedConfigurationAuthorityLoader({
@@ -130,56 +230,143 @@ describe("refreshed trusted configuration authority", () => {
     symlinkSync(target, manifest);
     await expect(load()).rejects.toThrow("Trusted configuration authority rejected");
 
-    rmSync(serviceDirectory, { recursive: true });
+    rmSync(join(root, "infra", "docker", "state", "ops-agent", "community", REPOSITORY), {
+      recursive: true,
+    });
+    rmSync(
+      join(
+        root,
+        "infra",
+        "docker",
+        "state",
+        "ops-agent",
+        "community",
+        services.communityRecordFileName(REPOSITORY),
+      ),
+    );
     const integrationDirectory = installIntegration(root);
     chmodSync(integrationDirectory, 0o777);
-    await expect(load()).rejects.toThrow("Trusted configuration authority rejected");
+    chmodSync(join(integrationDirectory, "manifest.json"), 0o666);
+    expect((await load()).integrationSchemas.has("integration-live")).toBe(true);
+
+    writeFileSync(
+      join(integrationDirectory, "manifest.json"),
+      JSON.stringify({ id: "integration-live", configSchema: { properties: {} } }),
+    );
+    const changed = await load();
+    expect(changed.integrationSchemas.has("integration-live")).toBe(false);
+    expect(changed.integrationProblems?.map((entry) => entry.integrationId)).toEqual([
+      "integration-live",
+    ]);
   });
 
-  it("rejects a community repository parent replaced by a symlink after validation", async () => {
+  it("rejects a recorded repository replaced by a symlink to identical bytes", async () => {
     const root = fixture();
-    const serviceDirectory = installService(root);
-    const repository = join(root, "services", ".community", "0123456789abcdef");
+    installService(root);
+    const repository = join(root, "infra", "docker", "state", "ops-agent", "community", REPOSITORY);
     const outside = mkdtempSync(join(tmpdir(), "openmapx-swapped-service-"));
     roots.push(outside);
-    const replacement = join(outside, "services", "live");
-    mkdirSync(replacement, { recursive: true, mode: 0o755 });
-    writeFileSync(
-      join(replacement, "service.json"),
-      JSON.stringify({
-        id: "escaped-service",
-        name: "Escaped",
-        version: "1.0.0",
-        quality: "community",
-        container: {
-          image: "registry.example.test/escaped",
-          digest: `sha256:${"b".repeat(64)}`,
-        },
-      }),
-      { mode: 0o644 },
-    );
-    let swapped = false;
+    mkdirSync(join(outside, "services", "live"), { recursive: true });
+    writeFileSync(join(outside, "services", "live", "service.json"), serviceManifest());
+    renameSync(repository, `${repository}.original`);
+    symlinkSync(outside, repository);
     const load = createTrustedConfigurationAuthorityLoader({
       rootDir: root,
       builtInServices: [builtIn()],
-      hooks: {
-        beforeManifestOpen: (kind) => {
-          if (kind !== "service" || swapped) return;
-          swapped = true;
-          renameSync(repository, `${repository}.original`);
-          symlinkSync(outside, repository);
-        },
-      },
     });
-
     await expect(load()).rejects.toThrow("Trusted configuration authority rejected");
-    expect(serviceDirectory).toContain("services/live");
   });
 
-  it("rejects an integration parent replaced by a symlink after validation", async () => {
+  it("loads community services by their recorded digests, not by file permissions", async () => {
+    const root = fixture();
+    const serviceDirectory = installService(root);
+    const load = createTrustedConfigurationAuthorityLoader({
+      rootDir: root,
+      builtInServices: [builtIn()],
+    });
+    // Group-writable files and directories; the digests still hold.
+    for (const path of [
+      root,
+      join(root, "infra", "docker", "state", "ops-agent", "community"),
+      join(root, "infra", "docker", "state", "ops-agent", "community", REPOSITORY),
+      serviceDirectory,
+    ]) {
+      chmodSync(path, 0o775);
+    }
+    chmodSync(join(serviceDirectory, "service.json"), 0o664);
+    expect((await load()).services.map((service) => service.manifest.id).sort()).toEqual([
+      "alpha",
+      "community-live",
+    ]);
+
+    // A manifest the record does not list, and a repository without a record,
+    // are never loaded.
+    mkdirSync(join(serviceDirectory, "..", "extra"));
+    writeFileSync(join(serviceDirectory, "..", "extra", "service.json"), serviceManifest("extra"));
+    mkdirSync(join(root, "infra", "docker", "state", "ops-agent", "community", "fedcba9876543210"));
+    writeFileSync(
+      join(
+        root,
+        "infra",
+        "docker",
+        "state",
+        "ops-agent",
+        "community",
+        "fedcba9876543210",
+        "service.json",
+      ),
+      serviceManifest("unrecorded"),
+    );
+    expect((await load()).services.map((service) => service.manifest.id).sort()).toEqual([
+      "alpha",
+      "community-live",
+    ]);
+
+    // Changed bytes fail closed, as an invalid manifest always has.
+    writeFileSync(
+      join(serviceDirectory, "service.json"),
+      serviceManifest().replace("registry.example.test", "attacker.example.test"),
+    );
+    await expect(load()).rejects.toThrow("Trusted configuration authority rejected");
+  });
+
+  it("reads repository records strictly", async () => {
+    const recordPath = (root: string) =>
+      join(
+        root,
+        "infra",
+        "docker",
+        "state",
+        "ops-agent",
+        "community",
+        services.communityRecordFileName(REPOSITORY),
+      );
+    const load = (root: string) =>
+      createTrustedConfigurationAuthorityLoader({ rootDir: root, builtInServices: [builtIn()] })();
+    for (const failure of ["writable", "symlink", "version-1", "hardlink"] as const) {
+      const root = fixture();
+      installService(root);
+      const path = recordPath(root);
+      if (failure === "writable") {
+        chmodSync(path, 0o664);
+      } else if (failure === "symlink") {
+        renameSync(path, `${path}.real`);
+        symlinkSync(`${path}.real`, path);
+      } else if (failure === "version-1") {
+        const record = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+        const { manifests: _manifests, ...legacy } = record;
+        writeFileSync(path, JSON.stringify({ ...legacy, version: 1 }));
+      } else {
+        linkSync(path, `${path}.link`);
+      }
+      await expect(load(root), failure).rejects.toThrow("Trusted configuration authority rejected");
+    }
+  });
+
+  it("leaves out an integration whose directory is swapped for other bytes during the read", async () => {
     const root = fixture();
     installIntegration(root);
-    const integrations = join(root, "custom_integrations");
+    const integrations = join(root, "infra", "docker", "state", "ops-agent", "custom-integrations");
     const outside = mkdtempSync(join(tmpdir(), "openmapx-swapped-integration-"));
     roots.push(outside);
     const replacement = join(outside, "integration-live");
@@ -206,6 +393,9 @@ describe("refreshed trusted configuration authority", () => {
       },
     });
 
-    await expect(load()).rejects.toThrow("Trusted configuration authority rejected");
+    const authority = await load();
+    expect(swapped).toBe(true);
+    expect(authority.integrationSchemas.has("integration-live")).toBe(false);
+    expect(authority.integrationProblems?.[0]?.problem).toContain("no longer matches");
   });
 });

@@ -7,11 +7,16 @@ import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import FormControl from "@mui/material/FormControl";
+import FormHelperText from "@mui/material/FormHelperText";
 import InputLabel from "@mui/material/InputLabel";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Typography from "@mui/material/Typography";
 import {
+  BIKE_HILL_PREFERENCES,
+  BIKE_PROFILES,
+  isBikeHillPreference,
+  isBikeProfile,
   TRANSIT_ACCESS_OPTIONS,
   TRANSIT_PREFER_OPTIONS,
   type TransitAccessMode,
@@ -316,6 +321,115 @@ function TransitRouteOptions() {
   );
 }
 
+function CyclingRouteOptions() {
+  const t = useTranslations("directions");
+  const {
+    bikeProfile,
+    bikeHillPreference,
+    bikePreferQuietRoads,
+    bikePreferSmoothSurfaces,
+    bikeSpeedKmh,
+    setBikeProfile,
+    setBikeHillPreference,
+    setBikePreferQuietRoads,
+    setBikePreferSmoothSurfaces,
+    setBikeSpeedKmh,
+  } = useDirectionsStore();
+  const units = useSettingsStore((state) => state.units);
+  const speeds = [
+    ...new Set([10, 15, 18, 20, 25, 30, 35, ...(bikeSpeedKmh === undefined ? [] : [bikeSpeedKmh])]),
+  ].sort((a, b) => a - b);
+  const profiles = {
+    trekking: "bikeTrekking",
+    road: "bikeRoad",
+    gravel: "bikeGravel",
+    mountain: "bikeMountain",
+  } as const;
+  const hills = {
+    default: "bikeHillsDefault",
+    avoid: "bikeHillsAvoid",
+    "strongly-avoid": "bikeHillsStronglyAvoid",
+  } as const;
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, mb: 2 }}>
+      <FormControl fullWidth size="small">
+        <InputLabel id="bike-profile-label">{t("bikeType")}</InputLabel>
+        <Select
+          labelId="bike-profile-label"
+          label={t("bikeType")}
+          value={bikeProfile}
+          onChange={(e) => {
+            if (isBikeProfile(e.target.value)) setBikeProfile(e.target.value);
+          }}
+        >
+          {BIKE_PROFILES.map((value) => (
+            <MenuItem key={value} value={value}>
+              {t(profiles[value])}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+      <FormControl fullWidth size="small">
+        <InputLabel id="cycling-hills-label">{t("bikeHillPreference")}</InputLabel>
+        <Select
+          labelId="cycling-hills-label"
+          label={t("bikeHillPreference")}
+          value={bikeHillPreference}
+          onChange={(e) => {
+            if (isBikeHillPreference(e.target.value)) setBikeHillPreference(e.target.value);
+          }}
+        >
+          {BIKE_HILL_PREFERENCES.map((value) => (
+            <MenuItem key={value} value={value}>
+              {t(hills[value])}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+      <FormControl fullWidth size="small">
+        <InputLabel id="cycling-speed-label" shrink>
+          {t("bikeCruisingSpeed")}
+        </InputLabel>
+        <Select<number | "">
+          labelId="cycling-speed-label"
+          label={t("bikeCruisingSpeed")}
+          value={bikeSpeedKmh ?? ""}
+          onChange={(event) =>
+            setBikeSpeedKmh(event.target.value === "" ? undefined : Number(event.target.value))
+          }
+          displayEmpty
+          slotProps={{ input: { "aria-describedby": "cycling-speed-hint" } }}
+        >
+          <MenuItem value="">{t("bikeSpeedAutomatic")}</MenuItem>
+          {speeds.map((speed) => (
+            <MenuItem key={speed} value={speed}>
+              {t(units === "imperial" ? "bikeSpeedMph" : "bikeSpeedKmh", {
+                speed: units === "imperial" ? Math.round((speed / 1.609344) * 10) / 10 : speed,
+              })}
+            </MenuItem>
+          ))}
+        </Select>
+        <FormHelperText id="cycling-speed-hint">{t("bikeSpeedHint")}</FormHelperText>
+      </FormControl>
+      <Box>
+        <CheckRow
+          label={t("bikeSmoothSurfaces")}
+          checked={bikePreferSmoothSurfaces}
+          onChange={setBikePreferSmoothSurfaces}
+        />
+        <CheckRow
+          label={t("bikeQuietRoads")}
+          checked={bikePreferQuietRoads}
+          onChange={setBikePreferQuietRoads}
+        />
+        <Typography variant="caption" color="text.secondary">
+          {t("bikePreferencesHint")}
+        </Typography>
+      </Box>
+    </Box>
+  );
+}
+
 export function RouteOptions() {
   const t = useTranslations("directions");
   const {
@@ -342,6 +456,7 @@ export function RouteOptions() {
   return (
     <Box sx={{ px: 2, pb: 1.5 }}>
       <Divider sx={{ mb: 1.5, mx: -2 }} />
+      {mode === "cycling" && <CyclingRouteOptions />}
       {isTransit ? (
         <TransitRouteOptions />
       ) : (

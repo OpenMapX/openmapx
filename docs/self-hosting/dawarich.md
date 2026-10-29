@@ -1,360 +1,243 @@
 # Managed Dawarich timeline
 
-OpenMapX can run an optional shared, multi-user [Dawarich](https://dawarich.app/)
-1.15.2 instance for timeline users. The bundle uses stock Dawarich application
-code and consists of four isolated services:
+This operator runbook complements the published
+[Dawarich setup guide](../docs/guides/dawarich.md). Use that guide for provisioning,
+user API-key connection, tracking clients, and the day viewer. This file records
+maintenance and release checks for the managed bundle; it is not evidence that
+a particular deployment passed them.
 
-- `dawarich-app` — Rails/Puma web application, 4 GiB memory limit;
-- `dawarich-sidekiq` — background worker with concurrency 3, 2 GiB limit;
-- `dawarich-postgis` — dedicated PostgreSQL 18/PostGIS 3.6, 2 GiB limit and
-  1 GiB shared memory;
-- `dawarich-redis` — dedicated Redis 7.4 queue/cache, 512 MiB limit.
-
-Selecting `dawarich-app` selects all four services and Traefik. PostgreSQL,
-Redis, and Sidekiq remain private on the Compose network. Only the app is
-published, at `https://timeline.<DOMAIN>` with TLS provided by Traefik.
-
-This service is separate from OpenMapX's own PostgreSQL and Valkey instances.
-It does not share schemas, cache keys, cookies, database credentials, or data
-volumes with the platform services.
+The current manifests select Dawarich 1.15.3 for app and worker, dedicated
+PostgreSQL 18/PostGIS 3.6, and dedicated Redis 7.4. Their combined memory ceilings
+are 8.5 GiB before OpenMapX and host overhead. App, worker, and data images are
+digest pinned. Database and Redis have no host-published ports.
 
 ## Before enabling
 
-Plan for at least 8.5 GiB of container memory plus Docker and host overhead.
-Location history and attachments grow over time, so size storage and off-host
-backups for the expected user count and import volume. The app's default
-`STORE_GEODATA=true` may send coordinates to the configured Dawarich reverse
-geocoder; review that privacy trade-off before onboarding users.
+Provide working public HTTPS origins for OpenMapX and `timeline.<DOMAIN>` (or
+the provisioned custom hostname), correct proxy routing, enough import/storage
+capacity, and a protected off-host recovery plan. Review Dawarich's default
+`STORE_GEODATA=true` and its reverse-geocoder disclosures before onboarding.
 
-Create public DNS for `timeline.<DOMAIN>` pointing to the OpenMapX host. Ports
-80 and 443 must reach Traefik so it can obtain and serve a certificate. Do not
-publish the Dawarich PostgreSQL or Redis ports.
+Verify persistence before collecting real history. In particular, compare the
+running dedicated PostGIS `PGDATA` with its actual Docker mounts: the current
+Dawarich manifest declares `/var/lib/postgresql/data`, while the platform's
+PostgreSQL 18 manifest uses `/var/lib/postgresql`. A named-volume declaration
+alone does not prove that the selected image writes its live database there.
+Resolve any mismatch and prove restart/recreation and restore behavior on a
+disposable instance before relying on it for retained data.
 
-The managed bundle also requires the Better Auth confidential OAuth client and
-the following vault-backed secrets before it can start:
-
-- a single database password, supplied to `dawarich-postgis` as
-  `POSTGRES_PASSWORD` and to the app and worker as `DATABASE_PASSWORD`;
-- the same Rails `SECRET_KEY_BASE` for the app and worker;
-- the same Better Auth `OIDC_CLIENT_SECRET` for the app and worker;
-- the non-secret OAuth client ID as `OIDC_CLIENT_ID` for the app and worker.
-
-OpenMapX renders secrets as files below `/run/secrets`; they never appear as
-literal values in generated Compose YAML. Minimal audited wrappers read those
-three Dawarich files and then execute the stock 1.15.2 web and Sidekiq
-entrypoints. Do not add plaintext environment fallbacks.
+Provisioning must supply consistent database, Rails, and OIDC vault secrets and
+the persisted confidential Better Auth client. Do not use plaintext environment
+fallbacks or generate guessed files in `infra/docker/secrets/`.
 
 ## Provision, enable, and apply
 
-Open the **Dawarich** service detail in the OpenMapX admin service catalog. In
-**Managed Dawarich setup**, optionally enter the public hostname, then select
-**Provision/reconcile**. The operation runs under a database lock, creates or
-reconciles one persisted Better Auth client, writes file-backed secrets, and
-stores non-secret service config. It is safe to retry and deliberately does not
-start containers or delete data. It must produce these exact values:
+1. Open **Admin → Services → Dawarich Timeline → Managed Dawarich setup**.
+2. Choose **Provision/reconcile** and resolve conflicts before enabling.
+3. Select `dawarich-app`; its dependencies include the complete bundle.
+4. Apply from the admin workflow for both app and Sidekiq. Newly provisioned
+   database/vault values must reach the first applied configuration generation.
+5. Verify all four services and the public OIDC flow before connecting users.
+
+Do not insert a fresh CLI render between provisioning and the first admin apply:
+the CLI preserves only the last applied generation and cannot read new database/
+vault values. After that first apply, host lifecycle commands retain the applied
+settings.
+
+Expected OIDC values:
 
 ```text
 Issuer:       https://<DOMAIN>/api/auth
 Redirect URI: https://timeline.<DOMAIN>/users/auth/openid_connect/callback
-Flow:         Authorization Code
-PKCE:         S256
+Flow:         Authorization Code with S256 PKCE
 Scopes:       openid profile email
 ```
 
-Provisioning must finish writing all vault secrets before the bundle is
-enabled. A retry reconciles the existing client; it must not create a second
-client, rotate a consistent client secret, or reveal credential material in the
-UI, response, audit event, log, metric, or generated Compose YAML. A partial or
-conflicting database/Rails secret is a blocking operator conflict, not something
-the reconciler guesses how to repair. The collapsed OIDC recovery action is only
-for an explicit rotation: it invalidates the old secret immediately and requires
-**Apply changes** on both **Dawarich Timeline** and **Dawarich Sidekiq** afterward.
-OpenMapX stores an opaque, non-secret provisioning generation in both service
-configs and compares it with the two running containers. The apply notice
-therefore survives page/API restarts and remains pending after an app-only apply;
-it clears only when both containers run the same current generation. The marker
-never contains or hashes credential material.
+A custom public hostname must produce the corresponding exact callback, with no
+`/dawarich-app` prefix. Inspect the rendered router and confirm neither data
+service has a `ports` entry. Provisioning is retryable and must not create a
+second OAuth client or rewrite consistent secrets.
 
-OIDC creation and rotation also set a raw, non-secret recovery marker on both
-consumers before Better Auth changes. Its value is not part of the public
-service schema, response payload, generated Compose environment, or container
-environment; the admin status exposes only a recovery-required boolean. It
-remains set while both vault copies are written and a fresh final provisioning
-generation is stored for both consumers; only then is it cleared. An **Apply**
-that races the rotation can therefore load only the interim generation and
-cannot satisfy readiness after rotation completes. If a write, finalization, or
-clear fails, **Apply** cannot clear recovery readiness—even if both containers
-later run a staged generation. Restore vault access and use
-**Provision/reconcile** again; OpenMapX will rotate once more because Better
-Auth intentionally does not expose a secret value that could be compared with
-the vault, synchronize both copies, store another fresh final generation, and
-clear the marker before Apply is safe.
+The generic Credentials tab marks the shared fields **Managed** and rejects
+independent mutation with `409 DAWARICH_CREDENTIAL_MANAGED`. Use the dedicated
+OIDC recovery action only for deliberate rotation. Database or Rails conflicts
+need coordinated maintenance with the whole bundle stopped.
 
-The generic **Credentials** tab reports the database, Rails, and OIDC fields as
-**Managed** and does not offer Set, Rotate, or Remove actions. Its API returns
-`409 DAWARICH_CREDENTIAL_MANAGED` for those fields, including the PostGIS
-password. This boundary prevents one service from receiving a shared credential
-without the other consumers and prevents an arbitrary OIDC value from diverging
-from Better Auth. Rotate OIDC only with the dedicated recovery action. Treat a
-database or Rails credential conflict as host-level maintenance: stop the whole
-bundle, repair the database role or affected vault rows as one coordinated
-operation, then run **Provision/reconcile** and apply both the app and Sidekiq.
-Do not use per-service credential rotation for managed Dawarich secrets.
-
-From the admin service catalog, select **Dawarich Timeline**, review the
-resource requirements, then use **Save & Apply** for both the timeline app and
-Sidekiq worker. The admin render is required after provisioning because it reads
-the service-config database and credential vault. Do not run a fresh CLI render
-between provisioning and this first admin apply: the CLI intentionally has no
-database/vault access, and renders what the last admin apply saved. After that
-apply, CLI renders keep the provisioned settings. A CLI-only selection/render
-sequence before provisioning is:
-
-```bash
-pnpm openmapx services enable dawarich-app
-pnpm openmapx compose render --domain example.org
-docker compose --env-file infra/docker/.env \
-  -f infra/docker/.trusted-config-current/docker-compose.generated.yml config --quiet
-pnpm openmapx compose up --domain example.org
-```
-
-The selection expands to the app, Sidekiq, dedicated PostGIS, dedicated Redis,
-and Traefik. Inspect the generated file before starting: its router rule must be
-``Host(`timeline.example.org`)`` with no `/dawarich-app` path prefix, and neither
-data service may have a `ports` entry.
+OIDC rotation invalidates the previous secret immediately. A non-secret recovery
+marker remains pending until both vault copies and a fresh final generation are
+written. An apply racing rotation cannot satisfy readiness with an intermediate
+generation. If provisioning or clearing the marker fails, restore vault access
+and run **Provision/reconcile** again. It can rotate again because Better Auth
+does not expose the current secret for comparison. Apply both consumers only
+after recovery clears. An app-only apply cannot clear the remaining notice.
 
 ## Authentication and the user API key
 
-Better Auth OIDC gives an already signed-in OpenMapX user single sign-on to the
-managed Dawarich web application. Dawarich still owns its own browser cookie,
-so this is not single logout; on shared devices, sign out of both applications.
+OIDC gives browser sign-in, not single logout or API authorization. Retain a
+verified local administrator until signed-out SSO, existing-session SSO, and
+explicit same-email account linking work. Sign out of both apps on shared devices.
 
-OIDC authenticates the browser only. Dawarich 1.15.2 does not authorize its API
-with the Better Auth token or Rails session. Every user must open Dawarich,
-finish OIDC registration or explicit account linking, copy their personal
-Dawarich API key from **Account settings** at `/users/edit`, and paste it into
-OpenMapX Timeline settings. (`/settings` is not a web account route in Dawarich
-1.15.2.) OpenMapX stores that key encrypted and uses it only as a Bearer token
-for read-only timeline calls. Tracking, imports, edits, and other writes go
-directly to Dawarich.
-
-The bundle keeps `ALLOW_EMAIL_PASSWORD_REGISTRATION=true` and local login
-available as a verified recovery path. Do not disable the last working local
-administrator until OIDC sign-in and account linking have been tested. An
-existing Dawarich account with the same email may require Dawarich's explicit
-linking flow.
-
-See the upstream [OIDC guide](https://dawarich.app/docs/self-hosting/configuration/oidc-authentication/),
-[API introduction](https://dawarich.app/docs/api/dawarich-api/), and the
-[Better Auth OAuth Provider documentation](https://better-auth.com/docs/plugins/oauth-provider).
+Every user copies their own key from Dawarich `/users/edit` into OpenMapX's
+personal timeline connection. The server encrypts the key and uses it as a Bearer
+token for supported read-only calls. Tracking/import writes go directly to
+Dawarich. See the upstream [OIDC guide](https://dawarich.app/docs/self-hosting/configuration/oidc-authentication/)
+and [API introduction](https://dawarich.app/docs/api/dawarich-api/).
 
 ## Health and logs
 
-Healthy startup order is PostGIS and Redis, then the web app, then Sidekiq. The
-checks are:
-
-- PostGIS: `pg_isready -U postgres -d dawarich_production`;
-- Redis: `redis-cli --raw incr ping`;
-- app: HTTP `GET /api/v1/health` on port 3000;
-- Sidekiq: `pgrep -f sidekiq`.
-
-Use the Services admin page or the CLI:
+| Service            | Manifest health probe                           |
+| ------------------ | ----------------------------------------------- |
+| `dawarich-postgis` | `pg_isready -U postgres -d dawarich_production` |
+| `dawarich-redis`   | `redis-cli --raw incr ping`                     |
+| `dawarich-app`     | `GET /api/v1/health` on internal port 3000      |
+| `dawarich-sidekiq` | `pgrep -f sidekiq`                              |
 
 ```bash
-pnpm openmapx services status dawarich-postgis
-pnpm openmapx services status dawarich-redis
-pnpm openmapx services status dawarich-app
-pnpm openmapx services status dawarich-sidekiq
+pnpm openmapx services status
 pnpm openmapx services logs dawarich-app --tail 200
 pnpm openmapx services logs dawarich-sidekiq --tail 200
 ```
 
-The app's stock entrypoint waits for PostgreSQL, runs schema and data
-migrations, runs seeds, and starts Puma. Repeating startup at the same pinned
-version is expected and migration-idempotent. The worker waits for PostgreSQL
-and then starts stock Sidekiq.
+The stock web entrypoint waits for PostgreSQL, applies schema/data migrations
+and seeds, then starts Puma. Worker startup follows the healthy app. Health
+probes alone do not establish a successful OIDC flow, working API key, import,
+or backup restore.
 
-OpenMapX considers the managed user flow available only when the exact bundle is
-installed, selected, provisioned with a validated public HTTPS origin, and the
-app is reachable. It calls Dawarich APIs through the internal
-`http://dawarich-app:3000` origin only; user links use the public HTTPS origin.
-Only the non-user `/api/v1/health` result is cached in memory, for at most 15
-seconds. Disabling or an unhealthy probe returns `TIMELINE_MANAGED_DISABLED` to
-existing users without deleting their connection.
+OpenMapX connects to the managed API only at `http://dawarich-app:3000`; user links
+use the public HTTPS origin. Managed availability requires installed, selected,
+provisioned configuration and reachable app health. Only non-user health is
+cached in memory, for at most 15 seconds. Disabling does not erase connections.
 
 ## Aggregate monitoring
 
-The internal Prometheus endpoint exports `personal_timeline_requests_total` and
-`personal_timeline_request_duration_ms`. Suggested dashboards may split only by
-the closed `mode`, `operation`, and `outcome` labels. Do not add account IDs,
-hostnames, dates, time zones, upstream messages, places, tracks, or coordinates.
-No alert threshold or SLO is defined until representative operational baseline
-data exists.
+The internal metrics `personal_timeline_requests_total` and
+`personal_timeline_request_duration_ms` use bounded mode/operation/outcome labels.
+Do not add account IDs, hostnames, dates, time zones, places, tracks, coordinates,
+or upstream messages. Establish representative operational baselines before
+choosing alert thresholds or an SLO. Check external proxy and log collectors as
+well as application logs.
 
 ## Persistence and backups
 
-Dawarich persistence uses five named volumes:
+| Named volume key               | Purpose                                          | Backup mode |
+| ------------------------------ | ------------------------------------------------ | ----------- |
+| `openmapx-dawarich-db-data`    | Dedicated database; verify actual `PGDATA` mount | `pg_dump`   |
+| `openmapx-dawarich-public`     | App public/static files                          | tar         |
+| `openmapx-dawarich-watched`    | Watched import directory                         | tar         |
+| `openmapx-dawarich-storage`    | Active Storage attachments and imports           | tar         |
+| `openmapx-dawarich-redis-data` | Transient jobs/cache                             | excluded    |
 
-| Volume                         | Purpose                                       | Backup mode |
-| ------------------------------ | --------------------------------------------- | ----------- |
-| `openmapx-dawarich-db-data`    | PostgreSQL/PostGIS location data and accounts | `pg_dump`   |
-| `openmapx-dawarich-public`     | public/static application files               | `tar`       |
-| `openmapx-dawarich-watched`    | watched import drop directory                 | `tar`       |
-| `openmapx-dawarich-storage`    | Active Storage attachments/imports            | `tar`       |
-| `openmapx-dawarich-redis-data` | transient queues and caches                   | none        |
-
-Backups record the producing service version. A valid Dawarich backup contains
-app version `1.15.2` and PostGIS version `18-3.6`. Redis is deliberately not a
-backup target: jobs and caches are transient and are rebuilt after restore.
-
-Create and copy a backup off-host before upgrades or destructive maintenance:
+A PostgreSQL logical dump can succeed even if live database storage is mounted
+incorrectly; prove persistence and restore separately. Retain OpenMapX OAuth and
+connection state, vault encryption keys, generated secrets, deployment environment,
+and required erasure-journal state through the protected recovery policy. Exclude
+private subject-export artifacts from backups.
 
 ```bash
 pnpm openmapx backup create --name dawarich-pre-upgrade
 pnpm openmapx backup list
 ```
 
-Restore only into the exact recorded Dawarich/PostGIS versions. Start an empty
-`dawarich-postgis` service first because `pg_dump` restore needs a live server,
-then restore the app and database targets:
+Use matching recorded Dawarich/PostGIS versions for a restore rehearsal. Stop
+all writers and restore both app files and database:
 
 ```bash
+pnpm openmapx services stop dawarich-sidekiq dawarich-app
 pnpm openmapx backup restore dawarich-pre-upgrade \
-  --services dawarich-app dawarich-postgis \
-  --stop-running
+  --services dawarich-app dawarich-postgis --stop-running
+pnpm openmapx services start dawarich-app dawarich-sidekiq
 ```
 
-Start the same pinned bundle, wait for all four health checks, and confirm a
-known synthetic user/point or import. A release is not approved until this
-synthetic backup/restore drill passes. Never use production location data for a
-release drill.
-
-OpenMapX's volume backup does not replace an export strategy for irreplaceable
-location history. Retain off-host backups and follow Dawarich's official
-[backup and restore guidance](https://dawarich.app/docs/self-hosting/maintenance/backup-and-restore/).
+The database container must exist for the restore workflow to start it and replay
+the dump. On a new host, prepare and apply the matching provisioned configuration
+first. Follow [Backup and restore](../docs/administration/backup-and-restore.md)
+for retention, version/provenance checks, and isolation. Verify all four services,
+sign-in, and a known synthetic point/import after restoring. Do not use real
+location data for release drills.
 
 ## Image and architecture release check
 
-| Component                  | Reviewed release                                                                                 | Reviewed OCI index / source                                                     | Native architectures tested or inspected                                                 | Support note                                                              |
-| -------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| OpenMapX                   | dependency-complete baseline `1a2d0396fb97b1957a6907ef41877f91cab640eb` plus this release change | repository source                                                               | CI targets plus staging host                                                             | Record the final release commit with acceptance evidence                  |
-| Better Auth OAuth Provider | `better-auth` and `@better-auth/oauth-provider`                                                  | exact package lock                                                              | server runtime                                                                           | One persisted confidential client; admin API only, no direct table writes |
-| Dawarich app + worker      | `freikin/dawarich:1.15.2`                                                                        | `sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d`       | linux/amd64, linux/arm64, linux/arm/v7 inspected; exact image exercised                  | Upstream Dawarich release                                                 |
-| Dedicated PostGIS          | `ghcr.io/baosystems/postgis:18-3.6`                                                              | index `sha256:4117c8beae9081e76a23a1577c64d05260a61fb0a3c212f37596054ef4c190d8` | linux/amd64 + linux/arm64 inspected; clean Dawarich schema and export fixtures exercised | Bao rebuilds weekly and explicitly provides no support                    |
-| Dedicated Redis            | `redis:7.4-alpine`                                                                               | mutable pinned release tag; re-inspect before release                           | linux/amd64 + linux/arm64 inspected                                                      | Transient queues/cache; not restored                                      |
+Read exact image references from the four `services/dawarich-*/service.json`
+files. The app and worker must share a reviewed digest and collector-compatible
+revision. PostGIS provenance is recorded in
+`services/postgis/image-provenance.json`; do not treat its old inspection date as
+fresh runtime evidence.
 
-The application manifest pins the human-readable `freikin/dawarich:1.15.2`
-tag. On 2026-09-26 its OCI index was verified as linux/amd64, linux/arm64, and
-linux/arm/v7 at digest
-`sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d`.
-The exact image exposed Docker ENTRYPOINT `bundle exec` and executable
-stock `/usr/local/bin/web-entrypoint.sh` and
-`/usr/local/bin/sidekiq-entrypoint.sh` paths.
-
-Dawarich's upstream Compose file still defaults to PostgreSQL 17/PostGIS 3.5.
-Because this bundle has no installed legacy database to migrate, OpenMapX uses
-`ghcr.io/baosystems/postgis:18-3.6` and verifies the combination by creating the
-complete 1.15.2 schema and exercising both live and restored-backup collectors.
-Bao Systems rebuilds the upstream Debian PostGIS images as multi-architecture
-images, but explicitly provides **no support** for them.
-
-On 2026-09-26 the Bao tag was a linux/amd64 + linux/arm64 index at
-`sha256:4117c8beae9081e76a23a1577c64d05260a61fb0a3c212f37596054ef4c190d8`.
-The exact arm64 image ran Dawarich's full migration set and both privacy-export
-fixtures successfully. The Redis `7.4-alpine` index was also checked for
-linux/amd64 and linux/arm64.
-
-These tags are mutable. Before every OpenMapX release, rerun:
+Before changing image pins, inspect the candidate indexes:
 
 ```bash
-docker buildx imagetools inspect freikin/dawarich:1.15.2
+docker buildx imagetools inspect freikin/dawarich:1.15.3
 docker buildx imagetools inspect ghcr.io/baosystems/postgis:18-3.6
 docker buildx imagetools inspect redis:7.4-alpine
 ```
 
-Stop the release for dependency review if the Bao digest moved, either required
-architecture disappeared, either Dawarich stock entrypoint path changed, or a
-native PostgreSQL/PostGIS smoke fails. Do not silently choose another image or
-force emulation. Re-run the full synthetic restore drill because the Bao image
-has no support guarantee. See the [Bao Systems repository](https://github.com/baosystems/docker-postgis)
-and Dawarich's [updating guide](https://dawarich.app/docs/self-hosting/updating/).
+These inspect mutable tags, while the managed manifests run pinned digests.
+Review any difference rather than silently adopting tag bytes. Require native
+linux/amd64 and linux/arm64 support, working stock web/Sidekiq entrypoints,
+native PostgreSQL/PostGIS startup, complete migrations, persistence, privacy
+collectors, and a same-version synthetic restore. Do not substitute another image
+or force emulation to bypass a failed check. Bao Systems' rebuilds have no support
+guarantee; see its [repository](https://github.com/baosystems/docker-postgis).
 
 ## Release acceptance
 
-Use synthetic data only. The release rehearsal must use two real public HTTPS
-origins (OpenMapX and `timeline.<domain>`) with trusted certificates, exact
-Traefik routing, no database/cache ports, and enough host memory for the full
-stack. Prove all of the following before release:
+Use synthetic data, two real public HTTPS origins, trusted certificates, exact
+Traefik routing, private data services, and sufficient host memory. Record the
+commit, pinned images, environment, and evidence for:
 
-1. provisioning twice creates one OAuth client and does not rewrite consistent
-   secrets;
-2. signed-out SSO, existing OpenMapX-session SSO, and the explicit same-email
-   account-link challenge all complete with PKCE and the exact callback;
-3. a synthetic day spanning a daylight-saving transition renders visits,
-   journey, bounds and track geometry after copying the key from `/users/edit`;
-4. browser Cache Storage, IndexedDB, local/session storage, OpenMapX logs, audit
-   events, metrics and Traefik access logs contain no key, synthetic history
-   marker, date, or coordinates, and the browser never calls the Dawarich API;
-5. disable/re-enable preserves the connection without repasting the key; and
-6. a same-version empty-volume restore recovers the OpenMapX OAuth/connection
-   state, Dawarich account/history, and app volumes using the preserved external
-   environment, encryption keys and ACME state.
+1. Two provisioning runs create one OAuth client and preserve consistent secrets.
+2. Signed-out and existing-session SSO complete with PKCE and the exact callback;
+   same-email linking requires its explicit challenge.
+3. A synthetic daylight-saving transition day renders summary, visits, journeys,
+   bounds, and geometry after copying the key from `/users/edit`.
+4. Browser caches/storage, application and proxy logs, audit events, and metrics
+   contain no credential or synthetic history marker, dates, or coordinates.
+   The browser never calls the Dawarich API directly.
+5. Disable/re-enable preserves the connection without repasting the key.
+6. Container recreation preserves the live database on the intended volume, and
+   an empty-volume restore recovers account/history, app files, and OpenMapX
+   OAuth/connection state using preserved recovery keys and ACME state.
 
-A local trusted-CA or tunnel rehearsal does not replace the public DNS/TLS gate.
-The bilingual privacy/legal text also requires explicit human/project-owner
-approval. Stop release on image drift, automatic same-email linking, credential
-or timeline leakage, restore loss, failed automated legal gates, or absent legal
-approval.
+A local trusted-CA or tunnel exercise does not replace public DNS/TLS acceptance.
+The bilingual privacy/legal text also requires human/project-owner approval.
+Stop release on missing acceptance, unsupported image drift, automatic same-email
+linking, secret/history leakage, persistence or restore loss, or failed legal
+checks. These are release conditions, not claims of checks run by editing docs.
 
 ## Upgrades
 
-Never auto-update to `latest`. Read the target release notes and Dawarich
-updating guide, then test the app and worker together against the existing API
-contract, OIDC flow, migrations, health checks, and a full synthetic restore.
+Do not change the bundle to `latest`. Read the target release notes and
+[Dawarich updating guide](https://dawarich.app/docs/self-hosting/updating/), then:
 
-1. Wait for active Sidekiq jobs to finish.
-2. Create and copy an off-host backup.
-3. Verify the new app and PostGIS image indexes and native architectures.
-4. Run a disposable upgrade and restore rehearsal.
-5. Update the app and worker tags together and update the documented restore
-   version.
-6. Apply the manifests and watch app/worker logs through health.
+1. Let active worker jobs finish and create a protected off-host backup.
+2. Verify candidate images and native architectures.
+3. Rehearse migration, OIDC, API compatibility, persistence, collector behavior,
+   and restore on disposable synthetic data.
+4. Update app/worker pins together and review their restore/collector contract.
+5. Apply in a maintenance window and verify logs, health, sign-in, and a day read.
 
-The [Dawarich 1.15.2 release](https://github.com/Freika/dawarich/releases/tag/1.15.2)
-is the compatibility baseline for this bundle.
+The current compatibility baseline is
+[Dawarich 1.15.3](https://github.com/Freika/dawarich/releases/tag/1.15.3).
 
 ## Disable and purge
 
-Disabling is reversible. Stop the four Dawarich services, remove
-`dawarich-app` from the root selection, and re-render. This preserves all five
-volumes, the Better Auth OAuth client, and users' OpenMapX timeline connection
-records:
+Stop before removing the root from the rendered stack:
 
 ```bash
 pnpm openmapx services stop \
   dawarich-sidekiq dawarich-app dawarich-redis dawarich-postgis
 pnpm openmapx services disable dawarich-app
 pnpm openmapx compose render
+pnpm openmapx services selected
 ```
 
-Re-enabling the root service reconnects the preserved data after normal key and
-health validation. Disabling does not revoke the OAuth client and does not
-promise that Dawarich browser sessions have ended.
+Remove any separately selected Dawarich roots too. This preserves volumes,
+OAuth client, and connection records. Re-enabling requires normal configuration
+and health checks; disabling does not revoke existing Dawarich browser sessions.
 
-Purge is a separate destructive operation. First create and verify a backup,
-disable the bundle, and obtain an explicit second confirmation naming the
-deployment. Use `docker compose config --volumes` to resolve the Compose project
-prefix, then delete **only** the resolved forms of these five keys:
-
-```text
-openmapx-dawarich-db-data
-openmapx-dawarich-redis-data
-openmapx-dawarich-public
-openmapx-dawarich-watched
-openmapx-dawarich-storage
-```
-
-Do not use a wildcard, do not remove platform `openmapx-pgdata` or
-`openmapx-redisdata`, and do not include the Traefik ACME volume. Volume deletion
-is permanent; connection records and the OAuth client require their own
-separately confirmed retirement flow.
+Purge is destructive. Verify a backup and explicitly confirm the deployment and
+exact volumes to delete. Inspect actual container/volume metadata before
+removing the selection; resolve Compose project prefixes and match only the five
+Dawarich volume keys above. Avoid wildcards and `compose down --volumes`.
+Never delete platform PostGIS/Redis or Traefik ACME volumes as part of this purge.
+Connection records and the OAuth client need separate confirmed retirement.

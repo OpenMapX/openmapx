@@ -1,6 +1,10 @@
+import type { AdminServiceCredentials } from "@openmapx/core/api-contracts";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ServiceCredentialsResponse } from "@/hooks/useServices";
+
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
+  useEnv: () => ({ apiUrl: "http://admin.test" }),
+}));
 
 const setCredential = vi.fn();
 const deleteCredential = vi.fn();
@@ -8,7 +12,7 @@ const showToast = vi.fn();
 const query: {
   isLoading: boolean;
   isError: boolean;
-  data: ServiceCredentialsResponse;
+  data: AdminServiceCredentials;
 } = {
   isLoading: false,
   isError: false,
@@ -19,6 +23,7 @@ const query: {
       {
         key: "OIDC_CLIENT_SECRET",
         title: "OpenMapX OIDC client secret",
+        updatedBy: null,
         source: "vault" as const,
         managedBy: "dawarich-provisioning" as const,
       },
@@ -28,7 +33,7 @@ const query: {
 
 vi.mock("@/hooks/useServices", () => ({
   useServiceCredentials: () => query,
-  useSetServiceCredential: () => ({ mutateAsync: setCredential, isPending: false }),
+  useSetServiceCredential: () => ({ mutateAsync: setCredential, isPending: false, reset: vi.fn() }),
   useDeleteServiceCredential: () => ({ mutateAsync: deleteCredential, isPending: false }),
 }));
 
@@ -46,6 +51,7 @@ describe("ServiceCredentials", () => {
         {
           key: "OIDC_CLIENT_SECRET",
           title: "OpenMapX OIDC client secret",
+          updatedBy: null,
           source: "vault",
           managedBy: "dawarich-provisioning",
         },
@@ -71,6 +77,7 @@ describe("ServiceCredentials", () => {
         {
           key: "NY_511_API_KEY",
           title: "511NY API key",
+          updatedBy: null,
           source: "missing",
           managedBy: undefined,
         },

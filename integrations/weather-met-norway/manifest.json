@@ -26,15 +26,51 @@
       "sourceId": "met-norway",
       "name": "MET Norway",
       "url": "https://api.met.no/",
-      "license": "CC BY 4.0 / NLOD 2.0",
-      "licenseUrl": "https://api.met.no/doc/TermsOfService",
       "commercialUse": "yes",
       "providerCountry": "NO",
       "providerPrivacyUrl": "https://www.met.no/en/About-us/privacy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "MET Norway data",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-4.0 OR NLOD-2.0"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "MET Norway API conditions",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:met-norway",
+              "id": "LicenseRef-Service-Terms",
+              "name": "MET Norway API conditions terms",
+              "url": "https://api.met.no/doc/TermsOfService"
+            },
+            "attribution": {
+              "placement": "details",
+              "surfaces": ["content"],
+              "basis": "provider-terms",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://api.met.no/doc/TermsOfService"],
+              "reason": "Preserve creator/source/license/changes; no Yr logo or implied origin"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CC-BY-4.0 / NLOD-2.0",
+            "url": "https://api.met.no/doc/TermsOfService"
+          }
+        ]
+      }
     }
   ]
 }

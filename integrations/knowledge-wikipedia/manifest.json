@@ -41,29 +41,72 @@
       "sourceId": "wikipedia",
       "name": "Wikipedia",
       "url": "https://www.wikipedia.org/",
-      "license": "CC BY-SA 4.0 / GFDL",
-      "licenseUrl": "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://foundation.wikimedia.org/wiki/Policy:Privacy_policy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Eligible Wikipedia article text using CC route",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-SA-4.0"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "Legacy GFDL branch/GFDL-only material",
+            "license": {
+              "kind": "unknown",
+              "raw": "GFDL"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CC-BY-SA-4.0 / GFDL",
+            "url": "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use"
+          }
+        ]
+      }
     },
     {
       "sourceId": "wikimedia-commons",
       "name": "Wikimedia Commons",
       "url": "https://commons.wikimedia.org/",
-      "license": "Per-file (CC BY-SA, CC BY, or Public Domain)",
-      "licenseUrl": "https://commons.wikimedia.org/wiki/Commons:Licensing",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://foundation.wikimedia.org/wiki/Policy:Privacy_policy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "imagery",
+            "subject": "Each returned image/file and actual creator",
+            "license": {
+              "kind": "per-item",
+              "raw": "Per-file (CC BY-SA, CC BY, or Public Domain)",
+              "url": "https://commons.wikimedia.org/wiki/Commons:Licensing"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Per-file (CC BY-SA, CC BY, or Public Domain)",
+            "url": "https://commons.wikimedia.org/wiki/Commons:Licensing"
+          }
+        ]
+      }
     }
   ]
 }

@@ -29,7 +29,9 @@
         "type": "object",
         "title": "Affiliate link wrappers",
         "description": "Optional per-provider affiliate deep-link wrappers. Key = provider id (e.g. \"deliveroo\"), value = a URL template containing the literal token {url}, which is replaced with the URL-encoded destination link. Lets you plug in an Awin / Impact / Partnerize wrapper without code changes. Leave empty for plain links.",
-        "additionalProperties": { "type": "string" }
+        "additionalProperties": {
+          "type": "string"
+        }
       }
     }
   },
@@ -40,166 +42,446 @@
       "sourceId": "ubereats",
       "name": "Uber Eats",
       "url": "https://www.ubereats.com/",
-      "license": "Proprietary (deep-link + server-side exact-store lookup)",
-      "licenseUrl": "https://www.uber.com/legal/en/document/?name=general-terms-of-use&country=united-states&lang=en",
       "commercialUse": "conditional",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.uber.com/legal/privacy/",
-      "endUserExposure": "mixed"
+      "endUserExposure": "mixed",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "Uber Eats link/handoff permission",
+            "license": {
+              "kind": "unknown",
+              "raw": "Proprietary (deep-link + server-side exact-store lookup); action identity not dataset grant.",
+              "url": "https://www.uber.com/legal/en/document/?name=general-terms-of-use&country=united-states&lang=en"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://www.uber.com/legal/en/document/?name=general-terms-of-use&country=united-states&lang=en"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (deep-link + server-side exact-store lookup)",
+            "url": "https://www.uber.com/legal/en/document/?name=general-terms-of-use&country=united-states&lang=en"
+          }
+        ]
+      }
     },
     {
       "sourceId": "wolt",
       "name": "Wolt",
       "url": "https://wolt.com/",
-      "license": "Proprietary (deep-link only)",
-      "licenseUrl": "https://explore.wolt.com/terms",
       "commercialUse": "conditional",
       "providerCountry": "FI",
       "providerPrivacyUrl": "https://wolt.com/en/privacy",
-      "endUserExposure": "direct"
+      "endUserExposure": "direct",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "Wolt link/handoff permission",
+            "license": {
+              "kind": "unknown",
+              "raw": "Proprietary (deep-link only); action identity not dataset grant.",
+              "url": "https://explore.wolt.com/terms"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (deep-link only)",
+            "url": "https://explore.wolt.com/terms"
+          }
+        ]
+      }
     },
     {
       "sourceId": "lieferando",
       "name": "Lieferando",
       "url": "https://www.lieferando.de/",
-      "license": "Proprietary (deep-link only)",
-      "licenseUrl": "https://www.lieferando.de/en/terms-and-conditions",
       "commercialUse": "conditional",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.lieferando.de/en/privacy-statement",
-      "endUserExposure": "direct"
+      "endUserExposure": "direct",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "Lieferando link/handoff permission",
+            "license": {
+              "kind": "unknown",
+              "raw": "Proprietary (deep-link only); action identity not dataset grant.",
+              "url": "https://www.lieferando.de/en/terms-and-conditions"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (deep-link only)",
+            "url": "https://www.lieferando.de/en/terms-and-conditions"
+          }
+        ]
+      }
     },
     {
       "sourceId": "doordash",
       "name": "DoorDash",
       "url": "https://www.doordash.com/",
-      "license": "Proprietary (deep-link only)",
-      "licenseUrl": "https://help.doordash.com/consumers/s/terms-and-conditions-us",
       "commercialUse": "conditional",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.doordash.com/privacy/",
-      "endUserExposure": "direct"
+      "endUserExposure": "direct",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "DoorDash link/handoff permission",
+            "license": {
+              "kind": "unknown",
+              "raw": "Proprietary (deep-link only); action identity not dataset grant.",
+              "url": "https://help.doordash.com/consumers/s/terms-and-conditions-us"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (deep-link only)",
+            "url": "https://help.doordash.com/consumers/s/terms-and-conditions-us"
+          }
+        ]
+      }
     },
     {
       "sourceId": "deliveroo",
       "name": "Deliveroo",
       "url": "https://deliveroo.co.uk/",
-      "license": "Proprietary (deep-link only)",
-      "licenseUrl": "https://deliveroo.co.uk/legal",
       "commercialUse": "conditional",
       "providerCountry": "GB",
       "providerPrivacyUrl": "https://deliveroo.co.uk/privacy",
-      "endUserExposure": "direct"
+      "endUserExposure": "direct",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "Deliveroo link/handoff permission",
+            "license": {
+              "kind": "unknown",
+              "raw": "Proprietary (deep-link only); action identity not dataset grant.",
+              "url": "https://deliveroo.co.uk/legal"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (deep-link only)",
+            "url": "https://deliveroo.co.uk/legal"
+          }
+        ]
+      }
     },
     {
       "sourceId": "justeat",
       "name": "Just Eat",
       "url": "https://www.just-eat.co.uk/",
-      "license": "Proprietary (deep-link only)",
-      "licenseUrl": "https://www.just-eat.co.uk/terms-and-conditions",
       "commercialUse": "conditional",
       "providerCountry": "GB",
       "providerPrivacyUrl": "https://www.just-eat.co.uk/privacy-policy",
-      "endUserExposure": "direct"
+      "endUserExposure": "direct",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "Just Eat link/handoff permission",
+            "license": {
+              "kind": "unknown",
+              "raw": "Proprietary (deep-link only); action identity not dataset grant.",
+              "url": "https://www.just-eat.co.uk/terms-and-conditions"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (deep-link only)",
+            "url": "https://www.just-eat.co.uk/terms-and-conditions"
+          }
+        ]
+      }
     },
     {
       "sourceId": "glovo",
       "name": "Glovo",
       "url": "https://glovoapp.com/",
-      "license": "Proprietary (deep-link only)",
-      "licenseUrl": "https://glovoapp.com/docs/en/legal/terms/",
       "commercialUse": "conditional",
       "providerCountry": "ES",
       "providerPrivacyUrl": "https://glovoapp.com/docs/en/legal/privacy/",
-      "endUserExposure": "direct"
+      "endUserExposure": "direct",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "Glovo link/handoff permission",
+            "license": {
+              "kind": "unknown",
+              "raw": "Proprietary (deep-link only); action identity not dataset grant.",
+              "url": "https://glovoapp.com/docs/en/legal/terms/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (deep-link only)",
+            "url": "https://glovoapp.com/docs/en/legal/terms/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "foodpanda",
       "name": "foodpanda",
       "url": "https://www.foodpanda.com/",
-      "license": "Proprietary (deep-link only)",
-      "licenseUrl": "https://foodpanda.de/en/contents/terms-and-conditions.htm",
       "commercialUse": "conditional",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.foodpanda.com/legal/privacy",
-      "endUserExposure": "direct"
+      "endUserExposure": "direct",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "foodpanda link/handoff permission",
+            "license": {
+              "kind": "unknown",
+              "raw": "Proprietary (deep-link only); action identity not dataset grant.",
+              "url": "https://foodpanda.de/en/contents/terms-and-conditions.htm"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (deep-link only)",
+            "url": "https://foodpanda.de/en/contents/terms-and-conditions.htm"
+          }
+        ]
+      }
     },
     {
       "sourceId": "grubhub",
       "name": "Grubhub",
       "url": "https://www.grubhub.com/",
-      "license": "Proprietary (deep-link only)",
-      "licenseUrl": "https://www.grubhub.com/legal/terms-of-use",
       "commercialUse": "conditional",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.grubhub.com/legal/privacy-policy",
-      "endUserExposure": "direct"
+      "endUserExposure": "direct",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "Grubhub link/handoff permission",
+            "license": {
+              "kind": "unknown",
+              "raw": "Proprietary (deep-link only); action identity not dataset grant.",
+              "url": "https://www.grubhub.com/legal/terms-of-use"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (deep-link only)",
+            "url": "https://www.grubhub.com/legal/terms-of-use"
+          }
+        ]
+      }
     },
     {
       "sourceId": "ifood",
       "name": "iFood",
       "url": "https://www.ifood.com.br/",
-      "license": "Proprietary (deep-link only)",
-      "licenseUrl": "https://www.ifood.com.br/termos",
       "commercialUse": "conditional",
       "providerCountry": "BR",
       "providerPrivacyUrl": "https://privacidade.ifood.com.br/pt-BR/privacidade-para-quem-compra/",
-      "endUserExposure": "direct"
+      "endUserExposure": "direct",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "iFood link/handoff permission",
+            "license": {
+              "kind": "unknown",
+              "raw": "Proprietary (deep-link only); action identity not dataset grant.",
+              "url": "https://www.ifood.com.br/termos"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (deep-link only)",
+            "url": "https://www.ifood.com.br/termos"
+          }
+        ]
+      }
     },
     {
       "sourceId": "rappi",
       "name": "Rappi",
       "url": "https://www.rappi.com/",
-      "license": "Proprietary (deep-link only)",
-      "licenseUrl": "https://legal.rappi.com/colombia/terminos-y-condiciones-de-uso-de-plataforma-rappi-2/",
       "commercialUse": "conditional",
       "providerCountry": "CO",
       "providerPrivacyUrl": "https://legal.rappi.com.co/colombia/politica-de-proteccion-y-tratamiento-de-datos-personales-rappi-s-a-s/",
-      "endUserExposure": "direct"
+      "endUserExposure": "direct",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "Rappi link/handoff permission",
+            "license": {
+              "kind": "unknown",
+              "raw": "Proprietary (deep-link only); action identity not dataset grant.",
+              "url": "https://legal.rappi.com/colombia/terminos-y-condiciones-de-uso-de-plataforma-rappi-2/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (deep-link only)",
+            "url": "https://legal.rappi.com/colombia/terminos-y-condiciones-de-uso-de-plataforma-rappi-2/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "pedidosya",
       "name": "PedidosYa",
       "url": "https://www.pedidosya.com/",
-      "license": "Proprietary (deep-link only)",
-      "licenseUrl": "https://www.pedidosya.com.uy/about/terminos-condiciones",
       "commercialUse": "conditional",
       "providerCountry": "UY",
       "providerPrivacyUrl": "https://www.pedidosya.com.uy/privacy",
-      "endUserExposure": "direct"
+      "endUserExposure": "direct",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "PedidosYa link/handoff permission",
+            "license": {
+              "kind": "unknown",
+              "raw": "Proprietary (deep-link only); action identity not dataset grant.",
+              "url": "https://www.pedidosya.com.uy/about/terminos-condiciones"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (deep-link only)",
+            "url": "https://www.pedidosya.com.uy/about/terminos-condiciones"
+          }
+        ]
+      }
     },
     {
       "sourceId": "swiggy",
       "name": "Swiggy",
       "url": "https://www.swiggy.com/",
-      "license": "Proprietary (deep-link only)",
-      "licenseUrl": "https://www.swiggy.com/terms-and-conditions",
       "commercialUse": "conditional",
       "providerCountry": "IN",
       "providerPrivacyUrl": "https://www.swiggy.com/privacy-policy",
-      "endUserExposure": "direct"
+      "endUserExposure": "direct",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "Swiggy link/handoff permission",
+            "license": {
+              "kind": "unknown",
+              "raw": "Proprietary (deep-link only); action identity not dataset grant.",
+              "url": "https://www.swiggy.com/terms-and-conditions"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (deep-link only)",
+            "url": "https://www.swiggy.com/terms-and-conditions"
+          }
+        ]
+      }
     },
     {
       "sourceId": "zomato",
       "name": "Zomato",
       "url": "https://www.zomato.com/",
-      "license": "Proprietary (deep-link only)",
-      "licenseUrl": "https://www.zomato.com/policies/terms-of-service/",
       "commercialUse": "conditional",
       "providerCountry": "IN",
       "providerPrivacyUrl": "https://www.zomato.com/privacy",
-      "endUserExposure": "direct"
+      "endUserExposure": "direct",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "Zomato link/handoff permission",
+            "license": {
+              "kind": "unknown",
+              "raw": "Proprietary (deep-link only); action identity not dataset grant.",
+              "url": "https://www.zomato.com/policies/terms-of-service/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (deep-link only)",
+            "url": "https://www.zomato.com/policies/terms-of-service/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "talabat",
       "name": "Talabat",
       "url": "https://www.talabat.com/",
-      "license": "Proprietary (deep-link only)",
-      "licenseUrl": "https://www.talabat.com/uae/terms",
       "commercialUse": "conditional",
       "providerCountry": "AE",
       "providerPrivacyUrl": "https://www.talabat.com/uae/privacy",
-      "endUserExposure": "direct"
+      "endUserExposure": "direct",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "Talabat link/handoff permission",
+            "license": {
+              "kind": "unknown",
+              "raw": "Proprietary (deep-link only); action identity not dataset grant.",
+              "url": "https://www.talabat.com/uae/terms"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (deep-link only)",
+            "url": "https://www.talabat.com/uae/terms"
+          }
+        ]
+      }
     }
   ]
 }

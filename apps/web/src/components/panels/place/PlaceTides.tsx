@@ -12,11 +12,11 @@ import type {
   TidesResponse,
   WaterLevelObservation,
 } from "@openmapx/core";
+import { contributorsForRecordFields } from "@openmapx/mobility-core/contributors";
 import { useTranslations } from "next-intl";
 import { SectionAttribution } from "@/components/ui/SectionAttribution";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { SectionLabel } from "../shared/SectionLabel";
-import { useDataSourceAttribution } from "./useDataSourceAttribution";
 
 /**
  * Presentation-only tide content. Mounted inside an `ExpandableDetailRow`
@@ -26,15 +26,6 @@ import { useDataSourceAttribution } from "./useDataSourceAttribution";
  */
 export function PlaceTidesContent({ data }: { data: TidesResponse }) {
   const t = useTranslations("tides");
-  // Attribution must reflect the provider that actually answered: NOAA covers
-  // US coasts, but Canada/Norway/Pegelonline/IOC each have their own license
-  // terms and crediting NOAA for their data is wrong. `useTides` stamps the
-  // winning provider onto the response so the panel can pull the matching
-  // manifest entry here.
-  const attributionSource = useDataSourceAttribution(
-    data.provider.integrationId,
-    data.provider.sourceId,
-  );
 
   const now = Date.now();
   const enriched = data.events.map((e) => ({ ...e, parsed: parseLocalTime(e.time) }));
@@ -49,6 +40,26 @@ export function PlaceTidesContent({ data }: { data: TidesResponse }) {
 
   const eventsToday = enriched.filter((e) => isoDate(e.parsed) === todayKey);
   const eventsTomorrow = enriched.filter((e) => isoDate(e.parsed) === tomorrowKey);
+  const displayedFields = ["station"];
+  if (data.currentLevel) displayedFields.push("currentLevel");
+  if (data.curve.length > 1) displayedFields.push("curve");
+  if (
+    nextHigh ||
+    nextLow ||
+    eventsToday.length ||
+    eventsTomorrow.length ||
+    (data.curve.length > 1 && data.events.length)
+  )
+    displayedFields.push("events");
+  for (const field of ["waterTempF", "airTempF", "pressureMb"] as const) {
+    if (data.met?.[field] !== undefined) displayedFields.push(`met.${field}`);
+  }
+  if (data.met?.windKnots !== undefined) {
+    displayedFields.push("met.windKnots");
+    for (const field of ["windDirDeg", "windGustKnots"] as const) {
+      if (data.met[field] !== undefined) displayedFields.push(`met.${field}`);
+    }
+  }
 
   return (
     <Box sx={{ py: 1 }}>
@@ -114,20 +125,10 @@ export function PlaceTidesContent({ data }: { data: TidesResponse }) {
         <Typography variant="caption">{t("informationalDisclaimer")}</Typography>
       </Box>
       {/* Attribution — rendered via the shared builder (SectionAttribution). */}
-      {attributionSource && (
-        <>
-          <SectionAttribution
-            name={attributionSource.name}
-            url={attributionSource.url}
-            license={attributionSource.license}
-            licenseUrl={attributionSource.licenseUrl}
-            attribution={attributionSource.attribution}
-          />
-          <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-            {t("datumNote")}
-          </Typography>
-        </>
-      )}
+      <SectionAttribution attributions={contributorsForRecordFields(data, displayedFields)} />
+      <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
+        {t("datumNote")}
+      </Typography>
     </Box>
   );
 }

@@ -9,14 +9,16 @@ import ListItem from "@mui/material/ListItem";
 import ListItemText from "@mui/material/ListItemText";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { safeHref } from "@openmapx/core";
+import { buildLicensingHtml, ROAD_CONDITION_BINDING_REASONS, safeHref } from "@openmapx/core";
 import type {
   CoverageSourceDetail,
   CoverageSourceRow,
+  RoadConditionOperationalMetrics,
   UsageAssessment,
 } from "@openmapx/core/coverage";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
+import { AttributionText } from "@/components/ui/AttributionText";
 import { type CoverageRequestError, useCoverageSource } from "@/lib/admin/coverageHooks";
 import { CompactAlert } from "../shared/CompactAlert";
 import { CoverageStatus, formatCoverageDate } from "./CoverageStatus";
@@ -211,6 +213,9 @@ function SourceEvidenceBody({
               )}
             />
           ))}
+          {data.evidence.roadConditions.bindingReasons && (
+            <BindingReasons reasons={data.evidence.roadConditions.bindingReasons} />
+          )}
           {data.evidence.roadConditions.action && (
             <CompactAlert severity="info">{data.evidence.roadConditions.action}</CompactAlert>
           )}
@@ -322,7 +327,14 @@ function SourceEvidenceBody({
               label={t("rights.derivedData")}
               value={t(`permission.${right.redistribution.derivedData}`)}
             />
-            {right.license && <Detail label={t("rights.license")} value={right.license} />}
+            {right.licensing && (
+              <AttributionText
+                html={buildLicensingHtml(right.licensing, {
+                  includeSoftware: true,
+                  fullNames: true,
+                })}
+              />
+            )}
             {right.attribution && (
               <Detail label={t("rights.attribution")} value={right.attribution} />
             )}
@@ -343,11 +355,6 @@ function SourceEvidenceBody({
               value={right.evidenceOrigin ?? t("common.unknown")}
             />
             <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
-              {right.licenseUrl && (
-                <Link href={safeHref(right.licenseUrl)} target="_blank" rel="noreferrer">
-                  {t("rights.license")}
-                </Link>
-              )}
               {right.termsUrl && (
                 <Link href={safeHref(right.termsUrl)} target="_blank" rel="noreferrer">
                   {t("rights.terms")}
@@ -368,6 +375,68 @@ function SourceEvidenceBody({
             ))}
           </Stack>
         </Section>
+      )}
+    </Stack>
+  );
+}
+
+const KNOWN_BINDING_REASONS = new Set<string>(ROAD_CONDITION_BINDING_REASONS);
+const KNOWN_BINDING_STATUSES = new Set([
+  "exact",
+  "likely",
+  "ambiguous",
+  "unresolved",
+  "no_coverage",
+  "not_applicable",
+  "unattempted",
+  "obsolete",
+  "invalid",
+]);
+
+/** A machine code read as words: "some_new_reason" → "Some new reason". */
+function humanizeCode(code: string): string {
+  const words = code.replace(/[_-]+/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** A sentence's first letter in upper case, for a label phrased to follow a colon. */
+function sentenceCase(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/**
+ * Why the feed's current bindings were not bound or kept off routing: one
+ * row per status and reason with the situations and effects it counts. A
+ * reason or status this version does not know reads as its words.
+ */
+function BindingReasons({
+  reasons,
+}: {
+  reasons: NonNullable<RoadConditionOperationalMetrics["bindingReasons"]>;
+}) {
+  const t = useTranslations("adminCoverage");
+  const road = useTranslations("roadConditions");
+  return (
+    <Stack spacing={0.5}>
+      <Typography variant="caption" color="text.secondary">
+        {t("roadConditions.bindingReasons")}
+      </Typography>
+      {reasons.length === 0 ? (
+        <Typography variant="body2">{t("roadConditions.noBindingReasons")}</Typography>
+      ) : (
+        reasons.map(({ status, reason, situations, effects }) => (
+          <Detail
+            key={`${status}:${reason}`}
+            label={
+              KNOWN_BINDING_STATUSES.has(status) ? road(`binding.${status}`) : humanizeCode(status)
+            }
+            value={`${
+              KNOWN_BINDING_REASONS.has(reason)
+                ? sentenceCase(road(`bindingReason.${reason}`))
+                : humanizeCode(reason)
+            } · ${t("roadConditions.reasonCounts", { situations, effects })}`}
+          />
+        ))
       )}
     </Stack>
   );

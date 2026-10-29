@@ -1,5 +1,10 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { resolveGooglePhotosLink, searchHeroPhotos } from "./orchestrator";
+import {
+  createOsmImagePhotoProvider,
+  resolveGooglePhotosLink,
+  searchHeroPhotos,
+} from "./orchestrator";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -13,9 +18,45 @@ function htmlResponse(imageUrl: string): Response {
 describe("resolveGooglePhotosLink trust boundaries", () => {
   it("publishes direct and provider photos before a slow share preview settles", async () => {
     const response = Promise.withResolvers<Response>();
-    vi.spyOn(globalThis, "fetch").mockReturnValue(response.promise);
-    const direct = "https://commons.wikimedia.org/wiki/Special:FilePath/Ready.jpg?width=1200";
-    const providerPhoto = { url: "https://upload.wikimedia.org/provider.jpg", source: "wikimedia" };
+    vi.spyOn(globalThis, "fetch").mockImplementation((url) =>
+      String(url).includes("commons.wikimedia.org/w/api.php")
+        ? Promise.resolve(
+            new Response(
+              JSON.stringify({
+                query: {
+                  pages: {
+                    1: {
+                      title: "File:Ready.jpg",
+                      imageinfo: [
+                        {
+                          url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Ready.jpg",
+                          mime: "image/jpeg",
+                          extmetadata: {
+                            Artist: { value: "Creator" },
+                            LicenseShortName: { value: "CC BY 4.0" },
+                            LicenseUrl: { value: "https://creativecommons.org/licenses/by/4.0/" },
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+              }),
+            ),
+          )
+        : response.promise,
+    );
+    const direct = "https://upload.wikimedia.org/wikipedia/commons/a/ab/Ready.jpg";
+    const providerPhoto = {
+      url: "https://upload.wikimedia.org/provider.jpg",
+      source: "wikimedia",
+      author: "Creator",
+      licensing: licensingFromDeclaration(
+        "CC BY 4.0",
+        "https://creativecommons.org/licenses/by/4.0/",
+      ),
+      pageUrl: "https://commons.wikimedia.org/wiki/File:Provider.jpg",
+    };
     const seen: string[] = [];
     const provider = {
       id: "wikimedia",
@@ -29,7 +70,33 @@ describe("resolveGooglePhotosLink trust boundaries", () => {
         "image:1": "File:Ready.jpg",
         wikimedia_commons: "File:Provider.jpg",
       },
-      [provider],
+      [
+        provider,
+        createOsmImagePhotoProvider({
+          http: {
+            get: async () => ({
+              query: {
+                pages: {
+                  1: {
+                    title: "File:Ready.jpg",
+                    imageinfo: [
+                      {
+                        url: direct,
+                        mime: "image/jpeg",
+                        extmetadata: {
+                          Artist: { value: "Creator" },
+                          LicenseShortName: { value: "CC BY 4.0" },
+                          LicenseUrl: { value: "https://creativecommons.org/licenses/by/4.0/" },
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            }),
+          },
+        } as never),
+      ],
       { strict: true, onPhotos: (photos) => seen.push(...photos.map((photo) => photo.url)) },
     );
     try {
@@ -72,6 +139,8 @@ describe("resolveGooglePhotosLink trust boundaries", () => {
   });
   it.each([
     "https://evil.attacker.test/image.jpg",
+    "https://lh3.googleusercontent.com.evil.attacker.test/image.jpg",
+    "https://evil.attacker.test/image.jpg?next=lh3.googleusercontent.com",
     "http://lh3.googleusercontent.com/image.jpg",
     "https://lh2.googleusercontent.com/image.jpg",
     "javascript:alert(1)",

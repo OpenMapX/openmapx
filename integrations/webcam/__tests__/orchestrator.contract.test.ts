@@ -218,7 +218,22 @@ describe("webcam orchestrator", () => {
           cam({
             id: "c:1",
             sources: ["src-c"],
-            attributions: [{ sourceId: "src-c", name: "Trafikverket", spdxLicense: "CC0-1.0" }],
+            attributions: [
+              {
+                sourceId: "src-c",
+                name: "Trafikverket",
+                licensing: {
+                  version: 1,
+                  bindings: [
+                    {
+                      scope: "data",
+                      subject: "Data",
+                      license: { kind: "spdx", expression: "CC0-1.0" },
+                    },
+                  ],
+                } as const,
+              },
+            ],
           }),
         ]),
       ]),
@@ -228,7 +243,16 @@ describe("webcam orchestrator", () => {
 
     expect(result.attributions.map((a) => a.sourceId)).toEqual(["src-a", "src-c"]);
     expect(result.data[2].attributions).toEqual([
-      { text: "Trafikverket", url: "", license: "CC0-1.0" },
+      {
+        sourceId: "src-c",
+        name: "Trafikverket",
+        licensing: {
+          version: 1,
+          bindings: [
+            { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC0-1.0" } },
+          ],
+        } as const,
+      },
     ]);
   });
 

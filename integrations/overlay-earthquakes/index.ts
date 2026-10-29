@@ -3,7 +3,9 @@ import {
   createHazardsOrchestrator,
   type IntegrationContext,
   scalarQueries,
+  snapshotContributors,
 } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { NaturalHazard } from "@openmapx/mobility-core/hazards";
 
 const WORLD: BBox = [-180, -90, 180, 90];
@@ -42,6 +44,7 @@ interface EarthquakeFeature {
     /** 1 for a large event in an oceanic region (not a warning), else 0. */
     tsunami: number;
     sources: string[];
+    contributors?: readonly Attribution[];
   };
 }
 
@@ -121,6 +124,9 @@ export function hazardToFeature(hazard: NaturalHazard): EarthquakeFeature | null
       alert: hazard.severity?.declared ?? null,
       tsunami: hazard.tsunamiFlag ? 1 : 0,
       sources: hazard.sources,
+      ...(hazard.contributors === undefined
+        ? {}
+        : { contributors: snapshotContributors(hazard.contributors) }),
     },
   };
 }
@@ -178,7 +184,7 @@ export function setup(ctx: IntegrationContext): void {
     // The world's earthquakes of the range are cached once, unfiltered, so the magnitude
     // cannot multiply cache entries. Namespaced by the response shape: an entry cached in an
     // older shape must not be served against the new one.
-    const key = `eq:v3:${timeRange}:${lang}`;
+    const key = `eq:v4:${timeRange}:${lang}`;
 
     try {
       const fc = await ctx.cache.withCache(key, ttl, async () => {

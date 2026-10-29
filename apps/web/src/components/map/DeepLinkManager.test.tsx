@@ -160,6 +160,10 @@ describe("DeepLinkManager overlay application", () => {
     window.history.replaceState(null, "", "/?fire=1,VIIRS_SNPP_NRT,0");
     render(<DeepLinkManager />);
     expect(useWildfireStore.getState()).toMatchObject({ dayRange: 1, source: "modis" });
+
+    window.history.replaceState(null, "", "/?fire=3,slstr,0");
+    render(<DeepLinkManager />);
+    expect(useWildfireStore.getState()).toMatchObject({ dayRange: 3, source: "slstr" });
   });
 
   it("leaves an automation-opened overlay alone when the link does not name it", () => {

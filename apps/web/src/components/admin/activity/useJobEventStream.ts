@@ -1,194 +1,202 @@
 "use client";
 
+import type { ApiClient } from "@openmapx/core";
+import { streamAdminActivityJobEvents } from "@openmapx/core/api-admin-sdk";
+import {
+  type AdminActivityJobDetail,
+  adminJobStreamEventSchemas,
+} from "@openmapx/core/api-contracts";
 import { useEffect, useReducer } from "react";
-
-export interface JobLog {
-  id: string;
-  seq: number;
-  stream: string;
-  line: string;
-  createdAt: string;
-}
-
-export interface JobStage {
-  id: string;
-  stage: string;
-  status: string;
-  startedAt: string;
-  finishedAt: string;
-  durationMs: number;
-  message: string | null;
-  error: unknown;
-  artifacts: unknown;
-}
-
-export interface JobDetailData {
-  source: "application" | "data-manager";
-  id: string;
-  type: string;
-  status: string;
-  payload: Record<string, unknown> | null;
-  result: Record<string, unknown> | null;
-  error: string | null;
-  progress: number | null;
-  createdBy: string | null;
-  createdAt: string;
-  startedAt: string | null;
-  finishedAt: string | null;
-  cancelable: boolean;
-  logs: JobLog[];
-  stages: JobStage[];
-}
 
 export type JobStreamConnection = "connecting" | "live" | "reconnecting" | "polling" | "closed";
 
 export interface JobStreamState {
-  data: JobDetailData | null;
+  data: AdminActivityJobDetail | null;
   connection: JobStreamConnection;
 }
 
-const ACTIVE_STATUSES = new Set(["queued", "running", "cancel_pending"]);
+const CANCELABLE_STATUSES = new Set(["queued", "running"]);
 /** Consecutive transport errors without a successful open before giving up. */
 const MAX_CONSECUTIVE_ERRORS = 3;
+const STREAM_EVENTS = ["snapshot", "status", "progress", "log", "end", "overflow"] as const;
 
-/** Applies one server event to the last known job state. Exported for tests. */
+/** Validates before applying an event, including terminal control frames. */
 export function reduceJobEvent(
-  state: JobDetailData | null,
+  state: AdminActivityJobDetail | null,
   type: string,
   data: unknown,
-): JobDetailData | null {
-  const payload = (data ?? {}) as Record<string, unknown>;
-  if (type === "snapshot") {
-    const job = payload.job as JobDetailData | undefined;
-    return job ?? state;
+): AdminActivityJobDetail | null {
+  switch (type) {
+    case "snapshot": {
+      const parsed = adminJobStreamEventSchemas.snapshot.safeParse(data);
+      return parsed.success ? parsed.data.job : state;
+    }
+    case "log": {
+      const parsed = adminJobStreamEventSchemas.log.safeParse(data);
+      if (!parsed.success || !state || state.logs.some((log) => log.id === parsed.data.id))
+        return state;
+      const { type: _, ...log } = parsed.data;
+      return {
+        ...state,
+        logs: [...state.logs, { ...log, jobId: state.id }].sort((a, b) => a.seq - b.seq),
+      };
+    }
+    case "progress": {
+      const parsed = adminJobStreamEventSchemas.progress.safeParse(data);
+      return parsed.success && state ? { ...state, progress: parsed.data.progress } : state;
+    }
+    case "status": {
+      const parsed = adminJobStreamEventSchemas.status.safeParse(data);
+      if (!parsed.success || !state || state.source !== "application") return state;
+      const { type: _, ...update } = parsed.data;
+      return { ...state, ...update, cancelable: CANCELABLE_STATUSES.has(update.status) };
+    }
+    case "end": {
+      const parsed = adminJobStreamEventSchemas.end.safeParse(data);
+      return parsed.success && state && state.source === "application"
+        ? { ...state, status: parsed.data.status, cancelable: false }
+        : state;
+    }
+    default:
+      return state;
   }
-  if (!state) return state;
-  if (type === "log") {
-    const log = payload as unknown as JobLog;
-    if (state.logs.some((existing) => existing.id === log.id)) return state;
-    const logs = [...state.logs, log].sort((a, b) => a.seq - b.seq);
-    return { ...state, logs };
-  }
-  if (type === "progress") {
-    const progress = typeof payload.progress === "number" ? payload.progress : state.progress;
-    return { ...state, progress };
-  }
-  if (type === "status") {
-    const status = typeof payload.status === "string" ? payload.status : state.status;
-    return {
-      ...state,
-      status,
-      cancelable: ACTIVE_STATUSES.has(status),
-      progress:
-        payload.progress === undefined ? state.progress : (payload.progress as number | null),
-      error: payload.error === undefined ? state.error : (payload.error as string | null),
-      result:
-        payload.result === undefined
-          ? state.result
-          : (payload.result as Record<string, unknown> | null),
-      startedAt:
-        payload.startedAt === undefined ? state.startedAt : (payload.startedAt as string | null),
-      finishedAt:
-        payload.finishedAt === undefined ? state.finishedAt : (payload.finishedAt as string | null),
-    };
-  }
-  return state;
 }
 
+interface OwnedState extends JobStreamState {
+  client: ApiClient;
+  jobId: string | null;
+}
 type Action =
   | { type: "event"; event: string; data: unknown }
   | { type: "connection"; connection: JobStreamConnection }
-  | { type: "reset" };
+  | { type: "reset"; client: ApiClient; jobId: string | null }
+  | { type: "fallback" };
 
-function reducer(state: JobStreamState, action: Action): JobStreamState {
+function reducer(state: OwnedState, action: Action): OwnedState {
   switch (action.type) {
     case "event":
       return { ...state, data: reduceJobEvent(state.data, action.event, action.data) };
     case "connection":
-      return state.connection === action.connection
-        ? state
-        : { ...state, connection: action.connection };
+      return { ...state, connection: action.connection };
     case "reset":
-      return { data: null, connection: "connecting" };
+      return { client: action.client, jobId: action.jobId, data: null, connection: "connecting" };
+    case "fallback":
+      // Polling must become authoritative, including after an earlier snapshot.
+      return { ...state, data: null, connection: "polling" };
   }
 }
 
-const STREAM_EVENTS = ["snapshot", "log", "progress", "status"] as const;
-
-/**
- * Subscribes to a job's Server-Sent Events stream. The browser handles
- * reconnects and resends the last event id; the server replays or sends a
- * fresh snapshot. When the transport keeps failing, or the browser has no
- * EventSource, the hook reports `polling` so the caller can fall back.
- */
-export function useJobEventStream(url: string | null): JobStreamState {
-  const [state, dispatch] = useReducer(reducer, { data: null, connection: "connecting" });
+/** Browser-owned replay/reconnection; finite JSON request deadlines do not own this stream. */
+export function useJobEventStream(client: ApiClient, jobId: string | null): JobStreamState {
+  const [state, dispatch] = useReducer(reducer, {
+    client,
+    jobId,
+    data: null,
+    connection: "connecting",
+  });
 
   useEffect(() => {
-    dispatch({ type: "reset" });
-    if (!url) {
-      dispatch({ type: "connection", connection: "polling" });
-      return;
-    }
-    if (typeof EventSource === "undefined") {
-      dispatch({ type: "connection", connection: "polling" });
+    dispatch({ type: "reset", client, jobId });
+    if (!jobId || typeof EventSource === "undefined") {
+      dispatch({ type: "fallback" });
       return;
     }
 
-    const source = new EventSource(url, { withCredentials: true });
-    let consecutiveErrors = 0;
+    const controller = new AbortController();
+    let source: EventSource | undefined;
+    let disposed = false;
     let finished = false;
-
-    const parse = (raw: string): unknown => {
+    let consecutiveErrors = 0;
+    const current = () => !disposed && !finished;
+    const fallback = () => {
+      if (!current()) return;
+      finished = true;
+      source?.close();
+      dispatch({ type: "fallback" });
+    };
+    const onEvent = (name: (typeof STREAM_EVENTS)[number]) => (event: MessageEvent<string>) => {
+      if (!current()) return;
+      let payload: unknown;
       try {
-        return JSON.parse(raw);
+        payload = JSON.parse(event.data);
       } catch {
-        return null;
+        fallback();
+        return;
+      }
+      const parsed = adminJobStreamEventSchemas[name].safeParse(payload);
+      if (!parsed.success) {
+        fallback();
+        return;
+      }
+      if (name === "snapshot") {
+        const snapshot = adminJobStreamEventSchemas.snapshot.parse(payload);
+        if (snapshot.job.id !== jobId) {
+          fallback();
+          return;
+        }
+      }
+      dispatch({ type: "event", event: name, data: parsed.data });
+      if (name === "end") {
+        finished = true;
+        source?.close();
+        dispatch({ type: "connection", connection: "closed" });
+      } else if (name === "overflow") {
+        // Preserve native reconnection/Last-Event-ID replay after a slow-consumer close.
+        dispatch({ type: "connection", connection: "reconnecting" });
       }
     };
-    const onEvent = (name: string) => (event: MessageEvent<string>) => {
-      dispatch({ type: "event", event: name, data: parse(event.data) });
-    };
     const listeners = STREAM_EVENTS.map((name) => [name, onEvent(name)] as const);
-    for (const [name, listener] of listeners) source.addEventListener(name, listener);
-
-    const onEnd = () => {
-      finished = true;
-      source.close();
-      dispatch({ type: "connection", connection: "closed" });
-    };
-    const onOverflow = () => {
-      // The server dropped us as a slow consumer; a reconnect resnapshots.
-      dispatch({ type: "connection", connection: "reconnecting" });
-    };
     const onOpen = () => {
+      if (!current()) return;
       consecutiveErrors = 0;
       dispatch({ type: "connection", connection: "live" });
     };
     const onError = () => {
-      if (finished) return;
+      if (!current()) return;
       consecutiveErrors += 1;
-      if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS || source.readyState === EventSource.CLOSED) {
-        source.close();
-        dispatch({ type: "connection", connection: "polling" });
-        return;
+      if (
+        consecutiveErrors >= MAX_CONSECUTIVE_ERRORS ||
+        source?.readyState === EventSource.CLOSED
+      ) {
+        fallback();
+      } else {
+        dispatch({ type: "connection", connection: "reconnecting" });
       }
-      dispatch({ type: "connection", connection: "reconnecting" });
     };
-    source.addEventListener("end", onEnd);
-    source.addEventListener("overflow", onOverflow);
-    source.addEventListener("open", onOpen);
-    source.addEventListener("error", onError);
+
+    void (async () => {
+      try {
+        const target = await streamAdminActivityJobEvents(
+          jobId,
+          { source: "application" },
+          {
+            client,
+            signal: controller.signal,
+          },
+        );
+        if (!current() || controller.signal.aborted) return;
+        source = new EventSource(target.url, { withCredentials: target.withCredentials });
+        for (const [name, listener] of listeners) source.addEventListener(name, listener);
+        source.addEventListener("open", onOpen);
+        source.addEventListener("error", onError);
+      } catch {
+        fallback();
+      }
+    })();
 
     return () => {
+      disposed = true;
+      controller.abort();
+      if (!source) return;
       for (const [name, listener] of listeners) source.removeEventListener(name, listener);
-      source.removeEventListener("end", onEnd);
-      source.removeEventListener("overflow", onOverflow);
       source.removeEventListener("open", onOpen);
       source.removeEventListener("error", onError);
       source.close();
     };
-  }, [url]);
+  }, [client, jobId]);
 
-  return state;
+  // Never render a previous origin/job's data while its replacement effect starts.
+  return state.client === client && state.jobId === jobId
+    ? state
+    : { data: null, connection: "connecting" };
 }

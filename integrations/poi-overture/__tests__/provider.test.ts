@@ -243,3 +243,142 @@ describe("canonical accepted-link identity", () => {
     });
   });
 });
+
+it("captures exact localized-name and contact suppliers before the database read settles", async () => {
+  const manifest = structuredClone((await import("../manifest.json")).default);
+  const nameSource = manifest.dataSources.find((source) => source.sourceId === "microsoft-places")!;
+  const originalName = nameSource.name;
+  const sources_catalogue = manifest.dataSources.map((source) => ({
+    sourceId: source.sourceId,
+    name: source.name,
+  }));
+  let finish!: (rows: unknown[]) => void;
+  const db = makeFakeDb();
+  db.execute.mockReturnValue(
+    new Promise<unknown[]>((resolve) => {
+      finish = resolve;
+    }),
+  );
+  const ctx = createMockIntegrationContext({ db, manifest: manifest as never });
+  const { setup } = await import("../index.js");
+  setup(ctx);
+  const provider = ctx.registered.poiSearch[0] as PoiSearchProvider;
+  const pending = toOutcome(provider.search("cafes", BBOX, { lang: "de" }));
+  nameSource.name = "Changed catalogue";
+  finish([
+    {
+      ...FIXTURE_ROWS[0],
+      sources_catalogue,
+      names: { primary: "Base", common: { de: "Cafe" } },
+      phones: ["123"],
+      sources: [
+        { property: "", dataset: "Meta" },
+        { property: "/names/common/de", dataset: "Microsoft" },
+        { property: "/phones/0", dataset: "Foursquare" },
+      ],
+    },
+  ]);
+  const result = (await pending).results[0];
+  expect(result.fieldContributors?.name?.map((receipt) => receipt.sourceId).sort()).toEqual([
+    "microsoft-places",
+    "overture",
+  ]);
+  expect(
+    result.fieldContributors?.name?.find((receipt) => receipt.sourceId === "microsoft-places")
+      ?.name,
+  ).toBe(originalName);
+  expect(result.fieldContributors?.coordinates?.map((receipt) => receipt.sourceId).sort()).toEqual([
+    "meta-places",
+    "overture",
+  ]);
+  expect(result.fieldContributors?.phone?.map((receipt) => receipt.sourceId).sort()).toEqual([
+    "foursquare",
+    "overture",
+  ]);
+});
+it("does not invent historical publishers for legacy rows or replace explicit empty catalogues", async () => {
+  const manifest = (await import("../manifest.json")).default;
+  const db = makeFakeDb();
+  db.execute.mockResolvedValue([
+    { ...FIXTURE_ROWS[0], sources: [{ property: "", dataset: "Meta" }] },
+  ]);
+  const ctx = createMockIntegrationContext({ db, manifest: manifest as never });
+  const { setup } = await import("../index.js");
+  setup(ctx);
+  const provider = ctx.registered.poiSearch[0] as PoiSearchProvider;
+  expect(
+    (await toOutcome(provider.search("cafes", BBOX))).results[0].contributors?.map(
+      (r) => r.sourceId,
+    ),
+  ).toEqual(["overture"]);
+  db.execute.mockResolvedValue([
+    { ...FIXTURE_ROWS[0], sources_catalogue: [], sources: [{ property: "", dataset: "Meta" }] },
+  ]);
+  expect((await toOutcome(provider.search("cafes", BBOX))).results[0].contributors).toEqual([]);
+});
+
+const reviewedRow = {
+  ...FIXTURE_ROWS[0],
+  basic_category: "cafe",
+  taxonomy_primary: "cafe",
+  taxonomy_hierarchy: [],
+  taxonomy_alternates: ["restaurant"],
+  brand: { names: { primary: "English Brand", common: { de: "Deutsche Marke" } } },
+  sources: [
+    { property: "/brand/names/primary", dataset: "meta" },
+    { property: "/brand/names/common/de", dataset: "Microsoft" },
+    { property: "/basic_category", dataset: "meta" },
+    { property: "/taxonomy/primary", dataset: "meta" },
+    { property: "/taxonomy/alternates/0", dataset: "Microsoft" },
+  ],
+  sources_catalogue: [
+    { sourceId: "overture", name: "Captured Overture" },
+    { sourceId: "meta-places", name: "English and cafe" },
+    { sourceId: "microsoft-places", name: "German and restaurant" },
+  ],
+};
+it("captures the actual localized brand name pointer on the normalized brand and OSM tag", async () => {
+  const { setup } = await import("../index.js");
+  const ctx = createMockIntegrationContext({ db: makeFakeDb([reviewedRow]) });
+  setup(ctx);
+  const result = (
+    await toOutcome(ctx.registered.poiSearch[0].search("cafes", BBOX, { lang: "de" }))
+  ).results[0];
+  expect(result.brand?.name).toBe("Deutsche Marke");
+  expect(result.fieldContributors?.brand.map((r) => r.sourceId)).toEqual([
+    "overture",
+    "microsoft-places",
+  ]);
+  expect(result.fieldContributors?.["brand.name"].map((r) => r.sourceId)).toEqual([
+    "overture",
+    "microsoft-places",
+  ]);
+  expect(result.fieldContributors?.["osmTags.brand"].map((r) => r.sourceId)).toEqual([
+    "overture",
+    "microsoft-places",
+  ]);
+});
+it("credits the retained requested category rather than a competing global taxonomy winner", async () => {
+  const { setup } = await import("../index.js");
+  const db = makeFakeDb([reviewedRow]);
+  const ctx = createMockIntegrationContext({ db });
+  setup(ctx);
+  const provider = ctx.registered.poiSearch[0];
+  const result = (await toOutcome(provider.search("cafes", BBOX))).results[0];
+  expect(result.category).toBe("cafes");
+  expect(result.fieldContributors?.category.map((r) => r.sourceId)).toEqual([
+    "overture",
+    "meta-places",
+  ]);
+  db.execute.mockResolvedValue([
+    {
+      ...reviewedRow,
+      basic_category: null,
+      taxonomy_primary: null,
+      taxonomy_alternates: ["restaurant"],
+    },
+  ]);
+  const criterion = (await toOutcome(provider.search("cafes", BBOX))).results[0];
+  expect(criterion.category).toBe("cafes");
+  expect(criterion.fieldContributors?.category).toEqual([]);
+});

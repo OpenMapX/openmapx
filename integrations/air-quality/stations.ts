@@ -9,6 +9,7 @@ import {
   type Pollutant,
 } from "@openmapx/air-quality";
 import type { IntegrationContext, StationViewportQuery } from "@openmapx/integration-framework";
+import { snapshotContributors } from "@openmapx/integration-framework";
 
 import { resolvePointJurisdiction } from "./jurisdiction.js";
 import { normalizeProviderEvidence } from "./normalize.js";
@@ -127,6 +128,15 @@ function toFeature(
       owner: item.sources.find(({ owner }) => owner !== null)?.owner ?? null,
       providerId: item.providerId,
       sourceIds: item.sourceIds,
+      contributors: snapshotContributors(
+        item.sources.map((source) => ({
+          sourceId: source.sourceId,
+          name: source.name,
+          ...(source.url ? { url: source.url } : {}),
+          ...(source.licensing ? { licensing: source.licensing } : {}),
+          ...(source.attribution ? { attributionText: source.attribution } : {}),
+        })),
+      ),
       localIndex:
         localIndex?.standardId === null || localIndex === null
           ? null

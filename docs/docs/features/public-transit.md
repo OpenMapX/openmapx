@@ -1,321 +1,195 @@
 ---
 title: Public transit
-description: Door-to-door public-transit journey planning, departures, route preferences, and live vehicles — backed by a MOTIS-first chain of self-hosted and regional providers.
+description: Plan journeys, check departures and service alerts, and follow a transit itinerary.
 sidebar_position: 4
 ---
 
 # Public transit
 
-OpenMapX plans public-transit journeys the way a rider thinks about them:
-"how do I get from here to there, leaving now, by bus and train?" It answers
-with door-to-door itineraries — walking to the stop, the transit legs in
-between, the transfers, and the walk at the far end — alongside live departure
-boards, route preferences, real-time vehicle positions, and guided transit
-navigation.
+Use transit in [Directions](./directions.md) to plan a trip with walking,
+boarding, transfers, and arrival at your destination. Open a station to check
+its departure board, or enable **Live transit** in Layers to see available
+vehicle positions.
 
-The transit feature spans three things you can see in the app:
-
-- **Journey planning** — multi-leg trips between two points, with departure or
-  arrival times, transfer counts, leg geometries, and (where the data supports
-  it) fares.
-- **Departures and arrivals** — a live timetable for any stop, with platform
-  numbers, delays, and cancellations, plus per-route and per-stop service
-  alerts.
-- **Live vehicles** — moving trains, trams, and buses on the map, drawn from
-  real-time feeds.
-- **Transit navigation** — walking guidance to and between stops, live ride
-  progress, transfer risk, alerts, and a get-off reminder.
-
-Under the hood, all of this is served by a **transit orchestrator** that queries
-many providers and merges their results. The rest of this page explains how that
-chain is put together, what the route options do, and how an operator configures
-which providers run.
+Coverage depends on the instance's prepared timetable data and enabled hosted
+or regional providers. A timetable is not a promise of live predictions,
+vehicle positions, fares, accessibility, or service on every route.
 
 ## Planning a journey
 
-Switch the [directions](./directions.md) panel to the transit tab and OpenMapX
-plans a trip between your origin and destination. Each itinerary is a sequence of
-legs — walk, ride, transfer, ride, walk — with per-leg duration, the line and
-its color, the boarding and alighting stops, and the geometry drawn on the map.
-The panel shows several alternatives so you can trade a faster trip against fewer
-transfers or less walking.
+1. Open **Directions** and choose the transit mode.
+2. Set the origin and destination. Choose to leave now, depart at a time, or
+   arrive by a time.
+3. Review the alternatives, including walking, transfer time, platforms, and
+   any alerts. Select an itinerary to inspect its legs.
+4. Start navigation when ready, with device location permitted.
 
-Cards preserve operational details rather than flattening them away: line
-branding and vehicle identity, destination/headsign, platform and indoor level,
-scheduled versus real-time times, occupancy, bike and wheelchair information,
-service alerts, skipped stops, and cancellations appear when the provider sends
-them. Tight transfers are flagged with interchange guidance so an attractive
-headline duration does not hide a risky connection.
+Cards show scheduled and predicted times separately when the source supplies
+both. Line branding, headsigns, occupancy, bicycle information, accessibility,
+indoor levels, fares, and skipped stops depend on the provider. Tight transfers
+can be flagged; confirm important connections with the operator.
 
-Trip planning is anchored on a **departure time** (leave now, or at a chosen
-time) or an **arrival time** (be there by). The planner can also weave in a
-first-and-last-mile mode — walking by default, or your own bike, a shared
-bike/scooter, or a park-and-ride car leg — so a bike-plus-transit or
-drive-to-the-station option appears next to the pure transit itineraries.
-
-**Trips that cross a time zone** are labelled rather than silently converted.
-Departure is shown in the origin's local time and arrival in the destination's,
-each with a `UTC±N` chip and a note that the arrival is in destination local
-time, so the printed span always matches the stated duration. A trip whose ends
-share a UTC offset is left exactly as it was — crossing a border without changing
-the clock adds no annotation.
+Trips whose endpoints have different UTC offsets show departure in the origin's
+local time and arrival in the destination's local time, with offset labels.
 
 ### Route options
 
-A "Route options" control mirrors the choices you'd expect from a consumer maps
-app. They fall into three groups:
+| Option                         | Effect and limit                                                                                                                      |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Vehicle categories             | Restricts supported planner requests to selected modes, such as bus or train; an empty selection allows all modes                     |
+| Fewer transfers / less walking | Ranks the alternatives returned by the planner; does not guarantee the best possible journey across all services                      |
+| Wheelchair                     | Requests an accessible pedestrian profile and supported accessibility constraints; missing source information remains uncertain       |
+| Deutschlandticket              | Approximates the ticket's scope using local/regional vehicle categories; it does not verify ticket validity for an individual service |
+| Access and egress              | Where supported, adds walking, your bicycle, rental mobility, or a park-and-ride leg                                                  |
 
-- **Prefer** — restrict the journey to specific vehicle categories: bus, subway,
-  train, or tram. This is an allow-list, so checking Bus and Train returns only
-  bus and train itineraries; with nothing checked, every mode is fair game.
-- **Routes** — a single optimization target. _Best_ keeps the engine's own
-  ranking; _fewer transfers_ and _less walking_ re-rank the alternatives the
-  engine returned; _wheelchair_ switches the walking legs to a step-free
-  (accessible) pedestrian profile.
-- **Deutschlandticket** — a Germany-only toggle that constrains the journey to
-  the local and regional services the Deutschlandticket covers, hiding
-  long-distance trains (ICE/IC), long-distance coaches, and night trains. It's a
-  vehicle-category approximation of the ticket's scope, matching the "local
-  transport only" filters you'll find elsewhere.
-
-The Prefer modes and the Deutschlandticket filter are applied by the routing
-engine itself, so they genuinely change which connections come back. _Fewer
-transfers_ and _less walking_ are applied to the returned set — the engine
-already computes a multi-criteria spread of alternatives, so OpenMapX re-orders
-that spread rather than asking for a narrower search that might come back empty.
+Additional controls depend on planner capabilities, including transfer buffers,
+maximum transfers, bicycle carriage, and rental filters. An unsupported required
+capability can make a request unavailable. Try removing optional restrictions
+when no journey is found, while keeping any accessibility requirement you need.
 
 ### Journeys with intermediate stops
 
-A journey can carry stops between its ends, each with its own time and dwell.
-OpenMapX plans one connection per segment and hands the previous segment's real
-arrival to the next as its departure, so a delay carried into a leg shapes what
-it can catch. That delay is shown on the leg it belongs to, alongside the
-scheduled time it drifted from.
-
-A chained journey has no combined earlier/later paging: each leg has its own
-alternatives, because there is no single cursor that means the same thing across
-all of them. When a leg has no connection at all the chain stops there and says
-so, keeping the part of the schedule it did work out.
+Intermediate stops can carry times and a dwell duration. OpenMapX plans the
+segments in order, carrying the preceding arrival into the next segment. Review
+each segment's alternatives and transfer feasibility. A chain has no single
+combined earlier/later paging cursor. If a segment has no connection, the
+remaining chain cannot be completed.
 
 ## Departures, stops, and alerts
 
-Open any stop or station and OpenMapX shows a live departure board: the next
-departures with their lines, destinations, scheduled and real-time times, delays,
-platform or track, and cancellations. The same surfaces back stop-detail views in
-[places](./places.md) — search a station and you get its departures, the lines
-that serve it, and, where a provider exposes it, station infrastructure
-(elevators, platforms, facilities) and service alerts.
+Open a stop or a place with linked stops to see its available departures,
+arrivals, lines, facilities, and alerts. Platform numbers, changes,
+cancellations, and predicted times appear only when reported.
 
-Scheduled times come from the matching provider's timetable; real-time deltas —
-the actual delay, a platform change, a cancellation — are merged in on top from
-any real-time provider that covers the area. When the underlying provider already
-returns real-time-aware times (MOTIS does this natively from GTFS-RT), OpenMapX
-skips the redundant second lookup.
+Scheduled data comes from the stop's source. Compatible realtime providers can
+add updates; sources that already include realtime times do not need a second
+lookup. Similar station names alone do not make different source IDs
+interchangeable, and a failed stop lookup can leave a place without a board.
+
+### Understanding timetable status
+
+**Scheduled time** identifies explicitly timetable-only service. A prediction
+can show a different time, including an early departure. Missing freshness
+information does not establish that a prediction is current.
+
+**Times may have changed** warns about known outdated predictions. Some sources,
+including current MOTIS/Transitous timetable wrappers, do not supply an upstream
+publication time, so the absence of this warning does not prove freshness.
+Platform changes show planned and current values when available; cancellations
+retain a clear label and struck-through times.
+
+If a refresh fails, previously loaded times can remain with a warning and retry
+action. A partial linked board warns that departures may be missing. A
+successful empty board means its source returned no departures; it does not
+prove that every source or nearby station has no service.
 
 ## Live vehicles on the map
 
-A live-transit map overlay plots vehicles in motion — trains, trams, and buses
-moving through the current view — refreshed as you pan. Positions come from the
-real-time feeds that publish them: MOTIS surfaces the active trips for the
-visible area, and regional sources add their own live positions where they're
-configured (Germany's DB real-time feed, for example). See
-[map layers](./map-layers.md) for turning the overlay on.
+Enable **Live transit** in [Layers](./map-layers.md). Vehicle positions depend on
+available feeds and can be delayed or absent. Seeing a scheduled service on a
+departure board does not mean the map can track its vehicle.
 
 ## Transit navigation
 
-Start navigation from an itinerary to turn the plan into a live sequence of
-walk, wait, ride, transfer, and arrival phases. Walking legs use turn-by-turn
-instructions. At a stop, the app shows live boarding departures; aboard a
-vehicle it follows the trip stop by stop, refreshes the itinerary, shows the
-vehicle around you on a radar-style map, and surfaces platform changes,
-cancellations, occupancy, and service alerts as they arrive.
+Navigation follows walking, waiting, riding, transferring, and arrival phases.
+Where data is available, it shows boarding departures, upcoming stops, platform
+changes, connection risk, cancellations, and alerts. Walking instructions and
+indoor guidance depend on the itinerary's geometry and station information.
 
-A stop counts as reached as soon as you step onto it. Navigation uses the stop's
-real shape from OpenStreetMap — the platform your bus or train leaves from, or
-else the whole station — instead of a single point, so waiting anywhere along a
-long platform counts, getting off at either end of it does too, and a transfer
-inside a station still guides you on to the next platform. Where nothing is
-mapped, a circle sized for the vehicle stands in.
+Stop arrival uses mapped platform or station areas when available, with a
+fallback area around the stop. Device accuracy and mapping can affect when a
+phase changes; check that the selected stop and platform are correct.
 
-The ride sheet can be swiped through upcoming stops and keeps scheduled and
-real-time values distinct. Transfer cards show the next line, platform, walking
-handoff, and connection risk; when a connection becomes endangered the app can
-offer alternatives. Indoor level guidance is retained where station data
-contains it. Voice cues, a keep-screen-on setting, and an optional get-off alarm
-(including a background notification where the browser permits it) help when
-the map is not in hand. The arrival summary closes the trip cleanly.
+Voice guidance, a keep-screen-on setting, and an optional get-off alarm support
+the trip. Background notifications depend on browser permission and lifecycle.
+The alarm is suppressed before boarding and for cancelled legs. Do not rely on
+it as your only indication of where to leave the vehicle.
 
-While planning or navigating transit, the live-vehicle and transit-line overlays
-turn on automatically if available. Manually enabling or disabling either layer
-is respected, and an automatically enabled layer returns to its earlier state
-when the transit context ends.
+Transit lines and live vehicles can turn on automatically during planning or
+navigation. Manual layer choices are respected, and automatically enabled
+layers return to their earlier state when the transit context ends.
 
 ## How the orchestrator works
 
-No single transit data source covers the world well. A planet-scale engine is
-unbeatable for door-to-door routing across hundreds of feeds, but a national
-operator's own API often knows things that aggregated GTFS doesn't — live
-platform changes, occupancy, the exact quirks of its network. OpenMapX's
-orchestrator embraces that by keeping a **chain of providers**, each declaring
-the geographic area it covers and a priority, and dispatching to them in order.
+The transit integration selects providers by declared coverage, role,
+capabilities, health, and source policy. Baseline planning is tried before
+regional and fallback providers. Within a role, lower numeric priority is tried
+first. A successful baseline response with no itinerary is authoritative and
+can stop the chain; it does not automatically trigger a hosted search.
 
-The model is **MOTIS-first**. [MOTIS](https://github.com/motis-project/motis) is
-OpenMapX's primary transit engine: a single self-hosted server that imports an
-OSM extract plus hundreds of GTFS feeds and answers multi-modal journey, stop,
-and departure queries at scale. It sits at the top of the chain with worldwide
-coverage, so most journeys are planned by your own MOTIS instance. Specialized
-regional and agency providers slot in just below it for the places where they
-add value, and broader catalogs sit underneath as a long-tail fallback.
+The built-in `transit-motis` integration registers local MOTIS when configured.
+Without a local endpoint it can use hosted Transitous as the baseline. With a
+local endpoint, Transitous can be a separate fallback. This is subject to
+`hostedRuntimeFallback`, the operations profile, and source policy; hosted
+fallback is not an availability guarantee.
 
-Concretely, when a request comes in the orchestrator:
-
-1. collects every registered transit provider whose coverage area overlaps the
-   request;
-2. sorts them by priority (lower number wins);
-3. for a journey plan, tries each in turn and returns the first that produces a
-   usable itinerary; for fan-out queries (stops in an area, vehicle positions,
-   alerts) it queries the matching providers in parallel and merges, de-duplicating
-   stops that appear in more than one feed.
-
-The priority tiers look like this:
-
-| Priority | Providers                                                                                                      | Role                                                                                                                  |
-| :------: | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-|    1     | Self-hosted MOTIS (`transit-motis-local`)                                                                      | Primary backbone and the only compiled static-schedule runtime — planning, stops, timetables, routes, and departures. |
-|   1–3    | Regional / agency providers (Entur, MBTA, TfL, iRail, opentransportdata.ch, DB HAFAS/vendo, DB RIS routing, …) | National operators with quirks or live data MOTIS doesn't model, each scoped to its country/city.                     |
-|    5     | Dynamic registry                                                                                               | A community-curated catalog of agency APIs.                                                                           |
-|    7     | MOTIS via Transitous (`transit-motis-transitous`)                                                              | Always-on soft fallback — covers local-MOTIS restarts and cold starts.                                                |
-|    9     | Transitland                                                                                                    | Global catalog for areas beyond MOTIS coverage.                                                                       |
-|    10    | Overpass (OSM)                                                                                                 | OSM-derived stops only; opt-in fallback, off by default.                                                              |
-
-The self-hosted MOTIS provider also falls back to the hosted
-[Transitous](https://api.transitous.org) service automatically when your local
-instance is unreachable, so transit keeps working during a MOTIS rebuild or
-restart.
+Regional providers include Entur, MBTA, TfL, iRail, Swiss transport, and German
+rail adapters. Catalog integrations have narrower roles: Transitland and
+Overpass can supply stop discovery without a complete journey-planning service.
+Mobility Database supplies feed catalog metadata, not departures or journeys.
 
 ### The dynamic registry
 
-The dynamic-registry provider pulls a community-maintained catalog of public
-transit APIs and registers each one as a provider on the fly, giving long-tail
-coverage of agencies that have a public endpoint but no first-party integration
-in OpenMapX. It's the catch-all between the hand-built regional providers and the
-global catalogs — entries it would duplicate (where a dedicated provider already
-exists) are suppressed.
+The dynamic registry discovers agency APIs from supported catalogs. Its endpoints
+and credentials have their own requirements. A discovered endpoint does not
+establish that an agency provides every transit operation or current data.
 
 ### Where the timetable data comes from
 
-MOTIS is the only component that compiles and serves static schedules. The
-data-manager builds its requested source set from the pinned
-[Transitous](https://github.com/public-transport/transitous) catalog plus any
-operator sources, acquires and validates the archives, imports them into an
-inactive MOTIS slot, runs functional probes, and then promotes the complete
-candidate. Postgres stores source, job, validation, and promotion metadata—not
-GTFS schedules.
+For local MOTIS, the data-manager prepares the selected feeds and OSM data,
+imports an inactive candidate, validates it, and promotes it. Requested source
+changes take effect only after successful publication. A failed candidate keeps
+the prior live dataset. Follow [Preparing data](../install/preparing-data.md).
 
-Catalog sources can be disabled and re-enabled. An operator source must provide
-a region, safe name, URL, attribution, and an SPDX license identifier or license
-URL. These changes are asynchronous, so the requested set can differ from the
-active set. A failed candidate never replaces the prior live dataset. See
-[Preparing data](../install/preparing-data.md) for the lifecycle and
-[How it works](../overview/how-it-works.md) for the data-manager that owns it.
-
-Stop timetables use the stop's local civil day. Route-pattern IDs are tied to
-the active dataset epoch and must not be persisted as durable external IDs.
-Route details currently depend on the experimental MOTIS
-`/api/experimental/map/route-details` endpoint in the pinned MOTIS release.
-
-Real-time data (GTFS-RT, plus agency-specific live APIs) is layered on top of the
-schedules by the real-time providers, scoped to the regions they cover.
+Timetables use the stop's local day. Internal route-pattern IDs belong to the
+active dataset version and should not be treated as permanent external IDs.
 
 ### Resilience and health
 
-Every provider call is timed and recorded into a sliding health window. A
-provider that starts failing is automatically taken out of rotation for a short
-cooldown, so one flaky upstream degrades gracefully to the next provider in the
-chain instead of failing the whole request — and recovers on its own when it
-comes back. Operators can inspect per-provider health and reset a cooldown from
-the admin surfaces; [Monitoring](../administration/monitoring.md) documents the
-window parameters and metrics.
-
-Every result also carries **attribution** for the feeds and operators behind it,
-which OpenMapX de-duplicates and renders as data-source credits in the UI.
+Provider errors can trigger cooldown and eligible fallback. These mechanisms
+cannot supply missing coverage, unsupported features, or an unavailable hosted
+service. Source credits identify contributing feeds. Operators can inspect
+[Monitoring](../administration/monitoring.md) and
+[Transit integrations](../developer/transit-integrations.md) for dispatch and
+freshness contracts.
 
 ## Transit reachability and isochrones
 
-Beyond point-to-point journey itineraries, OpenMapX integrates transit
-**reachability surfaces** and **exportable isochrones** powered by self-hosted MOTIS:
+The **Travel time** tool can show estimated transit reachability when supported
+by local MOTIS. Explore can use that estimate to filter nearby places. A smooth
+map surface is an estimate, not an exact journey to every point inside it.
 
-- **Estimated reachability surface**: Using MOTIS one-to-all computation
-  (`foot-1.2-cap-900-v1` profile: 1.2 m/s walking speed, 900-second access/egress/direct
-  walk caps, and configurable time thresholds up to 90 minutes), the backend calculates
-  reachable seeds across the network. The result is thinned server-side on a 100m Web
-  Mercator grid (up to 4,096 seeds) and cached for 300 seconds. In the frontend, a
-  custom WebGL2 shader (`transit-field-layer`) renders smooth, continuous color bands
-  directly on the map.
-- **Anchored explore filtering**: The reachability surface anchors location-based
-  POI discovery. When exploring places "within reach", candidate POIs are filtered
-  against the computed travel-time field, showing only attractions or venues reachable
-  within your selected transit time budget.
-- **Exact point checks**: For sensitive location evaluations, MOTIS
-  `POST /api/experimental/one-to-many-intermodal` verifies exact door-to-door transit
-  feasibility for up to 200 destinations in sequential batches of 128. This check is
-  strictly self-hosted and gated by `exactReachabilityEnabled`; destination coordinates
-  are never dispatched to external cloud endpoints.
-- **Exportable isochrone polygons**: Gated by `exportableIsochronesEnabled`,
-  `POST /api/integrations/transit/reachability/isochrone` samples travel times across
-  a spatial lattice (up to 900 km² ground area) and computes vector polygon contours.
-  The resulting RFC 7946 GeoJSON FeatureCollection includes `openmapx` foreign member
-  metadata (`accuracy: "sampled"`, lattice spacing, resolution, sample count, and
-  feed attributions). To protect latency on interactive trip queries, isochrone builds
-  are single-flight (returning HTTP 429 with `Retry-After: 30` when busy) and cache
-  sampled fields for 15 minutes (900s).
+Exact destination checks and sampled downloadable GeoJSON polygons are separate,
+operator-enabled capabilities. They require verified self-hosted MOTIS; those
+requests do not send destination grids to Transitous. Sampled polygons still
+have spatial resolution limits. See
+[Transit reachability](../administration/transit-reachability.md) for setup,
+costs, and interpretation.
 
 ## Configuring transit
 
-Transit has two configuration surfaces, matching OpenMapX's
-[service / integration split](../overview/how-it-works.md).
-
 ### The transit engine (a service)
 
-Running your own MOTIS is a [service](../install/managing-services.md) decision.
-Enable it, build its prepared data for your region, and link it into the stack:
-
-```bash
-pnpm openmapx services enable motis
-pnpm openmapx data download osm europe/germany
-pnpm openmapx data sync --countries de,at,ch
-pnpm openmapx services start motis
-```
-
-MOTIS scales from a single country to the whole planet on one server — pick the
-smallest region that covers your users, since region size drives RAM, disk, and
-import time. The region-only alternative,
-[OpenTripPlanner](../guides/transit-engines.md), is
-also supported for smaller deployments. See
-[Managing services](../install/managing-services.md) and
-[Preparing data](../install/preparing-data.md) for the full lifecycle, and
-[Configuration](../install/configuration.md) for the `MOTIS_URL` and
-`MOTIS_REGION` knobs.
+Operators who need local timetables should follow the
+[transit engine guide](../guides/transit-engines.md) and
+[Preparing data](../install/preparing-data.md). Configure coverage and source
+licenses before building a dataset. Local endpoint configuration alone is not
+proof that an active dataset and its capability metadata are ready.
 
 ### The transit providers (integrations)
 
-Which transit providers participate, and any credentials they need, is managed
-per integration in the admin panel at `/admin/integrations`. Most regional and
-agency providers work with no key at all; the few that require an API key (some
-real-time feeds) take it there, with the usual rule that anything set in
-`infra/docker/.env` wins over the admin-stored value. See
-[Configuration](../install/configuration.md) for the environment-variable side.
+Manage provider credentials and enablement under **Admin → Integrations**.
+Review hosted Transitous use and fallback explicitly. The
+[MOTIS operations profiles](../administration/motis-operations-profiles.md)
+explain regional deployments and hosted fallback controls.
 
-A handful of providers are deliberately off until you opt in — the OSM-derived
-Overpass fallback, for instance, is enabled only when its environment flag is
-set, since it returns stop geometry without schedules and is meant strictly as a
-last resort.
+If no journey appears, check the date, covered region, required modes, and
+restrictions. Operators should inspect provider health and the active dataset;
+users should check the transport operator when service information is missing.
 
 ## Related features
 
-- [Directions](./directions.md) — the routing panel transit shares with driving,
-  walking, and cycling.
-- [Places](./places.md) — stop and station detail, with departures and lines.
-- [Map layers](./map-layers.md) — the live-transit and transit-line overlays.
-- [Mobility data](./mobility-data.md) — shared bikes, scooters, and cars that
-  feed first-and-last-mile legs.
+- [Directions](./directions.md): route planning and stop times.
+- [Places](./places.md): station details.
+- [Map layers](./map-layers.md): transit line and vehicle overlays.
+- [Mobility data](./mobility-data.md): shared mobility for access and egress.

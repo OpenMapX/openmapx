@@ -36,6 +36,12 @@ import {
   walkStepInfo,
 } from "@openmapx/core/navigation";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  captureResultContributors,
+  contributorKey,
+  contributorsForField,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type {
   MergedDeparture,
   TransportMode,
@@ -64,6 +70,7 @@ import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
+import { getWheelchairStatus } from "./transitAccessibility";
 
 /**
  * Per-mode rendering for non-transit street legs (walk + intermodal bike/car
@@ -90,12 +97,17 @@ function isPerLegRedundant(
   if (!legAttrs || legAttrs.length === 0) return true;
   const trip = tripAttrs ?? [];
   if (legAttrs.length !== trip.length) return false;
-  const legIds = new Set(legAttrs.map((a) => a.sourceId));
-  return trip.every((a) => legIds.has(a.sourceId));
+  const legIds = new Set(legAttrs.map(contributorKey));
+  return trip.every((a) => legIds.has(contributorKey(a)));
 }
 
 function legToMergedDeparture(leg: TripLeg, provider?: string): MergedDeparture {
   return {
+    contributors: snapshotContributors(
+      ...["route", "mode", "from", "to", "startTime", "headsign"].map((field) =>
+        contributorsForField(leg, field),
+      ),
+    ),
     tripId: leg.tripId ?? "",
     route: {
       id: leg.routeId ?? "",
@@ -110,7 +122,7 @@ function legToMergedDeparture(leg: TripLeg, provider?: string): MergedDeparture 
   };
 }
 
-function LegStatusDetails({ leg }: { leg: TripLeg }) {
+function LegStatusDetails({ leg, itinerary }: { leg: TripLeg; itinerary: TripItinerary }) {
   const t = useTranslations("directions");
   const tNav = useTranslations("navigation");
   const [stepsExpanded, setStepsExpanded] = useState(false);
@@ -119,8 +131,10 @@ function LegStatusDetails({ leg }: { leg: TripLeg }) {
   if (leg.realtime === true) statuses.push(t("realtimeSupported"));
   if (leg.bikesAllowed === true) statuses.push(t("bikesSupported"));
   if (leg.bikesAllowed === false) statuses.push(t("bikesNotSupported"));
-  if (leg.wheelchairAccessible === true) statuses.push(t("wheelchairSupported"));
-  if (leg.wheelchairAccessible === false) statuses.push(t("wheelchairNotSupported"));
+  const wheelchairStatus = getWheelchairStatus(leg, itinerary);
+  if (wheelchairStatus === "accessible") statuses.push(t("wheelchairSupported"));
+  if (wheelchairStatus === "inaccessible") statuses.push(t("wheelchairNotSupported"));
+  if (wheelchairStatus === "unconfirmed") statuses.push(t("wheelchairUnconfirmed"));
   if (leg.rental?.returnConstraint === "ANY_STATION") statuses.push(t("returnAnyStation"));
   if (leg.rental?.returnConstraint === "ROUNDTRIP_STATION") {
     statuses.push(t("returnSameStation"));
@@ -218,6 +232,14 @@ export function TransitDetailsView({
   destinationTimeZone?: string | null;
   onBack: () => void;
 }) {
+  const selectedAttributions =
+    itinerary.contributors !== undefined
+      ? snapshotContributors(itinerary.contributors)
+      : snapshotContributors(
+          captureResultContributors(itinerary, attributions ?? []),
+          ...itinerary.legs.map((leg) => leg.contributors ?? leg.attributions ?? []),
+          itinerary.fare?.contributors ?? [],
+        );
   const t = useTranslations("directions");
   const tc = useTranslations("common");
   const tNav = useTranslations("navigation");
@@ -656,14 +678,22 @@ export function TransitDetailsView({
                       />
                       <LegAlerts routeId={leg.routeId} legAlerts={leg.alerts} />
                       {leg.tripId && <LegRemarks tripId={leg.tripId} />}
-                      {!isPerLegRedundant(leg.attributions, attributions) && (
+                      {!isPerLegRedundant(
+                        snapshotContributors(leg.contributors ?? leg.attributions ?? []),
+                        selectedAttributions,
+                      ) && (
                         <Box sx={{ mt: 0.5 }}>
-                          <AttributionStrip attributions={leg.attributions} variant="inline" />
+                          <AttributionStrip
+                            attributions={snapshotContributors(
+                              leg.contributors ?? leg.attributions ?? [],
+                            )}
+                            variant="inline"
+                          />
                         </Box>
                       )}
                     </Box>
                   )}
-                  <LegStatusDetails leg={leg} />
+                  <LegStatusDetails leg={leg} itinerary={itinerary} />
                 </Box>
               </Box>
               {/* Interchange summary after a ride that changes onto another. When a
@@ -814,7 +844,7 @@ export function TransitDetailsView({
       })()}
       {/* Data source attribution */}
       <AttributionStrip
-        attributions={attributions ?? []}
+        attributions={selectedAttributions}
         variant="panel-header"
         label={tc("dataSources")}
       />

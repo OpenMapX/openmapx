@@ -1,5 +1,16 @@
 import { createHash } from "node:crypto";
 import type { BBox } from "@openmapx/core";
+import { type CacheClient, captureTransitContributors } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  type ContributingRecord,
+  contributorsForField,
+  contributorsForFields,
+  contributorsForRecords,
+  type FieldContributors,
+  readCapturedFieldContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type {
   Departure,
   FareProduct,
@@ -27,6 +38,7 @@ import type {
   TripPlan,
   VehicleJourney,
 } from "@openmapx/mobility-core/transit";
+import { transitDataContributors } from "@openmapx/mobility-core/transit-contributors";
 import {
   buildOjpFareRequestXml,
   buildOjpLocationInformationRequestXml,
@@ -55,27 +67,12 @@ import {
   type SiriSituation,
   type XmlObject,
 } from "@openmapx/mobility-formats";
+import type { SwissTransitClient } from "./client.js";
 import {
-  fetchSwissFormationJourney,
-  fetchSwissGtfsRtFeed,
-  fetchSwissGtfsSaFeed,
-  fetchSwissSiriSxFeed,
-  getSwissTransitConfig,
-  isSwissTransitConfigured,
-  probeSwissOjp,
-  requestSwissOjp,
-  requestSwissOjpFare,
-  type SwissTransitConfig,
-  setSwissTransitConfig,
-} from "./client.js";
-import {
-  findSwissNearbyServicePoints,
-  loadSwissBusinessOrganisationDatasets,
-  loadSwissOccupancyForecastDataset,
-  loadSwissStopDatasets,
   resolveSwissStopIdentity,
   type SwissBusinessOrganisation,
   type SwissBusinessOrganisationDatasets,
+  type SwissDatasets,
   type SwissFlatCsvRecord,
   type SwissOccupancyForecastFareClassLevel,
   type SwissOccupancyForecastSection,
@@ -83,7 +80,6 @@ import {
   type SwissServicePoint,
   type SwissStopDatasets,
   type SwissTrafficPoint,
-  searchSwissServicePoints,
 } from "./datasets.js";
 
 const SWITZERLAND_BBOX: BBox = [5.96, 45.82, 10.49, 47.81];
@@ -251,8 +247,6 @@ interface SwissFormationJourneyResponse {
 }
 
 const SWISS_OBSERVED_ROUTE_TTL_MS = 24 * 60 * 60 * 1000;
-const SWISS_OBSERVED_ROUTE_TTL_SECONDS = 24 * 60 * 60;
-const observedRoutes = new Map<string, SwissObservedRouteEntry>();
 const SWISS_FORMATION_EVU_BY_ORGANISATION_NUMBER: Record<string, string> = {
   "11": "SBBP",
   "29": "MBC",
@@ -597,11 +591,21 @@ function serviceTrainNumber(service: OjpService | undefined): string | undefined
 }
 
 function mapOjpServiceInfo(
+  runtime: SwissProviderRuntime,
   service: OjpService | undefined,
   operatorMetadata?: SwissBusinessOrganisation,
 ): TransitServiceInfo | undefined {
   if (!service) return undefined;
   return {
+    contributors: snapshotContributors(
+      swissContributors(runtime, "ojp"),
+      contributorsForFields(operatorMetadata?.fieldContributors, [
+        "abbreviation",
+        "description",
+        "organisationNumber",
+        "participantRef",
+      ]),
+    ),
     attributes: service.attributeDetails.map((attribute) => ({
       accessFacility: attribute.accessFacility,
       code: attribute.code,
@@ -650,19 +654,28 @@ function mapOjpServiceInfo(
   };
 }
 
-function serviceRemarks(service: OjpService | undefined): Departure["remarks"] {
+function serviceRemarks(
+  runtime: SwissProviderRuntime,
+  service: OjpService | undefined,
+): Departure["remarks"] {
   if (!service?.attributes.length) return undefined;
-  return service.attributes.map((text) => ({ text, type: "info" as const }));
+  return service.attributes.map((text) => ({
+    contributors: swissContributors(runtime, "ojp"),
+    text,
+    type: "info" as const,
+  }));
 }
 
-function legGeometry(leg: OjpTripLeg): TripLeg["geometry"] {
+function legGeometry(runtime: SwissProviderRuntime, leg: OjpTripLeg): TripLeg["geometry"] {
   if (leg.projectionCoordinates.length >= 2) {
     return {
+      contributors: swissContributors(runtime, "ojp", "ojp-geometry-osm"),
       type: "LineString",
       coordinates: leg.projectionCoordinates,
     };
   }
   return {
+    contributors: swissContributors(runtime, "ojp"),
     type: "LineString",
     coordinates: [
       [leg.start.lng, leg.start.lat],
@@ -787,7 +800,19 @@ function buildStopCodes(identity: {
 }
 
 function mergeTransitRoute(existing: TransitRoute | undefined, next: TransitRoute): TransitRoute {
+  const retainedExisting =
+    existing &&
+    ((!next.shortName && existing.shortName) ||
+      (!next.longName && existing.longName) ||
+      (!next.operatorName && existing.operatorName) ||
+      (!next.color && existing.color) ||
+      (!next.textColor && existing.textColor) ||
+      (!next.geometry && existing.geometry));
   return {
+    contributors: snapshotContributors(
+      next.contributors ?? [],
+      retainedExisting ? (existing.contributors ?? []) : [],
+    ),
     id: next.id,
     shortName: next.shortName || existing?.shortName || next.id,
     longName: next.longName || existing?.longName || next.shortName || next.id,
@@ -803,27 +828,13 @@ function mergeTransitRoute(existing: TransitRoute | undefined, next: TransitRout
   };
 }
 
-function observedRouteCacheKey(routeId: string): string {
-  return `swiss-otdch:route-observed:${stripProviderPrefix(routeId)}`;
-}
-
-function pruneObservedRoutes(): void {
+function pruneObservedRoutes(runtime: SwissProviderRuntime): void {
   const now = Date.now();
-  for (const [routeId, entry] of observedRoutes.entries()) {
+  for (const [routeId, entry] of runtime.state.observedRoutes.entries()) {
     if (entry.expiresAt <= now) {
-      observedRoutes.delete(routeId);
+      runtime.state.observedRoutes.delete(routeId);
     }
   }
-}
-
-function serializeObservedRoute(entry: SwissObservedRouteEntry) {
-  return {
-    hintStopIds: entry.hintStopIds,
-    operatorRefs: entry.operatorRefs,
-    route: entry.route,
-    stops: entry.stops,
-    tripIds: entry.tripIds,
-  };
 }
 
 function buildObservedRouteEntry(
@@ -846,7 +857,27 @@ function buildObservedRouteEntry(
   };
 }
 
+function observationIsCurrent(runtime: SwissProviderRuntime): boolean {
+  return (
+    runtime.state.available && !runtime.state.disposed && runtime.epoch === runtime.state.epoch
+  );
+}
+
+function observationCacheKey(runtime: SwissProviderRuntime, routeId: string): string {
+  return `swiss-otdch:v2:observed:${runtime.cacheIdentity}:${stripProviderPrefix(routeId)}`;
+}
+
+function retainObservedRoute(runtime: SwissProviderRuntime, entry: SwissObservedRouteEntry): void {
+  runtime.state.observedRoutes.delete(entry.route.id);
+  runtime.state.observedRoutes.set(entry.route.id, entry);
+  if (runtime.state.observedRoutes.size > 5_000) {
+    const oldest = runtime.state.observedRoutes.keys().next();
+    if (!oldest.done) runtime.state.observedRoutes.delete(oldest.value);
+  }
+}
+
 async function rememberObservedRoute(
+  runtime: SwissProviderRuntime,
   route: TransitRoute,
   input: {
     hintStopId?: string;
@@ -855,53 +886,53 @@ async function rememberObservedRoute(
     tripId?: string;
   } = {},
 ): Promise<void> {
-  pruneObservedRoutes();
-  const entry = buildObservedRouteEntry(route, input, observedRoutes.get(route.id));
-  observedRoutes.set(route.id, entry);
-  const cache = getSwissTransitConfig().cache;
-  if (!cache) return;
-  try {
-    await cache.set(
-      observedRouteCacheKey(route.id),
-      serializeObservedRoute(entry),
-      SWISS_OBSERVED_ROUTE_TTL_SECONDS,
-    );
-  } catch {
-    // best-effort cache write only
-  }
+  if (!observationIsCurrent(runtime)) return;
+  const existing = await getObservedRoute(runtime, route.id);
+  if (!observationIsCurrent(runtime)) return;
+  // Another observation may have completed while the shared read was pending.
+  // Re-read and merge synchronously with publication to avoid losing its hints.
+  const current = runtime.state.observedRoutes.get(route.id);
+  const entry = buildObservedRouteEntry(route, input, current ?? existing ?? undefined);
+  retainObservedRoute(runtime, entry);
+  // The writer was captured before this operation's upstream acquisition.
+  // A direct cache.set here would capture the epoch too late.
+  await runtime.writer
+    ?.set(
+      observationCacheKey(runtime, route.id),
+      entry,
+      Math.max(1, Math.ceil((entry.expiresAt - Date.now()) / 1000)),
+    )
+    .catch(() => {});
 }
 
-async function getObservedRoute(routeId: string): Promise<SwissObservedRouteEntry | null> {
-  pruneObservedRoutes();
-  const local = observedRoutes.get(routeId);
+async function getObservedRoute(
+  runtime: SwissProviderRuntime,
+  routeId: string,
+): Promise<SwissObservedRouteEntry | null> {
+  if (!observationIsCurrent(runtime)) return null;
+  pruneObservedRoutes(runtime);
+  const local = runtime.state.observedRoutes.get(routeId);
   if (local) return local;
-  const cache = getSwissTransitConfig().cache;
-  if (!cache) return null;
+  if (!runtime.writer) return null;
   try {
-    const cached = await cache.get<{
-      hintStopIds?: string[];
-      operatorRefs?: string[];
-      route?: TransitRoute;
-      stops?: SwissRouteStop[];
-      tripIds?: string[];
-    }>(observedRouteCacheKey(routeId));
-    if (!cached?.route) return null;
-    const entry: SwissObservedRouteEntry = {
-      expiresAt: Date.now() + SWISS_OBSERVED_ROUTE_TTL_MS,
-      hintStopIds: uniqueStrings(cached.hintStopIds ?? []),
-      operatorRefs: uniqueStrings(cached.operatorRefs ?? []),
-      route: cached.route,
-      stops: cached.stops?.length ? cached.stops : undefined,
-      tripIds: uniqueStrings(cached.tripIds ?? []),
-    };
-    observedRoutes.set(routeId, entry);
-    return entry;
+    const cached = await runtime.cache?.get<SwissObservedRouteEntry>(
+      observationCacheKey(runtime, routeId),
+    );
+    if (!observationIsCurrent(runtime)) return null;
+    pruneObservedRoutes(runtime);
+    const current = runtime.state.observedRoutes.get(routeId);
+    if (current) return current;
+    if (!cached?.route || !Number.isFinite(cached.expiresAt) || cached.expiresAt <= Date.now())
+      return null;
+    retainObservedRoute(runtime, cached);
+    return cached;
   } catch {
     return null;
   }
 }
 
 function buildTransitStopFromServicePoint(
+  runtime: SwissProviderRuntime,
   servicePoint: SwissServicePoint,
   rawRef = servicePoint.didok ?? servicePoint.servicePointSloid,
 ): TransitStop {
@@ -914,6 +945,7 @@ function buildTransitStopFromServicePoint(
     servicePointSloid: servicePoint.servicePointSloid,
   });
   return {
+    contributors: swissContributors(runtime, "master-data"),
     id: providerId(rawRef),
     ...(ids.primaryScheme ? { primaryScheme: ids.primaryScheme } : {}),
     ...(ids.ids ? { ids: ids.ids } : {}),
@@ -927,6 +959,7 @@ function buildTransitStopFromServicePoint(
 }
 
 function buildTransitStopFromTrafficPoint(
+  runtime: SwissProviderRuntime,
   trafficPoint: SwissTrafficPoint,
   servicePoint: SwissServicePoint,
 ): TransitStop {
@@ -940,6 +973,7 @@ function buildTransitStopFromTrafficPoint(
     stopPointSloid: trafficPoint.sloid,
   });
   return {
+    contributors: swissContributors(runtime, "master-data"),
     id: providerId(trafficPoint.sloid),
     ...(ids.primaryScheme ? { primaryScheme: ids.primaryScheme } : {}),
     ...(ids.ids ? { ids: ids.ids } : {}),
@@ -956,7 +990,11 @@ function buildTransitStopFromTrafficPoint(
   };
 }
 
-function mapOjpPlaceToStop(place: OjpPlace, datasets: SwissStopDatasets): TransitStop {
+function mapOjpPlaceToStop(
+  runtime: SwissProviderRuntime,
+  place: OjpPlace,
+  datasets: SwissStopDatasets,
+): TransitStop {
   const rawRef = place.stopPointRef ?? place.stopPlaceRef ?? place.ref;
   const { didok, servicePoint, servicePointSloid, stopPoint } = findServicePoint(rawRef, datasets);
   const ids = buildStopIds(rawRef, { didok, servicePointSloid });
@@ -966,6 +1004,46 @@ function mapOjpPlaceToStop(place: OjpPlace, datasets: SwissStopDatasets): Transi
     stopPointSloid: stopPoint?.sloid,
   });
   return {
+    fieldContributors: {
+      id: swissContributors(runtime, "ojp"),
+      ids: swissContributors(runtime, "ojp", ...(servicePoint || stopPoint ? ["master-data"] : [])),
+      codes: swissContributors(runtime, servicePoint || stopPoint ? "master-data" : "ojp"),
+      name: swissContributors(
+        runtime,
+        place.name
+          ? "ojp"
+          : stopPoint?.designationOfficial || servicePoint?.name
+            ? "master-data"
+            : "ojp",
+      ),
+      lat: swissContributors(
+        runtime,
+        place.lat ? "ojp" : stopPoint || servicePoint ? "master-data" : "ojp",
+      ),
+      lng: swissContributors(
+        runtime,
+        place.lng ? "ojp" : stopPoint || servicePoint ? "master-data" : "ojp",
+      ),
+      modes: swissContributors(
+        runtime,
+        "ojp",
+        ...(servicePoint?.meansOfTransport?.some(
+          (mode) => !place.modes.map(mapSwissMode).includes(mapSwissMode(mode)),
+        )
+          ? ["master-data"]
+          : []),
+      ),
+      parentStationId: swissContributors(
+        runtime,
+        ...(place.placeType === "stop_point" && servicePoint ? ["master-data"] : []),
+      ),
+      platformCode: swissContributors(runtime, "ojp"),
+    },
+    contributors: swissContributors(
+      runtime,
+      "ojp",
+      ...(servicePoint || stopPoint ? ["master-data"] : []),
+    ),
     id: providerId(rawRef),
     ...(ids.primaryScheme ? { primaryScheme: ids.primaryScheme } : {}),
     ...(ids.ids ? { ids: ids.ids } : {}),
@@ -1010,29 +1088,33 @@ function dedupePreferredPlaces(places: OjpPlace[], datasets: SwissStopDatasets):
 }
 
 async function requestLocationInformationByQuery(
+  runtime: SwissProviderRuntime,
   query: string,
   limit: number,
 ): Promise<OjpPlace[]> {
   const xml = buildOjpLocationInformationRequestXml({
     includePtModes: true,
-    language: getSwissTransitConfig().requestLanguage,
+    language: runtime.client.config.requestLanguage,
     limit,
     query,
-    requestorRef: getSwissTransitConfig().requestorRef,
+    requestorRef: runtime.client.config.requestorRef,
     types: ["stop"],
   });
   return parseOjpLocationInformationResponse(
-    await requestSwissOjp(xml, {
+    await runtime.client.requestSwissOjp(xml, {
       cacheNamespace: "location-query",
       cacheTtlSeconds: 3600,
     }),
   ).places;
 }
 
-async function requestLocationInformationByRef(rawRef: string): Promise<OjpPlace[]> {
+async function requestLocationInformationByRef(
+  runtime: SwissProviderRuntime,
+  rawRef: string,
+): Promise<OjpPlace[]> {
   const xml = buildOjpLocationInformationRequestXml({
     includePtModes: true,
-    language: getSwissTransitConfig().requestLanguage,
+    language: runtime.client.config.requestLanguage,
     limit: 20,
     placeRef:
       rawRef.startsWith("ch:1:sloid:") && rawRef.split(":").length > 4
@@ -1042,11 +1124,11 @@ async function requestLocationInformationByRef(rawRef: string): Promise<OjpPlace
           : rawRef.startsWith("ch:1:sloid:")
             ? { stopPlaceRef: rawRef }
             : { stopPointRef: rawRef },
-    requestorRef: getSwissTransitConfig().requestorRef,
+    requestorRef: runtime.client.config.requestorRef,
     types: ["stop"],
   });
   return parseOjpLocationInformationResponse(
-    await requestSwissOjp(xml, {
+    await runtime.client.requestSwissOjp(xml, {
       cacheNamespace: "location-ref",
       cacheTtlSeconds: 3600,
     }),
@@ -1054,6 +1136,7 @@ async function requestLocationInformationByRef(rawRef: string): Promise<OjpPlace
 }
 
 async function requestNearbyLocations(
+  runtime: SwissProviderRuntime,
   lat: number,
   lng: number,
   radiusMeters: number,
@@ -1062,16 +1145,16 @@ async function requestNearbyLocations(
   const xml = buildOjpLocationInformationRequestXml({
     geoRestrictionCircleMeters: radiusMeters,
     includePtModes: true,
-    language: getSwissTransitConfig().requestLanguage,
+    language: runtime.client.config.requestLanguage,
     limit,
     placeRef: {
       geoPosition: { latitude: lat, longitude: lng },
     },
-    requestorRef: getSwissTransitConfig().requestorRef,
+    requestorRef: runtime.client.config.requestorRef,
     types: ["stop"],
   });
   return parseOjpLocationInformationResponse(
-    await requestSwissOjp(xml, {
+    await runtime.client.requestSwissOjp(xml, {
       cacheNamespace: "location-nearby",
       cacheTtlSeconds: 3600,
     }),
@@ -1088,6 +1171,7 @@ function computeDelaySeconds(
 }
 
 function buildRouteFromService(
+  runtime: SwissProviderRuntime,
   service: OjpService | undefined,
   operatorMetadata?: SwissBusinessOrganisation,
 ): TransitRoute | null {
@@ -1097,6 +1181,17 @@ function buildRouteFromService(
   const routeId = routeIdFromService(service);
   if (!routeId) return null;
   return {
+    contributors: snapshotContributors(
+      swissContributors(runtime, "ojp"),
+      contributorsForFields(
+        operatorMetadata?.fieldContributors,
+        operatorMetadata?.description
+          ? ["description"]
+          : operatorMetadata?.abbreviation
+            ? ["abbreviation"]
+            : [],
+      ),
+    ),
     id: routeId,
     longName: service?.destinationText || shortName,
     mode,
@@ -1110,20 +1205,22 @@ function buildRouteFromService(
 }
 
 function buildRouteFromStopEvent(
+  runtime: SwissProviderRuntime,
   stopEvent: OjpStopEvent,
   operatorMetadata?: SwissBusinessOrganisation,
 ): TransitRoute | null {
-  return buildRouteFromService(stopEvent.service, operatorMetadata);
+  return buildRouteFromService(runtime, stopEvent.service, operatorMetadata);
 }
 
 function buildDepartureFromStopEvent(
+  runtime: SwissProviderRuntime,
   stopEvent: OjpStopEvent,
   type: "departure" | "arrival",
-  route = buildRouteFromStopEvent(stopEvent),
+  route = buildRouteFromStopEvent(runtime, stopEvent),
   operatorMetadata?: SwissBusinessOrganisation,
 ): Departure | null {
   const service = stopEvent.service;
-  const serviceInfo = mapOjpServiceInfo(service, operatorMetadata);
+  const serviceInfo = mapOjpServiceInfo(runtime, service, operatorMetadata);
   if (!service || !route) return null;
   const call = stopEvent.thisCall;
   if (!call) return null;
@@ -1134,7 +1231,12 @@ function buildDepartureFromStopEvent(
     service.operatingDayRef && service.journeyRef
       ? providerId(`${service.operatingDayRef}|${service.journeyRef}`)
       : providerId(service.journeyRef || `${route.id}:${scheduledAt}`);
-  return {
+  const departure: Departure = {
+    contributors: snapshotContributors(
+      swissContributors(runtime, "ojp"),
+      route.contributors ?? [],
+      serviceInfo?.contributors ?? [],
+    ),
     delaySeconds: computeDelaySeconds(scheduledAt, expectedAt),
     expectedAt,
     formation: mapOjpFormation(service.datedTrainNumberRefs),
@@ -1143,8 +1245,9 @@ function buildDepartureFromStopEvent(
       mapSwissOccupancy(service.occupancy) ??
       mapSwissOccupancy(type === "departure" ? call.departureOccupancy : call.arrivalOccupancy),
     platform: call.estimatedQuay || call.plannedQuay,
-    remarks: serviceRemarks(service),
+    remarks: serviceRemarks(runtime, service),
     route: {
+      contributors: swissContributors(runtime, "ojp"),
       id: route.id,
       longName: route.longName,
       mode: route.mode,
@@ -1153,6 +1256,18 @@ function buildDepartureFromStopEvent(
     scheduledAt,
     serviceInfo,
     tripId,
+  };
+  return {
+    ...departure,
+    fieldContributors: {
+      ...Object.fromEntries(
+        Object.keys(departure)
+          .filter((field) => field !== "contributors")
+          .map((field) => [field, swissContributors(runtime, "ojp")]),
+      ),
+      route: snapshotContributors(departure.route.contributors ?? []),
+      serviceInfo: snapshotContributors(serviceInfo?.contributors ?? []),
+    },
   };
 }
 
@@ -1202,6 +1317,7 @@ function swissForecastTrainKeys(train: SwissOccupancyForecastTrain): Set<string>
 }
 
 async function resolveSwissOccupancyForecast(
+  runtime: SwissProviderRuntime,
   serviceInfo: TransitServiceInfo | undefined,
   options: {
     scheduledAt?: string;
@@ -1209,6 +1325,7 @@ async function resolveSwissOccupancyForecast(
     stopName?: string;
   } = {},
 ): Promise<{
+  contributors: readonly Attribution[];
   occupancy: OccupancyLevel;
   occupancyClasses?: TransitServiceInfo["occupancyClasses"];
   occupancyRaw: string;
@@ -1219,10 +1336,12 @@ async function resolveSwissOccupancyForecast(
     return null;
   }
 
-  const dataset = await loadSwissOccupancyForecastDataset(
-    serviceInfo.operatingDayRef,
-    serviceInfo.operatorOrganisationNumber,
-  ).catch(() => null);
+  const dataset = await runtime.datasets
+    .loadSwissOccupancyForecastDataset(
+      serviceInfo.operatingDayRef,
+      serviceInfo.operatorOrganisationNumber,
+    )
+    .catch(() => null);
   if (!dataset?.trains?.length) return null;
 
   const trainKeys = swissOccupancyTrainKeys(serviceInfo);
@@ -1246,7 +1365,9 @@ async function resolveSwissOccupancyForecast(
   });
   if (!trains.length) return null;
 
-  const datasets = options.stopId ? await loadSwissStopDatasets().catch(() => null) : null;
+  const datasets = options.stopId
+    ? await runtime.datasets.loadSwissStopDatasets().catch(() => null)
+    : null;
   const stopRefs = new Set<string>(
     options.stopId && datasets
       ? collectSwissStopRefs(stripProviderPrefix(options.stopId), datasets)
@@ -1304,6 +1425,7 @@ async function resolveSwissOccupancyForecast(
   if (!occupancy) return null;
 
   return {
+    contributors: snapshotContributors(dataset.contributors ?? []),
     occupancy,
     occupancyClasses: classes,
     occupancyRaw:
@@ -1316,9 +1438,23 @@ async function resolveSwissOccupancyForecast(
   };
 }
 
+/** Snapshot retained field owners before adding an independently acquired value. */
+function retainedFieldContributors(
+  record: ContributingRecord & { fieldContributors?: FieldContributors },
+): Record<string, readonly Attribution[]> {
+  if (record.fieldContributors !== undefined)
+    return { ...readCapturedFieldContributors(record.fieldContributors) };
+  return Object.fromEntries(
+    Object.keys(record)
+      .filter((field) => field !== "contributors" && field !== "fieldContributors")
+      .map((field) => [field, contributorsForField(record, field)]),
+  );
+}
+
 function applySwissOccupancyForecastToServiceInfo(
   serviceInfo: TransitServiceInfo | undefined,
   forecast: {
+    contributors: readonly Attribution[];
     occupancy: OccupancyLevel;
     occupancyClasses?: TransitServiceInfo["occupancyClasses"];
     occupancyRaw: string;
@@ -1327,17 +1463,68 @@ function applySwissOccupancyForecastToServiceInfo(
   } | null,
 ): TransitServiceInfo | undefined {
   if (!serviceInfo || !forecast) return serviceInfo;
+  const candidate = {
+    occupancy: forecast.occupancy,
+    occupancyClasses: forecast.occupancyClasses,
+    occupancyRaw: forecast.occupancyRaw,
+    occupancySource: forecast.source,
+    occupancyUpdatedAt: forecast.occupancyUpdatedAt,
+  };
+  const retained = Object.entries(candidate).filter(
+    ([field, value]) => value != null && serviceInfo[field as keyof TransitServiceInfo] == null,
+  );
+  if (!retained.length) return serviceInfo;
+  const receipts = snapshotContributors(forecast.contributors);
   return {
     ...serviceInfo,
-    occupancy: serviceInfo.occupancy ?? forecast.occupancy,
-    occupancyClasses: serviceInfo.occupancyClasses ?? forecast.occupancyClasses,
-    occupancyRaw: serviceInfo.occupancyRaw ?? forecast.occupancyRaw,
-    occupancySource: serviceInfo.occupancySource ?? forecast.source,
-    occupancyUpdatedAt: serviceInfo.occupancyUpdatedAt ?? forecast.occupancyUpdatedAt,
+    ...Object.fromEntries(retained),
+    contributors: snapshotContributors(serviceInfo.contributors ?? [], receipts),
+    fieldContributors: {
+      ...retainedFieldContributors(serviceInfo),
+      ...Object.fromEntries(retained.map(([field]) => [field, snapshotContributors(receipts)])),
+    },
+  };
+}
+
+function nestedFieldContributors(
+  record: ContributingRecord & { fieldContributors?: FieldContributors },
+  field: string,
+): Record<string, readonly Attribution[]> {
+  return {
+    [field]: snapshotContributors(record.contributors ?? []),
+    ...Object.fromEntries(
+      Object.entries(retainedFieldContributors(record)).map(([key, receipts]) => [
+        `${field}.${key}`,
+        snapshotContributors(receipts),
+      ]),
+    ),
+  };
+}
+
+function applySwissOccupancyForecast<T extends Departure | TripLeg>(
+  record: T,
+  forecast: NonNullable<Awaited<ReturnType<typeof resolveSwissOccupancyForecast>>>,
+): T {
+  const serviceInfo = applySwissOccupancyForecastToServiceInfo(record.serviceInfo, forecast);
+  const changedOccupancy = record.occupancy == null;
+  if (!changedOccupancy && serviceInfo === record.serviceInfo) return record;
+  return {
+    ...record,
+    contributors: snapshotContributors(record.contributors ?? [], forecast.contributors),
+    occupancy: record.occupancy ?? forecast.occupancy,
+    serviceInfo,
+    fieldContributors: {
+      ...retainedFieldContributors(record),
+      ...(changedOccupancy ? { occupancy: snapshotContributors(forecast.contributors) } : {}),
+      ...(serviceInfo && serviceInfo !== record.serviceInfo
+        ? nestedFieldContributors(serviceInfo, "serviceInfo")
+        : {}),
+    },
   };
 }
 
 async function requestStopEvents(
+  runtime: SwissProviderRuntime,
   rawRef: string,
   minutes: number,
   stopEventType: "departure" | "arrival",
@@ -1346,16 +1533,16 @@ async function requestStopEvents(
     includeAllRestrictedLines: true,
     includeOnwardCalls: true,
     includePreviousCalls: true,
-    language: getSwissTransitConfig().requestLanguage,
+    language: runtime.client.config.requestLanguage,
     numberOfResults: Math.min(Math.max(minutes, 10), 120),
-    requestorRef: getSwissTransitConfig().requestorRef,
+    requestorRef: runtime.client.config.requestorRef,
     stopEventType,
     stopRef: rawRef,
     useRealtimeData: "full",
     dateTime: new Date().toISOString(),
   });
   return parseOjpStopEventResponse(
-    await requestSwissOjp(xml, {
+    await runtime.client.requestSwissOjp(xml, {
       cacheNamespace: `stop-events:${stopEventType}`,
       cacheTtlSeconds: stopEventType === "departure" ? 30 : 60,
     }),
@@ -1375,9 +1562,13 @@ function computeTripDurationSeconds(result: OjpTripResult): number {
   return 0;
 }
 
-function mapOjpFareProduct(product: OjpFareProduct): FareProduct | null {
+function mapOjpFareProduct(
+  runtime: SwissProviderRuntime,
+  product: OjpFareProduct,
+): FareProduct | null {
   if (product.amount == null || !product.currency) return null;
   return {
+    contributors: swissContributors(runtime, "ojp-fare"),
     amount: product.amount,
     authorityName: product.authorityName,
     authorityRef: product.authorityRef,
@@ -1393,6 +1584,7 @@ function mapOjpFareProduct(product: OjpFareProduct): FareProduct | null {
 }
 
 function mapOjpFareBundle(
+  runtime: SwissProviderRuntime,
   fareResult: OjpFareResult | undefined,
   trip: OjpTripResult,
 ): SwissMappedFareBundle | undefined {
@@ -1403,7 +1595,7 @@ function mapOjpFareBundle(
   const results: NonNullable<TripFare["results"]> = [];
   for (const [effectiveFareLegIndex, fareTrip] of fareResult.trips.entries()) {
     const products = fareTrip.products
-      .map(mapOjpFareProduct)
+      .map(mapOjpFareProduct.bind(null, runtime))
       .filter((value): value is FareProduct => Boolean(value));
     if (!products.length) continue;
 
@@ -1432,6 +1624,7 @@ function mapOjpFareBundle(
   const transferProducts = results.flatMap((result) => result.products);
   return {
     fare: {
+      contributors: swissContributors(runtime, "ojp-fare"),
       results,
       source: "ojpfare",
       transfers: [
@@ -1447,10 +1640,11 @@ function mapOjpFareBundle(
 }
 
 async function requestTripFares(
+  runtime: SwissProviderRuntime,
   response: OjpTripResponse,
   rawTrips: XmlObject[],
 ): Promise<Array<OjpFareResult | undefined>> {
-  const config = getSwissTransitConfig();
+  const config = runtime.client.config;
   return Promise.all(
     response.trips.map(async (trip, index) => {
       const rawTrip = rawTrips[index];
@@ -1464,7 +1658,7 @@ async function requestTripFares(
           trips: [rawTrip],
         });
         return parseOjpFareResponse(
-          await requestSwissOjpFare(xml, {
+          await runtime.client.requestSwissOjpFare(xml, {
             cacheNamespace: "trip-fare",
             cacheTtlSeconds: 300,
           }),
@@ -1478,6 +1672,7 @@ async function requestTripFares(
 }
 
 function mapOjpTripLeg(
+  runtime: SwissProviderRuntime,
   leg: OjpTripLeg,
   businessDatasets: SwissBusinessOrganisationDatasets,
   fareAssignment?: SwissFareAssignment,
@@ -1488,7 +1683,7 @@ function mapOjpTripLeg(
     leg.service?.productCategoryShortName ||
     leg.service?.trainNumber;
   const operatorMetadata = mapSwissOperatorMetadata(leg.service, businessDatasets);
-  const serviceInfo = mapOjpServiceInfo(leg.service, operatorMetadata);
+  const serviceInfo = mapOjpServiceInfo(runtime, leg.service, operatorMetadata);
   const mode = leg.kind === "timed" ? mapSwissMode(leg.service?.ptMode) || "rail" : "walking";
   const tripId =
     leg.service?.operatingDayRef && leg.service?.journeyRef
@@ -1496,6 +1691,33 @@ function mapOjpTripLeg(
       : undefined;
   const routeId = routeIdFromService(leg.service);
   return {
+    fieldContributors: {
+      mode: swissContributors(runtime, "ojp"),
+      route: swissContributors(runtime, "ojp"),
+      from: swissContributors(runtime, "ojp"),
+      to: swissContributors(runtime, "ojp"),
+      geometry: swissContributors(
+        runtime,
+        "ojp",
+        ...(leg.projectionCoordinates.length >= 2 ? ["ojp-geometry-osm"] : []),
+      ),
+      serviceInfo: serviceInfo?.contributors ?? [],
+      ...(fareAssignment
+        ? {
+            fareTransferIndex: swissContributors(runtime, "ojp-fare"),
+            effectiveFareLegIndex: swissContributors(runtime, "ojp-fare"),
+          }
+        : {}),
+    },
+    contributors: snapshotContributors(
+      swissContributors(
+        runtime,
+        "ojp",
+        ...(leg.projectionCoordinates.length >= 2 ? ["ojp-geometry-osm"] : []),
+      ),
+      serviceInfo?.contributors ?? [],
+      fareAssignment ? swissContributors(runtime, "ojp-fare") : [],
+    ),
     _intermediateStopCount: leg.intermediateCalls.length,
     alightNameSuffix: leg.alightCall?.nameSuffix,
     boardNameSuffix: leg.boardCall?.nameSuffix,
@@ -1512,7 +1734,7 @@ function mapOjpTripLeg(
       name: leg.start.name,
       stopId: leg.start.stopPointRef ? providerId(leg.start.stopPointRef) : undefined,
     },
-    geometry: legGeometry(leg),
+    geometry: legGeometry(runtime, leg),
     intermodal:
       leg.kind === "timed" &&
       !leg.guidanceTexts.length &&
@@ -1577,21 +1799,27 @@ function mapOjpTripLeg(
 }
 
 function mapTripResponseToPlan(
+  runtime: SwissProviderRuntime,
   response: OjpTripResponse,
   params: { from: { lat: number; lng: number }; to: { lat: number; lng: number } },
   businessDatasets: SwissBusinessOrganisationDatasets,
   fareResults?: Array<OjpFareResult | undefined>,
 ): TripPlan | null {
   const itineraries: TripItinerary[] = response.trips.map((trip, index) => {
-    const fareBundle = mapOjpFareBundle(fareResults?.[index], trip);
+    const fareBundle = mapOjpFareBundle(runtime, fareResults?.[index], trip);
     const legs = trip.legs.map((leg) =>
       mapOjpTripLeg(
+        runtime,
         leg,
         businessDatasets,
         leg.id ? fareBundle?.legAssignments.get(leg.id) : undefined,
       ),
     );
     return {
+      contributors: snapshotContributors(
+        contributorsForRecords(legs),
+        fareBundle?.fare.contributors ?? [],
+      ),
       distanceMeters: trip.distanceMeters,
       duration: computeTripDurationSeconds(trip),
       endTime: trip.endTime || legs.at(-1)?.endTime || new Date().toISOString(),
@@ -1613,6 +1841,7 @@ function mapTripResponseToPlan(
       name: itineraries[0]?.legs[0]?.from.name || "Origin",
     },
     itineraries,
+    contributors: contributorsForRecords(itineraries),
     provider: PROVIDER,
     to: {
       lat: params.to.lat,
@@ -1622,34 +1851,38 @@ function mapTripResponseToPlan(
   };
 }
 
-async function enrichSwissTripPlanOccupancy(plan: TripPlan | null): Promise<TripPlan | null> {
+async function enrichSwissTripPlanOccupancy(
+  runtime: SwissProviderRuntime,
+  plan: TripPlan | null,
+): Promise<TripPlan | null> {
   if (!plan) return null;
   const itineraries = await Promise.all(
     plan.itineraries.map(async (itinerary) => {
       const legs = await Promise.all(
         itinerary.legs.map(async (leg) => {
           if (leg.mode === "walking" || leg.occupancy || !leg.serviceInfo) return leg;
-          const forecast = await resolveSwissOccupancyForecast(leg.serviceInfo, {
+          const forecast = await resolveSwissOccupancyForecast(runtime, leg.serviceInfo, {
             scheduledAt: leg.startTime,
             stopId: leg.from.stopId,
             stopName: leg.from.name,
           });
           if (!forecast) return leg;
-          return {
-            ...leg,
-            occupancy: leg.occupancy ?? forecast.occupancy,
-            serviceInfo: applySwissOccupancyForecastToServiceInfo(leg.serviceInfo, forecast),
-          };
+          return applySwissOccupancyForecast(leg, forecast);
         }),
       );
       return {
         ...itinerary,
+        contributors: snapshotContributors(
+          contributorsForRecords(legs),
+          itinerary.fare?.contributors ?? [],
+        ),
         legs,
       };
     }),
   );
   return {
     ...plan,
+    contributors: contributorsForRecords(itineraries),
     itineraries,
   };
 }
@@ -1683,6 +1916,7 @@ function decodeSwissTripRef(
 }
 
 async function requestTripInfoByTripId(
+  runtime: SwissProviderRuntime,
   tripId: string,
   options: {
     includeCalls: boolean;
@@ -1705,15 +1939,15 @@ async function requestTripInfoByTripId(
     includeSituationsContext: true,
     includeTrackSections: options.includeTrackSections,
     journeyRef: decoded.journeyRef,
-    language: getSwissTransitConfig().requestLanguage,
+    language: runtime.client.config.requestLanguage,
     operatingDayRef: decoded.operatingDayRef,
-    requestorRef: getSwissTransitConfig().requestorRef,
+    requestorRef: runtime.client.config.requestorRef,
     useRealtimeData: "full",
   });
   return {
     rawTripId: decoded.rawTripId,
     response: parseOjpTripInfoResponse(
-      await requestSwissOjp(xml, {
+      await runtime.client.requestSwissOjp(xml, {
         cacheNamespace:
           options.includeCalls || options.includeService ? "trip-info-live" : "trip-info-static",
         cacheTtlSeconds: options.includeCalls || options.includeService ? 30 : 86400,
@@ -1750,6 +1984,7 @@ function stopEventCalls(stopEvent: OjpStopEvent): OjpCall[] {
 }
 
 function mapJourneyStopFromCall(
+  runtime: SwissProviderRuntime,
   call: OjpCall,
   datasets: SwissStopDatasets,
 ): VehicleJourney["stops"][number] {
@@ -1760,6 +1995,11 @@ function mapJourneyStopFromCall(
   const scheduledDeparture = call.departureTimetabled;
   const expectedDeparture = call.departureEstimated;
   return {
+    contributors: swissContributors(
+      runtime,
+      "ojp",
+      ...(findServicePoint(call.stopPointRef ?? "", datasets).servicePoint ? ["master-data"] : []),
+    ),
     delaySeconds:
       computeDelaySeconds(scheduledDeparture, expectedDeparture) ??
       computeDelaySeconds(scheduledArrival, expectedArrival),
@@ -1776,6 +2016,7 @@ function mapJourneyStopFromCall(
 }
 
 function mapRouteStopFromCall(
+  runtime: SwissProviderRuntime,
   call: OjpCall,
   datasets: SwissStopDatasets,
   mode: TransportMode,
@@ -1785,6 +2026,11 @@ function mapRouteStopFromCall(
   const { didok, servicePoint, servicePointSloid, stopPoint } = findServicePoint(rawRef, datasets);
   const ids = buildStopIds(rawRef, { didok, servicePointSloid });
   return {
+    contributors: swissContributors(
+      runtime,
+      "ojp",
+      ...(findServicePoint(call.stopPointRef ?? "", datasets).servicePoint ? ["master-data"] : []),
+    ),
     id: providerId(rawRef),
     ...(ids.primaryScheme ? { primaryScheme: ids.primaryScheme } : {}),
     ...(ids.ids ? { ids: ids.ids } : {}),
@@ -2173,8 +2419,9 @@ function translatedText(
 }
 
 function pickSiriText(
+  runtime: SwissProviderRuntime,
   values: Array<{ language?: string; value: string }> | undefined,
-  preferredLanguage = getSwissTransitConfig().requestLanguage,
+  preferredLanguage = runtime.client.config.requestLanguage,
 ): string | undefined {
   if (!values?.length) return undefined;
   const normalized = normalizeText(preferredLanguage).toLowerCase();
@@ -2257,6 +2504,7 @@ function mapAffectedSwissStopIds(rawStopRefs: string[], datasets: SwissStopDatas
 }
 
 function mapGtfsAlert(
+  runtime: SwissProviderRuntime,
   entity: SwissGtfsEntity,
   datasets: SwissStopDatasets,
 ): SwissMappedAlert | null {
@@ -2280,6 +2528,11 @@ function mapGtfsAlert(
     }))
     .filter((period) => Boolean(period.start));
   return {
+    contributors: swissContributors(
+      runtime,
+      "gtfs-sa",
+      ...(rawStopRefs.length ? ["master-data"] : []),
+    ),
     activePeriods,
     affectedRouteIds: rawRouteRefs.map((routeId) => providerId(`gtfs-route:${routeId}`)),
     affectedStopIds: mapAffectedSwissStopIds(rawStopRefs, datasets),
@@ -2299,11 +2552,15 @@ function mapGtfsAlert(
   } satisfies SwissMappedAlert;
 }
 
-function mapSiriSituation(situation: SiriSituation, datasets: SwissStopDatasets): SwissMappedAlert {
+function mapSiriSituation(
+  runtime: SwissProviderRuntime,
+  situation: SiriSituation,
+  datasets: SwissStopDatasets,
+): SwissMappedAlert {
   const rawStopRefs = uniqueStrings([...situation.stopPointRefs, ...situation.stopPlaceRefs]);
   const rawRouteRefs = uniqueStrings([...situation.lineRefs, ...situation.routeRefs]);
   const descriptions = uniqueStrings([
-    pickSiriText(situation.descriptions),
+    pickSiriText(runtime, situation.descriptions),
     ...situation.consequences.map((consequence) => consequence.advice),
   ]);
   const activePeriods = uniqueStrings([
@@ -2318,8 +2575,13 @@ function mapSiriSituation(situation: SiriSituation, datasets: SwissStopDatasets)
       start,
     };
   });
-  const title = pickSiriText(situation.summaries) || descriptions[0] || "Service alert";
+  const title = pickSiriText(runtime, situation.summaries) || descriptions[0] || "Service alert";
   return {
+    contributors: swissContributors(
+      runtime,
+      "siri-sx",
+      ...(rawStopRefs.length ? ["master-data"] : []),
+    ),
     activePeriods: activePeriods.length
       ? activePeriods
       : [{ start: situation.creationTime || new Date().toISOString() }],
@@ -2359,6 +2621,7 @@ function dedupeSwissMappedAlerts(alerts: SwissMappedAlert[]): SwissMappedAlert[]
     }
     merged.set(alert.id, {
       ...existing,
+      contributors: snapshotContributors(existing.contributors ?? [], alert.contributors ?? []),
       activePeriods: [...existing.activePeriods, ...alert.activePeriods],
       affectedRouteIds: uniqueStrings([...existing.affectedRouteIds, ...alert.affectedRouteIds]),
       affectedStopIds: uniqueStrings([...existing.affectedStopIds, ...alert.affectedStopIds]),
@@ -2373,42 +2636,50 @@ function dedupeSwissMappedAlerts(alerts: SwissMappedAlert[]): SwissMappedAlert[]
   return [...merged.values()];
 }
 
-async function loadGtfsMappedAlerts(datasets: SwissStopDatasets): Promise<SwissMappedAlert[]> {
+async function loadGtfsMappedAlerts(
+  runtime: SwissProviderRuntime,
+  datasets: SwissStopDatasets,
+): Promise<SwissMappedAlert[]> {
   try {
-    const feed = await fetchSwissGtfsSaFeed();
+    const feed = await runtime.client.fetchSwissGtfsSaFeed();
     const entities = (feed.entity ?? []) as SwissGtfsEntity[];
     return entities
-      .map((entity) => mapGtfsAlert(entity, datasets))
+      .map((entity) => mapGtfsAlert(runtime, entity, datasets))
       .filter((alert): alert is SwissMappedAlert => alert !== null);
   } catch (error) {
-    getSwissTransitConfig().log?.warn?.("Swiss GTFS-SA alert feed failed", error);
+    runtime.client.config.log?.warn?.("Swiss GTFS-SA alert feed failed", error);
     return [];
   }
 }
 
-async function loadSiriMappedAlerts(datasets: SwissStopDatasets): Promise<SwissMappedAlert[]> {
+async function loadSiriMappedAlerts(
+  runtime: SwissProviderRuntime,
+  datasets: SwissStopDatasets,
+): Promise<SwissMappedAlert[]> {
   const feeds = await Promise.all([
-    fetchSwissSiriSxFeed("complete")
+    runtime.client
+      .fetchSwissSiriSxFeed("complete")
       .then((xml) => listSiriSituations(xml))
       .catch((error) => {
-        getSwissTransitConfig().log?.warn?.("Swiss SIRI-SX feed failed", error);
+        runtime.client.config.log?.warn?.("Swiss SIRI-SX feed failed", error);
         return [] as SiriSituation[];
       }),
-    fetchSwissSiriSxFeed("unplanned")
+    runtime.client
+      .fetchSwissSiriSxFeed("unplanned")
       .then((xml) => listSiriSituations(xml))
       .catch((error) => {
-        getSwissTransitConfig().log?.warn?.("Swiss SIRI-SX unplanned feed failed", error);
+        runtime.client.config.log?.warn?.("Swiss SIRI-SX unplanned feed failed", error);
         return [] as SiriSituation[];
       }),
   ]);
-  return feeds.flat().map((situation) => mapSiriSituation(situation, datasets));
+  return feeds.flat().map((situation) => mapSiriSituation(runtime, situation, datasets));
 }
 
-async function loadMappedAlerts(): Promise<SwissMappedAlert[]> {
-  const datasets = await loadSwissStopDatasets();
+async function loadMappedAlerts(runtime: SwissProviderRuntime): Promise<SwissMappedAlert[]> {
+  const datasets = await runtime.datasets.loadSwissStopDatasets();
   return dedupeSwissMappedAlerts([
-    ...(await loadGtfsMappedAlerts(datasets)),
-    ...(await loadSiriMappedAlerts(datasets)),
+    ...(await loadGtfsMappedAlerts(runtime, datasets)),
+    ...(await loadSiriMappedAlerts(runtime, datasets)),
   ]);
 }
 
@@ -2506,6 +2777,7 @@ function deriveGtfsExpectedTime(
 }
 
 function applyGtfsTripUpdateOverlay(
+  runtime: SwissProviderRuntime,
   departure: Departure,
   boardStopRef: string,
   kind: "departure" | "arrival",
@@ -2564,20 +2836,43 @@ function applyGtfsTripUpdateOverlay(
   }
 
   if (!bestMatch) return departure;
+  const applied =
+    (!departure.canceled && bestMatch.canceled) ||
+    (departure.delaySeconds == null && bestMatch.delaySeconds != null) ||
+    (!departure.expectedAt && Boolean(bestMatch.expectedAt)) ||
+    (departure.serviceInfo && !departure.serviceInfo.canceled && bestMatch.canceled);
+  if (!applied) return departure;
+  const realtime = swissContributors(runtime, "gtfs-rt");
+  const fieldContributors = retainedFieldContributors(departure);
+  if (!departure.canceled && bestMatch.canceled) fieldContributors.canceled = realtime;
+  if (departure.delaySeconds == null && bestMatch.delaySeconds != null)
+    fieldContributors.delaySeconds = realtime;
+  if (!departure.expectedAt && bestMatch.expectedAt) fieldContributors.expectedAt = realtime;
+  const serviceInfo =
+    departure.serviceInfo && !departure.serviceInfo.canceled && bestMatch.canceled
+      ? {
+          ...departure.serviceInfo,
+          canceled: true,
+          contributors: snapshotContributors(departure.serviceInfo.contributors ?? [], realtime),
+          fieldContributors: {
+            ...retainedFieldContributors(departure.serviceInfo),
+            canceled: realtime,
+          },
+        }
+      : departure.serviceInfo;
+  if (serviceInfo && serviceInfo !== departure.serviceInfo)
+    Object.assign(fieldContributors, nestedFieldContributors(serviceInfo, "serviceInfo"));
   return {
     ...departure,
+    contributors: snapshotContributors(departure.contributors ?? [], realtime),
+    fieldContributors,
     canceled: departure.canceled || bestMatch.canceled,
     delaySeconds:
       departure.delaySeconds == null && bestMatch.delaySeconds != null
         ? bestMatch.delaySeconds
         : departure.delaySeconds,
     expectedAt: departure.expectedAt || bestMatch.expectedAt,
-    serviceInfo: departure.serviceInfo
-      ? {
-          ...departure.serviceInfo,
-          canceled: departure.serviceInfo.canceled || bestMatch.canceled,
-        }
-      : departure.serviceInfo,
+    serviceInfo,
   };
 }
 
@@ -2646,6 +2941,7 @@ function mapSwissFormationStopId(
 }
 
 function mapSwissFormationDetails(
+  runtime: SwissProviderRuntime,
   journey: SwissFormationJourneyResponse,
   datasets: SwissStopDatasets,
   evu: string,
@@ -2699,6 +2995,7 @@ function mapSwissFormationDetails(
     return undefined;
   }
   return {
+    contributors: swissContributors(runtime, "formation", "master-data"),
     lastUpdate: journey.lastUpdate,
     ...(lengthMeters > 0 ? { lengthMeters } : {}),
     operatorCode: evu,
@@ -2713,66 +3010,72 @@ function mapSwissFormationDetails(
   };
 }
 
-export function setOpenTransportDataChConfig(config: SwissTransitConfig): void {
-  observedRoutes.clear();
-  setSwissTransitConfig(config);
+function swissContributors(runtime: SwissProviderRuntime, ...sourceIds: string[]): Attribution[] {
+  return snapshotContributors(
+    ...sourceIds.map((id) => runtime.contributors[`opentransportdata-ch-${id}`] ?? []),
+  );
 }
 
-export async function isOpenTransportDataChAvailable(): Promise<boolean> {
-  return probeSwissOjp();
+async function isOpenTransportDataChAvailable(runtime: SwissProviderRuntime): Promise<boolean> {
+  return runtime.client.probeSwissOjp();
 }
 
-export async function searchByName(query: string, limit: number): Promise<TransitStop[]> {
-  const datasets = await loadSwissStopDatasets();
-  if (isSwissTransitConfigured()) {
+async function searchByName(
+  runtime: SwissProviderRuntime,
+  query: string,
+  limit: number,
+): Promise<TransitStop[]> {
+  const datasets = await runtime.datasets.loadSwissStopDatasets();
+  if (runtime.client.isSwissTransitConfigured()) {
     try {
       return dedupePreferredPlaces(
-        await requestLocationInformationByQuery(query, limit * 3),
+        await requestLocationInformationByQuery(runtime, query, limit * 3),
         datasets,
       )
         .slice(0, limit)
-        .map((place) => mapOjpPlaceToStop(place, datasets));
+        .map((place) => mapOjpPlaceToStop(runtime, place, datasets));
     } catch {
       // fall back to the static master-data snapshot
     }
   }
-  return (await searchSwissServicePoints(query, limit)).map((servicePoint) =>
-    buildTransitStopFromServicePoint(servicePoint),
+  return (await runtime.datasets.searchSwissServicePoints(query, limit)).map((servicePoint) =>
+    buildTransitStopFromServicePoint(runtime, servicePoint),
   );
 }
 
-export async function getStopsNearby(
+async function getStopsNearby(
+  runtime: SwissProviderRuntime,
   lat: number,
   lng: number,
   radiusMeters: number,
 ): Promise<TransitStop[]> {
-  const datasets = await loadSwissStopDatasets();
-  if (isSwissTransitConfigured()) {
+  const datasets = await runtime.datasets.loadSwissStopDatasets();
+  if (runtime.client.isSwissTransitConfigured()) {
     try {
       return dedupePreferredPlaces(
-        await requestNearbyLocations(lat, lng, Math.min(radiusMeters, 5_000), 80),
+        await requestNearbyLocations(runtime, lat, lng, Math.min(radiusMeters, 5_000), 80),
         datasets,
-      ).map((place) => mapOjpPlaceToStop(place, datasets));
+      ).map((place) => mapOjpPlaceToStop(runtime, place, datasets));
     } catch {
       // fall back to the static snapshot
     }
   }
-  return (await findSwissNearbyServicePoints(lat, lng, radiusMeters)).map((servicePoint) =>
-    buildTransitStopFromServicePoint(servicePoint),
+  return (await runtime.datasets.findSwissNearbyServicePoints(lat, lng, radiusMeters)).map(
+    (servicePoint) => buildTransitStopFromServicePoint(runtime, servicePoint),
   );
 }
 
-export async function getStop(stopId: string): Promise<TransitStop | null> {
-  const datasets = await loadSwissStopDatasets();
+async function getStop(runtime: SwissProviderRuntime, stopId: string): Promise<TransitStop | null> {
+  const datasets = await runtime.datasets.loadSwissStopDatasets();
   const rawRef = stripProviderPrefix(stopId);
-  if (isSwissTransitConfigured()) {
+  if (runtime.client.isSwissTransitConfigured()) {
     try {
-      const places = await requestLocationInformationByRef(rawRef);
+      const places = await requestLocationInformationByRef(runtime, rawRef);
       const exact = places.find((place) => {
         const placeRaw = place.stopPointRef ?? place.stopPlaceRef ?? place.ref;
         return matchesStopRef(placeRaw, rawRef, datasets);
       });
-      if (exact) return mapOjpPlaceToStop(exact, datasets);
+      if (exact) return mapOjpPlaceToStop(runtime, exact, datasets);
     } catch {
       // fall back to master data
     }
@@ -2780,53 +3083,67 @@ export async function getStop(stopId: string): Promise<TransitStop | null> {
 
   const { servicePoint, stopPoint } = findServicePoint(rawRef, datasets);
   if (stopPoint && servicePoint) {
-    return buildTransitStopFromTrafficPoint(stopPoint, servicePoint);
+    return buildTransitStopFromTrafficPoint(runtime, stopPoint, servicePoint);
   }
   if (servicePoint) {
-    return buildTransitStopFromServicePoint(servicePoint, rawRef);
+    return buildTransitStopFromServicePoint(runtime, servicePoint, rawRef);
   }
   return null;
 }
 
-export async function getDepartures(stopId: string, minutes: number): Promise<Departure[]> {
+async function getDepartures(
+  runtime: SwissProviderRuntime,
+  stopId: string,
+  minutes: number,
+): Promise<Departure[]> {
   const rawRef = stripProviderPrefix(stopId);
   const cutoff = Date.now() + minutes * 60_000;
   const [response, datasets, businessDatasets, gtfsRtFeed] = await Promise.all([
-    requestStopEvents(rawRef, minutes, "departure"),
-    loadSwissStopDatasets(),
-    loadSwissBusinessOrganisationDatasets(),
-    fetchSwissGtfsRtFeed().catch(() => null),
+    requestStopEvents(runtime, rawRef, minutes, "departure"),
+    runtime.datasets.loadSwissStopDatasets(),
+    runtime.datasets.loadSwissBusinessOrganisationDatasets(),
+    runtime.client.fetchSwissGtfsRtFeed().catch(() => null),
   ]);
   const departures: Departure[] = [];
   for (const stopEvent of response.stopEvents) {
     const operatorMetadata = mapSwissOperatorMetadata(stopEvent.service, businessDatasets);
-    const route = buildRouteFromStopEvent(stopEvent, operatorMetadata);
-    let departure = buildDepartureFromStopEvent(stopEvent, "departure", route, operatorMetadata);
+    const route = buildRouteFromStopEvent(runtime, stopEvent, operatorMetadata);
+    let departure = buildDepartureFromStopEvent(
+      runtime,
+      stopEvent,
+      "departure",
+      route,
+      operatorMetadata,
+    );
     if (!departure) continue;
     if (gtfsRtFeed) {
-      departure = applyGtfsTripUpdateOverlay(departure, rawRef, "departure", gtfsRtFeed, datasets);
+      departure = applyGtfsTripUpdateOverlay(
+        runtime,
+        departure,
+        rawRef,
+        "departure",
+        gtfsRtFeed,
+        datasets,
+      );
     }
     if (!departure.occupancy && !departure.serviceInfo?.occupancy) {
-      const occupancyForecast = await resolveSwissOccupancyForecast(departure.serviceInfo, {
-        scheduledAt: departure.scheduledAt,
-        stopId,
-        stopName: stopEvent.thisCall?.name,
-      });
+      const occupancyForecast = await resolveSwissOccupancyForecast(
+        runtime,
+        departure.serviceInfo,
+        {
+          scheduledAt: departure.scheduledAt,
+          stopId,
+          stopName: stopEvent.thisCall?.name,
+        },
+      );
       if (occupancyForecast) {
-        departure = {
-          ...departure,
-          occupancy: departure.occupancy ?? occupancyForecast.occupancy,
-          serviceInfo: applySwissOccupancyForecastToServiceInfo(
-            departure.serviceInfo,
-            occupancyForecast,
-          ),
-        };
+        departure = applySwissOccupancyForecast(departure, occupancyForecast);
       }
     }
     if (new Date(departure.scheduledAt).getTime() > cutoff) continue;
     departures.push(departure);
     if (route) {
-      await rememberObservedRoute(route, {
+      await rememberObservedRoute(runtime, route, {
         hintStopId: stopId,
         operatorRefs: collectServiceOperatorRefs(stopEvent.service),
         tripId: departure.tripId,
@@ -2836,45 +3153,55 @@ export async function getDepartures(stopId: string, minutes: number): Promise<De
   return departures;
 }
 
-export async function getArrivals(stopId: string, minutes: number): Promise<Departure[]> {
+async function getArrivals(
+  runtime: SwissProviderRuntime,
+  stopId: string,
+  minutes: number,
+): Promise<Departure[]> {
   const rawRef = stripProviderPrefix(stopId);
   const cutoff = Date.now() + minutes * 60_000;
   const [response, datasets, businessDatasets, gtfsRtFeed] = await Promise.all([
-    requestStopEvents(rawRef, minutes, "arrival"),
-    loadSwissStopDatasets(),
-    loadSwissBusinessOrganisationDatasets(),
-    fetchSwissGtfsRtFeed().catch(() => null),
+    requestStopEvents(runtime, rawRef, minutes, "arrival"),
+    runtime.datasets.loadSwissStopDatasets(),
+    runtime.datasets.loadSwissBusinessOrganisationDatasets(),
+    runtime.client.fetchSwissGtfsRtFeed().catch(() => null),
   ]);
   const arrivals: Departure[] = [];
   for (const stopEvent of response.stopEvents) {
     const operatorMetadata = mapSwissOperatorMetadata(stopEvent.service, businessDatasets);
-    const route = buildRouteFromStopEvent(stopEvent, operatorMetadata);
-    let arrival = buildDepartureFromStopEvent(stopEvent, "arrival", route, operatorMetadata);
+    const route = buildRouteFromStopEvent(runtime, stopEvent, operatorMetadata);
+    let arrival = buildDepartureFromStopEvent(
+      runtime,
+      stopEvent,
+      "arrival",
+      route,
+      operatorMetadata,
+    );
     if (!arrival) continue;
     if (gtfsRtFeed) {
-      arrival = applyGtfsTripUpdateOverlay(arrival, rawRef, "arrival", gtfsRtFeed, datasets);
+      arrival = applyGtfsTripUpdateOverlay(
+        runtime,
+        arrival,
+        rawRef,
+        "arrival",
+        gtfsRtFeed,
+        datasets,
+      );
     }
     if (!arrival.occupancy && !arrival.serviceInfo?.occupancy) {
-      const occupancyForecast = await resolveSwissOccupancyForecast(arrival.serviceInfo, {
+      const occupancyForecast = await resolveSwissOccupancyForecast(runtime, arrival.serviceInfo, {
         scheduledAt: arrival.scheduledAt,
         stopId,
         stopName: stopEvent.thisCall?.name,
       });
       if (occupancyForecast) {
-        arrival = {
-          ...arrival,
-          occupancy: arrival.occupancy ?? occupancyForecast.occupancy,
-          serviceInfo: applySwissOccupancyForecastToServiceInfo(
-            arrival.serviceInfo,
-            occupancyForecast,
-          ),
-        };
+        arrival = applySwissOccupancyForecast(arrival, occupancyForecast);
       }
     }
     if (new Date(arrival.scheduledAt).getTime() > cutoff) continue;
     arrivals.push(arrival);
     if (route) {
-      await rememberObservedRoute(route, {
+      await rememberObservedRoute(runtime, route, {
         hintStopId: stopId,
         operatorRefs: collectServiceOperatorRefs(stopEvent.service),
         tripId: arrival.tripId,
@@ -2884,24 +3211,33 @@ export async function getArrivals(stopId: string, minutes: number): Promise<Depa
   return arrivals;
 }
 
-export async function getRoutesForStop(stopId: string): Promise<TransitRoute[]> {
+async function getRoutesForStop(
+  runtime: SwissProviderRuntime,
+  stopId: string,
+): Promise<TransitRoute[]> {
   const [datasets, businessDatasets] = await Promise.all([
-    loadSwissStopDatasets(),
-    loadSwissBusinessOrganisationDatasets(),
+    runtime.datasets.loadSwissStopDatasets(),
+    runtime.datasets.loadSwissBusinessOrganisationDatasets(),
   ]);
   const rawRef = stripProviderPrefix(stopId);
-  const response = await requestStopEvents(rawRef, 120, "departure");
+  const response = await requestStopEvents(runtime, rawRef, 120, "departure");
   const routes = new Map<string, TransitRoute>();
   for (const stopEvent of response.stopEvents) {
     const operatorMetadata = mapSwissOperatorMetadata(stopEvent.service, businessDatasets);
-    const route = buildRouteFromStopEvent(stopEvent, operatorMetadata);
-    const departure = buildDepartureFromStopEvent(stopEvent, "departure", route, operatorMetadata);
+    const route = buildRouteFromStopEvent(runtime, stopEvent, operatorMetadata);
+    const departure = buildDepartureFromStopEvent(
+      runtime,
+      stopEvent,
+      "departure",
+      route,
+      operatorMetadata,
+    );
     if (!route) continue;
     routes.set(route.id, mergeTransitRoute(routes.get(route.id), route));
     const stops = stopEventCalls(stopEvent).map((call, index) =>
-      mapRouteStopFromCall(call, datasets, route.mode, index + 1),
+      mapRouteStopFromCall(runtime, call, datasets, route.mode, index + 1),
     );
-    await rememberObservedRoute(route, {
+    await rememberObservedRoute(runtime, route, {
       hintStopId: stopId,
       operatorRefs: collectServiceOperatorRefs(stopEvent.service),
       ...(stops.length > 0 ? { stops } : {}),
@@ -2911,21 +3247,25 @@ export async function getRoutesForStop(stopId: string): Promise<TransitRoute[]> 
   return [...routes.values()];
 }
 
-export async function getRoute(routeId: string): Promise<TransitRoute | null> {
-  return (await getObservedRoute(routeId))?.route ?? null;
+async function getRoute(
+  runtime: SwissProviderRuntime,
+  routeId: string,
+): Promise<TransitRoute | null> {
+  return (await getObservedRoute(runtime, routeId))?.route ?? null;
 }
 
-export async function getRouteStops(
+async function getRouteStops(
+  runtime: SwissProviderRuntime,
   routeId: string,
   hintStopId?: string,
 ): Promise<Array<TransitStop & { sequence: number }>> {
-  const observed = await getObservedRoute(routeId);
+  const observed = await getObservedRoute(runtime, routeId);
   if (observed?.stops?.length) return observed.stops;
 
   const routeMode = observed?.route.mode;
   const tripCandidates = uniqueStrings(observed?.tripIds ?? []);
   for (const tripId of tripCandidates) {
-    const journey = await getVehicleJourney(tripId);
+    const journey = await getVehicleJourney(runtime, tripId);
     if (!journey) continue;
     const stops = routeStopsFromJourney(journey, routeMode);
     if (stops.length > 0) {
@@ -2936,7 +3276,7 @@ export async function getRouteStops(
         mode: routeMode ?? "rail",
         operatorName: "OpenTransportData Switzerland",
       };
-      await rememberObservedRoute(rememberedRoute, {
+      await rememberObservedRoute(runtime, rememberedRoute, {
         hintStopId,
         operatorRefs: observed?.operatorRefs,
         stops,
@@ -2949,32 +3289,32 @@ export async function getRouteStops(
   const stopCandidates = uniqueStrings([hintStopId, ...(observed?.hintStopIds ?? [])]);
   for (const stopCandidate of stopCandidates) {
     const rawRef = stripProviderPrefix(stopCandidate);
-    const response = await requestStopEvents(rawRef, 120, "departure").catch(() => null);
+    const response = await requestStopEvents(runtime, rawRef, 120, "departure").catch(() => null);
     const matching = response?.stopEvents.find((stopEvent) => {
-      const route = buildRouteFromStopEvent(stopEvent);
+      const route = buildRouteFromStopEvent(runtime, stopEvent);
       return route?.id === routeId;
     });
     if (!matching) continue;
 
-    const matchedRoute = buildRouteFromStopEvent(matching);
+    const matchedRoute = buildRouteFromStopEvent(runtime, matching);
     if (matchedRoute) {
-      await rememberObservedRoute(matchedRoute, {
+      await rememberObservedRoute(runtime, matchedRoute, {
         hintStopId: stopCandidate,
         operatorRefs: collectServiceOperatorRefs(matching.service),
       });
     }
 
-    const departure = buildDepartureFromStopEvent(matching, "departure", matchedRoute);
+    const departure = buildDepartureFromStopEvent(runtime, matching, "departure", matchedRoute);
     if (!departure?.tripId) continue;
 
-    const journey = await getVehicleJourney(departure.tripId);
+    const journey = await getVehicleJourney(runtime, departure.tripId);
     if (!journey) continue;
-    const latestObserved = await getObservedRoute(routeId);
+    const latestObserved = await getObservedRoute(runtime, routeId);
     if (latestObserved?.stops?.length) return latestObserved.stops;
 
     const stops = routeStopsFromJourney(journey, routeMode);
     if (stops.length > 0 && latestObserved?.route) {
-      await rememberObservedRoute(latestObserved.route, {
+      await rememberObservedRoute(runtime, latestObserved.route, {
         hintStopId: stopCandidate,
         operatorRefs: latestObserved.operatorRefs,
         stops,
@@ -2987,14 +3327,17 @@ export async function getRouteStops(
   return [];
 }
 
-export async function planTrip(params: {
-  from: { lat: number; lng: number };
-  to: { lat: number; lng: number };
-  departureTime?: string;
-  arrivalTime?: string;
-  modes?: string[];
-}): Promise<TripPlan | null> {
-  const businessDatasets = await loadSwissBusinessOrganisationDatasets();
+async function planTrip(
+  runtime: SwissProviderRuntime,
+  params: {
+    from: { lat: number; lng: number };
+    to: { lat: number; lng: number };
+    departureTime?: string;
+    arrivalTime?: string;
+    modes?: string[];
+  },
+): Promise<TripPlan | null> {
+  const businessDatasets = await runtime.datasets.loadSwissBusinessOrganisationDatasets();
   const itModesToCover = mapRequestedIntermodalModes(params.modes);
   const xml = buildOjpTripRequestXml({
     arrivalTime: params.arrivalTime,
@@ -3010,31 +3353,35 @@ export async function planTrip(params: {
     includeTrackSections: true,
     includeTurnDescription: true,
     itModesToCover,
-    language: getSwissTransitConfig().requestLanguage,
+    language: runtime.client.config.requestLanguage,
     numberOfResults: 5,
     origin: {
       geoPosition: { latitude: params.from.lat, longitude: params.from.lng },
     },
-    requestorRef: getSwissTransitConfig().requestorRef,
+    requestorRef: runtime.client.config.requestorRef,
     useRealtimeData: "full",
   });
-  const tripXml = await requestSwissOjp(xml, {
+  const tripXml = await runtime.client.requestSwissOjp(xml, {
     cacheNamespace: "trip-plan",
     cacheTtlSeconds: 300,
   });
   const tripResponse = parseOjpTripResponse(tripXml);
-  const fareResults = await requestTripFares(tripResponse, extractOjpTripRequestTrips(tripXml));
+  const fareResults = await requestTripFares(
+    runtime,
+    tripResponse,
+    extractOjpTripRequestTrips(tripXml),
+  );
   for (const trip of tripResponse.trips) {
     for (const leg of trip.legs) {
       if (leg.kind !== "timed") continue;
       const operatorMetadata = mapSwissOperatorMetadata(leg.service, businessDatasets);
-      const route = buildRouteFromService(leg.service, operatorMetadata);
+      const route = buildRouteFromService(runtime, leg.service, operatorMetadata);
       const tripId =
         leg.service?.operatingDayRef && leg.service?.journeyRef
           ? providerId(`${leg.service.operatingDayRef}|${leg.service.journeyRef}`)
           : undefined;
       if (!route) continue;
-      await rememberObservedRoute(route, {
+      await rememberObservedRoute(runtime, route, {
         hintStopId: leg.boardCall?.stopPointRef
           ? providerId(leg.boardCall.stopPointRef)
           : undefined,
@@ -3044,16 +3391,18 @@ export async function planTrip(params: {
     }
   }
   return enrichSwissTripPlanOccupancy(
-    mapTripResponseToPlan(tripResponse, params, businessDatasets, fareResults),
+    runtime,
+    mapTripResponseToPlan(runtime, tripResponse, params, businessDatasets, fareResults),
   );
 }
 
-export async function getLegGeometry(
+async function getLegGeometry(
+  runtime: SwissProviderRuntime,
   tripId: string,
   fromStopId?: string,
   toStopId?: string,
 ): Promise<GeoJSONLineString | null> {
-  const tripInfoResult = await requestTripInfoByTripId(tripId, {
+  const tripInfoResult = await requestTripInfoByTripId(runtime, tripId, {
     includeCalls: false,
     includeLinkProjection: true,
     includeService: false,
@@ -3061,7 +3410,7 @@ export async function getLegGeometry(
   });
   const tripInfo = tripInfoResult?.response.tripInfo;
   if (!tripInfo?.trackSections.length) return null;
-  const datasets = await loadSwissStopDatasets();
+  const datasets = await runtime.datasets.loadSwissStopDatasets();
   const rawFrom = fromStopId ? stripProviderPrefix(fromStopId) : undefined;
   const rawTo = toStopId ? stripProviderPrefix(toStopId) : undefined;
 
@@ -3084,12 +3433,14 @@ export async function getLegGeometry(
   );
   if (!coordinates.length) return null;
   return {
+    contributors: swissContributors(runtime, "ojp", "ojp-geometry-osm"),
     coordinates,
     type: "LineString",
   };
 }
 
-export async function getVehicleJourney(
+async function getVehicleJourney(
+  runtime: SwissProviderRuntime,
   tripId: string,
   fallbackIds: string[] = [],
 ): Promise<VehicleJourney | null> {
@@ -3097,12 +3448,12 @@ export async function getVehicleJourney(
     (value, index, values) => values.indexOf(value) === index,
   );
   const [datasets, businessDatasets] = await Promise.all([
-    loadSwissStopDatasets(),
-    loadSwissBusinessOrganisationDatasets(),
+    runtime.datasets.loadSwissStopDatasets(),
+    runtime.datasets.loadSwissBusinessOrganisationDatasets(),
   ]);
 
   for (const candidate of candidates) {
-    const result = await requestTripInfoByTripId(candidate, {
+    const result = await requestTripInfoByTripId(runtime, candidate, {
       includeCalls: true,
       includeLinkProjection: false,
       includeService: true,
@@ -3113,13 +3464,13 @@ export async function getVehicleJourney(
 
     const calls = dedupeJourneyCalls([...tripInfo.previousCalls, ...tripInfo.onwardCalls]);
     const operatorMetadata = mapSwissOperatorMetadata(tripInfo.service, businessDatasets);
-    const serviceInfo = mapOjpServiceInfo(tripInfo.service, operatorMetadata);
-    const route = buildRouteFromService(tripInfo.service, operatorMetadata);
+    const serviceInfo = mapOjpServiceInfo(runtime, tripInfo.service, operatorMetadata);
+    const route = buildRouteFromService(runtime, tripInfo.service, operatorMetadata);
     if (route) {
-      await rememberObservedRoute(route, {
+      await rememberObservedRoute(runtime, route, {
         operatorRefs: collectServiceOperatorRefs(tripInfo.service),
         stops: calls.map((call, index) =>
-          mapRouteStopFromCall(call, datasets, route.mode, index + 1),
+          mapRouteStopFromCall(runtime, call, datasets, route.mode, index + 1),
         ),
         tripId: candidate,
       });
@@ -3130,18 +3481,19 @@ export async function getVehicleJourney(
       formationRequest &&
       (route?.mode === "rail" || Boolean(tripInfo.service?.datedTrainNumberRefs?.length))
     ) {
-      const formationJourney = await fetchSwissFormationJourney<SwissFormationJourneyResponse>(
-        formationRequest,
-      ).catch((error) => {
-        getSwissTransitConfig().log?.warn?.(
-          "Swiss formation lookup failed",
-          formationRequest,
-          error,
-        );
-        return null;
-      });
+      const formationJourney = await runtime.client
+        .fetchSwissFormationJourney<SwissFormationJourneyResponse>(formationRequest)
+        .catch((error) => {
+          runtime.client.config.log?.warn?.(
+            "Swiss formation lookup failed",
+            formationRequest,
+            error,
+          );
+          return null;
+        });
       if (formationJourney) {
         formationDetails = mapSwissFormationDetails(
+          runtime,
           formationJourney,
           datasets,
           formationRequest.evu,
@@ -3150,7 +3502,7 @@ export async function getVehicleJourney(
     }
     const occupancyForecast =
       serviceInfo?.occupancy == null
-        ? await resolveSwissOccupancyForecast(serviceInfo, {
+        ? await resolveSwissOccupancyForecast(runtime, serviceInfo, {
             scheduledAt: calls[0]?.departureTimetabled ?? calls[0]?.arrivalTimetabled,
             stopId: calls[0]?.stopPointRef ? providerId(calls[0].stopPointRef) : undefined,
             stopName: calls[0]?.name,
@@ -3161,6 +3513,14 @@ export async function getVehicleJourney(
       occupancyForecast,
     );
     return {
+      contributors: snapshotContributors(
+        swissContributors(runtime, "ojp"),
+        resolvedServiceInfo?.contributors ?? [],
+        contributorsForRecords(
+          calls.map((call) => mapJourneyStopFromCall(runtime, call, datasets)),
+        ),
+        formationDetails?.contributors ?? [],
+      ),
       formation: mapOjpFormation(tripInfo.service?.datedTrainNumberRefs),
       ...(formationDetails ? { formationDetails } : {}),
       id: candidate,
@@ -3179,17 +3539,20 @@ export async function getVehicleJourney(
           )
           .find((value): value is OccupancyLevel => value !== undefined),
       provider: PROVIDER,
-      remarks: serviceRemarks(tripInfo.service),
+      remarks: serviceRemarks(runtime, tripInfo.service),
       serviceInfo: resolvedServiceInfo,
-      stops: calls.map((call) => mapJourneyStopFromCall(call, datasets)),
+      stops: calls.map((call) => mapJourneyStopFromCall(runtime, call, datasets)),
     };
   }
 
   return null;
 }
 
-export async function getStopPlatforms(stopId: string): Promise<TransitStop[]> {
-  const datasets = await loadSwissStopDatasets();
+async function getStopPlatforms(
+  runtime: SwissProviderRuntime,
+  stopId: string,
+): Promise<TransitStop[]> {
+  const datasets = await runtime.datasets.loadSwissStopDatasets();
   const rawRef = stripProviderPrefix(stopId);
   const { servicePoint, servicePointSloid } = findServicePoint(rawRef, datasets);
   if (!servicePoint || !servicePointSloid) return [];
@@ -3197,13 +3560,14 @@ export async function getStopPlatforms(stopId: string): Promise<TransitStop[]> {
     .filter((trafficPoint) =>
       ["BOARDING_PLATFORM", "BOARDING_AREA"].includes(trafficPoint.trafficPointElementType ?? ""),
     )
-    .map((trafficPoint) => buildTransitStopFromTrafficPoint(trafficPoint, servicePoint));
+    .map((trafficPoint) => buildTransitStopFromTrafficPoint(runtime, trafficPoint, servicePoint));
 }
 
-export async function getStopInfrastructure(
+async function getStopInfrastructure(
+  runtime: SwissProviderRuntime,
   stopId: string,
 ): Promise<TransitStopInfrastructure | null> {
-  const datasets = await loadSwissStopDatasets();
+  const datasets = await runtime.datasets.loadSwissStopDatasets();
   const rawRef = stripProviderPrefix(stopId);
   const { servicePoint, servicePointSloid, stopPoint } = findServicePoint(rawRef, datasets);
   if (!servicePoint || !servicePointSloid) return null;
@@ -3259,56 +3623,60 @@ export async function getStopInfrastructure(
     ? childStops.filter((childStop) => childStop.parentStopId === parentStopSummary.id)
     : [];
 
-  return {
-    accessibility: buildAccessibility(
-      stopPointRecord,
-      platforms,
-      relations,
-      contactPoints,
-      toilets,
-    ),
-    amenities: buildAmenities(stopPointRecord, contactPoints, toilets, parking),
-    canonicalStop: parentStopSummary,
-    childStops,
-    displayName: requestedStop.name,
-    facts: buildStopInfrastructureFacts(
-      servicePoint,
-      stopPointRecord,
-      contactPoints,
-      referencePoints,
-    ),
-    fareZones: [],
-    focusLevel: requestedStop.level,
-    parking,
-    ...(stopPoint ? { parentStop: parentStopSummary } : {}),
-    platforms,
-    provider: PROVIDER,
-    requestedStop,
-    siblingStops,
-    sourceId: servicePoint.servicePointSloid,
-    stationIntelligence: deriveStationIntelligence({
+  return captureTransitContributors(
+    {
+      contributors: swissContributors(runtime, "master-data"),
+      accessibility: buildAccessibility(
+        stopPointRecord,
+        platforms,
+        relations,
+        contactPoints,
+        toilets,
+      ),
+      amenities: buildAmenities(stopPointRecord, contactPoints, toilets, parking),
+      canonicalStop: parentStopSummary,
       childStops,
-      parentStop: parentStopSummary,
+      displayName: requestedStop.name,
+      facts: buildStopInfrastructureFacts(
+        servicePoint,
+        stopPointRecord,
+        contactPoints,
+        referencePoints,
+      ),
+      fareZones: [],
+      focusLevel: requestedStop.level,
       parking,
+      ...(stopPoint ? { parentStop: parentStopSummary } : {}),
       platforms,
+      provider: PROVIDER,
+      requestedStop,
       siblingStops,
-    }),
-    stopId,
-    topographicPlace:
-      servicePoint.localityName || servicePoint.municipalityName
-        ? {
-            id: `ch-locality:${servicePoint.localityName || servicePoint.municipalityName}`,
-            name: servicePoint.localityName || servicePoint.municipalityName || "",
-            placeType: "locality",
-          }
-        : undefined,
-  };
+      sourceId: servicePoint.servicePointSloid,
+      stationIntelligence: deriveStationIntelligence({
+        childStops,
+        parentStop: parentStopSummary,
+        parking,
+        platforms,
+        siblingStops,
+      }),
+      stopId,
+      topographicPlace:
+        servicePoint.localityName || servicePoint.municipalityName
+          ? {
+              id: `ch-locality:${servicePoint.localityName || servicePoint.municipalityName}`,
+              name: servicePoint.localityName || servicePoint.municipalityName || "",
+              placeType: "locality",
+            }
+          : undefined,
+    },
+    swissContributors(runtime, "master-data"),
+  );
 }
 
-export async function getAlerts(bbox: BBox): Promise<ServiceAlert[]> {
+async function getAlerts(runtime: SwissProviderRuntime, bbox: BBox): Promise<ServiceAlert[]> {
   if (!bboxOverlaps(bbox, SWITZERLAND_BBOX)) return [];
-  const datasets = await loadSwissStopDatasets();
-  return (await loadMappedAlerts())
+  const datasets = await runtime.datasets.loadSwissStopDatasets();
+  return (await loadMappedAlerts(runtime))
     .filter((alert) => {
       const coordinates = alertCoordinates(alert, datasets);
       return coordinates.some(([lng, lat]) => bboxContains(bbox, lng, lat));
@@ -3323,10 +3691,13 @@ export async function getAlerts(bbox: BBox): Promise<ServiceAlert[]> {
     );
 }
 
-export async function getStopAlerts(stopId: string): Promise<ServiceAlert[]> {
-  const datasets = await loadSwissStopDatasets();
+async function getStopAlerts(
+  runtime: SwissProviderRuntime,
+  stopId: string,
+): Promise<ServiceAlert[]> {
+  const datasets = await runtime.datasets.loadSwissStopDatasets();
   const rawRef = stripProviderPrefix(stopId);
-  return (await loadMappedAlerts())
+  return (await loadMappedAlerts(runtime))
     .filter((alert) => alertMatchesStop(alert, rawRef, datasets))
     .map(
       ({
@@ -3338,9 +3709,12 @@ export async function getStopAlerts(stopId: string): Promise<ServiceAlert[]> {
     );
 }
 
-export async function getRouteAlerts(routeId: string): Promise<ServiceAlert[]> {
-  const observed = await getObservedRoute(routeId);
-  return (await loadMappedAlerts())
+async function getRouteAlerts(
+  runtime: SwissProviderRuntime,
+  routeId: string,
+): Promise<ServiceAlert[]> {
+  const observed = await getObservedRoute(runtime, routeId);
+  return (await loadMappedAlerts(runtime))
     .filter((alert) => alertMatchesRoute(alert, routeId, observed))
     .map(
       ({
@@ -3351,3 +3725,110 @@ export async function getRouteAlerts(routeId: string): Promise<ServiceAlert[]> {
       }) => alert,
     );
 }
+
+interface SwissProviderState {
+  observedRoutes: Map<string, SwissObservedRouteEntry>;
+  epoch: number;
+  available: boolean;
+  disposed: boolean;
+}
+interface SwissProviderRuntime {
+  cache?: CacheClient;
+  writer?: Pick<CacheClient, "set">;
+  cacheIdentity: string;
+  client: SwissTransitClient;
+  datasets: SwissDatasets;
+  contributors: Readonly<Record<string, readonly Attribution[]>>;
+  state: SwissProviderState;
+  epoch: number;
+}
+
+export function createOpenTransportDataChProvider(options: {
+  client: SwissTransitClient;
+  datasets: SwissDatasets;
+  cache?: CacheClient;
+  contributors: Readonly<Record<string, readonly Attribution[]>>;
+  isSourceAllowed?: (sourceId: string) => Promise<boolean>;
+}) {
+  const state: SwissProviderState = {
+    observedRoutes: new Map(),
+    epoch: 0,
+    available: true,
+    disposed: false,
+  };
+  const contributors = Object.fromEntries(
+    Object.entries(options.contributors).map(([id, receipts]) => [
+      id,
+      snapshotContributors(receipts),
+    ]),
+  );
+  const cacheIdentity = createHash("sha256")
+    .update(JSON.stringify({ client: options.client.cacheIdentity, contributors }))
+    .digest("hex");
+  const unsubscribe = options.cache?.onInvalidate?.(({ available }) => {
+    state.epoch++;
+    state.available = available;
+    state.observedRoutes.clear();
+  });
+  const bind =
+    <Args extends unknown[], Result>(
+      operation: (runtime: SwissProviderRuntime, ...args: Args) => Promise<Result>,
+    ) =>
+    async (...args: Args): Promise<Result> => {
+      if (state.disposed) throw new Error("Swiss provider retired");
+      const epoch = state.epoch;
+      const writer = await options.cache?.captureWriter?.().catch(() => undefined);
+      if (state.disposed) throw new Error("Swiss provider retired");
+      const result = await operation(
+        {
+          cache: options.cache,
+          writer,
+          cacheIdentity,
+          client: options.client,
+          datasets: options.datasets,
+          contributors,
+          state,
+          epoch,
+        },
+        ...args,
+      );
+      if (state.disposed) throw new Error("Swiss provider retired");
+      if (options.isSourceAllowed) {
+        for (const receipt of transitDataContributors(result)) {
+          if (receipt.sourceId && !(await options.isSourceAllowed(receipt.sourceId))) {
+            throw new Error("Swiss result source disabled by policy");
+          }
+        }
+      }
+      if (state.disposed) throw new Error("Swiss provider retired");
+      return result;
+    };
+  return {
+    isOpenTransportDataChAvailable: bind(isOpenTransportDataChAvailable),
+    searchByName: bind(searchByName),
+    getStopsNearby: bind(getStopsNearby),
+    getStop: bind(getStop),
+    getDepartures: bind(getDepartures),
+    getArrivals: bind(getArrivals),
+    getRoutesForStop: bind(getRoutesForStop),
+    getRoute: bind(getRoute),
+    getRouteStops: bind(getRouteStops),
+    planTrip: bind(planTrip),
+    getLegGeometry: bind(getLegGeometry),
+    getVehicleJourney: bind(getVehicleJourney),
+    getStopPlatforms: bind(getStopPlatforms),
+    getStopInfrastructure: bind(getStopInfrastructure),
+    getAlerts: bind(getAlerts),
+    getStopAlerts: bind(getStopAlerts),
+    getRouteAlerts: bind(getRouteAlerts),
+    async dispose() {
+      if (state.disposed) return;
+      state.disposed = true;
+      state.epoch++;
+      state.observedRoutes.clear();
+      unsubscribe?.();
+    },
+  };
+}
+
+export type OpenTransportDataChProvider = ReturnType<typeof createOpenTransportDataChProvider>;

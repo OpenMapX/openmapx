@@ -2,16 +2,22 @@
 
 import Box from "@mui/material/Box";
 import Link from "@mui/material/Link";
+import { useTheme } from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import { useNavigationStore, useSidebarStore } from "@openmapx/core";
 import NextLink from "next/link";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useMapAttributionHtml } from "@/integration-api/overlay/mapAttributionStore";
+import { createPortal } from "react-dom";
+import { LAYER_SELECTOR_OPEN_EVENT } from "@/components/command-palette/constants";
+import { AttributionDetails } from "@/components/ui/AttributionDetails";
+import { AttributionNotices } from "@/components/ui/AttributionNotices";
+import { useMapAttributionPresentation } from "@/integration-api/overlay/mapAttributionStore";
 import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
 import { coversFooterCenter, publishMapFooterCenterCovered } from "@/lib/mapFooterCenter";
-import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
-import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
-import { CREDITS_SEPARATOR, CREDITS_SX } from "./MapCredits";
+import { planSheetFollow, sheetFollowSx, useSheetFollowTrack } from "@/lib/sheetFollow";
+import { CREDITS_SX } from "./MapCredits";
+import { useMapFooterSurface } from "./useMapFooterSurface";
 
 // Below this much free space between the two groups they stop reading as two
 // separate bars, so they're painted as one instead.
@@ -34,13 +40,14 @@ const MERGE_GAP = 16;
  */
 export function MapFooter() {
   const t = useTranslations("footer");
+  const theme = useTheme();
+  const mobile = useMediaQuery(theme.breakpoints.down("sm"));
   const sidebarOpen = useSidebarStore((s) => s.activeSidebarId !== null);
   const collapsed = useSidebarStore((s) => s.collapsed);
   const navigating = useNavigationStore((s) => s.status !== "idle");
   const shifted = isPanelShiftActive({ sidebarOpen, sidebarCollapsed: collapsed, navigating });
-  const followHeight = useMobilePanelClearance(useWindowHeight());
-  const credits = useMapAttributionHtml();
-  const creditsHtml = credits.join(CREDITS_SEPARATOR);
+  const credits = useMapAttributionPresentation();
+  const creditsHtml = JSON.stringify(credits);
 
   const containerRef = useRef<HTMLElement>(null);
   const [footerEl, setFooterEl] = useState<HTMLElement | null>(null);
@@ -48,9 +55,32 @@ export function MapFooter() {
     containerRef.current = element;
     setFooterEl(element);
   }, []);
-  useMeasuredMapObstruction("map-footer", "bottom", footerEl);
   const linksRef = useRef<HTMLDivElement>(null);
   const creditsRef = useRef<HTMLDivElement>(null);
+  // Read live, docking included: a footer docked into a sheet leaves the map
+  // edge clear, whatever its own content does.
+  const centerCovered = useCallback(() => {
+    const container = containerRef.current;
+    const links = linksRef.current;
+    if (!container || !links || container.closest('[data-map-footer-surface="sheet"]'))
+      return false;
+    const credits = creditsRef.current?.getBoundingClientRect();
+    const l = links.getBoundingClientRect();
+    return coversFooterCenter(container.getBoundingClientRect(), credits ? [l, credits] : [l]);
+  }, []);
+  const {
+    container: portalContainer,
+    setHome,
+    mapBudget,
+  } = useMapFooterSurface(footerEl, mobile, centerCovered);
+  // On the map the footer rides the sheet's top edge, never below the visual
+  // viewport; docked inside the sheet it scrolls with it and the follow stops.
+  const followTrack = useSheetFollowTrack();
+  const follow = followTrack
+    ? planSheetFollow(followTrack, { offset: followTrack.lift, min: followTrack.floor })
+    : null;
+  const mandatoryRef = useRef<HTMLSpanElement>(null);
+  const [tall, setTall] = useState(false);
   const [merged, setMerged] = useState(false);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: credit changes resize the strip and (re)mount the element the observer watches
@@ -60,16 +90,18 @@ export function MapFooter() {
     if (!container || !links) return;
     const measure = () => {
       const creditsEl = creditsRef.current;
+      const height = mandatoryRef.current?.getBoundingClientRect().height ?? 0;
+      setTall(height > Math.max(1, mapBudget) * 0.25);
+      publishMapFooterCenterCovered(centerCovered());
       const l = links.getBoundingClientRect();
       const c = creditsEl?.getBoundingClientRect();
-      publishMapFooterCenterCovered(
-        coversFooterCenter(container.getBoundingClientRect(), c ? [l, c] : [l]),
-      );
       if (!c) {
         setMerged(false);
         return;
       }
-      const sameLine = Math.abs(l.top - c.top) < 1;
+      // Bars stretch to the same height within each flex row. Different
+      // bottom edges therefore indicate that the groups wrapped onto separate rows.
+      const sameLine = Math.abs(l.bottom - c.bottom) < 1;
       setMerged(!sameLine || c.left - l.right < MERGE_GAP);
     };
     measure();
@@ -77,11 +109,9 @@ export function MapFooter() {
     observer?.observe(container);
     observer?.observe(links);
     if (creditsRef.current) observer?.observe(creditsRef.current);
-    return () => {
-      observer?.disconnect();
-      publishMapFooterCenterCovered(false);
-    };
-  }, [creditsHtml]);
+    return () => observer?.disconnect();
+  }, [creditsHtml, mapBudget, centerCovered]);
+  useEffect(() => () => publishMapFooterCenterCovered(false), []);
 
   // Typography/colors come from the shared credits style so the footer and the
   // embedded maps' `<MapCredits>` can't drift apart. In merged mode the
@@ -95,7 +125,7 @@ export function MapFooter() {
     pointerEvents: "auto",
   } as const;
 
-  return (
+  const footer = (
     <Box
       component="footer"
       ref={setFooterRef}
@@ -103,9 +133,10 @@ export function MapFooter() {
         bgcolor: merged ? background : "transparent",
         position: "absolute",
         bottom: {
-          xs: followHeight > 0 ? `${followHeight}px` : "var(--omx-safe-bottom)",
+          xs: follow ? `${follow.base}px` : "var(--omx-map-footer-bottom, var(--omx-safe-bottom))",
           sm: "var(--omx-safe-bottom)",
         },
+        ...sheetFollowSx(follow),
         left: {
           xs: "var(--omx-safe-left)",
           sm: shifted ? `calc(${PANEL_WIDTH}px + var(--omx-safe-left))` : "var(--omx-safe-left)",
@@ -114,7 +145,7 @@ export function MapFooter() {
         zIndex: 5,
         display: "flex",
         flexWrap: "wrap",
-        alignItems: "flex-end",
+        alignItems: "stretch",
         justifyContent: "flex-start",
         columnGap: 0,
         rowGap: 0,
@@ -122,10 +153,32 @@ export function MapFooter() {
         // stays a draggable part of the map.
         pointerEvents: "none",
         ...creditsTypography,
-        transition: "left 0.25s ease, bottom 0.25s ease",
+        transition: "left 0.25s ease",
+        "@media (prefers-reduced-motion: reduce)": { transition: "none" },
+        '[data-map-footer-surface="sheet"] > &': {
+          position: "relative",
+          bottom: "auto",
+          left: "auto",
+          right: "auto",
+          marginLeft: "var(--omx-safe-left)",
+          marginRight: "var(--omx-safe-right)",
+          flexShrink: 0,
+          transition: "none",
+          animation: "none",
+        },
       }}
     >
-      <Box ref={linksRef} sx={{ ...barSx, display: "flex", flexWrap: "wrap", columnGap: "0.6em" }}>
+      <Box
+        ref={linksRef}
+        sx={{
+          ...barSx,
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          alignContent: "center",
+          columnGap: "0.6em",
+        }}
+      >
         <Link component={NextLink} href="/imprint">
           {t("legalNotice")}
         </Link>
@@ -139,17 +192,51 @@ export function MapFooter() {
           {t("licenses")}
         </Link>
       </Box>
-      {credits.length > 0 && (
+      {credits.fullHtml.length > 0 && (
         <Box
           ref={creditsRef}
           data-testid="map-attributions"
-          sx={{ ...barSx, marginLeft: "auto", textAlign: "right" }}
-          // Entries are sanitized in `useMapAttributions` (anchors only, safe
-          // hrefs) before they reach the registry.
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: credits carry license-required publisher links
-          dangerouslySetInnerHTML={{ __html: creditsHtml }}
-        />
+          sx={{
+            ...barSx,
+            marginLeft: "auto",
+            textAlign: "right",
+            overflowWrap: "anywhere",
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "flex-end",
+          }}
+        >
+          <Box component="span" ref={mandatoryRef} data-testid="mandatory-map-attributions">
+            <AttributionNotices notices={credits.visible} />
+          </Box>
+          {credits.visible.length > 0 && " | "}
+          <AttributionDetails
+            entries={credits.details}
+            label={t("credits")}
+            logos={credits.visible.flatMap((notice) => notice.logos)}
+          />
+          {tall && (
+            <Box sx={{ mt: 0.5 }}>
+              {t("manyRequiredCredits")}{" "}
+              <Link
+                component="button"
+                type="button"
+                onClick={() => window.dispatchEvent(new Event(LAYER_SELECTOR_OPEN_EVENT))}
+                sx={{ font: "inherit", color: "inherit", cursor: "pointer" }}
+              >
+                {t("manageOverlays")}
+              </Link>
+            </Box>
+          )}
+        </Box>
       )}
     </Box>
+  );
+  return (
+    <>
+      <div ref={setHome} style={{ display: "contents" }} />
+      {portalContainer && createPortal(footer, portalContainer)}
+    </>
   );
 }

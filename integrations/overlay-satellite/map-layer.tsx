@@ -3,9 +3,13 @@
 import { useOverlayExclusion } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { addLayerInSlot, removeSlottedLayers } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
-import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
+import { useSlottedLayersCleanup } from "@/integration-api/map/useSlottedLayersCleanup";
+import { addAttributedRasterSource } from "@/integration-api/overlay/rasterMapContribution";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
+import { useRasterMapAttributions } from "@/integration-api/overlay/useRasterMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { type Capabilities, GIBS_LAYERS, useSatelliteStore } from "./store";
 
@@ -18,9 +22,16 @@ function getLayerDef(id: string) {
 
 export function SatelliteLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
+  useSlottedLayersCleanup(mapRef, () => ({ layerIds: [LAYER_ID], sourceIds: [SOURCE_ID] }));
   const env = useEnv();
   const layerVisible = useSatelliteStore((s) => s.layerVisible);
-  useIntegrationAttribution("overlay-satellite", layerVisible);
+  const resolve = useContributorResolver();
+  const credits = resolve({ sourceIds: ["nasa-gibs"] });
+  useRasterMapAttributions(
+    "satellite",
+    [{ sourceId: SOURCE_ID, layerId: LAYER_ID, contributors: credits }],
+    layerVisible,
+  );
   const activeLayer = useSatelliteStore((s) => s.activeLayer);
   const date = useSatelliteStore((s) => s.date);
   const opacity = useSatelliteStore((s) => s.opacity);
@@ -87,13 +98,7 @@ export function SatelliteLayer() {
     if (!map || !mapReady) return;
 
     if (!layerVisible) {
-      try {
-        if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      } catch {
-        // ignore
-      }
-      unregisterLayerSlot(LAYER_ID);
+      removeSlottedLayers(map, [LAYER_ID], [SOURCE_ID]);
       prevKeyRef.current = "";
       return;
     }
@@ -102,50 +107,35 @@ export function SatelliteLayer() {
     const tileUrl = `${env.apiUrl}/api/integrations/overlay-satellite/tiles/${def.id}/${date}/{z}/{y}/{x}`;
     const key = `${def.id}:${date}`;
 
-    // Fast path: date changed but same layer and source already exists.
-    // Must run BEFORE isStyleLoaded() because that returns false while the
-    // source's initial tiles are still loading — which is exactly the case
-    // when capabilities auto-adjusts the date on mount.
-    const existing = map.getSource(SOURCE_ID);
-    if (prevKeyRef.current !== key && existing) {
-      const prevLayerId = prevKeyRef.current ? prevKeyRef.current.split(":")[0] : "";
-      if (prevLayerId === def.id) {
-        prevKeyRef.current = key;
-        // The source is the raster source added below; `setTiles` lives on
-        // RasterTileSource, not the Source base type.
-        (existing as maplibregl.RasterTileSource).setTiles([tileUrl]);
-        map.triggerRepaint();
-      }
-    }
-
     const buildLayer = () => {
-      if (!map.isStyleLoaded()) {
-        map.once("idle", buildLayer);
-        return;
-      }
-
-      // Handle key change requiring full rebuild (layer definition changed, different maxZoom)
       if (prevKeyRef.current !== key) {
-        const prevLayerId = prevKeyRef.current ? prevKeyRef.current.split(":")[0] : "";
+        const prevLayerId = prevKeyRef.current.split(":")[0];
         prevKeyRef.current = key;
-        if (prevLayerId && prevLayerId !== def.id) {
-          try {
-            if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-            if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-          } catch {
-            // ignore
-          }
-          unregisterLayerSlot(LAYER_ID);
+        const existing = map.getSource(SOURCE_ID);
+        if (existing && prevLayerId === def.id) {
+          // Only the date changed: swap tile URLs in place so the current
+          // imagery stays visible until the new date's tiles arrive. `setTiles`
+          // lives on RasterTileSource, not the Source base type.
+          (existing as maplibregl.RasterTileSource).setTiles([tileUrl]);
+          map.triggerRepaint();
+        } else if (prevLayerId && prevLayerId !== def.id) {
+          // Another product can differ in max zoom, so rebuild the source.
+          removeSlottedLayers(map, [LAYER_ID], [SOURCE_ID]);
         }
       }
 
       if (!map.getSource(SOURCE_ID)) {
-        map.addSource(SOURCE_ID, {
-          type: "raster",
-          tiles: [tileUrl],
-          tileSize: 256,
-          maxzoom: def.maxZoom,
-        });
+        addAttributedRasterSource(
+          map,
+          SOURCE_ID,
+          {
+            type: "raster",
+            tiles: [tileUrl],
+            tileSize: 256,
+            maxzoom: def.maxZoom,
+          },
+          credits,
+        );
       }
 
       if (!map.getLayer(LAYER_ID)) {
@@ -164,20 +154,18 @@ export function SatelliteLayer() {
       }
     };
 
-    buildLayer();
-
-    map.on("styledata", syncLayer);
-    return () => {
-      map.off("styledata", syncLayer);
-    };
-
-    function syncLayer() {
-      if (!map?.isStyleLoaded()) return;
-      if (!map.getSource(SOURCE_ID)) {
-        prevKeyRef.current = "";
-      }
-    }
-  }, [mapReady, styleVersion, mapRef, layerVisible, activeLayer, date, opacity, env.apiUrl]);
+    return subscribeStyleLoaded(map, buildLayer);
+  }, [
+    mapReady,
+    styleVersion,
+    mapRef,
+    layerVisible,
+    activeLayer,
+    date,
+    opacity,
+    env.apiUrl,
+    resolve,
+  ]);
 
   // Update opacity without rebuilding source
   useEffect(() => {

@@ -1,10 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   existsSync,
+  linkSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -13,6 +16,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gzipSync } from "node:zlib";
+import { services } from "@openmapx/core/server";
 import {
   backupInstalledIntegration,
   packageIntegration,
@@ -46,7 +51,7 @@ const baseManifest = {
   version: "1.0.0",
   domains: ["map-overlay"],
   quality: "community",
-  platform: ">=1.0.0",
+  platform: "1.0",
 };
 
 function writeTarGz(sourceDir: string, artifactPath: string): void {
@@ -56,6 +61,87 @@ function writeTarGz(sourceDir: string, artifactPath: string): void {
   if (result.status !== 0) {
     throw new Error(result.stderr.toString() || `tar exited with ${result.status}`);
   }
+}
+
+interface TarFixtureEntry {
+  name: string;
+  type?: "0" | "1" | "2" | "5" | "7" | "g" | "x";
+  mode?: number;
+  data?: Buffer | string;
+  linkName?: string;
+  claimedSize?: number;
+  omitPadding?: boolean;
+}
+
+function writeTarOctal(header: Buffer, offset: number, length: number, value: number): void {
+  const encoded = `${value.toString(8).padStart(length - 1, "0")}\0`;
+  header.write(encoded, offset, length, "ascii");
+}
+
+function tarFixtureEntry(entry: TarFixtureEntry): Buffer {
+  const payload = Buffer.isBuffer(entry.data) ? entry.data : Buffer.from(entry.data ?? "", "utf-8");
+  const claimedSize = entry.claimedSize ?? payload.length;
+  const header = Buffer.alloc(512);
+  header.write(entry.name, 0, 100, "utf-8");
+  writeTarOctal(header, 100, 8, entry.mode ?? 0o644);
+  writeTarOctal(header, 108, 8, 0);
+  writeTarOctal(header, 116, 8, 0);
+  writeTarOctal(header, 124, 12, claimedSize);
+  writeTarOctal(header, 136, 12, 0);
+  header.fill(0x20, 148, 156);
+  header.write(entry.type ?? "0", 156, 1, "ascii");
+  if (entry.linkName) header.write(entry.linkName, 157, 100, "utf-8");
+  header.write("ustar\0", 257, 6, "ascii");
+  header.write("00", 263, 2, "ascii");
+  const checksum = header.reduce((sum, byte) => sum + byte, 0);
+  writeTarOctal(header, 148, 8, checksum);
+
+  if (entry.omitPadding) return Buffer.concat([header, payload]);
+  if (claimedSize !== payload.length) {
+    throw new Error("Padded tar fixtures require payload length to match the claimed size");
+  }
+  const padding = Buffer.alloc((512 - (payload.length % 512)) % 512);
+  return Buffer.concat([header, payload, padding]);
+}
+
+function writeTarFixture(
+  artifactPath: string,
+  entries: TarFixtureEntry[],
+  options: { endBlocks?: boolean } = {},
+): void {
+  const blocks = entries.map(tarFixtureEntry);
+  if (options.endBlocks ?? true) blocks.push(Buffer.alloc(1024));
+  writeFileSync(artifactPath, gzipSync(Buffer.concat(blocks)));
+}
+
+function paxRecord(key: string, value: string): Buffer {
+  const body = Buffer.from(`${key}=${value}\n`, "utf-8");
+  let length = body.length + 2;
+  for (;;) {
+    const next = Buffer.byteLength(String(length)) + 1 + body.length;
+    if (next === length) return Buffer.concat([Buffer.from(`${length} `), body]);
+    length = next;
+  }
+}
+
+function manifestTarEntry(id: string): TarFixtureEntry {
+  return {
+    name: "manifest.json",
+    data: JSON.stringify({ ...baseManifest, id }),
+  };
+}
+
+async function expectArtifactRejection(
+  artifactPath: string,
+  id: string,
+  message: RegExp,
+): Promise<void> {
+  await expect(
+    installIntegration({ source: artifactPath, sourceKind: "artifact", rootDir: tmp }),
+  ).rejects.toThrow(message);
+  expect(existsSync(join(tmp, "custom_integrations", id))).toBe(false);
+  const staging = join(tmp, "custom_integrations", ".staging");
+  expect(existsSync(staging) ? readdirSync(staging) : []).toEqual([]);
 }
 
 function sha256(path: string): string {
@@ -375,6 +461,202 @@ describe("installIntegration (local source)", () => {
 });
 
 describe("installIntegration (artifact source)", () => {
+  it("accepts exactly 4,096 tar headers without materializing metadata entries", async () => {
+    const id = "header-boundary-artifact";
+    const artifact = join(tmp, `${id}.tar.gz`);
+    const metadataHeaders = Array.from<TarFixtureEntry>({ length: 4095 }).fill({
+      name: "GlobalHead",
+      type: "g",
+    });
+    writeTarFixture(artifact, [...metadataHeaders, manifestTarEntry(id)]);
+
+    await installIntegration({ source: artifact, sourceKind: "artifact", rootDir: tmp });
+
+    expect(existsSync(join(tmp, "custom_integrations", id, "manifest.json"))).toBe(true);
+  });
+
+  it("rejects a 4,097th tar header and leaves no extracted tree", async () => {
+    const id = "header-limit-artifact";
+    const artifact = join(tmp, `${id}.tar.gz`);
+    const metadataHeaders = Array.from<TarFixtureEntry>({ length: 4096 }).fill({
+      name: "GlobalHead",
+      type: "g",
+    });
+    writeTarFixture(artifact, [...metadataHeaders, manifestTarEntry(id)]);
+
+    await expectArtifactRejection(artifact, id, /tar header limit.*4,096/i);
+  });
+
+  it("accepts materializable archive paths and PAX records at their structural boundaries", async () => {
+    const id = "structure-boundary-artifact";
+    const artifact = join(tmp, `${id}.tar.gz`);
+    const pathAtDepthLimit = Array.from({ length: 32 }, (_, index) => `d${index}`).join("/");
+    const pathAtComponentLimit = "c".repeat(255);
+    const paxAtRecordLimit = Buffer.concat([
+      ...Array.from({ length: 255 }, (_, index) => paxRecord(`key${index}`, "value")),
+      paxRecord("comment", "record 256"),
+    ]);
+    expect(pathAtDepthLimit.split("/")).toHaveLength(32);
+    expect(Buffer.byteLength(pathAtComponentLimit)).toBe(255);
+
+    writeTarFixture(artifact, [
+      manifestTarEntry(id),
+      { name: "PaxHeader", type: "x", data: paxRecord("path", pathAtDepthLimit) },
+      { name: "depth-limit", data: "depth boundary" },
+      { name: "PaxHeader", type: "x", data: paxRecord("path", pathAtComponentLimit) },
+      { name: "component-limit", data: "component boundary" },
+      { name: "PaxHeader", type: "x", data: paxAtRecordLimit },
+      { name: "pax-limit.txt", data: "record boundary" },
+    ]);
+
+    await installIntegration({ source: artifact, sourceKind: "artifact", rootDir: tmp });
+
+    const installed = join(tmp, "custom_integrations", id);
+    expect(readFileSync(join(installed, pathAtDepthLimit), "utf-8")).toBe("depth boundary");
+    expect(readFileSync(join(installed, pathAtComponentLimit), "utf-8")).toBe("component boundary");
+    expect(readFileSync(join(installed, "pax-limit.txt"), "utf-8")).toBe("record boundary");
+  });
+
+  it("accepts a 1,024-byte resolved path during structural validation", async () => {
+    const id = "path-byte-boundary-artifact";
+    const artifact = join(tmp, `${id}.tar.gz`);
+    const pathAtByteLimit = Array.from({ length: 5 }, () => "a".repeat(204)).join("/");
+    expect(Buffer.byteLength(pathAtByteLimit)).toBe(1024);
+    writeTarFixture(artifact, [
+      manifestTarEntry(id),
+      { name: "PaxHeader", type: "x", data: paxRecord("path", pathAtByteLimit) },
+      { name: "unsupported", type: "7" },
+    ]);
+
+    await expectArtifactRejection(artifact, id, /Unsupported artifact entry type '7'/);
+  });
+
+  it.each([
+    {
+      id: "bytes",
+      label: "a PAX-resolved path over 1,024 bytes",
+      key: "path",
+      value: Array.from({ length: 6 }, () => "a".repeat(204)).join("/"),
+      entry: { name: "byte-limit", data: "x" } satisfies TarFixtureEntry,
+      message: /artifact path.*1,024 UTF-8 bytes/i,
+    },
+    {
+      id: "depth",
+      label: "a path with 33 components",
+      key: "path",
+      value: Array.from({ length: 33 }, () => "a").join("/"),
+      entry: { name: "depth-limit", data: "x" } satisfies TarFixtureEntry,
+      message: /artifact path.*32 components/i,
+    },
+    {
+      id: "component",
+      label: "a path component over 255 bytes",
+      key: "path",
+      value: "a".repeat(256),
+      entry: { name: "component-limit", data: "x" } satisfies TarFixtureEntry,
+      message: /artifact path component.*255 UTF-8 bytes/i,
+    },
+    {
+      id: "link-depth",
+      label: "a link target with 33 components",
+      key: "linkpath",
+      value: Array.from({ length: 33 }, () => "target").join("/"),
+      entry: { name: "linked", type: "2", linkName: "fallback" } satisfies TarFixtureEntry,
+      message: /artifact link target.*32 components/i,
+    },
+  ])("rejects $label before installation", async ({ id: suffix, key, value, entry, message }) => {
+    const id = `path-limit-artifact-${suffix}`;
+    const artifact = join(tmp, `${id}.tar.gz`);
+    writeTarFixture(artifact, [
+      manifestTarEntry(id),
+      { name: "PaxHeader", type: "x", data: paxRecord(key, value) },
+      entry,
+    ]);
+
+    await expectArtifactRejection(artifact, id, message);
+  });
+
+  it("rejects more than 256 records in one PAX payload", async () => {
+    const id = "pax-record-limit-artifact";
+    const artifact = join(tmp, `${id}.tar.gz`);
+    const records = Buffer.concat(
+      Array.from({ length: 257 }, (_, index) => paxRecord(`key${index}`, "value")),
+    );
+    writeTarFixture(artifact, [
+      manifestTarEntry(id),
+      { name: "PaxHeader", type: "x", data: records },
+      { name: "payload.txt", data: "x" },
+    ]);
+
+    await expectArtifactRejection(artifact, id, /PAX payload.*256 records/i);
+  });
+
+  it.each([
+    {
+      id: "truncated",
+      label: "truncated payload bytes",
+      claimedSize: 10,
+      data: "abc",
+      message: /tar payload.*truncated/i,
+    },
+    {
+      id: "padding",
+      label: "missing payload padding",
+      claimedSize: 3,
+      data: "abc",
+      message: /tar payload.*padding/i,
+    },
+  ])("rejects $label", async ({ id: suffix, claimedSize, data, message }) => {
+    const id = `payload-bounds-artifact-${suffix}`;
+    const artifact = join(tmp, `${id}.tar.gz`);
+    writeTarFixture(
+      artifact,
+      [manifestTarEntry(id), { name: "payload.txt", data, claimedSize, omitPadding: true }],
+      { endBlocks: false },
+    );
+
+    await expectArtifactRejection(artifact, id, message);
+  });
+
+  it("rejects a trailing partial tar header", async () => {
+    const id = "partial-header-artifact";
+    const artifact = join(tmp, `${id}.tar.gz`);
+    writeFileSync(
+      artifact,
+      gzipSync(Buffer.concat([tarFixtureEntry(manifestTarEntry(id)), Buffer.from([1])])),
+    );
+
+    await expectArtifactRejection(artifact, id, /partial tar header/i);
+  });
+
+  it.each([
+    {
+      id: "length",
+      label: "a PAX record whose declared length omits its newline",
+      payload: Buffer.from("8 path=a\n"),
+    },
+    {
+      id: "trailing",
+      label: "unterminated trailing PAX data",
+      payload: Buffer.from("9 path=a\nx"),
+    },
+    {
+      id: "non-decimal-length",
+      label: "a PAX record with a non-decimal length",
+      payload: Buffer.from("11x path=a\n"),
+    },
+  ])("rejects $label", async ({ id: suffix, payload }) => {
+    const id = `malformed-pax-artifact-${suffix}`;
+    const artifact = join(tmp, `${id}.tar.gz`);
+    writeTarFixture(artifact, [
+      manifestTarEntry(id),
+      { name: "PaxHeader", type: "x", data: payload },
+      { name: "payload.txt", data: "x" },
+    ]);
+
+    await expectArtifactRejection(artifact, id, /invalid PAX|PAX payload/i);
+  });
+
   it("rejects a prebuilt same-origin frontend bundle", async () => {
     const src = join(tmp, "artifact-src");
     mkdirSync(join(src, "dist", "frontend"), { recursive: true });
@@ -645,6 +927,199 @@ describe("packageIntegration", () => {
   });
 });
 
+describe("installIntegration (what the operations agent loads)", () => {
+  const schemaManifest = (id: string, extra: Record<string, unknown> = {}) =>
+    JSON.stringify({
+      ...baseManifest,
+      id,
+      configSchema: { type: "object", properties: { region: { enum: ["eu", "us"] } } },
+      ...extra,
+    });
+  const install = (source: string, sourceKind: "artifact" | "source" = "artifact") =>
+    installIntegration({ source, sourceKind, rootDir: tmp });
+  /**
+   * The installed integrations the agent's per-integration check accepts. The
+   * agent itself loads only what it installed and recorded; this is what a
+   * direct install leaves for it to verify.
+   */
+  const agentLoads = () =>
+    readdirSync(join(tmp, "custom_integrations"))
+      .filter((name) => !name.startsWith("."))
+      .filter((name) => {
+        try {
+          services.assertTrustedIntegrationDirectory(join(tmp, "custom_integrations", name), name);
+          return true;
+        } catch {
+          return false;
+        }
+      })
+      .sort();
+  const mode = (path: string) => lstatSync(path).mode & 0o777;
+
+  /** A Debian or Ubuntu login shell's umask while `run` runs. */
+  async function underUmask002<T>(run: () => Promise<T>): Promise<T> {
+    const previous = process.umask(0o002);
+    try {
+      return await run();
+    } finally {
+      process.umask(previous);
+    }
+  }
+
+  async function installKept(): Promise<void> {
+    const artifact = join(tmp, "kept.tar.gz");
+    writeTarFixture(artifact, [{ name: "manifest.json", data: schemaManifest("kept") }]);
+    await install(artifact);
+  }
+
+  it("installs an archive declaring 0666 and 0664 modes with the modes the agent loads", async () => {
+    const artifact = join(tmp, "loose-modes.tar.gz");
+    writeTarFixture(artifact, [
+      { name: "assets/", type: "5", mode: 0o777 },
+      { name: "manifest.json", data: schemaManifest("loose-modes"), mode: 0o666 },
+      { name: "strings/en.json", data: "{}", mode: 0o664 },
+      { name: "assets/data.json", data: "{}", mode: 0o000 },
+    ]);
+    await underUmask002(() => install(artifact));
+
+    const installed = join(tmp, "custom_integrations", "loose-modes");
+    expect(mode(join(tmp, "custom_integrations"))).toBe(0o755);
+    expect(mode(installed)).toBe(0o755);
+    expect(mode(join(installed, "manifest.json"))).toBe(0o644);
+    expect(mode(join(installed, "strings"))).toBe(0o755);
+    expect(mode(join(installed, "strings", "en.json"))).toBe(0o644);
+    expect(mode(join(installed, "assets"))).toBe(0o755);
+    expect(mode(join(installed, "assets", "data.json"))).toBe(0o644);
+    expect(agentLoads()).toEqual(["loose-modes"]);
+  });
+
+  it("installs a local source written under umask 002 with the modes the agent loads", async () => {
+    const source = join(tmp, "local-loose");
+    mkdirSync(join(source, "strings"), { recursive: true });
+    writeFileSync(join(source, "manifest.json"), schemaManifest("local-loose"));
+    writeFileSync(join(source, "strings", "en.json"), "{}");
+    chmodSync(join(source, "manifest.json"), 0o664);
+    chmodSync(join(source, "strings"), 0o775);
+    await underUmask002(() => install(source, "source"));
+
+    const installed = join(tmp, "custom_integrations", "local-loose");
+    expect(mode(installed)).toBe(0o755);
+    expect(mode(join(installed, "manifest.json"))).toBe(0o644);
+    expect(mode(join(installed, "strings"))).toBe(0o755);
+    expect(agentLoads()).toEqual(["local-loose"]);
+  });
+
+  it("refuses a hard-linked manifest.json and keeps the installed integrations loadable", async () => {
+    await installKept();
+    const linkedTo = join(tmp, "manifest-linked-to.tar.gz");
+    writeTarFixture(linkedTo, [
+      { name: "copy.json", data: schemaManifest("linked-to") },
+      { name: "manifest.json", type: "1", linkName: "copy.json" },
+    ]);
+    await expectArtifactRejection(linkedTo, "linked-to", /must not be hard-linked/);
+    const linkedFrom = join(tmp, "manifest-linked-from.tar.gz");
+    writeTarFixture(linkedFrom, [
+      { name: "manifest.json", data: schemaManifest("linked-from") },
+      { name: "alias.json", type: "1", linkName: "manifest.json" },
+    ]);
+    await expectArtifactRejection(linkedFrom, "linked-from", /must not be hard-linked/);
+    expect(agentLoads()).toEqual(["kept"]);
+  });
+
+  it("refuses a symlinked manifest.json from an archive or a local source", async () => {
+    await installKept();
+    const artifact = join(tmp, "manifest-symlink.tar.gz");
+    writeTarFixture(artifact, [
+      { name: "real.json", data: schemaManifest("manifest-symlink") },
+      { name: "manifest.json", type: "2", linkName: "real.json" },
+    ]);
+    await expectArtifactRejection(artifact, "manifest-symlink", /not a symbolic link/);
+
+    const source = join(tmp, "local-symlink");
+    mkdirSync(source);
+    writeFileSync(join(source, "real.json"), schemaManifest("local-symlink"));
+    symlinkSync("real.json", join(source, "manifest.json"));
+    await expect(install(source, "source")).rejects.toThrow(/not a symbolic link/);
+    expect(existsSync(join(tmp, "custom_integrations", "local-symlink"))).toBe(false);
+    expect(agentLoads()).toEqual(["kept"]);
+  });
+
+  it("installs a local source's hard-linked manifest.json as a file of its own", async () => {
+    // A local source is copied file by file, so no link survives the copy.
+    const source = join(tmp, "local-hardlink");
+    mkdirSync(source);
+    writeFileSync(join(source, "manifest.json"), schemaManifest("local-hardlink"));
+    linkSync(join(source, "manifest.json"), join(source, "alias.json"));
+    await install(source, "source");
+    const installed = join(tmp, "custom_integrations", "local-hardlink", "manifest.json");
+    expect(lstatSync(installed).nlink).toBe(1);
+    expect(agentLoads()).toEqual(["local-hardlink"]);
+  });
+
+  /** A manifest whose description holds a byte that is not UTF-8. */
+  function invalidUtf8Manifest(id: string): Buffer {
+    const [head, tail] = schemaManifest(id, { description: "X" }).split('"X"');
+    return Buffer.concat([Buffer.from(`${head}"`), Buffer.from([0xff]), Buffer.from(`"${tail}`)]);
+  }
+
+  it("refuses manifests the agent's loader would reject", async () => {
+    await installKept();
+    const cases: Array<[string, Buffer | string, RegExp]> = [
+      [
+        "oversized",
+        `${schemaManifest("oversized")}${" ".repeat(services.MAX_INTEGRATION_MANIFEST_BYTES)}`,
+        /exceeds the 128 KiB limit/,
+      ],
+      [
+        "unaccepted-schema",
+        schemaManifest("unaccepted-schema", {
+          configSchema: {
+            type: "object",
+            properties: { region: { type: "string", examples: ["eu"] } },
+          },
+        }),
+        /configSchema uses a construct/,
+      ],
+      ["invalid-utf8", invalidUtf8Manifest("invalid-utf8"), /not valid UTF-8/],
+      [`a${"b".repeat(64)}`, schemaManifest(`a${"b".repeat(64)}`), /longer than the 64 characters/],
+    ];
+    for (const [id, data, message] of cases) {
+      const artifact = join(tmp, "refused.tar.gz");
+      writeTarFixture(artifact, [{ name: "manifest.json", data }]);
+      await expectArtifactRejection(artifact, id, message);
+    }
+    expect(agentLoads()).toEqual(["kept"]);
+  });
+
+  it("restores a rollback backup with the modes the agent loads", async () => {
+    await installKept();
+    const target = join(tmp, "custom_integrations", "kept");
+    const backup = backupInstalledIntegration(tmp, "kept") as NonNullable<
+      ReturnType<typeof backupInstalledIntegration>
+    >;
+    chmodSync(join(backup.backupDirectory, "manifest.json"), 0o666);
+    chmodSync(backup.backupDirectory, 0o777);
+    restoreInstalledIntegration(tmp, backup);
+    expect(mode(target)).toBe(0o755);
+    expect(mode(join(target, "manifest.json"))).toBe(0o644);
+    expect(agentLoads()).toEqual(["kept"]);
+  });
+});
+
+describe("packageIntegration (what the operations agent loads)", () => {
+  it("refuses a manifest larger than the agent reads", async () => {
+    const source = join(tmp, "oversized-source");
+    mkdirSync(source);
+    writeFileSync(
+      join(source, "manifest.json"),
+      `${JSON.stringify({ ...baseManifest, id: "oversized-source" })}${" ".repeat(services.MAX_INTEGRATION_MANIFEST_BYTES)}`,
+    );
+    await expect(
+      packageIntegration({ rootDir: tmp, source, outFile: join(tmp, "out.tar.gz") }),
+    ).rejects.toThrow(/manifest\.json exceeds its 131072-byte limit/);
+  });
+});
+
 describe("integration rollback backups", () => {
   it("restores the exact pre-update files", () => {
     writeIntegration("custom_integrations", "weather-radar", {
@@ -692,6 +1167,58 @@ describe("removeIntegration", () => {
 });
 
 describe("installIntegration security", () => {
+  it("rejects a local integration that uses a built-in integration id", async () => {
+    writeIntegration("integrations", "core-feature", {
+      ...baseManifest,
+      id: "core-feature",
+      name: "Trusted built-in",
+      quality: "built-in",
+    });
+    const builtInManifestPath = join(tmp, "integrations", "core-feature", "manifest.json");
+    const builtInManifest = readFileSync(builtInManifestPath, "utf-8");
+    const source = join(tmp, "community-source");
+    mkdirSync(source, { recursive: true });
+    writeFileSync(
+      join(source, "manifest.json"),
+      JSON.stringify({ ...baseManifest, id: "core-feature", name: "Untrusted community" }),
+      "utf-8",
+    );
+
+    await expect(installIntegration({ source, rootDir: tmp })).rejects.toThrow(
+      /built-in integration id/i,
+    );
+
+    expect(existsSync(join(tmp, "custom_integrations", "core-feature"))).toBe(false);
+    expect(readFileSync(builtInManifestPath, "utf-8")).toBe(builtInManifest);
+  });
+
+  it("rejects an integration artifact that uses a built-in integration id before replacement", async () => {
+    writeIntegration("integrations", "core-feature", {
+      ...baseManifest,
+      id: "core-feature",
+      name: "Trusted built-in",
+      quality: "built-in",
+    });
+    const source = join(tmp, "community-artifact-source");
+    mkdirSync(source, { recursive: true });
+    writeFileSync(
+      join(source, "manifest.json"),
+      JSON.stringify({ ...baseManifest, id: "core-feature", name: "Untrusted artifact" }),
+      "utf-8",
+    );
+    const artifact = join(tmp, "community-artifact.tar.gz");
+    writeTarGz(source, artifact);
+    const installed = join(tmp, "custom_integrations", "core-feature");
+    mkdirSync(installed, { recursive: true });
+    writeFileSync(join(installed, "keep.txt"), "existing install", "utf-8");
+
+    await expect(
+      installIntegration({ source: artifact, sourceKind: "artifact", rootDir: tmp }),
+    ).rejects.toThrow(/built-in integration id/i);
+
+    expect(readFileSync(join(installed, "keep.txt"), "utf-8")).toBe("existing install");
+  });
+
   it("rejects a remote artifact without a SHA-256 pin before downloading", async () => {
     await expect(
       installIntegration({

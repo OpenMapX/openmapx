@@ -1,19 +1,17 @@
 "use client";
 
-import type { MapLayerMouseEvent } from "maplibre-gl";
-import * as maplibregl from "maplibre-gl";
+import { captureHazardFeatures } from "@openmapx/integration-framework";
+import type * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef } from "react";
-import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { useCallback, useEffect } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
-import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import type { WildfirePopupController, WildfirePopupLease } from "../popup-controller";
+import type { WildfirePopupController } from "../popup-controller";
 import {
   buildNoaaSmokePopupModel,
-  renderWildfirePopupModel as buildPopupCard,
   NOAA_SMOKE_DENSITY_STYLE,
   NOAA_SMOKE_STYLE,
   type WildfirePopupTranslate,
@@ -21,13 +19,13 @@ import {
 import { isSourceId } from "../source-id";
 import { useWildfireStore } from "../store";
 import type { NoaaSmokeProperties, WildfireFeatureCollection } from "../types";
+import { type FillPaint, type LinePaint, usePolygonLayerLifecycle } from "./polygon-layer";
 
 export const NOAA_SMOKE_SOURCE = "openmapx-wildfires-noaa-smoke-source";
 export const NOAA_SMOKE_FILL = "openmapx-wildfires-noaa-smoke-fill";
 export const NOAA_SMOKE_LINE = "openmapx-wildfires-noaa-smoke-line";
 
 const REFRESH_MS = 600_000;
-const EMPTY_COLLECTION: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 type UnknownRecord = Record<string, unknown>;
@@ -151,6 +149,14 @@ const FILL_COLOR: maplibregl.ExpressionSpecification = [
   NOAA_SMOKE_DENSITY_STYLE.medium.fillColor,
 ];
 
+const FILL_PAINT: FillPaint = { "fill-color": FILL_COLOR, "fill-opacity": FILL_OPACITY };
+
+const LINE_PAINT: LinePaint = {
+  "line-color": NOAA_SMOKE_STYLE.lineColor,
+  "line-opacity": NOAA_SMOKE_STYLE.lineOpacity,
+  "line-width": NOAA_SMOKE_STYLE.lineWidth,
+};
+
 export interface NoaaSmokeLayerProps {
   active: boolean;
   popupController: WildfirePopupController;
@@ -161,9 +167,10 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
   const env = useEnv();
   const locale = useLocale();
   const translate = useTranslations("wildfires") as WildfirePopupTranslate;
-  const popupLease = useRef<WildfirePopupLease>({});
   const setSourceStatus = useWildfireStore((state) => state.setSourceStatus);
   const resetSourceStatus = useWildfireStore((state) => state.resetSourceStatus);
+  const resolveContributors = useContributorResolver();
+  useRenderedMapAttributions("wildfires-smoke", [NOAA_SMOKE_FILL, NOAA_SMOKE_LINE], active);
   const bridge = useGeoJsonSourceDataBridge({
     mapRef: mapContext.mapRef,
     mapReady: mapContext.mapReady,
@@ -186,7 +193,14 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
       if (!isNoaaSmokeFeatureCollection(data)) {
         throw new Error("Invalid NOAA smoke FeatureCollection");
       }
-      bridge.publish([{ sourceId: NOAA_SMOKE_SOURCE, data }]);
+      const captured = captureHazardFeatures(data, resolveContributors, (feature) =>
+        Array.isArray(feature.properties?.sources)
+          ? feature.properties.sources
+          : typeof feature.properties?.provider === "string"
+            ? [feature.properties.provider]
+            : [],
+      );
+      bridge.publish([{ sourceId: NOAA_SMOKE_SOURCE, data: captured }]);
       setSourceStatus("noaa-hms", {
         loading: false,
         fetchedAt: Date.parse(data.fetchedAt),
@@ -208,6 +222,7 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
     mapContext.mapReady,
     mapContext.mapRef,
     setSourceStatus,
+    resolveContributors,
   ]);
 
   useEffect(() => {
@@ -223,118 +238,24 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
     };
   }, [active, fetchSmoke, resetSourceStatus]);
 
-  useEffect(() => {
-    void mapContext.styleVersion;
-    const map = mapContext.mapRef.current;
-    if (!map || !mapContext.mapReady) return;
-
-    const remove = () => {
-      try {
-        if (map.getLayer(NOAA_SMOKE_LINE)) map.removeLayer(NOAA_SMOKE_LINE);
-        if (map.getLayer(NOAA_SMOKE_FILL)) map.removeLayer(NOAA_SMOKE_FILL);
-        if (map.getSource(NOAA_SMOKE_SOURCE)) map.removeSource(NOAA_SMOKE_SOURCE);
-      } catch {
-        // MapLibre may be replacing the style while cleanup runs.
-      }
-      unregisterLayerSlot(NOAA_SMOKE_FILL);
-      unregisterLayerSlot(NOAA_SMOKE_LINE);
-    };
-
-    const sync = () => {
-      if (!active) {
-        remove();
-        popupController.close(popupLease.current);
-        return;
-      }
-      try {
-        if (!map.getSource(NOAA_SMOKE_SOURCE)) {
-          map.addSource(NOAA_SMOKE_SOURCE, { type: "geojson", data: EMPTY_COLLECTION });
-        }
-        if (!map.getLayer(NOAA_SMOKE_FILL)) {
-          addLayerInSlot(
-            map,
-            {
-              id: NOAA_SMOKE_FILL,
-              type: "fill",
-              source: NOAA_SMOKE_SOURCE,
-              paint: { "fill-color": FILL_COLOR, "fill-opacity": FILL_OPACITY },
-            },
-            "area-overlays",
-            3,
-          );
-        }
-        if (!map.getLayer(NOAA_SMOKE_LINE)) {
-          addLayerInSlot(
-            map,
-            {
-              id: NOAA_SMOKE_LINE,
-              type: "line",
-              source: NOAA_SMOKE_SOURCE,
-              paint: {
-                "line-color": NOAA_SMOKE_STYLE.lineColor,
-                "line-opacity": NOAA_SMOKE_STYLE.lineOpacity,
-                "line-width": NOAA_SMOKE_STYLE.lineWidth,
-              },
-            },
-            "area-overlays",
-            4,
-          );
-        }
-      } catch {
-        // A subsequent styledata event retries once the new style is ready.
-      }
-    };
-
-    sync();
-    if (!active) return;
-    map.on("styledata", sync);
-    return () => {
-      map.off("styledata", sync);
-      remove();
-      popupController.close(popupLease.current);
-    };
-  }, [active, mapContext.mapReady, mapContext.mapRef, mapContext.styleVersion, popupController]);
-
-  useEffect(() => {
-    const map = mapContext.mapRef.current;
-    if (!map || !mapContext.mapReady || !active) return;
-
-    const onClick = (event: MapLayerMouseEvent) => {
-      if (getMapClickOwner(event)) return;
-      const properties = event.features?.[0]?.properties;
-      if (!isNoaaSmokeProperties(properties)) return;
-      const html = buildPopupCard(buildNoaaSmokePopupModel(properties, locale), translate);
-      popupController.open(
-        popupLease.current,
-        new maplibregl.Popup({ closeButton: true, maxWidth: "320px", className: "omx-popup" })
-          .setLngLat(event.lngLat)
-          .setHTML(html)
-          .addTo(map),
-      );
-    };
-    const onMouseEnter = () => {
-      map.getCanvasContainer().style.cursor = "pointer";
-    };
-    const onMouseLeave = () => {
-      map.getCanvasContainer().style.cursor = "";
-    };
-
-    for (const layerId of [NOAA_SMOKE_FILL, NOAA_SMOKE_LINE]) {
-      INTERACTIVE_LAYER_IDS.add(layerId);
-      map.on("click", layerId, onClick);
-      map.on("mouseenter", layerId, onMouseEnter);
-      map.on("mouseleave", layerId, onMouseLeave);
-    }
-    return () => {
-      for (const layerId of [NOAA_SMOKE_FILL, NOAA_SMOKE_LINE]) {
-        map.off("click", layerId, onClick);
-        map.off("mouseenter", layerId, onMouseEnter);
-        map.off("mouseleave", layerId, onMouseLeave);
-        INTERACTIVE_LAYER_IDS.delete(layerId);
-      }
-      map.getCanvasContainer().style.cursor = "";
-    };
-  }, [active, locale, mapContext.mapReady, mapContext.mapRef, popupController, translate]);
+  const popupModel = useCallback(
+    (properties: Record<string, unknown>) =>
+      isNoaaSmokeProperties(properties) ? buildNoaaSmokePopupModel(properties, locale) : null,
+    [locale],
+  );
+  usePolygonLayerLifecycle({
+    active,
+    sourceId: NOAA_SMOKE_SOURCE,
+    fillId: NOAA_SMOKE_FILL,
+    lineId: NOAA_SMOKE_LINE,
+    fillOrder: 3,
+    lineOrder: 4,
+    fillPaint: FILL_PAINT,
+    linePaint: LINE_PAINT,
+    popupController,
+    popupModel,
+    translate,
+  });
 
   return null;
 }

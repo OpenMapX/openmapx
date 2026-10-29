@@ -1,13 +1,11 @@
-FROM docker.io/golang:1.27.2@sha256:5bc7f572bbaa98885a3a1fd9c0aa76b59e3e14e8628bfc316bbfd0c701e4818c AS build-gtfsclean
+FROM docker.io/golang:1.27.3@sha256:f20d83a83e18dbd2a4714b8ffd4b30b287b6243962dd75608e86abcc63ba4efc AS build-gtfsclean
 # Pin gtfsclean to a commit (the project only publishes rolling snapshot-N tags)
 # instead of @latest so the build is reproducible and can't silently pull new code.
 WORKDIR /tmp/gtfsclean-build
-RUN GOPROXY=direct go mod init openmapx.local/gtfsclean-build && \
-    GOPROXY=direct go get github.com/public-transport/gtfsclean@013af793337b759e782c3f8919e0b535cb702944 && \
-    GOPROXY=direct go get golang.org/x/text@v0.39.0 && \
-    GOPROXY=direct go build -trimpath -o /usr/local/bin/gtfsclean github.com/public-transport/gtfsclean
+COPY --chmod=0755 build-gtfsclean.sh /usr/local/bin/build-gtfsclean
+RUN build-gtfsclean
 
-FROM docker.io/debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251
+FROM docker.io/debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Pin the MOTIS release we install. Override with `--build-arg MOTIS_VERSION=vX.Y.Z`.
@@ -24,11 +22,18 @@ ARG MOTIS_SHA256_ARM64=eda48ad1744e7be9bdd1cb515e7229e9c7ecdc3cf82c6621a64670505
 # available inside the RUN below.
 ARG TARGETARCH
 
-# Explicitly upgrade PCRE2 and Expat inherited from the pinned base to their
-# security fixes, including Expat's 2.5.0-1+deb12u4 update.
+# Explicitly upgrade PCRE2, Expat and Brotli inherited from the pinned base,
+# and libssl3 and openssl (3.0.22-1~deb12u2 fixes CVE-2026-84782) that curl,
+# git, Python and ca-certificates pull in, to their security fixes. The version
+# checks fail a stale mirror and, when raised, invalidate this layer in the
+# registry build cache.
 RUN apt-get update -y \
     && apt-get install -y --no-install-recommends \
-      git python3-pip python3-venv curl wget bzip2 rsync openssh-client ca-certificates age libpcre2-8-0 libexpat1 \
+      git python3-pip python3-venv curl wget bzip2 rsync openssh-client ca-certificates age libpcre2-8-0 libexpat1 libbrotli1 libssl3 openssl \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libexpat1)" ge 2.5.0-1+deb12u5 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge 1.0.9-2+deb12u1 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3)" ge 3.0.22-1~deb12u2 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' openssl)" ge 3.0.22-1~deb12u2 \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED
@@ -59,5 +64,9 @@ RUN mkdir -p /opt/motis \
 
 ENV PATH=/opt/motis:$PATH
 ENV PYTHONDONTWRITEBYTECODE=1
+
+# The step runner the CLI calls (packages/cli/src/lib/motis-data.ts), part of
+# the release rather than mounted from the host checkout.
+COPY --chmod=0755 run.sh /usr/local/bin/openmapx-transitous
 
 WORKDIR /transitous

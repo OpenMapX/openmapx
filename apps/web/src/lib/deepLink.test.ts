@@ -124,8 +124,9 @@ describe("deepLink helpers", () => {
       "shared",
     );
     expect(share).toHaveBeenCalledWith({
+      sourceId: undefined,
       title: "Museum",
-      text: undefined,
+      name: undefined,
       url: "https://maps.example/?at=38.8,-77.0",
     });
     expect(writeText).not.toHaveBeenCalled();
@@ -191,8 +192,9 @@ describe("deepLink helpers", () => {
     expect(await shareCurrentUrl({ title: "Museum" })).toBe("shared");
     expect(events).toEqual(["update", "share"]);
     expect(share).toHaveBeenCalledWith({
+      sourceId: undefined,
       title: "Museum",
-      text: undefined,
+      name: undefined,
       url: window.location.href,
     });
   });

@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type {
   RoadConditionEffect,
   RoadConditionEvent,
@@ -82,7 +83,10 @@ export const event = (): RoadConditionEvent => ({
   validity: { status: "active", start: "2026-09-11T08:00:00Z" },
   effects: [effect("fr1/closure", "closure")],
   origin: "feed",
-  attribution: { provider: "DIR", license: "etalab-2.0" },
+  attribution: {
+    provider: "DIR",
+    licensing: licensingFromDeclaration("etalab-2.0", undefined, "Data"),
+  },
   fetchedAt: "2026-09-11T11:59:00Z",
   routingEvidence: { "fr1/closure": evidence() },
 });

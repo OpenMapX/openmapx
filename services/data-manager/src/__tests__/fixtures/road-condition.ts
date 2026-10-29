@@ -89,7 +89,16 @@ export const event = (): RoadConditionEvent => ({
   validity: { status: "active" },
   effects: [effect()],
   origin: "feed",
-  attribution: { provider: "DIR", license: "etalab-2.0" },
+  attribution: {
+    provider: "DIR",
+    licensing: {
+      version: 1,
+      bindings: [
+        { scope: "data", subject: "Data", license: { kind: "spdx", expression: "etalab-2.0" } },
+      ],
+      declarations: [{ text: "etalab-2.0" }],
+    },
+  },
   fetchedAt: "2026-09-11T11:59:00Z",
   routingEvidence: { [EFFECT_ID]: evidence() },
 });

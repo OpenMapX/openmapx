@@ -1,5 +1,13 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import {
+  type TransitSourceLifecycle as CanonicalTransitSourceLifecycle,
+  type TransitSourceListQuery as CanonicalTransitSourceListQuery,
+  type TransitSourceListResult as CanonicalTransitSourceListResult,
+  type TransitSourceRow as CanonicalTransitSourceRow,
+  type TransitCatalogSource,
+  transitLicenseSchema,
+} from "@openmapx/core/data-manager-contracts";
 import { CANDIDATE_MANIFEST_FILENAME, readCandidateManifest } from "./jobs/transitous/candidate.js";
 import {
   buildTransitlandAtlasSpecIndex,
@@ -24,14 +32,7 @@ import {
   writeFeedOverlayAtomic,
 } from "./jobs/transitous-feeds-overlay.js";
 
-export type TransitSourceLifecycle =
-  | "active"
-  | "add-pending"
-  | "update-pending"
-  | "removal-pending"
-  | "disabled"
-  | "failed"
-  | "stale";
+export type TransitSourceLifecycle = CanonicalTransitSourceLifecycle;
 
 export interface TransitFeedStateEvidence {
   region: string;
@@ -44,44 +45,9 @@ export interface TransitFeedStateEvidence {
   status?: string | null;
 }
 
-export interface TransitSourceRow {
-  id: string;
-  region: string;
-  name: string;
-  format: "gtfs" | "netex";
-  origin: "catalog" | "operator";
-  originUrl?: string;
-  license: Record<string, unknown>;
-  requested: boolean;
-  active: boolean;
-  activeEpoch?: string;
-  artifact?: {
-    path: string;
-    sha256: string;
-    sizeBytes: number;
-    retrievedAt: string;
-  };
-  lastFetchedAt?: string;
-  lastImportedAt?: string;
-  validationStatus?: string;
-  validationMessage?: string;
-  lifecycle: TransitSourceLifecycle;
-}
-
-export interface TransitSourceListQuery {
-  search?: string;
-  lifecycle?: TransitSourceLifecycle;
-  origin?: "catalog" | "operator";
-  limit?: number;
-  offset?: number;
-}
-
-export interface TransitSourceListResult {
-  sources: TransitSourceRow[];
-  total: number;
-  limit: number;
-  offset: number;
-}
+export type TransitSourceRow = CanonicalTransitSourceRow;
+export type TransitSourceListQuery = CanonicalTransitSourceListQuery;
+export type TransitSourceListResult = CanonicalTransitSourceListResult;
 
 export class TransitSourceError extends Error {
   constructor(
@@ -114,16 +80,6 @@ interface CatalogSourceRecord extends Record<string, unknown> {
 
 function emptyOverlay(): FeedOverlay {
   return { version: 3, sources: [], patches: [], quarantine: [] };
-}
-
-export function resolveTransitOverlayPath(dataDir: string, explicit?: string): string {
-  // `||`, not `??`: compose renders unset vars as empty strings, and an empty
-  // overlay path would make every mutation fail and every list read nothing.
-  return (
-    explicit ||
-    process.env.TRANSITOUS_FEEDS_OVERLAY_PATH ||
-    join(dataDir, "overrides", "feeds-overlay.json")
-  );
 }
 
 function readOverlay(path: string): FeedOverlay {
@@ -294,7 +250,7 @@ export function listTransitSources(options: {
       format: base.format,
       origin: base.origin,
       ...(base.originUrl ? { originUrl: base.originUrl } : {}),
-      license: structuredClone(base.license ?? {}),
+      license: transitLicenseSchema.parse(base.license ?? {}),
       requested,
       active: isActive,
       ...(isActive && active.epoch ? { activeEpoch: active.epoch } : {}),
@@ -448,15 +404,11 @@ export function prepareEnableTransitSource(options: {
 export function listPinnedTransitCatalog(
   catalogDir: string,
   countries?: string[],
-): Array<{
-  id: string;
-  region: string;
-  name: string;
-  format: "gtfs" | "netex";
-  originUrl?: string;
-  license: Record<string, unknown>;
-}> {
+): TransitCatalogSource[] {
   return desiredSources(catalogDir, emptyOverlay(), countries).map(
-    ({ requested: _requested, origin: _origin, ...source }) => source,
+    ({ requested: _requested, origin: _origin, ...source }) => ({
+      ...source,
+      license: transitLicenseSchema.parse(source.license),
+    }),
   );
 }

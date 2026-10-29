@@ -49,7 +49,8 @@ vi.mock("@/integration-api/map/MapContext", () => {
   return { __test: value, useMap: () => value };
 });
 
-vi.mock("@/lib/map", () => {
+vi.mock("@/lib/map", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/map")>();
   const style = {
     version: 8,
     sources: { openmaptiles: { type: "vector", tiles: [] } },
@@ -80,6 +81,7 @@ vi.mock("@/lib/map", () => {
     },
   };
   return {
+    ...actual,
     __test: test,
     loadMaptilerStyle: vi.fn(),
     loadOpenMapXStyle: vi.fn(() => stylePromise),
@@ -136,6 +138,14 @@ vi.mock("maplibre-gl", () => {
       workerUrlsAtConstruction.push(workerUrl);
       mapOptions.container.append(document.createElement("canvas"));
     }
+
+    getStyle = () => (this.style._loaded ? options[instances.indexOf(this)]?.style : undefined);
+    setStyle = vi.fn((input: unknown) => {
+      const style = input as { layers: Array<{ id: string }> };
+      options[instances.indexOf(this)].style = style;
+    });
+    getLayer = (id: string) => this.getStyle()?.layers.find((layer) => layer.id === id);
+    getSource = () => undefined;
 
     getCenter = () => {
       this.cameraReads += 1;
@@ -229,6 +239,7 @@ import { useMapStore, useNavigationStore, useSettingsStore } from "@openmapx/cor
 import * as maplibre from "maplibre-gl";
 import * as mapContext from "@/integration-api/map/MapContext";
 import * as mapStyle from "@/lib/map";
+import { MAP_FOOTER_OBSTRUCTION_ID } from "@/lib/mapFooterCenter";
 import { publishMapObstruction } from "@/lib/mapObstructions";
 import { MapCanvas } from "./MapCanvas";
 
@@ -240,6 +251,8 @@ const maplibreTest = (
         cameraReads: number;
         emitError(error: Error, data?: Record<string, unknown>): void;
         emitStyleLoad(): void;
+        isStyleLoaded(): boolean;
+        setStyle: ReturnType<typeof vi.fn>;
         jumpTo: ReturnType<typeof vi.fn>;
         on: ReturnType<typeof vi.fn>;
         removeControl: ReturnType<typeof vi.fn>;
@@ -392,6 +405,51 @@ describe("MapCanvas", () => {
       act(() => publishMapObstruction("scale-test-left", "left", null));
       act(() => publishMapObstruction("scale-test-right", "right", null));
       Object.defineProperty(window, "innerWidth", { configurable: true, value: previousWidth });
+    }
+  });
+
+  it("hides the scale during ground navigation only", async () => {
+    maplibreTest.reset();
+    mapStyleTest.reset();
+    vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
+    const view = render(<MapCanvas />);
+    try {
+      await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
+      const scale = view.container.querySelector<HTMLElement>(".maplibregl-ctrl-scale");
+      expect(getComputedStyle(scale as HTMLElement).display).toBe("block");
+      act(() => useNavigationStore.setState({ status: "navigating", kind: "ground" }));
+      expect(getComputedStyle(scale as HTMLElement).display).toBe("none");
+      act(() => useNavigationStore.setState({ status: "navigating", kind: "transit" }));
+      expect(getComputedStyle(scale as HTMLElement).display).toBe("block");
+      act(() => useNavigationStore.setState({ status: "idle", kind: "ground" }));
+      expect(getComputedStyle(scale as HTMLElement).display).toBe("block");
+    } finally {
+      view.unmount();
+    }
+  });
+
+  it("keeps the scale on the live footer rather than a sheet's settled extent", async () => {
+    maplibreTest.reset();
+    mapStyleTest.reset();
+    vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
+    const view = render(<MapCanvas />);
+    try {
+      await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
+      const scale = view.container.querySelector<HTMLElement>(".maplibregl-ctrl-scale");
+      act(() => {
+        publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 300);
+        publishMapObstruction("scale-test-sheet", "bottom", 500);
+      });
+      expect(getComputedStyle(scale as HTMLElement).marginBottom).toBe("312px");
+      act(() => publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 200));
+      expect(getComputedStyle(scale as HTMLElement).marginBottom).toBe("212px");
+      expect(getComputedStyle(scale as HTMLElement).transition).toBe("");
+    } finally {
+      view.unmount();
+      act(() => {
+        publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", null);
+        publishMapObstruction("scale-test-sheet", "bottom", null);
+      });
     }
   });
 
@@ -618,6 +676,18 @@ describe("MapCanvas", () => {
     expect(mapContextTest.notifyMapReady).toHaveBeenCalledTimes(1);
   });
 
+  it("publishes map readiness for a parsed initial style with pending tiles", async () => {
+    maplibreTest.reset();
+    mapStyleTest.reset();
+    maplibreTest.deferInitialStyle(true);
+    vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
+    render(<MapCanvas />);
+    await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
+    expect(maplibreTest.instances[0]?.isStyleLoaded()).toBe(false);
+    expect(mapContextTest.notifyMapReady).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
   it("keeps the initial map usable when a tile fails before style readiness", async () => {
     maplibreTest.reset();
     mapStyleTest.reset();
@@ -733,4 +803,46 @@ describe("MapCanvas", () => {
 
     expect(useMapStore.getState().center).toEqual([1.5, 2.5]);
   });
+});
+
+it("keeps the installed generation during pending or rejected reloads and ignores late style completions", async () => {
+  maplibreTest.reset();
+  mapStyleTest.reset();
+  vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
+  const view = render(<MapCanvas />);
+  await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
+  const map = maplibreTest.instances[0];
+  act(() => map.emitStyleLoad());
+  const installed = maplibreTest.options[0].style;
+  const first = mapStyleTest.deferStyle();
+  act(() => window.dispatchEvent(new Event("offline")));
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(map.setStyle).not.toHaveBeenCalled();
+  expect(maplibreTest.options[0].style).toBe(installed);
+  const second = mapStyleTest.deferStyle();
+  act(() => window.dispatchEvent(new Event("online")));
+  await act(async () => {
+    second();
+    await Promise.resolve();
+  });
+  await waitFor(() => expect(map.setStyle).toHaveBeenCalledTimes(1));
+  const latest = maplibreTest.options[0].style;
+  await act(async () => {
+    first();
+    await Promise.resolve();
+  });
+  expect(map.setStyle).toHaveBeenCalledTimes(1);
+  expect(maplibreTest.options[0].style).toBe(latest);
+  console.error = vi.fn();
+  const reset = mapStyleTest.failStyleOnce(new Error("reload failed"));
+  await act(async () => {
+    window.dispatchEvent(new Event("offline"));
+    await Promise.resolve();
+  });
+  expect(map.setStyle).toHaveBeenCalledTimes(1);
+  expect(maplibreTest.options[0].style).toBe(latest);
+  reset();
+  view.unmount();
 });

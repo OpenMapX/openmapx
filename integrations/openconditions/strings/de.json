@@ -1,6 +1,6 @@
 {
   "name": "OpenConditions",
-  "description": "Aktuelle Straßenlage (Ereignisse, Baustellen, Sperrungen und Verkehrsfluss), Tankstellen mit ihren Preisen, Parkplätze mit freien Stellplätzen und Tarifen, Ladestationen mit Ladepunkten, Status und Tarifen, Verkehrs- und Wetterkameras mit ihren aktuellen Bildern sowie Wetterwarnungen, Erdbeben, Naturereignisse und Brandmeldungen aus einer OpenConditions-Instanz",
+  "description": "Aktuelle Straßenlage (Ereignisse, Baustellen, Sperrungen und Verkehrsfluss), Tankstellen mit ihren Preisen, Parkplätze mit freien Stellplätzen und Tarifen, Ladestationen mit Ladepunkten, Status und Tarifen, Verkehrs- und Wetterkameras mit ihren aktuellen Bildern, Anzeigetafeln mit ihren Meldungen, Straßenwetterstationen mit ihren Messwerten, Fahrzeuge des Straßendiensts mit ihren Arbeiten, Grenzübergänge mit ihren Wartezeiten sowie Wetterwarnungen, Erdbeben, Naturereignisse und Brandmeldungen aus einer OpenConditions-Instanz",
   "dataSources": {
     "domain:road-conditions": {
       "purpose": "Verkehrsereignisse, Baustellen, Sperrungen und Verkehrsfluss, gelesen über OpenConditions",
@@ -26,6 +26,26 @@
       "purpose": "Verkehrs-, Wetter- und Panoramakameras mit ihren Ansichten und aktuellen Bildern, gelesen über OpenConditions",
       "dataSent": "Über OpenConditions nichts über die Nutzer: Eine Quelle, die es bei Bedarf abfragt, erhält die Rasterzellen, die den gesuchten Kartenausschnitt abdecken (bzw. beim Öffnen einer Kamera einen Ausschnitt von etwa 200 m um sie), und eine Quelle mit Schlüssel zusätzlich den API-Schlüssel des Betreibers; Quellen, die es im Gesamtabruf liest, erhalten nichts. Kamerabilder ruft der OpenMapX-Server ab und zeigt sie über seinen Bild-Proxy. Videostreams und Player von Drittanbietern lädt der Browser direkt, und erst nachdem die Nutzer \"Medien laden\" anklicken; deren Anbieter erhält dabei die IP-Adresse und Browserangaben der Nutzer",
       "dataReceived": "Kameras mit Standort, Art, Betreiber, ihren Ansichten mit Blickrichtung, Status und Aktualisierungsintervall, dem aktuellen Bild oder Stream jeder Ansicht sowie einem Link zur Seite des Anbieters"
+    },
+    "domain:message-signs": {
+      "purpose": "Wechselverkehrszeichen und Anzeigetafeln an Straßen mit den Meldungen, die sie anzeigen, gelesen über OpenConditions",
+      "dataSent": "Nichts über die Nutzer: OpenMapX übermittelt dem OpenConditions-Server nur den gesuchten Kartenausschnitt (bzw. beim Öffnen einer Tafel einen Ausschnitt von etwa 200 m um sie), und OpenConditions liest die Tafeln aus seinem eigenen Bestand, den es durch Abruf seiner Quellen nach eigenem Zeitplan füllt",
+      "dataReceived": "Tafeln mit Standort, Straße, Blickrichtung, Betreiber, Betriebszustand und den Zeilen jeder angezeigten Seite"
+    },
+    "domain:road-weather": {
+      "purpose": "Straßenwetterstationen und ihre Messwerte, gelesen über OpenConditions",
+      "dataSent": "Nichts über die Nutzer: OpenMapX übermittelt dem OpenConditions-Server nur den gesuchten Kartenausschnitt (bzw. beim Öffnen einer Station einen Ausschnitt von etwa 200 m um sie), und OpenConditions liest die Stationen aus seinem eigenen Bestand, den es durch Abruf seiner Quellen nach eigenem Zeitplan füllt",
+      "dataReceived": "Stationen mit Standort, Straße und Gemeinde, den gemessenen Werten für Lufttemperatur, Luftfeuchte, Taupunkt, Wind, Sichtweite und Niederschlag sowie Zustand, Temperatur, Griffigkeit, Wasser, Schnee, Eis und Salz auf der Fahrbahn an jedem Sensor"
+    },
+    "domain:service-vehicles": {
+      "purpose": "Wo Fahrzeuge des Straßendiensts wie Räum- und Streufahrzeuge unterwegs sind und was sie tun, gelesen über OpenConditions",
+      "dataSent": "Nichts über die Nutzer: OpenMapX übermittelt dem OpenConditions-Server nur den gesuchten Kartenausschnitt (bzw. beim Öffnen eines Fahrzeugs einen Ausschnitt von etwa 10 km um die Stelle, an der es war, um es wiederzufinden, nachdem es weitergefahren ist), und OpenConditions liest die Positionen aus seinem eigenen Bestand, den es durch Abruf seiner Quellen nach eigenem Zeitplan füllt",
+      "dataReceived": "Anonyme Fahrzeugpositionen mit Zeit, Fahrtrichtung, den gemeldeten Arbeiten und ob der Pflug abgesenkt oder der Streuer in Betrieb ist; kein Fahrzeug und kein Fahrer wird genannt"
+    },
+    "domain:border-crossings": {
+      "purpose": "Grenzübergänge an Landgrenzen und wie lang ihre Warteschlangen sind, gelesen über OpenConditions",
+      "dataSent": "Nichts über die Nutzer: OpenMapX übermittelt dem OpenConditions-Server nur den gesuchten Kartenausschnitt (bzw. beim Öffnen eines Übergangs einen Ausschnitt von etwa 200 m um ihn) sowie, um Öffnungszeiten zu finden, die eine Behörde für einen von einer anderen veröffentlichten Übergang angibt, diesen Ausschnitt um 2 km erweitert (bzw. einen Ausschnitt von etwa 4 km um den geöffneten Übergang); und OpenConditions liest die Übergänge aus seinem eigenen Bestand, den es durch Abruf seiner Quellen nach eigenem Zeitplan füllt",
+      "dataReceived": "Übergänge mit Standort, den Ländern, die sie verbinden, Öffnungszeiten und Status sowie für jede Warteschlange ihre Richtung, die Wartezeit und die geöffneten Spuren"
     },
     "domain:hazards": {
       "purpose": "Wetter- und Katastrophenwarnungen, Erdbeben, Naturereignisse und Satelliten-Brandmeldungen, gelesen über OpenConditions",

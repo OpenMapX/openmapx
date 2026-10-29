@@ -43,15 +43,50 @@
       "sourceId": "pelias",
       "name": "Pelias (self-hosted)",
       "url": "https://github.com/pelias/pelias",
-      "license": "MIT",
-      "licenseUrl": "https://github.com/pelias/pelias/blob/master/LICENSE",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "-",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "software",
+            "subject": "Pelias (self-hosted) engine/software",
+            "license": {
+              "kind": "spdx",
+              "expression": "MIT"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "Actual configured/result upstream datasets",
+            "license": {
+              "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://github.com/pelias/documentation/blob/master/data-sources.md",
+                "https://github.com/pelias/pelias"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "MIT",
+            "url": "https://github.com/pelias/pelias/blob/master/LICENSE"
+          }
+        ]
+      }
     }
   ],
   "requires": [

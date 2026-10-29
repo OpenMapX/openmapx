@@ -1,11 +1,15 @@
 import {
   type OfflineMapPackageManifest,
-  type OfflinePackageCapability,
-  type OfflinePackageJob,
   type OfflinePackageRequest,
   parseOfflinePackageRequest,
   validateOfflineMapPackageManifest,
 } from "@openmapx/core";
+import {
+  type OfflinePackageCapability,
+  type OfflinePackagePreparation,
+  offlinePackageCapabilitySchema,
+  offlinePackagePreparationSchema,
+} from "@openmapx/core/data-manager-contracts";
 
 export class OfflinePackageApiError extends Error {
   constructor(
@@ -21,8 +25,8 @@ export class OfflinePackageApiError extends Error {
 
 export interface OfflinePackageApi {
   capability(signal?: AbortSignal): Promise<OfflinePackageCapability>;
-  prepare(request: OfflinePackageRequest, signal?: AbortSignal): Promise<OfflinePackageJob>;
-  getJob(jobId: string, signal?: AbortSignal): Promise<OfflinePackageJob>;
+  prepare(request: OfflinePackageRequest, signal?: AbortSignal): Promise<OfflinePackagePreparation>;
+  getJob(jobId: string, signal?: AbortSignal): Promise<OfflinePackagePreparation>;
   getManifest(packageId: string, signal?: AbortSignal): Promise<OfflineMapPackageManifest>;
   openArchive(
     packageId: string,
@@ -79,6 +83,14 @@ async function expectJson(response: Response): Promise<unknown> {
   return body;
 }
 
+async function expectJob(response: Response): Promise<OfflinePackagePreparation> {
+  const result = offlinePackagePreparationSchema.safeParse(await expectJson(response));
+  if (!result.success) {
+    throw new OfflinePackageApiError("invalid-response", response.status, "Invalid package job");
+  }
+  return result.data;
+}
+
 export function createOfflinePackageApi(apiBaseUrl = ""): OfflinePackageApi {
   const apiPath = (path: string) => offlinePackageApiPath(path, apiBaseUrl);
   return {
@@ -87,15 +99,15 @@ export function createOfflinePackageApi(apiBaseUrl = ""): OfflinePackageApi {
       // The public proxy deliberately reports an unavailable capability with a
       // 502 when data-manager is down. It is still a valid capability response,
       // not an exception that should leave Settings stuck in its loading state.
-      const value = (await jsonBody(response)) as OfflinePackageCapability | undefined;
-      if (value?.provider !== "openmapx" || typeof value.available !== "boolean") {
+      const result = offlinePackageCapabilitySchema.safeParse(await jsonBody(response));
+      if (!result.success) {
         throw new OfflinePackageApiError(
           "invalid-response",
           response.status,
           "Invalid package capability",
         );
       }
-      return value;
+      return result.data;
     },
 
     async prepare(request, signal) {
@@ -107,7 +119,7 @@ export function createOfflinePackageApi(apiBaseUrl = ""): OfflinePackageApi {
         body: JSON.stringify(canonicalRequest),
         signal,
       });
-      return (await expectJson(response)) as OfflinePackageJob;
+      return expectJob(response);
     },
 
     async getJob(jobId, signal) {
@@ -115,7 +127,7 @@ export function createOfflinePackageApi(apiBaseUrl = ""): OfflinePackageApi {
         apiPath(`/api/offline/packages/jobs/${encodeURIComponent(jobId)}`),
         { credentials: "include", signal },
       );
-      return (await expectJson(response)) as OfflinePackageJob;
+      return expectJob(response);
     },
 
     async getManifest(packageId, signal) {

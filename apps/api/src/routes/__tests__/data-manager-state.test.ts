@@ -12,6 +12,8 @@ const policySnapshot = vi.hoisted(() =>
     evaluatedAt: "2026-09-11T12:00:00Z",
     validUntil: "2026-09-11T12:02:30Z",
     disallowedSourceIds: ["denied"],
+    allowGreyArea: true,
+    allowNonCommercial: false,
   })),
 );
 vi.mock("../../services/data-use-policy.js", () => ({
@@ -35,21 +37,29 @@ const fakeDb = vi.hoisted(() => ({
   callIndex: 0,
 }));
 
-// The lock is agent-owned; /state reads it through the typed operation rather
-// than from a copy of the repository inside this image.
-vi.mock("../../services/ops-client.js", () => ({
-  createApiOpsClient: vi.fn(() => ({}) as never),
-  createDurableOpsKey: vi.fn(() => "opk1_datamanagerstatefixture0000"),
-  executeAndWait: vi.fn(async () => ({
-    active: {
-      ref: "main@abc123def456",
-      submodules: { "transitland-atlas": "deadbeef" },
-      lockedAt: "2026-05-01T00:00:00.000Z",
-      lockedBy: "tester",
-    },
-    proposed: null,
-  })),
-}));
+// The pin is the agent's; /state reads it through the api role's read-only
+// operation, as the agent authorizes it: any other kind is refused, as
+// transitousLock.inspect is for the api role.
+vi.mock("../../services/ops-client.js", async () => {
+  const { authorizeOpsOperation } = await import("@openmapx/core/ops");
+  const pin = {
+    ref: "main@abc123def456",
+    submodules: { "transitland-atlas": "deadbeef" },
+    lockedAt: "2026-05-01T00:00:00.000Z",
+    lockedBy: "tester",
+  };
+  return {
+    createApiOpsClient: vi.fn(() => ({}) as never),
+    createDurableOpsKey: vi.fn(() => "opk1_datamanagerstatefixture0000"),
+    executeAndWait: vi.fn(async (_client: unknown, operation: { kind: string }) => {
+      if (!authorizeOpsOperation("api", operation.kind as never)) {
+        throw new Error(`${operation.kind} is not permitted for the api role`);
+      }
+      if (operation.kind !== "transitousPin.inspect") throw new Error("unexpected operation");
+      return { release: { ...pin, ref: "main@release0000000" }, active: pin };
+    }),
+  };
+});
 
 vi.mock("../../auth", () => ({
   auth: {
@@ -257,6 +267,8 @@ describe("GET /data-manager/road-conditions/policy", () => {
       authoritative: true,
       revision: "p1",
       disallowedSourceIds: ["denied"],
+      allowGreyArea: true,
+      allowNonCommercial: false,
     });
     expect(fakeDb.callIndex).toBe(0);
   });

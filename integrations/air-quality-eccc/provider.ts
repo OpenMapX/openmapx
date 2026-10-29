@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-
 import type {
   AirQualityBasis,
   AirQualitySourceRef,
@@ -14,7 +13,9 @@ import type {
   PointAirQualityQuery,
   ProviderCallContext,
 } from "@openmapx/integration-framework";
+import { parseLicensing } from "@openmapx/mobility-core/licensing";
 import { z } from "zod";
+import sourceManifest from "./manifest.json";
 
 const CURRENT_ENDPOINT = "https://api.weather.gc.ca/collections/aqhi-observations-realtime/items";
 const FORECAST_ENDPOINT = "https://api.weather.gc.ca/collections/aqhi-forecasts-realtime/items";
@@ -31,10 +32,7 @@ const source: AirQualitySourceRef = {
   name: "ECCC GeoMet AQHI observations and forecasts",
   url: "https://api.weather.gc.ca/collections/aqhi-observations-realtime",
   owner: "Environment and Climate Change Canada",
-  license: {
-    name: "Open Government Licence – Canada",
-    url: "https://open.canada.ca/en/open-government-licence-canada",
-  },
+  licensing: parseLicensing(sourceManifest.dataSources[0].licensing)!,
   methodologyUrl: "https://eccc-msc.github.io/open-data/msc-data/aqhi/readme_aqhi_en/",
   attribution: "Environment and Climate Change Canada",
 };

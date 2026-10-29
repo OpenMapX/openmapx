@@ -1,6 +1,9 @@
 import { useImportedGeometryStore } from "@openmapx/core";
 import { act, render } from "@testing-library/react";
-import { expect, it, vi } from "vitest";
+import type { MapGeoJSONFeature } from "maplibre-gl";
+import { afterEach, expect, it, vi } from "vitest";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
+import { parseGeoFile } from "@/lib/importGeoFile";
 import { createFakeMap } from "@/test";
 import { ImportedGeometryLayer } from "./ImportedGeometryLayer";
 
@@ -47,4 +50,39 @@ it("does not republish or reframe an import on 100 style events and restores a r
   });
   expect(fake.state.sources.has("imported-geometry-source")).toBe(false);
   view.unmount();
+});
+
+afterEach(() => vi.useRealTimers());
+it("publishes imported coordinate receipts only while their geometry is painted", () => {
+  vi.useFakeTimers();
+  useMapAttributionStore.setState({ byLayer: {} });
+  const receipt = { sourceId: "import", name: "Original imported geometry" };
+  const name = { sourceId: "name", name: "Unpainted name" };
+  const geojson = parseGeoFile(
+    "saved.geojson",
+    JSON.stringify({
+      type: "Feature",
+      properties: { name: "Place", fieldContributors: { name: [name], lat: [receipt], lng: [] } },
+      geometry: { type: "Point", coordinates: [8, 50] },
+    }),
+  );
+  if (!geojson) throw new Error("Import rejected");
+  useImportedGeometryStore.setState({ imported: { name: "saved.geojson", geojson } });
+  const view = render(<ImportedGeometryLayer />);
+  fake.setRenderedFeatures("imported-geometry-point", geojson.features as MapGeoJSONFeature[]);
+  act(() => {
+    fake.emit("render");
+    vi.advanceTimersByTime(250);
+  });
+  const html = () =>
+    Object.values(useMapAttributionStore.getState().byLayer)
+      .flat()
+      .map((entry) => entry.fullHtml)
+      .join(" ");
+  expect(html()).toContain("Original imported geometry");
+  expect(html()).not.toContain("Unpainted name");
+  view.unmount();
+  expect(html()).toBe("");
+  expect(fake.state.sources.has("imported-geometry-source")).toBe(false);
+  useImportedGeometryStore.setState({ imported: null });
 });

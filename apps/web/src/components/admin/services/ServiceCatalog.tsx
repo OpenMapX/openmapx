@@ -25,12 +25,18 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { AdminServiceSummary, AdminServicesBulkAction } from "@openmapx/core/api-contracts";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import type { ServiceQuality, ServiceSummary } from "@/hooks/useServices";
-import { useServicesList } from "@/hooks/useServices";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import {
+  useServiceHealthCheck,
+  useServiceSelection,
+  useServiceSelectionSave,
+  useServicesBulkAction,
+  useServicesList,
+} from "@/hooks/useServices";
+import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
+import { useActivityClient } from "../activity/activityQueries";
 import { StatusBadge } from "../integrations/StatusBadge";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
@@ -40,21 +46,10 @@ import { ServiceStatusChip } from "../shared/ServiceStatusChip";
 import { TableEmptyState } from "../shared/TableEmptyState";
 import { useClientPagination } from "../shared/tableHooks";
 
-type QualityFilter = "all" | ServiceQuality;
+type QualityFilter = "all" | AdminServiceSummary["quality"];
 
-type BulkAction = "start" | "stop" | "restart" | "update" | "build";
-
-interface ServiceSelectionSummary {
-  source: "env" | "file" | "default";
-  selectedRoots: string[];
-  requestedIds: string[];
-  effectiveIds: string[];
-  warnings: string[];
-  missingIds: string[];
-  envVarName: string;
-  envVarValue: string | null;
-  selectionFilePath: string;
-}
+type BulkAction = AdminServicesBulkAction["action"];
+const emptyServices: AdminServiceSummary[] = [];
 
 function ProvidesCell({ provides }: { provides: string[] }) {
   if (!provides.length) {
@@ -139,10 +134,10 @@ function SkeletonRows() {
 }
 
 function filterServices(
-  services: ServiceSummary[],
+  services: AdminServiceSummary[],
   search: string,
   quality: QualityFilter,
-): ServiceSummary[] {
+): AdminServiceSummary[] {
   const q = search.trim().toLowerCase();
   return services.filter((s) => {
     if (quality !== "all" && s.quality !== quality) return false;
@@ -164,9 +159,14 @@ function parseRootInput(raw: string): string[] {
 }
 
 export function ServiceCatalog() {
-  const { apiUrl } = useEnv();
+  const { apiUrl } = useActivityClient();
+  return <ServiceCatalogView key={apiUrl} />;
+}
+
+function ServiceCatalogView() {
+  const { client } = useActivityClient();
+  const owner = useAdminMutationOwner(client);
   const showToast = useAdminToast();
-  const queryClient = useQueryClient();
   const { data, isLoading, isError, refetch } = useServicesList();
 
   const [search, setSearch] = useState("");
@@ -175,14 +175,7 @@ export function ServiceCatalog() {
   const [buildRegion, setBuildRegion] = useState("");
   const [buildContinueOnError, setBuildContinueOnError] = useState(true);
 
-  const selectionQuery = useQuery<ServiceSelectionSummary>({
-    queryKey: ["admin", "services", "selection"],
-    queryFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/services/selection`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load service selection");
-      return res.json();
-    },
-  });
+  const selectionQuery = useServiceSelection();
 
   const [selectionDraft, setSelectionDraft] = useState("");
 
@@ -191,7 +184,7 @@ export function ServiceCatalog() {
     setSelectionDraft(roots.join(", "));
   }, [selectionQuery.data?.selectedRoots]);
 
-  const services = data?.services ?? [];
+  const services = data?.services ?? emptyServices;
   const summary = data?.summary;
   const filtered = useMemo(
     () => filterServices(services, search, quality),
@@ -233,73 +226,40 @@ export function ServiceCatalog() {
     });
   };
 
-  const healthCheckMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/services/check`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to run service health check");
-      return res.json() as Promise<{ statuses: Array<{ service: string }>; checkedAt: string }>;
-    },
-    onSuccess: (result) => {
-      showToast(`Checked ${result.statuses.length} service(s)`);
-      void queryClient.invalidateQueries({ queryKey: ["admin", "services"] });
-      void queryClient.invalidateQueries({ queryKey: ["admin", "overview"] });
-    },
-    onError: (err) => showToast(err instanceof Error ? err.message : "Check failed", "error"),
-  });
+  const healthCheckMutation = useServiceHealthCheck();
+  const saveSelectionMutation = useServiceSelectionSave();
+  const bulkMutation = useServicesBulkAction();
 
-  const saveSelectionMutation = useMutation({
-    mutationFn: async (selectedRoots: string[]) => {
-      const res = await fetch(`${apiUrl}/api/admin/services/selection`, {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ selectedRoots }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error ?? "Failed to save selection");
-      }
-      return res.json() as Promise<{ ok: boolean }>;
-    },
-    onSuccess: () => {
-      showToast("Service selection saved");
-      void queryClient.invalidateQueries({ queryKey: ["admin", "services", "selection"] });
-      void queryClient.invalidateQueries({ queryKey: ["admin", "services"] });
-    },
-    onError: (err) => showToast(err instanceof Error ? err.message : "Save failed", "error"),
-  });
-
-  const bulkMutation = useMutation({
-    mutationFn: async (payload: {
-      action: BulkAction;
-      serviceIds?: string[];
-      all?: boolean;
-      region?: string;
-      continueOnError?: boolean;
-    }) => {
-      const res = await fetch(`${apiUrl}/api/admin/services/bulk-action`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error ?? "Failed to queue bulk action");
-      }
-      return res.json() as Promise<{ jobId: string }>;
-    },
-    onSuccess: (result, payload) => {
-      showToast(`Queued ${payload.action} (${result.jobId})`);
-      void queryClient.invalidateQueries({ queryKey: ["admin", "services"] });
-      void queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
-      void queryClient.invalidateQueries({ queryKey: ["admin", "overview"] });
-    },
-    onError: (err) => showToast(err instanceof Error ? err.message : "Bulk action failed", "error"),
-  });
+  async function checkHealth() {
+    const execution = owner;
+    try {
+      const result = await healthCheckMutation.mutateAsync();
+      if (execution.active) showToast(`Checked ${result.statuses.length} service(s)`);
+    } catch (error) {
+      if (execution.active)
+        showToast(error instanceof Error ? error.message : "Check failed", "error");
+    }
+  }
+  async function saveSelection() {
+    const execution = owner;
+    try {
+      await saveSelectionMutation.mutateAsync(parseRootInput(selectionDraft));
+      if (execution.active) showToast("Service selection saved");
+    } catch (error) {
+      if (execution.active)
+        showToast(error instanceof Error ? error.message : "Save failed", "error");
+    }
+  }
+  async function queueBulk(payload: AdminServicesBulkAction) {
+    const execution = owner;
+    try {
+      const result = await bulkMutation.mutateAsync(payload);
+      if (execution.active) showToast(`Queued ${payload.action} (${result.jobId})`);
+    } catch (error) {
+      if (execution.active)
+        showToast(error instanceof Error ? error.message : "Bulk action failed", "error");
+    }
+  }
 
   const queueBulkAction = (action: BulkAction) => {
     const ids = [...selectedIds];
@@ -309,7 +269,7 @@ export function ServiceCatalog() {
     }
 
     if (action === "build") {
-      bulkMutation.mutate({
+      void queueBulk({
         action,
         serviceIds: ids,
         region: buildRegion.trim() || undefined,
@@ -318,11 +278,11 @@ export function ServiceCatalog() {
       return;
     }
 
-    bulkMutation.mutate({ action, serviceIds: ids });
+    void queueBulk({ action, serviceIds: ids });
   };
 
   const queueBuildAll = () => {
-    bulkMutation.mutate({
+    void queueBulk({
       action: "build",
       all: true,
       region: buildRegion.trim() || undefined,
@@ -416,7 +376,7 @@ export function ServiceCatalog() {
                 <Button
                   size="small"
                   variant="contained"
-                  onClick={() => saveSelectionMutation.mutate(parseRootInput(selectionDraft))}
+                  onClick={() => void saveSelection()}
                   disabled={
                     saveSelectionMutation.isPending || selectionQuery.data?.source === "env"
                   }
@@ -471,7 +431,7 @@ export function ServiceCatalog() {
             <Button
               size="small"
               variant="outlined"
-              onClick={() => healthCheckMutation.mutate()}
+              onClick={() => void checkHealth()}
               disabled={healthCheckMutation.isPending || bulkMutation.isPending}
             >
               {healthCheckMutation.isPending ? "Checking..." : "Run Service Check"}

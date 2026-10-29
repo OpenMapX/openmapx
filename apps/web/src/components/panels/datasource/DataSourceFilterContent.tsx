@@ -166,6 +166,12 @@ export function DataSourceFilterContent() {
     if (activeSource === "parking") {
       return [{ key: "freeSpaces", labelKey: "freeSpaces" as const }];
     }
+    if (activeSource === "road-weather") {
+      return [{ key: "roadTemperature", labelKey: "roadTemperature" as const }];
+    }
+    if (activeSource === "border-crossings") {
+      return [{ key: "waitMinutes", labelKey: "waitTime" as const }];
+    }
     if (activeSource === "ev-charging") {
       return [
         { key: "powerKw", labelKey: "power" as const },

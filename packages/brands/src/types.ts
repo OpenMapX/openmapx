@@ -1,16 +1,19 @@
 import type { BrandDetail, BrandKind, BrandPresence, BrandSummary } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 
 /** One catalogued chain, operator, or network — keyed by its Wikidata QID. */
 export type BrandEntry = BrandDetail;
 
 /** The committed artifact. `v` guards against loading an incompatible shape. */
 export interface BrandArtifact {
-  v: 1;
+  v: 2;
+  inputHashes: { nsi: string; wikidata: string };
+  sourceCredits: Attribution[];
   /** NSI package version the artifact was generated from, e.g. "8.0.20260729". */
   source: string;
   /** Licence of the upstream data. */
   license: string;
-  brands: BrandEntry[];
+  brands: Array<BrandEntry & { origins: Record<string, string[]> }>;
 }
 
 /**

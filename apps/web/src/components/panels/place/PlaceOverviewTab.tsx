@@ -54,11 +54,19 @@ import {
   useTides,
   useUpdateLabel,
 } from "@openmapx/core";
+import { captureSavedPlaceContributors } from "@openmapx/core/saved-place-contributors";
+import {
+  contributorsForField,
+  contributorsForRecordFields,
+  contributorsForRecords,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { MergedDeparture, MergedRoute, TransportMode } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
+import { SectionAttribution } from "@/components/ui/SectionAttribution";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { resolveListIcon } from "@/lib/listIcon";
 import { openingHoursTone } from "@/lib/openingHoursTone";
@@ -387,6 +395,7 @@ export function PlaceOverviewTab({
         lat: place.coordinates[1],
         lng: place.coordinates[0],
         placeId: place.id,
+        fieldContributors: captureSavedPlaceContributors(place),
       });
     }
     setLabelDialogOpen(false);
@@ -448,6 +457,25 @@ export function PlaceOverviewTab({
         )
         .slice(0, 2)
     : [];
+
+  const displayedFields = [
+    "coordinates",
+    ...(["address", "phone", "website", "email", "wikipediaUrl", "airport"] as const).filter(
+      (field) => (field === "address" ? Boolean(place.address?.trim()) : Boolean(place[field])),
+    ),
+    ...(hours && !(isLoading && !place.openingHours)
+      ? ["openingHoursInfo", ...(place.openingHours ? ["openingHours"] : [])]
+      : []),
+    ...(isCity && (place.wikipediaExtract || place.description)
+      ? [place.wikipediaExtract ? "wikipediaExtract" : "description"]
+      : descriptionRow
+        ? ["description"]
+        : []),
+  ];
+  const overviewAttributions = snapshotContributors(
+    ...displayedFields.map((field) => contributorsForField(place, field)),
+    contributorsForRecords(overviewFacts),
+  );
 
   const conditionRows = (
     <>
@@ -868,6 +896,7 @@ export function PlaceOverviewTab({
 
           {promotePracticalDetails && place.osmTags && (
             <PlaceTagDetails
+              place={place}
               osmTags={place.osmTags}
               section="practical"
               representedEmail={place.email}
@@ -1082,9 +1111,13 @@ export function PlaceOverviewTab({
           reference is passed: every editable value comes from a live server
           read, never from this merged/enriched place record. */}
       <OsmContributionEntry osmId={place.ids?.osm} />
+      {overviewAttributions.length > 0 && (
+        <SectionAttribution attributions={overviewAttributions} inset />
+      )}
       {/* Structured OSM tag details (access, indoor, multilingual descriptions, etc.) */}
       {place.osmTags && Object.keys(place.osmTags).length > 0 && (
         <PlaceTagDetails
+          place={place}
           osmTags={place.osmTags}
           section={promotePracticalDetails ? "remaining" : "all"}
           representedEmail={place.email}
@@ -1102,7 +1135,12 @@ export function PlaceOverviewTab({
         <DataSourceSections detail={place.dataSourceDetail} domain={place.primaryScheme} />
       )}
       {/* Airport detail (runways, frequencies, navaids) — only present on aerodrome/heliport */}
-      {place.airport && <PlaceAirportInfo airport={place.airport} />}
+      {place.airport && (
+        <PlaceAirportInfo
+          airport={place.airport}
+          attributions={contributorsForRecordFields(place, ["airport"])}
+        />
+      )}
       {/* Harbor detail — facilities, OSM link. Surfaces for OpenSeaMap harbour click-throughs. */}
       {place.primaryScheme === "openseamap-harbour" && (
         <PlaceHarborFacilities

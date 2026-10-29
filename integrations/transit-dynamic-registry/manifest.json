@@ -37,6 +37,22 @@
           "cost": "Free.",
           "notes": "No scopes required (public read only). Used solely to raise GitHub's unauthenticated REST limit from 60/hr to 5,000/hr when fetching the public registry."
         }
+      },
+      "digitransitApiKey": {
+        "type": "string",
+        "title": "Digitransit subscription key",
+        "description": "Required for the four Finnish Digitransit OTP providers. Sent only to their reviewed api.digitransit.fi endpoints; catalog credentials are ignored.",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://portal-api.digitransit.fi/",
+          "urlLabel": "Register with Digitransit",
+          "steps": [
+            "Register in the Digitransit API portal.",
+            "Subscribe to the required Routing v2 GTFS APIs.",
+            "Copy the subscription key."
+          ],
+          "notes": "One operator key is shared across Finland, HSL, VARELY and Waltti. Limits and Retry-After cooldowns are shared across regions."
+        }
       }
     }
   },
@@ -60,8 +76,6 @@
       "sourceId": "jsdelivr",
       "name": "JSDelivr CDN",
       "url": "https://cdn.jsdelivr.net/",
-      "license": "MIT",
-      "licenseUrl": "https://www.jsdelivr.com/terms/terms-of-use",
       "commercialUse": "yes",
       "providerCountry": "UK",
       "providerPrivacyUrl": "https://www.jsdelivr.com/terms/privacy-policy",
@@ -69,14 +83,49 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": true,
-      "dpaUrl": "https://www.jsdelivr.com/documents/data-processing-agreement.pdf"
+      "dpaUrl": "https://www.jsdelivr.com/documents/data-processing-agreement.pdf",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "software",
+            "subject": "Unspecified software component",
+            "license": {
+              "kind": "spdx",
+              "expression": "MIT"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "jsDelivr CDN",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:jsdelivr",
+              "id": "LicenseRef-Service-Terms",
+              "name": "jsDelivr CDN terms",
+              "url": "https://www.jsdelivr.com/terms/terms-of-use"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "Fetched registry/operator content",
+            "license": {
+              "kind": "unknown"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "MIT",
+            "url": "https://www.jsdelivr.com/terms/terms-of-use"
+          }
+        ]
+      }
     },
     {
       "sourceId": "github",
       "name": "GitHub API",
       "url": "https://api.github.com/",
-      "license": "Proprietary (GitHub ToS)",
-      "licenseUrl": "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://docs.github.com/site-policy/privacy-policies/github-privacy-statement",
@@ -84,14 +133,41 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": true,
-      "dpaUrl": "https://github.com/customer-terms/github-data-protection-agreement"
+      "dpaUrl": "https://github.com/customer-terms/github-data-protection-agreement",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "GitHub API retrieval",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:github",
+              "id": "LicenseRef-Service-Terms",
+              "name": "GitHub API retrieval terms",
+              "url": "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "Repository/registry/operator content",
+            "license": {
+              "kind": "unknown"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (GitHub ToS)",
+            "url": "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service"
+          }
+        ]
+      }
     },
     {
       "sourceId": "regional-operators",
       "name": "Regional public-transport operator APIs (transport-apis registry)",
       "url": "https://github.com/public-transport/transport-apis",
-      "license": "Various (per regional operator)",
-      "licenseUrl": "https://github.com/public-transport/transport-apis",
       "commercialUse": "unknown",
       "providerCountry": "Various",
       "providerPrivacyUrl": "https://github.com/public-transport/transport-apis",
@@ -99,7 +175,238 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false,
-      "notes": "Auto-discovered from the public-transport/transport-apis registry (~85 regional operators across many countries). Queried server-side only when no hand-crafted provider covers the requested area; this is a category of recipients, not a single controller — see the linked registry for the operator list, each governed by its own terms."
+      "notes": "Auto-discovered from the public-transport/transport-apis registry (~85 regional operators across many countries). Queried server-side only when no hand-crafted provider covers the requested area; this is a category of recipients, not a single controller — see the linked registry for the operator list, each governed by its own terms.",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Each actual contributing feed/operator/source",
+            "license": {
+              "kind": "per-item",
+              "raw": "Determined by each contributing item or operator"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://github.com/public-transport/db-vendo-client",
+                "https://github.com/public-transport/hafas-rest-api",
+                "https://github.com/public-transport/transport-apis"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Regional public-transport operator APIs (transport-apis registry) endpoint policy",
+            "license": {
+              "kind": "unknown",
+              "url": "https://github.com/public-transport/transport-apis"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://github.com/public-transport/db-vendo-client",
+                "https://github.com/public-transport/hafas-rest-api",
+                "https://github.com/public-transport/transport-apis"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Various (per regional operator)",
+            "url": "https://github.com/public-transport/transport-apis"
+          }
+        ]
+      }
+    },
+    {
+      "sourceId": "stadtnavi",
+      "name": "Stadtnavi",
+      "url": "https://www.stadtnavi.de/",
+      "apiHosts": ["api.stadtnavi.de"],
+      "commercialUse": "unknown",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.stadtnavi.de/",
+      "endUserExposure": "server-only",
+      "personalData": true,
+      "cookies": false,
+      "dpaAvailable": false,
+      "credentialOwner": "none",
+      "reviewedAt": "2026-10-22",
+      "notes": "Fixed reviewed OTP endpoint. Source data terms and privacy guarantees are not established by the OTP software licence. The linked provider page is a contact/reference, not verified privacy assurance.",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Stadtnavi transit data",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Stadtnavi API",
+            "license": {
+              "kind": "unknown",
+              "url": "https://www.stadtnavi.de/"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "sourceId": "peatus",
+      "name": "Peatus",
+      "url": "https://www.peatus.ee/",
+      "apiHosts": ["api.peatus.ee"],
+      "commercialUse": "unknown",
+      "providerCountry": "EE",
+      "providerPrivacyUrl": "https://www.peatus.ee/",
+      "endUserExposure": "server-only",
+      "personalData": true,
+      "cookies": false,
+      "dpaAvailable": false,
+      "credentialOwner": "none",
+      "reviewedAt": "2026-10-22",
+      "notes": "Fixed reviewed OTP endpoint. Source data terms and privacy guarantees are not established by the OTP software licence. The linked provider page is a contact/reference, not verified privacy assurance.",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Peatus transit data",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Peatus API",
+            "license": {
+              "kind": "unknown",
+              "url": "https://www.peatus.ee/"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "sourceId": "torino",
+      "name": "5T Torino",
+      "url": "https://www.5t.torino.it/",
+      "apiHosts": ["mapi.5t.torino.it"],
+      "commercialUse": "unknown",
+      "providerCountry": "IT",
+      "providerPrivacyUrl": "https://www.5t.torino.it/",
+      "endUserExposure": "server-only",
+      "personalData": true,
+      "cookies": false,
+      "dpaAvailable": false,
+      "credentialOwner": "none",
+      "reviewedAt": "2026-10-22",
+      "notes": "Fixed reviewed OTP endpoint. Source data terms and privacy guarantees are not established by the OTP software licence. The linked provider page is a contact/reference, not verified privacy assurance.",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "5T Torino transit data",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "5T Torino API",
+            "license": {
+              "kind": "unknown",
+              "url": "https://www.5t.torino.it/"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "sourceId": "trufi",
+      "name": "Trufi Cochabamba",
+      "url": "https://www.trufi-association.org/",
+      "apiHosts": ["otp281.trufi.app"],
+      "commercialUse": "unknown",
+      "providerCountry": "Unknown",
+      "providerPrivacyUrl": "https://www.trufi-association.org/",
+      "endUserExposure": "server-only",
+      "personalData": true,
+      "cookies": false,
+      "dpaAvailable": false,
+      "credentialOwner": "none",
+      "reviewedAt": "2026-10-22",
+      "notes": "Fixed reviewed OTP endpoint. Source data terms and privacy guarantees are not established by the OTP software licence. The linked provider page is a contact/reference, not verified privacy assurance.",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Trufi Cochabamba transit data",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Trufi Cochabamba API",
+            "license": {
+              "kind": "unknown",
+              "url": "https://www.trufi-association.org/"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "sourceId": "digitransit",
+      "name": "Digitransit",
+      "url": "https://digitransit.fi/en/developers/",
+      "apiHosts": ["api.digitransit.fi"],
+      "commercialUse": "unknown",
+      "providerCountry": "FI",
+      "providerPrivacyUrl": "https://digitransit.fi/en/developers/apis/7-terms-of-use",
+      "endUserExposure": "server-only",
+      "personalData": true,
+      "cookies": false,
+      "dpaAvailable": false,
+      "credentialOwner": "instance-operator",
+      "reviewedAt": "2026-10-22",
+      "notes": "Fixed reviewed OTP endpoint. Source data terms and privacy guarantees are not established by the OTP software licence. The linked provider page is a contact/reference, not verified privacy assurance. Digitransit requires registration and acceptance of its terms.",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Digitransit transit data",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Digitransit API",
+            "license": {
+              "kind": "unknown",
+              "url": "https://digitransit.fi/en/developers/"
+            }
+          }
+        ]
+      }
     }
   ],
   "dependencies": ["transit"]

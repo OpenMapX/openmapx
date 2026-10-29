@@ -81,7 +81,9 @@ describe("catalog failure logging", () => {
     const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const before = appLogger.getEntries({ source: "extension-store" }).total;
 
-    await getExtensionCatalog(true);
+    await expect(getExtensionCatalog()).rejects.toMatchObject({
+      category: "catalog_acquisition_failed",
+    });
 
     const result = appLogger.getEntries({ source: "extension-store" });
     expect(consoleWarn).not.toHaveBeenCalled();

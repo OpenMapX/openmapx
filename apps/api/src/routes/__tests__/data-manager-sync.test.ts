@@ -87,12 +87,11 @@ describe("POST /data-manager/transit/sync", () => {
         method: "POST",
         redirect: "error",
         signal: expect.any(AbortSignal),
-        headers: expect.objectContaining({
-          Authorization: "Bearer service-token",
-        }),
       }),
     );
     const args = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(args.headers).get("authorization")).toBe("Bearer service-token");
+    expect(new Headers(args.headers).get("content-type")).toBe("application/json");
     expect(JSON.parse(args.body as string)).toMatchObject({
       idempotencyKey: "abc-123",
       triggeredBy: "service-token",
@@ -142,6 +141,7 @@ describe("POST /data-manager/transit/sync", () => {
   it("rejects an oversized proxy response instead of buffering it", async () => {
     fetchMock.mockResolvedValue(
       new Response(`{"padding":"${"x".repeat(4 * 1024 * 1024)}"}`, {
+        status: 202,
         headers: { "content-type": "application/json" },
       }),
     );

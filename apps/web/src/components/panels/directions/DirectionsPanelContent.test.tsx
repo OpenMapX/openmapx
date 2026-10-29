@@ -1,9 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, createQueryWrapper, fireEvent, render, screen, waitFor } from "@/test";
+import {
+  act,
+  createQueryWrapper,
+  createTestQueryClient,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@/test";
+import { enterDateTime } from "@/test/dateTimeField";
 
 vi.mock("next-intl", async () =>
   (await import("@/test/intl")).mockNextIntl({ useLocale: () => "de" }),
 );
+
+vi.mock("@/integration-api/map/MapContext", () => ({
+  useMap: () => ({ flyTo: vi.fn() }),
+  useMapOptional: () => null,
+}));
 
 const useDirectionsMock = vi.fn();
 const useScheduledDirectionsMock = vi.fn();
@@ -11,6 +25,10 @@ const useTransitPlanMock = vi.fn();
 const useTransitChainPlanMock = vi.fn();
 const useEvDirectionsMock = vi.fn();
 const useAutocompleteMock = vi.fn();
+const transitCollection = vi.hoisted(() => ({
+  journey: undefined as import("@openmapx/mobility-core/transit").VehicleJourney | undefined,
+  alerts: [] as import("@openmapx/mobility-core/transit").ServiceAlert[],
+}));
 let capabilityServices: Record<string, { available: boolean }> = {};
 vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core")>();
@@ -42,6 +60,8 @@ vi.mock("@openmapx/core", async (importOriginal) => {
       isLoading: false,
     }),
     useRideQuotes: () => ({ results: [], expiresAt: null, refetch: vi.fn() }),
+    useVehicleJourney: () => ({ data: transitCollection.journey }),
+    useRouteAlerts: () => ({ data: transitCollection.alerts }),
     useCapabilities: () => ({ services: capabilityServices }),
     useOptimizeRoute: () => ({ mutate: vi.fn(), isPending: false }),
     useRouteInGermany: () => ({ bothInGermany: false }),
@@ -49,15 +69,34 @@ vi.mock("@openmapx/core", async (importOriginal) => {
 });
 
 // TransitItineraryCard's real mount needs ~8 module mocks (see its own spec);
-// stub it — this spec only asserts DirectionsPanelContent DELEGATES to it.
+// keep the card shallow while its Details action opens the real detail consumer.
 vi.mock("@/components/panels/directions/TransitRouteView", () => ({
-  TransitItineraryCard: ({ itinerary }: { itinerary: { duration: number } }) => (
-    <div data-testid="transit-itinerary-card">{itinerary.duration}</div>
+  TransitItineraryCard: ({
+    itinerary,
+    onDetails,
+  }: {
+    itinerary: { duration: number };
+    onDetails?: () => void;
+  }) => (
+    <div data-testid="transit-itinerary-card">
+      {itinerary.duration}
+      <button type="button" onClick={onDetails}>
+        Open transit details
+      </button>
+    </div>
   ),
+  LegBadge: () => <span />,
+  LegRemarks: () => null,
+  LiveStopTime: ({ scheduledTime }: { scheduledTime: string }) => <span>{scheduledTime}</span>,
+  TransitEmissionsBadge: () => null,
+  TransitLiveBadge: () => null,
 }));
 
 import {
   ApiClientError,
+  type DirectionsResult,
+  directionsQueryKey,
+  formatDuration,
   useDirectionsStore,
   useMapStore,
   useSettingsStore,
@@ -87,6 +126,8 @@ interface TransitCallArgs {
 
 beforeEach(() => {
   capabilityServices = {};
+  transitCollection.journey = undefined;
+  transitCollection.alerts = [];
   useDirectionsMock
     .mockReset()
     .mockReturnValue({ data: undefined, isLoading: false, isError: false });
@@ -296,6 +337,30 @@ describe("DirectionsPanelContent", () => {
     ]);
   });
 
+  it("credits displayed waypoint suggestions and removes the credit when selected", async () => {
+    seedOriginDestination();
+    const supplier = { sourceId: "waypoint", name: "Waypoint supplier" };
+    useAutocompleteMock.mockReturnValue({
+      data: [
+        {
+          id: "x",
+          label: "Leipzig",
+          type: "poi",
+          coordinates: [12.37, 51.34],
+          contributors: [supplier],
+        },
+      ],
+    });
+    renderPanel();
+    fireEvent.click(screen.getByText("directions.addStop"));
+    const input = screen.getByPlaceholderText(/directions.addStop 1/);
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "Leipzig" } });
+    expect(await screen.findByText("Waypoint supplier")).toBeVisible();
+    fireEvent.click(screen.getByText("Leipzig"));
+    await waitFor(() => expect(screen.queryByText("Waypoint supplier")).not.toBeInTheDocument());
+  });
+
   it("remove stop: goes back to two waypoints and re-plans with the remaining pair", () => {
     seedOriginDestination();
     act(() => {
@@ -397,9 +462,10 @@ describe("DirectionsPanelContent", () => {
     const departAtTab = screen.getByText("directions.departAt");
     fireEvent.click(departAtTab);
 
-    const dtInput = document.querySelector('input[type="datetime-local"]') as HTMLInputElement;
-    expect(dtInput).not.toBeNull();
-    fireEvent.change(dtInput, { target: { value: "2026-07-04T09:30" } });
+    await enterDateTime(
+      screen.getByRole("group", { name: "directions.departAt" }),
+      "2026-07-04T09:30",
+    );
 
     await waitFor(() => {
       const arg = lastArg<DirectionsCallArgs>(useDirectionsMock);
@@ -409,8 +475,10 @@ describe("DirectionsPanelContent", () => {
 
     const arriveByTab = screen.getByText("directions.arriveBy");
     fireEvent.click(arriveByTab);
-    const dtInput2 = document.querySelector('input[type="datetime-local"]') as HTMLInputElement;
-    fireEvent.change(dtInput2, { target: { value: "2026-07-04T18:00" } });
+    await enterDateTime(
+      screen.getByRole("group", { name: "directions.arriveBy" }),
+      "2026-07-04T18:00",
+    );
 
     await waitFor(() => {
       const arg = lastArg<DirectionsCallArgs>(useDirectionsMock);
@@ -1087,4 +1155,253 @@ describe("EV and chained transit recovery", () => {
     screen.getByText("directions.chainNoConnection");
     expect(screen.queryByRole("button", { name: "common.retry" })).toBeNull();
   });
+});
+
+it("credits scheduled cards, the ordinary mode-button duration and selected details", () => {
+  seedOriginDestination();
+  act(() => useDirectionsStore.getState().setWaypointSchedule(1, { dwellSeconds: 1800 }));
+  const route = (name: string) => ({
+    mode: "driving",
+    duration: 600,
+    distance: 5000,
+    legs: [],
+    steps: [],
+    geometry: [
+      [13.3, 52.5],
+      [11.5, 48.1],
+    ],
+    contributors: [{ sourceId: name, name }],
+  });
+  useDirectionsMock.mockReturnValue({
+    data: { routes: [route("Retained ordinary source")] },
+    isLoading: false,
+    isError: false,
+  });
+  useScheduledDirectionsMock.mockReturnValue({
+    data: {
+      routes: [route("Scheduled first source"), route("Scheduled alternate source")],
+      schedule: {
+        stops: [],
+        legs: [],
+        departure: "2026-09-01T09:00:00Z",
+        arrival: "2026-09-01T10:00:00Z",
+        totalTravelSeconds: 600,
+        totalDwellSeconds: 1800,
+        totalWaitSeconds: 0,
+        multiDay: false,
+        violations: [],
+      },
+      fidelity: "exact",
+      warnings: [],
+    },
+    isLoading: false,
+    isError: false,
+  });
+  renderPanel();
+  expect(screen.getByText("Scheduled first source")).toBeTruthy();
+  expect(screen.getByText("Scheduled alternate source")).toBeTruthy();
+  const footer = screen.getByRole("contentinfo", { name: "Data sources" });
+  const modes = screen.getByRole("radiogroup", { name: "directions.travelMode" });
+  expect(modes.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.getAllByRole("button", { name: "footer.attributions" })).toHaveLength(1);
+  // The ordinary duration remains painted on the active mode button.
+  expect(screen.getByText("Retained ordinary source")).toBeTruthy();
+  fireEvent.click(screen.getAllByText("common.details")[1]);
+  expect(screen.getByText("Scheduled alternate source")).toBeTruthy();
+  expect(screen.queryByText("Scheduled first source")).toBeNull();
+  expect(screen.queryByText("Retained ordinary source")).toBeNull();
+});
+
+it("projects multi-stop leg metrics from indexed fields without reviving canonical empty children", () => {
+  seedOriginDestination();
+  act(() => {
+    useDirectionsStore.getState().addWaypoint(0);
+    useDirectionsStore.getState().setWaypoint(1, [12, 50], "Via");
+  });
+  const visible = { sourceId: "metrics", name: "Visible leg metrics" };
+  const hidden = { sourceId: "hidden", name: "Hidden leg container" };
+  useDirectionsMock.mockReturnValue({
+    data: {
+      routes: [
+        {
+          mode: "driving",
+          duration: 600,
+          distance: 5000,
+          geometry: [
+            [13.3, 52.5],
+            [12, 50],
+            [11.5, 48.1],
+          ],
+          steps: [],
+          contributors: [],
+          fieldContributors: {
+            legs: [hidden],
+            "legs.0.duration": [visible],
+            "legs.0.distance": [],
+            "legs.1.duration": [hidden],
+          },
+          legs: [
+            { duration: 300, distance: 2500, geometry: [], steps: [] },
+            { duration: 300, distance: 2500, geometry: [], steps: [], contributors: [] },
+          ],
+        },
+      ],
+    },
+    isLoading: false,
+    isError: false,
+  });
+  renderPanel();
+  expect(screen.getByText("Visible leg metrics")).toBeTruthy();
+  expect(screen.queryByText("Hidden leg container")).toBeNull();
+});
+
+it("credits the exact duration fields on inactive cached mode buttons", () => {
+  seedOriginDestination();
+  const queryClient = createTestQueryClient();
+  const duration = { sourceId: "engine", name: "Captured walking duration" };
+  const hidden = { sourceId: "engine", name: "Hidden walking geometry" };
+  queryClient.setQueryData(
+    directionsQueryKey({
+      waypoints: [
+        [13.3, 52.5],
+        [11.5, 48.1],
+      ],
+      mode: "walking",
+      avoidHighways: useDirectionsStore.getState().avoidHighways,
+      avoidTolls: useDirectionsStore.getState().avoidTolls,
+      avoidFerries: useDirectionsStore.getState().avoidFerries,
+      avoidClosures: useSettingsStore.getState().avoidIncidents,
+      units: useSettingsStore.getState().units,
+      lang: "de",
+    }),
+    {
+      routes: [
+        {
+          mode: "walking",
+          duration: 600,
+          distance: 5000,
+          geometry: [],
+          legs: [],
+          steps: [],
+          contributors: [hidden],
+          fieldContributors: { duration: [duration], geometry: [hidden] },
+        },
+      ],
+      waypoints: [],
+      activeRouteIndex: 0,
+      provider: "historical-engine",
+    } satisfies DirectionsResult,
+  );
+  render(<DirectionsPanelContent />, { wrapper: createQueryWrapper(queryClient) });
+  expect(screen.getByText(formatDuration(600))).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "footer.attributions" }));
+  expect(screen.getByRole("dialog")).toHaveTextContent("Captured walking duration");
+  expect(screen.queryByText("Hidden walking geometry")).toBeNull();
+});
+
+it("keeps cached empty duration receipts authoritative and hides spinner-only duration credits", () => {
+  seedOriginDestination();
+  const queryClient = createTestQueryClient();
+  const hidden = { sourceId: "engine", name: "Hidden duration owner" };
+  useDirectionsMock.mockReturnValue({
+    data: { routes: [{ duration: 600, contributors: [hidden] }] },
+    isLoading: true,
+    isError: false,
+  });
+  queryClient.setQueryData(
+    directionsQueryKey({
+      waypoints: [
+        [13.3, 52.5],
+        [11.5, 48.1],
+      ],
+      mode: "cycling",
+      avoidHighways: useDirectionsStore.getState().avoidHighways,
+      avoidTolls: useDirectionsStore.getState().avoidTolls,
+      avoidFerries: useDirectionsStore.getState().avoidFerries,
+      avoidClosures: useSettingsStore.getState().avoidIncidents,
+      units: useSettingsStore.getState().units,
+      lang: "de",
+    }),
+    {
+      routes: [
+        {
+          mode: "cycling",
+          duration: 1200,
+          distance: 5000,
+          geometry: [],
+          legs: [],
+          steps: [],
+          contributors: [hidden],
+          fieldContributors: { duration: [] },
+        },
+      ],
+      waypoints: [],
+      activeRouteIndex: 0,
+      provider: "historical-engine",
+    } satisfies DirectionsResult,
+  );
+  render(<DirectionsPanelContent />, { wrapper: createQueryWrapper(queryClient) });
+  expect(screen.getByText(formatDuration(1200))).toBeTruthy();
+  expect(screen.queryByText(formatDuration(600))).toBeNull();
+  expect(screen.queryByText("Hidden duration owner")).toBeNull();
+  expect(screen.queryByRole("button", { name: "footer.attributions" })).toBeNull();
+});
+
+it("collects transit details, fetched stops and alerts into one mounted credit footer", () => {
+  seedOriginDestination();
+  act(() => useDirectionsStore.getState().setMode("transit"));
+  const supplier = { sourceId: "transit", name: "Transit plan supplier" };
+  const stopSupplier = { sourceId: "stops", name: "Fetched stop supplier" };
+  const alertSupplier = { sourceId: "alerts", name: "Fetched alert supplier" };
+  const itinerary = {
+    duration: 3600,
+    startTime: "2026-10-16T08:00:00Z",
+    endTime: "2026-10-16T09:00:00Z",
+    transfers: 0,
+    walkDistance: 0,
+    contributors: [supplier],
+    legs: [
+      {
+        mode: "rail",
+        startTime: "2026-10-16T08:00:00Z",
+        endTime: "2026-10-16T09:00:00Z",
+        from: { name: "From", lat: 50, lng: 8, stopId: "from" },
+        to: { name: "To", lat: 51, lng: 9, stopId: "to" },
+        route: { shortName: "ICE", longName: "Express", color: "DF2027" },
+        tripId: "trip",
+        routeId: "route",
+        _intermediateStopCount: 1,
+        contributors: [supplier],
+      },
+    ],
+  };
+  useTransitPlanMock.mockReturnValue({
+    data: { provider: "captured", itineraries: [itinerary] },
+    isLoading: false,
+    isError: false,
+  });
+  const view = renderPanel();
+  fireEvent.click(screen.getByRole("button", { name: "Open transit details" }));
+  expect(screen.getAllByText("Transit plan supplier")).toHaveLength(1);
+  transitCollection.journey = {
+    stops: [
+      { stopId: "from", name: "From", contributors: [supplier] },
+      { stopId: "middle", name: "Middle", contributors: [stopSupplier] },
+      { stopId: "to", name: "To", contributors: [supplier] },
+    ],
+  } as never;
+  transitCollection.alerts = [
+    { id: "alert", severity: "warning", title: "Disruption", contributors: [alertSupplier] },
+  ] as never;
+  view.rerender(<DirectionsPanelContent />);
+  expect(screen.getAllByText("Transit plan supplier")).toHaveLength(1);
+  expect(screen.getByText("Fetched stop supplier")).toBeInTheDocument();
+  expect(screen.getByText("Fetched alert supplier")).toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: "footer.attributions" })).toHaveLength(1);
+  transitCollection.journey = undefined;
+  transitCollection.alerts = [];
+  view.rerender(<DirectionsPanelContent />);
+  expect(screen.queryByText("Fetched stop supplier")).not.toBeInTheDocument();
+  expect(screen.queryByText("Fetched alert supplier")).not.toBeInTheDocument();
+  expect(screen.getAllByText("Transit plan supplier")).toHaveLength(1);
 });

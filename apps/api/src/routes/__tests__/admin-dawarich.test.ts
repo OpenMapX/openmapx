@@ -19,8 +19,8 @@ const bundle = new Map([
     {
       manifest: {
         id: "dawarich-app",
-        version: "1.15.2",
-        container: { image: "freikin/dawarich", tag: "1.15.2" },
+        version: "1.15.3",
+        container: { image: "freikin/dawarich", tag: "1.15.3" },
       },
     },
   ],
@@ -29,8 +29,8 @@ const bundle = new Map([
     {
       manifest: {
         id: "dawarich-sidekiq",
-        version: "1.15.2",
-        container: { image: "freikin/dawarich", tag: "1.15.2" },
+        version: "1.15.3",
+        container: { image: "freikin/dawarich", tag: "1.15.3" },
       },
     },
   ],
@@ -126,7 +126,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   delete process.env.DOMAIN;
-  await app.close();
+  await app?.close();
 });
 
 beforeEach(() => {

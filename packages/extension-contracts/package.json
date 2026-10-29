@@ -1,0 +1,180 @@
+{
+  "name": "@openmapx/extension-contracts",
+  "version": "0.1.0",
+  "description": "Portable manifests, validation and compatibility contracts for OpenMapX extension authors",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./integration": {
+      "types": "./src/integration.ts",
+      "import": "./src/integration.ts",
+      "default": "./src/integration.ts"
+    },
+    "./service": {
+      "types": "./src/service.ts",
+      "import": "./src/service.ts",
+      "default": "./src/service.ts"
+    },
+    "./extension": {
+      "types": "./src/extension.ts",
+      "import": "./src/extension.ts",
+      "default": "./src/extension.ts"
+    },
+    "./platform": {
+      "types": "./src/platform.ts",
+      "import": "./src/platform.ts",
+      "default": "./src/platform.ts"
+    },
+    "./contributors": {
+      "types": "./src/contributors.ts",
+      "import": "./src/contributors.ts",
+      "default": "./src/contributors.ts"
+    },
+    "./licensing": {
+      "types": "./src/licensing.ts",
+      "import": "./src/licensing.ts",
+      "default": "./src/licensing.ts"
+    },
+    "./attribution": {
+      "types": "./src/attribution.ts",
+      "import": "./src/attribution.ts",
+      "default": "./src/attribution.ts"
+    },
+    "./identifiers": {
+      "types": "./src/identifiers.ts",
+      "import": "./src/identifiers.ts",
+      "default": "./src/identifiers.ts"
+    },
+    "./media-hosts": {
+      "types": "./src/media-hosts.ts",
+      "import": "./src/media-hosts.ts",
+      "default": "./src/media-hosts.ts"
+    },
+    "./capabilities": {
+      "types": "./src/capabilities.ts",
+      "import": "./src/capabilities.ts",
+      "default": "./src/capabilities.ts"
+    },
+    "./artifact": {
+      "types": "./src/artifact.ts",
+      "import": "./src/artifact.ts",
+      "default": "./src/artifact.ts"
+    },
+    "./schemas": {
+      "types": "./src/schemas.ts",
+      "import": "./src/schemas.ts",
+      "default": "./src/schemas.ts"
+    },
+    "./schemas/integration.json": "./schemas/integration.json",
+    "./schemas/service.json": "./schemas/service.json",
+    "./schemas/extension.json": "./schemas/extension.json",
+    "./schemas/artifact.json": "./schemas/artifact.json",
+    "./licensing-schema": {
+      "types": "./src/licensing-schema.ts",
+      "import": "./src/licensing-schema.ts",
+      "default": "./src/licensing-schema.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "schemas",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./integration": {
+        "types": "./dist/integration.d.ts",
+        "import": "./dist/integration.js"
+      },
+      "./service": {
+        "types": "./dist/service.d.ts",
+        "import": "./dist/service.js"
+      },
+      "./extension": {
+        "types": "./dist/extension.d.ts",
+        "import": "./dist/extension.js"
+      },
+      "./platform": {
+        "types": "./dist/platform.d.ts",
+        "import": "./dist/platform.js"
+      },
+      "./contributors": {
+        "types": "./dist/contributors.d.ts",
+        "import": "./dist/contributors.js"
+      },
+      "./licensing": {
+        "types": "./dist/licensing.d.ts",
+        "import": "./dist/licensing.js"
+      },
+      "./attribution": {
+        "types": "./dist/attribution.d.ts",
+        "import": "./dist/attribution.js"
+      },
+      "./identifiers": {
+        "types": "./dist/identifiers.d.ts",
+        "import": "./dist/identifiers.js"
+      },
+      "./media-hosts": {
+        "types": "./dist/media-hosts.d.ts",
+        "import": "./dist/media-hosts.js"
+      },
+      "./capabilities": {
+        "types": "./dist/capabilities.d.ts",
+        "import": "./dist/capabilities.js"
+      },
+      "./artifact": {
+        "types": "./dist/artifact.d.ts",
+        "import": "./dist/artifact.js"
+      },
+      "./schemas": {
+        "types": "./dist/schemas.d.ts",
+        "import": "./dist/schemas.js"
+      },
+      "./schemas/integration.json": "./schemas/integration.json",
+      "./schemas/service.json": "./schemas/service.json",
+      "./schemas/extension.json": "./schemas/extension.json",
+      "./schemas/artifact.json": "./schemas/artifact.json",
+      "./licensing-schema": {
+        "types": "./dist/licensing-schema.d.ts",
+        "import": "./dist/licensing-schema.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsup && node scripts/schemas.mjs --check",
+    "check-types": "tsc --noEmit",
+    "check:schemas": "node scripts/schemas.mjs --check",
+    "prepack": "pnpm build",
+    "generate:schemas": "tsup && node scripts/schemas.mjs"
+  },
+  "dependencies": {
+    "spdx-expression-parse": "5.0.0",
+    "spdx-license-list": "^6.12.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/spdx-expression-parse": "4.0.0",
+    "tsup": "8.5.1",
+    "typescript": "^6.0.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpenMapX/openmapx.git",
+    "directory": "packages/extension-contracts"
+  },
+  "homepage": "https://github.com/OpenMapX/openmapx"
+}

@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { applyHardlinkPlan } from "@openmapx/hardlinks";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // nginx validate+reload is one typed agent operation now; a failure of either
@@ -86,24 +87,25 @@ describe("feed proxy transaction", () => {
   it("re-links the written config into the container-mounted copy so nginx sees it", async () => {
     const fx = setup({ "de-x": { url: "https://x.example/gbfs.json", gbfs: true } }, {});
     if (!tmp) throw new Error("fixture not initialized");
-    // A hardlink plan like the compose renderer emits: producer `conf/` →
-    // consumer `motis-feed-proxy-config/` (the dir the container mounts).
-    const generation = join(tmp, "repo", "infra", "docker", ".trusted-config-current");
-    mkdirSync(generation, { recursive: true });
-    writeFileSync(
-      join(generation, "docker-compose.generated.hardlinks.json"),
-      JSON.stringify([
+    // `openmapx data link` applied a plan like the compose renderer emits:
+    // producer `conf/` → consumer `motis-feed-proxy-config/` (the dir the
+    // container mounts). Data-manager cannot read that plan; the data root
+    // records the applied entries.
+    applyHardlinkPlan(
+      [
         {
           source: "data/motis-feed-proxy/conf",
           target: "data/motis-feed-proxy/motis-feed-proxy-config",
           consumerService: "motis-feed-proxy",
           dataType: "motis-feed-proxy-config",
         },
-      ]),
+      ],
+      { rootDir: tmp },
     );
+    const mountedPath = join(tmp, "motis-feed-proxy", "motis-feed-proxy-config", "default.conf");
+    expect(readFileSync(mountedPath, "utf-8")).toBe("old bytes\n");
     const context = buildJobContext({
       dataDir: tmp,
-      repoRoot: join(tmp, "repo"),
       store: new StateStore(tmp),
       runner: async () => {},
       now: () => "2026-01-01T00:00:00Z",
@@ -111,7 +113,6 @@ describe("feed proxy transaction", () => {
     expect((await run(context)).status).toBe("ok");
 
     const producerPath = join(fx.active, "conf", "default.conf");
-    const mountedPath = join(tmp, "motis-feed-proxy", "motis-feed-proxy-config", "default.conf");
     // The container-mounted copy matches the freshly written producer config…
     expect(readFileSync(mountedPath, "utf-8")).toBe(readFileSync(producerPath, "utf-8"));
     // …and is a hardlink to it (same inode), so future in-place writes propagate.

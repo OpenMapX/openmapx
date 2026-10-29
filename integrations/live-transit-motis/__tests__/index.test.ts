@@ -1,4 +1,5 @@
 import type { IntegrationContext, RealtimeProvider } from "@openmapx/integration-framework";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@motis-project/motis-client", () => ({
@@ -23,7 +24,7 @@ function createCtx(config: Record<string, unknown> = { endpoint: "http://motis:8
           sourceId: "transitous",
           name: "Transitous",
           url: "https://api.transitous.org/",
-          license: "Mixed",
+          licensing: licensingFromDeclaration("Mixed", undefined, "Transitous"),
           providerCountry: "DE",
           providerPrivacyUrl: "https://transitous.org/privacy/",
         },
@@ -31,7 +32,12 @@ function createCtx(config: Record<string, unknown> = { endpoint: "http://motis:8
           sourceId: "motis-rt",
           name: "MOTIS GTFS-RT Pass-through",
           url: "https://motis-project.de/",
-          license: "MIT",
+          licensing: {
+            version: 1,
+            bindings: [
+              { scope: "data", subject: "Data", license: { kind: "spdx", expression: "MIT" } },
+            ],
+          } as const,
           providerCountry: "DE",
           providerPrivacyUrl: "https://motis-project.de/",
         },
@@ -168,7 +174,7 @@ describe("live-transit-motis provider", () => {
         activePeriods: [{ start: "2026-05-22T08:00:00Z", end: "2026-05-22T18:00:00Z" }],
       }),
     ]);
-    expect(result?.attributions.map((a) => a.sourceId)).toContain("motis-rt");
+    expect(result?.attributions).toEqual([]);
     expect(result?.freshness.hasRealtimeData).toBe(true);
   });
 
@@ -214,6 +220,7 @@ describe("live-transit-motis provider", () => {
       expect.objectContaining({ query: expect.objectContaining({ tripId: "trip-42" }) }),
     );
     expect(result?.data).toEqual({
+      contributors: result?.attributions,
       tripId: "ms:trip-42",
       expectedAt: "2026-05-22T08:02:30Z",
       delaySeconds: 150,
@@ -282,7 +289,11 @@ describe("live-transit-motis provider", () => {
     const provider = getProvider();
 
     const result = await provider.getTripUpdate?.("ms:trip-42", "ms:DE:8000105");
-    expect(result?.data).toEqual({ tripId: "ms:trip-42", canceled: true });
+    expect(result?.data).toEqual({
+      tripId: "ms:trip-42",
+      canceled: true,
+      contributors: result?.attributions,
+    });
   });
 
   it("maps severity levels to ServiceAlert severities", async () => {
@@ -425,4 +436,37 @@ describe("live-transit-motis provider", () => {
       expect(transitousClient).not.toBe(localClient);
     });
   });
+});
+
+it("captures local realtime records from their typed feed references, not the MOTIS backend manifest", async () => {
+  const motisClient = await import("@motis-project/motis-client");
+  vi.mocked(motisClient.trip).mockResolvedValueOnce({
+    data: {
+      legs: [
+        {
+          from: {
+            stopId: "feed_A_stop",
+            scheduledDeparture: "2026-05-22T08:00:00Z",
+            departure: "2026-05-22T08:02:00Z",
+          },
+          to: { stopId: "feed_A_to" },
+        },
+      ],
+    },
+  } as never);
+  const mod = await loadModule();
+  const { ctx, getProvider } = createCtx();
+  const a = { sourceId: "feed_A", name: "Actual feed A", notes: "Required feed notice" };
+  Object.assign(ctx, {
+    attributionIndex: {
+      listMotisFeedTags: () => ["feed_A"],
+      getById: (id: string) => (id === "feed_A" ? a : undefined),
+    },
+  });
+  mod.setup(ctx);
+  const result = await getProvider().getTripUpdate?.("ms:feed_A_trip", "ms:feed_A_stop");
+  expect(result?.data?.contributors).toEqual([a]);
+  expect(result?.attributions).toEqual([a]);
+  a.name = "Updated registry";
+  expect(result?.data?.contributors?.[0].name).toBe("Actual feed A");
 });

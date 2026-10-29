@@ -8,6 +8,7 @@ import manifest from "../manifest.json";
 import { useEnvironmentStore } from "../store";
 
 let fake: FakeMap;
+let popupHtml = "";
 
 vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({
@@ -26,7 +27,8 @@ vi.mock("maplibre-gl", () => ({
     setLngLat() {
       return this;
     }
-    setHTML() {
+    setHTML(html: string) {
+      popupHtml = html;
       return this;
     }
     addTo() {
@@ -70,7 +72,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  useEnvironmentStore.setState({ layerVisible: false });
+  act(() => useEnvironmentStore.setState({ layerVisible: false }));
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
@@ -121,4 +123,72 @@ describe("EnvironmentLayer zoom gate", () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+});
+
+it("credits only the rendered captured station receipt and keeps it during a failed refresh", async () => {
+  vi.useFakeTimers();
+  const contributors = [
+    {
+      sourceId: "sensor-community",
+      name: "Retained Sensor.Community",
+      url: "https://sensor.community/",
+      attributionText: "Data © custom station publisher",
+    },
+  ];
+  fetchMock.mockResolvedValueOnce({
+    ok: true,
+    json: async () => [
+      {
+        id: "sc-1",
+        name: "SC",
+        lat: 51,
+        lng: 6,
+        value: 20,
+        unit: "°C",
+        sensorTitle: "Temperature",
+        sensorType: "temp",
+        lastUpdated: "2026-01-01",
+        model: "",
+        allSensors: [],
+        contributors,
+      },
+    ],
+  } as never);
+  const { useMapAttributionStore } = await import("@/integration-api/overlay/mapAttributionStore");
+  useMapAttributionStore.setState({ byLayer: {} });
+  render(<EnvironmentLayer />, { wrapper });
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const collection = fake.state.sources.get("opensensemap-env")?.data as GeoJSON.FeatureCollection;
+  expect(collection.features[0].properties?._mapAttributions).toContain("sensor-community");
+  act(() => fake.emit("click", { features: collection.features }));
+  expect(popupHtml).toContain("Data © custom station publisher");
+  expect(popupHtml).not.toContain("openSenseMap");
+  fake.setRenderedFeatures("env-circle-layer", collection.features as never);
+  const html = () =>
+    Object.values(useMapAttributionStore.getState().byLayer)
+      .flat()
+      .map((entry) => entry.fullHtml)
+      .join(" ");
+  act(() => {
+    fake.emit("render");
+    vi.advanceTimersByTime(250);
+  });
+  expect(html()).toContain("custom station publisher");
+  expect(html()).not.toContain("openSenseMap");
+  fetchMock.mockResolvedValueOnce({ ok: false, json: async () => [] } as never);
+  await act(async () => {
+    fake.emit("moveend");
+    vi.advanceTimersByTime(1000);
+    await Promise.resolve();
+  });
+  expect(html()).toContain("custom station publisher");
+  fake.setRenderedFeatures("env-circle-layer", []);
+  act(() => {
+    fake.emit("render");
+    vi.advanceTimersByTime(250);
+  });
+  expect(html()).toBe("");
 });

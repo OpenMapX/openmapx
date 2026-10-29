@@ -5,6 +5,7 @@ import {
   type LngLat,
   overpassQuerySafe,
   type Route,
+  type RoutingOptions,
   type TravelMode,
 } from "@openmapx/core";
 import {
@@ -39,7 +40,8 @@ import {
   parseJunctionPoints,
 } from "./junctions.js";
 import { routeUsesLocalAccessRoad } from "./local-access.js";
-import { createRoutingOrchestrator } from "./orchestrator.js";
+import { captureRoutingResult, createRoutingOrchestrator } from "./orchestrator.js";
+import { avoidPlannedClosures, plannedClosureImpact } from "./planned-closures.js";
 import { roadConditionImpactForRequest } from "./road-condition-routing.js";
 import { NoScheduleProviderError, runSchedulePlan } from "./schedule-plan.js";
 import {
@@ -427,42 +429,60 @@ export function setup(ctx: IntegrationContext): void {
     );
     const ttl = conditionResponse ? 0 : cacheTtlSeconds(closureRefTime);
 
+    const planWith = async (chain: typeof resolvedChain, options: RoutingOptions) => {
+      let lastErr: unknown;
+      for (const resolved of chain) {
+        const providerStartedAt = performance.now();
+        try {
+          const r = await resolved.provider.getRoute(waypoints, travelMode, options);
+          ctx.metricsRecorder?.recordProviderCall(
+            {
+              providerId: resolved.integrationId,
+              method: "getRoute",
+              outcome: r.routes.length > 0 ? "ok" : "empty",
+            },
+            performance.now() - providerStartedAt,
+          );
+          return captureRoutingResult(r, resolved);
+        } catch (err) {
+          ctx.metricsRecorder?.recordProviderCall(
+            { providerId: resolved.integrationId, method: "getRoute", outcome: "error" },
+            performance.now() - providerStartedAt,
+          );
+          lastErr = err;
+          ctx.log.warn(
+            `routing provider ${resolved.integrationId} failed; trying next`,
+            err as Error,
+          );
+        }
+      }
+      throw lastErr ?? new Error("All routing providers failed");
+    };
+
     try {
-      const result = await withOptionalCache(
+      let result = await withOptionalCache(
         ctx,
-        hashKey("cache:directions", keyParams),
+        hashKey("cache:directions:contributors-v3", keyParams),
         ttl,
-        async () => {
-          let lastErr: unknown;
-          for (const resolved of resolvedChain) {
-            const providerStartedAt = performance.now();
-            try {
-              const r = await resolved.provider.getRoute(waypoints, travelMode, routingOptions);
-              ctx.metricsRecorder?.recordProviderCall(
-                {
-                  providerId: resolved.integrationId,
-                  method: "getRoute",
-                  outcome: r.routes.length > 0 ? "ok" : "empty",
-                },
-                performance.now() - providerStartedAt,
-              );
-              r.provider = resolved.integrationId;
-              return r;
-            } catch (err) {
-              ctx.metricsRecorder?.recordProviderCall(
-                { providerId: resolved.integrationId, method: "getRoute", outcome: "error" },
-                performance.now() - providerStartedAt,
-              );
-              lastErr = err;
-              ctx.log.warn(
-                `routing provider ${resolved.integrationId} failed; trying next`,
-                err as Error,
-              );
-            }
-          }
-          throw lastErr ?? new Error("All routing providers failed");
-        },
+        () => planWith(resolvedChain, routingOptions),
       );
+      const planned =
+        wantClosureAvoidance &&
+        closureRefTime &&
+        (travelMode === "driving" || travelMode === "motorcycle")
+          ? await avoidPlannedClosures(ctx, {
+              first: result,
+              waypoints,
+              travelAt: closureRefTime,
+              options: routingOptions,
+              plan: (options) =>
+                planWith(
+                  resolvedChain.filter((e) => e.provider.supportsDirectedExclusions === true),
+                  options,
+                ),
+            })
+          : null;
+      if (planned) result = planned.result;
       markLocalAccessRoutes(result.routes, localAccessLines);
       if (responseRoadConditionImpact)
         result.roadConditionImpact = await verifyRouteTraffic(
@@ -470,6 +490,11 @@ export function setup(ctx: IntegrationContext): void {
           result.routes,
           responseRoadConditionImpact,
           result.provider,
+        );
+      if (planned)
+        result.roadConditionImpact = plannedClosureImpact(
+          result.roadConditionImpact,
+          planned.outcome,
         );
       reply.header(
         "Cache-Control",
@@ -573,7 +598,7 @@ export function setup(ctx: IntegrationContext): void {
     try {
       const result = await withOptionalCache(
         ctx,
-        hashKey("cache:directions:optimize", keyParams),
+        hashKey("cache:directions:optimize:contributors-v3", keyParams),
         ttl,
         async () => {
           let lastErr: unknown;
@@ -591,8 +616,7 @@ export function setup(ctx: IntegrationContext): void {
                 },
                 performance.now() - providerStartedAt,
               );
-              r.provider = resolved.integrationId;
-              return r;
+              return captureRoutingResult(r, resolved);
             } catch (err) {
               ctx.metricsRecorder?.recordProviderCall(
                 {
@@ -927,7 +951,10 @@ export function setup(ctx: IntegrationContext): void {
     try {
       const result = await withOptionalCache(
         ctx,
-        hashKey("cache:directions:schedule", createScheduleCacheIdentity(request, exclusionsHash)),
+        hashKey(
+          "cache:directions:schedule:contributors-v3",
+          createScheduleCacheIdentity(request, exclusionsHash),
+        ),
         ttl,
         () =>
           runSchedulePlan(request, chain, {

@@ -132,7 +132,12 @@ export const serviceActionLimit = new RateLimiter({
   },
 });
 
+export const extensionPreviewLimit = new RateLimiter({ max: 1, windowMs: 30_000 });
+
 export const storeInstallLimit = new RateLimiter({ max: 1, windowMs: 30_000 });
+
+/** Update checks are read-only host inspection; keep them from consuming the apply token. */
+export const systemUpdateCheckLimit = new RateLimiter({ max: 1, windowMs: 30_000 });
 
 export const systemMaintenanceLimit = new RateLimiter({ max: 1, windowMs: 30_000 });
 
@@ -158,6 +163,17 @@ function envInt(name: string, fallback: number): number {
 export const publicApiLimit = new RateLimiter({
   max: envInt("RATE_LIMIT_PUBLIC_MAX", 600),
   windowMs: envInt("RATE_LIMIT_PUBLIC_WINDOW_MS", 60_000),
+});
+
+/**
+ * Admission floor for integration dispatcher methods whose bodies Fastify
+ * parses before the matched route can apply its declared limiter. This bucket
+ * is independent from that late operation tier; GET and HEAD never use it, so
+ * bursty integration tile traffic retains the dedicated tile budget.
+ */
+export const integrationIngressApiLimit = new RateLimiter({
+  max: envInt("RATE_LIMIT_INTEGRATION_INGRESS_MAX", 60),
+  windowMs: envInt("RATE_LIMIT_INTEGRATION_INGRESS_WINDOW_MS", 60_000),
 });
 
 /**

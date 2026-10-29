@@ -18,6 +18,21 @@ const { values, redisMock } = vi.hoisted(() => {
         values.set(key, value);
       }),
       del: vi.fn(async (key: string) => values.delete(key)),
+      eval: vi.fn(
+        async (
+          _script: string,
+          _keyCount: number,
+          epochKey: string,
+          key: string,
+          _leasesKey: string,
+          epoch: string,
+          serialized: string,
+        ) => {
+          if ((values.get(epochKey) ?? "0") !== epoch) return 0;
+          values.set(key, serialized);
+          return 1;
+        },
+      ),
     },
   };
 });
@@ -54,7 +69,9 @@ describe("station linked-stop single-flight", () => {
     ];
     const discovery = {
       ...emptyResult(stops),
-      attributions: [{ sourceId: "test-feed", name: "Test feed" }],
+      attributions: [
+        { sourceId: "test-feed", name: "Test feed", notes: "Original timetable notice" },
+      ],
     };
     const search = vi.fn<TransitOrchestrator["searchByNameRaw"]>(async () => {
       await gate.promise;
@@ -70,14 +87,23 @@ describe("station linked-stop single-flight", () => {
     try {
       await vi.waitFor(() => expect(search).toHaveBeenCalledTimes(1));
       gate.resolve();
-      await pending;
+      const panels = await pending;
+      expect(panels.map((result) => result.attributions)).toEqual([[], [], [], []]);
       expect(search).toHaveBeenCalledTimes(1);
       for (const fn of Object.values(downstream)) expect(fn).toHaveBeenCalledTimes(1);
-      expect(await transit.getLinkedStops(50, 7, "Central")).toEqual(discovery);
+      const retained = await transit.getLinkedStops(50, 7, "Central");
+      expect(retained).toEqual({
+        ...discovery,
+        data: stops.map((stop) => ({ ...stop, contributors: discovery.attributions })),
+      });
+      expect(stops[0]).not.toHaveProperty("contributors");
+      const cached = [...values.entries()].find(([key]) => key.includes("place-stops:"));
+      expect(cached).toBeDefined();
+      expect(JSON.parse(cached?.[1] ?? "null").stops[0].contributors).toEqual(
+        discovery.attributions,
+      );
       expect(search).toHaveBeenCalledTimes(1);
-      expect(
-        redisMock.setex.mock.calls.filter(([key]) => key.includes("place-stops:")),
-      ).toHaveLength(1);
+      expect([...values.keys()].filter((key) => key.includes("place-stops:"))).toHaveLength(1);
     } finally {
       gate.resolve();
       await pending;
@@ -98,7 +124,7 @@ describe("station linked-stop single-flight", () => {
     gate.resolve();
     const failed = await settled;
     expect(failed.map((result) => result.status)).toEqual(["rejected", "rejected"]);
-    expect(redisMock.setex).not.toHaveBeenCalled();
+    expect(values.size).toBe(0);
 
     const empty = emptyResult<TransitStop[]>([]);
     search.mockImplementation(async () => empty);

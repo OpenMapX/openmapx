@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const testState = (vi as unknown as { hoisted<T>(factory: () => T): T }).hoisted(() => ({
@@ -34,13 +34,17 @@ vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => testState.env,
 }));
 
-vi.mock("@/lib/map", () => ({
-  baseMapCreditsHtml: () => [],
+vi.mock("@/lib/map", async (original) => ({
+  ...(await original<typeof import("@/lib/map")>()),
   loadMaptilerStyle: testState.loadMaptilerStyle,
   loadOpenMapXStyle: testState.loadOpenMapXStyle,
 }));
 
-vi.mock("@/components/map/MapCredits", () => ({ MapCredits: () => null }));
+vi.mock("@/components/map/MapCredits", () => ({
+  MapCredits: ({ attributions }: { attributions: Array<{ name: string }> }) => (
+    <div data-testid="map-credits">{attributions.map((credit) => credit.name).join(" | ")}</div>
+  ),
+}));
 
 vi.mock("maplibre-gl", () => {
   let workerUrl = "";
@@ -97,12 +101,21 @@ const maplibreTest = (
 
 beforeEach(() => {
   testState.env.styleProvider = "openmapx";
+  testState.env.tilesUrl = "";
   testState.scheme.mode = "light";
   testState.scheme.systemMode = "light";
   testState.loadMaptilerStyle.mockReset();
   testState.loadOpenMapXStyle.mockReset();
-  testState.loadMaptilerStyle.mockResolvedValue({ name: "maptiler" });
-  testState.loadOpenMapXStyle.mockResolvedValue({ name: "openmapx-light" });
+  testState.loadMaptilerStyle.mockResolvedValue({
+    name: "maptiler",
+    sources: { openmaptiles: { type: "vector" } },
+    layers: [],
+  });
+  testState.loadOpenMapXStyle.mockResolvedValue({
+    name: "openmapx-light",
+    sources: { openmaptiles: { type: "vector" } },
+    layers: [],
+  });
 });
 
 afterEach(() => {
@@ -124,12 +137,12 @@ describe("LocationMinimap", () => {
   it("constructs with the latest camera when props change during style loading", async () => {
     let resolveStyle: (style: Record<string, unknown>) => void = () => {};
     testState.loadOpenMapXStyle.mockImplementation(
-      () => new Promise((resolve) => (resolveStyle = resolve)),
+      () => new Promise<Record<string, unknown>>((resolve) => (resolveStyle = resolve)),
     );
     const view = render(<LocationMinimap lng={1} lat={2} zoom={10} />);
 
     view.rerender(<LocationMinimap lng={3} lat={4} zoom={12} />);
-    resolveStyle({ name: "delayed" });
+    resolveStyle({ name: "delayed", sources: {}, layers: [] });
 
     await waitFor(() => expect(maplibreTest.maps).toHaveLength(1));
     expect(maplibreTest.maps[0]?.options).toMatchObject({ center: [3, 4], zoom: 12 });
@@ -166,5 +179,50 @@ describe("LocationMinimap", () => {
     await waitFor(() => expect(maplibreTest.maps).toHaveLength(3));
     expect(maplibreTest.maps[1]?.remove).toHaveBeenCalledTimes(1);
     expect(testState.loadMaptilerStyle).toHaveBeenCalledWith("streets-v2-dark", testState.env);
+  });
+});
+
+describe("installed minimap supplier credits", () => {
+  it("lets the gallery own credits only after a map is actually constructed", async () => {
+    let resolveStyle: (style: Record<string, unknown>) => void = () => {};
+    testState.loadOpenMapXStyle.mockImplementation(
+      () => new Promise<Record<string, unknown>>((resolve) => (resolveStyle = resolve)),
+    );
+    const onCreditsChange = vi.fn();
+    render(<LocationMinimap lng={1} lat={2} onCreditsChange={onCreditsChange} />);
+    expect(onCreditsChange).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("map-credits")).toBeNull();
+    resolveStyle({ sources: { openmaptiles: { type: "vector" } }, layers: [] });
+    await waitFor(() => expect(onCreditsChange).toHaveBeenCalled());
+    const loadedCredits = onCreditsChange.mock.calls.at(-1)?.[0] as readonly { sourceId: string }[];
+    expect(loadedCredits.map((credit) => credit.sourceId)).toEqual([
+      "openmaptiles",
+      "openstreetmap",
+      "maptiler",
+    ]);
+    expect(screen.queryByTestId("map-credits")).toBeNull();
+  });
+
+  it("keeps default credits tied to the loaded provider when configuration mutates in flight", async () => {
+    let resolveStyle: (style: Record<string, unknown>) => void = () => {};
+    testState.loadOpenMapXStyle.mockImplementation(
+      () => new Promise<Record<string, unknown>>((resolve) => (resolveStyle = resolve)),
+    );
+    render(<LocationMinimap lng={1} lat={2} />);
+    expect(screen.queryByText(/MapTiler/)).toBeNull();
+    testState.env.styleProvider = "maptiler";
+    testState.env.tilesUrl = "/changed-after-request";
+    resolveStyle({ sources: { openmaptiles: { type: "vector" } }, layers: [] });
+    await waitFor(() => expect(screen.getByTestId("map-credits")).toHaveTextContent("MapTiler"));
+    expect(screen.getByTestId("map-credits")).toHaveTextContent("OpenStreetMap");
+  });
+
+  it("does not publish suppliers for a failed style request", async () => {
+    testState.loadOpenMapXStyle.mockRejectedValue(new Error("style unavailable"));
+    const onCreditsChange = vi.fn();
+    render(<LocationMinimap lng={1} lat={2} onCreditsChange={onCreditsChange} />);
+    await waitFor(() => expect(testState.loadOpenMapXStyle).toHaveBeenCalled());
+    expect(maplibreTest.maps).toHaveLength(0);
+    expect(onCreditsChange).not.toHaveBeenCalled();
   });
 });

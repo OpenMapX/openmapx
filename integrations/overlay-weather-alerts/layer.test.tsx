@@ -1,4 +1,6 @@
+import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
 import { useWeatherAlertStore } from "./store";
 
@@ -10,14 +12,32 @@ vi.mock("@/integration-api/map/MapContext", () => ({
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "https://api.test" }),
 }));
-vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
-  useSourceAttributions: vi.fn(),
-}));
 vi.mock("next-intl", () => ({
   useLocale: () => "en",
   useTranslations: () => (key: string) => key,
 }));
-vi.mock("maplibre-gl", () => ({ Popup: class {} }));
+const popups = vi.hoisted(() => ({ open: 0 }));
+vi.mock("maplibre-gl", () => ({
+  Popup: class {
+    private shown = false;
+    setLngLat() {
+      return this;
+    }
+    setHTML() {
+      return this;
+    }
+    addTo() {
+      this.shown = true;
+      popups.open++;
+      return this;
+    }
+    remove() {
+      if (this.shown) popups.open--;
+      this.shown = false;
+      return this;
+    }
+  },
+}));
 
 import { ALERT_DISPLAY_MAX_AGE_MS, WeatherAlertLayer } from "./map-layer";
 
@@ -57,6 +77,7 @@ beforeEach(() => {
   fake = createFakeMap({ styleLoaded: true });
   mapContext.mapRef.current = fake.map;
   now = T;
+  useMapAttributionStore.setState({ byLayer: {} });
   vi.spyOn(Date, "now").mockImplementation(() => now);
   answer = () => new Response(JSON.stringify(ALERTS), { status: 200 });
   vi.stubGlobal(
@@ -130,10 +151,151 @@ describe("WeatherAlertLayer freshness", () => {
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
   });
 
+  it("closes an alert's popup once the alert expires or leaves the feed, or its severity is hidden", async () => {
+    popups.open = 0;
+    const soon = feature("soon", new Date(T + 60_000).toISOString());
+    answer = () =>
+      new Response(
+        JSON.stringify({
+          ...ALERTS,
+          features: [soon, feature("dropped", null), feature("kept", null)],
+        }),
+      );
+    render(<WeatherAlertLayer />);
+    await waitFor(() => expect(drawn()).toEqual(["soon", "dropped", "kept"]));
+    const click = (id: string) =>
+      act(() => {
+        fake.emit("click", {
+          features: [feature(id, null)],
+          lngLat: { lng: 8, lat: 50 },
+          originalEvent: new MouseEvent("click"),
+        });
+      });
+
+    // The alert expires while its popup is open.
+    click("soon");
+    expect(popups.open).toBe(1);
+    now = T + 61_000;
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(drawn()).toEqual(["dropped", "kept"]);
+    expect(popups.open).toBe(0);
+
+    // A refresh no longer carries the alert.
+    click("dropped");
+    expect(popups.open).toBe(1);
+    answer = () => new Response(JSON.stringify({ ...ALERTS, features: [feature("kept", null)] }));
+    becomeVisible();
+    await waitFor(() => expect(drawn()).toEqual(["kept"]));
+    expect(popups.open).toBe(0);
+
+    // Its severity is switched off in the legend.
+    click("kept");
+    expect(popups.open).toBe(1);
+    act(() => {
+      useWeatherAlertStore.setState({ activeSeverities: new Set(["Minor"]) });
+    });
+    expect(popups.open).toBe(0);
+  });
+
   it("shows the service as unavailable when the route answers 503 from the start", async () => {
     answer = () => new Response("{}", { status: 503 });
     render(<WeatherAlertLayer />);
     await waitFor(() => expect(useWeatherAlertStore.getState().unavailable).toBe(true));
     expect(drawn() ?? []).toEqual([]);
   });
+});
+
+it("captures per-feature receipts before last-good retention and keeps them through a failed refresh", async () => {
+  const a = { sourceId: "a", name: "Captured A" };
+  answer = () =>
+    new Response(
+      JSON.stringify({
+        ...ALERTS,
+        sources: ["a", "offscreen"],
+        features: [
+          {
+            ...feature("a", null),
+            properties: { ...feature("a", null).properties, contributors: [a], sources: ["a"] },
+          },
+        ],
+      }),
+    );
+  render(<WeatherAlertLayer />);
+  await waitFor(() => expect(drawn()).toEqual(["a"]));
+  const data = fake.state.sources.get(SOURCE_ID)?.data as {
+    features: { properties: Record<string, unknown> }[];
+  };
+  expect(JSON.parse(String(data.features[0]?.properties._mapAttributions))).toEqual([a]);
+  now += 60_000;
+  answer = () => new Response("{}", { status: 503 });
+  becomeVisible();
+  await waitFor(() => expect(useWeatherAlertStore.getState().unavailable).toBe(true));
+  expect(
+    (fake.state.sources.get(SOURCE_ID)?.data as typeof data).features[0]?.properties
+      ._mapAttributions,
+  ).toBe(data.features[0]?.properties._mapAttributions);
+});
+
+it("credits only rendered unexpired severity-filtered alerts during panning, worker lag and no idle", async () => {
+  const supplied = (id: string, expires: string | null, severity = "Severe") => ({
+    ...feature(id, expires),
+    properties: {
+      ...feature(id, expires).properties,
+      severity,
+      sources: [id],
+      contributors: [{ sourceId: id, name: `Publisher ${id}` }],
+    },
+  });
+  answer = () =>
+    new Response(
+      JSON.stringify({
+        type: "FeatureCollection",
+        sources: ["a", "b", "offscreen"],
+        features: [
+          supplied("a", new Date(T + 60_000).toISOString()),
+          supplied("b", null),
+          supplied("offscreen", null, "Minor"),
+        ],
+      }),
+    );
+  render(<WeatherAlertLayer />);
+  await waitFor(() => expect(drawn()).toEqual(["a", "b", "offscreen"]));
+  const data = fake.state.sources.get(SOURCE_ID)?.data as GeoJSON.FeatureCollection;
+  const hits = (ids: string[]) => {
+    fake.state.renderedFeatures.set(
+      "openmapx-weather-alerts-points",
+      data.features
+        .filter((f) => ids.includes(String(f.properties?.id)))
+        .map(
+          (f) =>
+            ({
+              ...f,
+              layer: { id: "openmapx-weather-alerts-points", type: "circle" },
+            }) as MapGeoJSONFeature,
+        ),
+    );
+    fake.emit("render");
+  };
+  const credits = () =>
+    Object.values(useMapAttributionStore.getState().byLayer)
+      .flat()
+      .map((entry) => entry.fullHtml)
+      .sort();
+  act(() => hits(["a", "b"]));
+  await waitFor(() => expect(credits()).toEqual(["Publisher a", "Publisher b"]));
+  fake.state.styleLoaded = false; // A pending unrelated source never reaches idle.
+  act(() => hits(["a"]));
+  await waitFor(() => expect(credits()).toEqual(["Publisher a"]));
+  now = T + 61_000;
+  answer = () => new Response("{}", { status: 503 });
+  becomeVisible();
+  await waitFor(() => expect(drawn()).toEqual(["b", "offscreen"]));
+  // The old worker snapshot still paints A until source processing catches up.
+  expect(credits()).toEqual(["Publisher a"]);
+  act(() => hits(["b"]));
+  await waitFor(() => expect(credits()).toEqual(["Publisher b"]));
+  act(() => hits([]));
+  await waitFor(() => expect(credits()).toEqual([]));
 });

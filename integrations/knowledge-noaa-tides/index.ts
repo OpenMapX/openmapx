@@ -1,9 +1,11 @@
 import { createPlace, type Place } from "@openmapx/core";
 import {
   type IntegrationContext,
+  resolveIntegrationContributors,
   scalarQueries,
   type TideCurvePoint,
   type TidesResponse,
+  withContributors,
 } from "@openmapx/integration-framework";
 import {
   fetchHighLowPredictions,
@@ -159,6 +161,7 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/tides", async (req, reply) => {
+    const captured = resolveIntegrationContributors(ctx, ["noaa-co-ops"]);
     const {
       lat,
       lng,
@@ -188,7 +191,7 @@ export function setup(ctx: IntegrationContext): void {
         return;
       }
 
-      const cacheKey = `tides:${round4(latNum)},${round4(lngNum)}:${todayKey()}`;
+      const cacheKey = `tides:contributors-v1:${round4(latNum)},${round4(lngNum)}:${todayKey()}`;
       const cached = await ctx.cache.get<TidesResponse | { notFound: true }>(cacheKey);
       if (cached) {
         if ("notFound" in cached) {
@@ -239,11 +242,11 @@ export function setup(ctx: IntegrationContext): void {
     if (!stationParam && lat && lng) {
       const latNum = Number.parseFloat(lat);
       const lngNum = Number.parseFloat(lng);
-      const cacheKey = `tides:${round4(latNum)},${round4(lngNum)}:${todayKey()}`;
-      await ctx.cache.set(cacheKey, result, PREDICTIONS_CACHE_TTL);
+      const cacheKey = `tides:contributors-v1:${round4(latNum)},${round4(lngNum)}:${todayKey()}`;
+      await ctx.cache.set(cacheKey, withContributors(result, captured), PREDICTIONS_CACHE_TTL);
     }
 
     reply.header("Cache-Control", "public, max-age=3600");
-    reply.send(result);
+    reply.send(withContributors(result, captured));
   });
 }

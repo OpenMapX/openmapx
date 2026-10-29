@@ -284,3 +284,27 @@ describe("mergeRegionalStations", () => {
     expect(result[0].capacity).toBe(8);
   });
 });
+
+it("credits a captured regional supplement only when its fields survive priority merging", () => {
+  const a = { sourceId: "de-cambio", name: "Cambio" };
+  const b = { sourceId: "open-data", name: "Open data" };
+  const first = makeStation({
+    id: "a",
+    name: "A",
+    coordinates: [13.4, 52.5],
+    sources: ["de-cambio/region"],
+    contributors: [a],
+    address: { street: "Existing street" },
+  });
+  const duplicate = {
+    ...structuredClone(first),
+    id: "b",
+    sources: ["open-data"],
+    contributors: [b],
+    availableVehicles: 99,
+  };
+  expect(mergeRegionalStations([first, duplicate])[0].contributors).toEqual([a]);
+  expect(mergeRegionalStations([first, duplicate])[0].sources).toEqual(["de-cambio/region"]);
+  const gap = { ...first, address: undefined };
+  expect(mergeRegionalStations([gap, duplicate])[0].contributors).toEqual([a, b]);
+});

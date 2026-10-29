@@ -1,6 +1,6 @@
-// @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { localizeTextField } from "./localizeTextField";
+import { createFakeMap } from "@/test";
+import { localizeMapLabels, localizeTextField } from "./localizeTextField";
 
 const GERMAN = ["coalesce", ["get", "name:de"], ["get", "name_de"], ["get", "name"]];
 
@@ -44,5 +44,24 @@ describe("localizeTextField", () => {
     expect(localizeTextField("{ref}", "de")).toBe("{ref}");
     const literal = ["match", ["get", "class"], ["literal", ["name"]], "x", "y"];
     expect(localizeTextField(literal, "de")).toEqual(literal);
+  });
+});
+
+describe("localizeMapLabels", () => {
+  it("localizes symbol layers once and leaves other layers alone", () => {
+    const fake = createFakeMap({
+      baseLayers: [
+        { id: "place-label", type: "symbol", layout: { "text-field": ["get", "name"] } },
+        { id: "road-shield", type: "symbol", layout: { "text-field": "{ref}" } },
+        { id: "water", type: "fill" },
+      ],
+    });
+    localizeMapLabels(fake.map, "de");
+    expect(fake.map.getLayoutProperty("place-label", "text-field")).toEqual(GERMAN);
+    expect(fake.map.getLayoutProperty("road-shield", "text-field")).toBe("{ref}");
+
+    const before = fake.state.layout.get("place-label");
+    localizeMapLabels(fake.map, "de");
+    expect(fake.state.layout.get("place-label")).toBe(before);
   });
 });

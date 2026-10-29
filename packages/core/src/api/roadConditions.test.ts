@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "./client";
 import {
@@ -119,7 +120,12 @@ describe("fetchRoadConditions", () => {
             validity: { status: "active", start: "2026-09-11T08:00:00Z" },
             effects: [],
             origin: "feed",
-            attribution: { provider: "NDW", license: "CC0-1.0" },
+            attribution: {
+              provider: "NDW",
+              licensing: licensingFromDeclaration("CC0-1.0", undefined),
+              sourceId: "ndw-parent",
+              notice: "Required publisher notice",
+            },
             fetchedAt: "2026-09-11T08:01:00Z",
           },
         },
@@ -159,7 +165,12 @@ describe("fetchRoadConditions", () => {
         validity: { status: "active", start: "2026-09-11T08:00:00Z" },
         effects: [],
         origin: "feed",
-        attribution: { provider: "NDW", license: "CC0-1.0" },
+        attribution: {
+          provider: "NDW",
+          licensing: licensingFromDeclaration("CC0-1.0", undefined),
+          sourceId: "ndw-parent",
+          notice: "Required publisher notice",
+        },
         fetchedAt: "2026-09-11T08:01:00Z",
       },
     ]);
@@ -231,6 +242,11 @@ describe("roadConditionFeatureToEvent", () => {
     });
   });
 
+  it("keeps a declared no-impact severity apart from a missing one", () => {
+    expect(read({ severity: { label: "none" } })?.severity).toEqual({ label: "none" });
+    expect(read({})?.severity).toEqual({ label: "unknown" });
+  });
+
   it("carries timing, freshness, evidence and the publisher's texts through", () => {
     const event = read({
       source: "de-autobahn",
@@ -270,8 +286,8 @@ describe("roadConditionFeatureToEvent", () => {
       updatedAt: "2026-10-01T10:00:00Z",
       fetchedAt: "2026-10-01T10:01:00Z",
       expiresAt: "2026-10-01T10:11:00Z",
-      // Attribution falls back to the source id when the provider gives no name.
-      attribution: { provider: "de-autobahn" },
+      // Missing recorded attribution stays unknown; a source ID is not a publisher receipt.
+      attribution: { provider: "" },
     });
   });
 
@@ -316,6 +332,28 @@ describe("roadConditionFeatureToEvent", () => {
       { ref: "A1", name: [{ lang: "de", text: "Hansalinie" }], class: "motorway" },
     ]);
     expect(event?.direction).toEqual({ value: "positive", compass: "N" });
+    expect(
+      read({
+        direction: {
+          value: "negative",
+          basis: "geometry",
+          bearingDeg: 45,
+          loop: "inner",
+          toward: "Utrecht",
+          text: "richting Utrecht",
+        },
+      })?.direction,
+    ).toEqual({
+      value: "negative",
+      basis: "geometry",
+      bearingDeg: 45,
+      loop: "inner",
+      toward: "Utrecht",
+      text: "richting Utrecht",
+    });
+    expect(read({ direction: { value: "both", bearingDeg: "45" } })?.direction).toEqual({
+      value: "both",
+    });
     expect(read({ roads: [{ name: "x" }], direction: { compass: "N" } })).not.toHaveProperty(
       "roads",
     );

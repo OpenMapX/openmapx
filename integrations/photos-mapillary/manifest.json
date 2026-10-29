@@ -53,15 +53,61 @@
       "sourceId": "mapillary",
       "name": "Mapillary",
       "url": "https://www.mapillary.com/",
-      "license": "CC BY-SA 4.0 (imagery); Proprietary (API)",
-      "licenseUrl": "https://www.mapillary.com/terms",
       "commercialUse": "conditional",
       "providerCountry": "IE",
       "providerPrivacyUrl": "https://www.mapillary.com/privacy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "imagery",
+            "subject": "Mapillary contributed image",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-SA-4.0"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://www.mapillary.com/terms",
+                "https://help.mapillary.com/hc/en-us/articles/115001770409-CC-BY-SA-license-for-open-data",
+                "https://help.mapillary.com/hc/en-us/articles/8348198426396-Mapillary-FAQ"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Mapillary API/proxy/branding agreement",
+            "license": {
+              "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "provider-terms",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://www.mapillary.com/terms"],
+              "reason": "Images served from own servers trigger section 11; Extracted imagery data via API/vector tiles additionally triggers logo rule; CC BY-SA imagery creator/source/license receipt remains separate",
+              "compactText": "<a href=\"https://www.mapillary.com/\">Mapillary</a>",
+              "logo": "mapillary"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CC-BY-SA-4.0 (imagery); Proprietary (API)",
+            "url": "https://www.mapillary.com/terms"
+          }
+        ]
+      }
     }
   ]
 }

@@ -751,3 +751,41 @@ describe("fusePoiResults — link-first pass", () => {
     expect(nameFused?.gersId).toBe("gers-name-match");
   });
 });
+
+it("keeps POI field credits with actual fusion winners and copied brand overrides", () => {
+  const a = { sourceId: "a", name: "OSM acquisition" };
+  const b = { sourceId: "b", name: "Overture phone" };
+  const c = { sourceId: "c", name: "Overture name" };
+  const d = { sourceId: "d", name: "Overture brand" };
+  const osm = makePoi("osm:node/1", "Cafe", 52.52, 13.4, {
+    contributors: [a],
+    osmTags: { brand: "Old" },
+  });
+  const overture = makePoi("overture:gers-1", "Rejected name", 52.52, 13.4, {
+    gersId: "gers-1",
+    phone: "123",
+    osmTags: { brand: "New" },
+    contributors: [b, c, d],
+    fieldContributors: {
+      name: [c],
+      coordinates: [c],
+      gersId: [],
+      phone: [b],
+      "osmTags.brand": [d],
+    },
+  });
+  const fused = fusePoiResults(
+    [osm],
+    [overture],
+    DEFAULT_CONFLATION_THRESHOLDS,
+    new Map([["node/1", "gers-1"]]),
+  )[0];
+  expect(fused.fieldContributors?.name).toEqual([a]);
+  expect(fused.fieldContributors?.coordinates).toEqual([a]);
+  expect(fused.fieldContributors?.phone).toEqual([b]);
+  expect(fused.fieldContributors?.["osmTags.brand"]).toEqual([d]);
+  expect(fused.contributors).toEqual(expect.arrayContaining([a, b, d]));
+  expect(fused.contributors).not.toContainEqual(c);
+  b.name = "New catalogue";
+  expect(fused.fieldContributors?.phone?.[0].name).toBe("Overture phone");
+});

@@ -1,10 +1,12 @@
 import type { RoadConditionEvent, RoadConditionRoutingEvidence } from "../types/roadConditions";
 import {
+  actionInForce,
   bindsEveryCar,
   closesRoadForCars,
   effectValidity,
   isRestrictionEvidence,
   isVehicleSpecific,
+  lifecycleInForce,
   type RoadConditionEffect,
   speedCapKph,
 } from "./roadConditionEffects";
@@ -128,6 +130,54 @@ export function isRoadConditionRoutingEvidence(
   );
 }
 
+/**
+ * The operator's data-use policy as routing applies it: whether a source
+ * whose rights are unclear (a permission `unknown`) or whose licence forbids
+ * commercial use may shape routes. Without one, routing takes neither.
+ */
+export interface RoadConditionRightsPolicy {
+  allowGreyArea: boolean;
+  allowNonCommercial: boolean;
+}
+
+const STRICT_RIGHTS: RoadConditionRightsPolicy = {
+  allowGreyArea: false,
+  allowNonCommercial: false,
+};
+
+type Permission = "yes" | "no" | "unknown";
+
+/**
+ * Why routing on an effect's data is not permitted, if it is not. Routing
+ * builds a product from the data, so it needs its derived use and its
+ * retention for the effect's lifetime, and commercial use unless the policy
+ * admits non-commercial sources. A denial always refuses; an `unknown`
+ * permission refuses unless the policy admits unclear rights. A grant
+ * reported without a review date is unknown, as a producer that states
+ * permissions only reports `yes` on checked evidence. The credit the licence
+ * asks for must be there to give.
+ */
+export function routingRightsReasons(
+  e: Pick<RoadConditionRoutingEvidence, "rights" | "license_url" | "attribution">,
+  policy: RoadConditionRightsPolicy = STRICT_RIGHTS,
+): string[] {
+  const r = e.rights;
+  if (!r) return ["unverified_rights"];
+  const permission = (value: string): Permission =>
+    value === "no" ? "no" : value === "yes" && r.reviewed_at ? "yes" : "unknown";
+  const derive = permission(r.derived_redistribution);
+  const retain = permission(r.retention);
+  const commercial = permission(r.commercial_use);
+  const reasons: string[] = [];
+  if (derive === "no" || retain === "no") reasons.push("rights_denied");
+  if (commercial === "no" && !policy.allowNonCommercial) reasons.push("non_commercial_source");
+  if ([derive, retain, commercial].includes("unknown") && !policy.allowGreyArea)
+    reasons.push("unverified_rights");
+  if (!e.license_url || (r.attribution_required !== "no" && !e.attribution))
+    reasons.push("missing_attribution");
+  return reasons;
+}
+
 /** Whether a situation's origin may route: a feed outright, a crowd report once corroborated. */
 function originRoutes(event: Pick<RoadConditionEvent, "origin" | "evidence">): boolean {
   if (event.origin === "feed" || event.origin === "derived") return true;
@@ -150,6 +200,8 @@ export function getRoadConditionRoutingDecision(
     travelAt?: number;
     disallowedSources?: ReadonlySet<string>;
     sharedTraffic?: boolean;
+    /** The operator's data-use policy; strict when absent. */
+    rightsPolicy?: RoadConditionRightsPolicy;
   } = {},
 ): { eligible: boolean; reasons: string[]; validUntil: string | null } {
   const now = options.evaluatedAt ?? Date.now();
@@ -202,19 +254,7 @@ export function getRoadConditionRoutingDecision(
     !(e.applicability?.kind === "classes" && bindsCars && bindsEveryCar(e.applicability))
   )
     reasons.push("unsupported_vehicle_scope");
-  if (
-    !e.rights ||
-    e.rights.source_redistribution !== "yes" ||
-    e.rights.derived_redistribution !== "yes" ||
-    e.rights.commercial_use !== "yes" ||
-    e.rights.retention !== "yes" ||
-    !e.rights.evidence_origin ||
-    !e.rights.evidence_version ||
-    !e.rights.reviewed_at ||
-    !e.license_url ||
-    (e.rights.attribution_required !== "no" && !e.attribution)
-  )
-    reasons.push("unverified_rights");
+  reasons.push(...routingRightsReasons(e, options.rightsPolicy));
   const checked = parseTime(e.source_checked_at, true);
   const fresh = parseTime(e.fresh_until, true);
   const expiry = parseTime(e.expires_at);
@@ -229,6 +269,11 @@ export function getRoadConditionRoutingDecision(
     reasons.push("outside_validity");
   if (start !== null && end !== null && start >= end) reasons.push("invalid_time");
   const validity = effectValidity(event, effect);
+  // A planned or approved effect still announced for later counts for a trip
+  // inside its window, weighed against the instant of evaluation.
+  const clock = new Date(now);
+  if (!lifecycleInForce(validity, clock)) reasons.push("lifecycle_not_in_force");
+  if (!actionInForce(effect, validity, clock)) reasons.push("action_not_routable");
   if ((validity.periods?.length || validity.exceptions?.length) && transition === null)
     reasons.push("unsupported_schedule");
   if (travel === now && transition !== null && transition <= now) reasons.push("expired_window");

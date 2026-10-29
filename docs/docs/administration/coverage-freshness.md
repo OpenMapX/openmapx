@@ -6,23 +6,23 @@ sidebar_position: 2
 
 # Coverage & freshness
 
-The full-admin page at `/admin/coverage` is a deployment inventory of evidence,
-not a promise that a provider covers every place in a region. It helps answer
-whether a configured operation has a published, regionally qualified and
-currently usable data source, and which fact needs attention when it does not.
+Open `/admin/coverage` with a full administrator account to check publication,
+freshness, runtime and source-rights evidence for a region. The report is
+read-only. It cannot certify geographic completeness or the legal position of
+your deployment.
 
 ## Reading the page
 
 The region matrix always shows eight domain columns:
 
-- Addresses — forward address search and reverse geocoding.
-- POIs — POI search and the optional Overture enrichment stream.
-- Transit — stops, departures, journey planning, and realtime.
-- EV — charger discovery, charger availability, and EV route planning.
-- Parking — facility discovery and occupancy.
-- Fuel — station discovery and prices.
-- Cameras — camera discovery and live camera images.
-- Traffic — flow, road conditions, and confirmed traffic-graph application.
+- Addresses: forward address search and reverse geocoding.
+- POIs: POI search and the optional Overture enrichment stream.
+- Transit: stops, departures, journey planning, and realtime.
+- EV: charger discovery, charger availability, and EV route planning.
+- Parking: facility discovery and occupancy.
+- Fuel: station discovery and prices.
+- Cameras: camera discovery and live camera images.
+- Traffic: flow, road conditions, and confirmed traffic-graph application.
 
 Select a region or a domain cell to open the selected-region view. The source
 table is paginated and can be filtered by domain, enabled state, attention, and
@@ -78,19 +78,17 @@ publication fingerprints and timestamps; it does not hash a large PBF from a
 GET request. Overture's Places publication timestamp is independent of later
 OSM conflation. The Places publication marker is created atomically with the active schema.
 
-EV, parking, fuel, camera, and traffic-condition evidence comes from OpenConditions:
+OpenConditions supplies the EV, parking, fuel, camera and road-condition feed observations:
 each of its providers reports, per feed, the last poll outcome, the last
 published snapshot, and the regions the feed covers, and the page shows those
-as the stream's attempt, publication, and region. A deployment without
-OpenConditions has no streams in those domains.
+as the stream's attempt, publication, and region. Without OpenConditions, those feed streams are unavailable; other passive provider or capability observations must still be assessed separately.
 
 Transit evidence comes from the active MOTIS slot and manifest. Historical feed
 rows do not count as active coverage, and an import timestamp is not a claim
 that the schedule is valid for a particular service date. Traffic keeps flow,
 conditions, and graph application as separate observations. A conditions feed
 can be present while traffic-aware routing remains unverified until a graph
-write is observed and associated with the active graph. Graph identity is not
-yet available from the sidecar, so traffic-aware routing remains unverified. The historical sidecar survives a restart but never restores
+write is observed and associated with the active graph. The coverage sidecar does not establish the graph/serving-process association required for traffic-aware routing, so that capability remains unverified in this report. Runtime route proofs have a separate contract, described in [Monitoring](./monitoring.md#the-applied-set). The historical sidecar survives a restart but never restores
 the runtime set of applied condition IDs.
 
 ## Usage rights and provenance
@@ -130,25 +128,24 @@ validity deadline.
 Start with the reason text and the authority row, then follow the corrective
 link in the source drawer:
 
-- **No publication evidence / unknown** — inspect the relevant data workflow
+- **No publication evidence / unknown**: inspect the relevant data workflow
   and wait for a successful active publication. Timestamp/hash columns without
   the new publication marker do not establish freshness.
-- **Failed attempt with an older publication** — repair the upstream feed or
+- **Failed attempt with an older publication**: repair the upstream feed or
   credentials in OpenConditions, Transit, or the owning integration. The older
   publication is intentionally still shown until a replacement is committed.
-- **Region unknown or partial** — check the active extract, published region,
+- **Region unknown or partial**: check the active extract, published region,
   source declaration, or provider mapping. Do not use the count as a claim of
   local completeness.
-- **Traffic conditions present but routing unverified** — inspect the
+- **Traffic conditions present but routing unverified**: inspect the
   data-manager traffic cycle and graph-application counts. Conditions alone do
   not clear the router's fallback path.
-- **Rights review required** — add or correct the source's manifest metadata,
+- **Rights review required**: add or correct the source's manifest metadata,
   including the qualified source ID and terms/licence URLs. This page does not
   certify a deployment's legal position.
-- **Collector partial or unavailable** — inspect the Data Manager and Postgres
+- **Collector partial or unavailable**: inspect the Data Manager and Postgres
   authorities. A corrupt local inventory is reported as corruption rather than
   a valid empty deployment; fixing the underlying workflow lets a later read
   replace the diagnostic.
 
-The page is intentionally diagnostic and read-only. Use the linked Transit,
-integration, or data-workflow screens for changes.
+Use the linked Transit, integration or data-workflow screens to make changes, then confirm that a later report contains the expected publication evidence.

@@ -12,6 +12,7 @@ import {
   parseOpsResult,
   redactedOpsError,
 } from "./contract";
+import { configurationProjectionFingerprint } from "./fingerprint";
 
 const issuedAt = "2026-08-23T18:00:00.000Z";
 const expiresAt = "2026-08-23T18:00:20.000Z";
@@ -31,7 +32,20 @@ function request(operation: unknown, extra: Record<string, unknown> = {}) {
 const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   "docker.status": { kind: "docker.status" },
   "stack.status": { kind: "stack.status" },
-  "stack.render": { kind: "stack.render", revisionId: "config_20260823" },
+  "configuration.inspect": { kind: "configuration.inspect" },
+  "configuration.hardlinks.inspect": {
+    kind: "configuration.hardlinks.inspect",
+    revisionId: `cfg1_${"a".repeat(43)}`,
+  },
+  "configuration.failure.inspect": {
+    kind: "configuration.failure.inspect",
+    attemptedRevisionId: `cfg1_${"a".repeat(43)}`,
+  },
+  "stack.render": {
+    expectedCurrentRevisionId: null,
+    kind: "stack.render",
+    revisionId: "config_20260823",
+  },
   "stack.start": { kind: "stack.start" },
   "stack.stop": { kind: "stack.stop" },
   "service.start": { kind: "service.start", serviceId: "motis" },
@@ -62,6 +76,13 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     updateJobId: "update_20260823",
   },
   "appApi.runtime.inspect": { kind: "appApi.runtime.inspect" },
+  "agent.update": {
+    kind: "agent.update",
+    releaseId: "release-123",
+    expectedDigest: "a".repeat(64),
+    handoffId: "handoff-123",
+  },
+  "agent.handoff.inspect": { kind: "agent.handoff.inspect", handoffId: "handoff-123" },
   "backup.list": { kind: "backup.list" },
   "backup.create": { kind: "backup.create", backupId: "pre-update-20260823" },
   "backup.restore": {
@@ -75,43 +96,90 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   "system.inspect": { kind: "system.inspect" },
   "system.update": {
     kind: "system.update",
+    expectedDigest: "a".repeat(64),
     releaseId: "2026.08.23",
     createBackup: true,
     backupId: "pre-update-20260823",
   },
-  "extension.repository.inspect": {
-    kind: "extension.repository.inspect",
-    catalogEntryId: "maps-bundle",
-    catalogRevisionId: "catalog_20260823",
+  "serviceRepository.inspect": {
+    kind: "serviceRepository.inspect",
+    url: "https://github.com/example/maps-services",
+    ref: "v1.2.0",
   },
-  "extension.install": {
-    kind: "extension.install",
+  "serviceRepository.publish": {
+    kind: "serviceRepository.publish",
+    url: "https://github.com/example/maps-services",
+    commit: "a".repeat(40),
     extensionId: "maps-bundle",
-    catalogEntryId: "maps-bundle",
-    catalogRevisionId: "catalog_20260823",
+    recovery: {
+      selectionBefore: ["postgis"],
+      touchedServiceIds: ["maps-tiles"],
+      previouslyEnabledServiceIds: [],
+    },
   },
-  "extension.update": {
-    kind: "extension.update",
+  "serviceRepository.settle": {
+    kind: "serviceRepository.settle",
+    repository: "0123456789abcdef",
+    transactionId: `txn1_${"b".repeat(24)}`,
+    outcome: "commit",
+  },
+  "serviceRepository.remove": {
+    kind: "serviceRepository.remove",
+    repository: "0123456789abcdef",
     extensionId: "maps-bundle",
-    catalogRevisionId: "catalog_20260823",
   },
-  "extension.remove": { kind: "extension.remove", extensionId: "maps-bundle" },
+  "communityServices.inspect": { kind: "communityServices.inspect" },
+  "integration.inspect": {
+    kind: "integration.inspect",
+    source: {
+      kind: "artifact",
+      url: "https://example.test/weather-radar-1.0.0.tar.gz",
+      sha256: "c".repeat(64),
+    },
+  },
+  "integration.publish": {
+    kind: "integration.publish",
+    integrationId: "weather-radar",
+    source: { kind: "upload", sha256: "c".repeat(64) },
+    extensionId: "maps-bundle",
+  },
+  "integration.settle": {
+    kind: "integration.settle",
+    integrationId: "weather-radar",
+    transactionId: `itx1_${"d".repeat(24)}`,
+    outcome: "rollback",
+  },
+  "integration.remove": {
+    kind: "integration.remove",
+    integrationId: "weather-radar",
+    extensionId: "maps-bundle",
+  },
+  "integration.adopt": {
+    kind: "integration.adopt",
+    integrationId: "weather-radar",
+    extensionId: "maps-bundle",
+  },
+  "installedIntegrations.inspect": { kind: "installedIntegrations.inspect" },
   "serviceSelection.apply": {
+    expectedCurrentRevisionId: null,
     kind: "serviceSelection.apply",
     revisionId: "selection_20260823",
   },
   "serviceSelection.inspect": { kind: "serviceSelection.inspect" },
   "serviceConfig.apply": {
+    expectedCurrentRevisionId: null,
     kind: "serviceConfig.apply",
     serviceId: "motis",
     revisionId: "config_20260823",
   },
   "integrationConfig.apply": {
+    expectedCurrentRevisionId: null,
     kind: "integrationConfig.apply",
     integrationId: "routing",
     revisionId: "config_20260823",
   },
   "vault.apply": {
+    expectedCurrentRevisionId: null,
     kind: "vault.apply",
     serviceId: "motis",
     revisionId: "vault_20260823",
@@ -168,9 +236,57 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     approvedBy: "fixture-actor",
   },
   "gbfsCatalogLock.inspect": { kind: "gbfsCatalogLock.inspect" },
+  "transitousPin.inspect": { kind: "transitousPin.inspect" },
 };
 
+it("compares projections independent of object ordering while preserving array and value identity", () => {
+  const digest = configurationProjectionFingerprint({
+    label: "before",
+    nested: { a: 1, b: [true, false] },
+  });
+  expect(
+    configurationProjectionFingerprint({ nested: { b: [true, false], a: 1 }, label: "before" }),
+  ).toBe(digest);
+  expect(
+    configurationProjectionFingerprint({ label: "after", nested: { a: 1, b: [true, false] } }),
+  ).not.toBe(digest);
+  expect(
+    configurationProjectionFingerprint({ label: "before", nested: { a: 1, b: [false, true] } }),
+  ).not.toBe(digest);
+});
+
 describe("ops contract", () => {
+  it.each([
+    "stack.start",
+    "service.start",
+    "service.stop",
+    "service.restart",
+    "service.recreate",
+    "service.recreateIsolated",
+    "service.remove",
+  ] as const)("bounds %s with shutdown grace and settlement overhead", (kind) => {
+    expect(OPS_KIND_POLICIES[kind]).toMatchObject({
+      execution: "async",
+      role: "api",
+      timeoutMs: 630_000,
+    });
+  });
+
+  it("preserves budgets outside the wired lifecycle operations", () => {
+    for (const [kind, timeoutMs] of [
+      ["docker.status", 5_000],
+      ["stack.status", 15_000],
+      ["stack.render", 120_000],
+      ["service.logs", 30_000],
+      ["service.logs.follow", 900_000],
+      ["service.pull", 900_000],
+      ["service.build", 1_800_000],
+      ["services.buildAll", 1_800_000],
+      ["stack.stop", 300_000],
+      ["service.update", 900_000],
+    ] as const)
+      expect(OPS_KIND_POLICIES[kind].timeoutMs).toBe(timeoutMs);
+  });
   it("freezes one strict schema for every inventoried typed effect", () => {
     expect(Object.keys(samples).sort()).toEqual([...OPS_OPERATION_KINDS].sort());
     for (const operation of Object.values(samples)) {
@@ -202,6 +318,44 @@ describe("ops contract", () => {
         }),
       ).toThrow(OpsContractError);
     }
+  });
+
+  it.each([
+    "https://sentinel-user:sentinel-password@example.test/integration.tgz",
+    "https://example.test/integration.tgz?token=sentinel-query",
+    "https://example.test/integration.tgz#sentinel-fragment",
+  ])("rejects unsafe integration artifact locators before agent dispatch: %s", (url) => {
+    const source = { kind: "artifact", url, sha256: "a".repeat(64) };
+    for (const operation of [
+      { kind: "integration.inspect", source },
+      { kind: "integration.publish", integrationId: "fixture", source },
+      { kind: "integration.adopt", integrationId: "fixture", source },
+    ]) {
+      expect(() => parseOpsRequest(request(operation), { role: "api" })).toThrow(OpsContractError);
+    }
+  });
+
+  it("canonicalizes accepted integration artifact locators before dispatch", () => {
+    const parsed = parseOpsRequest(
+      request({
+        kind: "integration.inspect",
+        source: {
+          kind: "artifact",
+          url: "https://ARTIFACTS.example.test:443/releases/../integration.tgz",
+          sha256: "a".repeat(64),
+        },
+      }),
+      { role: "api" },
+    );
+
+    expect(parsed.operation).toEqual({
+      kind: "integration.inspect",
+      source: {
+        kind: "artifact",
+        url: "https://artifacts.example.test/integration.tgz",
+        sha256: "a".repeat(64),
+      },
+    });
   });
 
   it("rejects flag-shaped, path-shaped, malformed, and unregistered service IDs", () => {
@@ -311,6 +465,7 @@ describe("ops contract", () => {
       parseOpsRequest(
         request({
           kind: "system.update",
+          expectedDigest: "a".repeat(64),
           releaseId: "release-1",
           createBackup: true,
           backupId: "pre-update-job-1",
@@ -320,20 +475,37 @@ describe("ops contract", () => {
     ).toMatchObject({ createBackup: true, backupId: "pre-update-job-1" });
     expect(
       parseOpsRequest(
-        request({ kind: "system.update", releaseId: "release-1", createBackup: false }),
+        request({
+          kind: "system.update",
+          expectedDigest: "a".repeat(64),
+          releaseId: "release-1",
+          createBackup: false,
+        }),
         { role: "api" },
       ).operation,
-    ).toEqual({ kind: "system.update", releaseId: "release-1", createBackup: false });
+    ).toEqual({
+      kind: "system.update",
+      expectedDigest: "a".repeat(64),
+      releaseId: "release-1",
+      createBackup: false,
+    });
     for (const operation of [
-      { kind: "system.update", releaseId: "release-1", createBackup: true },
       {
         kind: "system.update",
+        expectedDigest: "a".repeat(64),
+        releaseId: "release-1",
+        createBackup: true,
+      },
+      {
+        kind: "system.update",
+        expectedDigest: "a".repeat(64),
         releaseId: "release-1",
         createBackup: false,
         backupId: "unexpected",
       },
       {
         kind: "system.update",
+        expectedDigest: "a".repeat(64),
         releaseId: "release-1",
         createBackup: false,
         path: "/host",
@@ -342,7 +514,12 @@ describe("ops contract", () => {
       expect(() => parseOpsRequest(request(operation), { role: "api" })).toThrow();
     }
     expect(
-      opsResourceId({ kind: "system.update", releaseId: "release-1", createBackup: false }),
+      opsResourceId({
+        kind: "system.update",
+        expectedDigest: "a".repeat(64),
+        releaseId: "release-1",
+        createBackup: false,
+      }),
     ).toBe("release-1");
   });
 
@@ -462,6 +639,59 @@ describe("ops contract", () => {
     }
   });
 
+  describe.each(["motis.primary.stop", "motis.staging.stop"] as const)(
+    "%s confirmation",
+    (kind) => {
+      it.each([
+        { changed: true, state: "stopped" },
+        { changed: false, state: "stopped" },
+        { changed: false, state: "absent" },
+        { changed: true, state: "absent" },
+      ])("accepts a confirmed result %j", (result) => {
+        expect(parseOpsResult(kind, result)).toEqual(result);
+      });
+
+      it.each([
+        { changed: true },
+        { changed: false, state: "running" },
+        { changed: false, state: "unknown" },
+        { changed: true, state: "stopped", environment: ["SECRET=value"] },
+      ])("rejects legacy or unconfirmed result %j", (result) => {
+        expect(() => parseOpsResult(kind, result)).toThrow();
+      });
+
+      it("keeps stop authority limited to the data-manager", () => {
+        expect(authorizeOpsOperation("data-manager", kind)).toBe(true);
+        expect(authorizeOpsOperation("api", kind)).toBe(false);
+      });
+    },
+  );
+
+  it("gives the api role a read-only view of the Transitous pins, and nothing of the lock", () => {
+    expect(authorizeOpsOperation("api", "transitousPin.inspect")).toBe(true);
+    expect(authorizeOpsOperation("data-manager", "transitousPin.inspect")).toBe(false);
+    for (const kind of [
+      "transitousLock.inspect",
+      "transitousLock.propose",
+      "transitousLock.approve",
+    ] as const) {
+      expect(authorizeOpsOperation("api", kind)).toBe(false);
+    }
+    const pin = {
+      ref: `main@${"a".repeat(40)}`,
+      submodules: { "transitland-atlas": "b".repeat(40) },
+      lockedAt: "2026-10-25T00:00:00.000Z",
+      lockedBy: "dev@example.test",
+    };
+    expect(parseOpsResult("transitousPin.inspect", { release: pin, active: pin })).toEqual({
+      release: pin,
+      active: pin,
+    });
+    expect(() =>
+      parseOpsResult("transitousPin.inspect", { release: pin, active: pin, proposed: pin }),
+    ).toThrow();
+  });
+
   it("authorizes roles from the operation kind without inspecting operation arguments", () => {
     expect(authorizeOpsOperation("api", "service.start")).toBe(true);
     expect(authorizeOpsOperation("api", "motis.primary.restart")).toBe(false);
@@ -512,6 +742,78 @@ describe("ops contract", () => {
     ).toThrow();
     expect(() =>
       parseOpsResult("dawarich.provisioning.inspect", { ...inspection, environment: [] }),
+    ).toThrow();
+  });
+
+  it("binds community repository operations to exact, bounded identities", () => {
+    const publish = {
+      kind: "serviceRepository.publish",
+      url: "https://github.com/example/maps-services",
+      commit: "a".repeat(40),
+      extensionId: "maps-bundle",
+      recovery: { selectionBefore: null, touchedServiceIds: [], previouslyEnabledServiceIds: [] },
+    };
+    expect(parseOpsRequest(request(publish), { role: "api" }).operation).toEqual(publish);
+    for (const operation of [
+      { ...publish, url: "http://github.com/example/maps-services" },
+      { ...publish, url: "ssh://git@github.com/example/maps-services" },
+      { ...publish, url: "https://github.com/example/maps services" },
+      { ...publish, url: "https://github.com/example/maps-services?ref=main" },
+      { ...publish, commit: "a".repeat(7) },
+      { ...publish, commit: "A".repeat(40) },
+      { ...publish, recovery: { ...publish.recovery, touchedServiceIds: ["../x"] } },
+      { ...publish, recovery: { ...publish.recovery, directory: "/tmp" } },
+      { kind: "serviceRepository.inspect", url: publish.url, ref: "--upload-pack=x" },
+      {
+        kind: "serviceRepository.settle",
+        repository: "0123456789abcdef",
+        transactionId: "txn1_short",
+        outcome: "commit",
+      },
+      {
+        kind: "serviceRepository.settle",
+        repository: "0123456789abcdef",
+        transactionId: `txn1_${"b".repeat(24)}`,
+        outcome: "discard",
+      },
+      { kind: "serviceRepository.remove", repository: "../services", extensionId: "maps-bundle" },
+      { kind: "communityServices.inspect", repository: "0123456789abcdef" },
+    ]) {
+      expect(
+        () => parseOpsRequest(request(operation), { role: "api" }),
+        JSON.stringify(operation),
+      ).toThrow(OpsContractError);
+    }
+    expect(() => parseOpsRequest(request(publish), { role: "data-manager" })).toThrow(
+      OpsContractError,
+    );
+    expect(
+      opsResourceId({
+        kind: "serviceRepository.remove",
+        repository: "0123456789abcdef",
+        extensionId: "maps-bundle",
+      }),
+    ).toBe("0123456789abcdef");
+  });
+
+  it("bounds community repository inspection results", () => {
+    const inspection = {
+      url: "https://github.com/example/maps-services",
+      repository: "0123456789abcdef",
+      commit: "a".repeat(40),
+      valid: false,
+      problems: ["service.json: invalid"],
+      services: [{ path: "tiles", manifest: { id: "maps-tiles" } }],
+    };
+    expect(parseOpsResult("serviceRepository.inspect", inspection)).toEqual(inspection);
+    expect(() =>
+      parseOpsResult("serviceRepository.inspect", {
+        ...inspection,
+        problems: Array.from({ length: 65 }, () => "x"),
+      }),
+    ).toThrow();
+    expect(() =>
+      parseOpsResult("serviceRepository.inspect", { ...inspection, checkout: "/srv" }),
     ).toThrow();
   });
 });

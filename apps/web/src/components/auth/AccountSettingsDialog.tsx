@@ -34,7 +34,7 @@ import { authClient, getInitials, oauthProviders, proxyImageUrl } from "@openmap
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import QRCode from "qrcode";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import {
   mobileFullScreenDialogPaperSx,
@@ -46,12 +46,18 @@ import { MangroveAccountSection } from "./MangroveAccountSection";
 import { PrivacyDataSection } from "./PrivacyDataSection";
 import { SharedLinksSection } from "./SharedLinksSection";
 import { TimelineConnectionSection } from "./TimelineConnectionSection";
+import { useAccountCredentials } from "./useAccountCredentials";
 
 interface AccountSettingsDialogProps {
   open: boolean;
   onClose: () => void;
   user: User;
   initialSection: AccountSettingsSection;
+}
+
+/** One open-account lifetime for the email-code flow; `generation` retires work within it. */
+function createEmailLifetime() {
+  return { active: false, busy: false, generation: 0 };
 }
 
 export function AccountSettingsDialog({
@@ -72,13 +78,20 @@ export function AccountSettingsDialog({
     type: "success" | "error";
     text: string;
   } | null>(null);
-  const [passkeys, setPasskeys] = useState<
-    { id: string; name?: string | null | undefined; createdAt?: Date | null | undefined }[]
-  >([]);
-  const [linkedAccounts, setLinkedAccounts] = useState<{ id: string; providerId: string }[]>([]);
+  const {
+    passkeys,
+    linkedAccounts,
+    confirmUnlinkProvider,
+    setConfirmUnlinkProvider,
+    passkeysBusy,
+    providersBusy,
+    addPasskey: handleAddPasskey,
+    deletePasskey: handleDeletePasskey,
+    linkProvider: handleLinkProvider,
+    unlinkProvider: handleUnlinkProvider,
+  } = useAccountCredentials(open ? user.id : null, setMessage);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
-  const [confirmUnlinkProvider, setConfirmUnlinkProvider] = useState<string | null>(null);
   const timelineHeadingRef = useRef<HTMLHeadingElement>(null);
   const sharingHeadingRef = useRef<HTMLHeadingElement>(null);
   const privacyHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -106,6 +119,17 @@ export function AccountSettingsDialog({
   const [newEmail, setNewEmail] = useState("");
   const [emailOtp, setEmailOtp] = useState("");
   const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [emailPending, setEmailPending] = useState<"send" | "confirm" | null>(null);
+  const [emailLifetime, setEmailLifetime] = useState(createEmailLifetime);
+  // The last message published by the email flow, so retiring an address clears only that message.
+  const emailMessageRef = useRef<typeof message>(null);
+
+  useLayoutEffect(() => {
+    emailLifetime.active = true;
+    return () => {
+      emailLifetime.active = false;
+    };
+  }, [emailLifetime]);
 
   // Password change state
   const [changingPassword, setChangingPassword] = useState(false);
@@ -131,14 +155,12 @@ export function AccountSettingsDialog({
 
   if (sessionKey !== previousSessionKey) {
     setPreviousSessionKey(sessionKey);
+    setEmailLifetime(createEmailLifetime());
     if (open) {
       setName(user.name);
       setMessage(null);
-      setPasskeys([]);
-      setLinkedAccounts([]);
       setConfirmDelete(false);
       setDeletePassword("");
-      setConfirmUnlinkProvider(null);
       setChangingEmail(false);
       setNewEmail("");
       setEmailOtp("");
@@ -169,31 +191,6 @@ export function AccountSettingsDialog({
       .catch(() => setQrDataUrl(null));
   }, [totpSetupUri]);
 
-  useEffect(() => {
-    if (!sessionKey) return;
-    let cancelled = false;
-
-    // Load passkeys
-    authClient.passkey.listUserPasskeys().then(({ data }) => {
-      if (!cancelled && data) setPasskeys(data);
-    });
-
-    // Load linked accounts
-    authClient.listAccounts().then(({ data }) => {
-      if (!cancelled && data) {
-        setLinkedAccounts(
-          data.map((a: { id: string; providerId: string }) => ({
-            id: a.id,
-            providerId: a.providerId,
-          })),
-        );
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionKey]);
-
   const handleUpdateProfile = async () => {
     setSaving(true);
     setMessage(null);
@@ -211,43 +208,108 @@ export function AccountSettingsDialog({
     }
   };
 
-  // Email change handlers
-  const handleRequestEmailChange = async () => {
+  // Email change handlers. Work is owned by the open-account lifetime and the editor generation
+  // it started in; retiring bumps the generation so older continuations cannot publish.
+  const publishEmailMessage = (next: NonNullable<typeof message>) => {
+    emailMessageRef.current = next;
+    setMessage(next);
+  };
+
+  const clearEmailMessage = () => {
+    const owned = emailMessageRef.current;
+    emailMessageRef.current = null;
+    setMessage((current) => (current === owned ? null : current));
+  };
+
+  const releaseEmailRequest = () => {
+    emailLifetime.busy = false;
+    setEmailPending(null);
+  };
+
+  const retireEmailFlow = () => {
+    emailLifetime.generation++;
+    releaseEmailRequest();
+  };
+
+  const resetEmailFlow = (changing: boolean) => {
+    retireEmailFlow();
+    setChangingEmail(changing);
+    setNewEmail("");
+    setEmailOtp("");
+    setEmailOtpSent(false);
+  };
+
+  const closeDialog = () => {
+    retireEmailFlow();
+    onClose();
+  };
+
+  // The synchronous busy flag covers repeated activation before React renders disabled controls.
+  const beginEmailRequest = (kind: "send" | "confirm") => {
+    if (!emailLifetime.active || emailLifetime.busy) return null;
+    emailLifetime.busy = true;
+    setEmailPending(kind);
     setMessage(null);
+    const generation = emailLifetime.generation;
+    return () => emailLifetime.active && emailLifetime.generation === generation;
+  };
+
+  const handleRequestEmailChange = async () => {
+    const owned = beginEmailRequest("send");
+    if (!owned) return;
     try {
       const { error } = await authClient.emailOtp.requestEmailChange({
         newEmail,
       });
+      if (!owned()) return;
       if (error) {
-        setMessage({ type: "error", text: String(error.message ?? t("failedEmailChange")) });
+        publishEmailMessage({
+          type: "error",
+          text: String(error.message ?? t("failedEmailChange")),
+        });
         return;
       }
       setEmailOtpSent(true);
-      setMessage({ type: "success", text: t("verificationCodeSent") });
+      publishEmailMessage({ type: "success", text: t("verificationCodeSent") });
     } catch {
-      setMessage({ type: "error", text: t("failedChangeEmail") });
+      if (owned()) publishEmailMessage({ type: "error", text: t("failedChangeEmail") });
+    } finally {
+      if (owned()) releaseEmailRequest();
     }
   };
 
   const handleConfirmEmailChange = async () => {
-    setMessage(null);
+    const owned = beginEmailRequest("confirm");
+    if (!owned) return;
     try {
       const { error } = await authClient.emailOtp.changeEmail({
         newEmail,
         otp: emailOtp,
       });
+      if (!owned()) return;
       if (error) {
-        setMessage({ type: "error", text: String(error.message ?? t("failedChangeEmail")) });
+        publishEmailMessage({
+          type: "error",
+          text: String(error.message ?? t("failedChangeEmail")),
+        });
         return;
       }
-      setMessage({ type: "success", text: t("emailUpdated") });
-      setChangingEmail(false);
-      setNewEmail("");
-      setEmailOtp("");
-      setEmailOtpSent(false);
+      publishEmailMessage({ type: "success", text: t("emailUpdated") });
+      resetEmailFlow(false);
     } catch {
-      setMessage({ type: "error", text: t("failedChangeEmail") });
+      if (owned()) publishEmailMessage({ type: "error", text: t("failedChangeEmail") });
+    } finally {
+      if (owned()) releaseEmailRequest();
     }
+  };
+
+  const handleNewEmailChange = (value: string) => {
+    // A different address abandons the previous request and any code sent for it.
+    clearEmailMessage();
+    retireEmailFlow();
+    setEmailOtp("");
+    setEmailOtpSent(false);
+    setNewEmail(value);
   };
 
   // Password change handler
@@ -376,62 +438,6 @@ export function AccountSettingsDialog({
     URL.revokeObjectURL(url);
   };
 
-  const handleAddPasskey = async () => {
-    setMessage(null);
-    try {
-      const { error } = await authClient.passkey.addPasskey();
-      if (error) {
-        setMessage({
-          type: "error",
-          text: String(error.message ?? t("failedAddPasskey")),
-        });
-        return;
-      }
-      setMessage({ type: "success", text: t("passkeyAdded") });
-      const { data } = await authClient.passkey.listUserPasskeys();
-      if (data) setPasskeys(data);
-    } catch {
-      setMessage({ type: "error", text: t("failedAddPasskey") });
-    }
-  };
-
-  const handleDeletePasskey = async (id: string) => {
-    try {
-      await authClient.passkey.deletePasskey({ id });
-      setPasskeys((prev) => prev.filter((p) => p.id !== id));
-      setMessage({ type: "success", text: t("passkeyRemoved") });
-    } catch {
-      setMessage({ type: "error", text: t("failedRemovePasskey") });
-    }
-  };
-
-  const handleLinkProvider = async (providerId: string, providerName: string) => {
-    try {
-      await authClient.linkSocial({
-        provider: providerId,
-        callbackURL: window.location.origin,
-      });
-    } catch {
-      setMessage({
-        type: "error",
-        text: t("failedLink", { provider: providerName }),
-      });
-    }
-  };
-
-  const handleUnlinkProvider = async (providerId: string, providerName: string) => {
-    try {
-      const account = linkedAccounts.find((a) => a.providerId === providerId);
-      if (!account) return;
-      await authClient.unlinkAccount({ accountId: account.id });
-      setLinkedAccounts((prev) => prev.filter((a) => a.providerId !== providerId));
-      setConfirmUnlinkProvider(null);
-      setMessage({ type: "success", text: t("accountUnlinked", { provider: providerName }) });
-    } catch {
-      setMessage({ type: "error", text: t("failedUnlink", { provider: providerName }) });
-    }
-  };
-
   const hasCredential = linkedAccounts.some((a) => a.providerId === "credential");
 
   const handleDeleteAccount = async () => {
@@ -453,7 +459,7 @@ export function AccountSettingsDialog({
   return (
     <Dialog
       open={open}
-      onClose={onClose}
+      onClose={closeDialog}
       maxWidth="sm"
       fullWidth
       fullScreen={fullScreen}
@@ -467,7 +473,7 @@ export function AccountSettingsDialog({
         <Typography variant="h6" component="span" sx={{ flex: 1, fontWeight: 600 }}>
           {t("accountSettings")}
         </Typography>
-        <IconButton onClick={onClose} aria-label={tc("close")} edge="end">
+        <IconButton onClick={closeDialog} aria-label={tc("close")} edge="end">
           <CloseIcon />
         </IconButton>
       </DialogTitle>
@@ -526,7 +532,7 @@ export function AccountSettingsDialog({
             >
               {user.email}
             </Typography>
-            <Button size="small" startIcon={<EditIcon />} onClick={() => setChangingEmail(true)}>
+            <Button size="small" startIcon={<EditIcon />} onClick={() => resetEmailFlow(true)}>
               {tc("change")}
             </Button>
           </Box>
@@ -537,7 +543,7 @@ export function AccountSettingsDialog({
               label={t("newEmailAddress")}
               type="email"
               value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
+              onChange={(e) => handleNewEmailChange(e.target.value)}
               size="small"
               sx={{ mb: 1.5 }}
             />
@@ -547,6 +553,7 @@ export function AccountSettingsDialog({
                 label={t("verificationCode")}
                 value={emailOtp}
                 onChange={(e) => setEmailOtp(e.target.value)}
+                disabled={emailPending === "confirm"}
                 size="small"
                 sx={{ mb: 1.5 }}
                 helperText={t("verificationCodeHelper")}
@@ -558,7 +565,7 @@ export function AccountSettingsDialog({
                   variant="contained"
                   size="small"
                   onClick={handleRequestEmailChange}
-                  disabled={!newEmail}
+                  disabled={!newEmail || emailPending !== null}
                 >
                   {t("sendVerificationCode")}
                 </Button>
@@ -567,21 +574,12 @@ export function AccountSettingsDialog({
                   variant="contained"
                   size="small"
                   onClick={handleConfirmEmailChange}
-                  disabled={!emailOtp}
+                  disabled={!emailOtp || emailPending !== null}
                 >
                   {t("confirmChange")}
                 </Button>
               )}
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={() => {
-                  setChangingEmail(false);
-                  setNewEmail("");
-                  setEmailOtp("");
-                  setEmailOtpSent(false);
-                }}
-              >
+              <Button variant="outlined" size="small" onClick={() => resetEmailFlow(false)}>
                 {tc("cancel")}
               </Button>
             </Box>
@@ -1061,6 +1059,7 @@ export function AccountSettingsDialog({
                       <Button
                         size="small"
                         variant="outlined"
+                        disabled={providersBusy}
                         onClick={() => setConfirmUnlinkProvider(null)}
                       >
                         {tc("cancel")}
@@ -1069,6 +1068,7 @@ export function AccountSettingsDialog({
                         size="small"
                         variant="contained"
                         color="error"
+                        disabled={providersBusy}
                         onClick={() => handleUnlinkProvider(provider.providerId, provider.name)}
                       >
                         {tc("confirm")}
@@ -1078,6 +1078,7 @@ export function AccountSettingsDialog({
                     <Button
                       size="small"
                       color="error"
+                      disabled={providersBusy}
                       onClick={() => setConfirmUnlinkProvider(provider.providerId)}
                     >
                       {t("unlink")}
@@ -1087,6 +1088,7 @@ export function AccountSettingsDialog({
                   <Button
                     size="small"
                     startIcon={<LinkIcon />}
+                    disabled={providersBusy}
                     onClick={() => handleLinkProvider(provider.providerId, provider.name)}
                   >
                     {t("connect")}
@@ -1124,6 +1126,7 @@ export function AccountSettingsDialog({
                   <IconButton
                     edge="end"
                     aria-label={t("removePasskey")}
+                    disabled={passkeysBusy}
                     onClick={() => handleDeletePasskey(pk.id)}
                     size="small"
                   >
@@ -1157,6 +1160,7 @@ export function AccountSettingsDialog({
         <Button
           size="small"
           startIcon={<KeyIcon />}
+          disabled={passkeysBusy}
           onClick={handleAddPasskey}
           sx={{ mt: 1, mb: 3 }}
         >

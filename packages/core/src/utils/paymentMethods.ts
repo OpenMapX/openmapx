@@ -25,16 +25,3 @@ export function formatPaymentMethodLabel(raw: string): string {
     )
   );
 }
-
-/** Join payment methods for compact provider summaries, without duplicates. */
-export function formatPaymentMethods(methods: string[]): string {
-  const seen = new Set<string>();
-  const formatted: string[] = [];
-  for (const raw of methods) {
-    const normalized = raw.trim().toLowerCase().replace(/_/g, " ");
-    if (!normalized || seen.has(normalized)) continue;
-    seen.add(normalized);
-    formatted.push(formatPaymentMethodLabel(normalized));
-  }
-  return formatted.join(", ");
-}

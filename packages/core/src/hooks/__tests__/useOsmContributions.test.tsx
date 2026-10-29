@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClientError, apiClient } from "../../api/client";
 import { createQueryWrapper, createTestQueryClient } from "../../test/queryWrapper";
 import type { OsmContributionContext, OsmElementRef } from "../../types/osmContribution";
-import { useCapabilities } from "../useCapabilities";
 import {
   osmContributionKeys,
   useCreateOsmNote,
@@ -81,37 +80,6 @@ describe("query keys", () => {
       "en",
       "cafe",
     ]);
-  });
-});
-
-describe("useCapabilities", () => {
-  it("fails closed while the public capability response is missing or loading", async () => {
-    vi.spyOn(apiClient, "get").mockImplementation(() => new Promise(() => {}));
-    const { result } = renderHook(() => useCapabilities(), { wrapper: wrapper() });
-    expect(result.current.osmContributionsEnabled).toBe(false);
-  });
-
-  it("fails closed on an invalid or absent feature bit", async () => {
-    vi.spyOn(apiClient, "get").mockResolvedValue({ services: {} });
-    const { result } = renderHook(() => useCapabilities(), { wrapper: wrapper() });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.osmContributionsEnabled).toBe(false);
-  });
-
-  it("is true only for an explicit true", async () => {
-    vi.spyOn(apiClient, "get").mockResolvedValue({
-      services: {},
-      features: { osmContributions: true },
-    });
-    const { result } = renderHook(() => useCapabilities(), { wrapper: wrapper() });
-    await waitFor(() => expect(result.current.osmContributionsEnabled).toBe(true));
-  });
-
-  it("stays false when the request fails", async () => {
-    vi.spyOn(apiClient, "get").mockRejectedValue(new ApiClientError(500, null, null));
-    const { result } = renderHook(() => useCapabilities(), { wrapper: wrapper() });
-    await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(result.current.osmContributionsEnabled).toBe(false);
   });
 });
 

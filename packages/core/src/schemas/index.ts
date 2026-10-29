@@ -48,3 +48,16 @@ export {
   osmTagDiffSchema,
   parseOsmElementId,
 } from "./osmContribution";
+
+export {
+  personalTimelineDayV1Schema,
+  personalTimelineDisconnectSchema,
+  personalTimelineErrorCodeSchema,
+  personalTimelineJourneyV1Schema,
+  personalTimelineSummaryV1Schema,
+  personalTimelineVisitV1Schema,
+  personalTimelineWarningSchema,
+  timelineConnectionModeSchema,
+  timelineConnectionStatusSchema,
+  timelineConnectionViewSchema,
+} from "./personalTimeline";

@@ -12,6 +12,7 @@ const SUPPRESSED_IDS = new Set([
   "ch/zvv-hafas-mgate",
   "ch/tpg-hafas-mgate",
   "us/mbta-otp",
+  "no/entur-otp",
 ]);
 
 /** Protocols we currently have adapters for */
@@ -134,6 +135,18 @@ export class RegistryManager {
   /** Find a provider by its stop-ID prefix (e.g. "oebb:") */
   findByPrefix(prefix: string): RegistryEntry | null {
     return this.byPrefix.get(prefix) ?? null;
+  }
+
+  /** Detached setup-owned full entries: refreshes cannot retarget active clients or receipts. */
+  snapshotEntries(): RegistryEntry[] {
+    const freeze = <T>(value: T): T => {
+      if (value && typeof value === "object") {
+        for (const child of Object.values(value)) freeze(child);
+        Object.freeze(value);
+      }
+      return value;
+    };
+    return structuredClone(this.entries).map(freeze);
   }
 
   /** Get all loaded entries (for debug endpoint and attribution wiring) */

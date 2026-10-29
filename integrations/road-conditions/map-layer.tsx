@@ -1,60 +1,63 @@
 "use client";
 
 import {
+  type RoadConditionBindingDetail,
   type RoadConditionEvent,
   roadConditionFeatureToEvent,
   useOverlayExclusion,
 } from "@openmapx/core";
+import type * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, MapGeoJSONFeature } from "maplibre-gl";
-import * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import {
   registerMapOverlayInteraction,
   removeMapOverlayPopup,
-  replaceMapOverlayPopup,
 } from "@/integration-api/map/mapInteractionArbiter";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
-import { useIntegrationDomainAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
 import { useOverlayLayerVisible } from "@/integration-api/overlay/useOverlayStoreState";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
+import { roadConditionAttributions } from "./attributions";
+import { loadRoadConditionBindings } from "./bindings";
 import { buildRoadConditionDisplayGroups, buildRoadConditionFeatures } from "./display";
-import { markerImageData, parseMarkerImageId } from "./markers";
-import { buildRoadConditionPopupHtml } from "./popup";
-import { RouteConditionsLayer } from "./route-layer";
-import { SEVERITY_LINE_COLOR } from "./severity";
 // The named import also runs the module side-effect that registers the
 // "road-conditions" overlay store (shared by the layer selector + legend).
+import {
+  closeIncidentPopup,
+  type IncidentLayerIds,
+  incidentClickHits,
+  incidentLayerGroup,
+  openIncidentPopup,
+} from "./incident-layers";
+import { useIncidentsVisible } from "./incidents-visible";
+import { markerImageData, parseMarkerImageId } from "./markers";
+import { buildRoadConditionPopupHtml, popupEvents } from "./popup";
+import { useRestoredRoadConditionsChoices } from "./restore-choices";
+import { RouteConditionsLayer } from "./route-layer";
+import { RoadSourceLayers } from "./source-layers";
 import { horizonDaysParam, useRoadConditionsStore } from "./store";
 import {
   createViewportFetchScheduler,
   type ViewportBox,
   type ViewportFetchScheduler,
 } from "./viewport-scheduler";
-import {
-  ROAD_CONDITION_LINE_DASHARRAY,
-  ROAD_CONDITION_LINE_OPACITY,
-  ROAD_CONDITION_MARKER_OPACITY,
-} from "./visual-style";
 
 export { buildRoadConditionPopupGroups } from "./popup";
 
 type GeoJsonData = Parameters<GeoJSONSource["setData"]>[0];
 
 const OVERLAY_ID = "road-conditions";
-/**
- * The manifest domain the feeds are published under, which happens to spell the
- * same as this overlay's id — they are separate identifiers, so don't collapse
- * them: renaming the overlay would otherwise silently drop the credits.
- */
-const CREDIT_DOMAIN = "road-conditions";
-const SOURCE = "omx-road-conditions";
-const LINE_LAYER = "omx-road-conditions-line";
-const MARKER_LAYER = "omx-road-conditions-markers";
+const AREA_LAYERS: IncidentLayerIds = {
+  source: "omx-road-conditions",
+  line: "omx-road-conditions-line",
+  marker: "omx-road-conditions-markers",
+};
+const CREDIT_LAYERS = [AREA_LAYERS.line, AREA_LAYERS.marker];
 
 /**
  * The server's own `/events` cache TTL (`index.ts` caches the aggregation for
@@ -121,31 +124,33 @@ export function buildSources(
   return {
     data: {
       type: "FeatureCollection",
-      features: buildRoadConditionFeatures(groups, locale, atMs),
+      features: buildRoadConditionFeatures(groups, locale, atMs, (events) =>
+        roadConditionAttributions(events),
+      ),
     } as GeoJsonData,
     eventsByDisplayId,
   };
 }
 
 export function RoadConditionsLayer() {
+  useRestoredRoadConditionsChoices();
   const { mapRef, mapReady, styleVersion } = useMap();
   const { apiUrl } = useEnv();
   // Declared in this integration's manifest, the same gate the layer selector
   // applies: below it we skip fetching and keep the layers hidden, so a
   // country-sized viewport can't pull thousands of incidents.
   const minZoom = useOverlayMinZoom(OVERLAY_ID);
-  const layerVisible = useOverlayLayerVisible(OVERLAY_ID);
-  // This overlay's manifest declares no dataSources of its own — the feeds it
-  // paints (NDW, Autobahn GmbH, Digitraffic, DriveBC, WZDx) are published by
-  // the `openconditions` integration's provider registered under the shared
-  // domain. Credit the domain, the same way overlay-traffic-flow does;
-  // crediting this integration's own manifest registered nothing at all.
-  useIntegrationDomainAttribution(CREDIT_DOMAIN, layerVisible);
-  useOverlayExclusion(OVERLAY_ID, layerVisible);
+  const overlayVisible = useOverlayLayerVisible(OVERLAY_ID);
+  // The incidents are one of the overlay's layers; the reader can hide them
+  // and keep only, say, road weather.
+  const layerVisible = useIncidentsVisible();
+  useRenderedMapAttributions("road-conditions-area", CREDIT_LAYERS, layerVisible);
+  useOverlayExclusion(OVERLAY_ID, overlayVisible);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const popupSelectionRef = useRef<{
     hits: MapGeoJSONFeature[];
     fallbackCoordinates: [number, number];
+    bindings?: ReadonlyMap<string, RoadConditionBindingDetail>;
   } | null>(null);
   const viewNeedsRefreshRef = useRef(false);
   const eventsByDisplayIdRef = useRef<Map<string, RoadConditionEvent[]>>(new Map());
@@ -248,11 +253,12 @@ export function RoadConditionsLayer() {
       const { data, eventsByDisplayId } = buildSources(
         Array.isArray(fc.features) ? fc.features : [],
         localeRef.current,
+        Date.now(),
       );
       eventsByDisplayIdRef.current = eventsByDisplayId;
       viewNeedsRefreshRef.current = false;
       refreshPopup(false);
-      publishGeoJson([{ sourceId: SOURCE, data }]);
+      publishGeoJson([{ sourceId: AREA_LAYERS.source, data }]);
       hasViewportDataRef.current = true;
       setViewportFetchStatus("ready");
     } catch {
@@ -296,104 +302,20 @@ export function RoadConditionsLayer() {
     };
   }, [mapRef, mapReady]);
 
-  // Add/remove source + layers, re-attaching after a style swap.
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-
-    let idleRetryScheduled = false;
-    const sync = () => {
-      if (!layerVisible) {
-        idleRetryScheduled = false;
-        try {
-          if (map.getLayer(MARKER_LAYER)) map.removeLayer(MARKER_LAYER);
-          if (map.getLayer(LINE_LAYER)) map.removeLayer(LINE_LAYER);
-          if (map.getSource(SOURCE)) map.removeSource(SOURCE);
-        } catch {
-          // In-flight render — ignore.
-        }
-        unregisterLayerSlot(MARKER_LAYER);
-        unregisterLayerSlot(LINE_LAYER);
-        if (popupRef.current) {
-          removeMapOverlayPopup(map, popupRef.current);
-          popupRef.current = null;
-        }
-        return;
-      }
-      if (!map.isStyleLoaded()) {
-        if (idleRetryScheduled) map.off("idle", sync);
-        idleRetryScheduled = true;
-        map.once("idle", sync);
-        return;
-      }
-      idleRetryScheduled = false;
-      try {
-        if (!map.getSource(SOURCE)) {
-          map.addSource(SOURCE, {
-            type: "geojson",
-            data: { type: "FeatureCollection", features: [] },
-          });
-        }
-        if (!map.getLayer(LINE_LAYER)) {
-          addLayerInSlot(
-            map,
-            {
-              id: LINE_LAYER,
-              type: "line",
-              source: SOURCE,
-              filter: ["match", ["geometry-type"], ["LineString", "MultiLineString"], true, false],
-              minzoom: minZoom,
-              layout: { "line-cap": "round", "line-join": "round" },
-              paint: {
-                "line-color": SEVERITY_LINE_COLOR,
-                "line-width": ["interpolate", ["linear"], ["zoom"], 5, 3, 12, 6, 16, 9],
-                "line-opacity": ROAD_CONDITION_LINE_OPACITY,
-                "line-dasharray": ROAD_CONDITION_LINE_DASHARRAY,
-              },
-            },
-            "conditions-lines",
-            0,
-          );
-        }
-        if (!map.getLayer(MARKER_LAYER)) {
-          addLayerInSlot(
-            map,
-            {
-              id: MARKER_LAYER,
-              type: "symbol",
-              source: SOURCE,
-              filter: ["==", ["geometry-type"], "Point"],
-              minzoom: minZoom,
-              layout: {
-                "icon-image": ["get", "_icon"],
-                "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.42, 10, 0.55, 16, 0.75],
-                "icon-allow-overlap": true,
-                "icon-ignore-placement": true,
-                // Higher sort-key is drawn last (on top), so key by severity rank
-                // — the worst condition's disc sits on top where markers overlap.
-                "symbol-sort-key": ["get", "_sev"],
-              },
-              paint: {
-                "icon-opacity": ROAD_CONDITION_MARKER_OPACITY,
-              },
-            },
-            "overlay-markers",
-            0,
-          );
-        }
-      } catch {
-        // Style not ready — styledata will retry.
-      }
-    };
-
-    sync();
-    map.on("styledata", sync);
-    return () => {
-      map.off("styledata", sync);
-      if (idleRetryScheduled) map.off("idle", sync);
-    };
-  }, [mapReady, mapRef, styleVersion, layerVisible, minZoom]);
+  useMapLayerGroup(
+    useMemo(
+      () =>
+        layerVisible
+          ? incidentLayerGroup(AREA_LAYERS, {
+              zoom: { minzoom: minZoom },
+              order: 0,
+              lineWidth: ["interpolate", ["linear"], ["zoom"], 5, 3, 12, 6, 16, 9],
+              iconSize: ["interpolate", ["linear"], ["zoom"], 5, 0.42, 10, 0.55, 16, 0.75],
+            })
+          : null,
+      [layerVisible, minZoom],
+    ),
+  );
 
   // A followed navigation camera fires `moveend` on every animation frame —
   // up to 60/s for the whole length of a drive — so `fetchData` must never
@@ -462,37 +384,20 @@ export function RoadConditionsLayer() {
 
     const unregister = registerMapOverlayInteraction(map, {
       id: "road-conditions-area",
-      layerIds: [MARKER_LAYER, LINE_LAYER],
+      layerIds: [AREA_LAYERS.marker, AREA_LAYERS.line],
       priority: 100,
-      onClick: ({ event, features }) => {
-        // Collect every marker near the click — not just the top one — so several
-        // conditions stacked at the same spot all stay reachable in a single popup
-        // (linked works often share a segment: roadworks + its lane closure land on
-        // the same point). The radius is ~one marker-width so touching/overlapping
-        // discs are grouped while genuinely separate incidents stay independent.
-        const markerFeatures = features.filter((feature) => feature.layer?.id === MARKER_LAYER);
-        let hits: MapGeoJSONFeature[] = markerFeatures;
-        if (markerFeatures.length > 0) {
-          const r = 24;
-          const box: [[number, number], [number, number]] = [
-            [event.point.x - r, event.point.y - r],
-            [event.point.x + r, event.point.y + r],
-          ];
-          const queried = map.getLayer(MARKER_LAYER)
-            ? (map.queryRenderedFeatures(box, { layers: [MARKER_LAYER] }) as MapGeoJSONFeature[])
-            : [];
-          if (queried.length > 0) hits = queried;
-        } else {
-          hits = features;
-        }
+      onClick: (interaction) => {
+        const hits = incidentClickHits(map, AREA_LAYERS.marker, interaction);
         if (hits.length === 0) return;
 
-        popupSelectionRef.current = {
+        const { lngLat } = interaction.event;
+        const selection = {
           hits,
-          fallbackCoordinates: [event.lngLat.lng, event.lngLat.lat],
+          fallbackCoordinates: [lngLat.lng, lngLat.lat] as [number, number],
         };
-        const content = buildRoadConditionPopupHtml({
-          ...popupSelectionRef.current,
+        popupSelectionRef.current = selection;
+        const opened = openIncidentPopup(map, popupRef, {
+          ...selection,
           atMs: Date.now(),
           needsRefresh: viewNeedsRefreshRef.current,
           requireCurrentEvents: true,
@@ -502,30 +407,31 @@ export function RoadConditionsLayer() {
           translate: (key, values) => tRef.current(key, values),
           locale: localeRef.current,
         });
-        if (content.groupCount === 0) return;
-        const popup = new maplibregl.Popup({
-          closeButton: true,
-          maxWidth: "300px",
-          className: "omx-popup",
-        })
-          .setLngLat(content.coordinates)
-          .setHTML(content.html);
-        popupRef.current = popup;
-        replaceMapOverlayPopup(map, popup);
+        if (!opened) return;
+        // The situation lists carry no bindings; read them for the cards shown.
+        void loadRoadConditionBindings(
+          popupEvents({ hits, eventsByDisplayId: eventsByDisplayIdRef.current }),
+        ).then((bindings) => {
+          if (popupSelectionRef.current !== selection || bindings.size === 0) return;
+          popupSelectionRef.current = { ...selection, bindings };
+          refreshPopup(viewNeedsRefreshRef.current);
+        });
       },
     });
     return () => {
       unregister();
-      if (popupRef.current) {
-        removeMapOverlayPopup(map, popupRef.current);
-        popupRef.current = null;
-      }
+      closeIncidentPopup(map, popupRef);
     };
-  }, [mapReady, mapRef, styleVersion, layerVisible]);
+  }, [mapReady, mapRef, styleVersion, layerVisible, refreshPopup]);
 
   // The area overlay stops at its min zoom; this covers the route at the zooms
   // below it, where a whole trip is on screen.
-  return <RouteConditionsLayer />;
+  return (
+    <>
+      <RouteConditionsLayer />
+      <RoadSourceLayers />
+    </>
+  );
 }
 
 export default RoadConditionsLayer;

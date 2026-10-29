@@ -43,6 +43,7 @@ export type {
   RouteHandler,
   RouteOptions,
   SecretsClient,
+  StreamHttpResponse,
   TransferSafeguard,
   TransitReachabilityMetrics,
 } from "./context";
@@ -57,7 +58,15 @@ export type {
   AiCloudProcessor,
   AirQualityCapability,
   AirQualityProvider,
+  Attribution,
   AutocompleteResult,
+  BorderCrossing,
+  BorderCrossingMode,
+  BorderCrossingProgram,
+  BorderCrossingProvider,
+  BorderCrossingQuery,
+  BorderCrossingQueue,
+  BorderWaitStatus,
   Camera,
   CameraProvider,
   CameraQuery,
@@ -74,7 +83,6 @@ export type {
   ChargingSiteQuery,
   CurrentWeather,
   DailyForecastPoint,
-  DataSourceAttribution,
   DataSourceBranding,
   DataSourceDetail,
   DataSourceDetailSection,
@@ -97,6 +105,7 @@ export type {
   FireDensityCell,
   FireInstrument,
   FirePixel,
+  FireQuery,
   ForecastAirQualityQuery,
   FuelProduct,
   FuelStation,
@@ -128,11 +137,17 @@ export type {
   MatchResult,
   MatchShapeMatch,
   MatchTracePoint,
+  MessageSign,
+  MessageSignProvider,
+  MessageSignQuery,
+  MessageSignStatus,
+  MessageSignType,
   MobilityDataSourceProvider,
   NaturalHazard,
   NaturalHazardType,
   NlpProvider,
   NlpProviderId,
+  OperationalBindingReason,
   OperationalEvidence,
   OperationalFeedCoverage,
   OperationalFeedEvidence,
@@ -155,6 +170,7 @@ export type {
   PoiSearchProvider,
   PoiSearchResult,
   PoiSearchReturn,
+  PrecipitationType,
   PricingPlanEntry,
   ProviderAttribution,
   RasterTile,
@@ -190,6 +206,8 @@ export type {
   RideQuoteRequest,
   RideUnavailableReason,
   RoadConditionAttribution,
+  RoadConditionBinding,
+  RoadConditionBindingDetail,
   RoadConditionEffect,
   RoadConditionEvent,
   RoadConditionRoadRef,
@@ -200,6 +218,13 @@ export type {
   RoadConditionValidity,
   RoadFlowQuery,
   RoadFlowSegment,
+  RoadSurfaceSensor,
+  RoadSurfaceState,
+  RoadWeatherAir,
+  RoadWeatherProvider,
+  RoadWeatherQuery,
+  RoadWeatherStation,
+  RoadWeatherValue,
   Route,
   RouteLeg,
   RouteStep,
@@ -209,6 +234,10 @@ export type {
   SearchIntent,
   SearchResult,
   SearchSuggestionProvider,
+  ServiceVehicle,
+  ServiceVehicleActivity,
+  ServiceVehicleProvider,
+  ServiceVehicleQuery,
   SpatialConstraint,
   StationEvidencePage,
   StationViewportQuery,
@@ -234,6 +263,7 @@ export type {
   TripUpdate,
   VehicleJourney,
   Waypoint,
+  WeatherForecastResponse,
   WeatherOptions,
   WeatherProvider,
   WeatherResponse,
@@ -247,6 +277,7 @@ export type {
 // build catches this.
 export { RoutingProviderError } from "./contracts/routing-provider";
 export { isPlausibleNlSearch, NL_CONFIDENCE_FLOOR } from "./contracts/search-nlp-provider";
+export * from "./contributors";
 export {
   type OpaqueCursorCodec,
   OpaqueCursorError,
@@ -272,8 +303,10 @@ export {
   type Wgs84BoundingBox,
   type Wgs84Point,
 } from "./geospatial";
+export { captureHazardFeatures } from "./hazards-features";
 export { createHazardsOrchestrator, type HazardsOrchestrator } from "./hazards-orchestrator";
 export { httpError } from "./http-error";
+export { withKnowledgeContributors } from "./knowledge-contributors";
 // Installer exports (`installIntegration` / `listIntegrations` /
 // `removeIntegration` / `validateIntegrationDirectory` and their option/result
 // types) intentionally do NOT live in this barrel. `installer.ts` imports
@@ -311,10 +344,13 @@ export {
   validateDataSource,
   validateManifest,
 } from "./manifest";
+export {
+  capturePhotoProviderContributors,
+  captureStreetLevelProviderContributors,
+} from "./media-attribution";
 export { matchesMediaHost, parseMediaHostEntry } from "./media-hosts";
 export { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";
 export {
-  mapSettledWithConcurrency,
   type ProviderCallContext,
   ProviderCancelledError,
   type ProviderDeadlineOptions,
@@ -329,6 +365,8 @@ export {
   scalarQuery,
 } from "./query";
 export { IntegrationRegistry } from "./registry";
+export { captureReviewProviderContributors } from "./review-attribution";
+export { withRoutingContributors } from "./routing-contributors";
 export {
   createSiteOrchestrator,
   type SiteOrchestrator,
@@ -366,10 +404,17 @@ export {
   type TidesResponse,
   type WaterLevelObservation,
 } from "./tides-integration-factory";
-export { defineTransitProvider, type TransitProviderScaffold } from "./transit-provider-factory";
+export {
+  captureTransitContributors,
+  defineTransitProvider,
+  type TransitProviderScaffold,
+} from "./transit-provider-factory";
 export type {
   QuotaDecision,
   QuotaWindow,
+  SharedRequestDecision,
+  SharedRequestIdentity,
+  SharedRequestPolicy,
   UpstreamCacheRead,
   UpstreamCacheTtl,
   UpstreamRuntime,

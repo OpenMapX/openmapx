@@ -205,6 +205,45 @@ describe("explicit values and removal", () => {
     expect(state.draft.errors.name).toBeDefined();
   });
 
+  it("flags invalid opening_hours syntax with INVALID_SYNTAX and accepts valid OSM syntax", () => {
+    const contextWithOh: OsmContributionContext = {
+      ...CONTEXT,
+      fields: [
+        ...CONTEXT.fields,
+        {
+          kind: "text",
+          field: "openingHours",
+          label: "Opening hours",
+          currentValue: "Mo-Fr 09:00-17:00",
+          maxCodePoints: 255,
+          enabled: true,
+        },
+      ],
+    };
+
+    const invalid = reduce(
+      initialOsmContributionState,
+      { type: "open", intent: "edit" },
+      { type: "contextLoaded", context: contextWithOh },
+      { type: "selectField", field: "openingHours" },
+      { type: "setText", field: "openingHours", value: "not a valid schedule" },
+    );
+    if (invalid.step !== "edit") throw new Error("expected edit");
+    expect(invalid.draft.errors.openingHours).toBe("INVALID_SYNTAX");
+    expect(selectedChanges(invalid.draft)).toEqual([]);
+
+    const valid = reduce(invalid, {
+      type: "setText",
+      field: "openingHours",
+      value: "Mo-Fr 08:00-18:00; Sa 10:00-14:00",
+    });
+    if (valid.step !== "edit") throw new Error("expected edit");
+    expect(valid.draft.errors.openingHours).toBeUndefined();
+    expect(selectedChanges(valid.draft)).toEqual([
+      { field: "openingHours", action: "set", value: "Mo-Fr 08:00-18:00; Sa 10:00-14:00" },
+    ]);
+  });
+
   it("requires an explicit remove action, available only when a value exists", () => {
     const removed = reduce(edited(), { type: "removeValue", field: "name" });
     if (removed.step !== "edit") throw new Error("expected edit");

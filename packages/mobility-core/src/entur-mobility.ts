@@ -1,5 +1,13 @@
 import { createHash } from "node:crypto";
 import { type CacheClient, TTL, withCache } from "./cache.js";
+import { contributionState, retainContributions } from "./contribution-merge.js";
+import {
+  type ContributingRecord,
+  parseContributors,
+  snapshotContributors,
+  withContributors,
+  withFeatureContributors,
+} from "./contributors.js";
 import { isEnturGbfsUrl } from "./entur-gbfs.js";
 import {
   filterCatalogByBbox,
@@ -13,6 +21,7 @@ import {
   normalizeAndClipMobilityGeometry,
 } from "./mobility-context-geometry.js";
 import { normalizeRentalReturnConstraint } from "./rental-constraints.js";
+import type { Attribution } from "./types/attribution.js";
 import type { BoundingBox } from "./types/geometry.js";
 import type {
   PricingDetail,
@@ -173,7 +182,7 @@ interface EnturGeofencingFeature {
   } | null;
 }
 
-interface EnturGeofencingZones {
+interface EnturGeofencingZones extends ContributingRecord {
   systemId?: string | null;
   geojson?: {
     type: "FeatureCollection";
@@ -199,50 +208,102 @@ interface EnturEnrichmentData {
   vehicles?: EnturVehicle[] | null;
 }
 
+const ENTUR_STATION_FIELDS = [
+  "systemId",
+  "nativeId",
+  "operator",
+  "branding",
+  "website",
+  "rentalApps",
+  "rentalUris",
+  "stationType",
+  "stationArea",
+  "accessMethod",
+  "address",
+  "vehicleTypeIds",
+  "vehicleTypeDetails",
+  "pricingDetails",
+  "pricingSummary",
+] as const;
+const ENTUR_VEHICLE_FIELDS = [
+  "systemId",
+  "nativeId",
+  "vehicleTypeId",
+  "operator",
+  "branding",
+  "batteryLevel",
+  "rangeMeters",
+  "propulsion",
+  "vehicleImageUrl",
+  "vehicleIconUrl",
+  "vehicleIconUrlDark",
+  "rentalUris",
+  "rentalApps",
+] as const;
+
 export interface EnturMobilityDependencies {
   cache: CacheClient;
   catalog: GbfsCatalogClient;
   transport: MobilityHttpTransport;
+  resolveContributors?: (sourceIds: readonly string[]) => Attribution[];
 }
 
 function hashParts(parts: string[]): string {
   return createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 16);
 }
 
-async function fetchEnturGraphQl<T>(
+async function fetchEnturGraphQl<T extends object>(
   dependencies: EnturMobilityDependencies,
   query: string,
   variables: Record<string, unknown>,
   cacheKey: string,
-): Promise<T> {
-  return withCache(dependencies.cache, cacheKey, ENTUR_QUERY_CACHE_TTL, async () => {
-    const json = await dependencies.transport.fetchJson<{
-      data?: T;
-      errors?: Array<{ message?: string }>;
-    }>(ENTUR_GRAPHQL_URL, {
-      method: "POST",
-      headers: {
-        "User-Agent": dependencies.transport.userAgent,
-        "content-type": "application/json",
-        "ET-Client-Name": ENTUR_CLIENT_NAME,
-      },
-      body: JSON.stringify({ query, variables }),
-      timeoutMs: 10_000,
-      maxBytes: 8 * 1024 * 1024,
-    });
-    if (json.errors?.length) {
-      throw new Error(
-        json.errors
-          .map((error) => error.message)
-          .filter(Boolean)
-          .join("; ") || "Entur mobility GraphQL returned errors",
-      );
-    }
-    if (!json.data) {
-      throw new Error("Entur mobility GraphQL returned no data");
-    }
-    return json.data;
-  });
+): Promise<T & ContributingRecord> {
+  const cached = await withCache<{ data: T; contributors?: Attribution[] } | T>(
+    dependencies.cache,
+    `${cacheKey}:contributors-v1`,
+    ENTUR_QUERY_CACHE_TTL,
+    async () => {
+      const json = await dependencies.transport.fetchJson<{
+        data?: T;
+        errors?: Array<{ message?: string }>;
+      }>(ENTUR_GRAPHQL_URL, {
+        method: "POST",
+        headers: {
+          "User-Agent": dependencies.transport.userAgent,
+          "content-type": "application/json",
+          "ET-Client-Name": ENTUR_CLIENT_NAME,
+        },
+        body: JSON.stringify({ query, variables }),
+        timeoutMs: 10_000,
+        maxBytes: 8 * 1024 * 1024,
+      });
+      if (json.errors?.length) {
+        throw new Error(
+          json.errors
+            .map((error) => error.message)
+            .filter(Boolean)
+            .join("; ") || "Entur mobility GraphQL returned errors",
+        );
+      }
+      if (!json.data) {
+        throw new Error("Entur mobility GraphQL returned no data");
+      }
+      return {
+        data: json.data,
+        ...(dependencies.resolveContributors
+          ? {
+              contributors: snapshotContributors(
+                dependencies.resolveContributors(["entur-mobility"]),
+              ),
+            }
+          : {}),
+      };
+    },
+  );
+  // Historical raw entries have no captured wording: never resolve it using today's registry.
+  if (!("data" in cached)) return cached;
+  const receipt = parseContributors(cached.contributors);
+  return receipt === undefined ? cached.data : withContributors(cached.data, receipt);
 }
 
 function pickTranslatedString(value: EnturTranslatedString | null | undefined): string | undefined {
@@ -700,6 +761,7 @@ export async function enrichEnturMobilityItems(
     const enturStation = stationById.get(nativeId);
     if (!enturStation) continue;
 
+    const before = contributionState(station, ENTUR_STATION_FIELDS);
     const branding = mapBranding(enturStation.system);
     const details = [
       ...(enturStation.pricingPlans ?? [])
@@ -754,6 +816,11 @@ export async function enrichEnturMobilityItems(
       station.pricingSummary =
         station.pricingSummary ?? pricingSummary(station.pricingDetails ?? details);
     }
+    if (contributionState(station, ENTUR_STATION_FIELDS) !== before)
+      retainContributions(station, {
+        sources: ["entur-mobility"],
+        contributors: data.contributors,
+      });
   }
 
   for (const vehicle of vehicles) {
@@ -762,6 +829,7 @@ export async function enrichEnturMobilityItems(
     const enturVehicle = vehicleById.get(nativeId);
     if (!enturVehicle) continue;
 
+    const before = contributionState(vehicle, ENTUR_VEHICLE_FIELDS);
     const branding = mapBranding(enturVehicle.system);
     const vehicleType = enturVehicle.vehicleType;
 
@@ -794,6 +862,11 @@ export async function enrichEnturMobilityItems(
       android: enturVehicle.rentalUris?.android ?? undefined,
     };
     vehicle.rentalApps = vehicle.rentalApps ?? mapRentalApps(enturVehicle.system.rentalApps);
+    if (contributionState(vehicle, ENTUR_VEHICLE_FIELDS) !== before)
+      retainContributions(vehicle, {
+        sources: ["entur-mobility"],
+        contributors: data.contributors,
+      });
   }
 }
 
@@ -836,7 +909,9 @@ async function fetchEnturGeofencing(
     `shared-mobility:entur:geofencing:${hashParts(systemIds.slice().sort())}`,
   );
 
-  return data.geofencingZones ?? [];
+  return (data.geofencingZones ?? []).map((system) =>
+    data.contributors === undefined ? system : withContributors(system, data.contributors),
+  );
 }
 
 async function resolveEnturGeofencingSystemIds(
@@ -878,6 +953,7 @@ export async function buildEnturGeofencingMapContext(
     transport: MobilityHttpTransport;
     systemIds?: string[];
     vehicleTypeIds?: string[];
+    resolveContributors?: (sourceIds: readonly string[]) => Attribution[];
   },
 ): Promise<SharedMobilityMapContext | null> {
   const systemIds = await resolveEnturGeofencingSystemIds(bbox, options.systemIds, options);
@@ -897,8 +973,8 @@ export async function buildEnturGeofencingMapContext(
       const zone = classifyMobilityRules(rules, DEFAULT_SLOW_ZONE_KPH);
       if (!zone) continue;
 
-      features.push({
-        type: "Feature",
+      const mapped = {
+        type: "Feature" as const,
         geometry: clippedGeometry,
         properties: {
           contextKind: "restriction_zone",
@@ -923,7 +999,12 @@ export async function buildEnturGeofencingMapContext(
           rideThroughAllowed: rules.every((rule) => rule.rideThroughAllowed),
           stationParking: rules.some((rule) => rule.stationParking === true),
         },
-      });
+      };
+      features.push(
+        system.contributors === undefined
+          ? mapped
+          : withFeatureContributors(mapped, system.contributors),
+      );
     }
   }
 

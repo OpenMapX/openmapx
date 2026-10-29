@@ -114,5 +114,9 @@ declare module "vitest" {
     useRealTimers(): void;
     advanceTimersByTime(ms: number): void;
     advanceTimersByTimeAsync(ms: number): Promise<void>;
+    waitFor<T>(
+      callback: () => T | Promise<T>,
+      options?: number | { interval?: number; timeout?: number },
+    ): Promise<T>;
   };
 }

@@ -1,7 +1,12 @@
 import {
-  chmodSync,
+  closeSync,
+  constants,
   existsSync,
+  fchmodSync,
+  fstatSync,
+  ftruncateSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
   rmSync,
@@ -50,7 +55,32 @@ export const IMPORT_MARKER_FILE = ".data-manager-import.ok.json";
 
 export const RAW_BASE = "https://raw.githubusercontent.com/public-transport/transitous/main";
 export const DEFAULT_TRANSITOUS_API_KEYS_PATH = "/config/transitous/api-keys.json";
-export const DEFAULT_TRANSITOUS_FEEDS_OVERLAY_PATH = "/data/overrides/feeds-overlay.json";
+
+/**
+ * The operator's Transitous API keys: an explicit path, else
+ * `TRANSITOUS_API_KEYS_PATH`, else the file mounted at
+ * {@link DEFAULT_TRANSITOUS_API_KEYS_PATH}.
+ */
+export function resolveTransitousApiKeysPath(explicit?: string): string {
+  // `||`, not `??`: compose renders an unset variable as "", which must fall
+  // through to the mounted default.
+  return explicit || process.env.TRANSITOUS_API_KEYS_PATH || DEFAULT_TRANSITOUS_API_KEYS_PATH;
+}
+
+/**
+ * The operator's feeds overlay: an explicit path, else
+ * `TRANSITOUS_FEEDS_OVERLAY_PATH`, else `<dataDir>/overrides/feeds-overlay.json`
+ * (`/data/…` in the container, `infra/docker/data/…` on the host).
+ */
+export function resolveTransitOverlayPath(dataDir: string, explicit?: string): string {
+  // `||`, not `??`: compose renders unset vars as empty strings, and an empty
+  // overlay path would make every mutation fail and every list read nothing.
+  return (
+    explicit ||
+    process.env.TRANSITOUS_FEEDS_OVERLAY_PATH ||
+    join(dataDir, "overrides", "feeds-overlay.json")
+  );
+}
 
 const COUNTRY_TOKEN_RE = /^[a-z][a-z0-9_-]{0,31}$/;
 
@@ -151,6 +181,28 @@ export function ensureTransitousWorkdirs(
   symlinkSync(downloadsDir, cacheDir, "dir");
 }
 
+/** Keep the catalog inode/owner, but make it private before any credential bytes. */
+export function writePrivateCatalogFile(feedPath: string, content: string): void {
+  // No truncation on open: validate and tighten the same descriptor first.
+  // NONBLOCK also lets us reject a FIFO without waiting for a reader.
+  const fd = openSync(
+    feedPath,
+    constants.O_WRONLY | constants.O_CREAT | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    0o600,
+  );
+  try {
+    const file = fstatSync(fd);
+    if (!file.isFile() || file.nlink !== 1) {
+      throw new Error(`Transitous catalog file must be regular with a single link: ${feedPath}`);
+    }
+    fchmodSync(fd, 0o600);
+    ftruncateSync(fd, 0);
+    writeFileSync(fd, content, "utf-8");
+  } finally {
+    closeSync(fd);
+  }
+}
+
 export function applyApiKeysOverlay(catalogDir: string, overlayPath: string): number {
   if (!existsSync(overlayPath)) return 0;
   let overlay: Record<string, string>;
@@ -189,11 +241,7 @@ export function applyApiKeysOverlay(catalogDir: string, overlayPath: string): nu
     }
 
     if (!modified) continue;
-    writeFileSync(feedPath, `${JSON.stringify(data, null, 2)}\n`, "utf-8");
-    // The file now carries a feed API key. writeFileSync's `mode` only applies
-    // when it creates the file, and catalog files arrive at 0644, so tighten
-    // explicitly to repair files stamped by an earlier run as well.
-    chmodSync(feedPath, 0o600);
+    writePrivateCatalogFile(feedPath, `${JSON.stringify(data, null, 2)}\n`);
     applied++;
   }
 

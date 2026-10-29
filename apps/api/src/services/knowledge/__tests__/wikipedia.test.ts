@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { emptyResponse, streamedJsonResponse } from "../../../test/streamed-response.js";
 
@@ -101,8 +102,12 @@ describe("wikipediaSource", () => {
     const richPhoto = {
       url: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Berlin.jpg/800px-Berlin.jpg",
       author: "Author",
-      license: "CC BY-SA 4.0",
-      source: "wikimedia",
+      licensing: licensingFromDeclaration(
+        "CC BY-SA 4.0",
+        "https://creativecommons.org/licenses/by-sa/4.0/",
+      ),
+      source: "wikimedia-commons",
+      pageUrl: "https://commons.wikimedia.org/wiki/File:Berlin.jpg",
     };
     mockFetchCommonsMetadata.mockResolvedValueOnce(new Map([["Berlin.jpg", richPhoto]]));
 
@@ -123,11 +128,11 @@ describe("wikipediaSource", () => {
 
     expect(mockFetchCommonsMetadata).toHaveBeenCalledWith(["Berlin.jpg"]);
     expect(result?.photos).toHaveLength(1);
-    // Source is overridden to "wikipedia"
-    expect(result?.photos?.[0].source).toBe("wikipedia");
+    // The file retains its Commons supplier independently of the article.
+    expect(result?.photos?.[0].source).toBe("wikimedia-commons");
   });
 
-  it("falls back to thumbnail.source when no originalimage", async () => {
+  it("defers an uncredited thumbnail when no originalimage", async () => {
     mockFetchCommonsMetadata.mockResolvedValueOnce(new Map());
 
     mockFetch.mockResolvedValueOnce(
@@ -146,17 +151,10 @@ describe("wikipediaSource", () => {
     const { wikipediaSource } = await loadModule();
     const result = await wikipediaSource.lookup({ wikipedia: "en:Berlin" }, "en");
 
-    // Falls back to thumbnail-based photo since commons metadata returns empty.
-    // A filename WAS extractable from the thumb URL, so we still know the
-    // Commons file page even though the metadata fetch failed.
-    expect(result?.photos).toHaveLength(1);
-    expect(result?.photos?.[0].source).toBe("wikipedia");
-    expect(result?.photos?.[0].pageUrl).toBe("https://commons.wikimedia.org/wiki/File:Berlin.jpg");
-    expect(result?.photos?.[0].author).toBeUndefined();
-    expect(result?.photos?.[0].license).toBeUndefined();
+    expect(result?.photos).toBeUndefined();
   });
 
-  it("creates fallback photo when filename cannot be extracted from URL", async () => {
+  it("defers a photo whose file identity cannot be extracted", async () => {
     mockFetch.mockResolvedValueOnce(
       mockOk(
         makeSummary({
@@ -171,13 +169,7 @@ describe("wikipediaSource", () => {
 
     const { wikipediaSource } = await loadModule();
     const result = await wikipediaSource.lookup({ wikipedia: "en:Berlin" }, "en");
-    expect(result?.photos).toHaveLength(1);
-    expect(result?.photos?.[0].url).toBe("https://some-cdn.example.com/image.jpg");
-    // No filename could be extracted, so we don't know the author, license, or
-    // file page — none of those fields (nor a fabricated attribution) are set.
-    expect(result?.photos?.[0].pageUrl).toBeUndefined();
-    expect(result?.photos?.[0].author).toBeUndefined();
-    expect(result?.photos?.[0].license).toBeUndefined();
+    expect(result?.photos).toBeUndefined();
     expect(mockFetchCommonsMetadata).not.toHaveBeenCalled();
   });
 

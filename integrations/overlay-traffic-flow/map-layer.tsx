@@ -1,9 +1,10 @@
 "use client";
 
 import { useOverlayExclusion } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { addLayerInSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import {
@@ -14,7 +15,13 @@ import {
 import { buildPopupCard, type PopupCardSpec } from "@/integration-api/map/popupCard";
 import { flowColorExpression } from "@/integration-api/map/trafficFlowExpression";
 import { useStyleSyncedLayer } from "@/integration-api/map/useStyleSyncedLayer";
-import { useIntegrationDomainAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import {
+  flowFeatureContributorKey,
+  flowFeatureContributors,
+} from "@/integration-api/overlay/flowContributors";
+import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
+import { createVectorTileCoverageContributorResolver } from "@/integration-api/overlay/vectorTileCoverageContributors";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useTrafficFlowStore } from "./store";
 import { TRAFFIC_FLOW_OPACITY_EXPRESSION } from "./visual-style";
@@ -22,8 +29,17 @@ import { TRAFFIC_FLOW_OPACITY_EXPRESSION } from "./visual-style";
 const SRC = "omx-traffic-flow-src";
 const CASING = "omx-traffic-flow-casing";
 const COLOR = "omx-traffic-flow-color";
-const SOURCE_LAYER = "segment_flow";
+/** Martin's function-source id; the tile layer inside carries the same name. */
+const MARTIN_SOURCE = "segment_flow";
+const SOURCE_LAYER = MARTIN_SOURCE;
 const LAYER_MIN_ZOOM = 6;
+
+/** Whether Martin's `/catalog` answer lists the flow source among its tile sources. */
+function catalogServesFlow(catalog: unknown): boolean {
+  if (typeof catalog !== "object" || catalog === null) return false;
+  const tiles = (catalog as { tiles?: unknown }).tiles;
+  return typeof tiles === "object" && tiles !== null && Object.hasOwn(tiles, MARTIN_SOURCE);
+}
 
 /**
  * Relative-speed (`speed_ratio` = current ÷ free-flow) → TomTom-style color
@@ -101,7 +117,7 @@ const POPUP_SPEC: PopupCardSpec = {
 
 /** `123.4` → `"123 km/h"`; anything non-finite → "" so the row drops. */
 function formatKph(raw: unknown): string {
-  const n = Number(raw);
+  const n = raw == null || raw === "" ? Number.NaN : Number(raw);
   return Number.isFinite(n) ? `${Math.round(n)} km/h` : "";
 }
 
@@ -125,7 +141,8 @@ function buildPopupProperties(
   const highway = typeof p.highway === "string" && p.highway ? p.highway : undefined;
   const los = typeof p.los === "string" && p.los ? p.los : undefined;
   const confidence = typeof p.confidence === "string" && p.confidence ? p.confidence : undefined;
-  const speedRatio = Number(p.speed_ratio);
+  const speedRatio =
+    p.speed_ratio == null || p.speed_ratio === "" ? Number.NaN : Number(p.speed_ratio);
   return {
     roadRef: ref ?? (highway ? humanizeHighway(highway) : ""),
     currentSpeedText: formatKph(p.current_kph),
@@ -139,9 +156,30 @@ function buildPopupProperties(
 export function TrafficFlowLayer() {
   const map = useMap();
   const { mapRef, mapReady, styleVersion } = map;
+  const glMap = mapRef.current;
   const env = useEnv();
   const showFlow = useTrafficFlowStore((s) => s.panelOpen && s.layerVisible);
-  useIntegrationDomainAttribution("road-conditions", showFlow);
+  const [popupContributors, setPopupContributors] = useState<Attribution[]>([]);
+  useMapAttributions("traffic-flow-popup", showFlow ? popupContributors : []);
+  const tileCredits = useMemo(
+    () =>
+      createVectorTileCoverageContributorResolver({
+        sourceId: SRC,
+        sourceLayer: SOURCE_LAYER,
+        layerIds: [CASING, COLOR],
+        // Color includes geometry plus the ratio/LOS and opacity projection inputs.
+        // This key also proves equivalence for casing's geometry-only subset.
+        featureContributorKey: (properties) => flowFeatureContributorKey(properties, "color"),
+        resolveFeatureContributors: (properties, layerId) =>
+          flowFeatureContributors(properties, layerId === CASING ? "casing" : "color"),
+      }),
+    [],
+  );
+  // Deliberately conservative at tile edges. Do not add these dense road layers
+  // to the shared exact query: it materializes ~90k hits for a few suppliers.
+  useRenderedMapAttributions("traffic-flow", [], showFlow, {
+    resolveTileCoverageContributors: () => (glMap ? tileCredits(glMap) : []),
+  });
   useOverlayExclusion("traffic-flow", showFlow);
 
   const martinBase = env.martinBaseUrl;
@@ -153,7 +191,7 @@ export function TrafficFlowLayer() {
       // /martin/catalog). No `.pbf` suffix: the PWA service worker
       // CacheFirst-caches /\.pbf$/ URLs for 30 days, which would freeze this
       // "live" layer.
-      tiles: [`${martinBase}/segment_flow/{z}/{x}/{y}`],
+      tiles: [`${martinBase}/${MARTIN_SOURCE}/{z}/{x}/{y}`],
       minzoom: 5,
       maxzoom: 16,
     });
@@ -221,6 +259,37 @@ export function TrafficFlowLayer() {
     deps: [mapReady, styleVersion, mapRef, showFlow, martinBase],
   });
 
+  // The tiles come from an OpenConditions function behind Martin, so without
+  // either the overlay would draw nothing while still being offered. MapLibre
+  // reports failed tiles as `error` events but drops a 404 silently, and a
+  // missing source is exactly a 404, so Martin's catalog is asked as well. Map
+  // listeners outlive a style swap; the re-added source keeps the same id.
+  const setUnavailable = useTrafficFlowStore((s) => s.setUnavailable);
+  useEffect(() => {
+    if (!glMap || !mapReady || !showFlow) return;
+    setUnavailable(false);
+    const controller = new AbortController();
+    void fetch(`${martinBase}/catalog`, { cache: "no-store", signal: controller.signal })
+      .then(async (res) => res.ok && catalogServesFlow(await res.json()))
+      .catch(() => false)
+      .then((served) => {
+        if (!served && !controller.signal.aborted) setUnavailable(true);
+      });
+    const onError = (event: maplibregl.ErrorEvent & { sourceId?: string }) => {
+      if (event.sourceId === SRC) setUnavailable(true);
+    };
+    const onSourceData = (event: maplibregl.MapSourceDataEvent) => {
+      if (event.sourceId === SRC && event.tile) setUnavailable(false);
+    };
+    glMap.on("error", onError);
+    glMap.on("sourcedata", onSourceData);
+    return () => {
+      controller.abort();
+      glMap.off("error", onError);
+      glMap.off("sourcedata", onSourceData);
+    };
+  }, [glMap, mapReady, showFlow, martinBase, setUnavailable]);
+
   // Keep the latest translator in a ref so the imperative click handler
   // (bound once per effect) always uses the current locale.
   const t = useTranslations("trafficFlow");
@@ -235,7 +304,6 @@ export function TrafficFlowLayer() {
   // pointer cursor and popup replacement for this map.
   useEffect(() => {
     void styleVersion;
-    const glMap = mapRef.current;
     if (!glMap || !mapReady || !showFlow) return;
 
     const unregister = registerMapOverlayInteraction(glMap, {
@@ -258,6 +326,13 @@ export function TrafficFlowLayer() {
             ),
           );
         popupRef.current = popup;
+        setPopupContributors(flowFeatureContributors(properties, "popup"));
+        popup.on("close", () => {
+          if (popupRef.current === popup) {
+            popupRef.current = null;
+            setPopupContributors([]);
+          }
+        });
         replaceMapOverlayPopup(glMap, popup);
       },
     });
@@ -267,8 +342,9 @@ export function TrafficFlowLayer() {
         removeMapOverlayPopup(glMap, popupRef.current);
         popupRef.current = null;
       }
+      setPopupContributors([]);
     };
-  }, [mapReady, mapRef, styleVersion, showFlow]);
+  }, [mapReady, glMap, styleVersion, showFlow]);
 
   return null;
 }

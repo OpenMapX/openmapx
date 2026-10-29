@@ -99,7 +99,7 @@ export function isOnlineStyleReachabilityProbe(url: URL): boolean {
 export const PUBLIC_CACHEABLE_API_PATH_TEMPLATES = [
   "/api/maptiler/{wildcard}",
   "/api/offline/packages/glyphs/{version}/catalog.json",
-  "/api/offline/packages/glyphs/{version}/{wildcard}",
+  "/api/offline/packages/glyphs/{version}/{fontstack}/{range}.pbf",
   "/api/tiles/cycling-routes/{z}/{x}/{y}.png",
   "/api/tiles/cyclosm/{z}/{x}/{y}.png",
   "/api/traffic/flow/{z}/{x}/{y}.png",

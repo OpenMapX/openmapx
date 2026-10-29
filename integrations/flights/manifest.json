@@ -41,85 +41,193 @@
       "sourceId": "skyscanner",
       "name": "Skyscanner",
       "url": "https://www.skyscanner.net/",
-      "license": "Proprietary (deep-link only)",
-      "licenseUrl": "https://www.skyscanner.net/media/terms-of-service",
       "commercialUse": "conditional",
       "providerCountry": "GB",
       "providerPrivacyUrl": "https://www.skyscanner.net/privacy-policy",
       "endUserExposure": "direct",
       "personalData": true,
       "cookies": true,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "Skyscanner link/handoff permission",
+            "license": {
+              "kind": "unknown",
+              "raw": "Proprietary (deep-link only); action identity not dataset grant.",
+              "url": "https://www.skyscanner.net/media/terms-of-service"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (deep-link only)",
+            "url": "https://www.skyscanner.net/media/terms-of-service"
+          }
+        ]
+      }
     },
     {
       "sourceId": "google-flights",
       "name": "Google Flights",
       "url": "https://www.google.com/travel/flights",
-      "license": "Proprietary (deep-link only)",
-      "licenseUrl": "https://policies.google.com/terms",
       "commercialUse": "conditional",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://policies.google.com/privacy",
       "endUserExposure": "direct",
       "personalData": true,
       "cookies": true,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "Google Flights link/handoff permission",
+            "license": {
+              "kind": "unknown",
+              "raw": "Proprietary (deep-link only); action identity not dataset grant.",
+              "url": "https://policies.google.com/terms"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (deep-link only)",
+            "url": "https://policies.google.com/terms"
+          }
+        ]
+      }
     },
     {
       "sourceId": "kayak",
       "name": "KAYAK",
       "url": "https://www.kayak.com/flights",
-      "license": "Proprietary (deep-link only)",
-      "licenseUrl": "https://www.kayak.com/terms-of-use",
       "commercialUse": "conditional",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.kayak.com/privacy",
       "endUserExposure": "direct",
       "personalData": true,
       "cookies": true,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "KAYAK link/handoff permission",
+            "license": {
+              "kind": "unknown",
+              "raw": "Proprietary (deep-link only); action identity not dataset grant.",
+              "url": "https://www.kayak.com/terms-of-use"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (deep-link only)",
+            "url": "https://www.kayak.com/terms-of-use"
+          }
+        ]
+      }
     },
     {
       "sourceId": "kiwi",
       "name": "Kiwi.com",
       "url": "https://www.kiwi.com/",
-      "license": "Proprietary (deep-link only)",
-      "licenseUrl": "https://www.kiwi.com/en/pages/content/legal",
       "commercialUse": "conditional",
       "providerCountry": "CZ",
       "providerPrivacyUrl": "https://www.kiwi.com/en/pages/content/privacy",
       "endUserExposure": "direct",
       "personalData": true,
       "cookies": true,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "Kiwi.com link/handoff permission",
+            "license": {
+              "kind": "unknown",
+              "raw": "Proprietary (deep-link only); action identity not dataset grant.",
+              "url": "https://www.kiwi.com/en/pages/content/legal"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (deep-link only)",
+            "url": "https://www.kiwi.com/en/pages/content/legal"
+          }
+        ]
+      }
     },
     {
       "sourceId": "momondo",
       "name": "momondo",
       "url": "https://www.momondo.com/",
-      "license": "Proprietary (deep-link only)",
-      "licenseUrl": "https://www.momondo.com/terms-of-use",
       "commercialUse": "conditional",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.momondo.com/privacy",
       "endUserExposure": "direct",
       "personalData": true,
       "cookies": true,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "momondo link/handoff permission",
+            "license": {
+              "kind": "unknown",
+              "raw": "Proprietary (deep-link only); action identity not dataset grant.",
+              "url": "https://www.momondo.com/terms-of-use"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (deep-link only)",
+            "url": "https://www.momondo.com/terms-of-use"
+          }
+        ]
+      }
     },
     {
       "sourceId": "skiplagged",
       "name": "Skiplagged",
       "url": "https://skiplagged.com/",
-      "license": "Proprietary (deep-link only)",
-      "licenseUrl": "https://skiplagged.com/terms",
       "commercialUse": "conditional",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://skiplagged.com/privacy",
       "endUserExposure": "direct",
       "personalData": true,
       "cookies": true,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "Skiplagged link/handoff permission",
+            "license": {
+              "kind": "unknown",
+              "raw": "Proprietary (deep-link only); action identity not dataset grant.",
+              "url": "https://skiplagged.com/terms"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (deep-link only)",
+            "url": "https://skiplagged.com/terms"
+          }
+        ]
+      }
     }
   ]
 }

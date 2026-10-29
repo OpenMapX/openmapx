@@ -35,8 +35,6 @@
       "sourceId": "timezone-boundary-builder",
       "name": "timezone-boundary-builder (OpenStreetMap)",
       "url": "https://github.com/evansiroky/timezone-boundary-builder",
-      "license": "ODbL 1.0",
-      "licenseUrl": "https://www.openstreetmap.org/copyright",
       "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "commercialUse": "yes",
       "providerCountry": "US",
@@ -44,7 +42,27 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "timezone-boundary-builder (OpenStreetMap) material",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0",
+              "url": "https://www.openstreetmap.org/copyright"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "ODbL-1.0",
+            "url": "https://www.openstreetmap.org/copyright"
+          }
+        ]
+      }
     }
   ]
 }

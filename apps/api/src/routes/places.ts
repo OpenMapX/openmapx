@@ -14,17 +14,28 @@ import {
   type CategoryCardEnrichmentRequest,
   type CategoryCardEnrichmentResponse,
   categoryPlaceToPlace,
+  createRequestJsonScope,
   isDisplayablePhoto,
+  type KnowledgeResult,
   openingHoursSourceFromOsm,
   type Place,
   type PlaceIds,
   type PlacePhoto,
   parseId,
+  type ReviewAggregate,
   type ReviewProvider,
 } from "@openmapx/core";
 import { ambientPlaceToCategoryPlace } from "@openmapx/core/ambient-places";
 import { readAmbientPlaceByGers } from "@openmapx/core/ambient-places-server";
 import { currentOpeningHoursInfo } from "@openmapx/core/server";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  captureFieldContributors,
+  contributorsForField,
+  contributorsForFields,
+  contributorsForRecords,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import {
   buildFacebookUrl,
   buildFoursquareUrl,
@@ -36,13 +47,13 @@ import {
   type PlaceResolverContext,
 } from "@openmapx/place-ids";
 import type { FastifyPluginAsync } from "fastify";
+import pLimit from "p-limit";
 import { sql } from "../db/index.js";
 import { getAllIntegrations, isEnabledIntegrationScheme } from "../integration-host.js";
 import { getPlaceKnowledge } from "../services/knowledge/index";
 import { recordCardEnrichment } from "../services/metrics/index";
 import { buildReviewLinks } from "../services/review-links";
 import { hashKey, TTL, withCache } from "../utils/cache.js";
-import { createLimiter } from "../utils/concurrency.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
 import { isStaticImageHost } from "./image-hosts.js";
 
@@ -51,9 +62,15 @@ import { isStaticImageHost } from "./image-hosts.js";
 // boundary polygons); a burst of DISTINCT place opens would otherwise run N of
 // them at once and OOM the process. Identical requests already coalesce in
 // withCache, so this caps only the distinct ones. Tunable for high-memory hosts.
-const ENRICH_CONCURRENCY = Math.trunc(Number(process.env.OPENMAPX_PLACE_ENRICH_CONCURRENCY)) || 8;
-const enrichLimit = createLimiter(Math.max(1, ENRICH_CONCURRENCY));
-const cardEnrichLimit = createLimiter(4);
+const ENRICH_CONCURRENCY = Math.max(
+  1,
+  Math.trunc(Number(process.env.OPENMAPX_PLACE_ENRICH_CONCURRENCY)) || 8,
+);
+if (!Number.isFinite(ENRICH_CONCURRENCY)) {
+  throw new Error("OPENMAPX_PLACE_ENRICH_CONCURRENCY must be finite");
+}
+const enrichLimit = pLimit(ENRICH_CONCURRENCY);
+const cardEnrichLimit = pLimit(4);
 const pendingCardRating = new Map<string, Promise<unknown>>();
 const pendingCardPhoto = new Map<string, Promise<unknown>>();
 const cardFailureCooldown = new Map<string, { error: unknown; until: number }>();
@@ -223,7 +240,7 @@ async function cardPhoto(input: CardInput, lang: string | undefined): Promise<Pl
     Object.entries(input.photoTags ?? {}).sort(([left], [right]) => left.localeCompare(right)),
   ) as Record<string, string>;
   if (Object.keys(tags).length === 0) return null;
-  const key = hashKey("cache:card-photo", {
+  const key = hashKey("cache:card-photo:v3", {
     id: input.id,
     coordinates: input.coordinates,
     name: input.name,
@@ -324,7 +341,7 @@ async function cardRating(input: CardInput): Promise<CardResult["rating"] | null
     name: input.name,
     osmId: match ? `${match[1]}/${match[2]}` : undefined,
   };
-  const key = hashKey("cache:card-rating", subject);
+  const key = hashKey("cache:card-rating:v3-contributors", subject);
   const { rating } = await withCardCache(key, 600, async () => {
     if (pendingCardRating.has(key)) throw new Error("Previous rating request is still settling");
     if (pendingCardRating.size >= 4) throw new Error("Rating providers are still settling");
@@ -369,7 +386,12 @@ async function cardRating(input: CardInput): Promise<CardResult["rating"] | null
       )
         return { rating: null };
       return {
-        rating: { stars: aggregate.stars, count: ratedCount, source: aggregate.source },
+        rating: {
+          stars: aggregate.stars,
+          count: ratedCount,
+          source: aggregate.source,
+          contributors: contributorsForRecords([aggregate]),
+        },
       };
     } finally {
       if (timer) clearTimeout(timer);
@@ -593,7 +615,7 @@ async function safeAggregate(
   name: string,
   osmId: string | undefined,
   providers: ReviewProvider[],
-): Promise<{ stars: number; count: number } | null> {
+): Promise<Pick<ReviewAggregate, "stars" | "count" | "contributors"> | null> {
   if (!name) return null;
   try {
     const result = await Promise.race([
@@ -601,7 +623,11 @@ async function safeAggregate(
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
     ]);
     if (!result || result.count < 3 || result.stars <= 0) return null;
-    return { stars: result.stars, count: result.count };
+    return {
+      stars: result.stars,
+      count: result.count,
+      contributors: contributorsForRecords([result]),
+    };
   } catch {
     return null;
   }
@@ -618,16 +644,21 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
   const photoProviders = getPhotoProviders(allIntegrations);
   const reviewProviders = getReviewProviders(allIntegrations);
   const [plng, plat] = place.coordinates;
+  // One scope per full enrichment: knowledge and hero photos share identical
+  // Wikimedia JSON, and it is released with this call. Never wired into card mode.
+  const jsonScope = createRequestJsonScope();
 
   // These inputs do not depend on knowledge's auxiliary IDs. Start all four
   // branches together, then fold those IDs into the final response.
   const [knowledgeResult, adminBoundary, heroPhotos, reviewStats] = await Promise.all([
-    getPlaceKnowledge(place, lang),
+    getPlaceKnowledge(place, lang, { jsonScope }),
     // Only administrative areas get a boundary highlight.
     place.osmTags?.boundary === "administrative" && place.ids?.osm
       ? fetchOsmBoundary(place.ids.osm, lang)
       : Promise.resolve(null),
-    place.osmTags ? searchHeroPhotos(place.osmTags, photoProviders) : Promise.resolve([]),
+    place.osmTags
+      ? searchHeroPhotos(place.osmTags, photoProviders, { getJson: jsonScope.getJson })
+      : Promise.resolve([]),
     safeAggregate(plat, plng, place.name, place.ids?.osm, reviewProviders),
   ]);
   const {
@@ -638,6 +669,7 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
     website: knowledgeWebsite,
     socials: knowledgeSocials,
     address: knowledgeAddress,
+    addressEvidence: knowledgeAddressEvidence,
     city: knowledgeCity,
     countryCode: knowledgeCountryCode,
     provenance: knowledgeProvenance,
@@ -645,7 +677,7 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
   } = knowledgeResult;
   const enriched = foldExternalIdsIntoPlace(place, externalIds);
   const photos = deduplicatePhotos([...heroPhotos, ...(knowledgePhotos ?? [])]);
-  return {
+  const result: Place = {
     ...enriched,
     ...knowledge,
     // Social profiles: gap-fill the OSM `contact:*` tags from a knowledge
@@ -662,6 +694,15 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
     website: pickMoreSpecificWebsite(enriched.website, knowledgeWebsite),
     socials: enriched.socials ?? knowledgeSocials,
     address: enriched.address || knowledgeAddress || "",
+    addressEvidence: enriched.address
+      ? enriched.addressEvidence
+      : knowledgeAddress
+        ? (knowledgeAddressEvidence ?? {
+            source: contributorsForField(knowledgeResult, "address")[0]?.sourceId ?? "knowledge",
+            method: "provider-label",
+            components: {},
+          })
+        : undefined,
     city: enriched.city ?? knowledgeCity,
     countryCode: enriched.countryCode ?? knowledgeCountryCode,
     provenance: mergePlaceProvenance(enriched.provenance, knowledgeProvenance),
@@ -671,6 +712,137 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
     reviewCount: reviewStats?.count,
     boundary: adminBoundary?.boundary,
     boundingBox: adminBoundary?.boundingBox,
+  };
+  return captureEnrichedPlaceContributors(
+    place,
+    knowledgeResult,
+    result,
+    reviewStats,
+    adminBoundary,
+  );
+}
+
+/** Ownership mirrors the actual enrichment policies above, including tag/ID gap fills. */
+function captureEnrichedPlaceContributors(
+  base: Place,
+  knowledge: KnowledgeResult,
+  result: Place,
+  reviewStats: Pick<ReviewAggregate, "contributors"> | null,
+  adminBoundary: Awaited<ReturnType<typeof fetchOsmBoundary>>,
+): Place {
+  const fields: Record<string, Attribution[]> = {};
+  const metadata = new Set([
+    "contributors",
+    "fieldContributors",
+    "provenance",
+    "photos",
+    "facts",
+    "externalIds",
+    "osmTags",
+    "ids",
+  ]);
+  for (const [field, value] of Object.entries(base)) {
+    if (value !== undefined && !metadata.has(field))
+      Object.assign(fields, captureFieldContributors(base, field));
+  }
+  const contacts = new Set([
+    "phone",
+    "email",
+    "website",
+    "socials",
+    "address",
+    "addressEvidence",
+    "city",
+    "countryCode",
+  ]);
+  for (const [field, value] of Object.entries(knowledge)) {
+    if (value !== undefined && !metadata.has(field) && !contacts.has(field)) {
+      Object.assign(fields, captureFieldContributors(knowledge, field));
+    }
+  }
+  for (const field of contacts) {
+    const key = field as
+      | "phone"
+      | "email"
+      | "website"
+      | "socials"
+      | "address"
+      | "addressEvidence"
+      | "city"
+      | "countryCode";
+    if (!result[key]) continue;
+    const baseWins =
+      key === "website"
+        ? pickMoreSpecificWebsite(base.website, knowledge.website) === base.website &&
+          base.website !== undefined
+        : key === "address" || key === "addressEvidence"
+          ? Boolean(base.address)
+          : base[key] !== undefined && base[key] !== null;
+    if (key === "addressEvidence") {
+      for (const existing of Object.keys(fields)) {
+        if (existing === key || existing.startsWith(`${key}.`)) delete fields[existing];
+      }
+    }
+    Object.assign(
+      fields,
+      captureFieldContributors(
+        baseWins ? base : knowledge,
+        key === "addressEvidence" ? "address" : key,
+        key,
+      ),
+    );
+  }
+  for (const [scheme, value] of Object.entries(result.ids)) {
+    const key = `ids.${scheme}`;
+    if (base.ids[scheme] === value) {
+      fields[key] = contributorsForField(base, key);
+    } else {
+      const externalKey = scheme === "googleMaps" ? "google_maps" : scheme;
+      const fromKnowledge = knowledge.externalIds?.[externalKey] === value;
+      fields[key] = contributorsForField(
+        fromKnowledge ? knowledge : base,
+        fromKnowledge ? `externalIds.${externalKey}` : "osmTags",
+      );
+    }
+  }
+  for (const [key, value] of Object.entries(result.osmTags ?? {})) {
+    const field = `osmTags.${key}`;
+    const knowledgeField =
+      key === "brand"
+        ? "brand.name"
+        : key === "brand:wikidata"
+          ? "brand.wikidata"
+          : key === "email"
+            ? "email"
+            : "socials";
+    fields[field] =
+      base.osmTags?.[key] === value
+        ? contributorsForField(base, field)
+        : contributorsForField(knowledge, knowledgeField);
+  }
+  fields.osmTags = contributorsForFields(
+    fields,
+    Object.keys(fields).filter((key) => key.startsWith("osmTags.")),
+  );
+  fields.ids = contributorsForFields(
+    fields,
+    Object.keys(fields).filter((key) => key.startsWith("ids.")),
+  );
+  // Boundary geometry is acquired independently of the resolved place and knowledge.
+  fields.boundary = result.boundary ? contributorsForRecords([adminBoundary]) : [];
+  fields.boundingBox = result.boundingBox ? contributorsForRecords([adminBoundary]) : [];
+  // Ratings are supplied by the review acquisition, independently of the
+  // resolved place and knowledge fields. Absence never inherits their receipts.
+  fields.rating = contributorsForRecords([reviewStats]);
+  fields.reviewCount = contributorsForRecords([reviewStats]);
+  return {
+    ...result,
+    fieldContributors: fields,
+    contributors: snapshotContributors(
+      contributorsForFields(fields, Object.keys(fields)),
+      contributorsForRecords(result.photos ?? []),
+      contributorsForRecords(result.facts ?? []),
+    ),
   };
 }
 
@@ -762,7 +934,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
             ? await readAmbientPlaceByGers(sql, parsed.value)
             : null;
         const cacheKey = hashKey(
-          "cache:place",
+          "cache:place-v4-photo-metadata",
           published
             ? { ...placeRequest.identity, ambientGeneration: published.generation }
             : placeRequest.identity,
@@ -819,9 +991,10 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
             // street-level imagery drops) that aren't backed by any integration,
             // dangerous for an integration whose `setup()` failed and
             // never got to register its resolver. The manifest registry
-            // tells us which is which: any scheme matching an installed
-            // integration id is strict; everything else is freeform.
-            if (isEnabledIntegrationScheme(parsedId.scheme)) {
+            // tells us which is which: enabled integration schemes are strict.
+            // OSM references also remain exact when their owning integration
+            // is unavailable; coordinates cannot establish another object's identity.
+            if (parsedId.scheme === "osm" || isEnabledIntegrationScheme(parsedId.scheme)) {
               fastify.log.warn(
                 { scheme: parsedId.scheme },
                 "places: integration scheme has no resolver; refusing coord-fallback",

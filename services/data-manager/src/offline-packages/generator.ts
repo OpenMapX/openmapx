@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
-import { lstatSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import type { PmtilesPackageMetadata } from "@openmapx/cli/tile-pmtiles";
 import {
   type CanonicalOfflinePackageRequest,
@@ -22,6 +22,7 @@ import {
 } from "./accounting.js";
 import { createOfflinePackageExtractor } from "./extractor-client.js";
 import { OfflinePackageSourceError } from "./source-catalog.js";
+import { resolveOfflinePackageFile } from "./storage.js";
 import type {
   OfflinePackageExtractor,
   OfflinePackageGeneratorOptions,
@@ -352,11 +353,6 @@ export class OfflinePackageGenerator {
     if (source.descriptor.glyphsVersion !== glyphsVersion || !/^\d+-\d+$/.test(rawRange)) {
       return undefined;
     }
-    const root = resolve(source.fontsDirectory);
-    const resolved = (candidate: string): string | undefined => {
-      const value = resolve(candidate);
-      return value === root || value.startsWith(`${root}/`) ? value : undefined;
-    };
     {
       const fontStacks = rawFontstack.split(",").map((font) => font.trim());
       if (
@@ -367,15 +363,15 @@ export class OfflinePackageGenerator {
       )
         return undefined;
 
-      const paths = fontStacks.map((font) =>
-        resolved(join(source.fontsDirectory, font, `${rawRange}.pbf`)),
-      );
-      if (paths.some((path) => !path)) return undefined;
       try {
-        const files = paths as string[];
+        const files = fontStacks.map((font) =>
+          resolveOfflinePackageFile(
+            source.fontsDirectory,
+            join(source.fontsDirectory, font, `${rawRange}.pbf`),
+          ),
+        );
         if (files.length === 1) {
           const path = files[0];
-          if (!lstatSync(path).isFile()) return undefined;
           return {
             path,
             byteLength: statSync(path).size,

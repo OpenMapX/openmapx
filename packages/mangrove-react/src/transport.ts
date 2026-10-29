@@ -1,3 +1,4 @@
+import type { SignerTransport } from "./signer";
 import type {
   CreateKeypairEnvelopePayload,
   EnvelopeState,
@@ -18,24 +19,29 @@ import type {
  * into this package.
  */
 export interface MangroveTransport<TReview = unknown, TAggregate = unknown> {
+  /** Optional delegated signer; tokens stay inside its session controller. */
+  signer?: SignerTransport;
   /**
-   * Fetch the server-side encrypted-or-cleartext keypair envelope.
+   * Fetch the server-side encrypted keypair envelope.
    * Return `null` when the user has none yet (i.e. needs setup) — typically
    * mapped from a 204 No Content response.
    */
   getKeypairEnvelope(): Promise<EnvelopeState | null>;
 
   /** Create the envelope (first-time setup). */
-  createKeypairEnvelope(payload: CreateKeypairEnvelopePayload): Promise<void>;
+  createKeypairEnvelope(payload: CreateKeypairEnvelopePayload): Promise<{ revision: string }>;
 
   /** Replace the wraps (add/remove unlock methods, change passphrase). */
-  updateKeypairWraps(payload: UpdateKeypairWrapsPayload): Promise<void>;
+  updateKeypairWraps(payload: UpdateKeypairWrapsPayload): Promise<{ revision: string }>;
 
   /** Wipe the envelope entirely (regenerate flow). */
-  deleteKeypairEnvelope(): Promise<void>;
+  deleteKeypairEnvelope(payload: { expectedRevision: string }): Promise<void>;
 
   /** Submit a signed review JWT. Returns the server-assigned id. */
-  submitReview(payload: SubmitReviewTransportPayload): Promise<{ id: string }>;
+  submitReview(
+    payload: SubmitReviewTransportPayload,
+    options?: { signal?: AbortSignal },
+  ): Promise<{ id: string }>;
 
   /** Upload a (already EXIF-stripped) image. Returns the absolute URL. */
   uploadReviewImage(payload: UploadReviewImagePayload): Promise<{ src: string }>;
@@ -55,6 +61,8 @@ export interface MangroveTransport<TReview = unknown, TAggregate = unknown> {
 export interface MangroveCurrentUser {
   /** Stable identifier for cache keying. */
   id: string;
+  /** Exact host authentication-session identity. */
+  authorityId?: string;
   /** Display name fallback when a review submission doesn't override it. */
   nickname?: string | null;
 }

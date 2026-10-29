@@ -6,22 +6,18 @@ sidebar_position: 12
 
 # Crowd reports
 
-OpenMapX can collect fresh, on-the-ground conditions without tying them to an
-account. From the map or during navigation, a person can report a road or lane
-closure, crash, stopped vehicle, object/weather/animal hazard, congestion,
-roadworks, or an uncategorized condition. Each category is sent as an
-OpenConditions situation (for example a lane closure is a closure that restricts
-some lanes, a jam is a queue), so crowd reports and official feeds describe the
-same situation the same way.
+Use **Report a condition** in the map controls to report a road closure, lane
+closure, crash, stopped vehicle, hazard, congestion, roadworks, or another road
+condition. Reports need a reachable OpenConditions contributions service; an
+OpenMapX account is not required.
 
-The report flow captures three useful signals:
-
-- **Where it applies** — current location, map center, or a point picked on a
-  mini-map.
-- **How precise it is** — here, somewhere ahead, back of the queue, or all along
-  this stretch. This becomes explicit spatial fuzziness rather than false
-  precision.
-- **Severity** — level 1–5, preselected by category and still adjustable.
+1. Open **Report a condition**.
+2. Choose the category and check the location. Use your current location, the
+   map center, or a point selected on the mini-map.
+3. Choose the extent: here, ahead, back of the queue, or all along the stretch.
+   Adjust severity if needed.
+4. Submit and wait for the result. If submission fails, the condition has not
+   been confirmed as accepted; retry when the service is available.
 
 During navigation, compatible reports ahead appear as approach prompts. A
 traveler can confirm that a condition is still present or negate it when it has
@@ -35,8 +31,9 @@ Reports and votes are pseudonymous and are not bound to an OpenMapX login. The
 browser creates a device key, enrolls it for short-lived reporting grants, and
 signs each claim locally. OpenMapX relays the signed envelope unchanged; the
 OpenConditions contributions service verifies signatures and decides how
-evidence, votes, and official feeds affect trust. Treat the local device key as
-browser data: clearing site storage creates a new reporting identity.
+evidence, votes, and official feeds affect trust. Clearing site storage creates a new reporting identity. Pseudonymity does not
+hide the reported location or stop the server and contributions service from
+processing request metadata.
 
 ## Operator setup
 
@@ -49,8 +46,9 @@ another compatible service) and set its endpoint for `app-api`:
 OPENCONDITIONS_CONTRIBUTIONS_URL=http://openconditions-contributions-api:4200
 ```
 
-`openconditions-contributions-api` is the OpenConditions contributions
-service's name on its network, which `app-api` joins.
+This example uses the contributions service's container hostname. Ensure
+`app-api` can resolve and reach it on the deployment network. A host-run API
+needs an endpoint reachable from that host.
 
 The development fallback is `http://localhost:4200`, the contributions
 service's default port; without a reachable
@@ -63,5 +61,5 @@ model.
 
 ## Related features
 
-- [Directions & navigation](./directions.md) — approach prompts and live routing.
-- [Map layers](./map-layers.md) — display trusted crowd and official conditions.
+- [Directions & navigation](./directions.md): approach prompts and live routing.
+- [Map layers](./map-layers.md): display trusted crowd and official conditions.

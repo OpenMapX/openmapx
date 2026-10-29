@@ -15,7 +15,7 @@ const apps = [
 ];
 const prefix = "example.invalid/openmapx";
 const sha = "f".repeat(40);
-const releaseId = `${sha}-1-1`;
+const releaseId = `${sha}-1-2`;
 const digests = Object.fromEntries(
   apps.map((app, i) => [app, `sha256:${String(i + 1).repeat(64)}`]),
 );
@@ -46,7 +46,7 @@ function promote(
     const bin = join(temp, "bin");
     mkdirSync(bin);
     for (const app of apps) {
-      const dir = join(temp, "digests", `docker-digest-${app}-1-1`);
+      const dir = join(temp, "digests", `docker-digest-${app}-1`);
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, digests[app].slice(7)), "");
     }
@@ -118,14 +118,16 @@ if (args[2] === "inspect" && args.includes("--format")) {
           ...process.env,
           PATH: `${bin}:${process.env.PATH}`,
           GITHUB_RUN_ID: "1",
-          GITHUB_RUN_ATTEMPT: "1",
+          GITHUB_RUN_ATTEMPT: "2",
+          GITHUB_REPOSITORY: "OpenMapX/openmapx",
+          GITHUB_EVENT_NAME: "push",
           IMAGE_PREFIX: prefix,
           RELEASE_MANIFEST_IMAGE: `${prefix}/release-manifest`,
           RELEASE_SHA: sha,
           RELEASE_ID: releaseId,
           FAIL_MATCH: failMatch,
           MISMATCH: String(mismatch),
-          DIGESTS: JSON.stringify(digests),
+          DIGESTS: JSON.stringify({ ...digests, "release-manifest": `sha256:${"8".repeat(64)}` }),
         },
       });
       status = result.status;
@@ -163,6 +165,14 @@ describe("aggregate Docker promotion", () => {
       "2026-09-09T12:00:00.000Z",
     );
     expect(Object.keys(manifest.images)).toEqual(apps);
+    expect(manifest.producer).toEqual({
+      repository: "OpenMapX/openmapx",
+      workflowPath: ".github/workflows/ci.yml",
+      sourceRevision: sha,
+      runId: 1,
+      runAttempt: 2,
+      event: "push",
+    });
   });
   it.each([
     { privacyFingerprint: "0".repeat(64) },
@@ -170,7 +180,7 @@ describe("aggregate Docker promotion", () => {
   ])("refuses publication when evidence or reused digest disagrees with the plan", (override) => {
     const { status, calls } = promote("", false, ["api"], override);
     expect(status).toBe(1);
-    expect(calls.flatMap(destinations).some((tag) => tag.endsWith(":latest"))).toBe(false);
+    expect(calls.flatMap(destinations).some((tag) => tag.endsWith(":main"))).toBe(false);
     expect(calls.flatMap(destinations)).not.toContain(`${prefix}/release-manifest:${releaseId}`);
   });
   it("publishes only application images despite unrelated plan metadata", () => {
@@ -189,11 +199,14 @@ describe("aggregate Docker promotion", () => {
       ...apps.flatMap((app) => [`${prefix}/${app}:${sha}`, `${prefix}/${app}:${releaseId}`]),
       `${prefix}/release-manifest:${sha}`,
       `${prefix}/release-manifest:${releaseId}`,
-      ...apps.map((app) => `${prefix}/${app}:latest`),
-      `${prefix}/release-manifest:latest`,
+      ...apps.map((app) => `${prefix}/${app}:main`),
+      `${prefix}/release-manifest:main`,
     ]);
+    const pointer = calls.find((args) => destination(args) === `${prefix}/release-manifest:main`);
+    expect(pointer?.at(-1)).toBe(`${prefix}/release-manifest@sha256:${"8".repeat(64)}`);
+    expect(calls.at(-1)).toContain("--format");
     for (const app of apps) {
-      for (const tag of [sha, "latest"]) {
+      for (const tag of [sha, "main"]) {
         const call = calls.find((args) => destination(args) === `${prefix}/${app}:${tag}`);
         expect(call?.at(-1)).toBe(`${prefix}/${app}@${digests[app]}`);
       }
@@ -201,7 +214,7 @@ describe("aggregate Docker promotion", () => {
         calls.some(
           (args) =>
             args[2] === "inspect" &&
-            args.includes(`${prefix}/${app}:latest`) &&
+            args.includes(`${prefix}/${app}:main`) &&
             args.includes("--format"),
         ),
       ).toBe(true);
@@ -211,21 +224,21 @@ describe("aggregate Docker promotion", () => {
   it.each([
     `--tag ${prefix}/ops-agent:${sha}`,
     `--tag ${prefix}/release-manifest:${sha}`,
-    `--tag ${prefix}/ops-agent:latest`,
-    `inspect ${prefix}/ops-agent:latest`,
+    `--tag ${prefix}/ops-agent:main`,
+    `inspect ${prefix}/ops-agent:main`,
   ])("does not switch the release pointer after failure at %s", (failMatch) => {
     const { calls, status } = promote(failMatch);
     expect(status).toBe(1);
-    expect(calls.map(destination)).not.toContain(`${prefix}/release-manifest:latest`);
-    if (!failMatch.endsWith(":latest")) {
-      expect(calls.some((args) => destination(args)?.endsWith(":latest"))).toBe(false);
+    expect(calls.map(destination)).not.toContain(`${prefix}/release-manifest:main`);
+    if (!failMatch.endsWith(":main")) {
+      expect(calls.some((args) => destination(args)?.endsWith(":main"))).toBe(false);
     }
   });
 
-  it("rejects a latest tag that does not resolve to the approved digest", () => {
+  it("rejects a main tag that does not resolve to the approved digest", () => {
     const { calls, status, stderr } = promote("", true);
     expect(status).toBe(1);
     expect(stderr).toMatch(/digest/i);
-    expect(calls.map(destination)).not.toContain(`${prefix}/release-manifest:latest`);
+    expect(calls.map(destination)).not.toContain(`${prefix}/release-manifest:main`);
   });
 });

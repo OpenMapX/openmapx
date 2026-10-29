@@ -27,9 +27,9 @@ const RAW_FETCH_ALLOWLIST: Record<string, string> = {
     "caller-supplied parser: response body may be XML/CSV/etc., not JSON",
   "integrations/geocoding-motis/provider.ts":
     "isMotisLocalReachable() reachability probe: reads only res.status, never the body",
-  "integrations/hotels/official.ts":
-    "manual per-hop redirect loop with SSRF re-check + binary HTML byte cap",
   "integrations/knowledge-tides-norway/index.ts": "Kartverket tide feeds are XML, not JSON",
+  "integrations/overlay-ambient-places/useAmbientPublication.ts":
+    'browser host API discovery: needs cache:"no-store" (not a FetchJsonOptions field) and its own request cancelled by unmount, API-origin change and each 60s refresh',
   "integrations/overlay-hiking/index.ts":
     "tile proxy: forwards the binary PNG tile body and status verbatim",
   "integrations/overlay-nautical/index.ts":
@@ -44,16 +44,12 @@ const RAW_FETCH_ALLOWLIST: Record<string, string> = {
     "RainViewer + OWM tile proxies: forward binary PNG tiles verbatim",
   "integrations/overlay-winter-sports/index.ts":
     "tile proxy: forwards the binary PNG tile body and status verbatim",
-  "integrations/restaurants/menu.ts":
-    "manual per-hop redirect loop with SSRF re-check + binary HTML byte cap",
   "integrations/search-nlp/index.ts":
     "Ollama generate/pull: streaming responses and multi-minute model downloads",
   "integrations/street-level-imagery-panoramax/index.ts":
     "tile proxy: forwards the binary MVT tile body, content-type and status verbatim",
   "integrations/street-level-imagery-mapillary/index.ts":
     "Mapillary vector tiles: forwards the binary tile body, content-type, and status verbatim",
-  "integrations/transit-otp/provider.ts":
-    "isOtpAvailable() reachability probe: reads only res.ok, never the body",
 };
 
 // Matches a bare, unqualified `fetch(` call — NOT `fetchJson(`,

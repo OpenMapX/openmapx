@@ -184,9 +184,10 @@ describe("OpenWeatherMap weather provider", () => {
     mockFetch.mockResolvedValueOnce(mockOk(forecastResponse()));
 
     const hourly = await getProvider().getHourlyForecast(COORDS, 9);
+    expect(hourly.source).toBe("openweathermap");
 
-    expect(hourly).toHaveLength(3);
-    expect(hourly[0]).toMatchObject({
+    expect(hourly.points).toHaveLength(3);
+    expect(hourly.points[0]).toMatchObject({
       time: "2025-03-10T10:00:00.000Z",
       temperature: 8,
       weatherCode: 3, // id 803 -> 3
@@ -196,9 +197,9 @@ describe("OpenWeatherMap weather provider", () => {
       cloudCover: 50,
       pressure: 1010,
     });
-    expect(hourly[0]?.windSpeed).toBeCloseTo(18, 5); // 5 m/s -> km/h
+    expect(hourly.points[0]?.windSpeed).toBeCloseTo(18, 5); // 5 m/s -> km/h
     // snow-only entry uses the 3h snow accumulation.
-    expect(hourly[2]?.precipitation).toBe(2);
+    expect(hourly.points[2]?.precipitation).toBe(2);
     expect(String(mockFetch.mock.calls[0]?.[0])).toContain("/forecast?");
   });
 
@@ -206,9 +207,10 @@ describe("OpenWeatherMap weather provider", () => {
     mockFetch.mockResolvedValueOnce(mockOk(forecastResponse()));
 
     const daily = await getProvider().getDailyForecast(COORDS, 7);
+    expect(daily.source).toBe("openweathermap");
 
-    expect(daily).toHaveLength(2);
-    const day1 = daily[0];
+    expect(daily.points).toHaveLength(2);
+    const day1 = daily.points[0];
     expect(day1?.date).toBe("2025-03-10");
     expect(day1?.temperatureMin).toBe(8);
     expect(day1?.temperatureMax).toBe(12);
@@ -217,7 +219,7 @@ describe("OpenWeatherMap weather provider", () => {
     // pop 0.4 (id 803) beats pop 0.1 (id 800) -> dominant code 803 -> WMO 3
     expect(day1?.weatherCode).toBe(3);
 
-    const day2 = daily[1];
+    const day2 = daily.points[1];
     expect(day2?.date).toBe("2025-03-11");
     expect(day2?.weatherCode).toBe(73); // id 601 -> 73
   });

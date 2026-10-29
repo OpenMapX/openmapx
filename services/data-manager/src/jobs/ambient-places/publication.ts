@@ -56,13 +56,16 @@ export async function insertAmbientFeatures(
       min_zoom: p.minZoom,
       tenant: p.tenant,
       sources: p.sources,
+      contributors: p.contributors ?? [],
+      field_contributors: p.fieldContributors ?? null,
+      source_lineage: p.sourceLineage ?? null,
       lng: p.coordinates[0],
       lat: p.coordinates[1],
     }));
     const result = await tx.unsafe(
-      `INSERT INTO ${target}(generation,id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,geom)
-      SELECT $1::UUID,r.id,r.gers_id,r.name,r.name_de,r.name_en,r.category,r.rank,r.min_zoom,r.tenant,r.sources,ST_AsEWKB(ST_Transform(ST_SetSRID(ST_MakePoint(r.lng,r.lat),4326),3857))
-      FROM jsonb_to_recordset($2::TEXT::JSONB) AS r(id TEXT,gers_id TEXT,name TEXT,name_de TEXT,name_en TEXT,category TEXT,rank INT,min_zoom SMALLINT,tenant BOOLEAN,sources TEXT,lng DOUBLE PRECISION,lat DOUBLE PRECISION)`,
+      `INSERT INTO ${target}(generation,id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,geom,contributors,field_contributors,source_lineage)
+      SELECT $1::UUID,r.id,r.gers_id,r.name,r.name_de,r.name_en,r.category,r.rank,r.min_zoom,r.tenant,r.sources,ST_AsEWKB(ST_Transform(ST_SetSRID(ST_MakePoint(r.lng,r.lat),4326),3857)),r.contributors,r.field_contributors,r.source_lineage
+      FROM jsonb_to_recordset($2::TEXT::JSONB) AS r(id TEXT,gers_id TEXT,name TEXT,name_de TEXT,name_en TEXT,category TEXT,rank INT,min_zoom SMALLINT,tenant BOOLEAN,sources TEXT,lng DOUBLE PRECISION,lat DOUBLE PRECISION,contributors JSONB,field_contributors JSONB,source_lineage JSONB)`,
       [generation, JSON.stringify(rows)],
     );
     if (result.count !== rows.length)

@@ -34,6 +34,7 @@ beforeEach(() => {
     showEffisBurnedAreas: true,
     showNoaaSmoke: false,
     showHeatmap: false,
+    showLowConfidence: false,
   });
   for (const sourceId of SOURCE_IDS) {
     useWildfireStore.getState().resetSourceStatus(sourceId);
@@ -96,7 +97,12 @@ describe("WildfireLegend source controls", () => {
       "aria-pressed",
       "false",
     );
+    expect(within(sensorGroup).getByRole("button", { name: "wildfires.slstr1km" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
     expect(hotspots.getByRole("switch", { name: "wildfires.heatmap" })).toBeTruthy();
+    expect(hotspots.getByRole("switch", { name: "wildfires.showLowConfidence" })).not.toBeChecked();
     expect(hotspots.getByText("wildfires.recencyScale")).toBeTruthy();
     expect(hotspots.getByText("wildfires.frpSize")).toBeTruthy();
 
@@ -119,8 +125,20 @@ describe("WildfireLegend source controls", () => {
     expect(hotspots.queryByText("wildfires.hotspotAge")).toBeNull();
     expect(hotspots.queryByText("wildfires.sensor")).toBeNull();
     expect(hotspots.queryByRole("switch", { name: "wildfires.heatmap" })).toBeNull();
+    expect(hotspots.queryByRole("switch", { name: "wildfires.showLowConfidence" })).toBeNull();
     expect(hotspots.queryByText("wildfires.recencyScale")).toBeNull();
     expect(hotspots.queryByText("wildfires.frpSize")).toBeNull();
+  });
+
+  it("shows low-confidence detections only when switched on, with their caveat", async () => {
+    render(<WildfireLegend />);
+    const hotspots = within(screen.getByTestId("wildfire-source-firms"));
+    expect(hotspots.queryByText("wildfires.lowConfidenceCaveat")).toBeNull();
+
+    await userEvent.click(hotspots.getByRole("switch", { name: "wildfires.showLowConfidence" }));
+
+    expect(useWildfireStore.getState().showLowConfidence).toBe(true);
+    expect(hotspots.getByText("wildfires.lowConfidenceCaveat")).toBeTruthy();
   });
 });
 
@@ -403,5 +421,9 @@ describe("WildfireLegend source semantics and status", () => {
     expect(en.wildfires.effisBurnedAreaCaveat).toMatch(/not an authoritative wildfire perimeter/i);
     expect(en.wildfires.noaaObservedSmokeCaveat).toMatch(/not a smoke forecast/i);
     expect(en.wildfires.noaaSmokeDensityCaveat).toMatch(/not a measured.*concentration/i);
+    for (const key of ["lowConfidence", "showLowConfidence", "lowConfidenceCaveat"] as const) {
+      expect(en.wildfires[key], key).toBeTruthy();
+      expect(de.wildfires[key], key).toBeTruthy();
+    }
   });
 });

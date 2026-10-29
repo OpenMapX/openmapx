@@ -1,3 +1,4 @@
+import type { ManeuverSign } from "@openmapx/core";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -40,6 +41,149 @@ describe("lowercaseFirstWord", () => {
 });
 
 describe("ManeuverBanner", () => {
+  function bannerWithSign(instruction: string, sign: ManeuverSign) {
+    const container = document.createElement("div");
+    container.innerHTML = renderToStaticMarkup(
+      <ManeuverBanner
+        instruction={instruction}
+        distanceToManeuver={9200}
+        maneuver={{ type: "turn", modifier: "right" }}
+        sign={sign}
+        country="DE"
+        units="metric"
+      />,
+    );
+    return container;
+  }
+
+  const exit20: ManeuverSign = {
+    exitNumbers: ["20"],
+    exitBranches: ["A 46"],
+    exitToward: ["Heinsberg", "Aachen", "Neuss-Holzheim"],
+    exitNames: ["Kreuz Neuss-West"],
+  };
+
+  it("shows the screenshot's destinations only in the full instruction, retaining badges", () => {
+    const instruction = "Take exit 20 onto A 46 toward Heinsberg/Aachen/Neuss-Holzheim.";
+    const container = bannerWithSign(instruction, exit20);
+    const strip = container.querySelector('[data-testid="exit-sign-strip"]');
+    expect(strip?.textContent).toBe("Exit 20A 46");
+    expect(strip?.querySelector('[aria-label="A 46"]')).not.toBeNull();
+    expect(container.textContent).toContain(instruction);
+    expect(container.textContent?.match(/Heinsberg/g)).toHaveLength(1);
+    expect(container.textContent).not.toContain("Kreuz Neuss-West");
+  });
+
+  it("preserves the screenshot's distinct interchange name and keep-left instruction", () => {
+    const instruction = "Keep left to take exit 11 onto A 44.";
+    const container = bannerWithSign(instruction, {
+      exitNumbers: ["11"],
+      exitBranches: ["A 44"],
+      exitNames: ["Kreuz Holz"],
+    });
+    expect(container.querySelector('[data-testid="exit-sign-strip"]')?.textContent).toContain(
+      "Kreuz Holz",
+    );
+    expect(container.textContent).toContain(instruction);
+  });
+
+  it.each([
+    "Take exit 20 toward HEINSBERG / AACHEN / NEUSS-HOLZHEIM.",
+    "Take exit 20 toward Heinsberg · Aachen · Neuss-Holzheim.",
+    "Take exit 20 toward Heinsberg; Aachen; Neuss-Holzheim.",
+    "Take exit 20 toward Heinsberg, Aachen, Neuss-Holzheim.",
+  ])("recognizes the same destinations with different case or separators: %s", (instruction) => {
+    const container = bannerWithSign(instruction, exit20);
+    expect(container.querySelector('[data-testid="exit-sign-strip"]')?.textContent).toBe(
+      "Exit 20A 46",
+    );
+    expect(container.textContent).toContain(instruction);
+  });
+
+  it("recognizes equivalent Unicode spelling and whitespace without changing the instruction", () => {
+    const instruction = "Take exit 20 toward KO\u0308LN / Bad\u00a0  Münstereifel.";
+    const container = bannerWithSign(instruction, {
+      ...exit20,
+      exitToward: ["Köln", "Bad Münstereifel"],
+    });
+    expect(container.querySelector('[data-testid="exit-sign-strip"]')?.textContent).toBe(
+      "Exit 20A 46",
+    );
+    expect(container.textContent).toContain(instruction);
+  });
+
+  it("keeps the whole headline when only some destinations are repeated", () => {
+    const container = bannerWithSign("Take exit 20 toward Heinsberg/Aachen.", exit20);
+    expect(container.querySelector('[data-testid="exit-sign-strip"]')?.textContent).toContain(
+      "Heinsberg · Aachen · Neuss-Holzheim",
+    );
+  });
+
+  it("recognizes a localized instruction and literal punctuation inside place names", () => {
+    const instruction = "Rechts halten Richtung Frankfurt (Oder)/Bad Münstereifel.";
+    const container = bannerWithSign(instruction, {
+      ...exit20,
+      exitToward: ["Frankfurt (Oder)", "Bad Münstereifel"],
+    });
+    expect(container.querySelector('[data-testid="exit-sign-strip"]')?.textContent).toBe(
+      "Exit 20A 46",
+    );
+    expect(container.textContent).toContain(instruction);
+  });
+
+  it.each([
+    ["Köln", "Koln"],
+    ["Frankfurt (Oder)", "Frankfurt XOderY"],
+  ])("keeps uncertain spelling differences: %s versus %s", (name, otherName) => {
+    const container = bannerWithSign(`Take exit 20 toward ${otherName}.`, {
+      ...exit20,
+      exitToward: [name],
+    });
+    expect(container.querySelector('[data-testid="exit-sign-strip"]')?.textContent).toContain(name);
+  });
+
+  it.each(["Aachener Straße", "Aachen-West", "Großaachen", "Aachen’s center"])(
+    "keeps a place name when the instruction only contains a longer name: %s",
+    (place) => {
+      const container = bannerWithSign(`Take exit 20 toward ${place}.`, {
+        ...exit20,
+        exitToward: ["Aachen"],
+      });
+      expect(container.querySelector('[data-testid="exit-sign-strip"]')?.textContent).toContain(
+        "Aachen",
+      );
+    },
+  );
+
+  it("keeps uncertain empty names and unmatched destinations beyond the three-town cap", () => {
+    for (const exitToward of [
+      ["Heinsberg", ""],
+      ["Heinsberg", "Aachen", "Neuss-Holzheim", "Köln"],
+    ]) {
+      const container = bannerWithSign("Take exit 20 toward Heinsberg/Aachen/Neuss-Holzheim.", {
+        ...exit20,
+        exitToward,
+      });
+      expect(container.querySelector('[data-testid="exit-sign-strip"]')?.textContent).toContain(
+        "Heinsberg",
+      );
+    }
+  });
+
+  it("deduplicates an exit-name fallback without exposing another interchange name", () => {
+    const container = bannerWithSign("Take exit 20 toward Kreuz Holz.", {
+      exitNumbers: ["20"],
+      exitNames: ["Kreuz Holz"],
+    });
+    expect(container.querySelector('[data-testid="exit-sign-strip"]')?.textContent).toBe("Exit 20");
+  });
+
+  it("omits an otherwise empty sign row when its headline repeats the instruction", () => {
+    const container = bannerWithSign("Keep right toward Aachen.", { exitToward: ["Aachen"] });
+    expect(container.querySelector('[data-testid="exit-sign-strip"]')).toBeNull();
+    expect(container.textContent).toContain("Keep right toward Aachen.");
+  });
+
   it("renders the instruction and distance to the maneuver", () => {
     const html = renderToStaticMarkup(
       <ManeuverBanner

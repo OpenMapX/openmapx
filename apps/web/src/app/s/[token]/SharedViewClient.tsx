@@ -14,10 +14,12 @@ import {
   makeId,
   useDirections,
 } from "@openmapx/core";
+import { savedPlaceContributors } from "@openmapx/core/saved-place-contributors";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useLocale, useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { SharedMapView } from "@/components/share/SharedMapView";
+import { AttributionDetailsGroup } from "@/components/ui/AttributionDetailsGroup";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { buildDirectionsDeepLinkUrl, buildLocationShareUrl } from "@/lib/deepLink";
 import { resolveListIcon } from "@/lib/listIcon";
@@ -57,6 +59,11 @@ export function SharedViewClient({ share }: { share: PublicShare | null }) {
     avoidHighways: routeShare?.route.avoidHighways ?? false,
     avoidTolls: routeShare?.route.avoidTolls ?? false,
     avoidFerries: routeShare?.route.avoidFerries ?? false,
+    bikeProfile: routeShare?.route.bikeProfile,
+    bikeHillPreference: routeShare?.route.bikeHillPreference,
+    bikePreferQuietRoads: routeShare?.route.bikePreferQuietRoads,
+    bikePreferSmoothSurfaces: routeShare?.route.bikePreferSmoothSurfaces,
+    bikeSpeedKmh: routeShare?.route.bikeSpeedKmh,
     lang: locale,
   });
   const activeRoute = directions.data?.routes[directions.data.activeRouteIndex ?? 0] ?? null;
@@ -94,15 +101,19 @@ export function SharedViewClient({ share }: { share: PublicShare | null }) {
             <SharedMapView
               points={
                 share.type === "list"
-                  ? share.places.map((p) => ({ lat: p.lat, lng: p.lng }))
+                  ? share.places.map((p) => ({
+                      lat: p.lat,
+                      lng: p.lng,
+                      fieldContributors: p.fieldContributors,
+                    }))
                   : share.route.waypoints.map((w) => ({ lat: w.lat, lng: w.lng }))
               }
-              routeGeometry={routeShare ? (activeRoute?.geometry ?? null) : null}
+              route={routeShare ? activeRoute : null}
             />
           </Box>
           <Box sx={{ flex: 1, overflowY: "auto", px: 2, py: 1.5 }}>
             {share.type === "list" ? (
-              <>
+              <AttributionDetailsGroup placement="footer" footerSx={{ px: 0 }}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   {resolveListIcon(share.icon, 24)}
                   <Typography variant="h6" sx={{ fontWeight: 600 }}>
@@ -127,6 +138,13 @@ export function SharedViewClient({ share }: { share: PublicShare | null }) {
                           {place.address}
                         </Typography>
                       )}
+                      <AttributionStrip
+                        attributions={savedPlaceContributors(place.fieldContributors, [
+                          "name",
+                          ...(place.address ? ["address" as const] : []),
+                        ])}
+                        variant="inline"
+                      />
                       {place.note && (
                         <Typography variant="body2" sx={{ fontStyle: "italic" }}>
                           {place.note}
@@ -138,7 +156,7 @@ export function SharedViewClient({ share }: { share: PublicShare | null }) {
                     </Button>
                   </Box>
                 ))}
-              </>
+              </AttributionDetailsGroup>
             ) : (
               routeShare && (
                 <SharedRouteContent
@@ -183,6 +201,11 @@ function SharedRouteContent({
       avoidHighways: share.route.avoidHighways,
       avoidTolls: share.route.avoidTolls,
       avoidFerries: share.route.avoidFerries,
+      bikeProfile: share.route.bikeProfile,
+      bikeHillPreference: share.route.bikeHillPreference,
+      bikePreferQuietRoads: share.route.bikePreferQuietRoads,
+      bikePreferSmoothSurfaces: share.route.bikePreferSmoothSurfaces,
+      bikeSpeedKmh: share.route.bikeSpeedKmh,
     }),
   );
   return (

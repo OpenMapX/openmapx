@@ -3,9 +3,9 @@
   "description": "Nahverkehrsdaten der Massachusetts Bay Transportation Authority",
   "dataSources": {
     "mbta": {
-      "purpose": "Boston-Metro-Nahverkehrsdaten — Haltestellen, Vorhersagen, Störungen, Fahrzeuge, Routen, Formen, Einrichtungen",
-      "dataSent": "Koordinaten (Breitengrad, Längengrad), Suchradius; Haltestellen-ID; Routen-ID; Zeitfenster",
-      "dataReceived": "JSON:API-Haltestellen, Echtzeit-Vorhersagen mit Verspätungen, Dienststörungen, Fahrzeugpositionen, Routenformen/-farben, Aufzug-/Rolltreppeneinrichtungen"
+      "purpose": "Nahverkehrsdaten im Großraum Boston — Haltestellen, Vorhersagen, Störungen, Fahrzeuge, Routeninformationen, Aufzüge und Rolltreppen",
+      "dataSent": "Koordinaten (Breitengrad, Längengrad), Suchradius; Haltestellen-ID; Routen-ID; konfigurierter API-Schlüssel in einem Anfrage-Header",
+      "dataReceived": "JSON:API-Haltestellen, Echtzeit-Vorhersagen mit Fahrplanzeiten und Verspätungen, Fahrtziele, Störungsmeldungen, Fahrzeugpositionen, Routenbezeichnungen/-farben, Aufzüge und Rolltreppen"
     }
   }
 }

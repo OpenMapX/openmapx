@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@/test";
@@ -6,7 +7,7 @@ import { StructuredSections } from "./StructuredSections";
 vi.mock("@/components/ui/HlsVideo", () => ({
   HlsVideo: ({ src }: { src: string }) => (
     <video src={src}>
-      <track kind="captions" src="" srcLang="en" label="Captions" />
+      <track kind="captions" src="https://player.test/captions" srcLang="en" label="Captions" />
     </video>
   ),
 }));
@@ -130,6 +131,25 @@ describe("StructuredSections", () => {
 
     expect(markup).toContain("2 of 4 available");
     expect(markup).toContain("5 minutes ago");
+  });
+
+  it("draws the road-weather and road-maintenance section icons", () => {
+    const markup = renderToStaticMarkup(
+      <StructuredSections
+        sections={[
+          { title: "Weather", type: "table", rows: [["Air", "1.0 °C"]], sectionIcon: "thermostat" },
+          {
+            title: "Work",
+            type: "table",
+            rows: [["Task", "Salting"]],
+            sectionIcon: "construction",
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain('data-testid="ThermostatIcon"');
+    expect(markup).toContain('data-testid="ConstructionIcon"');
   });
 
   it("renders the caption without a relative-time suffix when there is no captionTimestamp", () => {
@@ -536,3 +556,132 @@ describe("StructuredSections refreshing stills", () => {
     expect(img()).toBeNull();
   });
 });
+
+it("keeps image-specific branding adjacent to its own image even in a mixed detail", () => {
+  render(
+    <StructuredSections
+      sections={[
+        {
+          title: "Windy view",
+          type: "image",
+          imageUrl: "https://image.test/frame.jpg",
+          contributors: [
+            {
+              sourceId: "windy",
+              name: "Windy",
+              licensing: {
+                version: 1,
+                bindings: [
+                  {
+                    scope: "service",
+                    subject: "API",
+                    license: { kind: "unknown" },
+                    attribution: {
+                      placement: "visible",
+                      surfaces: ["image"],
+                      basis: "provider-terms",
+                      reviewedAt: "2026-10-14",
+                      evidenceUrls: ["https://api.windy.com/terms"],
+                      reason: "Adjacent continuous courtesy",
+                      compactText:
+                        'Webcams provided by <a href="https://windy.com/">windy.com</a> — <a href="https://windy.com/webcams/add">add a webcam</a>',
+                      prominence: "normal",
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ]}
+    />,
+  );
+  expect(screen.getByRole("link", { name: "add a webcam" })).toBeVisible();
+});
+
+it.each(["video", "iframe"] as const)(
+  "keeps image-surface service credit beside a consented %s",
+  (embedType) => {
+    render(
+      <StructuredSections
+        sections={[
+          {
+            title: "Camera player",
+            type: "embed",
+            collapsed: false,
+            embedType,
+            embedUrl: "https://player.test/embed",
+            contributors: [
+              {
+                sourceId: "camera-service",
+                name: "Provider",
+                licensing: {
+                  version: 1,
+                  bindings: [
+                    {
+                      scope: "service",
+                      subject: "API",
+                      license: { kind: "unknown" },
+                      attribution: {
+                        placement: "visible",
+                        surfaces: ["image"],
+                        basis: "provider-terms",
+                        reviewedAt: "2026-10-14",
+                        evidenceUrls: ["https://player.test/terms"],
+                        reason: "Adjacent provider",
+                        compactText: "Required player service credit",
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+    expect(screen.queryByText("Required player service credit")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Load media" }));
+    expect(screen.getByText("Required player service credit")).toBeVisible();
+  },
+);
+
+it.each(["image", "video", "iframe"] as const)(
+  "uses one disclosure for optional %s provenance",
+  (kind) => {
+    const contributors = [
+      {
+        sourceId: "optional",
+        name: "Optional image source",
+        licensing: licensingFromDeclaration(
+          "CC BY-SA 4.0",
+          "https://creativecommons.org/licenses/by-sa/4.0/",
+        ),
+      },
+    ];
+    render(
+      <StructuredSections
+        sections={[
+          kind === "image"
+            ? {
+                title: "Picture",
+                type: "image",
+                imageUrl: "https://image.test/frame",
+                contributors,
+              }
+            : {
+                title: "Player",
+                type: "embed",
+                collapsed: false,
+                embedType: kind,
+                embedUrl: "https://player.test/embed",
+                contributors,
+              },
+        ]}
+      />,
+    );
+    if (kind !== "image") fireEvent.click(screen.getByRole("button", { name: "Load media" }));
+    expect(screen.getAllByRole("button", { name: "attributions" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "showMore" })).toBeNull();
+  },
+);

@@ -1,5 +1,8 @@
+import { render, screen } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import en from "../../../../../../packages/i18n/locales/en.json";
 import { BrandMark } from "./BrandMark";
 
 describe("BrandMark", () => {
@@ -18,4 +21,25 @@ describe("BrandMark", () => {
     );
     expect(markup).not.toContain('src="https://api.entur.io');
   });
+});
+
+it("credits a catalogue-derived initial without borrowing the hidden logo receipt", () => {
+  const name = { sourceId: "name-suggestion-index", name: "Captured catalogue name" };
+  const hidden = { sourceId: "hidden-logo", name: "Hidden logo selection" };
+  render(
+    <NextIntlClientProvider locale="en" messages={en}>
+      <BrandMark
+        branding={{
+          name: "Catalogue brand",
+          logoUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Unknown.svg",
+          contributors: [name, hidden],
+          fieldContributors: { name: [name], logoUrl: [hidden] },
+        }}
+      />
+    </NextIntlClientProvider>,
+  );
+  expect(screen.getByText("C")).toBeVisible();
+  expect(screen.getByText("Captured catalogue name")).toBeVisible();
+  expect(screen.queryByRole("img")).toBeNull();
+  expect(screen.queryByText("Hidden logo selection")).toBeNull();
 });

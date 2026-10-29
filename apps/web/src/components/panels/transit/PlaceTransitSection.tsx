@@ -23,17 +23,19 @@ import {
   useLinkedTransitFacilities,
   useLinkedTransitRoutes,
 } from "@openmapx/core";
+import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import type { MergedDeparture, MergedRoute, TransportMode } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import type { KeyboardEvent } from "react";
 import { useMemo } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
-import { useAttributionFromHooks } from "@/integration-api/overlay/useAttributionFromHooks";
 import { BRAND } from "@/integration-api/runtime/theme";
+import { useNow } from "@/lib/useNow";
 import { AlertsBanner } from "./AlertsBanner";
 import { DepartureRow } from "./DepartureRow";
 import { FacilitiesSection } from "./FacilitiesSection";
 import { RouteBadge } from "./RouteBadge";
+import { TransitQueryNotice } from "./TransitDataStatus";
 
 const MAX_BADGES_PER_MODE = 8;
 
@@ -78,6 +80,7 @@ export function PlaceTransitSection({
 }: PlaceTransitSectionProps) {
   const t = useTranslations("transit");
   const tc = useTranslations("common");
+  const now = useNow(30_000);
   const routesQuery = useLinkedTransitRoutes(place);
   const { data: routes, isLoading } = routesQuery;
   const alertsQuery = useLinkedTransitAlerts(place);
@@ -86,12 +89,13 @@ export function PlaceTransitSection({
   const { data: departures, isLoading: depsLoading } = departuresQuery;
   const facilitiesQuery = useLinkedTransitFacilities(place);
   const { data: facilities } = facilitiesQuery;
-  const mergedAttributions = useAttributionFromHooks(
-    routesQuery,
-    alertsQuery,
-    departuresQuery,
-    facilitiesQuery,
-  );
+  // Hidden route counts are displayed data; the timetable preview shows only five rows.
+  const mergedAttributions = contributorsForRecords([
+    ...(routes ?? []),
+    ...(alerts ?? []),
+    ...(departures ?? []).slice(0, 5),
+    ...(facilities ?? []),
+  ]);
 
   const alertRouteIds = useMemo(
     () =>
@@ -104,7 +108,9 @@ export function PlaceTransitSection({
   );
 
   // Show skeleton while loading only if we haven't confirmed there are no routes
-  if (isLoading && !routes) {
+  const hasDepartures = Boolean(departures?.length);
+  const uncertainDepartures = departuresQuery.isError || departuresQuery.freshness?.isPartial;
+  if (isLoading && !routes && !hasDepartures && !uncertainDepartures) {
     return (
       <Box sx={{ px: 2, py: 1 }}>
         <Divider sx={{ mb: 1.5 }} />
@@ -119,9 +125,9 @@ export function PlaceTransitSection({
   }
 
   // No transit data for this place — render nothing
-  if (!routes || routes.length === 0) return null;
+  if (!routes?.length && !hasDepartures && !uncertainDepartures) return null;
 
-  const grouped = groupByMode(routes);
+  const grouped = groupByMode(routes ?? []);
 
   return (
     <Box sx={{ px: 2, py: 1 }}>
@@ -235,6 +241,14 @@ export function PlaceTransitSection({
           {t("nextDepartures")}
         </Typography>
       </Box>
+      <TransitQueryNotice
+        failed={departuresQuery.isError}
+        partial={departuresQuery.freshness?.isPartial}
+        onRetry={() => {
+          void departuresQuery.refetch();
+        }}
+        retrying={departuresQuery.isFetching}
+      />
       {depsLoading && !departures && (
         <Box sx={{ mt: 1 }}>
           {[0, 1, 2].map((i) => (
@@ -248,6 +262,9 @@ export function PlaceTransitSection({
             <DepartureRow
               key={`${dep.tripId}-${dep.scheduledAt}-${dep.route.id}`}
               departure={dep}
+              now={now}
+              freshness={departuresQuery.freshness}
+              queryFailed={departuresQuery.isError}
               onClick={
                 onOpenTripDetail ? (dep) => onOpenTripDetail(dep as MergedDeparture) : undefined
               }
@@ -255,7 +272,10 @@ export function PlaceTransitSection({
             />
           ))}
         </Box>
-      ) : !depsLoading && departures ? (
+      ) : !depsLoading &&
+        departures &&
+        !departuresQuery.isError &&
+        !departuresQuery.freshness?.isPartial ? (
         <Typography
           variant="caption"
           sx={{

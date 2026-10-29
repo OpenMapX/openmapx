@@ -1,0 +1,258 @@
+import ts from "typescript";
+
+// Used by the runtime bundler. Plain JavaScript, so the release plan job can
+// load it without a TypeScript loader.
+
+function typeOnlyImport(node) {
+  const clause = node.importClause;
+  if (!clause) return false;
+  if (clause.isTypeOnly) return true;
+  const bindings = clause.namedBindings;
+  return (
+    clause.name === undefined &&
+    bindings !== undefined &&
+    ts.isNamedImports(bindings) &&
+    bindings.elements.length > 0 &&
+    bindings.elements.every((element) => element.isTypeOnly)
+  );
+}
+
+function isImportMeta(node, property) {
+  return (
+    ts.isPropertyAccessExpression(node) &&
+    ts.isMetaProperty(node.expression) &&
+    node.expression.keywordToken === ts.SyntaxKind.ImportKeyword &&
+    node.name.text === property
+  );
+}
+
+/**
+ * The runtime facts of one module that a bundle can change:
+ * - `specifiers`: module specifiers it loads at runtime (type-only imports and
+ *   exports are erased, so they are not listed);
+ * - `computedImport`: an `import()` or `require()` whose specifier is not a
+ *   literal;
+ * - `assetUrls`: literal `new URL("…", import.meta.url)` references, with the
+ *   source range of the literal so a bundler can rewrite it;
+ * - `localRequires`: literal calls of a `require` created with
+ *   `createRequire(import.meta.url)`, with the source range of the literal;
+ * - `locationSensitive`: any other use of `import.meta` (`url`, `dirname`,
+ *   `resolve`, `main`, …) or of `__dirname`/`__filename`, which means
+ *   something different once the module is bundled;
+ * - `topLevelStatements`: code the module runs when it is imported that a
+ *   bundler may drop with an unused module: statements other than imports,
+ *   exports, declarations and directives (`"use client"`); `await`,
+ *   assignments, `++`/`--` and `delete` in initializers; `export default` of a
+ *   computed value; class static blocks and decorators; and namespaces with a
+ *   body. Plain calls in initializers, such as `z.object(…)`, are not listed.
+ */
+export function analyzeModule(file, text) {
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+  const specifiers = [];
+  const assetUrls = [];
+  const locationSensitive = [];
+  let computedImport = false;
+  const assetMetaNodes = new Set();
+  // `const require = createRequire(import.meta.url)`: the binding may only be
+  // called with literal specifiers, which a bundler can pin.
+  const localRequireBindings = new Set();
+  const bindingDeclarations = new Set();
+  const identifierUses = [];
+  const visit = (node) => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer &&
+      ts.isCallExpression(node.initializer) &&
+      node.initializer.arguments.length === 1 &&
+      isImportMeta(node.initializer.arguments[0], "url") &&
+      ((ts.isIdentifier(node.initializer.expression) &&
+        node.initializer.expression.text === "createRequire") ||
+        (ts.isPropertyAccessExpression(node.initializer.expression) &&
+          node.initializer.expression.name.text === "createRequire"))
+    ) {
+      localRequireBindings.add(node.name.text);
+      bindingDeclarations.add(node.name);
+      assetMetaNodes.add(node.initializer.arguments[0]);
+      // Other modules' calls of an exported binding are not analyzed.
+      const statement = node.parent?.parent;
+      if (
+        statement &&
+        ts.isVariableStatement(statement) &&
+        statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
+      ) {
+        const { line } = source.getLineAndCharacterOfPosition(node.getStart(source));
+        locationSensitive.push(
+          `exported ${node.name.text} from createRequire(import.meta.url) (line ${line + 1})`,
+        );
+      }
+    }
+    if (ts.isIdentifier(node)) identifierUses.push(node);
+    if (ts.isImportDeclaration(node)) {
+      if (!typeOnlyImport(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+        specifiers.push(node.moduleSpecifier.text);
+      }
+    } else if (ts.isExportDeclaration(node)) {
+      if (!node.isTypeOnly && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+        specifiers.push(node.moduleSpecifier.text);
+      }
+    } else if (ts.isCallExpression(node)) {
+      const isImport = node.expression.kind === ts.SyntaxKind.ImportKeyword;
+      const isRequire = ts.isIdentifier(node.expression) && node.expression.text === "require";
+      if (isImport || isRequire) {
+        const [argument] = node.arguments;
+        if (argument && ts.isStringLiteralLike(argument)) specifiers.push(argument.text);
+        else computedImport = true;
+      }
+    } else if (
+      ts.isNewExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "URL" &&
+      node.arguments?.length === 2 &&
+      isImportMeta(node.arguments[1], "url") &&
+      ts.isStringLiteralLike(node.arguments[0])
+    ) {
+      const literal = node.arguments[0];
+      assetUrls.push({
+        specifier: literal.text,
+        start: literal.getStart(source),
+        end: literal.getEnd(),
+      });
+      assetMetaNodes.add(node.arguments[1]);
+    } else if (
+      ts.isMetaProperty(node) &&
+      node.keywordToken === ts.SyntaxKind.ImportKeyword &&
+      !assetMetaNodes.has(node.parent)
+    ) {
+      // Every form other than the two above: `import.meta.dirname`,
+      // `import.meta["url"]`, `const { url } = import.meta`, …
+      const property =
+        ts.isPropertyAccessExpression(node.parent) && node.parent.expression === node
+          ? `import.meta.${node.parent.name.text}`
+          : "import.meta";
+      const { line } = source.getLineAndCharacterOfPosition(node.getStart(source));
+      locationSensitive.push(`${property} (line ${line + 1})`);
+    } else if (
+      ts.isIdentifier(node) &&
+      (node.text === "__dirname" || node.text === "__filename") &&
+      !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node)
+    ) {
+      const { line } = source.getLineAndCharacterOfPosition(node.getStart(source));
+      locationSensitive.push(`${node.text} (line ${line + 1})`);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  const topLevelStatements = [];
+  const report = (node) => {
+    const { line } = source.getLineAndCharacterOfPosition(node.getStart(source));
+    topLevelStatements.push(`line ${line + 1}`);
+  };
+  // Effects evaluated with the module, outside any function body.
+  const effectsIn = (node) => {
+    if (!node || ts.isFunctionLike(node) || ts.isClassLike(node)) return false;
+    if (
+      ts.isAwaitExpression(node) ||
+      ts.isDeleteExpression(node) ||
+      (ts.isForOfStatement(node) && node.awaitModifier) ||
+      ((ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+        (node.operator === ts.SyntaxKind.PlusPlusToken ||
+          node.operator === ts.SyntaxKind.MinusMinusToken)) ||
+      (ts.isBinaryExpression(node) &&
+        node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+        node.operatorToken.kind <= ts.SyntaxKind.LastAssignment)
+    ) {
+      return true;
+    }
+    return ts.forEachChild(node, effectsIn) ?? false;
+  };
+  const declaredValue = (node) => {
+    let value = node;
+    while (
+      ts.isParenthesizedExpression(value) ||
+      ts.isAsExpression(value) ||
+      ts.isSatisfiesExpression(value)
+    ) {
+      value = value.expression;
+    }
+    return (
+      ts.isFunctionLike(value) ||
+      ts.isClassLike(value) ||
+      ts.isIdentifier(value) ||
+      ts.isLiteralExpression(value) ||
+      ts.isObjectLiteralExpression(value) ||
+      ts.isArrayLiteralExpression(value)
+    );
+  };
+  for (const statement of source.statements) {
+    if (ts.isVariableStatement(statement)) {
+      if (statement.declarationList.declarations.some((d) => effectsIn(d.initializer))) {
+        report(statement);
+      }
+    } else if (ts.isExportAssignment(statement)) {
+      if (!declaredValue(statement.expression) || effectsIn(statement.expression)) {
+        report(statement);
+      }
+    } else if (ts.isClassDeclaration(statement)) {
+      if (
+        ts.getDecorators(statement)?.length ||
+        statement.members.some(
+          (member) =>
+            ts.isClassStaticBlockDeclaration(member) ||
+            ts.getDecorators(member)?.length ||
+            (ts.isPropertyDeclaration(member) &&
+              member.modifiers?.some((m) => m.kind === ts.SyntaxKind.StaticKeyword) &&
+              ts.forEachChild(member, effectsIn)),
+        )
+      ) {
+        report(statement);
+      }
+    } else if (ts.isModuleDeclaration(statement)) {
+      if (!statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword)) {
+        report(statement);
+      }
+    } else if (
+      !(
+        ts.isImportDeclaration(statement) ||
+        ts.isExportDeclaration(statement) ||
+        ts.isImportEqualsDeclaration(statement) ||
+        ts.isFunctionDeclaration(statement) ||
+        ts.isInterfaceDeclaration(statement) ||
+        ts.isTypeAliasDeclaration(statement) ||
+        ts.isEnumDeclaration(statement) ||
+        ts.isEmptyStatement(statement) ||
+        (ts.isExpressionStatement(statement) && ts.isStringLiteral(statement.expression))
+      )
+    ) {
+      report(statement);
+    }
+  }
+  const localRequires = [];
+  for (const identifier of identifierUses) {
+    if (!localRequireBindings.has(identifier.text) || bindingDeclarations.has(identifier)) continue;
+    const parent = identifier.parent;
+    if (ts.isPropertyAccessExpression(parent) && parent.name === identifier) continue;
+    const [argument] =
+      ts.isCallExpression(parent) && parent.expression === identifier ? parent.arguments : [];
+    if (argument && ts.isStringLiteralLike(argument) && parent.arguments.length === 1) {
+      localRequires.push({
+        specifier: argument.text,
+        start: argument.getStart(source),
+        end: argument.getEnd(),
+      });
+    } else {
+      const { line } = source.getLineAndCharacterOfPosition(identifier.getStart(source));
+      locationSensitive.push(
+        `${identifier.text} from createRequire(import.meta.url) is used other than with a literal specifier (line ${line + 1})`,
+      );
+    }
+  }
+  return {
+    specifiers,
+    computedImport,
+    assetUrls,
+    localRequires,
+    locationSensitive,
+    topLevelStatements,
+  };
+}

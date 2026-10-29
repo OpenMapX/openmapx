@@ -1,11 +1,13 @@
+import { useRideStore } from "@openmapx/core";
 import { en } from "@openmapx/i18n";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { enterDateTime } from "@/test/dateTimeField";
 
-let providers = {
+let providers: import("@openmapx/core").RideProvidersResponse = {
   providers: [
     {
       id: "uber",
@@ -254,4 +256,83 @@ describe("RidePanel", () => {
     await userEvent.click(await screen.findByText("Bolt"));
     expect(await screen.findByText(/cannot carry your pickup/i)).not.toBeNull();
   });
+  it("does not render a failed quote envelope's static supplier notice", () => {
+    comparison();
+    quoteResults = [
+      {
+        providerId: "uber",
+        quotes: [],
+        attributions: [{ sourceId: "uber", name: "FAILED QUOTE SUPPLIER" }],
+      },
+    ];
+    renderPanel();
+    expect(screen.queryByText("FAILED QUOTE SUPPLIER")).toBeNull();
+  });
+
+  it("renders only the displayed quotes' canonical notices", () => {
+    comparison();
+    quoteResults = [
+      {
+        providerId: "uber",
+        quotes: [
+          {
+            ...quote("Quoted ride", 12),
+            contributors: [{ sourceId: "served", name: "Served quote notice" }],
+          },
+        ],
+        attributions: [{ sourceId: "unused", name: "Unused envelope notice" }],
+      },
+    ];
+    renderPanel();
+    expect(screen.getByText("Served quote notice")).toBeInTheDocument();
+    expect(screen.queryByText("Unused envelope notice")).toBeNull();
+  });
+});
+
+it("sets and clears a pre-booked pickup time", async () => {
+  providers = {
+    ...providers,
+    providers: [
+      {
+        ...providers.providers[0],
+        capabilities: { deepLink: true, quote: true, booking: false, tracking: false },
+        availability: {
+          available: true,
+          coverageChecked: true,
+          products: [],
+          bookingRules: { bookingType: 1, priorNoticeMinutesMin: 30 },
+          contributors: [],
+        },
+      },
+    ],
+  };
+  renderPanel();
+  await enterDateTime(screen.getByRole("group", { name: "Pick up at" }), "2026-07-04T18:05");
+  expect(useRideStore.getState().pickupAt).toBe("2026-07-04T18:05");
+
+  await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+  expect(useRideStore.getState().pickupAt).toBeNull();
+});
+
+it("credits displayed availability rules when quote acquisition returned no quotes", () => {
+  providers = {
+    ...providers,
+    providers: [
+      {
+        ...providers.providers[0],
+        capabilities: { deepLink: true, quote: true, booking: false, tracking: false },
+        availability: {
+          available: true,
+          coverageChecked: true,
+          products: [],
+          bookingRules: { bookingType: 1, priorNoticeMinutesMin: 30 },
+          contributors: [{ sourceId: "rules", name: "Availability rules supplier" }],
+        },
+      },
+    ],
+  };
+  quoteResults = [{ providerId: "uber", quotes: [], attributions: [] }];
+  renderPanel();
+  expect(screen.getByText(/30 minutes/)).toBeInTheDocument();
+  expect(screen.getByText(/Availability rules supplier/)).toBeInTheDocument();
 });

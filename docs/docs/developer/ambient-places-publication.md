@@ -10,8 +10,34 @@ one published planet, Germany or custom regional generation. Source ingestion re
 in the existing OSM search index and Overture workflows. Newly built OSM snapshots
 retain allowlisted named POIs even when they have no alias/code/acronym, without
 inventing lexical terms. Coverage, policy and collision limits remain distinct.
-Global publication requires a complete format 2 planet snapshot; it is explicit
-operator work. No AllThePlaces ingestion or geocoder rewrite is introduced.
+Global publication requires a complete format 2 planet snapshot and explicit
+operator preparation. AllThePlaces ingestion is not part of this pipeline.
+
+Use the operator workflow below to publish or recover a generation. The dated
+acceptance sections record bounded regional and synthetic runs; they do not
+qualify a full Germany/planet deployment or current source completeness.
+
+| Change                                                                  | Owning source                                                        |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Policy, identity, format, and tile budgets                              | `packages/core/src/ambient-places.ts` and `ambient-places-region.ts` |
+| Writer locks, country transaction, planet checkpoints, and activation   | `services/data-manager/src/jobs/ambient-places/`                     |
+| Public/admin routes, auth, cache headers, and read concurrency          | `apps/api/src/routes/ambient-places.ts`                              |
+| Manifest polling, teardown, rendered attribution, and label suppression | `integrations/overlay-ambient-places/`                               |
+
+Keep these boundaries aligned when changing publication format or lifecycle.
+
+## Client behavior
+
+The web client treats a usable publication as ordinary map content. The built-in
+integration declares a map layer, but no layer-selector entry, legend or overlay
+state; its map host mounts it whenever integration metadata enables it. One
+component-owned hook discovers the manifest every 60 seconds, validates
+versions 1 and 2, and yields a publication only when it is enabled and every
+source is within the 90-day freshness limit. Successful absent, disabled or stale
+replies clear the content. A failed refresh keeps only a still-fresh generation
+that this mounted component already discovered from the same API origin; unmount
+or an origin change cancels the request and releases handlers, identities,
+sources and credits. A late reply is ignored, and a remount rediscovers.
 
 ## Operator workflow and public contract
 
@@ -43,6 +69,14 @@ operator work. No AllThePlaces ingestion or geocoder rewrite is introduced.
 5. Use **Disable** for discovery fallback, **Enable** to resume, or **Roll back**
    to switch to the predecessor. Rollback can be repeated to switch back.
 
+If a build fails, inspect the source readiness, freshness, region, and free-space
+diagnostics before retrying. A `409` means an operation lock is busy; wait for
+its owner rather than starting a second writer. Planet interruptions expose a
+durable candidate: use the resume/discard workflow below. Regional/Germany
+failures roll back their transaction and require a new build. Disable and
+rollback affect discovery; cached generation tiles remain readable for their
+lease.
+
 The authenticated admin proxy routes are
 `/api/admin/ambient-places/{status,build,resume,discard,enabled,rollback}`. Their data-manager
 counterparts omit `/api/admin`. Mutations use the existing administrator guard,
@@ -52,12 +86,54 @@ clients read `/api/ambient-places/manifest` (`no-store`), then
 valid tiles are immutable for seven days. Unknown generations return `404`.
 
 The public manifest contains only generation/policy version, publication time,
-region bounds/name, optional `coverage: "germany"` or `"planet"`, counts and source release provenance. Source filesystem
-paths/fingerprints, contributor record IDs and raw ingest state are not exposed.
+region bounds/name, optional `coverage: "germany"` or `"planet"`, counts, attribution precision and source release provenance. Source filesystem
+paths/fingerprints and raw ingest state are not exposed by discovery. Format 2
+tiles retain public Overture source properties and release, including upstream
+record identities, alongside captured attribution snapshots.
 Source publication time means local snapshot publication, not real-world
 verification of every business. The UI identifies OSM-only versus combined
 coverage. Filters, missing source coverage, ranking and collisions remain visible
 limits; the layer is not a complete business directory.
+
+### Captured contribution format
+
+New publications use manifest/feature format `2`. The Overture pull captures
+trusted built-in source notices before acquisition, stores that catalogue in its
+version 2 pull contract, and retains it as `sources_catalogue` with the ingested
+release. Field receipts apply Overture JSON Pointer inheritance to the scalar
+actually retained: a specific property overrides its ancestors, including the
+whole-feature root. A phone-only supplier does not become a label supplier.
+Localized names have separate receipts. OSM names, position and category remain
+authoritative after conflation; only retained Overture gaps and GERS identity
+add their corresponding receipts.
+
+Format 2 feature properties include `format_version`, `_mapAttributions`
+(canonical JSON receipt array), `field_contributors` (JSON field receipt map),
+and `source_lineage` (public source properties plus release). Receipts retain
+their captured wording after registry reloads. A captured empty array is
+authoritative. Old snapshots without a producer catalogue can only establish
+the known Overture aggregate, never historical upstream publisher notices.
+The manifest's `attributionPrecision` and the operator status `attribution`
+diagnostic distinguish these legacy records from captured fields and identify
+when a fresh pull/ingest/publication is needed.
+
+The web layer selects the current locale's actual placed label receipts and
+uses the shared rendered-feature tracker. Unloaded, offscreen, collision-hidden,
+filtered and below-zoom features produce no ambient credit. A matched basemap
+feature can carry ambient clickable label/GERS metadata after its duplicate
+ambient label is suppressed; that metadata is credited only while the matched
+basemap feature is rendered. The basemap retains its own geometry attribution.
+
+Existing format 1 generations keep the previous MVT attribute order, encoder
+and byte budget for their lease-addressable URLs. The storage migration adds
+nullable receipt columns without rewriting these tiles. Format 2 separately
+accounts for each distinct MVT metadata string and per-feature overhead within
+the unchanged 256-feature/128-KiB limits. Planet source signatures include the
+ambient format, and pre-format candidates must be discarded and rebuilt.
+Upgrade the API and web reader before publishing format 2. Capacity preflights
+allow 8 KiB per ambient input row for receipts and lineage; Overture ingest adds
+the captured catalogue's raw row bytes plus WAL headroom. These are admission
+allowances, not measured country or planet storage claims.
 
 The Germany build body is:
 
@@ -86,7 +162,7 @@ authoritative even across envelope boundaries. Source-ID keysets preserve bigint
 identity without country-sized arrays or geographic seam deduplication.
 
 The operations agent inspects free space on the actual PostGIS volume before a
-country build. Admission requires a minimum 1 GiB working allowance, or 2 KiB per
+country build. Admission requires a minimum 1 GiB working allowance, or 8 KiB per
 input source record if larger, plus a 5 GiB reserve. The reserve is checked every
 25 batches and again before activation. These are conservative admission guards,
 not measured Germany sizing or a guarantee against competing disk usage. Budget
@@ -213,7 +289,7 @@ seven-day immutable lifetime. Keep discovery/status and errors uncached; existin
 in the cache key and preserve binary content type. Changing sources creates new
 URLs. Disable changes discovery within one minute; rollback restores a retained
 URL. Neither action can revoke a tile already held by a client/CDN. Preserve the
-API's per-origin eight pending reads, two-second SQL timeout, zooms 13–18,
+API's per-origin eight pending reads, two-second SQL timeout, zooms 13 to 18,
 256-feature and 128-KiB budgets. Origin scaling increases aggregate database work,
 so size connection limits and monitor cache misses, timeout/429 rate and query
 latency instead of multiplying API processes without a database budget.
@@ -241,9 +317,9 @@ for `R` retained published generations and one candidate, plus all other databas
 budgets above. At most eight generation slots exist, including a candidate;
 leases may prevent another build. A weekly publication cadence generally retains
 fewer versions than daily builds. The conservative publisher admission allowance
-is **2 KiB per remaining raw source row**, minimum 1 GiB, plus 20 GiB reserve,
+is **8 KiB per remaining raw source row**, minimum 1 GiB, plus 20 GiB reserve,
 checked before staging, every committed page and before activation. For example,
-200 million raw rows require about 381.5 GiB working allowance plus 20 GiB at the
+200 million raw rows require about 1525.9 GiB working allowance plus 20 GiB at the
 start; this is a guard, not an estimate of final storage or peak WAL. Other writers
 can still exhaust space after admission, in which case the candidate fails safely.
 
@@ -252,7 +328,7 @@ can still exhaust space after admission, in which case the candidate fails safel
 | `AMBIENT_PLANET_MAX_PLACES`          |    `250000000` | Positive output guard; increase only after sizing the target deployment.                                                   |
 | `AMBIENT_PLANET_RESERVE_BYTES`       |  `21474836480` | Positive PostgreSQL-volume safety reserve (20 GiB).                                                                        |
 | `OVERTURE_DUCKDB_MEMORY_MB`          |         `2048` | Buffer-manager limit; total RSS can exceed it.                                                                             |
-| `OVERTURE_DUCKDB_THREADS`            |            `4` | Preparation parallelism, validated 1–64.                                                                                   |
+| `OVERTURE_DUCKDB_THREADS`            |            `4` | Preparation parallelism, validated 1 to 64.                                                                                |
 | `OVERTURE_DUCKDB_TEMP_MB`            |        `32768` | Maximum per-process spill (32 GiB); allocated in a unique directory under `/data/overture/duckdb-tmp`, removed after exit. |
 | `OSMIUM_PLANET_INDEX_ESTIMATE_BYTES` | `137438953472` | File-backed node-index admission allowance (128 GiB), plus 5 GiB free on the source volume; adjust for the selected PBF.   |
 
@@ -367,7 +443,7 @@ retain their existing coordinate fallback.
   style localization pass accepts colon and underscore language fields; at most 120
   Unicode characters. No inferred opening hours, ratings or popularity.
 - Ranking (policy 2): essential destinations at zoom 13; corroborated cathedral/
-  basilica or heritage levels 1–3 destinations at 14; other registered cultural
+  basilica or heritage levels 1 to 3 destinations at 14; other registered cultural
   landmarks and everyday businesses at 15; other places at 16. Cultural landmarks
   require a valid Wikidata/language-prefixed Wikipedia identity plus registered
   heritage or explicit cathedral/basilica designation. Ordinary worship buildings
@@ -377,7 +453,7 @@ retain their existing coordinate fallback.
 - Tenant handling: interior/node/building-part non-ground records stay at 18.
   A corroborated whole cultural-building footprint is a building destination;
   its level metadata does not imply an interior tenant or an entrance claim.
-- MVT: zooms 13–18, at most 256 features, 128 KiB, indexed geometry intersection,
+- MVT: zooms 13 to 18, at most 256 features, 128 KiB, indexed geometry intersection,
   a 2-second SQL timeout and eight pending tile requests per API process. A
   conservative UTF-8 budget removes the lowest-ranked tail before encoding; a
   final byte guard prevents an oversized response. Invalid UUID/XYZ never reaches
@@ -429,7 +505,7 @@ generation URLs or these limits. PMTiles is a good candidate for a later regiona
 export/offline package; this change does not promise that feature.
 
 A local disposable PostGIS 18 / PostGIS 3.6 fixture check on 2026-10-07 used 26
-explicitly synthetic Aachen places, 60 occupied cells over zooms 13–18 and
+explicitly synthetic Aachen places, 60 occupied cells over zooms 13 to 18 and
 identical decoded MVT bytes. The same bounded query was served through the
 repository-pinned Martin image and an archive converted/verified with the official
 PMTiles CLI 1.31.2. The archive was 16,451 bytes; exporting its 60 source tiles took
@@ -492,58 +568,29 @@ claim production Aachen coverage.
 
 ## Real regional acceptance: October 8–9, 2026
 
-The follow-up uses dated, public Geofabrik Düsseldorf/Cologne October 6 PBFs,
-merged and cropped to `[6.58,50.89,7.07,51.31]`. The existing extractor/index builder
-produces 14,232 unique indexed places, then policy 2 publishes 13,454 places.
-Uncategorized indexed roads/buildings remain searchable but are excluded from the
-ambient destination layer; the real Industriestraße road-segment case is a regression
-control.
-The cropped source fingerprint is
+The [aggregate acceptance evidence](./ambient-places-acceptance.json) retains
+source hashes, exact code/runtime settings, generation identities, camera
+outcomes, screenshot checksums, and successful and failed measurements. Selected
+before/after and iOS screenshots are attached to PR #436. These are historical
+local acceptance runs in disposable PostgreSQL 18/PostGIS 3.6, not production
+coverage or capacity evidence. Later format-2 code must retain the captured
+attribution contracts described above; these earlier generations used format 1.
+
+Public Geofabrik Düsseldorf/Cologne October 6 PBFs were merged and cropped to
+`[6.58,50.89,7.07,51.31]`. The extractor produced 14,232 unique indexed places;
+policy 2 published 13,454. The cropped source fingerprint is
 `sha256:c18cc77ed3493aa186bd7659fee4a9b028fbc479c2a8a90f219a3b2d33824d75`.
-The source snapshot's latest object timestamp is `2026-10-06T20:09:52Z`;
-the publication timestamp is a separate pipeline timestamp.
+Its latest object timestamp is `2026-10-06T20:09:52Z`, separate from the local
+publication timestamp. The initial run was OSM-only. Uncategorised roads and
+buildings remained searchable but were excluded from ambient destinations;
+Industriestraße is the regression control.
 
-The original Rhine run has **OSM-only coverage**; the subsequent combined Neuss
-run below verifies actual Overture coverage. For the original run, optional Overture/confidence/conflation and
-published-GERS detail resolution are covered by the PostGIS regression fixtures,
-not claimed as a live Overture extract. Single-name source features without aliases
-or codes can be absent from the existing alias/code-focused search index. The
-committed landmark corpus distinguishes source presence from index eligibility;
-this change preserves that existing ingestion/geocoder behavior.
-
-Actual Quirinus-Münster (`osm:way/28562993`) and Cologne Cathedral
-(`osm:way/4532022`) publish at zoom 14 through corroborated source tags.
-Names still compete for available space: eligibility does not guarantee a label
-in every camera. Six candidate anchors allow a corroborated landmark name to use nearby
-whitespace while retaining collision avoidance and road/transit priority. Ordinary
-destinations retain one label position to bound placement work and crowding.
-The selected/category/basemap suppression filter is repaired per live layer after
-paint-only theme recreation as well as full style replacement. OSM-only publication
-credits use the actual OSM source; combined publications retain the supported
-Overture contributor notices. The overlay registers these source IDs through
-the shared `useSourceAttributions` API and clears its credits when hidden.
-
-The actual extractor-to-index-to-publication run also caught JSONB-array tag
-serialization: serialized strings had been stored as JSON strings rather than
-objects. The index writer now casts text values once to JSONB objects, and ambient
-policy safely reads legacy serialized objects. Private/closed legacy tags therefore
-remain enforceable without a global migration.
-
-The [aggregate acceptance evidence](https://github.com/OpenMapX/openmapx/blob/main/docs/docs/developer/ambient-places-acceptance.json) records
-source hashes, runtime/settings, measured targets, fixed camera outcomes and
-external screenshot checksums. It contains no screenshot binaries or credentials.
-Selected real before/after and iOS screenshots are attached directly to PR #436.
-The earlier static views, images, tile reads and frame measurements use generation
-`59337707-c217-4398-966c-3c21ac8237b1`, containing the same 13,454 places and
-checksummed source. Earlier generations and measurements remain explicitly
-identified in the artifact. T3 preview handled initial static/frame QA; after
-`preview_open` explicitly reported unavailable, isolated foreground system Chrome
-completed desktop/phone-CSS frames, the static matrix and desktop/admin images.
-Native iOS screenshots and frames use Safari through the T3 device tools.
-No headless frame measurements are claimed in that run.
-The branch then integrated newer main and Next 16.3.8. Those historical captures
-retain their exact source checksums and runtime. The cartographic follow-up below
-identifies the subsequently changed renderer separately.
+The initial static/tile/frame evidence uses generation
+`59337707-c217-4398-966c-3c21ac8237b1`. Quirinus-Münster
+(`osm:way/28562993`) and Cologne Cathedral (`osm:way/4532022`) had source-backed
+zoom-14 eligibility. Eligibility did not guarantee collision placement at each
+camera. The committed landmark corpus separates source presence from index
+eligibility, including named features missing from older alias-focused indexes.
 
 | Regional check                           | Declared limit |   Observed |
 | ---------------------------------------- | -------------: | ---------: |
@@ -554,53 +601,48 @@ identifies the subsequently changed renderer separately.
 | Representative tile features / bytes     |  256 / 131,072 | 83 / 6,881 |
 | Explicit IDs duplicated in decoded tiles |              0 |          0 |
 
-A concurrent build/test run reached warm p95 127.89 ms, exceeding the 100 ms
-budget; those samples remain in the aggregate as a diagnostic. The table is the
-subsequent quiet repeat on the same generation, without those jobs.
+The table records the quiet repeat. A concurrent build/test diagnostic reached
+127.89 ms warm p95 and missed its budget; it remains in the artifact. These reads
+measured the final EWKB/functional-GiST store, without restarted-cold database,
+remote network/CDN, or regional PMTiles measurements. Replacement publication
+preserved old tile bytes; forced candidate failure retained discovery; rollback
+restored the old pointer; disable hid discovery while leased tiles remained readable.
 
-These reads measure the final EWKB/functional-GiST store in disposable PostGIS
-18/PostGIS 3.6. They do not measure a restarted cold database, remote network/CDN,
-a full regional PMTiles archive, or deployment capacity. On the same real source,
-replacement publication preserved old bytes; forced candidate failure retained
-active discovery; rollback restored the old pointer; disable hid discovery while
-already published tile bytes remained readable.
-
-Reproduce extraction/publication with the existing commands against a disposable
-database, using the source SHA-256 and bbox above:
+The source preparation used:
 
 ```sh
 osmium merge duesseldorf-regbez-261006.osm.pbf koeln-regbez-261006.osm.pbf -o merged.pbf
 osmium extract -b 6.58,50.89,7.07,51.31 merged.pbf -o rhine.osm.pbf
-# Register the cropped PBF in the data-manager StateStore, then run its existing
-# buildOsmSearchIndex and buildAmbientPlaces jobs against the disposable database.
-OPENMAPX_RUN_DATABASE_TESTS=1 pnpm exec vitest run services/data-manager/__tests__/ambient-places
 ```
 
-Osmium's complete-way crop can include object geometries outside the bbox;
-publication enforces the requested region bounds. The test-only corpus contains
-selected public policy/name tags with ODbL credit, not contact or contributor data.
-The source PBFs omit user/UID/changeset metadata.
+Reproducing that acceptance run also requires registering the cropped PBF in a
+disposable data-manager StateStore, then running the existing index/publication
+jobs. The commands above alone do not create a ready snapshot. Complete-way
+cropping can include geometries beyond the bbox; publication enforces its bounds.
+The public-tag test corpus retains ODbL attribution and excludes contact and
+contributor data. The source PBFs omit user/UID/changeset metadata.
 
-The fixed-camera matrix contains 45 off/on pairs at zooms 14–18: Neuss, Cologne,
-sparse Zons, an empty rural cell, and no-region Aachen/Berlin/Monschau controls,
-plus owned-dark English Neuss and German Cologne. Each pair has identical road
-name lists and basemap POI identities (source, source layer, feature ID, rendered
-layer, coordinates and name); decoded tiles and visible ambient label lists
-have no duplicate explicit IDs. A native pointer tap opens Quirinus-Münster with
-canonical ID `osm:way/28562993`; overlapping category and DOM markers retain
-click priority. Selected-label suppression survives both paint-only
-theme recreation and full style replacement. English/German labels retain supplied colon or underscore language properties
-after the real map localizer runs, then fall back conservatively to the source name. External enrichment is disabled in the QA fixture.
-The actual admin component shows the real generation, policy 2, source coverage
-and the intentionally induced failed-build notice while retaining the active map.
-Its rendering fixture bypasses outer production authentication; API authorization
-is verified separately by regression tests.
+For current database regressions, Docker is required; the fixtures start their
+own PostGIS containers:
 
-Five foreground five-second camera sweeps per state alternate Neuss/Cologne at
-zoom 15 → 15.7 → 15 using two 2.5-second `MapLibre.easeTo` legs. RAF observes frame
-intervals without forcing a camera update on each frame. Nearest-rank p95 is
-computed over the pooled intervals per state; individual sweep p95s are also
-recorded in the aggregate evidence. No builds/tests ran concurrently.
+```sh
+OPENMAPX_RUN_DATABASE_TESTS=1 pnpm exec vitest run --project node --maxWorkers=1 services/data-manager/__tests__/ambient-places
+```
+
+The 45 off/on camera pairs covered zooms 14 to 18 in Neuss, Cologne, sparse Zons,
+an empty rural cell, and outside-region Aachen/Berlin/Monschau controls, plus
+English/German and light/dark states. Road-name lists and basemap POI identities
+matched; decoded tiles and ambient labels had no duplicate explicit IDs. A tap
+selected Quirinus-Münster's canonical ID. Category/DOM markers kept click priority,
+and selected-label suppression survived paint-only theme recreation and full
+style replacement. External enrichment was disabled. The real admin component
+showed active state and an induced failed-build notice, with its outer auth
+boundary bypassed only in the fixture; API authorization had separate regressions.
+
+Five foreground five-second sweeps per state alternated Neuss/Cologne at
+zoom 15 to 15.7 and back using two 2.5-second `easeTo` legs. P95 used pooled RAF
+intervals; per-sweep samples remain in the artifact. No builds/tests ran during
+the quiet repeats.
 
 | Production-asset viewport                | Off pooled p95 | On pooled p95 | On >50 ms |
 | ---------------------------------------- | -------------: | ------------: | --------: |
@@ -608,80 +650,56 @@ recorded in the aggregate evidence. No builds/tests ran concurrently.
 | Same Chrome, phone CSS 430 × 932         |         9.2 ms |        9.2 ms |        0% |
 | iPhone 18 Pro simulator Safari, isolated |          33 ms |         33 ms |        0% |
 
-The final isolated run pauses the device preview stream and removes our second
-QA WebGL map. Six collision-placement candidates retain the actual Quirinus name
-where four/five fail, while bounding work below the original eight-candidate
-policy. The preceding same-generation eight-candidate run measured 32/34 ms off/on
-and missed the on target; its samples and code hashes remain in the artifact.
-Earlier streamed 33/34 ms and shared-load 35/36 ms samples remain diagnostic
-evidence. No unrelated host process was stopped.
-
-The unchanged target is pooled p95 ≤33.4 ms and intervals >50 ms ≤5%.
-The final six-candidate isolated simulator run meets it; individual on sweeps
-still reach 34 ms. This is a qualified local simulator result, not a claim that
-every sweep or physical device passes. An earlier forced-`jumpTo`-every-RAF stress
-workload missed mobile targets in both states; those raw samples remain external
-and are not relabeled as normal app camera behavior. Physical-device thermal/battery
-behavior and deployed network/CDN latency remain rollout checks.
+The target was pooled p95 ≤33.4 ms and intervals >50 ms ≤5%. The isolated
+six-anchor simulator repeat met it; individual on sweeps reached 34 ms. Earlier
+eight-anchor, streamed, and shared-load runs missed or approached the target and
+remain diagnostics. Forced `jumpTo` on every RAF also missed in both states and
+was not treated as normal camera behavior. Background-tab samples were excluded
+from frame acceptance because throttling changed the workload. These results do
+not establish physical-device battery/thermal or deployed-network performance.
 
 ## October 9 cartographic correction
 
-The separate teal dots and sideways labels did not match the owned map style.
-The correction above borrows the active style's POI badges and typography instead.
-It republishes the same cropped source into disposable generation
-`d90ce37e-f37a-49ba-8143-97a18674fbd5` (13,454 places, unchanged policy 2), and
-renders the before/after styling states against that same generation and camera.
-The captures use production Next 16.3.8 and MapLibre 6.10.0. T3's native Electron
-preview supplies desktop/light/dark verification; Safari on the iPhone 18 Pro
-simulator supplies mobile screenshots and its own frame samples.
+The follow-up replaced teal dots and sideways labels with active-basemap POI
+badges and typography. It used the same cropped source in generation
+`d90ce37e-f37a-49ba-8143-97a18674fbd5` (13,454 places, policy 2), production
+Next 16.3.8 and MapLibre 6.10.0. Electron supplied desktop light/dark captures;
+Safari on the iPhone 18 Pro simulator supplied native-browser captures and frames.
 
-The repeated 45 camera pairs at phone CSS dimensions 430 × 932 preserve every
-basemap POI identity and road-name list, with zero duplicate ambient IDs. The
-zoom-16 Neuss camera retains Quirinus-Münster, including in the native simulator
-view. An actual pointer tap on its placed name opens `osm:way/28562993` and hides
-its ambient copy. Style replacement refreshes category colors, fonts and halos.
-Before/after captures remain PR attachments outside git; their SHA-256, exact
-code hashes and all frame samples are qualified separately in
-`visualCartographyFollowup` in the aggregate artifact. Earlier dot-renderer
-measurements above remain historical evidence.
+The 45 phone-CSS camera pairs preserved basemap POI identities and road-name
+lists, with zero duplicate ambient IDs. Quirinus-Münster stayed visible at the
+fixed zoom-16 view and tapping selected `osm:way/28562993`. Style replacement
+refreshed badges, colours, fonts, and halos. `visualCartographyFollowup` in the
+aggregate artifact retains screenshots/checksums, source hashes, and every run.
 
-Five five-second desktop sweeps per state have pooled frame-interval p95 of
-10.1/10.1 ms off/on. The initial native simulator run measured 36/34 ms and
-missed the unchanged 33.4 ms target in both states. An isolated repeat measured
-33/33 ms, with no on-state intervals above 50 ms. Across both runs the pooled
-native p95 is 34/34 ms; individual sweeps and the initial off-state slowdown
-remain in the artifact. These measurements establish a qualified local repeat,
-not a guarantee for physical devices or competing host load.
+Five desktop sweeps per state measured pooled p95 10.1/10.1 ms off/on. The first
+simulator run measured 36/34 ms and missed the 33.4 ms target in both states; an
+isolated repeat measured 33/33 ms with no on intervals above 50 ms. Combining
+both native runs gives 34/34 ms. The passing isolated repeat does not erase the
+initial failure or qualify a physical device.
 
 ## Real combined-source acceptance: October 9, 2026
 
-The latest follow-up uses the existing Overture importer and conflation job,
-alongside the real OSM extract above, in a disposable database. It publishes a
-bounded Neuss subset `[6.64,51.14,6.75,51.25]` of the Düsseldorf source region;
-this does not claim coverage of the entire region. The installed Overture Places
-release is `2026-09-23.1`, verified through its STAC catalog. Its two overlapping
-source assets produce a bounded Parquet containing 15,232 rows / 2,112,192 bytes,
-with SHA-256 `708a6e41ac21dbfb8a99923f18d94af5e9af4fb4dd506c0f99ab0d7852ce5eef`.
-Contributor names and source asset URLs are recorded in
-`combinedSourceCartographyFollowup` in the aggregate evidence.
+`combinedSourceCartographyFollowup` in the same artifact records the real OSM
+extract plus Overture Places `2026-09-23.1` in a disposable database. Its Neuss
+bounds were `[6.64,51.14,6.75,51.25]`, not the entire Düsseldorf region. Two
+source assets yielded 15,232 Parquet rows / 2,112,192 bytes, SHA-256
+`708a6e41ac21dbfb8a99923f18d94af5e9af4fb4dd506c0f99ab0d7852ce5eef`.
+The artifact retains source URLs and contributors.
 
-The existing structured matcher, without embeddings, completes conflation before
-publication. It accepts 921 source links across the indexed extract. Within the
-publication bounds and policy filters, generation
-`1f2bfe9c-c389-465d-8d38-7db8e17f5ba7` contains **10,138 places: 1,412 OSM-only,
-8,690 Overture-only and 36 merged OSM/Overture**. No records or links are inserted
-as synthetic acceptance witnesses. The regional labeled quality corpus has no
-applicable cases inside this subset; its successful gate therefore does not
-establish local match precision.
+The existing structured matcher accepted 921 links across the indexed extract.
+No synthetic links or records were inserted as acceptance witnesses. Publication
+`1f2bfe9c-c389-465d-8d38-7db8e17f5ba7` contained 10,138 places: 1,412 OSM-only,
+8,690 Overture-only, and 36 merged. The regional labeled quality corpus had no
+applicable cases in this subset; a successful gate therefore did not establish
+local match precision.
 
-Actual tile reads and both the snapshot fallback and enabled Overture detail
-resolver retain Quirinus-Münster's primary `osm:way/28562993` plus GERS alias
-`afb26729-88d4-43a4-81e8-1c3cf5492082`. The Overture-only Cafe Bar Kleeberg retains
-`overture:6ffbe79a-b1ce-4900-93f6-b64b67d67ed5` through its tile, cafe category
-search and details. Pointer taps on both placed badges select those identities;
-the selected ambient copy disappears. External enrichment is disabled in this QA
-fixture. The real admin component displays the combined generation, release and
-eligible source counts.
+Tiles, snapshot fallback, and the enabled Overture resolver retained
+Quirinus-Münster's `osm:way/28562993` plus GERS
+`afb26729-88d4-43a4-81e8-1c3cf5492082`. Cafe Bar Kleeberg retained
+`overture:6ffbe79a-b1ce-4900-93f6-b64b67d67ed5` through tiles, category search,
+and details. Taps selected both identities and hid their ambient copies. External
+enrichment was disabled; the admin fixture showed the actual combined generation.
 
 | Combined Neuss check                       | Declared limit |     Observed |
 | ------------------------------------------ | -------------: | -----------: |
@@ -692,36 +710,18 @@ eligible source counts.
 | Dense tile features / bytes                |  256 / 131,072 | 256 / 38,529 |
 | Explicit IDs duplicated in decoded tiles   |              0 |            0 |
 
-The new light/dark desktop and native iOS screenshots use this combined
-publication. Genuine before captures use pre-PR revision
-`78e0990764247359d724a58b6aa3884eb2150291`, rather than an intermediate PR state.
-Quirinus-Münster now requires its normal native POI badge and label to fit
-together. ADAC Center Neuss uses the native office badge in its controlled zoom-18
-comparison; at the original zoom-16 camera it can still lose collision placement.
-Eligibility is not a promise of visibility at every camera.
+Before captures used pre-PR revision `78e0990764247359d724a58b6aa3884eb2150291`.
+Both badge and label had to fit. ADAC Center Neuss used its office badge in the
+controlled zoom-18 comparison but could still lose placement at zoom 16.
 
-Frame evidence and any unsuccessful diagnostic attempts are recorded separately
-from the historical OSM-only runs above. The same pooled p95 ≤33.4 ms and
-intervals >50 ms ≤5% targets remain binding. These local measurements do not
-establish physical-device or deployed network/CDN performance.
-
-After freshly invoking T3's native Electron preview and verifying the current
-sprite assets, five sweeps per state measure desktop pooled p95 9.8/9.9 ms off/on,
-with no intervals over 50 ms. Earlier preview-connection samples missed the
-budget in both states; the artifact retains them as unsuccessful diagnostics.
-An earlier Electron repeat loaded stale assets from the local QA-origin cache
-and is not used as final acceptance. Release asset cache invalidation already
-uses the committed build revision; the dirty QA rebuild reused that revision.
-
-The first combined-source native iOS run, with device streaming active, measures
-38/35 ms off/on and misses the p95 target. Pausing that stream and removing the
-second QA map produces an isolated five-sweep-per-state repeat of 29/30 ms,
-with 0.076%/0.394% of intervals over 50 ms. No builds/tests run concurrently and
-no unrelated host process is stopped. Because the native touch runner fails to
-accept connections, a temporary trusted QA-route helper starts the same sweeps
-after verifying the exact combined generation and current sprite; simulator URL
-opening brings Safari to the foreground. Product security policy is unchanged.
-Both the unsuccessful run and the passing qualified repeat remain in the artifact.
+Five current-asset Electron sweeps per state measured p95 9.8/9.9 ms off/on,
+with no intervals above 50 ms. Earlier preview-connection and stale-asset runs
+remain excluded diagnostics. The first streamed native iOS run measured 38/35 ms
+and failed the target. Pausing streaming and removing a second QA map produced
+an isolated repeat of 29/30 ms with 0.076%/0.394% of intervals above 50 ms. A
+trusted temporary QA helper started identical sweeps after native touch automation
+failed; the artifact records that qualification. No unrelated host process was
+stopped. The passing repeat is local simulator evidence only.
 
 ## Global fixture acceptance: October 10, 2026
 
@@ -743,5 +743,5 @@ assignment/neighborhood guards fail closed. A tiny actual pinned DuckDB 1.3.1/
 osmium probe verifies resource settings and file-backed Japanese-label extraction.
 Full planet preparation, peak source-tool memory/WAL, realistic cold/concurrent
 traffic and production CDN/backup recovery still require deployment acceptance.
-Earlier Neuss and Germany evidence in this page remains explicitly historical
-and regional; it does not prove global source completeness or throughput.
+Earlier Neuss and regional evidence in this page remains explicitly historical
+and bounded; it does not prove global source completeness or throughput.

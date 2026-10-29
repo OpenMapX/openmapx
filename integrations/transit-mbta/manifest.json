@@ -34,7 +34,7 @@
             "Copy the generated API key."
           ],
           "cost": "Free. A registered key raises the limit from 20 req/min (unauthenticated) to a default of 1,000 req/min.",
-          "notes": "A valid key is also required to pin the API version and to use streaming requests. You can request a higher rate limit from within the portal."
+          "notes": "OpenMapX requires a configured key for every MBTA request. The integration selects the API version; streaming is not used. You can request a higher rate limit from within the portal."
         }
       }
     }
@@ -44,7 +44,7 @@
   },
   "healthCheck": {
     "type": "http",
-    "urlTemplate": "https://api-v3.mbta.com/stops?filter[latitude]=42.36&filter[longitude]=-71.06&filter[radius]=0.01&api_key=${apiKey}",
+    "url": "https://api-v3.mbta.com/",
     "requiredConfigKeys": ["apiKey"]
   },
   "dataSources": [
@@ -52,15 +52,39 @@
       "sourceId": "mbta",
       "name": "MBTA",
       "url": "https://api-v3.mbta.com/",
-      "license": "Proprietary (MassDOT Developers License)",
-      "licenseUrl": "https://www.mbta.com/developers/v3-api",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.mbta.com/policies/privacy-policy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "MBTA material",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "MBTA access/account contract",
+            "license": {
+              "kind": "unknown",
+              "url": "https://www.mbta.com/developers/v3-api"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (MassDOT Developers License)",
+            "url": "https://www.mbta.com/developers/v3-api"
+          }
+        ]
+      }
     }
   ],
   "dependencies": ["transit"]

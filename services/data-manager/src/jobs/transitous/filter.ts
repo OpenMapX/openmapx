@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   applyFeedOverlay,
@@ -8,11 +8,12 @@ import {
 } from "../transitous-feeds-overlay.js";
 import {
   applyApiKeysOverlay,
-  DEFAULT_TRANSITOUS_API_KEYS_PATH,
-  DEFAULT_TRANSITOUS_FEEDS_OVERLAY_PATH,
   listTransitousFeedFiles,
   pruneUnresolvableSources,
+  resolveTransitOverlayPath,
+  resolveTransitousApiKeysPath,
   sumActiveGtfsSources,
+  writePrivateCatalogFile,
 } from "./internal.js";
 import type { JobContext, JobLogger, StageFn } from "./types.js";
 
@@ -28,11 +29,9 @@ export const run: StageFn = async (ctx) => {
   try {
     const catalogDir = ctx.state.catalogDir ?? ctx.catalogDir;
 
-    const apiKeysPath =
-      ctx.apiKeysPath ?? process.env.TRANSITOUS_API_KEYS_PATH ?? DEFAULT_TRANSITOUS_API_KEYS_PATH;
-    applyApiKeysOverlay(catalogDir, apiKeysPath);
+    applyApiKeysOverlay(catalogDir, resolveTransitousApiKeysPath(ctx.apiKeysPath));
 
-    const feedsOverlayPath = resolveFeedsOverlayPath(ctx);
+    const feedsOverlayPath = resolveTransitOverlayPath(ctx.dataDir, ctx.feedsOverlayPath);
     const overlayPatchCount = applyFeedsOverlayToCatalog(
       catalogDir,
       feedsOverlayPath,
@@ -142,23 +141,6 @@ export const run: StageFn = async (ctx) => {
 };
 
 /**
- * Resolve the path to the operator's feeds-overlay file. Priority:
- *   1. `ctx.feedsOverlayPath` (explicit override, used by tests)
- *   2. `TRANSITOUS_FEEDS_OVERLAY_PATH` env var (compose mounts)
- *   3. `<repoRoot>/infra/docker/data/overrides/feeds-overlay.json` (dev shell)
- *   4. `DEFAULT_TRANSITOUS_FEEDS_OVERLAY_PATH` (container default)
- */
-function resolveFeedsOverlayPath(ctx: JobContext): string | undefined {
-  if (ctx.feedsOverlayPath) return ctx.feedsOverlayPath;
-  const fromEnv = process.env.TRANSITOUS_FEEDS_OVERLAY_PATH;
-  if (fromEnv) return fromEnv;
-  if (ctx.repoRoot) {
-    return join(ctx.repoRoot, "infra", "docker", "data", "overrides", "feeds-overlay.json");
-  }
-  return DEFAULT_TRANSITOUS_FEEDS_OVERLAY_PATH;
-}
-
-/**
  * Apply operator-local patches from `feeds-overlay.json` into the catalog on
  * disk. Returns the number of patches found in the overlay (0 if the file is
  * absent), regardless of how many matched.
@@ -228,10 +210,7 @@ function applyFeedsOverlayToCatalog(
     // part of the Transitous catalog schema and would confuse fetch.py.
     const serialisable = { ...feed } as Record<string, unknown>;
     delete serialisable.region;
-    writeFileSync(feedPath, `${JSON.stringify(serialisable, null, 2)}\n`, "utf-8");
-    // This rewrite may preserve an API key or credentialed URL override, so
-    // repair the catalog checkout's default 0644 mode after writing.
-    chmodSync(feedPath, 0o600);
+    writePrivateCatalogFile(feedPath, `${JSON.stringify(serialisable, null, 2)}\n`);
   }
   for (const unmatched of result.unmatched) {
     logger.warn(

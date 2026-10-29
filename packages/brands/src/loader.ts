@@ -1,6 +1,11 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  contributorsForFields,
+  parseContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { BrandArtifact, BrandEntry } from "./types";
 
 export interface BrandIndex {
@@ -22,12 +27,28 @@ export function loadBrandIndex(): BrandIndex {
   const path = join(dirname(fileURLToPath(import.meta.url)), "data", "brands-index.json");
   const artifact = JSON.parse(readFileSync(path, "utf8")) as BrandArtifact;
 
-  if (artifact.v !== 1) {
+  if (artifact.v !== 2) {
     throw new Error(`Unsupported brand artifact version: ${String(artifact.v)}`);
   }
 
+  const sourceCredits = parseContributors(artifact.sourceCredits);
+  if (!sourceCredits) throw new Error("Invalid brand artifact source credits");
+  const entries = artifact.brands.map(({ origins, ...entry }): BrandEntry => {
+    const fieldContributors = Object.fromEntries(
+      Object.keys(entry).map((field) => [
+        field,
+        snapshotContributors(
+          sourceCredits.filter((receipt) => origins?.[field]?.includes(receipt.sourceId)),
+        ),
+      ]),
+    );
+    return {
+      ...entry,
+      fieldContributors,
+      contributors: contributorsForFields(fieldContributors, Object.keys(entry)),
+    };
+  });
   const byQid = new Map<string, BrandEntry>();
-  for (const entry of artifact.brands) byQid.set(entry.qid, entry);
-
-  return { entries: artifact.brands, byQid, source: artifact.source };
+  for (const entry of entries) byQid.set(entry.qid, entry);
+  return { entries, byQid, source: artifact.source };
 }

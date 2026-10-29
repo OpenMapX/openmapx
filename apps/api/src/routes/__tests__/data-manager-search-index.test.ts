@@ -25,7 +25,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   vi.unstubAllGlobals();
-  await app.close();
+  await app?.close();
 });
 
 beforeEach(() => {
@@ -48,7 +48,23 @@ describe("GET /data-manager/search-index/status", () => {
 
   it("proxies status with data-manager authentication", async () => {
     fetchMock.mockResolvedValueOnce(
-      Response.json({ region: "europe/germany", status: "ready", stale: false }),
+      Response.json({
+        ok: true,
+        region: "europe/germany",
+        status: "ready",
+        stale: false,
+        building: false,
+        epoch: "epoch",
+        sourcePath: "/data/osm/region.osm.pbf",
+        sourceFingerprint: "fingerprint",
+        currentFingerprint: "fingerprint",
+        placeCount: 42,
+        termCount: 84,
+        startedAt: null,
+        publishedAt: null,
+        updatedAt: "2026-10-19T00:00:00.000Z",
+        lastError: null,
+      }),
     );
     const res = await app.inject({ method: "GET", url: "/data-manager/search-index/status" });
 
@@ -58,8 +74,10 @@ describe("GET /data-manager/search-index/status", () => {
       "https://data-manager.test:4000/search-index/status",
       expect.objectContaining({
         method: "GET",
-        headers: expect.objectContaining({ Authorization: "Bearer service-token" }),
       }),
+    );
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("authorization")).toBe(
+      "Bearer service-token",
     );
   });
 
@@ -87,7 +105,22 @@ describe("GET /data-manager/notable-places/status", () => {
   });
 
   it("proxies status, and the 404 of an index never built", async () => {
-    fetchMock.mockResolvedValueOnce(Response.json({ status: "ready", placeCount: 150_000 }));
+    fetchMock.mockResolvedValueOnce(
+      Response.json({
+        ok: true,
+        status: "ready",
+        placeCount: 150_000,
+        building: false,
+        epoch: "epoch",
+        source: "https://qlever.dev/api/wikidata",
+        minSitelinks: 8,
+        nameCount: 790_000,
+        startedAt: null,
+        publishedAt: null,
+        updatedAt: "2026-10-19T00:00:00.000Z",
+        lastError: null,
+      }),
+    );
     const ready = await app.inject({ method: "GET", url: "/data-manager/notable-places/status" });
     expect(ready.statusCode).toBe(200);
     expect(fetchMock).toHaveBeenCalledWith(

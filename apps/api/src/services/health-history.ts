@@ -60,9 +60,14 @@ export async function getTimeline(
 /** Delete records older than N days. */
 export async function pruneOldRecords(days = 30): Promise<number> {
   const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-  const result = await db
-    .delete(healthHistory)
-    .where(lt(healthHistory.checkedAt, cutoff))
-    .returning({ id: healthHistory.id });
-  return result.length;
+  const result = await db.delete(healthHistory).where(lt(healthHistory.checkedAt, cutoff));
+  if (
+    result.command !== "DELETE" ||
+    result.length !== 0 ||
+    !Number.isSafeInteger(result.count) ||
+    result.count < 0
+  ) {
+    throw new Error("Unexpected health history DELETE command metadata");
+  }
+  return result.count;
 }

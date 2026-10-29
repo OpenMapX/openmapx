@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OpsClient, OpsClientError, opsRequestTimeoutMs, readOpsTokenFile } from "./client";
-import { OPS_MAX_HTTP_RESPONSE_BYTES } from "./contract";
+import { OPS_MAX_HTTP_RESPONSE_BYTES, OPS_PUBLIC_ERROR_MESSAGES } from "./contract";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -79,6 +79,43 @@ describe("ops client", () => {
     });
     expect(fetch).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    [true, "host_update_required"],
+    [false, "runtime"],
+  ])(
+    "accepts only canonical host-update errors (canonical: %s)",
+    async (canonical, expectedCode) => {
+      const client = new OpsClient({
+        baseUrl: "http://ops-agent:4300",
+        tokenFile: tokenFile(),
+        fetch: async (_url, init) =>
+          new Response(
+            JSON.stringify({
+              version: 1,
+              requestId: JSON.parse(String(init?.body)).requestId,
+              ok: false,
+              error: {
+                class: "host_update_required",
+                message: canonical
+                  ? OPS_PUBLIC_ERROR_MESSAGES.host_update_required
+                  : "secret raw stderr",
+              },
+            }),
+            { status: 409 },
+          ),
+      });
+      await expect(
+        client.execute(
+          { kind: "release.apply", releaseId: "release-123" },
+          { operationKey: "opk1_hostUpdateRequired" },
+        ),
+      ).rejects.toMatchObject({
+        errorClass: expectedCode,
+        message: "Ops agent request failed",
+      });
+    },
+  );
 
   it("bounds response bodies and never includes token, file path, URL, or remote body in errors", async () => {
     const token = Buffer.alloc(32, 11).toString("base64url");

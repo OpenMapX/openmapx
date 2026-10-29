@@ -1,4 +1,5 @@
 import type { ProviderEvidence } from "@openmapx/air-quality";
+import type { Licensing } from "@openmapx/mobility-core/licensing";
 
 export interface LegacyAirQualityStation {
   id: number;
@@ -9,7 +10,7 @@ export interface LegacyAirQualityStation {
   pm25: number;
   lastUpdated: string;
   attribution: { name: string; url: string | null } | null;
-  license: string | null;
+  licensing: Licensing | null;
 }
 
 function locationId(evidence: ProviderEvidence): number | null {
@@ -49,7 +50,7 @@ export function projectLegacyStations(
         pm25: latest.value,
         lastUpdated: latest.endAt,
         attribution: source?.attribution ? { name: source.attribution, url: source.url } : null,
-        license: source?.license?.name ?? null,
+        licensing: source?.licensing ?? null,
       },
     ];
   });

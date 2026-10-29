@@ -15,9 +15,10 @@ export function usePlacePhotos(
   options?: { name?: string; placeId?: string; limit?: number; enabled?: boolean },
 ) {
   return useQuery({
-    queryKey: ["placePhotos", lat, lng, options?.placeId, options?.name, options?.limit],
+    queryKey: ["placePhotos", lat, lng, options?.placeId, options?.name, options?.limit, 3],
     queryFn: ({ signal }) => {
       const params: Record<string, string> = {
+        fileMetadata: "3",
         lat: String(lat),
         lng: String(lng),
       };

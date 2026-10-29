@@ -1,4 +1,5 @@
 import type { ChainedTripPlan } from "@openmapx/core";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, userEvent } from "@/test";
 
@@ -18,6 +19,12 @@ vi.mock("@/components/panels/directions/TransitRouteView", () => ({
         Details
       </button>
     </div>
+  ),
+}));
+
+vi.mock("@/components/ui/AttributionStrip", () => ({
+  AttributionStrip: ({ attributions }: { attributions: { sourceId: string }[] }) => (
+    <div data-testid="credits">{attributions.map((x) => x.sourceId).join(",")}</div>
   ),
 }));
 
@@ -192,4 +199,42 @@ describe("backward partial transit chains", () => {
     expect(screen.getByText(/09:30 – 10:30/)).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("directions.scheduleLateArrival");
   });
+});
+
+it("credits selected chain segments and derived schedule without unused alternatives", () => {
+  const a = {
+    sourceId: "feed-a",
+    name: "A",
+    url: "https://a.test",
+    licensing: licensingFromDeclaration("CC0", undefined, "A"),
+  };
+  const b = {
+    sourceId: "feed-b",
+    name: "B",
+    url: "https://b.test",
+    licensing: licensingFromDeclaration("CC0", undefined, "B"),
+  };
+  render(
+    <TransitChainView
+      plan={{
+        ...plan,
+        contributors: [a, b],
+        segments: [
+          {
+            ...plan.segments[0],
+            contributors: [a],
+            itinerary: { ...plan.segments[0].itinerary, contributors: [a] },
+            alternatives: [{ ...plan.segments[0].itinerary, contributors: [b] }],
+            fieldContributors: { boardingWaitSeconds: [a], delaySeconds: [] },
+          },
+        ],
+        fieldContributors: { schedule: [a] },
+      }}
+      waypointLabels={labels}
+    />,
+  );
+  expect(screen.getAllByTestId("credits").map((node) => node.textContent)).toEqual([
+    "feed-a",
+    "feed-a",
+  ]);
 });

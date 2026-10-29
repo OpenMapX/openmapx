@@ -1,10 +1,16 @@
 import { isValidWgs84Bounds } from "@openmapx/core/coverage";
 import {
+  dataSourceToAttribution,
+  type FireInstrument,
   type IntegrationContext,
   type IntegrationDataSource,
   parseMediaHostEntry,
+  snapshotContributors,
 } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { type Licensing, parseLicensing } from "@openmapx/mobility-core/licensing";
 import type { OpenConditionsClient } from "./client.js";
+import { CROWD } from "./features/record.js";
 
 /** A right as OpenConditions states it: granted, denied, or not stated (null). */
 type Right = boolean | null;
@@ -29,8 +35,7 @@ export interface OcSource {
   /** The licence id: SPDX where SPDX lists it, else `LicenseRef-<name>`, or `NOASSERTION`. */
   license: string;
   /** The licence's readable name, which the legal pages and credits show. */
-  licenseName?: string;
-  licenseUrl?: string;
+  licensing: Licensing;
   attribution: string;
   homepage: string;
   privacyUrl: string;
@@ -41,7 +46,9 @@ export interface OcSource {
   coverage?: { countries?: string[]; bbox?: [number, number, number, number] };
   /** The hosts a camera feed's stills come from, which a consumer may proxy. */
   imageHosts?: string[];
+  /** What the licence and terms declare; `display` is absent from producers before it. */
   rights: {
+    display?: Right;
     redistribution: Right;
     derivedRedistribution: Right;
     commercialUse: Right;
@@ -49,7 +56,16 @@ export interface OcSource {
     retention: Right;
     shareAlike: boolean;
   };
+  /**
+   * Each use's permission: a grant counts only when it rests on the
+   * publisher's checked statement. Absent from producers before it, whose
+   * declared rights then stand in.
+   */
+  permissions?: Partial<Record<OcUse, Permission>>;
 }
+
+type Permission = "yes" | "no" | "unknown";
+type OcUse = "display" | "redistribute" | "derive" | "retain" | "commercial";
 
 /** The OpenMapX domain each OpenConditions domain is served under. */
 const DOMAINS: Readonly<Record<string, string>> = {
@@ -59,6 +75,9 @@ const DOMAINS: Readonly<Record<string, string>> = {
   charging: "charging-sites",
   cameras: "cameras",
   hazards: "hazards",
+  weather: "road-weather",
+  vehicles: "service-vehicles",
+  border: "border-crossings",
 };
 
 /**
@@ -73,15 +92,47 @@ export const SOURCE_SYNC_INTERVAL_MS = 300_000;
 export const SOURCE_SYNC_RETRY_MS = 30_000;
 const SOURCE_READ_TIMEOUT_MS = 10_000;
 
-const permission = (right: Right): "yes" | "no" | "unknown" =>
+const permission = (right: Right): Permission =>
   right === true ? "yes" : right === false ? "no" : "unknown";
 
-/** A redistribution right; share-alike attaches a condition to a granted one. */
+const PERMISSIONS: ReadonlySet<string> = new Set(["yes", "no", "unknown"]);
+
+/**
+ * The permission OpenConditions states for a use, or the declared right in
+ * its place from a producer that states none. A malformed value is unknown.
+ */
+export function permissionOf(source: OcSource, use: OcUse, declared: Right): Permission {
+  if (!source.permissions) return permission(declared);
+  const stated = source.permissions[use];
+  return typeof stated === "string" && PERMISSIONS.has(stated) ? stated : "unknown";
+}
+
+/** A redistribution permission; share-alike attaches a condition to a granted one. */
 function redistributionOf(
-  right: Right,
+  granted: Permission,
   shareAlike: boolean,
 ): "yes" | "no" | "conditional" | "unknown" {
-  return right === true && shareAlike ? "conditional" : permission(right);
+  return granted === "yes" && shareAlike ? "conditional" : granted;
+}
+
+/**
+ * Whether OpenMapX may show the source's data at all: OpenConditions states
+ * that its display is not permitted. Such a source is not listed, so none of
+ * its records reach a reader.
+ */
+export function displayDenied(source: OcSource): boolean {
+  return permissionOf(source, "display", source.rights.display ?? null) === "no";
+}
+
+/**
+ * The commercial-use permission the data-use policy gates on. A source whose
+ * display is unclear is grey area even where commercial use is granted: the
+ * operator's policy for unclear rights then decides whether it is shown.
+ */
+function commercialUseOf(source: OcSource): Permission {
+  const commercial = permissionOf(source, "commercial", source.rights.commercialUse);
+  const display = permissionOf(source, "display", source.rights.display ?? true);
+  return commercial === "yes" && display === "unknown" ? "unknown" : commercial;
 }
 
 /** The usage condition of a share-alike licence. */
@@ -110,7 +161,8 @@ function providerCountryOf(source: OcSource): string {
  */
 export function toDataSource(source: OcSource): IntegrationDataSource | undefined {
   const domain = DOMAINS[source.domain];
-  if (domain === undefined) return undefined;
+  const licensing = parseLicensing(source.licensing);
+  if (domain === undefined || licensing === undefined) return undefined;
   const usageConditions = usageConditionsOf(source);
   // A malformed field, or an entry the image proxy would refuse, costs the
   // source those stills, not its listing: the data-source rules refuse a
@@ -125,22 +177,23 @@ export function toDataSource(source: OcSource): IntegrationDataSource | undefine
     domain,
     name: source.name,
     url: source.homepage,
-    // People read this field; nothing in OpenMapX decides by the licence id.
-    license:
-      typeof source.licenseName === "string" && source.licenseName.trim() !== ""
-        ? source.licenseName
-        : source.license,
-    ...(source.licenseUrl ? { licenseUrl: source.licenseUrl } : {}),
+    licensing,
     attribution: source.attribution,
     ...(source.terms?.url ? { termsUrl: source.terms.url } : {}),
     ...(source.terms?.reviewedAt ? { reviewedAt: source.terms.reviewedAt } : {}),
     ...(usageConditions.length > 0 ? { usageConditions } : {}),
     providerCountry: providerCountryOf(source),
     providerPrivacyUrl: source.privacyUrl,
-    commercialUse: permission(source.rights.commercialUse),
+    commercialUse: commercialUseOf(source),
     redistribution: {
-      sourceData: redistributionOf(source.rights.redistribution, source.rights.shareAlike),
-      derivedData: redistributionOf(source.rights.derivedRedistribution, source.rights.shareAlike),
+      sourceData: redistributionOf(
+        permissionOf(source, "redistribute", source.rights.redistribution),
+        source.rights.shareAlike,
+      ),
+      derivedData: redistributionOf(
+        permissionOf(source, "derive", source.rights.derivedRedistribution),
+        source.rights.shareAlike,
+      ),
     },
     ...(mediaHosts.length > 0 ? { mediaHosts } : {}),
     endUserExposure: MIXED_EXPOSURE.has(domain) ? "mixed" : "server-only",
@@ -162,6 +215,34 @@ interface ReadList {
   withheld: string[];
   /** The sources listed, as OpenConditions describes them. */
   described: OcSource[];
+  /** The crowd's credit, when the answer states a valid one. */
+  crowd?: Attribution;
+  /** Whether the answer states a crowd credit that is not a valid one. */
+  crowdInvalid: boolean;
+}
+
+const isWebUrl = (value: unknown): value is string => {
+  if (typeof value !== "string" || !URL.canParse(value)) return false;
+  const { protocol } = new URL(value);
+  return protocol === "https:" || protocol === "http:";
+};
+
+/**
+ * The credit of the instance's crowd reports, as `/sources` states it beside
+ * the feeds: `{ id: "crowd", name, licensing, url? }`. Undefined when the
+ * entry is malformed; a link that is no http(s) URL is left out.
+ */
+function crowdCreditOf(crowd: unknown): Attribution | undefined {
+  if (!isRecord(crowd) || crowd.id !== CROWD) return undefined;
+  const name = typeof crowd.name === "string" ? crowd.name.trim() : "";
+  const licensing = parseLicensing(crowd.licensing);
+  if (name === "" || licensing === undefined) return undefined;
+  return {
+    sourceId: CROWD,
+    name,
+    ...(isWebUrl(crowd.url) ? { url: crowd.url } : {}),
+    licensing,
+  };
 }
 
 /** The scope OpenConditions served a read in; the operator scope includes restricted sources. */
@@ -173,6 +254,8 @@ export interface OcSourceList {
   /** The scope the list was served in. */
   scope: OcScope;
   sources: OcSource[];
+  /** The credit of the instance's crowd reports, which are no feed. */
+  crowd?: { id: "crowd"; name: string; license: string; licensing: Licensing; url?: string };
 }
 
 /**
@@ -181,27 +264,39 @@ export interface OcSourceList {
  * a restricted source is left out: its records are never served to
  * OpenMapX. The scope is OpenConditions' own, not whether OpenMapX sent a
  * token: an instance that holds no token answers a bearer read in public.
+ * A source whose display OpenConditions does not permit is left out in every
+ * scope. The crowd's credit is read beside the feeds.
  */
 function dataSourcesOf(answer: unknown): ReadList {
-  const sources = isRecord(answer) ? answer["sources"] : undefined;
-  const scope = isRecord(answer) ? answer["scope"] : undefined;
+  const sources = isRecord(answer) ? answer.sources : undefined;
+  const scope = isRecord(answer) ? answer.scope : undefined;
   if (!Array.isArray(sources) || (scope !== "public" && scope !== "operator")) {
     throw new Error("Malformed /sources answer");
   }
   const operator = scope === "operator";
-  const out: ReadList = { list: [], invalid: [], unmapped: [], withheld: [], described: [] };
+  const crowd = isRecord(answer) ? crowdCreditOf(answer.crowd) : undefined;
+  const out: ReadList = {
+    list: [],
+    invalid: [],
+    unmapped: [],
+    withheld: [],
+    described: [],
+    ...(crowd ? { crowd } : {}),
+    crowdInvalid: isRecord(answer) && answer.crowd !== undefined && crowd === undefined,
+  };
   for (const source of sources) {
-    const id = isRecord(source) && typeof source["id"] === "string" ? source["id"] : "(no id)";
+    const id = isRecord(source) && typeof source.id === "string" ? source.id : "(no id)";
     if (
       !isRecord(source) ||
       id === "(no id)" ||
-      !isRecord(source["rights"]) ||
-      typeof source["restricted"] !== "boolean"
+      !isRecord(source.rights) ||
+      typeof source.restricted !== "boolean"
     ) {
       out.invalid.push(id);
       continue;
     }
-    if (source["restricted"] && !operator) {
+    // Display denied: nothing of the source may be shown, in any scope.
+    if ((source.restricted && !operator) || displayDenied(source as unknown as OcSource)) {
       out.withheld.push(id);
       continue;
     }
@@ -291,6 +386,12 @@ export function createSourceScopes(): UpdatableSourceScopes {
   };
 }
 
+/** Copied attribution metadata only; serving rights still use the live source list. */
+export interface CapturedSourceCredits {
+  contributors(sourceId: string): readonly Attribution[] | undefined;
+  noticeOf(sourceId: string): string | undefined;
+}
+
 /**
  * The sources the instance lists, as the providers check them: no source is
  * listed until the first list arrives, so a provider serves nothing it
@@ -299,18 +400,24 @@ export function createSourceScopes(): UpdatableSourceScopes {
 export interface LiveSources {
   /** False until the first list arrives. */
   readonly ready: boolean;
+  /** Whether the list holds the source; `crowd` while the list states the crowd's credit. */
   has(sourceId: string): boolean;
+  /** The crowd's credit as the list states it; none while it states none. */
+  crowd(): Attribution | undefined;
+  /** Captured exact metadata; callers receive an independent copy. */
+  contributors?(sourceId: string): readonly Attribution[] | undefined;
+  /** Immutable catalogue for an acquisition whose exact source arrives in the response. */
+  captureCredits?(): CapturedSourceCredits;
   /** The source's credit link: its homepage. */
   link(sourceId: string): string | undefined;
   /** The readable name a listed source gives a licence id; none before the first list. */
-  licenseName(licenseId: string): string | undefined;
   /** The notice the source's publisher requires to accompany any display of its data. */
   noticeOf(sourceId: string): string | undefined;
   /**
-   * The listed FIRMS feeds of one instrument: the sources whose format is
-   * `firms` and whose qualifier is `firms-viirs` or `firms-modis`.
+   * The listed fire-pixel feeds of one instrument: FIRMS's `firms-viirs` or
+   * `firms-modis` feeds, or EUMETSAT's `slstr` feeds of format `slstr-frp`.
    */
-  firmsSources(instrument: "viirs" | "modis"): string[];
+  fireSources(instrument: FireInstrument): string[];
 }
 
 /** The listed sources with the image hosts each declares, as the cameras provider checks stills. */
@@ -320,38 +427,89 @@ export interface MediaSources extends LiveSources {
 }
 
 export interface UpdatableLiveSources extends MediaSources {
-  update(list: readonly Pick<IntegrationDataSource, "sourceId" | "url" | "mediaHosts">[]): void;
+  update(
+    list: readonly (Pick<IntegrationDataSource, "sourceId" | "url" | "mediaHosts"> &
+      Partial<IntegrationDataSource>)[],
+  ): void;
   /**
    * Takes the licence names from the sources as OpenConditions describes
    * them: the accepted data sources carry the readable name in place of the id.
    */
-  updateLicenses(list: readonly Pick<OcSource, "license" | "licenseName">[]): void;
   /** Takes the formats, qualifiers and notices from the sources as OpenConditions describes them. */
   updateDescribed(list: readonly Pick<OcSource, "id" | "format" | "qualifier" | "notice">[]): void;
+  /** Takes the crowd's credit; undefined when the list states none. */
+  updateCrowd(credit: Attribution | undefined): void;
 }
 
-const FIRMS_QUALIFIERS = { viirs: "firms-viirs", modis: "firms-modis" } as const;
+/** The format and qualifier of each instrument's fire-pixel feeds. */
+const FIRE_FEEDS: Readonly<Record<FireInstrument, { format: string; qualifier: string }>> = {
+  viirs: { format: "firms", qualifier: "firms-viirs" },
+  modis: { format: "firms", qualifier: "firms-modis" },
+  slstr: { format: "slstr-frp", qualifier: "slstr" },
+};
 
 export function createLiveSources(): UpdatableLiveSources {
   let links: ReadonlyMap<string, string> | undefined;
+  let receipts = new Map<string, Attribution[]>();
   let media: ReadonlyMap<string, readonly string[]> = new Map();
-  let licenseNames: ReadonlyMap<string, string> = new Map();
   let notices: ReadonlyMap<string, string> = new Map();
-  let firms: ReadonlyMap<"viirs" | "modis", readonly string[]> = new Map();
+  let fire: ReadonlyMap<FireInstrument, readonly string[]> = new Map();
+  let crowd: Attribution | undefined;
   return {
     get ready() {
       return links !== undefined;
     },
-    has: (sourceId) => links?.has(sourceId) ?? false,
+    has: (sourceId) =>
+      links !== undefined && (sourceId === CROWD ? crowd !== undefined : links.has(sourceId)),
+    crowd: () => (crowd ? snapshotContributors([crowd])[0] : undefined),
+    contributors: (sourceId) => {
+      if (!links?.has(sourceId)) return undefined;
+      const captured = receipts.get(sourceId);
+      if (!captured) return undefined;
+      const notice = notices.get(sourceId);
+      return snapshotContributors(captured, notice ? [{ sourceId, name: notice }] : []);
+    },
+    captureCredits() {
+      const captured = new Map(
+        Array.from(links?.keys() ?? [], (sourceId) => [
+          sourceId,
+          snapshotContributors(
+            receipts.get(sourceId) ?? [],
+            notices.has(sourceId) ? [{ sourceId, name: notices.get(sourceId)! }] : [],
+          ),
+        ]),
+      );
+      const capturedNotices = new Map(notices);
+      return {
+        contributors: (sourceId) =>
+          captured.has(sourceId) ? snapshotContributors(captured.get(sourceId)!) : undefined,
+        noticeOf: (sourceId) =>
+          captured.has(sourceId) ? capturedNotices.get(sourceId) : undefined,
+      };
+    },
     link: (sourceId) => links?.get(sourceId),
-    licenseName: (licenseId) => licenseNames.get(licenseId),
     mediaHosts: (sourceId) => media.get(sourceId) ?? [],
     noticeOf: (sourceId) => (links?.has(sourceId) ? notices.get(sourceId) : undefined),
     // Only feeds the host accepted count, so a dropped feed's pixels are never read.
-    firmsSources: (instrument) =>
-      (firms.get(instrument) ?? []).filter((sourceId) => links?.has(sourceId) ?? false),
+    fireSources: (instrument) =>
+      (fire.get(instrument) ?? []).filter((sourceId) => links?.has(sourceId) ?? false),
     update(list) {
       links = new Map(list.map((ds) => [ds.sourceId, ds.url]));
+      receipts = new Map(
+        list.flatMap((ds) =>
+          typeof ds.name === "string" && parseLicensing(ds.licensing) !== undefined
+            ? [
+                [
+                  ds.sourceId,
+                  // Served normalised into OpenConditions' model; see `credit`.
+                  snapshotContributors([
+                    { ...dataSourceToAttribution(ds as IntegrationDataSource), modified: true },
+                  ]),
+                ] as const,
+              ]
+            : [],
+        ),
+      );
       media = new Map(list.flatMap((ds) => (ds.mediaHosts ? [[ds.sourceId, ds.mediaHosts]] : [])));
     },
     updateDescribed(list) {
@@ -360,30 +518,21 @@ export function createLiveSources(): UpdatableLiveSources {
           typeof notice === "string" && notice.trim() !== "" ? [[id, notice] as const] : [],
         ),
       );
-      firms = new Map(
-        (Object.keys(FIRMS_QUALIFIERS) as Array<keyof typeof FIRMS_QUALIFIERS>).map(
-          (instrument) => [
-            instrument,
-            list
-              .filter(
-                (source) =>
-                  source.format === "firms" && source.qualifier === FIRMS_QUALIFIERS[instrument],
-              )
-              .map((source) => source.id),
-          ],
-        ),
+      fire = new Map(
+        (Object.keys(FIRE_FEEDS) as FireInstrument[]).map((instrument) => [
+          instrument,
+          list
+            .filter(
+              (source) =>
+                source.format === FIRE_FEEDS[instrument].format &&
+                source.qualifier === FIRE_FEEDS[instrument].qualifier,
+            )
+            .map((source) => source.id),
+        ]),
       );
     },
-    updateLicenses(list) {
-      licenseNames = new Map(
-        list.flatMap(({ license, licenseName }) =>
-          typeof license === "string" &&
-          typeof licenseName === "string" &&
-          licenseName.trim() !== ""
-            ? [[license, licenseName] as const]
-            : [],
-        ),
-      );
+    updateCrowd(credit) {
+      crowd = credit;
     },
   };
 }
@@ -397,6 +546,8 @@ export interface SourceSyncOptions {
   onSources?: (list: readonly IntegrationDataSource[]) => void;
   /** Called with each list's sources in a domain OpenMapX serves, as OpenConditions describes them. */
   onDescribed?: (list: readonly OcSource[]) => void;
+  /** Called with each list's crowd credit; undefined when it states none. */
+  onCrowd?: (credit: Attribution | undefined) => void;
 }
 
 export interface SourceSync {
@@ -430,9 +581,13 @@ export function startSourceSync(
         timeoutMs: SOURCE_READ_TIMEOUT_MS,
       });
       if (stopped) return true;
-      const { list, invalid, unmapped, withheld, described } = dataSourcesOf(answer);
+      const { list, invalid, unmapped, withheld, described, crowd, crowdInvalid } =
+        dataSourcesOf(answer);
       if (invalid.length > 0) {
         ctx.log.warn(`OpenConditions /sources: skipped malformed entries ${invalid.join(", ")}`);
+      }
+      if (crowdInvalid) {
+        ctx.log.warn("OpenConditions /sources: malformed crowd credit; crowd reports not served");
       }
       if (unmapped.length > 0) {
         ctx.log.debug(
@@ -450,6 +605,7 @@ export function startSourceSync(
       const accepted = ctx.setDataSources(list);
       opts.onSources?.(accepted);
       opts.onDescribed?.(described);
+      opts.onCrowd?.(crowd);
       if (failing) {
         failing = false;
         ctx.log.info(`OpenConditions /sources recovered: ${accepted.length} sources`);

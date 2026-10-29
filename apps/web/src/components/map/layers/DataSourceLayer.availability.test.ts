@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { availStateOf } from "./DataSourceLayer";
+import { availStateOf } from "@/integration-api/map/dataSourceFeatures";
 
 describe("availStateOf", () => {
   it("returns available when some chargers are free", () => {

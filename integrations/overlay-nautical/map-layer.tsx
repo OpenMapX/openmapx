@@ -11,11 +11,16 @@ import type * as maplibregl from "maplibre-gl";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { addLayerInSlot, removeSlottedLayers } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
-import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useSlottedLayersCleanup } from "@/integration-api/map/useSlottedLayersCleanup";
+import { addAttributedRasterSource } from "@/integration-api/overlay/rasterMapContribution";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
+import { useRasterMapAttributions } from "@/integration-api/overlay/useRasterMapAttributions";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { type HarborFeatureCollection, useNauticalStore } from "./store";
 
@@ -40,6 +45,27 @@ const HARBOR_LABEL_LAYER = "openmapx-nautical-harbor-labels";
 const STATION_SOURCE = "openmapx-nautical-station-source";
 const STATION_CIRCLE_LAYER = "openmapx-nautical-station-circles";
 const STATION_LABEL_LAYER = "openmapx-nautical-station-labels";
+/** Every layer this overlay adds, top-most first, and the sources they read. */
+const OWNED_LAYERS = [
+  STATION_LABEL_LAYER,
+  STATION_CIRCLE_LAYER,
+  HARBOR_LABEL_LAYER,
+  HARBOR_ICON_LAYER,
+  SEAMARK_LAYER,
+  KARTVERKET_LAYER,
+  NOAA_LAYER,
+  DEPTH_CONTOUR_LAYER,
+  DEPTH_RELIEF_LAYER,
+];
+const OWNED_SOURCES = [
+  STATION_SOURCE,
+  HARBOR_SOURCE,
+  SEAMARK_SOURCE,
+  KARTVERKET_SOURCE,
+  NOAA_SOURCE,
+  DEPTH_CONTOUR_SOURCE,
+  DEPTH_RELIEF_SOURCE,
+];
 
 /** Station marker palette — keyed by primary-type rank assigned by the backend. */
 const STATION_COLOR_BY_RANK = [
@@ -245,12 +271,71 @@ function makeKartverketTileUrl(apiUrl: string): string {
   return `${base}/api/integrations/overlay-nautical/charts/no/{z}/{x}/{y}.png`;
 }
 
+interface RasterSubLayer {
+  sourceId: string;
+  source: maplibregl.RasterSourceSpecification;
+  contributors: Parameters<typeof addAttributedRasterSource>[3];
+  layer: maplibregl.RasterLayerSpecification;
+  order: number;
+}
+
+/** Install one attributed raster sub-layer while it is wanted, else remove it. */
+function syncRasterSubLayer(map: maplibregl.Map, wanted: boolean, sub: RasterSubLayer): void {
+  if (!wanted) {
+    removeSlottedLayers(map, [sub.layer.id], [sub.sourceId]);
+    return;
+  }
+  if (!map.getSource(sub.sourceId)) {
+    addAttributedRasterSource(map, sub.sourceId, sub.source, sub.contributors);
+  }
+  if (!map.getLayer(sub.layer.id)) {
+    addLayerInSlot(map, sub.layer, "raster-overlays", sub.order);
+  }
+}
+
 export function NauticalLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
+  useSlottedLayersCleanup(mapRef, () => ({ layerIds: OWNED_LAYERS, sourceIds: OWNED_SOURCES }));
   const env = useEnv();
 
   const layerVisible = useNauticalStore((s) => s.panelOpen && s.layerVisible);
-  useIntegrationAttribution("overlay-nautical", layerVisible);
+  const resolve = useContributorResolver();
+  useRasterMapAttributions(
+    "nautical",
+    [
+      {
+        sourceId: SEAMARK_SOURCE,
+        layerId: SEAMARK_LAYER,
+        contributors: resolve({ sourceIds: ["openseamap", "openstreetmap"] }),
+      },
+      {
+        sourceId: DEPTH_RELIEF_SOURCE,
+        layerId: DEPTH_RELIEF_LAYER,
+        contributors: resolve({ sourceIds: ["gebco"] }),
+      },
+      {
+        sourceId: DEPTH_CONTOUR_SOURCE,
+        layerId: DEPTH_CONTOUR_LAYER,
+        contributors: resolve({ sourceIds: ["openseamap"] }),
+      },
+      {
+        sourceId: NOAA_SOURCE,
+        layerId: NOAA_LAYER,
+        contributors: resolve({ sourceIds: ["noaa-ncds"] }),
+      },
+      {
+        sourceId: KARTVERKET_SOURCE,
+        layerId: KARTVERKET_LAYER,
+        contributors: resolve({ sourceIds: ["kartverket-sjokart"] }),
+      },
+    ],
+    layerVisible,
+  );
+  useRenderedMapAttributions(
+    "nautical",
+    [HARBOR_ICON_LAYER, HARBOR_LABEL_LAYER, STATION_CIRCLE_LAYER, STATION_LABEL_LAYER],
+    layerVisible,
+  );
   const showSeamarks = useNauticalStore((s) => s.showSeamarks);
   const showDepth = useNauticalStore((s) => s.showDepth);
   const showNoaaCharts = useNauticalStore((s) => s.showNoaaCharts);
@@ -356,166 +441,112 @@ export function NauticalLayer() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
+    // Charts: multi-provider raster (US: NOAA, Norway+Svalbard: Kartverket).
+    // Each provider's source is added/removed based on viewport bbox so they
+    // stack naturally when both regions are visible (e.g. cross-Atlantic).
+    const syncCharts = () => {
+      syncRasterSubLayer(map, layerVisible && showNoaaCharts && bboxIntersectsUsWaters(map), {
+        sourceId: NOAA_SOURCE,
+        source: {
+          type: "raster",
+          tiles: [makeNoaaTileUrl(env.apiUrl)],
+          tileSize: 256,
+          minzoom: 3,
+          maxzoom: 18,
+        },
+        contributors: resolve({ sourceIds: ["noaa-ncds"] }),
+        layer: {
+          id: NOAA_LAYER,
+          type: "raster",
+          source: NOAA_SOURCE,
+          paint: { "raster-opacity": 0.9, "raster-fade-duration": 200 },
+        },
+        order: 12,
+      });
+      syncRasterSubLayer(map, layerVisible && showNoaaCharts && bboxIntersectsNorwayWaters(map), {
+        sourceId: KARTVERKET_SOURCE,
+        source: {
+          type: "raster",
+          tiles: [makeKartverketTileUrl(env.apiUrl)],
+          tileSize: 256,
+          minzoom: 3,
+          maxzoom: 18,
+        },
+        contributors: resolve({ sourceIds: ["kartverket-sjokart"] }),
+        layer: {
+          id: KARTVERKET_LAYER,
+          type: "raster",
+          source: KARTVERKET_SOURCE,
+          paint: { "raster-opacity": 0.9, "raster-fade-duration": 200 },
+        },
+        order: 13,
+      });
+    };
+
     const sync = () => {
-      if (!map.isStyleLoaded()) {
-        map.once("idle", sync);
-        return;
-      }
+      // Depth shaded relief (lowest layer)
+      syncRasterSubLayer(map, layerVisible && showDepth, {
+        sourceId: DEPTH_RELIEF_SOURCE,
+        source: {
+          type: "raster",
+          tiles: [makeDepthReliefTileUrl(env.apiUrl)],
+          tileSize: 256,
+          minzoom: 0,
+          maxzoom: 8,
+        },
+        contributors: resolve({ sourceIds: ["gebco"] }),
+        layer: {
+          id: DEPTH_RELIEF_LAYER,
+          type: "raster",
+          source: DEPTH_RELIEF_SOURCE,
+          maxzoom: 8,
+          paint: { "raster-opacity": 0.55, "raster-fade-duration": 200 },
+        },
+        order: 10,
+      });
 
-      // ---- Depth shaded relief (lowest layer) ----
-      if (layerVisible && showDepth) {
-        if (!map.getSource(DEPTH_RELIEF_SOURCE)) {
-          map.addSource(DEPTH_RELIEF_SOURCE, {
-            type: "raster",
-            tiles: [makeDepthReliefTileUrl(env.apiUrl)],
-            tileSize: 256,
-            minzoom: 0,
-            maxzoom: 8,
-          });
-        }
-        if (!map.getLayer(DEPTH_RELIEF_LAYER)) {
-          addLayerInSlot(
-            map,
-            {
-              id: DEPTH_RELIEF_LAYER,
-              type: "raster",
-              source: DEPTH_RELIEF_SOURCE,
-              maxzoom: 8,
-              paint: { "raster-opacity": 0.55, "raster-fade-duration": 200 },
-            },
-            "raster-overlays",
-            10,
-          );
-        }
-      } else {
-        if (map.getLayer(DEPTH_RELIEF_LAYER)) map.removeLayer(DEPTH_RELIEF_LAYER);
-        if (map.getSource(DEPTH_RELIEF_SOURCE)) map.removeSource(DEPTH_RELIEF_SOURCE);
-        unregisterLayerSlot(DEPTH_RELIEF_LAYER);
-      }
+      // Depth contour lines (zoom 7+)
+      syncRasterSubLayer(map, layerVisible && showDepth, {
+        sourceId: DEPTH_CONTOUR_SOURCE,
+        source: {
+          type: "raster",
+          tiles: [makeDepthContourTileUrl(env.apiUrl)],
+          tileSize: 256,
+          minzoom: 6,
+        },
+        contributors: resolve({ sourceIds: ["openseamap"] }),
+        layer: {
+          id: DEPTH_CONTOUR_LAYER,
+          type: "raster",
+          source: DEPTH_CONTOUR_SOURCE,
+          minzoom: 6,
+          paint: { "raster-opacity": 0.9, "raster-fade-duration": 200 },
+        },
+        order: 11,
+      });
 
-      // ---- Depth contour lines (zoom 7+) ----
-      if (layerVisible && showDepth) {
-        if (!map.getSource(DEPTH_CONTOUR_SOURCE)) {
-          map.addSource(DEPTH_CONTOUR_SOURCE, {
-            type: "raster",
-            tiles: [makeDepthContourTileUrl(env.apiUrl)],
-            tileSize: 256,
-            minzoom: 6,
-          });
-        }
-        if (!map.getLayer(DEPTH_CONTOUR_LAYER)) {
-          addLayerInSlot(
-            map,
-            {
-              id: DEPTH_CONTOUR_LAYER,
-              type: "raster",
-              source: DEPTH_CONTOUR_SOURCE,
-              minzoom: 6,
-              paint: { "raster-opacity": 0.9, "raster-fade-duration": 200 },
-            },
-            "raster-overlays",
-            11,
-          );
-        }
-      } else {
-        if (map.getLayer(DEPTH_CONTOUR_LAYER)) map.removeLayer(DEPTH_CONTOUR_LAYER);
-        if (map.getSource(DEPTH_CONTOUR_SOURCE)) map.removeSource(DEPTH_CONTOUR_SOURCE);
-        unregisterLayerSlot(DEPTH_CONTOUR_LAYER);
-      }
+      syncCharts();
 
-      // ---- Charts: multi-provider raster (US: NOAA, Norway+Svalbard: Kartverket)
-      // Each provider's source is added/removed based on viewport bbox so they
-      // stack naturally when both regions are visible (e.g. cross-Atlantic).
-      const wantNoaa = layerVisible && showNoaaCharts && bboxIntersectsUsWaters(map);
-      if (wantNoaa) {
-        if (!map.getSource(NOAA_SOURCE)) {
-          map.addSource(NOAA_SOURCE, {
-            type: "raster",
-            tiles: [makeNoaaTileUrl(env.apiUrl)],
-            tileSize: 256,
-            minzoom: 3,
-            maxzoom: 18,
-          });
-        }
-        if (!map.getLayer(NOAA_LAYER)) {
-          addLayerInSlot(
-            map,
-            {
-              id: NOAA_LAYER,
-              type: "raster",
-              source: NOAA_SOURCE,
-              paint: { "raster-opacity": 0.9, "raster-fade-duration": 200 },
-            },
-            "raster-overlays",
-            12,
-          );
-        }
-      } else {
-        if (map.getLayer(NOAA_LAYER)) map.removeLayer(NOAA_LAYER);
-        if (map.getSource(NOAA_SOURCE)) map.removeSource(NOAA_SOURCE);
-        unregisterLayerSlot(NOAA_LAYER);
-      }
+      // Seamarks (always on top of bathymetry/chart raster)
+      syncRasterSubLayer(map, layerVisible && showSeamarks, {
+        sourceId: SEAMARK_SOURCE,
+        source: {
+          type: "raster",
+          tiles: [makeSeamarkTileUrl(env.apiUrl)],
+          tileSize: 256,
+          maxzoom: 18,
+        },
+        contributors: resolve({ sourceIds: ["openseamap", "openstreetmap"] }),
+        layer: {
+          id: SEAMARK_LAYER,
+          type: "raster",
+          source: SEAMARK_SOURCE,
+          paint: { "raster-opacity": 0.95, "raster-fade-duration": 200 },
+        },
+        order: 14,
+      });
 
-      const wantKartverket = layerVisible && showNoaaCharts && bboxIntersectsNorwayWaters(map);
-      if (wantKartverket) {
-        if (!map.getSource(KARTVERKET_SOURCE)) {
-          map.addSource(KARTVERKET_SOURCE, {
-            type: "raster",
-            tiles: [makeKartverketTileUrl(env.apiUrl)],
-            tileSize: 256,
-            minzoom: 3,
-            maxzoom: 18,
-          });
-        }
-        if (!map.getLayer(KARTVERKET_LAYER)) {
-          addLayerInSlot(
-            map,
-            {
-              id: KARTVERKET_LAYER,
-              type: "raster",
-              source: KARTVERKET_SOURCE,
-              paint: { "raster-opacity": 0.9, "raster-fade-duration": 200 },
-            },
-            "raster-overlays",
-            13,
-          );
-        }
-      } else {
-        if (map.getLayer(KARTVERKET_LAYER)) map.removeLayer(KARTVERKET_LAYER);
-        if (map.getSource(KARTVERKET_SOURCE)) map.removeSource(KARTVERKET_SOURCE);
-        unregisterLayerSlot(KARTVERKET_LAYER);
-      }
-
-      // ---- Seamarks (always on top of bathymetry/chart raster) ----
-      if (layerVisible && showSeamarks) {
-        if (!map.getSource(SEAMARK_SOURCE)) {
-          map.addSource(SEAMARK_SOURCE, {
-            type: "raster",
-            tiles: [makeSeamarkTileUrl(env.apiUrl)],
-            tileSize: 256,
-            maxzoom: 18,
-          });
-        }
-        if (!map.getLayer(SEAMARK_LAYER)) {
-          addLayerInSlot(
-            map,
-            {
-              id: SEAMARK_LAYER,
-              type: "raster",
-              source: SEAMARK_SOURCE,
-              paint: { "raster-opacity": 0.95, "raster-fade-duration": 200 },
-            },
-            "raster-overlays",
-            14,
-          );
-        }
-      } else {
-        if (map.getLayer(SEAMARK_LAYER)) map.removeLayer(SEAMARK_LAYER);
-        if (map.getSource(SEAMARK_SOURCE)) map.removeSource(SEAMARK_SOURCE);
-        unregisterLayerSlot(SEAMARK_LAYER);
-      }
-
-      // ---- Harbor markers (top layer) ----
+      // Harbor markers (top layer)
       if (layerVisible && showHarbors) {
         if (!map.getSource(HARBOR_SOURCE)) {
           map.addSource(HARBOR_SOURCE, {
@@ -577,15 +608,11 @@ export function NauticalLayer() {
           );
         }
       } else {
-        if (map.getLayer(HARBOR_LABEL_LAYER)) map.removeLayer(HARBOR_LABEL_LAYER);
-        if (map.getLayer(HARBOR_ICON_LAYER)) map.removeLayer(HARBOR_ICON_LAYER);
-        if (map.getSource(HARBOR_SOURCE)) map.removeSource(HARBOR_SOURCE);
-        unregisterLayerSlot(HARBOR_LABEL_LAYER);
-        unregisterLayerSlot(HARBOR_ICON_LAYER);
+        removeSlottedLayers(map, [HARBOR_LABEL_LAYER, HARBOR_ICON_LAYER], [HARBOR_SOURCE]);
         harborsFetchKeyRef.current = null;
       }
 
-      // ---- Tide / water-level / currents station markers ----
+      // Tide / water-level / currents station markers
       if (layerVisible && showTideStations) {
         if (!map.getSource(STATION_SOURCE)) {
           map.addSource(STATION_SOURCE, {
@@ -641,19 +668,24 @@ export function NauticalLayer() {
           );
         }
       } else {
-        if (map.getLayer(STATION_LABEL_LAYER)) map.removeLayer(STATION_LABEL_LAYER);
-        if (map.getLayer(STATION_CIRCLE_LAYER)) map.removeLayer(STATION_CIRCLE_LAYER);
-        if (map.getSource(STATION_SOURCE)) map.removeSource(STATION_SOURCE);
-        unregisterLayerSlot(STATION_LABEL_LAYER);
-        unregisterLayerSlot(STATION_CIRCLE_LAYER);
+        removeSlottedLayers(map, [STATION_LABEL_LAYER, STATION_CIRCLE_LAYER], [STATION_SOURCE]);
         stationsFetchKeyRef.current = null;
       }
     };
 
-    sync();
-    map.on("styledata", sync);
+    const unsubscribeStyle = subscribeStyleLoaded(map, sync);
+    if (!layerVisible || !showNoaaCharts) return unsubscribeStyle;
+
+    // Panning can bring a chart provider's region into or out of view. A
+    // stylesheet that is still being replaced rejects new sources; its own
+    // load re-runs the full sync.
+    const onMoveEnd = () => {
+      if (map.getStyle()) syncCharts();
+    };
+    map.on("moveend", onMoveEnd);
     return () => {
-      map.off("styledata", sync);
+      unsubscribeStyle();
+      map.off("moveend", onMoveEnd);
     };
   }, [
     mapReady,
@@ -702,42 +734,6 @@ export function NauticalLayer() {
     stationsFetchKeyRef.current = null;
     void fetchStations();
   }, [tideStationFilter, layerVisible, showTideStations, fetchStations]);
-
-  // Re-evaluate chart-provider coverage when the viewport changes. Each
-  // provider's source is added when its bbox intersects and removed when
-  // it doesn't.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-    if (!layerVisible || !showNoaaCharts) return;
-
-    const reevaluate = () => {
-      // NOAA (US)
-      const inUs = bboxIntersectsUsWaters(map);
-      const hasNoaa = !!map.getLayer(NOAA_LAYER);
-      if (inUs && !hasNoaa) {
-        map.fire("styledata");
-      } else if (!inUs && hasNoaa) {
-        map.removeLayer(NOAA_LAYER);
-        if (map.getSource(NOAA_SOURCE)) map.removeSource(NOAA_SOURCE);
-        unregisterLayerSlot(NOAA_LAYER);
-      }
-      // Kartverket (Norway + Svalbard)
-      const inNo = bboxIntersectsNorwayWaters(map);
-      const hasKartverket = !!map.getLayer(KARTVERKET_LAYER);
-      if (inNo && !hasKartverket) {
-        map.fire("styledata");
-      } else if (!inNo && hasKartverket) {
-        map.removeLayer(KARTVERKET_LAYER);
-        if (map.getSource(KARTVERKET_SOURCE)) map.removeSource(KARTVERKET_SOURCE);
-        unregisterLayerSlot(KARTVERKET_LAYER);
-      }
-    };
-    map.on("moveend", reevaluate);
-    return () => {
-      map.off("moveend", reevaluate);
-    };
-  }, [mapRef, mapReady, layerVisible, showNoaaCharts]);
 
   // Click handling — open place panel for clicked harbor
   useEffect(() => {

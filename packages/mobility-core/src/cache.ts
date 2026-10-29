@@ -9,6 +9,8 @@ import { TTL as TTL_POLICY } from "./policy.js";
 // passes to integrations via `IntegrationContext.cache` - can be supplied
 // directly to the runtime that owns the operation.
 export interface CacheClient {
+  /** Host administration capability; CLI and test caches may omit it. */
+  onInvalidate?(listener: (event: { available: boolean }) => void): () => void;
   get<T = unknown>(key: string): Promise<T | null>;
   set(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
   del(key: string): Promise<void>;

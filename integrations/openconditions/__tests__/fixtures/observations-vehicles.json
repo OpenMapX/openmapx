@@ -1,0 +1,962 @@
+{
+  "records": [
+    {
+      "id": "oc:observation:fi-digitraffic-maintenance:b7769267128658755c94d17725dac8de7ac3727adb5f9e9dc623da0fcf6f07ff",
+      "temporality": "live",
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [22.046154, 60.541165]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "fi-digitraffic-maintenance",
+        "sourceFormat": "digitraffic",
+        "accessMode": "bulk",
+        "recordId": "202634992",
+        "attribution": {
+          "provider": "Source: Fintraffic / digitraffic.fi, license CC 4.0 BY",
+          "name": "Fintraffic Digitraffic road maintenance tracking",
+          "licensing": {
+            "version": 1,
+            "declarations": [
+              {
+                "text": "CC-BY-4.0",
+                "url": "https://creativecommons.org/licenses/by/4.0/"
+              }
+            ],
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "Fintraffic Digitraffic road maintenance tracking",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC-BY-4.0",
+                  "url": "https://creativecommons.org/licenses/by/4.0/"
+                }
+              }
+            ]
+          },
+          "license": "CC-BY-4.0",
+          "url": "https://www.digitraffic.fi/en/road-traffic/",
+          "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+          "rights": {
+            "source_redistribution": "yes",
+            "derived_redistribution": "yes",
+            "commercial_use": "yes",
+            "attribution_required": "yes",
+            "retention": "yes",
+            "evidence_origin": "https://www.digitraffic.fi/en/terms-of-service/",
+            "evidence_version": "CC-BY-4.0",
+            "reviewed_at": "2026-10-15T00:00:00.000Z"
+          }
+        },
+        "upstream": [
+          {
+            "publisher": "Harja/Väylävirasto",
+            "licensing": {
+              "version": 1,
+              "declarations": [
+                {
+                  "text": "NOASSERTION"
+                }
+              ],
+              "bindings": [
+                {
+                  "scope": "data",
+                  "subject": "Harja/Väylävirasto",
+                  "license": {
+                    "kind": "unknown",
+                    "raw": "NOASSERTION",
+                    "url": "https://spdx.org/licenses/"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "conditions.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-14T23:24:56Z",
+        "expiresAt": "2026-10-14T23:28:21Z"
+      },
+      "extras": {
+        "tasks": ["LEVELLING_OF_ROAD_SHOULDERS"]
+      },
+      "class": "observation",
+      "kind": "observation",
+      "property": "vehicle.position",
+      "subject": {
+        "kind": "location"
+      },
+      "result": {
+        "type": "structured",
+        "schema": "vehicle_position",
+        "v": 1,
+        "value": {
+          "v": 1,
+          "point": {
+            "type": "Point",
+            "coordinates": [22.046154, 60.541165]
+          },
+          "bearingDeg": 288
+        }
+      },
+      "phenomenonTime": {
+        "instant": "2026-10-14T23:18:21Z"
+      },
+      "aggregation": "instantaneous",
+      "canonicalId": "73bb02b736ea50ee0f32f2c78b5592b247c0bbc4b44b5800c5b1f4db995b3abc",
+      "domain": "vehicles",
+      "revision": 1,
+      "recordedAt": "2026-10-14T23:24:56Z",
+      "contentHash": "bbb104a5c271120754908cdf92bfe1ece42e69b416e3fcd37679f4133b2967dc"
+    },
+    {
+      "id": "oc:observation:fi-digitraffic-maintenance:59e45def0cab101fcb36a4ca00a23aeff3e3a2b2dc21ca3b89c68656e7ca0911",
+      "temporality": "live",
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [24.912245, 60.16504]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "fi-digitraffic-maintenance",
+        "sourceFormat": "digitraffic",
+        "accessMode": "bulk",
+        "recordId": "202635001",
+        "attribution": {
+          "provider": "Source: Fintraffic / digitraffic.fi, license CC 4.0 BY",
+          "name": "Fintraffic Digitraffic road maintenance tracking",
+          "licensing": {
+            "version": 1,
+            "declarations": [
+              {
+                "text": "CC-BY-4.0",
+                "url": "https://creativecommons.org/licenses/by/4.0/"
+              }
+            ],
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "Fintraffic Digitraffic road maintenance tracking",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC-BY-4.0",
+                  "url": "https://creativecommons.org/licenses/by/4.0/"
+                }
+              }
+            ]
+          },
+          "license": "CC-BY-4.0",
+          "url": "https://www.digitraffic.fi/en/road-traffic/",
+          "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+          "rights": {
+            "source_redistribution": "yes",
+            "derived_redistribution": "yes",
+            "commercial_use": "yes",
+            "attribution_required": "yes",
+            "retention": "yes",
+            "evidence_origin": "https://www.digitraffic.fi/en/terms-of-service/",
+            "evidence_version": "CC-BY-4.0",
+            "reviewed_at": "2026-10-15T00:00:00.000Z"
+          }
+        },
+        "upstream": [
+          {
+            "publisher": "Harja/Väylävirasto",
+            "licensing": {
+              "version": 1,
+              "declarations": [
+                {
+                  "text": "NOASSERTION"
+                }
+              ],
+              "bindings": [
+                {
+                  "scope": "data",
+                  "subject": "Harja/Väylävirasto",
+                  "license": {
+                    "kind": "unknown",
+                    "raw": "NOASSERTION",
+                    "url": "https://spdx.org/licenses/"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "conditions.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-14T23:24:56Z",
+        "expiresAt": "2026-10-14T23:29:22Z"
+      },
+      "extras": {
+        "tasks": ["LEVELLING_OF_ROAD_SHOULDERS"]
+      },
+      "class": "observation",
+      "kind": "observation",
+      "property": "vehicle.position",
+      "subject": {
+        "kind": "location"
+      },
+      "result": {
+        "type": "structured",
+        "schema": "vehicle_position",
+        "v": 1,
+        "value": {
+          "v": 1,
+          "point": {
+            "type": "Point",
+            "coordinates": [24.912245, 60.16504]
+          }
+        }
+      },
+      "phenomenonTime": {
+        "instant": "2026-10-14T23:19:22Z"
+      },
+      "aggregation": "instantaneous",
+      "canonicalId": "bcbe703b8f24484975c94f592e0ceb76ce66f49bcd44985e0047a36368a428b6",
+      "domain": "vehicles",
+      "revision": 1,
+      "recordedAt": "2026-10-14T23:24:56Z",
+      "contentHash": "29aee9377cd57e68bce2f88a08c0dd991bc1d1a024af2190a38725c524c1ba46"
+    },
+    {
+      "id": "oc:observation:fi-digitraffic-maintenance:a0d7c473365be3afe3b5c89c45a14412b81a498f329430f81a290afbb46552d8",
+      "temporality": "live",
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [27.119327, 68.100155]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "fi-digitraffic-maintenance",
+        "sourceFormat": "digitraffic",
+        "accessMode": "bulk",
+        "recordId": "202635025",
+        "attribution": {
+          "provider": "Source: Fintraffic / digitraffic.fi, license CC 4.0 BY",
+          "name": "Fintraffic Digitraffic road maintenance tracking",
+          "licensing": {
+            "version": 1,
+            "declarations": [
+              {
+                "text": "CC-BY-4.0",
+                "url": "https://creativecommons.org/licenses/by/4.0/"
+              }
+            ],
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "Fintraffic Digitraffic road maintenance tracking",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC-BY-4.0",
+                  "url": "https://creativecommons.org/licenses/by/4.0/"
+                }
+              }
+            ]
+          },
+          "license": "CC-BY-4.0",
+          "url": "https://www.digitraffic.fi/en/road-traffic/",
+          "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+          "rights": {
+            "source_redistribution": "yes",
+            "derived_redistribution": "yes",
+            "commercial_use": "yes",
+            "attribution_required": "yes",
+            "retention": "yes",
+            "evidence_origin": "https://www.digitraffic.fi/en/terms-of-service/",
+            "evidence_version": "CC-BY-4.0",
+            "reviewed_at": "2026-10-15T00:00:00.000Z"
+          }
+        },
+        "upstream": [
+          {
+            "publisher": "Harja/Väylävirasto",
+            "licensing": {
+              "version": 1,
+              "declarations": [
+                {
+                  "text": "NOASSERTION"
+                }
+              ],
+              "bindings": [
+                {
+                  "scope": "data",
+                  "subject": "Harja/Väylävirasto",
+                  "license": {
+                    "kind": "unknown",
+                    "raw": "NOASSERTION",
+                    "url": "https://spdx.org/licenses/"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "conditions.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-14T23:24:56Z",
+        "expiresAt": "2026-10-14T23:30:45Z"
+      },
+      "extras": {
+        "tasks": ["SPOT_SANDING"]
+      },
+      "class": "observation",
+      "kind": "observation",
+      "property": "vehicle.position",
+      "subject": {
+        "kind": "location"
+      },
+      "result": {
+        "type": "structured",
+        "schema": "vehicle_position",
+        "v": 1,
+        "value": {
+          "v": 1,
+          "point": {
+            "type": "Point",
+            "coordinates": [27.119327, 68.100155]
+          },
+          "activity": "sanding",
+          "spreaderOn": true
+        }
+      },
+      "phenomenonTime": {
+        "instant": "2026-10-14T23:20:45Z"
+      },
+      "aggregation": "instantaneous",
+      "canonicalId": "a0427ccf5f3f8d6c6fe2cdb0ada1d213543c8ac497f4a9c76ab007de978f289a",
+      "domain": "vehicles",
+      "revision": 1,
+      "recordedAt": "2026-10-14T23:24:56Z",
+      "contentHash": "0607b33db9f1849b641a0bf3ce978ace6c7fffd4572b2e0e0a64b48cbdeae899"
+    },
+    {
+      "id": "oc:observation:fi-digitraffic-maintenance:aeb5f6502834a58002af71b214acec92b5c6c6f866624a7dd67dddcd6d9cf788",
+      "temporality": "live",
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [24.881037, 60.164677]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "fi-digitraffic-maintenance",
+        "sourceFormat": "digitraffic",
+        "accessMode": "bulk",
+        "recordId": "202635027",
+        "attribution": {
+          "provider": "Source: Fintraffic / digitraffic.fi, license CC 4.0 BY",
+          "name": "Fintraffic Digitraffic road maintenance tracking",
+          "licensing": {
+            "version": 1,
+            "declarations": [
+              {
+                "text": "CC-BY-4.0",
+                "url": "https://creativecommons.org/licenses/by/4.0/"
+              }
+            ],
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "Fintraffic Digitraffic road maintenance tracking",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC-BY-4.0",
+                  "url": "https://creativecommons.org/licenses/by/4.0/"
+                }
+              }
+            ]
+          },
+          "license": "CC-BY-4.0",
+          "url": "https://www.digitraffic.fi/en/road-traffic/",
+          "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+          "rights": {
+            "source_redistribution": "yes",
+            "derived_redistribution": "yes",
+            "commercial_use": "yes",
+            "attribution_required": "yes",
+            "retention": "yes",
+            "evidence_origin": "https://www.digitraffic.fi/en/terms-of-service/",
+            "evidence_version": "CC-BY-4.0",
+            "reviewed_at": "2026-10-15T00:00:00.000Z"
+          }
+        },
+        "upstream": [
+          {
+            "publisher": "Harja/Väylävirasto",
+            "licensing": {
+              "version": 1,
+              "declarations": [
+                {
+                  "text": "NOASSERTION"
+                }
+              ],
+              "bindings": [
+                {
+                  "scope": "data",
+                  "subject": "Harja/Väylävirasto",
+                  "license": {
+                    "kind": "unknown",
+                    "raw": "NOASSERTION",
+                    "url": "https://spdx.org/licenses/"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "conditions.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-14T23:24:56Z",
+        "expiresAt": "2026-10-14T23:30:51Z"
+      },
+      "extras": {
+        "tasks": ["BRUSHING"]
+      },
+      "class": "observation",
+      "kind": "observation",
+      "property": "vehicle.position",
+      "subject": {
+        "kind": "location"
+      },
+      "result": {
+        "type": "structured",
+        "schema": "vehicle_position",
+        "v": 1,
+        "value": {
+          "v": 1,
+          "point": {
+            "type": "Point",
+            "coordinates": [24.881037, 60.164677]
+          }
+        }
+      },
+      "phenomenonTime": {
+        "instant": "2026-10-14T23:20:51Z"
+      },
+      "aggregation": "instantaneous",
+      "canonicalId": "d08c0cea734917b95a6bdc8a114479f61def2d5e14f53bc9c1d52705d9965451",
+      "domain": "vehicles",
+      "revision": 1,
+      "recordedAt": "2026-10-14T23:24:56Z",
+      "contentHash": "3b0799908a0911a33711907cd23f94ef71836a1d4d4d4296a6f3f9bc3034231f"
+    },
+    {
+      "id": "oc:observation:fi-digitraffic-maintenance:cf0e3e74508b0aaedeb4941e82e585d6f6d18c6065790096f0a7d9181df3562e",
+      "temporality": "live",
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [25.507827, 65.017175]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "fi-digitraffic-maintenance",
+        "sourceFormat": "digitraffic",
+        "accessMode": "bulk",
+        "recordId": "202635031",
+        "attribution": {
+          "provider": "Source: Fintraffic / digitraffic.fi, license CC 4.0 BY",
+          "name": "Fintraffic Digitraffic road maintenance tracking",
+          "licensing": {
+            "version": 1,
+            "declarations": [
+              {
+                "text": "CC-BY-4.0",
+                "url": "https://creativecommons.org/licenses/by/4.0/"
+              }
+            ],
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "Fintraffic Digitraffic road maintenance tracking",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC-BY-4.0",
+                  "url": "https://creativecommons.org/licenses/by/4.0/"
+                }
+              }
+            ]
+          },
+          "license": "CC-BY-4.0",
+          "url": "https://www.digitraffic.fi/en/road-traffic/",
+          "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+          "rights": {
+            "source_redistribution": "yes",
+            "derived_redistribution": "yes",
+            "commercial_use": "yes",
+            "attribution_required": "yes",
+            "retention": "yes",
+            "evidence_origin": "https://www.digitraffic.fi/en/terms-of-service/",
+            "evidence_version": "CC-BY-4.0",
+            "reviewed_at": "2026-10-15T00:00:00.000Z"
+          }
+        },
+        "upstream": [
+          {
+            "publisher": "Harja/Väylävirasto",
+            "licensing": {
+              "version": 1,
+              "declarations": [
+                {
+                  "text": "NOASSERTION"
+                }
+              ],
+              "bindings": [
+                {
+                  "scope": "data",
+                  "subject": "Harja/Väylävirasto",
+                  "license": {
+                    "kind": "unknown",
+                    "raw": "NOASSERTION",
+                    "url": "https://spdx.org/licenses/"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "conditions.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-14T23:24:56Z",
+        "expiresAt": "2026-10-14T23:30:57Z"
+      },
+      "extras": {
+        "tasks": ["SNOW_PLOUGHING_STICKS_AND_SNOW_FENCES"]
+      },
+      "class": "observation",
+      "kind": "observation",
+      "property": "vehicle.position",
+      "subject": {
+        "kind": "location"
+      },
+      "result": {
+        "type": "structured",
+        "schema": "vehicle_position",
+        "v": 1,
+        "value": {
+          "v": 1,
+          "point": {
+            "type": "Point",
+            "coordinates": [25.507827, 65.017175]
+          },
+          "bearingDeg": 5
+        }
+      },
+      "phenomenonTime": {
+        "instant": "2026-10-14T23:20:57Z"
+      },
+      "aggregation": "instantaneous",
+      "canonicalId": "4cebdaa3ee7c44247aa22a1ed47fabe09f6042acd07495c54133b464acf9b630",
+      "domain": "vehicles",
+      "revision": 1,
+      "recordedAt": "2026-10-14T23:24:56Z",
+      "contentHash": "6db86dc64440670d43004146b3967a8e17357bf067d56f5c2dd965cfeb7c0e17"
+    },
+    {
+      "id": "oc:observation:fi-digitraffic-maintenance:c50228bf7c3834e812a863137fb3e537f7b129c74b3bcb1cec785ceb4e638c38",
+      "temporality": "live",
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [24.18017, 60.85501]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "fi-digitraffic-maintenance",
+        "sourceFormat": "digitraffic",
+        "accessMode": "bulk",
+        "recordId": "202635032",
+        "attribution": {
+          "provider": "Source: Fintraffic / digitraffic.fi, license CC 4.0 BY",
+          "name": "Fintraffic Digitraffic road maintenance tracking",
+          "licensing": {
+            "version": 1,
+            "declarations": [
+              {
+                "text": "CC-BY-4.0",
+                "url": "https://creativecommons.org/licenses/by/4.0/"
+              }
+            ],
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "Fintraffic Digitraffic road maintenance tracking",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC-BY-4.0",
+                  "url": "https://creativecommons.org/licenses/by/4.0/"
+                }
+              }
+            ]
+          },
+          "license": "CC-BY-4.0",
+          "url": "https://www.digitraffic.fi/en/road-traffic/",
+          "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+          "rights": {
+            "source_redistribution": "yes",
+            "derived_redistribution": "yes",
+            "commercial_use": "yes",
+            "attribution_required": "yes",
+            "retention": "yes",
+            "evidence_origin": "https://www.digitraffic.fi/en/terms-of-service/",
+            "evidence_version": "CC-BY-4.0",
+            "reviewed_at": "2026-10-15T00:00:00.000Z"
+          }
+        },
+        "upstream": [
+          {
+            "publisher": "Harja/Väylävirasto",
+            "licensing": {
+              "version": 1,
+              "declarations": [
+                {
+                  "text": "NOASSERTION"
+                }
+              ],
+              "bindings": [
+                {
+                  "scope": "data",
+                  "subject": "Harja/Väylävirasto",
+                  "license": {
+                    "kind": "unknown",
+                    "raw": "NOASSERTION",
+                    "url": "https://spdx.org/licenses/"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "conditions.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-14T23:24:56Z",
+        "expiresAt": "2026-10-14T23:30:59Z"
+      },
+      "extras": {
+        "tasks": ["LEVELLING_GRAVEL_ROAD_SURFACE"]
+      },
+      "class": "observation",
+      "kind": "observation",
+      "property": "vehicle.position",
+      "subject": {
+        "kind": "location"
+      },
+      "result": {
+        "type": "structured",
+        "schema": "vehicle_position",
+        "v": 1,
+        "value": {
+          "v": 1,
+          "point": {
+            "type": "Point",
+            "coordinates": [24.18017, 60.85501]
+          },
+          "bearingDeg": 75
+        }
+      },
+      "phenomenonTime": {
+        "instant": "2026-10-14T23:20:59Z"
+      },
+      "aggregation": "instantaneous",
+      "canonicalId": "97dafa1f7f782ac606eb6ae77c110d7f6ccb2c10249bb37a314d07b6d0965066",
+      "domain": "vehicles",
+      "revision": 1,
+      "recordedAt": "2026-10-14T23:24:56Z",
+      "contentHash": "e7d21cd66d091be3b32486ca7b109600939b54ffed0bd67e01e1254fa566f06a"
+    },
+    {
+      "id": "oc:observation:fi-digitraffic-maintenance:a309965e1f5893b2890e0082c1da7a508562c463315c17c1896dfc8c6f481762",
+      "temporality": "live",
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [24.852819, 60.164005]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "fi-digitraffic-maintenance",
+        "sourceFormat": "digitraffic",
+        "accessMode": "bulk",
+        "recordId": "202635037",
+        "attribution": {
+          "provider": "Source: Fintraffic / digitraffic.fi, license CC 4.0 BY",
+          "name": "Fintraffic Digitraffic road maintenance tracking",
+          "licensing": {
+            "version": 1,
+            "declarations": [
+              {
+                "text": "CC-BY-4.0",
+                "url": "https://creativecommons.org/licenses/by/4.0/"
+              }
+            ],
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "Fintraffic Digitraffic road maintenance tracking",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC-BY-4.0",
+                  "url": "https://creativecommons.org/licenses/by/4.0/"
+                }
+              }
+            ]
+          },
+          "license": "CC-BY-4.0",
+          "url": "https://www.digitraffic.fi/en/road-traffic/",
+          "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+          "rights": {
+            "source_redistribution": "yes",
+            "derived_redistribution": "yes",
+            "commercial_use": "yes",
+            "attribution_required": "yes",
+            "retention": "yes",
+            "evidence_origin": "https://www.digitraffic.fi/en/terms-of-service/",
+            "evidence_version": "CC-BY-4.0",
+            "reviewed_at": "2026-10-15T00:00:00.000Z"
+          }
+        },
+        "upstream": [
+          {
+            "publisher": "Harja/Väylävirasto",
+            "licensing": {
+              "version": 1,
+              "declarations": [
+                {
+                  "text": "NOASSERTION"
+                }
+              ],
+              "bindings": [
+                {
+                  "scope": "data",
+                  "subject": "Harja/Väylävirasto",
+                  "license": {
+                    "kind": "unknown",
+                    "raw": "NOASSERTION",
+                    "url": "https://spdx.org/licenses/"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "conditions.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-14T23:24:56Z",
+        "expiresAt": "2026-10-14T23:31:16Z"
+      },
+      "extras": {
+        "tasks": ["BRUSH_CLEARING"]
+      },
+      "class": "observation",
+      "kind": "observation",
+      "property": "vehicle.position",
+      "subject": {
+        "kind": "location"
+      },
+      "result": {
+        "type": "structured",
+        "schema": "vehicle_position",
+        "v": 1,
+        "value": {
+          "v": 1,
+          "point": {
+            "type": "Point",
+            "coordinates": [24.852819, 60.164005]
+          }
+        }
+      },
+      "phenomenonTime": {
+        "instant": "2026-10-14T23:21:16Z"
+      },
+      "aggregation": "instantaneous",
+      "canonicalId": "06709e8aa91d8ffacc02897673a67dec3e70e5fee54c8fa8316085ed7cee3bdd",
+      "domain": "vehicles",
+      "revision": 1,
+      "recordedAt": "2026-10-14T23:24:56Z",
+      "contentHash": "196f29ea51109fc9089279967943f3822e9660819b1cdff971844783c9a306a3"
+    },
+    {
+      "id": "oc:observation:fi-digitraffic-maintenance:415498e37970b11dd544412b9e4e4d7c5bb1e0b11d84b634aa17067de5c81c69",
+      "temporality": "live",
+      "location": {
+        "geometry": {
+          "type": "Point",
+          "coordinates": [23.626365, 61.453097]
+        },
+        "extent": "point",
+        "geometryOrigin": "source",
+        "fuzziness": "exact"
+      },
+      "provenance": {
+        "origin": "feed",
+        "sourceId": "fi-digitraffic-maintenance",
+        "sourceFormat": "digitraffic",
+        "accessMode": "bulk",
+        "recordId": "202635043",
+        "attribution": {
+          "provider": "Source: Fintraffic / digitraffic.fi, license CC 4.0 BY",
+          "name": "Fintraffic Digitraffic road maintenance tracking",
+          "licensing": {
+            "version": 1,
+            "declarations": [
+              {
+                "text": "CC-BY-4.0",
+                "url": "https://creativecommons.org/licenses/by/4.0/"
+              }
+            ],
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "Fintraffic Digitraffic road maintenance tracking",
+                "license": {
+                  "kind": "spdx",
+                  "expression": "CC-BY-4.0",
+                  "url": "https://creativecommons.org/licenses/by/4.0/"
+                }
+              }
+            ]
+          },
+          "license": "CC-BY-4.0",
+          "url": "https://www.digitraffic.fi/en/road-traffic/",
+          "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+          "rights": {
+            "source_redistribution": "yes",
+            "derived_redistribution": "yes",
+            "commercial_use": "yes",
+            "attribution_required": "yes",
+            "retention": "yes",
+            "evidence_origin": "https://www.digitraffic.fi/en/terms-of-service/",
+            "evidence_version": "CC-BY-4.0",
+            "reviewed_at": "2026-10-15T00:00:00.000Z"
+          }
+        },
+        "upstream": [
+          {
+            "publisher": "Harja/Väylävirasto",
+            "licensing": {
+              "version": 1,
+              "declarations": [
+                {
+                  "text": "NOASSERTION"
+                }
+              ],
+              "bindings": [
+                {
+                  "scope": "data",
+                  "subject": "Harja/Väylävirasto",
+                  "license": {
+                    "kind": "unknown",
+                    "raw": "NOASSERTION",
+                    "url": "https://spdx.org/licenses/"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "privacy": {
+          "class": "authoritative"
+        },
+        "instanceId": "conditions.example"
+      },
+      "freshness": {
+        "fetchedAt": "2026-10-14T23:24:56Z",
+        "expiresAt": "2026-10-14T23:31:54.200Z"
+      },
+      "extras": {
+        "tasks": ["OTHER_OPERATIONS_OF_LIGHTING_CONTRACTS"]
+      },
+      "class": "observation",
+      "kind": "observation",
+      "property": "vehicle.position",
+      "subject": {
+        "kind": "location"
+      },
+      "result": {
+        "type": "structured",
+        "schema": "vehicle_position",
+        "v": 1,
+        "value": {
+          "v": 1,
+          "point": {
+            "type": "Point",
+            "coordinates": [23.626365, 61.453097]
+          }
+        }
+      },
+      "phenomenonTime": {
+        "instant": "2026-10-14T23:21:54.200Z"
+      },
+      "aggregation": "instantaneous",
+      "canonicalId": "fe952034bc75cf12c2d40c81a8838a8c14cde4ea890e468209c7b4e65b4d9e4e",
+      "domain": "vehicles",
+      "revision": 1,
+      "recordedAt": "2026-10-14T23:24:56Z",
+      "contentHash": "ddf5b0235d37a59cf34a13216ba05a4206e34695006c8cf2e362f9998477065c"
+    }
+  ],
+  "next": null
+}

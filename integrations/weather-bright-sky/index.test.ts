@@ -175,9 +175,10 @@ describe("Bright Sky weather provider", () => {
     mockFetch.mockResolvedValueOnce(mockOk(hourlyResponse()));
 
     const hourly = await getProvider().getHourlyForecast(COORDS, 2);
+    expect(hourly.source).toBe("bright-sky");
 
-    expect(hourly).toHaveLength(2);
-    expect(hourly[0]).toMatchObject({
+    expect(hourly.points).toHaveLength(2);
+    expect(hourly.points[0]).toMatchObject({
       time: "2026-03-10T10:00:00+00:00",
       temperature: 10,
       weatherCode: 0, // clear-day -> 0
@@ -188,7 +189,7 @@ describe("Bright Sky weather provider", () => {
       cloudCover: 20,
       pressure: 1015,
     });
-    expect(hourly[1]?.weatherCode).toBe(63); // rain -> 63
+    expect(hourly.points[1]?.weatherCode).toBe(63); // rain -> 63
   });
 
   it("throws when no hourly forecast rows are returned", async () => {
@@ -202,9 +203,10 @@ describe("Bright Sky weather provider", () => {
     mockFetch.mockResolvedValueOnce(mockOk(hourlyResponse()));
 
     const daily = await getProvider().getDailyForecast(COORDS, 7);
+    expect(daily.source).toBe("bright-sky");
 
-    expect(daily).toHaveLength(2);
-    const day1 = daily[0];
+    expect(daily.points).toHaveLength(2);
+    const day1 = daily.points[0];
     expect(day1?.date).toBe("2026-03-10");
     expect(day1?.temperatureMin).toBe(10);
     expect(day1?.temperatureMax).toBe(12);
@@ -213,7 +215,7 @@ describe("Bright Sky weather provider", () => {
     // midday (T12:) row uses icon "rain" -> 63
     expect(day1?.weatherCode).toBe(63);
 
-    const day2 = daily[1];
+    const day2 = daily.points[1];
     expect(day2?.date).toBe("2026-03-11");
     expect(day2?.weatherCode).toBe(73); // snow -> 73
   });

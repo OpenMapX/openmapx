@@ -1,10 +1,16 @@
 import {
   buildMangroveSubjectUri,
   type MangroveReviewPayload,
+  matchesMangrovePayload,
+  normalizeMangrovePayload,
   signMangroveReview,
+  verifyMangroveReview,
 } from "@openmapx/mangrove-client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
+import { keypairOwner, useKeypairStore } from "./keypairStore";
 import { useMangroveCurrentUser, useMangroveTransport } from "./provider";
+import { useMangroveSigner } from "./signerProvider";
 import { useUserKeypair } from "./useKeypair";
 
 export interface SubmitReviewInput {
@@ -36,15 +42,28 @@ export function useSubmitReview() {
   const transport = useMangroveTransport();
   const currentUser = useMangroveCurrentUser();
   const { keypair } = useUserKeypair();
+  const signer = useMangroveSigner();
+  const lifetime = useRef(new AbortController());
+  const authority = useRef(currentUser);
+  authority.current = currentUser;
+  useEffect(() => {
+    lifetime.current = new AbortController();
+    return () => lifetime.current.abort();
+  }, []);
   // Default nickname from the host-provided session — explicit `input.nickname`
   // still wins so callers can override per-submission.
   const sessionNickname = currentUser?.nickname?.trim() || null;
 
   return useMutation({
     mutationFn: async (input: SubmitReviewInput): Promise<{ id: string }> => {
-      if (!keypair) {
-        throw new Error("Not signed in. A Mangrove keypair is required to submit a review.");
-      }
+      const owner = currentUser;
+      const signal = lifetime.current.signal;
+      const assertOwner = () => {
+        if (!owner || authority.current !== owner || signal.aborted)
+          throw new Error("Review session changed. Please try again.");
+      };
+      assertOwner();
+      if (signer.mode === "local" && !keypair) throw new Error("Unlock your review key first.");
 
       let sub: string;
       if (input.action && input.editTargetId) {
@@ -71,16 +90,42 @@ export function useSubmitReview() {
         },
       };
 
-      const jwt = await signMangroveReview(payload, keypair);
-      return transport.submitReview({
-        jwt,
-        invalidate: {
-          lat: input.subject.lat,
-          lng: input.subject.lng,
-          name: input.subject.name,
-          osmId: input.subject.osmId,
+      const normalized = structuredClone(normalizeMangrovePayload(payload));
+      let jwt: string;
+      let submitSignal = signal;
+      if (signer.mode === "signer") {
+        if (!signer.controller) throw new Error("Connect to Mangrove first.");
+        const result = await signer.controller.sign(normalized);
+        const verified = await verifyMangroveReview({ jwt: result.jwt, kid: result.publicPem });
+        result.assertCurrent();
+        submitSignal = AbortSignal.any([signal, result.signal]);
+        assertOwner();
+        if (!verified.ok || !matchesMangrovePayload(verified.payload, normalized))
+          throw new Error("Mangrove returned an invalid signed review.");
+        jwt = result.jwt;
+      } else {
+        const binding = useKeypairStore.getState().getSigningSnapshot(keypairOwner(currentUser));
+        if (!binding || !useKeypairStore.getState().touch(binding))
+          throw new Error("Unlock your review key first.");
+        submitSignal = AbortSignal.any([signal, binding.signal]);
+        jwt = await signMangroveReview(normalized, binding.keypair);
+        assertOwner();
+        if (!useKeypairStore.getState().isCurrent(binding))
+          throw new Error("Review key changed. Unlock it again.");
+      }
+      assertOwner();
+      return transport.submitReview(
+        {
+          jwt,
+          invalidate: {
+            lat: input.subject.lat,
+            lng: input.subject.lng,
+            name: input.subject.name,
+            osmId: input.subject.osmId,
+          },
         },
-      });
+        { signal: submitSignal },
+      );
     },
     onSuccess: (_data, vars) => {
       void qc.invalidateQueries({

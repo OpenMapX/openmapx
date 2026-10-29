@@ -63,7 +63,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const deadline = Date.now() + 10_000;
         let status: { building: boolean; lastError: string | null };
         do {
-          status = (await a.inject({ method: "GET", url: "/ambient-places/status" })).json();
+          const response = await a.inject({ method: "GET", url: "/ambient-places/status" });
+          expect(response.statusCode, response.body).toBe(200);
+          status = response.json();
           if (!status.building) break;
           if (Date.now() > deadline) throw new Error("Winning publication did not finish");
           await new Promise((resolve) => setTimeout(resolve, 10));
@@ -73,6 +75,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(coldStatus).toBe(409);
         expect((await readAmbientManifest(pg.sql))?.placeCount).toBe(1);
         expect(status.lastError).toBeNull();
+        // Read again after publication, so a pre-commit row plus a concurrently
+        // cleared local building flag cannot hide the persisted timestamp path.
+        const published = await a.inject("/ambient-places/status");
+        expect(published.statusCode, published.body).toBe(200);
+        expect(published.json()).toMatchObject({ active: { placeCount: 1 }, building: false });
+        expect(published.json().startedAt).toMatch(/^\d{4}-\d\d-\d\dT.*Z$/);
+        expect(published.json().finishedAt).toMatch(/^\d{4}-\d\d-\d\dT.*Z$/);
       } finally {
         await cold.close();
         await coldSql.end({ timeout: 2 });

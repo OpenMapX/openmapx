@@ -1,3 +1,4 @@
+import { contributionState, retainContributions } from "@openmapx/mobility-core/contribution-merge";
 /**
  * Enrichment merge for regional car-sharing stations.
  *
@@ -46,6 +47,18 @@ function findNearby(stations: SharedMobilityStation[], lng: number, lat: number)
  * First-seen station wins for identity and availability.
  * Later stations at nearby coordinates contribute enrichment fields.
  */
+const ENRICHMENT_FIELDS = [
+  "address",
+  "website",
+  "locationHint",
+  "operatorNotes",
+  "transitInfo",
+  "accessMethod",
+  "vehicleClassNames",
+  "stationType",
+  "capacity",
+] as const;
+
 export function mergeRegionalStations(stations: SharedMobilityStation[]): SharedMobilityStation[] {
   const merged: SharedMobilityStation[] = [];
 
@@ -60,8 +73,7 @@ export function mergeRegionalStations(stations: SharedMobilityStation[]): Shared
 
     const existing = merged[idx];
 
-    // Merge source identifiers
-    existing.sources = [...new Set([...existing.sources, ...s.sources])];
+    const before = contributionState(existing, ENRICHMENT_FIELDS);
 
     // Enrich the primary station with fields from the secondary source.
     // Only copy fields that the primary source doesn't already have.
@@ -75,6 +87,11 @@ export function mergeRegionalStations(stations: SharedMobilityStation[]): Shared
       existing.vehicleClassNames = s.vehicleClassNames;
     if (!existing.stationType && s.stationType) existing.stationType = s.stationType;
     if (existing.capacity === undefined && s.capacity !== undefined) existing.capacity = s.capacity;
+    if (contributionState(existing, ENRICHMENT_FIELDS) !== before) retainContributions(existing, s);
+    else if (existing.contributors === undefined && s.contributors === undefined) {
+      // Preserve only the historical legacy footprint; captured display receipts remain precise.
+      existing.sources = [...new Set([...existing.sources, ...s.sources])];
+    }
     // Do NOT override: availableVehicles, isActive, operator, name, id
     // These come from the primary (live) source. Sources are merged above.
   }

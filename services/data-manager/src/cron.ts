@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { readBoundedResponseText } from "@openmapx/core";
+import type { PlannedTrafficClosures } from "@openmapx/core/data-manager-contracts";
 import { envInt, envString } from "@openmapx/core/server-env";
 import { feedState } from "@openmapx/db-schema";
 import {
@@ -32,6 +33,7 @@ import {
   type ConditionsToEdgesResult,
   conditionRoutingDecision,
   conditionsToEdges,
+  emptyConditionsToEdges,
   parseConditionsJson,
   spanKey,
 } from "./jobs/traffic/conditions-to-edges.js";
@@ -52,6 +54,7 @@ import {
 import { readTrafficGraphState } from "./jobs/traffic/graph-generation.js";
 import { createLiveTrafficWriter } from "./jobs/traffic/live-writer-client.js";
 import { openConditionsHeaders } from "./jobs/traffic/openconditions-auth.js";
+import { plannedClosures } from "./jobs/traffic/planned-closures.js";
 import { fetchTrafficPolicy, type TrafficPolicy } from "./jobs/traffic/policy.js";
 import { buildTrafficReceipts, type TrafficApplicationSnapshot } from "./jobs/traffic/receipts.js";
 import {
@@ -165,7 +168,6 @@ export interface CronLogger {
 
 export interface CronSetupOptions {
   dataDir: string;
-  repoRoot: string;
   countries: string[];
   operationsPolicy?: MotisOperationsPolicy;
   store: StateStore;
@@ -407,6 +409,15 @@ export interface CronHandles {
    * point exclusions exist only for closures.
    */
   getTrafficConditionsApplied: () => TrafficApplicationSnapshot;
+  /**
+   * The bound closures a car trip at `travelAt` must route around, from the
+   * last good conditions set under the last policy lease; null when either is
+   * stale or absent, so a caller never routes on lapsed evidence.
+   */
+  getPlannedClosures: (
+    bbox: readonly [number, number, number, number],
+    travelAt: number,
+  ) => PlannedTrafficClosures | null;
   /** Test seam: directly invoke the predicted-traffic bake as if the cron fired. */
   runTrafficPredictedNow: () => Promise<void>;
   /** Test seam: directly invoke the auto-bump handler as if the cron fired. */
@@ -554,7 +565,6 @@ export function setupCron(options: CronSetupOptions): CronHandles {
           dataDir: options.dataDir,
           store: options.store,
           countries: options.countries,
-          repoRoot: options.repoRoot,
           source: parseTransitSource(),
           operationsPolicy: options.operationsPolicy,
           jobId: start.jobId,
@@ -652,7 +662,6 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       dataDir: options.dataDir,
       store: options.store,
       countries: options.countries,
-      repoRoot: options.repoRoot,
       source: parseTransitSource(),
       operationsPolicy: options.operationsPolicy,
       jobId,
@@ -811,9 +820,9 @@ export function setupCron(options: CronSetupOptions): CronHandles {
 
   const syncCron = syncExpr
     ? new Cron(syncExpr, { name: "transitous-sync", protect: true }, () => {
-        // Swallow rejections so an unhandled cron exception doesn't crash
-        // the process; `runSync` already logs internally.
-        void runSync().catch((err) => {
+        // Return the full job lifetime so Croner keeps overlap protection;
+        // swallow rejections because `runSync` already logs internally.
+        return runSync().catch((err) => {
           log.error("transitous-cron: unexpected runSync rejection", {
             err: (err as Error).message,
           });
@@ -823,7 +832,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
 
   const feedProxyReloadCron = feedProxyReloadExpr
     ? new Cron(feedProxyReloadExpr, { name: "transitous-feed-proxy-reload", protect: true }, () => {
-        void runFeedProxyReload().catch((err) => {
+        return runFeedProxyReload().catch((err) => {
           log.warn("transitous-cron: feed-proxy heartbeat threw", {
             err: (err as Error).message,
           });
@@ -833,7 +842,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
 
   const stalenessCheckCron = stalenessCheckExpr
     ? new Cron(stalenessCheckExpr, { name: "transitous-staleness-check", protect: true }, () => {
-        void runStalenessCheck().catch((err) => {
+        return runStalenessCheck().catch((err) => {
           log.warn("transitous-cron: staleness check threw", {
             err: (err as Error).message,
           });
@@ -847,7 +856,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   );
   const autoBumpCron = autoBumpExpr
     ? new Cron(autoBumpExpr, { name: "transitous-auto-bump", protect: true }, () => {
-        void runAutoBump().catch((err) => {
+        return runAutoBump().catch((err) => {
           log.error("transitous-auto-bump: unexpected rejection", { err: (err as Error).message });
         });
       })
@@ -1092,7 +1101,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         trafficExtractExpr,
         { name: "valhalla-traffic-extract-guard", protect: true },
         () => {
-          void runTrafficExtractGuard().catch((err) => {
+          return runTrafficExtractGuard().catch((err) => {
             log.error("traffic-extract: guard cron threw", { err: (err as Error).message });
           });
         },
@@ -1184,6 +1193,8 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     observationIds: [],
     resolverVersion: null,
   };
+  // The last policy lease a cycle read, for request-time planned closures.
+  let lastPolicy: TrafficPolicy | null = null;
   let lastMissingWaysRefreshAt = 0;
   const MISSING_WAYS_REFRESH_MIN_INTERVAL_MS = 3_600_000;
 
@@ -1307,10 +1318,14 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       let policy: TrafficPolicy | null = null;
       try {
         policy = await (options.fetchTrafficPolicy ?? fetchTrafficPolicy)();
+        lastPolicy = policy;
       } catch {
+        lastPolicy = null;
         log.warn("traffic-live: policy authority unavailable; withholding road-event effects");
       }
       let waysToEdges = new Map<number, WayEdge[]>();
+      // Set when the engine's graph cannot be attested: every live effect waits.
+      let graphUnattested = false;
       let engineGeneration: string | undefined;
       let engineBootId: string | undefined;
       const captureGraphState = async () => {
@@ -1346,6 +1361,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         );
         waysToEdges = new Map();
         policy = null;
+        graphUnattested = true;
         csv = "way_id,dir,current_kph,free_flow_kph,los\n";
         scheduleGraphMaintenanceCheck();
       }
@@ -1368,14 +1384,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       // Guarded separately from tracing: classification must never abort the
       // cycle, because skipping `writeLive` would leave the previous cycle's
       // overrides alive in `traffic.tar` with no live speeds refreshed.
-      let mapped: ConditionsToEdgesResult = {
-        overrides: new Map(),
-        appliedObservationIds: new Set(),
-        missingWayIds: new Set(),
-        edgeExactSpans: 0,
-        wholeWaySpans: 0,
-        skipped: { notRelevant: 0, crowdNotEligible: 0, noEffect: 0 },
-      };
+      let mapped: ConditionsToEdgesResult = emptyConditionsToEdges();
       // Anything ending before a renewal could replace it is left out now, so
       // no lease this write grants can lapse before the next write.
       const renewBy = Date.now() + TRAFFIC_LEASE_RENEWAL_MS;
@@ -1383,20 +1392,24 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         const until = conditionRoutingDecision(c).validUntil;
         return until === null || Date.parse(until) > renewBy;
       });
+      // Why no condition was classified at all this cycle, so a quiet cycle
+      // never reads as "nothing to close".
+      const withheld = graphUnattested
+        ? "graph_unattested"
+        : !policy
+          ? "policy_unavailable"
+          : !(Date.parse(policy.validUntil) > renewBy)
+            ? "policy_lease_ending"
+            : conditionsDeadline === null
+              ? "conditions_unavailable"
+              : !(conditionsDeadline > renewBy)
+                ? "conditions_stale"
+                : null;
       try {
-        mapped = conditionsToEdges(
-          policy &&
-            Date.parse(policy.validUntil) > renewBy &&
-            conditionsDeadline !== null &&
-            conditionsDeadline > renewBy
-            ? lasting
-            : [],
-          waysToEdges,
-          spans?.resolved,
-          {
-            disallowedSources: new Set(policy?.disallowedSourceIds ?? []),
-          },
-        );
+        mapped = conditionsToEdges(withheld === null ? lasting : [], waysToEdges, spans?.resolved, {
+          disallowedSources: new Set(policy?.disallowedSourceIds ?? []),
+          ...(policy?.rightsPolicy ? { rightsPolicy: policy.rightsPolicy } : {}),
+        });
       } catch (err) {
         log.warn("traffic-live: conditions classification failed, writing no overrides", {
           err: (err as Error).message,
@@ -1432,7 +1445,10 @@ export function setupCron(options: CronSetupOptions): CronHandles {
               ...conditions
                 .filter((c) => contributors.has(c.id))
                 .flatMap((c) => {
-                  const decision = conditionRoutingDecision(c);
+                  const decision = conditionRoutingDecision(
+                    c,
+                    policy?.rightsPolicy ? { rightsPolicy: policy.rightsPolicy } : {},
+                  );
                   return decision.eligible && decision.validUntil
                     ? [Date.parse(decision.validUntil)]
                     : [];
@@ -1490,6 +1506,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
               appliedObservationIds: result.appliedObservationIds,
               graphGeneration: hostGraphGeneration,
               policyRevision: policy.revision,
+              rightsPolicy: policy.rightsPolicy,
               validUntil,
             })
           : [],
@@ -1509,6 +1526,9 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         wholeWaySpans: mapped.wholeWaySpans,
         missingWays: mapped.missingWayIds.size,
         skipped: mapped.skipped,
+        ineligibleReasons: mapped.ineligibleReasons,
+        endingBeforeRenewal: conditions.length - lasting.length,
+        withheld,
       });
       if (spans && spanEdgeCache) {
         // An empty set because the FEED is down is not the same as a set with
@@ -1583,7 +1603,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   const trafficLiveCron =
     trafficLiveExpr && openConditionsUrl
       ? new Cron(trafficLiveExpr, { name: "traffic-live", protect: true }, () => {
-          void runTrafficLive().catch((err) => {
+          return runTrafficLive().catch((err) => {
             log.error("traffic-live: cron threw", { err: (err as Error).message });
           });
         })
@@ -1627,7 +1647,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   const trafficPredictedCron =
     trafficPredictedExpr && openConditionsUrl
       ? new Cron(trafficPredictedExpr, { name: "traffic-predicted", protect: true }, () => {
-          void runTrafficPredicted().catch((err) => {
+          return runTrafficPredicted().catch((err) => {
             log.error("traffic-predicted: cron threw", { err: (err as Error).message });
           });
         })
@@ -1699,6 +1719,35 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       Date.parse(trafficConditionsApplied.validUntil) > Date.now()
         ? trafficConditionsApplied
         : { ...trafficConditionsApplied, observationIds: [], receipts: [] },
+    getPlannedClosures: (bbox, travelAt) => {
+      const now = Date.now();
+      const conditionsUntil = lastConditions ? lastConditions.fetchedAt + conditionsStaleMs : 0;
+      const policyUntil = lastPolicy ? Date.parse(lastPolicy.validUntil) : Number.NaN;
+      if (!lastConditions || !lastPolicy || !(conditionsUntil > now) || !(policyUntil > now))
+        return null;
+      const { closures, unrepresentable } = plannedClosures(lastConditions.conditions, {
+        bbox,
+        travelAt,
+        evaluatedAt: now,
+        disallowedSources: new Set(lastPolicy.disallowedSourceIds),
+        ...(lastPolicy.rightsPolicy ? { rightsPolicy: lastPolicy.rightsPolicy } : {}),
+      });
+      const validUntil = Math.min(
+        conditionsUntil,
+        policyUntil,
+        ...closures.map((c) => Date.parse(c.validUntil)),
+      );
+      return {
+        schemaVersion: 1,
+        mode: roadConditionsMode,
+        evaluatedAt: new Date(now).toISOString(),
+        at: new Date(travelAt).toISOString(),
+        policyRevision: lastPolicy.revision,
+        validUntil: new Date(validUntil).toISOString(),
+        closures,
+        unrepresentable,
+      };
+    },
     runTrafficPredictedNow: runTrafficPredicted,
     runAutoBumpNow: runAutoBump,
     // `activeJobId` is exposed indirectly through singleFlight.getInflight()

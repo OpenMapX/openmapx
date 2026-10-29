@@ -1,3 +1,4 @@
+import { zonedWallClockToInstant } from "@openmapx/core";
 import type {
   IntegrationContext,
   RideAvailability,
@@ -39,28 +40,17 @@ function localWallClock(timezone: string, at: Date): string {
 }
 
 /**
- * Interpret a `YYYY-MM-DDTHH:mm` wall clock in the feed's timezone and return
- * Unix seconds. Derives the zone's offset at that instant by formatting a
- * probe date, so it stays correct across daylight-saving changes without
- * pulling in a timezone library.
+ * Resolve a feed-local pickup time to GOFS Unix seconds using the shared policy:
+ * folds choose the earlier instant; gaps choose the first valid instant after
+ * the requested wall clock. Invalid dates/zones omit the optional pickup time.
  */
 export function wallClockToEpochSeconds(
   pickupAt: string | undefined,
   timezone: string,
 ): number | null {
   if (!pickupAt) return null;
-  const asUtc = Date.parse(`${pickupAt}:00Z`);
-  if (Number.isNaN(asUtc)) return null;
-  try {
-    const probe = new Date(asUtc);
-    const local = new Date(probe.toLocaleString("en-US", { timeZone: timezone }));
-    const utc = new Date(probe.toLocaleString("en-US", { timeZone: "UTC" }));
-    const offsetMs = local.getTime() - utc.getTime();
-    return Math.floor((asUtc - offsetMs) / 1000);
-  } catch {
-    // An unknown timezone string should not lose the whole handoff.
-    return Math.floor(asUtc / 1000);
-  }
+  const instant = zonedWallClockToInstant(timezone, pickupAt);
+  return instant ? Math.floor(instant.getTime() / 1000) : null;
 }
 
 /**
@@ -108,6 +98,27 @@ function toProduct(
     color: toCssColor(brand.brand_color),
     textColor: toCssColor(brand.brand_text_color),
   };
+}
+
+/**
+ * The first booking rule that applies to the trip, in feed order. A rule needs
+ * an origin match; when the destination is known it must also fit the rule's
+ * `to_zone_ids`. An omitted or null restriction covers every destination, while
+ * an empty one covers none. With no destination (`null`) only the origin is
+ * compared, so a destination-restricted rule is still offered for a partial trip.
+ */
+function selectBookingRule(
+  rules: GofsBookingRule[],
+  fromZoneIds: string[],
+  toZoneIds: string[] | null,
+): GofsBookingRule | undefined {
+  return rules.find(
+    (rule) =>
+      rule.from_zone_ids.some((z) => fromZoneIds.includes(z)) &&
+      (toZoneIds === null ||
+        !rule.to_zone_ids ||
+        rule.to_zone_ids.some((z) => toZoneIds.includes(z))),
+  );
 }
 
 function toBookingRules(rule: GofsBookingRule | undefined): RideBookingRules | undefined {
@@ -169,8 +180,16 @@ export function createGofsRideProvider(
   config: GofsFeedConfig,
   fetchJson?: GofsFetchJson,
 ): RideProvider {
-  const client = createGofsFeedClient(ctx, config, fetchJson);
   const sourceId = `gofs-${config.id}`;
+
+  /**
+   * One feed client per public operation. The client memoises its static
+   * snapshot so the stages of one request (availability, realtime booking, wait
+   * times) agree with each other; owning it for the provider's lifetime would
+   * make that snapshot permanent and bypass each document's TTL.
+   */
+  const createClient = () => createGofsFeedClient(ctx, config, fetchJson);
+  type FeedClient = ReturnType<typeof createClient>;
 
   function attributionFor(feed: GofsStaticFeed) {
     return [
@@ -188,7 +207,10 @@ export function createGofsRideProvider(
   }
 
   /** Resolve the brands serving this request, or null when out of area. */
-  async function resolve(request: RideQuoteRequest): Promise<{
+  async function resolve(
+    client: FeedClient,
+    request: RideQuoteRequest,
+  ): Promise<{
     feed: GofsStaticFeed;
     products: RideProduct[];
     fareIdByBrand: Map<string, string | undefined>;
@@ -235,9 +257,7 @@ export function createGofsRideProvider(
       return [toProduct(brand, vehicleCapabilities(vehicleIdsByBrand.get(id), feed.vehicleTypes))];
     });
 
-    const bookingRule = feed.bookingRules.find((r) =>
-      r.from_zone_ids.some((z) => fromZoneIds.includes(z)),
-    );
+    const bookingRule = selectBookingRule(feed.bookingRules, fromZoneIds, toZoneIds);
 
     return { feed, products, fareIdByBrand, bookingRule, fromZoneIds, toZoneIds };
   }
@@ -257,7 +277,8 @@ export function createGofsRideProvider(
     quoteTtlSeconds: QUOTE_TTL_SECONDS,
 
     async getAvailability(request) {
-      const resolved = await resolve(request);
+      const client = createClient();
+      const resolved = await resolve(client, request);
       if (!resolved) {
         const feed = await client.loadStatic();
         const data: RideAvailability = {
@@ -283,7 +304,8 @@ export function createGofsRideProvider(
     },
 
     async getQuotes(request) {
-      const resolved = await resolve(request);
+      const client = createClient();
+      const resolved = await resolve(client, request);
       if (!resolved) {
         const feed = await client.loadStatic();
         return { data: [], attributions: attributionFor(feed), freshness: freshnessNow() };
@@ -372,11 +394,10 @@ export function createGofsRideProvider(
     },
 
     async createHandoff(request) {
-      const feed = await client.loadStatic();
+      const feed = await createClient().loadStatic();
       const fromZoneIds = gofsZonesContaining(feed.zones, request.pickup);
-      const rule = feed.bookingRules.find((r) =>
-        r.from_zone_ids.some((z) => fromZoneIds.includes(z)),
-      );
+      const toZoneIds = request.dropoff ? gofsZonesContaining(feed.zones, request.dropoff) : null;
+      const rule = selectBookingRule(feed.bookingRules, fromZoneIds, toZoneIds);
 
       if (rule?.booking_url) {
         return {

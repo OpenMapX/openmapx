@@ -1,123 +1,200 @@
 ---
 title: Community extensions
-description: Browse, install, and manage third-party extensions from the unified Extensions store — integrations, services, and bundles of both — and understand the trust model.
+description: Inspect extension trust and host access, install or update components, and configure OpenConditions.
 sidebar_position: 4
 ---
 
 # Community extensions
 
-OpenMapX ships with a large set of first-party services and integrations, but
-its plugin model is open: anyone can publish an **extension** and you install it
-into your own deployment from one place — the **Extensions store**
-(**Extensions** in the admin panel, or `pnpm openmapx ext` on the CLI).
+Install community components through **Admin → Extensions** or
+`pnpm openmapx ext`. An extension can contain declarative integration artifacts,
+container services, or both.
 
-An extension bundles the parts of one feature so you install it in a single
-action. A bundle may contain:
+:::warning[Review third-party code and access]
 
-- **integrations** — declarative app metadata and presentation assets.
-  Distributed as prebuilt `.tar.gz` artifacts, pinned by SHA-256. Community
-  backend JavaScript is rejected rather than run in a privileged host process.
-- **services** — backend containers: a database, a routing engine, an alternative
-  geocoder, a data processor. Distributed as Git repositories, pinned by tag or
-  commit.
+Service containers execute third-party code. The sandbox restricts their host
+access, but does not audit their behavior. Installable integration artifacts
+cannot contain backend or frontend runtime entry points; community presentation
+execution remains disabled. A verified catalog entry establishes identity and
+validation of exact bytes, not a security audit. Review the service commit,
+container image, credentials, network access and host ports before installation.
 
-Most extensions are a single component (one integration, or one service); others
-bundle several, like [OpenConditions](#example-openconditions) with its two
-services. Either way you install it the same way, and the platform orchestrates
-the parts.
-
-:::warning[You are running third-party code]
-A community extension can contain code you did not write. Executable backend
-behavior runs as a separately sandboxed service; app-api and data-manager never
-import community runtime modules. Executable community presentation is disabled
-until it has a cross-origin sandbox and narrow capability protocol. Verification
-(see [trust tiers](#trust-tiers)) is
-an identity and automated-validation check — **not a security audit**. Install
-only from authors you trust, and read what an extension installs before you
-confirm.
 :::
 
 ## Trust tiers
 
-Every extension carries one trust tier, and the tier is assigned by **where it
-came from** — a manifest can advertise but never grant its own trust:
+Every extension carries a trust tier assigned by the host. A manifest cannot
+grant its own trust:
 
-| Tier          | Meaning                                                      | Source                                                                                                     |
-| ------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| **built-in**  | Ships in the OpenMapX monorepo                               | first-party                                                                                                |
-| **verified**  | Identity-checked + passed automated validation (not audited) | the curated OpenMapX catalog (`openmapx/community-extensions`), where inclusion is a CI-gated pull request |
-| **community** | Unreviewed                                                   | a catalog source you added yourself, or a direct install by URL                                            |
+| Tier          | Meaning                                                                      | Source                                                    |
+| ------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------- |
+| **built-in**  | Ships in the OpenMapX monorepo                                               | First-party                                               |
+| **verified**  | Catalog authorization binds the exact manifest ID, version and SHA-256 bytes | An immutable default catalog with a digest-bound entry    |
+| **community** | No verified catalog authorization                                            | Custom sources, unpinned entries or a direct manifest URL |
 
-The default catalog source is the curated **verified** one. Anything you add
-under **Sources**, or install by raw URL, is surfaced as **community** and
-requires you to acknowledge the risk.
-
-Verified and community services receive the same container sandbox. Verification
-is a listing and identity check, not an integrity guarantee about the manifest,
-moving image tag, or bytes that will run tomorrow.
+The default catalog does not make every entry verified. Direct URL installation
+validates the fetched manifest and uses its actual identity, always at community
+trust. Catalog installs continue to require matching identity, declared version
+and digest where present. Verification is not a security audit. Verified and
+community services receive the same community container sandbox.
 
 ## Browsing and installing
 
 Open **Extensions** in the admin panel. It has three tabs:
 
-- **Browse** — cards for every extension in the merged catalog, with search and
+- **Browse**: cards for every extension in the merged catalog, with search and
   filters by trust tier and component type. Each card shows the trust badge, the
   component types it ships (service / integration), a [service security
   rating](#service-security-rating), and compatibility with your platform
   version. An incompatible, delisted, or security-flagged extension cannot be
   installed.
-- **Installed** — what you have installed, each with its components expanded
+- **Installed**: what you have installed, each with its components expanded
   (service security rating inline), an **Update** action when a newer version is
   published, and **Uninstall**.
-- **Sources** — the catalog sources the Browse list is merged from. The default
+- **Sources**: the catalog sources the Browse list is merged from. The default
   OpenMapX catalog is built in and cannot be removed; you can add your own
-  (HTTPS only, no credentials in the URL) and they appear as the **community**
-  tier.
+  (HTTPS only, with no username, password, query, or fragment) and they appear
+  as the **community** tier. The same locator rule applies to direct manifest
+  URLs and every artifact or service repository declared by an extension.
 
-Installing from the catalog is one click. To install something not in any
-catalog, use **Install from URL** and paste an `extension.json` URL — that always
-lands as **community**.
+Select an entry, inspect the preview and confirm the installation. For an
+extension outside a catalog, use **Install from URL** with its `extension.json`
+URL. Direct URL installs always have community trust.
 
 The same operations are available on the CLI:
 
 ```bash
 pnpm openmapx ext browse                 # list the catalog
-pnpm openmapx ext install openconditions # install by catalog id…
-pnpm openmapx ext install https://example.com/my-ext/extension.json  # …or by URL
+pnpm openmapx ext preview openconditions # inspect current bindings and fingerprint
+pnpm openmapx ext install <catalog-id>    # acquire preview, then queue if consent permits
+pnpm openmapx ext install https://example.com/my-ext/extension.json
 pnpm openmapx ext list                   # what's installed
-pnpm openmapx ext update <id>            # re-pin to the latest published version
+pnpm openmapx ext update <id>            # update to the currently authorized version
 pnpm openmapx ext remove <id>            # uninstall (removes its services + integrations)
 ```
 
 The CLI talks to the admin API; run it on the API host (loopback admin) or set
-`OPENMAPX_API_URL`. Every install/update/remove is recorded in the audit log.
+`OPENMAPX_API_URL`. The destination is read for each action, in order:
+`API_URL`, `OPENMAPX_API_URL`, then `http://localhost:3001`. The CLI sends
+`x-openmapx-local-admin` on every request, using the trimmed optional
+`OPENMAPX_LOCAL_ADMIN_TOKEN` or an empty value. It omits cookies and does not
+create a browser session; a remote URL alone does not authenticate. The API's
+socket-peer, local-token and administrator-access rules still apply.
+Every accepted install/update/remove is recorded in the audit log.
+
+Install and update always acquire a fresh preview first, using the same API
+client and selector as the subsequent write. Without host ports they may proceed.
+With host ports, first deliberately inspect the explicit preview:
+
+```bash
+pnpm openmapx ext preview <idOrUrl>
+pnpm openmapx ext install <idOrUrl> --host-port-confirmation <fingerprint>
+# For an update, preview the same catalog ID:
+pnpm openmapx ext preview <id>
+pnpm openmapx ext update <id> --host-port-confirmation <fingerprint>
+```
+
+Use the `confirmation` fingerprint from the inspected output. Preview shows the
+complete extension identity and source trust, each service's full repository
+commit, all effective host/container ports, bind addresses (including IPv6),
+protocols and full security rating, including deployment variables and factors.
+Preview may fetch and stage repositories. Direct manifest URLs follow the same
+review flow and always have community trust. Because install/update obtain
+another preview, respect the one-preview-per-30-seconds limit after an explicit
+`ext preview` before invoking them. A 429 exits without retrying; wait for its
+`Retry-After` before a deliberate new invocation.
+
+Missing or mismatched confirmation fails with a nonzero exit before the write.
+If the snapshot moves between inspection and install/update, run a new explicit
+preview and review it before supplying its fingerprint. The CLI never copies a
+fresh fingerprint into consent, offers no `--yes` bypass, and does not re-enqueue
+a failed write. The worker remains the authority for host-port enforcement.
+
+Read requests have a 30-second deadline; preview and install/update/remove
+requests have finite 180-second deadlines, including response-body reading.
+A timeout leaves the outcome uncertain and does not cancel host work. Check
+**Admin → Activity** before deliberately retrying. HTTP 202 and the printed job
+ID mean queued acceptance, not completion. The CLI exits after acceptance without
+watching the job. Failed or invalid responses produce safe stderr and a nonzero
+exit, without dumping API payloads. Respect 429 `Retry-After`; no command retries
+automatically.
 
 ## What happens on install
 
-Install is one orchestrated, atomic job — it reuses the per-component pipelines
-and rolls back on any failure, leaving parts that already existed untouched:
+Install is a queued orchestration with ownership records and recovery journals.
+It attempts rollback on failure; a rollback or cleanup failure still requires
+operator investigation. Do not assume a failed job left every component
+unchanged. The normal sequence is:
 
-1. **Register + pin each service** — the service repo is shallow-cloned at the
-   bundle's pinned tag/commit into `services/.community/<url-hash>/` and marked as
-   managed by this extension. Every `service.json` is validated against the
-   [service manifest](../developer/service-manifest.md) schema; if any fails, the
-   whole install is refused.
-2. **Enable + render + start** the service(s) — `compose render` regenerates the
-   stack and the container is brought up. Each service creates and migrates its
-   own database schema on boot.
-3. **Install each integration artifact** — the `.tar.gz` is downloaded
-   (HTTPS only), its SHA-256 verified before extraction, unpacked into
-   `custom_integrations/<id>/`, and the integration host is hot-reloaded.
+1. **Inspect + pin each service repository**: the operations agent
+   shallow-clones the bundle's pinned tag or commit and validates every
+   `service.json` against the [service manifest](../developer/service-manifest.md)
+   schema and the community sandbox. If any manifest fails, or a service id is
+   already taken, the whole install is refused before anything changes. The
+   security preview describes that exact commit, and only that commit is
+   installed, into the agent's community store
+   (`infra/docker/state/ops-agent/community/<url-hash>/`), managed by this extension.
+2. **Enable + render + start** the service(s): `compose render` regenerates the
+   stack and the container is brought up. Database initialization and migration behavior belongs to the installed service;
+   inspect its startup logs.
+3. **Install each integration artifact**: the operations agent downloads the
+   `.tar.gz` (HTTPS only), verifies its SHA-256 before extraction, unpacks it
+   into its integration store (`infra/docker/state/ops-agent/custom-integrations/<id>/`)
+   and records the SHA-256 of every file it
+   wrote. The integration host is then hot-reloaded.
 4. **Record** the installed extension and its components.
 
-Both on-disk locations (`services/.community/` and `custom_integrations/`) are
-gitignored and bind-mounted, so installs survive container restarts.
+The operations agent owns its community store,
+`infra/docker/state/ops-agent/community/`, the way it owns
+Docker and the generated configuration. `app-api` never writes there: it asks
+the agent to inspect, install, settle or remove a repository, and reads the
+installed community services back from it. Until a change is settled the agent
+keeps the previous checkout for rollback and attempts recovery of interrupted
+changes on startup. Recovery failures remain operator work.
+
+The agent trusts an installed repository by content, not by file permissions.
+When it installs a commit, its record (`community/.repository-<hash>.json` in that store)
+lists each `service.json` it validated with that file's SHA-256. The agent, and
+the CLI it runs for updates, builds and backups, load exactly those manifests
+and only while their bytes match: a manifest the record does not list, or a
+repository directory without a record, is never loaded. Changed bytes, or a
+record the agent did not write, stop the agent from starting or authorizing
+anything, as an invalid manifest always has. Recover by deleting that
+repository's directory and record in the community store and installing
+the extension again. Records are the agent's own files: they must be owned by
+its user and writable only by it. Repositories installed before records carried
+digests are refused the same way. Both stores live in the agent's state
+directory on the host, which is gitignored, so installs survive container restarts.
+
+The agent owns its integration store,
+`infra/docker/state/ops-agent/custom-integrations/`, the same way. It installs,
+updates, rolls back and removes integrations; `app-api` mounts the store
+read-only at `/app/custom_integrations` and
+`pnpm openmapx integrations install` and `remove` ask the agent too. For each
+integration the agent records the SHA-256 of every file it installed, in its
+own state directory (`infra/docker/state/ops-agent/integrations/`), which no
+other service mounts. The agent, and the CLI it runs, load an installed
+integration's configuration schema only while its `manifest.json` has exactly
+the recorded bytes; `app-api` serves only the files whose bytes match. File
+owners and modes in the store decide nothing. An integration the
+agent did not install, or whose files changed, is left out and reported (in the
+agent's startup log and in **Run diagnostics**) without affecting the others.
+Install it again to fix it.
+
+Each record also names its owner: the extension that installed it, or the
+operator for an install made with the CLI. Only that owner changes or removes
+it, so an extension and a manual install don't replace each other by accident.
+
+This is bookkeeping, not a security boundary: `app-api` and the CLI reach the
+agent with the same credentials, and `app-api` can install any artifact as an
+admin anyway. What the agent guarantees is that every installed file is one it
+verified and recorded.
 
 ### The service sandbox
 
 The sandbox is derived from provenance, not the manifest's `quality` label:
-manifests loaded from `services/.community/` are third-party whether they say
-`community` or `community-verified`. They may **not** use any `bindMounts`
+manifests loaded from the community store are third-party whether they say
+`community` or `community-verified`, and the admin lists them as community. They may **not** use any `bindMounts`
 entry: community service installation and updates reject every host bind mount,
 including read-only mounts, with `community_bind_mount_forbidden`. Use a
 namespaced named volume (`openmapx-<serviceId>-<suffix>`) for persistent service
@@ -129,16 +206,15 @@ service id or alias. Operator configuration belongs in
 `configSchema`; secret fields are delivered as `/run/secrets/<KEY>` with
 `<KEY>_FILE` set. A community Git URL must also be `https://` on a short
 allowlist of public hosts (`github.com`, `gitlab.com`, `codeberg.org`,
-`bitbucket.org`, `git.sr.ht`) — defense-in-depth so an admin can't coerce a clone
-of a `file://`, `ssh://`, or intranet URL into the service tree.
+`bitbucket.org`, `git.sr.ht`). Local-file, SSH and intranet clone URLs are rejected.
 
 ### Service security rating
 
-Each service component shows a deterministic **security rating** (1–8) computed
-from what its manifest declares — published host ports lower it, auth-in-front
-and an owned (scoped) database schema raise it, and anything requiring built-in
-privileges floors it. It's an at-a-glance signal of how contained a service is
-_within_ the allowed sandbox; it is not a verdict on the code. Integrations get
+Each service component shows a deterministic **security rating** (1 to 8) computed
+from what its manifest declares: published host ports lower it, auth-in-front
+and an owned (scoped) database schema raise it, while privileged/deployment-variable declarations lower it. The score is clamped
+to the 1 to 8 range. Prohibited community declarations still fail installation
+regardless of score; the rating does not assess executable code. Integrations get
 no numeric rating because installable integration artifacts are declarative-only;
 their companion services use the service rating instead.
 
@@ -146,220 +222,238 @@ their companion services use the service rating instead.
 
 Integration artifacts are guarded on several fronts: only HTTPS artifact URLs are
 accepted; a SHA-256 pin is mandatory and checked before extraction; artifacts
-are capped at 200 MB; tar extraction blocks path-escape (zip-slip), malicious
+are capped at 200 MiB; tar extraction blocks path-escape (zip-slip), malicious
 symlinks/hardlinks, and absolute paths; and an artifact shipping a
 `node_modules/` directory is rejected. Backend and frontend runtime
 entry points are also rejected; executable behavior must move into an isolated
 service. These reduce the blast radius of a
-malformed archive — they are not a substitute for trusting the author.
+malformed archive. They cannot establish that the author's code is safe.
+
+The agent also refuses an archive it would not load, before it replaces
+anything:
+
+- an entry that is a symbolic link or a hard link;
+- a `manifest.json` larger than 128 KiB or not UTF-8;
+- a configuration schema the agent does not accept;
+- an id longer than 64 characters, or the id of a built-in integration;
+- more than 128 files, or more than 4,096 across all installed integrations.
+
+Installed files get fixed modes (`0755` for directories, `0644` for files),
+whatever the archive declares.
+
+### Preview, admission and failures
+
+Extension previews have an independent limit of one request per 30 seconds per
+network peer key. Install and update admission share a separate bucket with the
+same limit. At the HTTP level, preview can therefore be followed immediately by
+a deliberate install or update write. The CLI's install/update acquire their own
+fresh preview, so after `ext preview` they must also respect the preview bucket.
+Repeated requests in either bucket return 429 with
+`Retry-After`; there is no automatic mutation retry. Administrator, CSRF and
+broader API rate limits still apply.
+
+Install, update and removal return a queued job ID (HTTP 202). Check Activity
+for the terminal outcome. Dependency failures return bounded public messages;
+manifest detail may still return an empty component list if resolution fails.
+That fallback does not prove the extension has no components.
+
+The internal operator CLI provides `ext preview <idOrUrl>` and
+`ext install/update --host-port-confirmation <fingerprint>` as described above.
+Host-port approval is bound to the exact inspected snapshot and is never granted
+automatically.
+
+### Browser review and request lifetime
+
+The administration page distinguishes catalog trust from revoked status and stale
+revocation data. A missing manifest version appears as **Version unknown**. The
+default catalog label does not assert that every entry is verified. Failed inventory/source reads show an error. Installed inventory is local and
+remains readable when optional catalog acquisition fails; update availability
+then becomes unknown (`hasUpdate: null`). Removal remains available. Unknown
+version comparison is not evidence that the installed version is current.
+
+Security review displays the exact repository commit, effective host-port bindings
+(including protocol and bind address), and full service rating, including deployment
+variables. Install and update have distinct confirmation actions. Editing a selector,
+closing/reopening a dialog, switching tabs or API origins, selecting another row,
+or receiving a changed catalog/installed snapshot retires the previous preview.
+Confirmation uses the exact reviewed selector and fingerprint. A changed port
+snapshot requires another deliberate review; confirmation is never automatic.
+
+Browser reads have a 30-second deadline. Preview, mutation resolution and explicit
+catalog refresh have a 180-second deadline. A timeout is an unknown result, not
+host-job cancellation; check Activity before deliberately retrying. The longer
+budget is not a guarantee for extensions with several repositories. Accepted jobs
+continue to be observed by the administration layout after leaving the extension
+view; all terminal outcomes refresh the originating extension/component state.
+
+### Catalog source changes and refresh
+
+A successful source edit invalidates the cached catalog before persisting the
+new source list. An older in-flight build cannot republish against changed source
+or catalog bytes. Concurrent edits or refreshes can therefore fail with a safe
+error: read the current state before deliberately trying again. No mutation is
+automatically retried, and unavailable source storage cannot acknowledge an edit
+or an explicit refresh.
+Removing an absent source remains a no-op; the default source remains built in.
+
+A fully successful empty refresh replaces the previous catalog. If any catalog
+source acquisition fails and the assembled result is empty, refresh fails and
+leaves the existing snapshot, including its denials, untouched. Nonempty partial
+results retain their existing behavior; a returned entry count does not prove
+that every source was fetched. Moving-feed stale status remains independent.
+A storage or refresh error is not evidence that the catalog is empty.
 
 ## Updating, uninstalling, and the kill-switch
 
-- **Update** re-pins **all** of a bundle's parts to the latest published version
-  through the same orchestrated flow, keeping coupled parts version-consistent.
-  The version comes from the extension's own `extension.json` (the manifest the
-  catalog points at), not from a number in the catalog — so an extension that
-  publishes a moving "latest release" manifest surfaces new releases here
-  automatically, and its catalog listing is a one-time inclusion rather than a
-  per-release edit.
-- **Uninstall** removes exactly what the extension installed — stops and removes
+- **Update** applies the catalog's current authorized bundle through the same
+  preview and confirmation flow. Verified entries bind manifest ID, version and
+  digest; a moving manifest cannot choose a new verified version by itself.
+  Unverified entries can use manifest metadata for version discovery. Inspect
+  the resulting preview before consent.
+- **Uninstall** removes exactly what the extension installed: it stops and removes
   its service containers, drops the cloned repos and the integrations it placed,
   re-renders compose, and reloads the integration host. Standalone installs of
   the same component are left alone.
 - The catalog can carry a **kill-switch**: an extension marked `removed` is hidden
   from Browse (with a banner on installed copies), and one marked `critical`
-  shows a blocking security warning on installed copies and refuses new installs.
+  refuses preview, new installation and update admission. The worker rechecks
+  before installation effects and before committing installed state, including
+  when an advisory arrives while a job is queued. Every critical entry blocks
+  regardless of its version; advisory `maxVersion` is display information only.
+  Wait for the advisory to be cleared before trying another deliberate install
+  or update. Removal remains available. If the moving revocation feed cannot be
+  refreshed, known cached denials remain effective and the API reports stale
+  revocation data; an unavailable feed does not certify an extension as clean.
 
 :::note[An extension-managed service repo is pinned]
 Service repos installed as part of an extension are pinned and marked
 managed-by-extension. Update them through the extension (which re-pins every part
-together), not by hand — a manual refresh of a managed repo is refused to keep
-the bundle's coupled parts in agreement.
+together). A manual refresh of a managed repository is refused.
 :::
 
 ## Example: OpenConditions
 
-[OpenConditions](https://github.com/openconditions/openconditions) is a
-services-only bundle: its **ingest service** (`openconditions-ingest`) polls
-road-condition and fuel-price feeds into the shared database and serves them
-over HTTP, and its **contributions API** (`openconditions-contributions-api`)
-accepts signed crowd reports. The extension ships no integration code. OpenMapX
-reads OpenConditions through its built-in `openconditions` integration, which
-feeds two things: **roads** (the road-conditions overlay, navigation and
-routing closure-avoidance) and **fuel** (the fuel-station layer and its prices;
-without OpenConditions the fuel data source is not offered at all). It's
-published as the first **verified** entry in the curated catalog, so installing
-it is one action:
+[OpenConditions](https://github.com/openconditions/openconditions) supplies
+container services. OpenMapX's built-in `openconditions` integration reads its
+road conditions, hazards, fuel, charging, parking, cameras, message signs,
+road weather, service vehicles and border-crossing data. The companion
+contributions API accepts crowd reports. Which data is usable depends on the
+installed release, feed credentials, source policy and publication state.
+
+Inspect the currently authorized catalog entry and pinned service manifests;
+do not assume that a moving upstream release matches an older deployment.
 
 ```bash
-pnpm openmapx ext install openconditions
+pnpm openmapx ext preview openconditions
+# After reviewing the preview, wait for its preview rate-limit window if needed:
+pnpm openmapx ext install openconditions --host-port-confirmation <fingerprint>
 ```
 
-The orchestrator registers both services at their pinned tag, renders and starts
-them, and reloads the API, all as one job. The install reports success, but
-neither service runs yet: both stop at boot and their containers restart in a
-loop until their credentials are set (`DATABASE_URL` on both, the grant secret
-and reviewer token on the contributions API). Set them as described in
-[Configuring the OpenConditions services](#configuring-the-openconditions-services)
-and **Save & Apply**; the ingest service then creates its `conditions` schema
-and begins ingesting.
+Use the exact fingerprint from the reviewed output when host-port consent is
+required. Check **Activity**, then configure the installed services. A completed
+installation does not prove that their database and feed credentials are valid.
 
 ### Configuring the OpenConditions services
 
-Both are community services, so OpenMapX passes their manifests'
-`container.environment` to the containers verbatim: a `${VAR}` there would reach
-the container as literal text, never your `.env`. Everything an operator sets
-is a field of the service's `configSchema` instead, managed on
-**Admin → Services → `openconditions-ingest`** (and
-`openconditions-contributions-api`):
+1. Open **Services → openconditions-ingest** and
+   **openconditions-contributions-api**. Read each installed manifest's fields
+   and setup guides.
+2. Set secrets on **Credentials**. `OPENMAPX_SECRETS_KEY` is required for the API
+   vault; generated containers receive private secret files through `<KEY>_FILE`.
+   The ingest and contributions services need `DATABASE_URL`. For the shared
+   database, use `postgresql://postgres:<POSTGRES_PASSWORD>@postgis:5432/openmapx`
+   with a correctly URL-encoded password. The contributions service also declares
+   `OPENCONDITIONS_GRANT_SECRET` and `OPENCONDITIONS_REVIEWER_TOKEN`; generate
+   separate values with `openssl rand -hex 32`.
+3. Set non-secret options in **Configuration**, or use
+   `SERVICE_OPENCONDITIONS_INGEST_<KEY>` and
+   `SERVICE_OPENCONDITIONS_CONTRIBUTIONS_API_<KEY>` host overrides. Environment
+   values take precedence. Community manifest `container.environment` values
+   are literal; `${VAR}` there does not grant access to deployment secrets.
+4. Apply changes, follow every returned job and check health and startup logs.
+5. Set the OpenMapX consumers' endpoints in `infra/docker/.env`:
 
-- **Secrets** go on the service's **Credentials** tab. OpenMapX keeps each in
-  the credential vault (which needs `OPENMAPX_SECRETS_KEY` on app-api), mounts
-  it into the container as a file and sets `<KEY>_FILE` to its path. Secrets
-  have no default; the tab marks an unset one **Not set**.
-  - `DATABASE_URL` is **required** on both services; they refuse to start
-    without it. Set it once to the shared database's full URL, with your
-    `POSTGRES_PASSWORD` from `infra/docker/.env`:
-    `postgresql://postgres:<POSTGRES_PASSWORD>@postgis:5432/openmapx`.
-  - `OPENCONDITIONS_GRANT_SECRET` and `OPENCONDITIONS_REVIEWER_TOKEN` are
-    required on the contributions API. Generate each with
-    `openssl rand -hex 32`.
-  - `OPENCONDITIONS_OPERATOR_TOKEN` (ingest) and every feed's API key are set
-    the same way. The token is required for fuel in Germany, Austria and every
-    region served only by OpenStreetMap; see
-    [the operator token](#the-operator-token) below.
-- **Settings** (rate limits, `TRUST_PROXY_CIDRS`, the road-graph `SEGMENT_*`
-  and `BIND_*` knobs, `OVERPASS_URL`, `OPENCONDITIONS_EGRESS_ALLOWED_HOSTS`, …)
-  carry their defaults in the manifest. Change one in the service's config form,
-  or pin it in `infra/docker/.env` as `SERVICE_OPENCONDITIONS_INGEST_<KEY>`
-  (`SERVICE_OPENCONDITIONS_CONTRIBUTIONS_API_<KEY>` for the contributions API).
-  The env value wins over the form. Pick one place per deployment: a value
-  saved in the form survives only renders from the admin panel (and the
-  ops-agent), never a `pnpm openmapx services start` from the CLI (see
-  [applying a change](#applying-a-change)).
+   ```bash
+   OPENCONDITIONS_URL=http://openconditions-ingest:4100
+   OPENCONDITIONS_CONTRIBUTIONS_URL=http://openconditions-contributions-api:4200
+   OPENCONDITIONS_OPERATOR_TOKEN=
+   ```
 
-Each OpenConditions service runs on its own isolated network. Four audited
-built-ins join it: `postgis`, so both services reach the shared database at
-`postgis`; `app-api`, which reads the ingest service and relays crowd reports to
-the contributions API; the data-manager, which reads the ingest service's live
-traffic; and `overpass`, so the ingest service can query a self-hosted Overpass
-at `http://overpass:80`. No other service shares these networks, and OpenMapX
-gives a community service no public route, so OpenConditions' public emitter
-feeds (GeoJSON, TraFF, DATEX II, the event stream) are reachable only from
-inside the deployment. The bridge works both ways: the OpenConditions
-containers can also reach `app-api` and the data-manager, including their
-internal endpoints. It is granted by service id, so any extension that claims
-these ids gets the same reach (see
-[the audited exception](../developer/service-manifest.md)).
+6. Recreate the consumers as described under [Applying a change](#applying-a-change).
 
-Then point OpenMapX at the ingest service and the contributions API in
-`infra/docker/.env`:
+The blank token above does not enable restricted feeds. Configure it deliberately
+on both sides when your source terms permit operator-scope access.
 
-```bash
-OPENCONDITIONS_URL=http://openconditions-ingest:4100
-# Crowd reports: app-api relays them to the contributions API.
-OPENCONDITIONS_CONTRIBUTIONS_URL=http://openconditions-contributions-api:4200
-# Required for fuel in DE, AT and the OpenStreetMap-only regions (see below).
-# At least 32 characters. Generate with `openssl rand -hex 32`.
-OPENCONDITIONS_OPERATOR_TOKEN=
-```
+Each community service has its own network. Built-in manifests explicitly bridge
+`postgis` and `app-api` to both OpenConditions services; Data Manager and Overpass
+join the ingest network. These bridges are bidirectional: an ingest container can
+reach the bridged API, database and Data Manager, including internal endpoints.
+They are granted by service ID, so another extension claiming those IDs receives
+the same network reach. This exception is part of the trust decision; a separate
+network does not isolate those peers. Community services receive no platform
+public proxy route. See the [service manifest contract](../developer/service-manifest.md).
 
 #### The operator token
 
-`app-api` and the data-manager's live-traffic cycle send
-`OPENCONDITIONS_OPERATOR_TOKEN` as a bearer token, and OpenConditions answers
-them in operator scope, which includes the sources it withholds from the
-public. A source is withheld (restricted) for one of three reasons:
+Set the same `OPENCONDITIONS_OPERATOR_TOKEN` in the ingest service's
+**Credentials** and in OpenMapX's `.env`. The API and Data Manager send it as a
+bearer token. The ingest service requires at least 32 characters when configured;
+its credential is separate from the consumers' environment value.
 
-- **Redistribution not granted.** Tankerkönig (Germany's MTS-K prices) is
-  CC BY 4.0, but its terms forbid passing the data to oil companies, station
-  operators and the IT providers working for them, which a public API cannot
-  rule out.
-- **Share-alike.** OpenStreetMap (fuel stations worldwide) is ODbL: a database
-  derived from it must be published under the same licence.
-- **No licence asserted.** E-Control (Austria's prices) publishes no licence or
-  terms for its API.
+Operator scope includes feeds withheld from public redistribution. The reviewed
+OpenConditions configuration includes Tankerkönig (recipient restrictions),
+OpenStreetMap-derived records (ODbL obligations), E-Control (unasserted API terms)
+and restricted feeds in other domains. The token grants technical access; it
+does not grant redistribution rights. Review each installed source's terms,
+retention, attribution and permitted recipients before exposing its data.
 
-Some road feeds are restricted for the same reasons. Without the token,
-OpenMapX reads in public scope and lists only the public sources: the fuel
-layer then shows stations and prices from France (prix-carburants) and Spain
-(Minetur) only, and is empty in Germany, Austria and everywhere else. The
-withheld sources are not credited, and nothing on the map says why; `app-api`
-logs them at debug level.
+| Ingest credential state            | Result for OpenMapX requests                                                |
+| ---------------------------------- | --------------------------------------------------------------------------- |
+| Unset                              | Public scope, restricted sources withheld and ordinary public rate limiting |
+| Matches the consumer token         | Operator scope; restricted feeds can be returned                            |
+| Set but different                  | Bearer reads fail with 401                                                  |
+| Set but shorter than 32 characters | Ingest refuses startup                                                      |
 
-The token is set in **two places that must hold the same value**: this `.env`
-line for `app-api` and the data-manager, and the ingest service's
-`OPENCONDITIONS_OPERATOR_TOKEN` credential. The ingest service does not read
-OpenMapX's `.env`. A token shorter than 32 characters stops the ingest service
-at boot.
-
-The two places fail differently when they disagree:
-
-- **Credential not set** on the ingest service: it has no operator scope and
-  logs `operator scope disabled: restricted sources are not served` at startup.
-  It answers OpenMapX's bearer requests in public scope: restricted sources are
-  withheld, and `app-api` and the data-manager count against the ingest rate
-  limit (`RATE_LIMIT_MAX`, 120 requests a minute by default), so a busy
-  instance can see 429s that operator scope never gets.
-- **Credential set to a different value**: the ingest service answers every
-  OpenMapX read with **401**. The road-conditions overlay, closure avoidance,
-  fuel search and the live and predicted traffic cycles all stop.
-
-So set the ingest credential first, then the `.env` line, and change both
-together when rotating the token.
+When restricted data is missing, inspect the service's scope and provider status
+before treating it as a geographic coverage gap. Public scope does not establish
+that a region has no stations or conditions. Rotate the ingest credential and
+consumer environment together, allowing for the brief mismatch while containers
+are recreated.
 
 #### Applying a change
 
-A change takes effect once the stack is re-rendered and the affected
-containers are recreated. **Save & Apply** on a service in **Admin → Services**
-re-renders the enabled stack from the manifest defaults and the saved
-settings, and recreates **that one service**. It never reads
-`infra/docker/.env`. It recreates neither `app-api` nor the data-manager, and the admin
-panel cannot recreate `app-api` at all: it never starts, stops or recreates
-the container it runs in.
+For non-secret settings, **Save** stores the edit and publishes the host
+configuration generation; **Save & apply** also queues recreation of the selected
+service. Credential changes queue their own apply. Check Activity for completion.
+These actions do not recreate every consumer of that service.
 
-`app-api` and the data-manager read `infra/docker/.env` only when their
-containers are created, so a change to `OPENCONDITIONS_URL` or
-`OPENCONDITIONS_OPERATOR_TOKEN` reaches them only once they are recreated.
-After such a change, recreate both from the host, in the repository checkout:
+After editing `OPENCONDITIONS_URL`, `OPENCONDITIONS_CONTRIBUTIONS_URL` or the
+consumer token in the host `.env`, recreate the API and Data Manager from the
+repository checkout:
 
 ```bash
 pnpm openmapx services start app-api data-manager
 ```
 
-Compose recreates a container whose environment changed, so this replaces
-both and leaves the ingest service running as it is. When rotating the token,
-**Save & Apply** the ingest credential first, then run the command above.
+Host renders preserve settings and service secrets from the last published
+configuration generation; they do not silently replace all admin values with
+defaults. An unpublished database edit is not available to the CLI. Environment
+overrides come from the host during CLI rendering; an API process cannot see
+new `.env` lines until it is recreated.
 
-Where an ingest setting lives decides how you apply it:
-
-- **Saved in the admin form:** **Save & Apply** on `openconditions-ingest`.
-- **In `infra/docker/.env` as `SERVICE_OPENCONDITIONS_INGEST_<KEY>`:**
-  `pnpm openmapx services start openconditions-ingest`. The admin render
-  sees only the variables `app-api` was created with, so a line you add or
-  remove counts there only after `app-api` has been recreated.
-
-The CLI renders without database access, so it knows only the manifest
-defaults and the environment. A CLI render replaces every setting saved in the
-admin form with its default, silently: started from the CLI, the ingest
-service would query the public Overpass again and lose its egress allowlist if
-those were set in the form. Start `openconditions-ingest` from the CLI only
-when its settings live in `infra/docker/.env`.
-
-The ingest service's OpenStreetMap sources (fuel stations) and its road-graph
-import query Overpass at its `OVERPASS_URL` setting: either the **base URL**
-(for example `http://overpass:80`), to which OpenConditions appends
-`/api/interpreter` itself, or the full interpreter URL
-(`http://overpass:80/api/interpreter`); a trailing slash is ignored. Its default is the public
-`https://overpass-api.de`; OpenMapX's own `OVERPASS_URL` does not reach it. A
-self-hosted Overpass on the compose network is a private address, which the
-ingest service's egress guard refuses unless its host is listed in the
-`OPENCONDITIONS_EGRESS_ALLOWED_HOSTS` setting:
+For heavier OSM acquisition, point the ingest service at a self-hosted Overpass.
+OpenMapX's own `OVERPASS_URL` does not configure that service. Set its base URL
+(or full interpreter URL) and allow the private host in the service's egress
+settings:
 
 ```bash
 SERVICE_OPENCONDITIONS_INGEST_OVERPASS_URL=http://overpass:80
 SERVICE_OPENCONDITIONS_INGEST_OPENCONDITIONS_EGRESS_ALLOWED_HOSTS=overpass
 ```
+
+Then run `pnpm openmapx services start openconditions-ingest` or apply the
+corresponding settings in the admin form. Verify the resolved source and the
+resulting container logs.
 
 For the author-and-operator
 walkthrough of how an extension is built and bundled into one `extension.json`,
@@ -367,10 +461,7 @@ see [Building an external extension](../developer/building-an-external-extension
 
 ## Where to go next
 
-- **[Managing services](../install/managing-services.md)** — enable, render, run,
-  and configure any service (built-in or extension-installed) once it's in the
-  catalog.
-- **[Admin panel](./admin-panel.md)** — where the **Extensions** and **Services**
-  sections live, and how admin access works.
-- **Developer section** — authoring your own extension, the manifest schemas, the
-  `extension.json` bundle format, and the packaging workflow.
+Use [Managing services](../install/managing-services.md) for host operations or
+[Services administration](./services-administration.md) for the panel.
+Extension authors should follow
+[Building an external extension](../developer/building-an-external-extension.md).

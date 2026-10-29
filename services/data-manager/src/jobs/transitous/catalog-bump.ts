@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { parseRefShaPair, type TransitousLock } from "@openmapx/transitous-core";
 import { execa } from "execa";
-import { parseRefShaPair, type TransitousLock } from "../../transitous-lock.js";
 
 /**
  * Minimal command-runner seam so the resolver can be unit-tested without
@@ -14,7 +14,7 @@ const defaultRunner: CommandRunner = (file, args) => execa(file, args, { stdio: 
 /** A resolved upstream catalog pin: the transitous ref plus its transitland-atlas submodule. */
 export interface CatalogBumpCandidate {
   branch: string;
-  /** `<branch>@<sha>` — the shape `transitous.lock.json.ref` stores. */
+  /** `<branch>@<sha>` — the shape of a Transitous pin's `ref`. */
   ref: string;
   transitousSha: string;
   transitlandAtlasSha: string;

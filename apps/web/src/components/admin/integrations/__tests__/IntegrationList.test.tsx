@@ -20,6 +20,8 @@ function makeIntegrations(count: number): IntegrationSummary[] {
     domains: ["geocoding"],
     quality: "built-in" as const,
     isBuiltIn: true,
+    blockedCode: false,
+    requires: [],
     enabled: i % 2 === 0,
     configured: true,
     hasHealthCheck: false,
@@ -35,9 +37,9 @@ afterEach(() => {
 
 describe("IntegrationList pagination", () => {
   beforeEach(() => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => makeIntegrations(60),
+    fetchMock.mockImplementation((input: unknown) => {
+      expect(input).toBe("http://test.local/api/admin/integrations");
+      return Response.json(makeIntegrations(60));
     });
   });
 

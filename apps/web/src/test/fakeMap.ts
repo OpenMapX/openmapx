@@ -97,7 +97,7 @@ export interface CreateFakeMapOptions {
    * else — the app's sources and layers do not survive a style change. Defaults
    * to none so existing tests that assert an exact layer list are unaffected.
    */
-  baseLayers?: Array<{ id: string; type: string }>;
+  baseLayers?: Array<{ id: string; type: string; layout?: Record<string, unknown> }>;
   /** Initial `getZoom()` value (default 10). */
   zoom?: number;
   /** Initial camera pitch and pitch constraint. */
@@ -310,6 +310,11 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
       state.sources.delete(id);
     },
     getLayer: (id: string) => state.layers.get(id),
+    getLayersOrder: () => [...state.layers.keys()],
+    setLayerZoomRange: (layerId: string, minzoom: number, maxzoom: number) => {
+      const layer = state.layers.get(layerId);
+      if (layer) state.layers.set(layerId, { ...layer, minzoom, maxzoom });
+    },
     addLayer: (layer: { id: string } & Record<string, unknown>, beforeId?: string) => {
       bump(state.counts.addLayer, layer.id);
       state.paint.delete(layer.id);
@@ -367,7 +372,11 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
       m[name] = value;
       state.layout.set(layerId, m);
     },
-    getLayoutProperty: (layerId: string, name: string) => state.layout.get(layerId)?.[name],
+    getLayoutProperty: (layerId: string, name: string) => {
+      const overrides = state.layout.get(layerId);
+      if (overrides && name in overrides) return overrides[name];
+      return (state.layers.get(layerId)?.layout as Record<string, unknown> | undefined)?.[name];
+    },
     setFilter: (layerId: string, filter: unknown) => {
       state.filters.set(layerId, filter);
       bump(state.counts.setFilter, layerId);
@@ -396,9 +405,11 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
      * style's own layers. `style.load` then fires synchronously, inside this
      * call — that is the diff path MapLibre takes for a style object, and a
      * listener attached after `setStyle` returns misses it entirely. `styledata`
-     * follows. Modelling both facts is the point of this method.
+     * follows. Modelling both facts is the point of this method. A replacement
+     * stylesheet announces itself with `styledataloading` first.
      */
     setStyle: (_style?: unknown) => {
+      api.emit("styledataloading");
       state.layers.clear();
       state.sources.clear();
       state.images.clear();
@@ -410,7 +421,31 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
       api.emit("styledata");
     },
     queryRenderedFeatures: (_point: unknown, queryOptions?: { layers?: string[] }) =>
-      queryOptions?.layers?.flatMap((layerId) => state.renderedFeatures.get(layerId) ?? []) ?? [],
+      queryOptions?.layers?.flatMap((layerId) =>
+        (state.renderedFeatures.get(layerId) ?? []).map((feature) => {
+          // Plain object hits remain untouched for older fixture consumers.
+          if (feature.type !== "Feature") return feature;
+          const layer = state.layers.get(layerId);
+          return {
+            ...feature,
+            layer: {
+              ...layer,
+              ...feature.layer,
+              paint: {
+                ...(layer?.paint as object),
+                ...state.paint.get(layerId),
+                ...feature.layer?.paint,
+              },
+              layout: {
+                ...(layer?.layout as object),
+                ...state.layout.get(layerId),
+                ...feature.layer?.layout,
+              },
+              id: layerId,
+            },
+          } as MapGeoJSONFeature;
+        }),
+      ) ?? [],
     querySourceFeatures: () => [],
     project: (lngLat: unknown) => {
       if (options.project && Array.isArray(lngLat)) {
@@ -443,6 +478,9 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
       startMove(eventData, false, padding);
     },
     isMoving: () => state.moving,
+    // Scheduling a browser paint does not synchronously deliver a render event.
+    // Tests deliver the actual paint with emit("render") when appropriate.
+    triggerRepaint: () => api.map,
     getContainer: () => container,
     getBounds: () => {
       const bounds = options.bounds ?? { west: -180, south: -90, east: 180, north: 90 };

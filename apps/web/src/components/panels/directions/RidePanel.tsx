@@ -17,10 +17,15 @@ import {
   useRideQuotes,
   useRideStore,
 } from "@openmapx/core";
+import {
+  captureResultContributors,
+  contributorsForRecords,
+} from "@openmapx/mobility-core/contributors";
 import { useLocale, useTranslations } from "next-intl";
-import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { RideQuoteList } from "@/components/panels/directions/RideQuoteList";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { DateTimeField } from "@/components/ui/DateTimeField";
 import { BRAND } from "@/integration-api/runtime/theme";
 
 /** Stop refreshing quotes once the user has stopped interacting with the panel. */
@@ -54,22 +59,6 @@ function compareRanks(a: ReturnType<typeof quoteRank>, b: ReturnType<typeof quot
   if (fareDifference && !Number.isNaN(fareDifference)) return fareDifference;
   return a.eta === b.eta ? 0 : a.eta - b.eta;
 }
-
-const inputSx = {
-  border: "1px solid",
-  borderColor: "divider",
-  borderRadius: "8px",
-  px: 1.5,
-  py: 0.75,
-  fontSize: "0.875rem",
-  fontFamily: "inherit",
-  color: "text.primary",
-  bgcolor: "background.paper",
-  outline: "none",
-  "&:focus": { borderColor: BRAND },
-  width: "100%",
-  boxSizing: "border-box",
-} as const;
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -264,7 +253,12 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
   const comparisonResults = useMemo(() => {
     const sorted = results.map((result) => ({
       ...result,
-      quotes: [...result.quotes].sort((a, b) => compareRanks(quoteRank(a), quoteRank(b))),
+      quotes: result.quotes
+        .map((quote) => ({
+          ...quote,
+          contributors: captureResultContributors(quote, result.attributions),
+        }))
+        .sort((a, b) => compareRanks(quoteRank(a), quoteRank(b))),
     }));
     const rank = (result: (typeof sorted)[number]) => {
       const ranks = result.quotes.map(quoteRank);
@@ -351,8 +345,9 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
     ? (chipProviders.find((p) => p.id === selected?.id) ?? null)
     : selected;
   // Whoever supplied the numbers gets credited beside them.
-  const detailAttributions =
-    results.find((r) => r.providerId === detailProvider?.id)?.attributions ?? [];
+  const detailAttributions = contributorsForRecords(
+    results.find((r) => r.providerId === detailProvider?.id)?.quotes ?? [],
+  );
 
   return (
     <Box sx={{ px: 2, py: 1.5, display: "flex", flexDirection: "column", gap: 1.75 }}>
@@ -387,8 +382,11 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
                   locale={locale}
                   onBook={(productId) => openProvider(result.providerId, productId)}
                 />
-                {result.attributions.length > 0 && (
-                  <AttributionStrip attributions={result.attributions} variant="inline" />
+                {contributorsForRecords(result.quotes).length > 0 && (
+                  <AttributionStrip
+                    attributions={contributorsForRecords(result.quotes)}
+                    variant="inline"
+                  />
                 )}
               </Box>
             );
@@ -430,15 +428,18 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
       {allowsPrebook && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
           <SectionLabel>{t("ridePickupTime")}</SectionLabel>
-          <Box
-            component="input"
-            type="datetime-local"
+          <DateTimeField
+            label={t("ridePickupTime")}
             value={pickupAt ?? ""}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => {
+            clearable
+            onChange={(next) => {
               touch();
-              setPickupAt(e.target.value || null);
+              setPickupAt(next || null);
             }}
-            sx={inputSx}
+          />
+          <AttributionStrip
+            attributions={contributorsForRecords([selected?.availability])}
+            variant="inline"
           />
           {bookingRules?.priorNoticeMinutesMin !== undefined && (
             <Typography variant="caption" color="text.secondary">
@@ -451,9 +452,17 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
       {detailProvider && (
         <>
           {!detailProvider.availability.coverageChecked && (
-            <Typography variant="caption" color="text.secondary">
-              {t("rideCoverageUnknown", { provider: detailProvider.name })}
-            </Typography>
+            <>
+              <Typography variant="caption" color="text.secondary">
+                {t("rideCoverageUnknown", { provider: detailProvider.name })}
+              </Typography>
+              {!allowsPrebook && (
+                <AttributionStrip
+                  attributions={contributorsForRecords([detailProvider.availability])}
+                  variant="inline"
+                />
+              )}
+            </>
           )}
 
           {!detailProvider.handoffCarriesCoordinates && (

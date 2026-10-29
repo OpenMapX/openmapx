@@ -333,6 +333,30 @@ function transformRoute(r: OsrmRoute, mode: TravelMode): Route {
   };
 }
 
+// OSRM lists one waypoint per input, in input order, and `waypoint_index` is that
+// input's position within the trip. Callers want the inverse: input indexes in
+// visit order.
+function visitOrderFromTripWaypoints(
+  tripWaypoints: OsrmTripWaypoint[] | undefined,
+  expectedCount: number,
+): number[] {
+  const invalid = () => new Error("OSRM returned an invalid trip order");
+  if (!Array.isArray(tripWaypoints) || tripWaypoints.length !== expectedCount) throw invalid();
+
+  const order = new Array<number>(expectedCount);
+  const filled = new Set<number>();
+  tripWaypoints.forEach((waypoint, inputIndex) => {
+    const position = waypoint?.waypoint_index;
+    if (!Number.isInteger(position) || position < 0 || position >= expectedCount) throw invalid();
+    if (waypoint.trips_index !== 0) throw invalid();
+    if (filled.has(position)) throw invalid();
+    filled.add(position);
+    order[position] = inputIndex;
+  });
+  if (order[0] !== 0 || order[expectedCount - 1] !== expectedCount - 1) throw invalid();
+  return order;
+}
+
 export const osrmService: RoutingProvider = {
   id: "osrm",
   priority: 20,
@@ -381,7 +405,7 @@ export const osrmService: RoutingProvider = {
 
     return {
       waypoints,
-      routes: data.routes.map((r) => transformRoute(r, "driving")),
+      routes: data.routes.map((r) => ({ ...transformRoute(r, "driving"), sourceIds: ["osrm"] })),
       activeRouteIndex: 0,
     };
   },
@@ -413,13 +437,13 @@ export const osrmService: RoutingProvider = {
     if (data.code !== "Ok" || data.trips.length === 0) {
       throw new Error("OSRM returned no trips");
     }
+    if (data.trips.length !== 1) throw new Error("OSRM returned an invalid trip order");
 
-    // Extract optimized waypoint order from the trip response
-    const optimizedOrder = data.waypoints.map((wp) => wp.waypoint_index);
+    const optimizedOrder = visitOrderFromTripWaypoints(data.waypoints, waypoints.length);
 
     return {
       waypoints,
-      routes: data.trips.map((r) => transformRoute(r, "driving")),
+      routes: data.trips.map((r) => ({ ...transformRoute(r, "driving"), sourceIds: ["osrm"] })),
       activeRouteIndex: 0,
       optimizedOrder,
     };

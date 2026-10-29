@@ -2,13 +2,10 @@
 /**
  * Turns the data-practice registry into console worksheets.
  *
- * These are evidence for a human filling in App Store Connect and the Play
- * Console — not an automated legal conclusion. What the generator actually
- * guarantees is narrower and more useful: that the answers a person types match
- * the registry, and that the registry covers everything the app demonstrably
- * does. A worksheet is refused outright if a native permission, a public
- * endpoint, or a local store has no reviewed practice row, because the failure
- * mode this prevents is somebody answering a console question from memory.
+ * These are draft inputs for binary, runtime and privacy qualification before
+ * a human completes App Store Connect or Play Console. Generation checks that
+ * the manually listed practice IDs exist. It does not discover every behavior,
+ * validate classifications, establish review approval or inspect console input.
  *
  * Run with `--check` in CI to verify the committed worksheets are current.
  */
@@ -55,11 +52,11 @@ const registry = JSON.parse(readFileSync(resolve(here, "data-practices.json"), "
 };
 
 /**
- * Behaviours the app has that a worksheet must account for.
+ * Manually maintained coverage subjects and their expected practice IDs.
  *
- * Kept here rather than derived from a scan because a scan would silently pass
- * when a capability is added and the scanner is not taught about it — the point
- * is to fail loudly in exactly that case.
+ * A missing listed ID fails generation. New permissions, endpoints, stores or
+ * behaviors remain undetected until a reviewer updates this list. A matching
+ * row does not prove that its description is accurate or that it was reviewed.
  */
 const REQUIRED_COVERAGE: { subject: string; practiceId: string }[] = [
   {
@@ -84,10 +81,11 @@ const REQUIRED_COVERAGE: { subject: string; practiceId: string }[] = [
     practiceId: "background-location-active-navigation",
   },
   { subject: "Android POST_NOTIFICATIONS", practiceId: "local-alerts" },
-  { subject: "POST /api/directions", practiceId: "route-request-coordinates" },
-  { subject: "POST /api/transit/plan", practiceId: "transit-plan-and-refresh" },
+  { subject: "GET /api/integrations/routing/directions", practiceId: "route-request-coordinates" },
+  { subject: "GET /api/integrations/transit/plan", practiceId: "transit-plan-and-refresh" },
   { subject: "POST /api/mobile-auth/exchange", practiceId: "system-auth-handoff" },
   { subject: "/api/auth/*", practiceId: "account-and-contact" },
+  { subject: "/api/integrations/reviews-mangrove/signer/*", practiceId: "review-shared-signer" },
   { subject: "/api/saved/*", practiceId: "saved-places-and-settings" },
   { subject: "local SQLite navigation session", practiceId: "precise-location-active-navigation" },
   { subject: "local diagnostics buffer", practiceId: "diagnostics-export" },
@@ -114,8 +112,8 @@ const collectedForApple = generated.filter((practice) => practice.appleLabel.col
 const collectedForGoogle = generated.filter((practice) => practice.googleDataSafety.collected);
 
 const PREAMBLE = `<!-- Generated from data-practices.json by store-answers.mts. Do not edit by hand:
-     change the registry and regenerate, so the policy, the labels and the code
-     keep saying the same thing. -->`;
+     update registry prose or this template and regenerate. --check verifies
+     generated-file parity, not behavior, privacy classifications or approval. -->`;
 
 function appleWorksheet(): string {
   const rows = collectedForApple
@@ -131,7 +129,7 @@ function appleWorksheet(): string {
     .filter((practice) => !practice.appleLabel.collected && practice.leavesDevice)
     .map(
       (practice) =>
-        `- **${practice.dataType}** — ${practice.appleLabel.exemptionReason ?? practice.notes}`,
+        `- ${practice.dataType}: ${practice.appleLabel.exemptionReason ?? practice.notes}`,
     )
     .join("\n");
 
@@ -139,15 +137,23 @@ function appleWorksheet(): string {
 
 # Apple App Privacy worksheet
 
-Transcribe these into App Store Connect → App Privacy. The account holder is
-responsible for confirming each answer against the current official questions on
-the day of submission; this file records what the app actually does.
+DRAFT: qualification input. Do not transcribe these proposals into App Store
+Connect until the exact candidate binary, served web/API builds, deployment and
+configured providers have completed runtime and privacy review. Confirm the
+answers against the current console questions on the day of submission. This
+worksheet records no completed store review or proof of compliance.
+
+\`apps/mobile/src/App.tsx\` creates the shell bridge without native navigation
+or system-auth dispatch. Ground/transit guidance, background location, local
+notifications and speech are reported unavailable. Component behavior below
+describes intended native practices, not working installed-shell features.
+See [Mobile architecture](../../../docs/docs/developer/mobile-architecture.md).
 
 ## Does this app collect data?
 
-**Yes.** Not because most navigation data leaves the device — it does not — but
-because route requests, account details and saved places do. Answering "no" on
-the strength of on-device processing alone would be false.
+Proposed answer: Yes. The registry includes transmitted route inputs, account
+details and saved content. All category, purpose, identity and tracking values
+below remain pending review; omitted rows do not establish an exemption.
 
 ## Data types collected
 
@@ -157,25 +163,50 @@ ${rows}
 
 ## Tracking
 
-**No.** The app contains no analytics SDK, no advertising identifier, no crash
-reporter, and no cross-app or cross-site measurement of any kind. \`NSPrivacyTracking\`
-is \`false\` and there are no tracking domains.
+Proposed answer: No. Verify the exact binary's dependencies and privacy manifests,
+the served web code and provider behavior against Apple's tracking definition.
+A declared \`NSPrivacyTracking: false\` does not establish runtime behavior.
 
-## Data that leaves the device but is not declared as collected
+## Transmitted data currently marked not collected (unresolved)
 
-Each of these relies on Apple's documented real-time-processing exception. The
-reason is stated so the claim can be checked rather than taken on trust.
+Under [Apple's collection definition](https://developer.apple.com/app-store/app-privacy-details/),
+off-device access beyond the time needed to service the request in real time
+counts as collection. Short expiry, hashing and an opaque code do not establish
+that condition. Review server rows, logs, backups and partner retention.
+
+The following retained registry values are unresolved proposals. No real-time
+exemption has been approved here, including for distributor operational data.
 
 ${exempt}
 
 ## Location, specifically
 
-The app requests **Always** location only to continue guidance on a trip the
-user explicitly started, while the screen is locked or the app is backgrounded.
-It is never used to build a location history, is never transmitted continuously,
-and stops when the trip ends. Coordinates leave the device only to compute a
-route the user asked for, or to compute a new one after they have left the
-previous route.
+Native permission and navigation components are intended to request background
+location for a user-started trip, process progress locally and stop on termination.
+The current installed shell does not compose that flow or a foreground-only
+navigation alternative. Qualify both permission modes on the candidate device.
+Route/transit requests transmit inputs; map and imagery requests reveal viewed
+areas. Review other enabled web features before describing all location uses.
+
+## Review required before submission
+
+- The auth handoff sends the verifier through \`auth.result\` to the WebView and
+  then to API \`/mobile-auth/exchange\`. Server rows contain an account ID;
+  redemption expiry and eventual row deletion are different events.
+- Saved places are readable by the server/operator and can be shared by bearer
+  link. Local review keys are encrypted before upload. Shared signing sends a
+  session token and review content through the API to Mangrove, which holds the
+  signing key. Provider login also exposes browser request and login data. Public
+  submissions use an authenticated relay, so identity linkage needs review.
+- Sign-out does not clear every cache or downloaded offline area. Review local
+  storage, cookie transmission and deletion controls separately.
+- Provider retention is unverified. The proposed ephemeral values also need
+  review for transit tokens serialized into native SQLite and diagnostics whose
+  storage is limited by size without a demonstrated 24-hour purge.
+
+Use the [user-data trust model](../../../docs/docs/developer/user-data-trust-model.md)
+to review readers and storage. Complete candidate runtime/privacy qualification
+and current App Store Connect review before approving any console answers.
 `;
 }
 
@@ -195,35 +226,79 @@ function googleWorksheet(): string {
 
 # Google Play Data safety worksheet
 
-Transcribe into Play Console → App content → Data safety. As with Apple, the
-account holder confirms each answer against the current official form.
+DRAFT: qualification input. Do not transcribe these proposals into Play Console
+until the exact candidate binary, served web/API builds, deployment and configured
+providers have completed runtime and privacy review. Confirm each answer against
+the current console form on the day of submission. This worksheet records no
+completed store review or proof of compliance.
+
+\`apps/mobile/src/App.tsx\` does not compose native navigation or system-auth
+dispatch. Installed ground/transit guidance, background location, local alerts
+and speech are unavailable. Native component descriptions are intended practices
+requiring composition and device qualification.
+See [Mobile architecture](../../../docs/docs/developer/mobile-architecture.md).
 
 ## Collected and shared
+
+Every category, sharing, handling, required/optional and purpose value below is
+a proposal pending review. Rows filtered out by the current registry values must
+also be reviewed; their absence does not establish that data is not collected.
 
 | Category | What | Sharing | Handling | Required | Purposes |
 | --- | --- | --- | --- | --- | --- |
 ${rows}
 
-## Security practices
+## Security practices to verify
 
-- All transmission is over HTTPS.
-- Users can request deletion in the app and at a public URL that works after
-  uninstall: \`https://openmapx.com/delete-account\`.
-- The app has been reviewed against these answers rather than the answers being
-  written from the app's description.
+- Verify HTTPS for the binary, served web code and every configured provider path.
+- Test account-deletion intake in the app and at
+  \`https://openmapx.com/delete-account\`, including access after uninstall.
+  Review retained records, backups and processor handling separately.
+- Complete binary, runtime and privacy review before approving the form answers.
 
-## Data not collected
+## Transmission and ephemeral processing (unresolved)
 
-Location used for navigation is processed on the device and is not collected.
-The stop lists captured before a transit journey, the local alert schedule, the
-diagnostics buffer, and the WebView's own storage all stay on the device.
+[Google's Data safety guidance](https://support.google.com/googleplay/android-developer/answer/10787469)
+defines collection as off-device transmission, including through an app-controlled
+WebView. Transmitted data processed only in memory for the request still belongs
+in the form response; qualifying ephemeral handling affects public display.
+Apple's real-time retention definition does not decide Google's form answers.
+
+The auth handoff remains marked not collected in the registry pending review,
+although the WebView sends code, state and verifier to API \`/mobile-auth/exchange\`
+and the server stores an account-linked handoff row. Its two-minute redemption
+window does not establish memory-only handling or an approved exemption.
+
+Local navigation processing, captured stops, alert schedules and diagnostics
+components have separate transmission boundaries. Diagnostic export can share a
+file deliberately; cookies accompany authenticated requests. Local storage alone
+does not establish that the underlying data stays on the device.
+
+## Retention, sharing and identity review
+
+- Provider retention and proposed ephemeral tile/media handling are unverified.
+  Check each selected provider and deployment's intermediaries, caches and logs.
+- Native transit payloads serialize refresh tokens to SQLite. Diagnostics have
+  row/byte limits without a demonstrated 24-hour purge. These facts need review
+  against the retained retention classifications and budgets.
+- Saved content is readable by the server/operator and can be shared through
+  bearer links. Local review keys are encrypted before upload. Shared signing sends
+  a session token and review through the API to Mangrove, which holds the signing
+  key. Provider login also exposes browser request and login data. Public review
+  submissions use an authenticated relay; assess identity linkage separately.
+- Sign-out leaves offline downloads and some other browser storage. Verify the
+  separate removal controls. Review distributor diagnostics and developer-console
+  access before accepting the registry's not-collected proposal for store data.
+
+Use the [user-data trust model](../../../docs/docs/developer/user-data-trust-model.md)
+and current Play Console questions to resolve these proposals before submission.
 
 ## Location permission declaration
 
-Background location is used **only during an active navigation session the user
-started**, to continue turn-by-turn or transit guidance while the screen is
-locked. It is not used for advertising, analytics, or any form of tracking, and
-the app works without it in foreground-only mode.
+The native components are intended to use background location only during an
+active navigation session the user started. Qualify disclosure, permission denial,
+foreground-only behavior, locked-screen guidance and stop/revocation handling in
+the composed candidate. The current installed shell cannot demonstrate this flow.
 `;
 }
 
@@ -233,45 +308,68 @@ function backgroundDeclaration(): string {
 
 # Background location declaration
 
-The same words must appear in the OS purpose string, the in-app disclosure, the
-privacy policy, the store description, the console declaration, and the review
-notes. A reviewer comparing any two of them should find them saying the same
-thing — which is the reason this file is generated rather than written six times.
+DRAFT: qualification input for a future composed candidate. This is not a
+submission-ready declaration, evidence of a store review or proof of compliance.
+Review the exact binary, served web/API builds, runtime data flows and privacy
+practices, then confirm the current console requirements before submission.
 
-## What the app does
+\`apps/mobile/src/App.tsx\` does not compose the native navigation/permission/effect
+ports or system-auth dispatch. The shell reports background navigation, local
+notifications and speech unavailable. Existing components and tests do not
+establish installed locked-screen or foreground-only guidance.
+
+Check consistent, accurate descriptions in the OS purpose strings, in-app
+disclosure, privacy policy, store description, console declaration and reviewer
+notes. This generator does not update or verify those other surfaces.
+
+## Intended native behavior
 
 ${practice.purpose}
 
 ## When it is active
 
-Only while a navigation session the user explicitly started is running. Starting
-navigation is a deliberate action: the user plans a route and taps Start. Ending
-navigation, or arriving, stops it.
+The intended boundary is a navigation session the user explicitly starts.
+Verify that starting the session is deliberate, foreground-only mode pauses as
+disclosed, and ending, arriving or revoking permission stops background work.
+These are qualification requirements for the composed candidate.
 
 ## What the user is told, before the OS prompt
 
-That the app needs location **in the background**, or **when the app is not in
-use**, so it can keep guiding them on a route they started while the screen is
-locked or the app is minimised; that the guidance is computed on the device;
-that coordinates leave the device only to compute a route or a reroute; and that
-they can choose foreground-only or end navigation at any time.
+Verify that the disclosure explains background location for the user-started
+trip, local progress processing, transmitted route/transit requests and the
+foreground-only and stop controls. Map/imagery and other enabled web features
+have additional data flows; do not claim all coordinates stay on the device.
 
 ## Retention
 
 ${practice.retention.note}
 
-## What it is never used for
+All registry retention, collection, sharing and identity values remain proposals
+pending privacy review. Session expiry is not proof of immediate disk deletion.
+Review provider retention, deployment logs/backups, transit tokens serialized to
+SQLite, and diagnostics without a demonstrated age purge.
 
-Advertising, analytics, profiling, location history, or any transmission that is
-not a route the user asked for. The app ships no analytics SDK and no crash
-reporter.
+## Purpose restrictions to verify
+
+The intended background practice supports active guidance. Verify that the exact
+candidate and its providers do not use those fixes for advertising, analytics,
+profiling or location history. Inspect binary dependencies and served web code;
+the registry cannot establish the absence of tracking or crash reporting.
+
+Apply [Apple's collection and real-time retention definition](https://developer.apple.com/app-store/app-privacy-details/)
+and [Google's transmission and ephemeral-processing guidance](https://support.google.com/googleplay/android-developer/answer/10787469)
+separately. Google's form includes transmitted data processed ephemerally.
+An opaque auth code or short expiry does not approve an exemption; its verifier
+reaches the API and its server row is account-linked.
 
 ## Demonstrating it for review
 
-Record a short video that shows: planning a route, the disclosure screen, the OS
-prompt, guidance running, the screen locking, guidance continuing audibly, and
-the trip being ended. Use a synthetic or public route — never a real home or
-work address.
+After composition and candidate device qualification, record the actual flow:
+planning a route, disclosure, OS permission handling, guidance, screen locking,
+audible guidance and ending the trip. Cover denial and foreground-only behavior
+separately. Use a synthetic or public route, and bind observations to the tested
+binary and served web/API builds. Do not present component tests or a script as
+device evidence. The current installed shell cannot supply this demonstration.
 `;
 }
 

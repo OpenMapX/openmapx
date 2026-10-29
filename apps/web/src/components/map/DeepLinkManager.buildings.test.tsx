@@ -14,6 +14,7 @@ const BUILDINGS = {
   id: "overlay-3d-buildings",
   name: "Buildings",
   enabled: true,
+  isBuiltIn: true,
   domains: ["map-overlay"],
   frontend: { overlay: { excludes: [] } },
 };

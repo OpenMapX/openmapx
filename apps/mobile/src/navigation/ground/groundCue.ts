@@ -1,4 +1,8 @@
-import type { GroundMobileSession, VoiceCue } from "@openmapx/core/navigation";
+import {
+  type GroundMobileSession,
+  spokenInstructionFor,
+  type VoiceCue,
+} from "@openmapx/core/navigation";
 import { formatNavigationCue } from "@openmapx/i18n";
 import { MAX_CUE_ID_LENGTH, MAX_SPEECH_TEXT_LENGTH } from "../../audio/navigationAudio";
 import type { SessionEffect } from "../../storage/SessionRepository";
@@ -22,27 +26,6 @@ export const MAX_CUE_AGE_MS = 10_000;
 
 export function groundCueId(sessionId: string, routeFingerprint: string, cueKey: string): string {
   return `${sessionId}:ground:${routeFingerprint}:${cueKey}`.slice(0, MAX_CUE_ID_LENGTH);
-}
-
-/**
- * Picks the sentence to speak.
- *
- * Matches the browser's order exactly, because a user who switches between the
- * installed app and the site must not hear a different phrasing for the same
- * turn. Far and near cues carry the distance; the imminent one does not,
- * because by then the turn is right there.
- */
-export function spokenInstructionFor(cue: VoiceCue): string | null {
-  const step = cue.step as unknown as Record<string, unknown>;
-  const candidates =
-    cue.tier === "now"
-      ? [step.verbalAlert, step.verbalPre, step.instruction]
-      : [step.verbalSuccinct, step.verbalPre, step.instruction];
-
-  for (const candidate of candidates) {
-    if (typeof candidate === "string" && candidate.trim().length > 0) return candidate.trim();
-  }
-  return null;
 }
 
 export interface GroundCueEffect {

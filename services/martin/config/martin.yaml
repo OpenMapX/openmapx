@@ -1,32 +1,28 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/maplibre/martin/main/schemas/config.json
 #
-# Martin was previously run purely off `DATABASE_URL` (see service.json
-# `container.environment`) with no config file — Martin auto-discovers all
-# PostGIS tables/functions with zero config. This file exists ONLY to set the
-# internal tile cache expiry below; per Martin's docs, once `--config` /
-# `-c` is used the env-var shortcuts stop being read ("you can configure
-# Martin using environment variables, but only if the configuration file is
-# not used"), so the DB connection is re-declared here referencing the SAME
-# `DATABASE_URL` env var, and everything else is left at its documented
-# default so behavior is otherwise unchanged from the previous flag/env-only
-# startup.
+# Once `--config` is given Martin stops reading its environment shortcuts, so
+# the database connection is declared here, reusing service.json's
+# `DATABASE_URL`.
 
-# Unchanged from Martin's own default (`0.0.0.0:3000`) — matches the
-# container's `expose: [3000]` / Traefik proxy target in service.json.
-# Declared explicitly so this file is a complete, self-describing config.
+# Martin's own default, matching the container's `expose: [3000]` / Traefik
+# proxy target in service.json.
 listen_addresses: "0.0.0.0:3000"
 
 postgres:
-  # `$VAR` / `${VAR:-default}` expansion is a documented Martin config
-  # feature — this reuses the exact `DATABASE_URL` service.json already sets,
-  # so no connection details are duplicated here.
+  # `$VAR` / `${VAR:-default}` expansion is a documented Martin config feature.
+  # The URL logs in as `openmapx_tiles`, which the postgis entrypoint allows
+  # to call the functions in the `tiles` schema and nothing else.
   connection_string: $DATABASE_URL
-  # `auto_publish` is left unset (default: null). With no `tables`/
-  # `functions` block configured, Martin still auto-discovers every PostGIS
-  # source, which is the same zero-config behavior it had before this file
-  # existed. `segment_flow` (the traffic-flow overlay's live source, see
-  # docs/plans/conditions/speed-congestion/10-traffic-flow-overlay.md) is
-  # picked up this way — no source needs to be hand-declared.
+  # Martin publishes every table and function it can see unless told
+  # otherwise, and the database holds OpenConditions' records, crowd claims
+  # and operator-only data. Only the sources declared below are served.
+  auto_publish: false
+  functions:
+    # The traffic-flow overlay's live tiles; the source id is the URL path
+    # the web client requests (`/martin/segment_flow/{z}/{x}/{y}`).
+    segment_flow:
+      schema: tiles
+      function: segment_flow
 
 # Martin's internal tile-response cache. By default `cache.expiry` is `null`,
 # meaning cached tiles are NEVER time-based evicted (only evicted under

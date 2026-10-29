@@ -1,0 +1,55 @@
+fragment VehicleFields on VehicleUpdate {
+  vehicleId
+  lastUpdated
+  bearing
+  speed
+  mode
+  line {
+    lineRef
+    lineName
+    publicCode
+  }
+  serviceJourney {
+    id
+    date
+  }
+  operator {
+    name
+  }
+  location {
+    latitude
+    longitude
+  }
+  monitoredCall {
+    stopPointRef
+    order
+  }
+}
+
+query VehiclesByLine($lineRef: String!, $maxDataAge: Duration!) {
+  vehicles(lineRef: $lineRef, maxDataAge: $maxDataAge, monitored: true) {
+    ...VehicleFields
+  }
+}
+
+query VehiclesByBoundingBox(
+  $minLat: Float!
+  $minLon: Float!
+  $maxLat: Float!
+  $maxLon: Float!
+  $maxDataAge: Duration!
+) {
+  vehicles(
+    boundingBox: { minLat: $minLat, minLon: $minLon, maxLat: $maxLat, maxLon: $maxLon }
+    maxDataAge: $maxDataAge
+    monitored: true
+  ) {
+    ...VehicleFields
+  }
+}
+
+query VehicleHealthCheck {
+  vehicles(codespaceId: "RUT", maxDataAge: "PT1H", monitored: true) {
+    lastUpdated
+  }
+}

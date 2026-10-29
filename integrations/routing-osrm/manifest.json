@@ -44,8 +44,6 @@
       "sourceId": "osrm",
       "name": "OSRM",
       "url": "https://project-osrm.org/",
-      "license": "BSD 2-Clause (software); custom demo server policy",
-      "licenseUrl": "https://github.com/Project-OSRM/osrm-backend/wiki/Api-usage-policy",
       "attribution": "<a href=\"https://project-osrm.org/\">OSRM</a>, © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "commercialUse": "conditional",
       "providerCountry": "DE",
@@ -53,7 +51,41 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "software",
+            "subject": "OSRM engine",
+            "license": {
+              "kind": "spdx",
+              "expression": "BSD-2-Clause"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "OSRM API",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "OpenStreetMap routing data",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "BSD-2-Clause (software); custom demo server policy",
+            "url": "https://github.com/Project-OSRM/osrm-backend/wiki/Api-usage-policy"
+          }
+        ]
+      }
     }
   ],
   "requires": [

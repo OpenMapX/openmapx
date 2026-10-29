@@ -49,15 +49,33 @@
       "sourceId": "nasa-gibs",
       "name": "NASA GIBS",
       "url": "https://gibs.earthdata.nasa.gov/",
-      "license": "U.S. Public Domain",
-      "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.nasa.gov/privacy/",
       "endUserExposure": "proxied",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "NASA GIBS material",
+            "license": {
+              "kind": "public-domain",
+              "name": "U.S. Public Domain",
+              "url": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "U.S. Public Domain",
+            "url": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+          }
+        ]
+      }
     }
   ]
 }

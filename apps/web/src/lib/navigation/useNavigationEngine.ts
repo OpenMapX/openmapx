@@ -3,7 +3,6 @@ import {
   cumulativeDistances,
   type FixInput,
   fetchDirections,
-  formatSpokenDistance,
   isReroutingTooOften,
   type LngLat,
   type NavigationRouteOptions,
@@ -24,8 +23,10 @@ import {
   VOICE_TIMING_MULTIPLIER,
   type VoiceCue,
 } from "@openmapx/core";
+import { spokenInstructionFor } from "@openmapx/core/navigation";
+import { formatNavigationCue, NavigationCueError, resolveLocale } from "@openmapx/i18n";
 import type { NavIncidentResource } from "@openmapx/integration-framework/react";
-import { useLocale, useTranslations } from "next-intl";
+import { useLocale } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { haptics } from "../haptics";
 import { useWatchPosition } from "../useWatchPosition";
@@ -74,7 +75,6 @@ interface RerouteExecutionRequest {
 
 /** Wires GPS fixes → processFix → navigationStore + side effects (voice, reroute). */
 export function useNavigationEngine(incidentResource: NavIncidentResource): void {
-  const t = useTranslations("navigation");
   const locale = useLocale();
   const speak = useNavigationVoice(locale);
 
@@ -192,7 +192,13 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
           tickRef.current = freshTick();
           useNavigationStore
             .getState()
-            .applyReroute(next, response.provider, undefined, response.roadConditionImpact);
+            .applyReroute(
+              next,
+              response.provider,
+              undefined,
+              response.roadConditionImpact,
+              waypoints,
+            );
         })
         .catch((error) => {
           if (!isCurrentAttempt()) return;
@@ -212,23 +218,23 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
 
   const speakCue = useCallback(
     (cue: VoiceCue) => {
-      // Prefer the engine's voice-optimized phrasing (Valhalla `verbal_*`): the
-      // "now" cue uses the pre-transition line, earlier cues the advance alert.
-      // Fall back to the on-screen instruction for engines that omit them.
-      const step = cue.step;
-      const spoken =
-        cue.tier === "now"
-          ? (step.verbalPre ?? step.instruction)
-          : (step.verbalAlert ?? step.verbalPre ?? step.instruction);
-      const units = useSettingsStore.getState().units;
-      const distanceStr = formatSpokenDistance(cue.distance, units);
-      const text =
-        cue.tier === "now"
-          ? spoken
-          : t("voiceUpcoming", { distance: distanceStr, instruction: spoken });
+      const instruction = spokenInstructionFor(cue);
+      if (!instruction) return;
+      let text: string;
+      try {
+        text = formatNavigationCue(
+          { kind: "ground-maneuver", tier: cue.tier, instruction, distanceMeters: cue.distance },
+          resolveLocale(locale),
+          { units: useSettingsStore.getState().units },
+        );
+      } catch (error) {
+        // An unusable instruction costs one cue, not navigation progression.
+        if (error instanceof NavigationCueError) return;
+        throw error;
+      }
       speak(text);
     },
-    [speak, t],
+    [speak, locale],
   );
 
   const onFix = useCallback(

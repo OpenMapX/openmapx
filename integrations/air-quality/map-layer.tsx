@@ -10,7 +10,7 @@ import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import type { MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
-import { useSourceAttributions } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 
 import { useAirQualityStore } from "./store";
 import { MONITOR_MIN_ZOOM, MONITOR_SOURCE_ID, useMonitorStations } from "./use-monitor-stations";
@@ -228,14 +228,13 @@ export function AirQualityLayer() {
   const locale = useLocale();
   const layerVisible = useAirQualityStore((state) => state.layerVisible);
   const mode = useAirQualityStore((state) => state.mode);
-  const activeSourceIds = useAirQualityStore((state) => state.activeSourceIds);
   const monitorsActive = layerVisible && mode.kind === "monitors";
   const labels = useMemo(() => popupLabels(t), [t]);
   const popupRef = useRef<maplibregl.Popup | null>(null);
 
   useMonitorStations();
   useOverlayExclusion("air-quality", layerVisible);
-  useSourceAttributions("air-quality", monitorsActive ? activeSourceIds : []);
+  useRenderedMapAttributions("air-quality", [MONITOR_LAYER_ID], monitorsActive);
 
   const group = useMemo<MapLayerGroup | null>(
     () =>

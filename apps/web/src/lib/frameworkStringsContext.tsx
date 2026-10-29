@@ -1,6 +1,6 @@
 "use client";
 
-import type { LocaleStrings } from "@openmapx/integration-framework/strings";
+import type { LocaleStrings } from "@openmapx/core/api-contracts";
 import { createContext, type ReactNode, useContext } from "react";
 
 const FrameworkStringsContext = createContext<LocaleStrings | null>(null);

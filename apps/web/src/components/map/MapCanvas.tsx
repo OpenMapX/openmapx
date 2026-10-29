@@ -16,14 +16,22 @@ import type * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
+import {
+  installedNativeBasemap,
+  type NativeBasemapCandidate,
+} from "@/integration-api/overlay/nativeBasemap";
+import { attributedRasterRequestTransform } from "@/integration-api/overlay/rasterResponseProtocol";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { loadMaptilerStyle, loadOpenMapXStyle, type MapStyleVariant } from "@/lib/map";
 import { initializeMapClickModes } from "@/lib/mapClickModes";
+import { MAP_FOOTER_OBSTRUCTION_ID, useMapFooterBox } from "@/lib/mapFooterCenter";
 import { loadMapLibreRuntime, type MapLibreRuntime } from "@/lib/maplibreRuntime";
-import { useMapObstructionInsets } from "@/lib/mapObstructions";
+import { useMapObstructionExtent, useMapObstructionInsets } from "@/lib/mapObstructions";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { useMobilePanelClearance, useWindowHeight, useWindowWidth } from "@/lib/mobilePanelHeight";
+import { captureNativeBasemapRequest } from "@/lib/nativeBasemapAcquisition";
 import {
   ensureOfflinePackageRuntime,
   OFFLINE_PACKAGE_CHANGED_EVENT,
@@ -31,7 +39,8 @@ import {
   selectOnlineFirstOpenMapXStyle,
   setOfflinePackageActive,
 } from "@/lib/offlineAreas";
-import { localizeTextField } from "./localizeTextField";
+import { planAboveFooter, sheetFollowSx, useSheetFollowTrack } from "@/lib/sheetFollow";
+import { localizeMapLabels } from "./localizeTextField";
 
 /** The main map uses its camera-aware 3D layer instead of basemap extrusions. */
 function withoutNativeBuildingExtrusions(style: Record<string, unknown>): Record<string, unknown> {
@@ -44,13 +53,17 @@ function withoutNativeBuildingExtrusions(style: Record<string, unknown>): Record
 }
 
 async function loadStyleForViewport(
-  env: ReturnType<typeof useEnv>,
+  acquisition: ReturnType<typeof captureNativeBasemapRequest>,
   variant: MapStyleVariant,
   mapStyle: string,
   maplibre: MapLibreRuntime,
-): Promise<{ offline: boolean; style: Record<string, unknown> }> {
+): Promise<NativeBasemapCandidate> {
+  const { env } = acquisition;
   if (env.styleProvider !== "openmapx") {
-    return { offline: false, style: await loadMaptilerStyle(mapStyle, env) };
+    return acquisition.bind(
+      withoutNativeBuildingExtrusions(await loadMaptilerStyle(mapStyle, env)),
+      false,
+    );
   }
 
   const [configuredStyle, resolver] = await Promise.all([
@@ -68,7 +81,7 @@ async function loadStyleForViewport(
     { apiBaseUrl: env.apiUrl },
   );
   if (selected.offline && resolver) registerOfflinePmtilesProtocol(maplibre, resolver);
-  return selected;
+  return acquisition.bind(withoutNativeBuildingExtrusions(selected.style), selected.offline);
 }
 
 export function MapCanvas() {
@@ -100,9 +113,21 @@ export function MapCanvas() {
   const viewportHeight = useWindowHeight();
   const viewportWidth = useWindowWidth();
   const sheetClearance = useMobilePanelClearance(viewportHeight);
+  // The live footer and sheet edges rather than `insets.bottom`, which holds a
+  // moving sheet's last settled height and would leave the scale behind it.
+  const footerExtent = useMapObstructionExtent(MAP_FOOTER_OBSTRUCTION_ID);
   const scaleLeft = 12;
-  const scaleBottom = Math.max(102, insets.bottom + 12, sheetClearance + 12);
+  const scaleBottom = Math.max(102, footerExtent + 12, sheetClearance + 12);
+  // While a sheet drives the follow, the scale rides the footer (or, with the
+  // footer docked, the sheet edge) on the compositor (see lib/sheetFollow).
+  const followTrack = useSheetFollowTrack();
+  const footerBox = useMapFooterBox();
+  const scaleFollow = followTrack ? planAboveFooter(followTrack, footerBox, 12, 102) : null;
+  // Turn-by-turn guidance has no use for a distance scale, and its speed-limit
+  // badge sits over the same corner.
+  const groundNavigating = useNavigationStore((s) => s.status !== "idle" && s.kind === "ground");
   const scaleVisible =
+    !groundNavigating &&
     (viewportHeight === 0 || viewportHeight - insets.top - scaleBottom >= 24) &&
     (viewportWidth === 0 || viewportWidth - scaleLeft - 12 >= 100);
 
@@ -143,11 +168,13 @@ export function MapCanvas() {
       setZoom(initialZoom);
       // Keep the dynamically loaded module as a namespace: MapLibre 6 no longer
       // exposes a synthetic default export.
+      const request = ++styleRequestRef.current;
+      const acquisition = captureNativeBasemapRequest(env);
       const maplibreRuntime = await loadMapLibreRuntime();
       if (!isActive() || !containerRef.current) return;
       const currentStyle = currentStyleRef.current;
       const viewportStyle = await loadStyleForViewport(
-        env,
+        acquisition,
         currentStyle.variant,
         currentStyle.mapStyle,
         maplibreRuntime as MapLibreRuntime,
@@ -155,42 +182,44 @@ export function MapCanvas() {
       const maplibregl = maplibreRuntime as unknown as typeof import("maplibre-gl");
 
       if (!isActive() || !containerRef.current) return;
-      setOfflinePackageActive(viewportStyle.offline);
+      if (request !== styleRequestRef.current) return;
 
       // MapLibre's built-in AttributionControl is disabled: it collapses to a
       // ⓘ toggle on narrow viewports and lives in its own DOM subtree, so it
       // can't share a bar with the legal links. The credits are rendered by
-      // `<MapFooter>` instead, fed by the `useMapAttributions` hook (see
-      // apps/web/src/lib/useMapAttributions.ts) via the attribution registry.
+      // `<MapFooter>` instead, fed by captured rendered contributions and exact
+      // popup/custom owners through integration-api/overlay/mapAttributionStore.
       // Every style we load has its source-level `attribution` stripped (see
       // lib/map.ts), so no credit is lost by turning the control off.
       const map = new maplibregl.Map({
         container: containerRef.current,
-        style: withoutNativeBuildingExtrusions(
-          viewportStyle.style,
-        ) as maplibregl.StyleSpecification,
+        style: viewportStyle.style,
         center: initialCenter,
         zoom: initialZoom,
         bearing,
         pitch,
         attributionControl: false,
+        transformRequest: attributedRasterRequestTransform(),
         canvasContextAttributes: { antialias: true },
       });
       activeMap = map;
       const scale = new maplibregl.ScaleControl({ maxWidth: 100, unit: unitsRef.current });
       map.addControl(scale, "bottom-left");
       scaleRef.current = { map, control: scale };
+      installedNativeBasemap(map).install(viewportStyle, setOfflinePackageActive, true);
 
       const applyStyleForViewport = (reason: string) => {
         const request = ++styleRequestRef.current;
         const currentStyle = currentStyleRef.current;
-        void loadStyleForViewport(env, currentStyle.variant, currentStyle.mapStyle, maplibregl)
+        void loadStyleForViewport(
+          captureNativeBasemapRequest(env),
+          currentStyle.variant,
+          currentStyle.mapStyle,
+          maplibregl,
+        )
           .then((next) => {
             if (!isActive() || request !== styleRequestRef.current) return;
-            setOfflinePackageActive(next.offline);
-            map.setStyle(
-              withoutNativeBuildingExtrusions(next.style) as maplibregl.StyleSpecification,
-            );
+            installedNativeBasemap(map).install(next, setOfflinePackageActive);
           })
           .catch((err) => {
             if (!isActive() || request !== styleRequestRef.current) return;
@@ -287,7 +316,9 @@ export function MapCanvas() {
         notifyMapReady();
         setStatus("ready");
       };
-      if (map.isStyleLoaded()) {
+      // Parsed styles are usable while tiles are pending; style.load may
+      // already have fired when a cached style finished during construction.
+      if (map.getStyle()) {
         markReady();
       } else {
         map.on("error", handleInitialStyleError);
@@ -394,14 +425,16 @@ export function MapCanvas() {
     initialStyleRef.current = mapStyle;
 
     const request = ++styleRequestRef.current;
+    const acquisition = captureNativeBasemapRequest(env);
     loadMapLibreRuntime()
-      .then((module) => loadStyleForViewport(env, variant, mapStyle, module as MapLibreRuntime))
+      .then((module) =>
+        loadStyleForViewport(acquisition, variant, mapStyle, module as MapLibreRuntime),
+      )
       .then((s) => {
         if (request !== styleRequestRef.current || mapRef.current !== map) return;
         // The persistent `style.load` listener registered at map creation bumps
         // styleVersion once the new style lands.
-        setOfflinePackageActive(s.offline);
-        map.setStyle(withoutNativeBuildingExtrusions(s.style) as maplibregl.StyleSpecification);
+        installedNativeBasemap(map).install(s, setOfflinePackageActive);
       })
       .catch((err) => {
         if (request !== styleRequestRef.current) return;
@@ -414,28 +447,7 @@ export function MapCanvas() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    const setLabels = () => {
-      const style = map.getStyle();
-      if (!style?.layers) return;
-      for (const layer of style.layers) {
-        if (layer.type !== "symbol") continue;
-        const tf = layer.layout?.["text-field"];
-        if (!tf) continue;
-        const localized = localizeTextField(tf, locale);
-        if (JSON.stringify(localized) === JSON.stringify(tf)) continue;
-        map.setLayoutProperty(
-          layer.id,
-          "text-field",
-          localized as maplibregl.DataDrivenPropertyValueSpecification<string>,
-        );
-      }
-    };
-
-    setLabels();
-    map.on("styledata", setLabels);
-    return () => {
-      map.off("styledata", setLabels);
-    };
+    return subscribeStyleLoaded(map, () => localizeMapLabels(map, locale));
   }, [locale, mapRef, mapReady]);
 
   // Outer div owns the absolute positioning.
@@ -451,13 +463,13 @@ export function MapCanvas() {
           "& .maplibregl-ctrl-bottom-left > .maplibregl-ctrl-scale": {
             display: scaleVisible ? "block" : "none",
             marginLeft: `${scaleLeft}px`,
-            marginBottom: `${scaleBottom}px`,
+            marginBottom: `${scaleFollow ? scaleFollow.base : scaleBottom}px`,
+            ...sheetFollowSx(scaleFollow),
             pointerEvents: "none",
             bgcolor: "background.paper",
             color: "text.primary",
             borderColor: "currentColor",
             fontSize: 10,
-            transition: "margin-bottom 0.25s ease",
           },
         }}
       />

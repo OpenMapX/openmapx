@@ -112,6 +112,7 @@ interface Seams {
   traceSpanEdges?: CronSetupOptions["traceSpanEdges"];
   spanEdgeCachePath?: string;
   logger?: CronSetupOptions["logger"];
+  fetchTrafficPolicy?: CronSetupOptions["fetchTrafficPolicy"];
 }
 
 let cachePathCounter = 0;
@@ -119,7 +120,6 @@ let cachePathCounter = 0;
 function setupCronWithSeams(seams: Seams) {
   return setupCron({
     dataDir: "/tmp/openmapx-traffic-live-conditions",
-    repoRoot: "/tmp/nope",
     countries: [],
     store: {} as never,
     singleFlight: {} as never,
@@ -140,11 +140,13 @@ function setupCronWithSeams(seams: Seams) {
         generation: "fixture-engine-epoch",
         engineBootId: "e2630bd0-5a85-4c93-9b7d-cf174bd0dd45",
       })),
-    fetchTrafficPolicy: async () => ({
-      revision: "p1",
-      validUntil: new Date(Date.now() + 150_000).toISOString(),
-      disallowedSourceIds: [],
-    }),
+    fetchTrafficPolicy:
+      seams.fetchTrafficPolicy ??
+      (async () => ({
+        revision: "p1",
+        validUntil: new Date(Date.now() + 150_000).toISOString(),
+        disallowedSourceIds: [],
+      })),
     trafficTarPath: "/data/osm/traffic.tar",
     fetchLiveTrafficCsv: seams.fetchLiveTrafficCsv ?? (async () => HEADER_ONLY_CSV),
     fetchConditionsJson: seams.fetchConditionsJson ?? (async () => closureFeed()),
@@ -459,7 +461,58 @@ describe("traffic-live conditions merge", () => {
     expect([...(writeLive.mock.calls[0]?.[0].overrides?.keys() ?? [])].sort()).toEqual([]);
     expect(infoLog).toHaveBeenCalledWith(
       "traffic-live: conditions applied",
-      expect.objectContaining({ edgeExactSpans: 0, wholeWaySpans: 0 }),
+      expect.objectContaining({
+        edgeExactSpans: 0,
+        wholeWaySpans: 0,
+        skipped: expect.objectContaining({ incompleteSpans: 1, ineligible: 0 }),
+        withheld: null,
+      }),
+    );
+
+    handles.stop();
+  });
+
+  it("names an unattested graph, not the policy, when the engine's graph cannot be read", async () => {
+    const infoLog = vi.fn();
+    const handles = setupCronWithSeams({
+      readTrafficGraphState: async () => {
+        throw new Error("traffic-generations.json missing");
+      },
+      logger: { info: infoLog, warn: () => {}, error: () => {} },
+    });
+
+    await handles.runTrafficLiveNow();
+
+    expect(infoLog).toHaveBeenCalledWith(
+      "traffic-live: conditions applied",
+      expect.objectContaining({ withheld: "graph_unattested", candidateEdges: 0 }),
+    );
+
+    handles.stop();
+  });
+
+  it("says why it classified nothing when the policy authority is unavailable", async () => {
+    const infoLog = vi.fn();
+    const writeLive = vi.fn<(deps: WriteLiveTrafficDeps) => Promise<WriteLiveTrafficResult>>(
+      async (deps) => writeResult(deps),
+    );
+    const handles = setupCronWithSeams({
+      writeLiveTraffic: writeLive,
+      fetchTrafficPolicy: async () => {
+        throw new Error("policy service down");
+      },
+      logger: { info: infoLog, warn: () => {}, error: () => {} },
+    });
+
+    await handles.runTrafficLiveNow();
+
+    expect(writeLive.mock.calls[0]?.[0].overrides?.size).toBe(0);
+    expect(infoLog).toHaveBeenCalledWith(
+      "traffic-live: conditions applied",
+      expect.objectContaining({
+        withheld: "policy_unavailable",
+        skipped: expect.objectContaining({ ineligible: 0, incompleteSpans: 0 }),
+      }),
     );
 
     handles.stop();

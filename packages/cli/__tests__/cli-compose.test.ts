@@ -1,23 +1,62 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
+  closeSync,
+  constants,
   existsSync,
+  fstatSync,
   linkSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { readErasureJournal } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderComposeForRepo, rotateRedisPasswordForRepo } from "../src/commands/compose";
+import { runsInAgent } from "../src/lib/agent-integrations";
+import { legacyTraefikDynamicMounted } from "../src/lib/container-mounts";
+import { loadInfraEnv } from "../src/lib/infra-env";
 import { rotatePlatformSecretFile } from "../src/lib/platform-secret-files";
+import { selectedReleaseServiceFiles } from "../src/lib/release-service-files";
+
+// Docker answers whether a container still mounts the checkout's Traefik
+// directory, and what containers mount; here, by default, none does.
+vi.mock("../src/lib/container-mounts", () => ({
+  legacyTraefikDynamicMounted: vi.fn(async () => false),
+  containerBindMounts: vi.fn(async () => []),
+}));
+// The selected release's files come from its image; by default none is selected.
+vi.mock("../src/lib/release-service-files", () => ({
+  selectedReleaseServiceFiles: vi.fn(async () => "none"),
+}));
+// The host CLI by default; a test switches to the operations agent's fixed CLI.
+vi.mock("../src/lib/agent-integrations", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/lib/agent-integrations")>()),
+  runsInAgent: vi.fn(() => false),
+}));
+
+/** A file's permission bits, read through a descriptor rather than a second lookup by path. */
+function permissions(path: string): number {
+  const descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    return fstatSync(descriptor).mode & 0o777;
+  } finally {
+    closeSync(descriptor);
+  }
+}
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
 
@@ -28,9 +67,14 @@ function composeDefault(name: string, fallback: string): string {
 
 let tmp: string;
 
+/** A file of the applied generation, through the current pointer. */
+function currentGenerationFile(...names: string[]): string {
+  return join(tmp, "infra", "docker", coreServices.CURRENT_CONFIGURATION, ...names);
+}
+
 /** The applied generation's compose file. */
 function generatedCompose(): string {
-  return join(tmp, "infra", "docker", ".trusted-config-current", "docker-compose.generated.yml");
+  return currentGenerationFile("docker-compose.generated.yml");
 }
 let originalPostgresPassword: string | undefined;
 let originalBetterAuthSecret: string | undefined;
@@ -98,6 +142,135 @@ describe("renderComposeForRepo", () => {
     },
   );
 
+  it("refuses a deployment .env that is not the operator's own, and loads none of it", async () => {
+    writeManifest("alpha", { id: "alpha", ...baseManifest });
+    const env = join(tmp, "infra", "docker", ".env");
+    writeFileSync(env, "OPENMAPX_TEST_PLANTED=planted\n", { mode: 0o600 });
+    chmodSync(env, 0o664);
+    delete process.env.OPENMAPX_TEST_PLANTED;
+    loadInfraEnv(tmp);
+    expect(process.env.OPENMAPX_TEST_PLANTED).toBeUndefined();
+    await expect(
+      renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] }),
+    ).rejects.toThrow("no group or other write");
+    expect(existsSync(generatedCompose())).toBe(false);
+    expect(permissions(env)).toBe(0o664);
+
+    chmodSync(env, 0o600);
+    loadInfraEnv(tmp);
+    expect(process.env.OPENMAPX_TEST_PLANTED).toBe("planted");
+    delete process.env.OPENMAPX_TEST_PLANTED;
+    await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] });
+    expect(existsSync(generatedCompose())).toBe(true);
+  });
+
+  it("writes the deployment's user from the checkout's owner, and runs only as that user", async () => {
+    writeManifest("alpha", { id: "alpha", ...baseManifest });
+    const env = join(tmp, "infra", "docker", ".env");
+    writeFileSync(env, "DOMAIN=example.com\n", { mode: 0o600 });
+    const owner = statSync(tmp);
+    await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] });
+    expect(readFileSync(env, "utf8")).toContain(`\nUID=${owner.uid}\nGID=${owner.gid}\n`);
+    expect(permissions(env)).toBe(0o600);
+
+    // .env names another user than this process: nothing is rendered.
+    writeFileSync(env, `UID=${owner.uid + 1}\nGID=${owner.gid}\n`, { mode: 0o600 });
+    const before = coreServices.currentConfigurationGeneration(join(tmp, "infra", "docker"));
+    await expect(
+      renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] }),
+    ).rejects.toThrow(/but the deployment's user .* is/);
+    expect(coreServices.currentConfigurationGeneration(join(tmp, "infra", "docker"))).toBe(before);
+  });
+
+  it("on the host moves the operations agent to its narrow mounts once nothing is missing, and says what is", async () => {
+    writeManifest(
+      "ops-agent",
+      JSON.parse(readFileSync(join(REPO_ROOT, "services/ops-agent/service.json"), "utf8")),
+    );
+    const infraDir = join(tmp, "infra", "docker");
+    // log.warn writes to stderr.
+    const warnings = vi.spyOn(console, "error").mockImplementation(() => {});
+    const render = () =>
+      renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["ops-agent"] });
+    await render();
+    // Without the import, the retired earlier lock and an applied generation.
+    expect(coreServices.generationAgentMountLayout(infraDir)).toBe("checkout");
+    const said = warnings.mock.calls.flat().join("\n");
+    expect(said).toContain("The operations agent keeps the whole checkout mounted.");
+    expect(said).toMatch(/- The one-time import of your edits .*overrides-import\.json is missing/);
+    expect(said).toMatch(/- Writers still take the earlier releases' configuration lock/);
+
+    writeFileSync(
+      join(infraDir, "state/ops-agent/overrides-import.json"),
+      `${JSON.stringify({ version: 1, importedAt: "2026-10-26T00:00:00Z", imported: [] })}\n`,
+      { mode: 0o600 },
+    );
+    coreServices.retireLegacyConfigurationWriter(infraDir);
+    warnings.mockClear();
+    await render();
+    expect(coreServices.generationAgentMountLayout(infraDir)).toBe("narrow");
+    expect(warnings.mock.calls.flat().join("\n")).not.toContain("keeps the whole checkout");
+
+    // The agent's own render, with the whole checkout mounted, keeps it.
+    vi.mocked(runsInAgent).mockReturnValue(true);
+    try {
+      await render();
+      expect(coreServices.generationAgentMountLayout(infraDir)).toBe("checkout");
+    } finally {
+      vi.mocked(runsInAgent).mockReturnValue(false);
+    }
+  });
+
+  it("in the operations agent's fixed CLI only reads the deployment's user, and refuses without it", async () => {
+    writeManifest("alpha", { id: "alpha", ...baseManifest });
+    const infraDir = join(tmp, "infra", "docker");
+    const env = join(infraDir, ".env");
+    const owner = statSync(tmp);
+    // Read through one descriptor rather than a second lookup by path.
+    const state = () => {
+      const descriptor = openSync(env, constants.O_RDONLY | constants.O_NOFOLLOW);
+      try {
+        const stats = fstatSync(descriptor, { bigint: true });
+        return {
+          bytes: readFileSync(descriptor, "utf8"),
+          ino: stats.ino,
+          mtimeNs: stats.mtimeNs,
+        };
+      } finally {
+        closeSync(descriptor);
+      }
+    };
+    // An old mtime, so a write in the same instant would still show.
+    const written = (contents: string) => {
+      writeFileSync(env, contents, { mode: 0o600 });
+      utimesSync(env, new Date("2026-01-01T00:00:00Z"), new Date("2026-01-01T00:00:00Z"));
+      return state();
+    };
+    vi.mocked(runsInAgent).mockReturnValue(true);
+    try {
+      for (const [contents, missing] of [
+        ["DOMAIN=example.com\n", "UID or GID"],
+        [`DOMAIN=example.com\nUID=${owner.uid}\n`, "GID"],
+      ] as const) {
+        const before = written(contents);
+        await expect(
+          renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] }),
+        ).rejects.toThrow(
+          `infra/docker/.env sets no ${missing}, and the operations agent does not write .env: run \`pnpm openmapx compose render\` on the host, as the checkout's owner, which writes UID and GID from that owner.`,
+        );
+        expect(state()).toEqual(before);
+        expect(coreServices.currentConfigurationGeneration(infraDir)).toBeNull();
+      }
+
+      const present = written(`DOMAIN=example.com\nUID=${owner.uid}\nGID=${owner.gid}\n`);
+      await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] });
+      expect(coreServices.currentConfigurationGeneration(infraDir)).not.toBeNull();
+      expect(state()).toEqual(present);
+    } finally {
+      vi.mocked(runsInAgent).mockReturnValue(false);
+    }
+  });
+
   it("writes docker-compose.generated.yml from explicitly selected manifests", async () => {
     writeManifest("alpha", { ...baseManifest, id: "alpha" });
     writeManifest("beta", { ...baseManifest, id: "beta" });
@@ -115,7 +288,7 @@ describe("renderComposeForRepo", () => {
     expect(yaml).toContain("services:");
     expect(yaml).toContain("alpha:");
     expect(yaml).toContain("beta:");
-    const queue = lstatSync(join(tmp, "infra", "docker", "data", "ops-agent", "trusted-config"));
+    const queue = lstatSync(join(tmp, "infra", "docker", "state", "ops-agent", "trusted-config"));
     expect(queue.isDirectory()).toBe(true);
     expect(queue.mode & 0o777).toBe(0o700);
     const backups = lstatSync(join(tmp, "infra", "docker", "backups"));
@@ -152,6 +325,9 @@ describe("renderComposeForRepo", () => {
     writeManifest("postgis", { ...baseManifest, id: "postgis" });
     writeManifest("redis", { ...baseManifest, id: "redis" });
     writeManifest("traefik", { ...baseManifest, id: "traefik" });
+    // Traefik's static file goes into the generation; render refuses without it.
+    mkdirSync(join(tmp, "services", "traefik", "config"), { recursive: true });
+    writeFileSync(join(tmp, "services", "traefik", "config", "traefik.yml"), "log: {}\n");
     writeManifest("valhalla", { ...baseManifest, id: "valhalla" });
 
     const result = await renderComposeForRepo({ rootDir: tmp, domain: "example.com" });
@@ -202,13 +378,7 @@ describe("renderComposeForRepo", () => {
     });
 
     await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["valhalla"] });
-    const planPath = join(
-      tmp,
-      "infra",
-      "docker",
-      ".trusted-config-current",
-      "docker-compose.generated.hardlinks.json",
-    );
+    const planPath = currentGenerationFile("docker-compose.generated.hardlinks.json");
     const plan = JSON.parse(readFileSync(planPath, "utf-8"));
     expect(plan).toEqual([
       {
@@ -343,6 +513,321 @@ describe("renderComposeForRepo", () => {
       services: ["app-api,data-manager"],
     });
     expect(readFileSync(secretPath, "utf8")).toBe(key);
+  });
+
+  it("creates the agent's stores before mounting its integration store read-only into app-api", async () => {
+    for (const id of ["app-api", "data-manager", "ops-agent", "motis", "postgis", "redis"]) {
+      const manifest = JSON.parse(
+        readFileSync(join(REPO_ROOT, "services", id, "service.json"), "utf8"),
+      ) as Record<string, unknown>;
+      writeManifest(id, manifest);
+    }
+    // An earlier release's checkout, with a directory the agent never recorded.
+    mkdirSync(join(tmp, "custom_integrations", "hand-placed"), { recursive: true });
+    const warnings = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await renderComposeForRepo({
+      rootDir: tmp,
+      domain: "example.com",
+      services: ["app-api,data-manager"],
+    });
+
+    const state = join(tmp, "infra", "docker", "state", "ops-agent");
+    for (const store of ["custom-integrations", "community"]) {
+      expect(statSync(join(state, store)).mode & 0o777).toBe(0o700);
+    }
+    expect(readdirSync(join(state, "custom-integrations"))).toEqual([]);
+    const yaml = readFileSync(generatedCompose(), "utf8");
+    const appApi = yaml.split("  app-api:")[1]?.split("\n  app-")[0] ?? "";
+    // Relative to the generation, inside infra/docker/state/ops-agent.
+    expect(appApi).toMatch(
+      /- \.\.\/\.\.\/custom-integrations:\$\{OPENMAPX_CUSTOM_INTEGRATIONS_DIR:-\/app\/custom_integrations\}:ro/,
+    );
+    expect(yaml).not.toContain("/custom_integrations:${");
+    expect(warnings.mock.calls.flat().join("\n")).toContain(
+      "The integration hand-placed in custom_integrations was not copied into the operations agent's state: the agent holds no record of it.",
+    );
+    // Left in place, as everything in the checkout.
+    expect(readdirSync(join(tmp, "custom_integrations"))).toEqual(["hand-placed"]);
+  });
+
+  it("mounts only the Transitous API keys directory into data-manager, where it reads them", async () => {
+    for (const id of ["app-api", "data-manager", "ops-agent", "motis", "postgis", "redis"]) {
+      const manifest = JSON.parse(
+        readFileSync(join(REPO_ROOT, "services", id, "service.json"), "utf8"),
+      ) as Record<string, unknown>;
+      writeManifest(id, manifest);
+    }
+    // An earlier release's keys in the checkout.
+    const legacy = join(tmp, "services", "motis", "tools", "transitous", "api-keys.json");
+    mkdirSync(dirname(legacy), { recursive: true });
+    writeFileSync(legacy, '{\n  "us-ca/NeedsKey": "secret"\n}\n', { mode: 0o600 });
+
+    await renderComposeForRepo({
+      rootDir: tmp,
+      domain: "example.com",
+      services: ["app-api,data-manager"],
+    });
+
+    const keysDirectory = join(tmp, "infra", "docker", "secrets", "transitous-api-keys");
+    expect(readdirSync(keysDirectory)).toEqual(["api-keys.json"]);
+    expect(readFileSync(join(keysDirectory, "api-keys.json"), "utf8")).toBe(
+      readFileSync(legacy, "utf8"),
+    );
+    const yaml = readFileSync(generatedCompose(), "utf8");
+    const dataManagerSection = yaml.split("  data-manager:")[1]?.split("\n  app-")[0] ?? "";
+    // The directory, read-only, at the path data-manager reads by default.
+    expect(dataManagerSection).toContain(
+      "- ../../../../secrets/transitous-api-keys:/config/transitous:ro",
+    );
+    expect(dataManagerSection).not.toContain("services/motis/tools/transitous");
+    expect(yaml.match(/transitous-api-keys/g)).toHaveLength(1);
+  });
+
+  it("mounts Traefik's static file from the generation and its dynamic directory from the agent's state", async () => {
+    writeManifest(
+      "traefik",
+      JSON.parse(readFileSync(join(REPO_ROOT, "services", "traefik", "service.json"), "utf8")),
+    );
+    const config = join(tmp, "services", "traefik", "config");
+    mkdirSync(join(config, "dynamic"), { recursive: true });
+    writeFileSync(join(config, "traefik.yml"), "log: {}\n");
+    writeFileSync(join(config, "dynamic", "middlewares.yml"), "http: {}\n");
+    const legacyRoutes = join(config, "dynamic", "generated-routes.yml");
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const notices = () =>
+      errors.mock.calls
+        .flat()
+        .map(String)
+        .filter((line) => line.includes("Traefik still reads its routes"));
+
+    // A Traefik an earlier release started still reads the checkout's routes.
+    vi.mocked(legacyTraefikDynamicMounted).mockResolvedValueOnce(true);
+    await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["traefik"] });
+    const yaml = readFileSync(generatedCompose(), "utf8");
+    expect(yaml).toContain("- ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro");
+    expect(yaml).toContain("- ../../traefik/dynamic:/etc/traefik/dynamic:ro");
+    expect(yaml).not.toContain("services/traefik/config");
+    expect(permissions(currentGenerationFile("traefik", "traefik.yml"))).toBe(0o400);
+    const dynamic = join(tmp, "infra", "docker", "state", "ops-agent", "traefik", "dynamic");
+    expect(readdirSync(dynamic).sort()).toEqual(["generated-routes.yml", "middlewares.yml"]);
+    expect(permissions(dynamic)).toBe(0o700);
+    expect(readFileSync(legacyRoutes, "utf8")).toBe(
+      readFileSync(join(dynamic, "generated-routes.yml"), "utf8"),
+    );
+    expect(notices()).toHaveLength(1);
+
+    // Once none does, the checkout's file is left as it was and render is quiet.
+    rmSync(legacyRoutes);
+    errors.mockClear();
+    await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["traefik"] });
+    expect(existsSync(legacyRoutes)).toBe(false);
+    expect(notices()).toEqual([]);
+  });
+
+  /** Martin in a git checkout, and a release of it as its operations-agent image prints it. */
+  function martinCheckout() {
+    const manifest = {
+      ...baseManifest,
+      id: "martin",
+      bindMounts: [{ source: "config/martin.yaml", target: "/etc/martin/martin.yaml" }],
+    };
+    writeManifest("martin", manifest);
+    const config = join(tmp, "services", "martin", "config");
+    mkdirSync(config, { recursive: true });
+    const shipped = "listen_addresses: 0.0.0.0:3000\n";
+    writeFileSync(join(config, "martin.yaml"), shipped);
+    const git = (...args: string[]) =>
+      execFileSync(
+        "git",
+        [
+          "-C",
+          tmp,
+          "-c",
+          "user.name=OpenMapX",
+          "-c",
+          "user.email=ops@example.test",
+          "-c",
+          "commit.gpgsign=false",
+          ...args,
+        ],
+        { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+      ).trim();
+    /** Commits the checkout's services; returns the commit. */
+    const commit = (message: string) => {
+      git("add", "services");
+      git("commit", "-q", "-m", message);
+      return git("rev-parse", "HEAD");
+    };
+    git("init", "-q");
+    const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+    /** Selects the release built from `revision`, whose martin.yaml is `yaml`. */
+    const select = (revision: string | null, yaml: string, earlier: string[] = []) =>
+      vi.mocked(selectedReleaseServiceFiles).mockResolvedValue({
+        files: {
+          origin: "release",
+          files: new Map([
+            [
+              "martin/config/martin.yaml",
+              {
+                serviceId: "martin",
+                path: "config/martin.yaml",
+                executable: false,
+                bytes: Buffer.from(yaml),
+                sha256: sha(yaml),
+              },
+            ],
+          ]),
+          history: new Map([
+            ["martin/config/martin.yaml", new Set([sha(yaml), ...earlier.map(sha)])],
+          ]),
+          manifests: new Map([["martin", sha(JSON.stringify(manifest))]]),
+          missing: [],
+        },
+        release: "r1",
+        image: "ghcr.io/openmapx/ops-agent@sha256:1",
+        revision,
+      });
+    const render = () =>
+      renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["martin"] });
+    const mountedFile = () => {
+      const line = readFileSync(generatedCompose(), "utf8")
+        .split("\n")
+        .find((entry) => entry.includes(":/etc/martin/martin.yaml"));
+      return readFileSync(
+        join(dirname(generatedCompose()), line?.trim().replace(/^- /, "").split(":")[0] ?? ""),
+        "utf8",
+      );
+    };
+    const overrides = join(tmp, "infra", "docker", "overrides");
+    const marker = join(tmp, "infra", "docker", "state", "ops-agent", "overrides-import.json");
+    return {
+      manifest,
+      config,
+      shipped,
+      git,
+      commit,
+      select,
+      render,
+      mountedFile,
+      overrides,
+      marker,
+    };
+  }
+
+  it("renders a selected release's files, keeps checkout edits as overrides, and refuses while its manifests differ", async () => {
+    const f = martinCheckout();
+    try {
+      // A checkout at the release: the release's file, as the store holds it.
+      const first = f.commit("the release");
+      f.select(first, f.shipped);
+      await f.render();
+      expect(f.mountedFile()).toBe(f.shipped);
+
+      // One a later release left behind: refused, and nothing is imported from it.
+      const newer = "listen_addresses: 0.0.0.0:3000\nworker_processes: 2\n";
+      writeFileSync(join(f.config, "martin.yaml"), newer);
+      const later = f.commit("the next release");
+      f.git("checkout", "-q", first);
+      rmSync(f.marker);
+      f.select(later, newer, [f.shipped]);
+      await expect(f.render()).rejects.toThrow("services/martin/config/martin.yaml (changed)");
+      expect(existsSync(f.overrides)).toBe(false);
+      // Refused before the import, which is still to run.
+      expect(existsSync(f.marker)).toBe(false);
+
+      // An operator's edit in a checkout behind the release: imported once as
+      // an override, then used.
+      writeFileSync(join(f.config, "martin.yaml"), "listen_addresses: 0.0.0.0:3001\n");
+      // log.info writes to stdout, log.warn to stderr with ⚠.
+      const infos = vi.spyOn(console, "log").mockImplementation(() => {});
+      const warnings = vi.spyOn(console, "error").mockImplementation(() => {});
+      await f.render();
+      // What the import did and the override it made: information.
+      const said = infos.mock.calls.flat().map(String);
+      expect(said).toContainEqual(expect.stringMatching(/^Imported 1 checkout service file/));
+      expect(said).toContainEqual(
+        "Service file overrides in use, in place of the release's files (infra/docker/overrides/services): martin/config/martin.yaml.",
+      );
+      expect(warnings.mock.calls.flat().join("\n")).not.toMatch(/Imported|overrides in use/);
+      infos.mockRestore();
+      warnings.mockRestore();
+      expect(
+        readFileSync(join(f.overrides, "services", "martin", "config", "martin.yaml"), "utf8"),
+      ).toBe("listen_addresses: 0.0.0.0:3001\n");
+      expect(f.mountedFile()).toBe("listen_addresses: 0.0.0.0:3001\n");
+      expect(existsSync(f.marker)).toBe(true);
+
+      // A checkout whose manifest is not the release's: refused, with what to do.
+      writeManifest("martin", { ...f.manifest, version: "2.0.0" });
+      const refused = await f.render().catch((error: Error) => error.message);
+      expect(refused).toContain(
+        `The checkout's built-in services differ from the selected release r1, built from ${later}:\n  services/martin/service.json (changed)`,
+      );
+      expect(refused).toContain(
+        `Either wait until the release of this checkout's commit is published and run \`pnpm openmapx compose release\` again, or check out the selected release's source: git checkout ${later}`,
+      );
+      expect(refused).toContain("infra/docker/overrides/services/<id>/<path>");
+    } finally {
+      vi.mocked(selectedReleaseServiceFiles).mockResolvedValue("none");
+    }
+  });
+
+  it("imports nothing from a checkout one commit ahead of the release with a changed upstream file, and refuses", async () => {
+    const f = martinCheckout();
+    try {
+      const released = f.commit("the release");
+      // Upstream's next commit changes martin.yaml; its release isn't published yet.
+      writeFileSync(
+        join(f.config, "martin.yaml"),
+        "listen_addresses: 0.0.0.0:3000\nworker_processes: 8\n",
+      );
+      f.commit("upstream, ahead of the release");
+      f.select(released, f.shipped);
+
+      const refused = await f.render().catch((error: Error) => error.message);
+      expect(refused).toContain("  services/martin/config/martin.yaml (changed)");
+      expect(refused).toContain(
+        `Your edits in the checkout's service files are not imported as overrides meanwhile: the checkout's commit is neither the release's source revision ${released} nor one before it.`,
+      );
+      expect(existsSync(f.overrides)).toBe(false);
+      expect(existsSync(f.marker)).toBe(false);
+
+      // A basic-auth file the waiting import would carry over: refused by name,
+      // until it is an override; then the rest of the refusal stands.
+      const dynamic = join(tmp, "services", "traefik", "config", "dynamic");
+      mkdirSync(dynamic, { recursive: true });
+      writeFileSync(join(dynamic, "auth.yml"), "http: {}\n");
+      await expect(f.render()).rejects.toThrow(
+        "the checkout holds Traefik files the import would carry over, and the release's files in their place could drop a basic-auth gate: services/traefik/config/dynamic/auth.yml.",
+      );
+      const overridden = join(f.overrides, "services", "traefik", "config", "dynamic");
+      mkdirSync(overridden, { recursive: true, mode: 0o755 });
+      for (const directory of [f.overrides, join(f.overrides, "services")]) {
+        chmodSync(directory, 0o755);
+      }
+      for (const directory of ["traefik", "traefik/config", "traefik/config/dynamic"]) {
+        chmodSync(join(f.overrides, "services", directory), 0o755);
+      }
+      writeFileSync(join(overridden, "auth.yml"), "http: {}\n", { mode: 0o600 });
+      chmodSync(join(overridden, "auth.yml"), 0o600);
+      const rest = await f.render().catch((error: Error) => error.message);
+      expect(rest).toContain("  services/martin/config/martin.yaml (changed)");
+      expect(rest).not.toContain("auth.yml");
+      expect(existsSync(f.marker)).toBe(false);
+      rmSync(f.overrides, { recursive: true });
+      rmSync(join(dynamic, "auth.yml"));
+
+      // Without a revision to compare with, the import waits too.
+      f.select(null, f.shipped);
+      await expect(f.render()).rejects.toThrow(
+        "not imported as overrides meanwhile: the selected release's operations-agent image names no source revision",
+      );
+      expect(existsSync(f.overrides)).toBe(false);
+      expect(existsSync(f.marker)).toBe(false);
+    } finally {
+      vi.mocked(selectedReleaseServiceFiles).mockResolvedValue("none");
+    }
   });
 
   it("rejects pre-existing identical ops-agent role tokens", async () => {
@@ -653,18 +1138,7 @@ describe("renderComposeForRepo and what the admin panel applied", () => {
     expect(yaml).toContain("MODE: saved");
     expect(yaml).toContain("NH_API_KEY_FILE: /run/secrets/NH_API_KEY");
     expect(
-      readFileSync(
-        join(
-          tmp,
-          "infra",
-          "docker",
-          ".trusted-config-current",
-          ".generated-secrets",
-          "ingest",
-          "NH_API_KEY",
-        ),
-        "utf-8",
-      ),
+      readFileSync(currentGenerationFile(".generated-secrets", "ingest", "NH_API_KEY"), "utf-8"),
     ).toBe("secret-value");
   });
 

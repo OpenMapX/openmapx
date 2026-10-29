@@ -1,16 +1,23 @@
 "use client";
 
 import { escapeHtml, useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
+import {
+  type ContributingRecord,
+  readCapturedContributors,
+  withFeatureContributors,
+} from "@openmapx/integration-framework";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { EMPTY_FEATURE_COLLECTION, type MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
-import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { attributionToHtml } from "@/integration-api/overlay/useMapAttributions";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { type EnvironmentSensorType, useEnvironmentStore } from "./store";
 
@@ -97,7 +104,7 @@ interface SensorReading {
   unit: string;
 }
 
-interface EnvStation {
+interface EnvStation extends ContributingRecord {
   id: string;
   name: string;
   lat: number;
@@ -115,21 +122,26 @@ interface EnvStation {
 function buildGeoJson(stations: EnvStation[]) {
   return {
     type: "FeatureCollection" as const,
-    features: stations.map((s) => ({
-      type: "Feature" as const,
-      geometry: { type: "Point" as const, coordinates: [s.lng, s.lat] },
-      properties: {
-        id: s.id,
-        name: s.name,
-        value: s.value,
-        unit: s.unit,
-        sensorTitle: s.sensorTitle,
-        lastUpdated: s.lastUpdated,
-        model: s.model,
-        allSensors: JSON.stringify(s.allSensors),
-        label: `${Math.round(s.value)}`,
-      },
-    })),
+    features: stations.map((s) =>
+      withFeatureContributors(
+        {
+          type: "Feature" as const,
+          geometry: { type: "Point" as const, coordinates: [s.lng, s.lat] },
+          properties: {
+            id: s.id,
+            name: s.name,
+            value: s.value,
+            unit: s.unit,
+            sensorTitle: s.sensorTitle,
+            lastUpdated: s.lastUpdated,
+            model: s.model,
+            allSensors: JSON.stringify(s.allSensors),
+            label: `${Math.round(s.value)}`,
+          },
+        },
+        s.contributors ?? [],
+      ),
+    ),
   };
 }
 
@@ -141,6 +153,48 @@ function buildColorExpr(scale: ColorScale): unknown[] {
   return expr;
 }
 
+function environmentGroup(scale: ColorScale, minZoom: number): MapLayerGroup {
+  return {
+    sources: { [ENV_SOURCE_ID]: { type: "geojson", data: EMPTY_FEATURE_COLLECTION } },
+    layers: [
+      {
+        id: ENV_LAYER_ID,
+        type: "circle",
+        source: ENV_SOURCE_ID,
+        minzoom: minZoom,
+        slot: "overlay-points",
+        order: 1,
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 5, 10, 14, 14, 18],
+          "circle-color": buildColorExpr(scale) as maplibregl.ExpressionSpecification,
+          "circle-opacity": 0.85,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 7, 1, 10, 2],
+          "circle-stroke-opacity": 0.8,
+        },
+      },
+      {
+        id: ENV_LABEL_LAYER_ID,
+        type: "symbol",
+        source: ENV_SOURCE_ID,
+        minzoom: 10,
+        slot: "overlay-markers",
+        order: 3,
+        layout: {
+          "text-field": ["get", "label"],
+          "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+          "text-size": ["interpolate", ["linear"], ["zoom"], 10, 10, 14, 13],
+          "text-allow-overlap": true,
+          "text-ignore-placement": true,
+        },
+        paint: {
+          "text-color": "#ffffff",
+        },
+      },
+    ],
+  };
+}
+
 export function EnvironmentLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
@@ -149,16 +203,14 @@ export function EnvironmentLayer() {
   // applies: below it we skip fetching and keep the circles hidden, so an
   // overlay left on while zooming out can't pull stations for a continent.
   const minZoom = useOverlayMinZoom("environment");
-  useIntegrationAttribution("overlay-environment", layerVisible);
+  useRenderedMapAttributions("environment", [ENV_LAYER_ID, ENV_LABEL_LAYER_ID], layerVisible);
   const sensorType = useEnvironmentStore((s) => s.sensorType);
   const setLoading = useEnvironmentStore((s) => s.setLoading);
   const setStationCount = useEnvironmentStore((s) => s.setStationCount);
 
   useOverlayExclusion("environment", layerVisible);
 
-  const fetchedRef = useRef(false);
   const popupRef = useRef<maplibregl.Popup | null>(null);
-  const prevSensorRef = useRef(sensorType);
   const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
     mapRef,
     mapReady,
@@ -204,133 +256,21 @@ export function EnvironmentLayer() {
     minZoom,
   ]);
 
-  // Refetch when sensor type changes
+  useMapLayerGroup(
+    useMemo(
+      () => (layerVisible ? environmentGroup(COLOR_SCALES[sensorType], minZoom) : null),
+      [layerVisible, sensorType, minZoom],
+    ),
+  );
+
+  // Showing the overlay or switching sensor fetches the viewport immediately.
   useEffect(() => {
-    if (prevSensorRef.current !== sensorType && layerVisible) {
-      prevSensorRef.current = sensorType;
-      fetchedRef.current = false;
-    }
-  }, [sensorType, layerVisible]);
-
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-
-    const scale = COLOR_SCALES[sensorType];
-
-    const syncLayer = () => {
-      if (!layerVisible) {
-        try {
-          if (map.getLayer(ENV_LABEL_LAYER_ID)) map.removeLayer(ENV_LABEL_LAYER_ID);
-          if (map.getLayer(ENV_LAYER_ID)) map.removeLayer(ENV_LAYER_ID);
-          if (map.getSource(ENV_SOURCE_ID)) map.removeSource(ENV_SOURCE_ID);
-        } catch {
-          // ignore
-        }
-        unregisterLayerSlot(ENV_LABEL_LAYER_ID);
-        unregisterLayerSlot(ENV_LAYER_ID);
-        popupRef.current?.remove();
-        fetchedRef.current = false;
-        setStationCount(0);
-        return;
-      }
-
-      if (!map.isStyleLoaded()) {
-        map.once("idle", syncLayer);
-        return;
-      }
-
-      if (!map.getSource(ENV_SOURCE_ID)) {
-        map.addSource(ENV_SOURCE_ID, {
-          type: "geojson",
-          data: { type: "FeatureCollection", features: [] },
-        });
-      }
-
-      const colorExpr = buildColorExpr(scale);
-
-      if (!map.getLayer(ENV_LAYER_ID)) {
-        addLayerInSlot(
-          map,
-          {
-            id: ENV_LAYER_ID,
-            type: "circle",
-            source: ENV_SOURCE_ID,
-            minzoom: minZoom,
-            paint: {
-              "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 5, 10, 14, 14, 18],
-              "circle-color": colorExpr as maplibregl.ExpressionSpecification,
-              "circle-opacity": 0.85,
-              "circle-stroke-color": "#ffffff",
-              "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 7, 1, 10, 2],
-              "circle-stroke-opacity": 0.8,
-            },
-          },
-          "overlay-points",
-          1,
-        );
-      } else {
-        map.setPaintProperty(
-          ENV_LAYER_ID,
-          "circle-color",
-          colorExpr as maplibregl.ExpressionSpecification,
-        );
-      }
-
-      if (!map.getLayer(ENV_LABEL_LAYER_ID)) {
-        addLayerInSlot(
-          map,
-          {
-            id: ENV_LABEL_LAYER_ID,
-            type: "symbol",
-            source: ENV_SOURCE_ID,
-            minzoom: 10,
-            layout: {
-              "text-field": ["get", "label"],
-              "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
-              "text-size": ["interpolate", ["linear"], ["zoom"], 10, 10, 14, 13],
-              "text-allow-overlap": true,
-              "text-ignore-placement": true,
-            },
-            paint: {
-              "text-color": "#ffffff",
-            },
-          },
-          "overlay-markers",
-          3,
-        );
-      }
-
-      if (!fetchedRef.current) {
-        fetchedRef.current = true;
-        void fetchStations();
-      }
-    };
-
-    if (!layerVisible) {
-      syncLayer();
-      return;
-    }
-
-    syncLayer();
-    map.on("styledata", syncLayer);
-    return () => {
-      map.off("styledata", syncLayer);
-    };
-  }, [
-    mapReady,
-    styleVersion,
-    mapRef,
-    layerVisible,
-    sensorType,
-    fetchStations,
-    setStationCount,
-    minZoom,
-  ]);
+    if (!mapReady) return;
+    if (layerVisible) void fetchStations();
+    else setStationCount(0);
+  }, [mapReady, layerVisible, fetchStations, setStationCount]);
 
   const debouncedFetch = useDebouncedCallback(() => {
-    fetchedRef.current = true;
     void fetchStations();
   }, 800);
 
@@ -394,7 +334,7 @@ export function EnvironmentLayer() {
           <div style="font-size:12px;margin-bottom:4px">${sensorsHtml}</div>
           ${lastUp ? `<div style="font-size:11px;color:#999;margin-bottom:4px">${lastUp}</div>` : ""}
           <div style="font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:4px">
-            <a href="https://opensensemap.org/explore/${escapeHtml(String(p.id))}" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">openSenseMap</a> (ODbL 1.0)
+            ${(readCapturedContributors(p._mapAttributions) ?? []).map(attributionToHtml).join(" · ")}
           </div>
         </div>`;
 

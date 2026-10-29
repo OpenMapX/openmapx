@@ -1,4 +1,5 @@
 import { createOverlayStore } from "@openmapx/core";
+import type { FirmsInstrument } from "./types.js";
 
 export type WildfireSourceId = "firms" | "nifc" | "effis" | "noaa-hms";
 
@@ -40,22 +41,24 @@ export const useWildfireStore = createOverlayStore({
   overlayId: "wildfires",
   extra: {
     dayRange: 1 as 1 | 2 | 3,
-    source: "viirs" as "viirs" | "modis",
+    source: "viirs" as FirmsInstrument,
     showHotspots: true,
     showNifcPerimeters: true,
     showEffisBurnedAreas: true,
     showNoaaSmoke: false,
     showHeatmap: false,
+    showLowConfidence: false,
     statuses: initialStatuses(),
   },
   actions: (set) => ({
     setDayRange: (dayRange: 1 | 2 | 3) => set({ dayRange }),
-    setSource: (source: "viirs" | "modis") => set({ source }),
+    setSource: (source: FirmsInstrument) => set({ source }),
     setShowHotspots: (showHotspots: boolean) => set({ showHotspots }),
     setShowNifcPerimeters: (showNifcPerimeters: boolean) => set({ showNifcPerimeters }),
     setShowEffisBurnedAreas: (showEffisBurnedAreas: boolean) => set({ showEffisBurnedAreas }),
     setShowNoaaSmoke: (showNoaaSmoke: boolean) => set({ showNoaaSmoke }),
     setShowHeatmap: (showHeatmap: boolean) => set({ showHeatmap }),
+    setShowLowConfidence: (showLowConfidence: boolean) => set({ showLowConfidence }),
     setSourceStatus: (id: WildfireSourceId, patch: Partial<WildfireSourceStatus>) =>
       set((state) => ({
         statuses: {

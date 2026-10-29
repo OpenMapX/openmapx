@@ -9,6 +9,7 @@ import {
   DAWARICH_SUPPORTED_IMAGE_DIGEST,
 } from "@openmapx/core/privacy";
 import { describe, expect, it } from "vitest";
+import { invalidTarCases, invalidTarEndings, tar } from "./__tests__/fixtures/source-tar.js";
 import { type BackupSourcePartError, spoolBackupSourceTar } from "./backup-source-part.js";
 import { collectApprovedBackupSource } from "./collectors/backup.js";
 
@@ -16,38 +17,21 @@ function digest(value: Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function member(path: string, content: Buffer): Buffer {
-  const header = Buffer.alloc(512);
-  header.write(path, 0, 100, "utf8");
-  header.write("0000600\0", 100, 8, "ascii");
-  header.write("0000000\0", 108, 8, "ascii");
-  header.write("0000000\0", 116, 8, "ascii");
-  header.write(`${content.byteLength.toString(8).padStart(11, "0")}\0`, 124, 12, "ascii");
-  header.write("00000000000\0", 136, 12, "ascii");
-  header.fill(0x20, 148, 156);
-  header[156] = 48;
-  header.write("ustar\0", 257, 6, "ascii");
-  let sum = 0;
-  for (const byte of header) sum += byte;
-  header.write(`${sum.toString(8).padStart(6, "0")}\0 `, 148, 8, "ascii");
-  const padding = Buffer.alloc((512 - (content.byteLength % 512)) % 512);
-  return Buffer.concat([header, content, padding]);
-}
-
-function tar(entries: Array<[string, Buffer]>): Buffer {
-  return Buffer.concat([
-    ...entries.map(([path, content]) => member(path, content)),
-    Buffer.alloc(1024),
-  ]);
-}
-
-function fixture(options: { wrongFamily?: boolean } = {}): Buffer {
+function fixture(
+  options: {
+    wrongFamily?: boolean;
+    wrongDigest?: boolean;
+    missingDeclaration?: boolean;
+    extraDeclaration?: boolean;
+    afterManifest?: boolean;
+  } = {},
+): Buffer {
   const profile = Buffer.from('{"id":"subject-1","email":"subject@example.test"}\n');
   const areas = Buffer.from('{"id":1,"name":"Home"}\n');
   const dawarichManifest = Buffer.from(
     JSON.stringify({
       version: 1,
-      image: "freikin/dawarich:1.15.2",
+      image: "freikin/dawarich:1.15.3",
       imageDigest: DAWARICH_SUPPORTED_IMAGE_DIGEST,
       upstreamCommit: DAWARICH_SUPPORTED_COMMIT,
       subjectUserIdDigest: digest(Buffer.from("subject-1")),
@@ -74,7 +58,7 @@ function fixture(options: { wrongFamily?: boolean } = {}): Buffer {
       path: "openmapx/account-profile.jsonl",
       family: options.wrongFamily ? "dawarich" : "openmapx",
       bytes: profile.byteLength,
-      sha256: digest(profile),
+      sha256: options.wrongDigest ? "0".repeat(64) : digest(profile),
       records: 1,
       article15: true,
       portability: true,
@@ -101,6 +85,9 @@ function fixture(options: { wrongFamily?: boolean } = {}): Buffer {
       redactionCodes: [],
     },
   ];
+  if (options.missingDeclaration) declarations.shift();
+  if (options.extraDeclaration)
+    declarations.push({ ...declarations[0], path: "openmapx/saved-lists.jsonl" });
   const outer = Buffer.from(
     JSON.stringify({
       version: 1,
@@ -111,15 +98,44 @@ function fixture(options: { wrongFamily?: boolean } = {}): Buffer {
       warnings: [],
     }),
   );
-  return tar([
+  const members: Array<[string, Buffer]> = [
     ["openmapx/account-profile.jsonl", profile],
     ["dawarich/areas.jsonl", areas],
     ["dawarich/source-manifest.json", dawarichManifest],
     ["backup/source-manifest.json", outer],
-  ]);
+  ];
+  if (options.afterManifest) members.push(["openmapx/saved-lists.jsonl", profile]);
+  return tar(members);
 }
 
 describe("backup source tar", () => {
+  it.each([
+    { wrongDigest: true },
+    { missingDeclaration: true },
+    { extraDeclaration: true },
+    { afterManifest: true },
+  ])("rejects inconsistent declarations/order: %j", async (options) => {
+    await expect(spoolBackupSourceTar(Readable.from([fixture(options)]))).rejects.toMatchObject({
+      code: "manifest_mismatch",
+    });
+  });
+  it.each([{ cutoff: "2026-02-01T00:00:00Z" }, { subjectUserIdDigest: "b".repeat(64) }])(
+    "rejects a different expected subject or cutoff: %j",
+    async (expected) => {
+      await expect(
+        spoolBackupSourceTar(Readable.from([fixture()]), { expected }),
+      ).rejects.toMatchObject({ code: "manifest_mismatch" });
+    },
+  );
+  it.each(invalidTarEndings(fixture()))("rejects %s", async (_name, input, code) => {
+    await expect(spoolBackupSourceTar(Readable.from([input]))).rejects.toMatchObject({ code });
+  });
+  it.each(invalidTarCases("openmapx/account-profile.jsonl"))(
+    "rejects %s",
+    async (_name, input, code) => {
+      await expect(spoolBackupSourceTar(Readable.from([input]))).rejects.toMatchObject({ code });
+    },
+  );
   it("keeps OpenMapX and Dawarich families distinct while streaming into encrypted storage", async () => {
     const result = await spoolBackupSourceTar(Readable.from([fixture()]), {
       expected: {

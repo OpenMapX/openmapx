@@ -1,4 +1,6 @@
+import type { Disclosure } from "@openmapx/core/api-contracts";
 import type { AirQualityProvider } from "./contracts/air-quality-provider.js";
+import type { BorderCrossingProvider } from "./contracts/border-crossing-provider.js";
 import type { CameraProvider } from "./contracts/camera-provider.js";
 import type { ChargingSiteProvider } from "./contracts/charging-site-provider.js";
 import type { FuelStationProvider } from "./contracts/fuel-station-provider.js";
@@ -6,6 +8,7 @@ import type { GeocodingProvider } from "./contracts/geocoding-provider.js";
 import type { GtfsCatalogProvider } from "./contracts/gtfs-catalog-provider.js";
 import type { HazardsProvider } from "./contracts/hazards-provider.js";
 import type { KnowledgeProvider } from "./contracts/knowledge-provider.js";
+import type { MessageSignProvider } from "./contracts/message-sign-provider.js";
 import type { MobilityDataSourceProvider } from "./contracts/mobility-data-source-provider.js";
 import type { ParkingSiteProvider } from "./contracts/parking-site-provider.js";
 import type { PhotoProvider } from "./contracts/photo-provider.js";
@@ -14,9 +17,10 @@ import type { RealtimeProvider } from "./contracts/realtime-provider.js";
 import type { ReviewProvider } from "./contracts/review-provider.js";
 import type { RideProvider } from "./contracts/ride-provider.js";
 import type { RoadConditionsProvider } from "./contracts/road-conditions-provider.js";
+import type { RoadWeatherProvider } from "./contracts/road-weather-provider.js";
 import type { RoutingProvider } from "./contracts/routing-provider.js";
-import type { AiCloudProcessor } from "./contracts/search-nlp-provider.js";
 import type { SearchSuggestionProvider } from "./contracts/search-suggestion-provider.js";
+import type { ServiceVehicleProvider } from "./contracts/service-vehicle-provider.js";
 import type { StreetLevelProvider } from "./contracts/street-level-imagery-provider.js";
 import type { TransitProvider } from "./contracts/transit-provider.js";
 import type { WeatherProvider } from "./contracts/weather-provider.js";
@@ -52,25 +56,74 @@ export interface BinaryHttpResponse extends Omit<HttpResponse<never>, "body"> {
   bytes: Uint8Array;
 }
 
+export interface StreamHttpResponse extends Omit<HttpResponse<never>, "body"> {
+  /** Consume or cancel this stream. Its byte ceiling and request deadline remain active. */
+  stream: ReadableStream<Uint8Array>;
+}
+
 export interface ResponseOptions extends HttpClientOptions {
-  /** Hard ceiling applied before and while buffering the response body. */
+  /** Hard ceiling applied before and while reading the response body. */
   maxBytes: number;
   /** Exact, case-insensitive media types accepted after parameters are removed. */
   contentTypes: readonly string[];
+  /**
+   * getText/postText/getStream only: statuses subject to contentTypes (default: all 2xx).
+   * Must be a nonempty list of integer 2xx statuses. Other statuses still return bounded
+   * bodies for caller classification. JSON and byte methods ignore this option.
+   */
+  successStatuses?: readonly number[];
+  /**
+   * getText/postText/getStream only: cancel unsuccessful bodies without reading
+   * them and expose status/selected headers with an empty body. Opt in when
+   * errors are classified from metadata (for example Retry-After on HTTP 429).
+   * Success bodies retain media-type, byte, cancellation and deadline checks.
+   */
+  discardErrorBody?: boolean;
+  /** Media type assumed only when the upstream omits Content-Type. Must be in contentTypes. */
+  fallbackContentType?: string;
   /** Response headers to expose. Names are matched case-insensitively and returned lowercase. */
   responseHeaders?: readonly string[];
-  /** Reject redirects rather than following an untrusted upstream Location. */
-  redirect?: "error";
+  /** Reject redirects, or follow only the explicitly allowlisted target hosts. */
+  redirect?:
+    | "error"
+    | { allowedHosts: readonly string[]; follow203?: boolean; maxRedirects?: number };
 }
 
 export interface HttpClient {
   get<T = unknown>(url: string, options?: HttpClientOptions): Promise<T>;
   post<T = unknown>(url: string, body?: unknown, options?: HttpClientOptions): Promise<T>;
   getResponse<T = unknown>(url: string, options: ResponseOptions): Promise<HttpResponse<T>>;
+  /** POST a JSON body and return any status with its bounded JSON body; `post` throws on non-2xx. */
+  postResponse<T = unknown>(
+    url: string,
+    body: unknown,
+    options: ResponseOptions,
+  ): Promise<HttpResponse<T>>;
   getBytes(url: string, options: ResponseOptions): Promise<BinaryHttpResponse>;
+  /** Return any status as bounded UTF-8 text; successful responses enforce contentTypes. */
+  getText(url: string, options: ResponseOptions): Promise<HttpResponse<string>>;
+  /** POST the supplied text without JSON encoding. Set its request Content-Type explicitly. */
+  postText(url: string, body: string, options: ResponseOptions): Promise<HttpResponse<string>>;
+  /** Return any status as a bounded stream; successful responses enforce contentTypes. */
+  getStream(url: string, options: ResponseOptions): Promise<StreamHttpResponse>;
 }
 
 export interface CacheClient {
+  /**
+   * Host administration events; immediately reports current availability.
+   * Clear local copies on every event and bypass them while unavailable.
+   * Absent in clients without host administration (for example CLI fixtures).
+   */
+  onInvalidate?(listener: (event: { available: boolean }) => void): () => void;
+  /**
+   * Managed shared caches can capture an administrative write fence before
+   * acquisition. Use this writer for additional derived entries after awaits;
+   * late writes are rejected when the captured Redis invalidation epoch changes.
+   * Also guard local state/lifetime with onInvalidate and disposal; this writer
+   * is not a subscriber-availability or linearizable cross-worker read barrier.
+   * Hosts without shared cache administration omit this capability.
+   */
+  captureWriter?(): Promise<Pick<CacheClient, "set">>;
   get<T = unknown>(key: string): Promise<T | null>;
   set(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
   del(key: string): Promise<void>;
@@ -152,48 +205,13 @@ export interface HealthCheckResult {
 
 export type CustomHealthCheckFn = () => Promise<HealthCheckResult>;
 
-/**
- * A secret-free, server-computed legal disclosure signal surfaced to the
- * client on /api/integrations. Processor metadata only — never config or secrets.
- */
-export interface AiSearchDisclosure {
-  type: "ai-search";
-  integrationId: string;
-  /** Any AI provider (local or cloud) active → show the Terms AI disclaimer. */
-  aiActive: boolean;
-  localActive: boolean;
-  /** A cloud provider configured + in chain → show the Privacy data-transfer row. */
-  cloudActive: boolean;
-  cloudProcessors: AiCloudProcessor[];
-  /** Cloud execution is permitted by the instance privacy policy. */
-  cloudAvailable: boolean;
-  /** The client must obtain an explicit opt-in before sending a query to cloud AI. */
-  cloudConsentRequired: boolean;
-  /** Secret-free, operator-facing labels for the configured cloud provider chain. */
-  cloudProviderLabels: string[];
-}
-
-export type EmailProvider = "emaillabs" | "lettermint" | "smtp";
-/** Art. 44+ transfer safeguard for a non-EEA recipient. */
-export type TransferSafeguard = "eea" | "adequacy" | "dpf" | "scc" | "none";
-
-/**
- * The transactional-email provider currently active for this instance, so the
- * Privacy Policy can name the correct processor. Vendor metadata only — never
- * keys or SMTP credentials.
- */
-export interface EmailDisclosure {
-  type: "email";
-  provider: EmailProvider;
-  /** Human-readable vendor name; empty for an unnamed self-hosted SMTP server. */
-  vendorName: string;
-  /** ISO 3166-1 alpha-2 country code for localization ("PL", "NL", "US"); empty if unknown. */
-  countryCode: string;
-  privacyUrl?: string;
-  transfer: TransferSafeguard;
-}
-
-export type Disclosure = AiSearchDisclosure | EmailDisclosure;
+export type {
+  AiSearchDisclosure,
+  Disclosure,
+  EmailDisclosure,
+  EmailProvider,
+  TransferSafeguard,
+} from "@openmapx/core/api-contracts";
 
 export interface SecretsClient {
   /** Retrieve a decrypted secret from the vault, or null if not stored. */
@@ -407,6 +425,8 @@ export interface MetricsRecorder {
  * compile time.
  */
 export interface AttributionIndexHandle {
+  /** Capture named source metadata before an acquisition; never display the whole catalogue. */
+  list?(): import("@openmapx/mobility-core/attribution").Attribution[];
   getById(sourceId: string): import("@openmapx/mobility-core/attribution").Attribution | undefined;
   getForMotisFile(
     filename: string,
@@ -522,6 +542,30 @@ export interface IntegrationContext {
    */
   registerCameraProvider(provider: CameraProvider): void;
   /**
+   * Typed registrar for message-sign providers (dynamic message signs and
+   * what each shows). Stored under the `message-signs` key; the
+   * `message-signs` orchestrator merges all registered providers.
+   */
+  registerMessageSignProvider(provider: MessageSignProvider): void;
+  /**
+   * Typed registrar for road-weather providers (road weather stations and
+   * what they measure). Stored under the `road-weather` key; the
+   * `road-weather` orchestrator merges all registered providers.
+   */
+  registerRoadWeatherProvider(provider: RoadWeatherProvider): void;
+  /**
+   * Typed registrar for service-vehicle providers (where road service
+   * vehicles are and what they do). Stored under the `service-vehicles` key;
+   * the `road-maintenance` orchestrator merges all registered providers.
+   */
+  registerServiceVehicleProvider(provider: ServiceVehicleProvider): void;
+  /**
+   * Typed registrar for border-crossing providers (crossings and their
+   * queues). Stored under the `border-crossings` key; the `border-crossings`
+   * orchestrator merges all registered providers.
+   */
+  registerBorderCrossingProvider(provider: BorderCrossingProvider): void;
+  /**
    * Typed registrar for hazards providers (alerts, natural hazards, fire
    * detections). Stored under the `hazards` key; the hazards orchestrator
    * merges all registered providers.
@@ -591,6 +635,10 @@ export interface IntegrationContext {
     revision: string;
     validUntil: string | null;
     disallowedSourceIds: string[];
+    /** Whether a source whose rights are unclear (a permission `unknown`) may be used. */
+    allowGreyArea?: boolean;
+    /** Whether a source whose licence forbids commercial use may be used. */
+    allowNonCommercial?: boolean;
   }>;
 
   /**

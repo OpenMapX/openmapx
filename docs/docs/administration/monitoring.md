@@ -6,26 +6,22 @@ sidebar_position: 6
 
 # Monitoring, health & logs
 
-When something feels off, this is where you look. OpenMapX keeps four
-operator-facing views of how the instance is doing: a **status dashboard** for
-"is everything reachable?", a **provider health** surface for the transit and
-mobility chain, **logs** — both per-service container logs and the platform's
-own application log — and an **audit log** that records every admin action.
-Underneath the UI sits an OpenTelemetry metrics pipeline you can scrape with
-Prometheus.
+Start with `/status` for reachability, then use **Admin → Activity** for failed
+jobs and application logs. Use a service's log drawer for container-specific
+failures. Full administrator access is required for the administration views.
 
-One background writer gets its own section: the live road-conditions cycle has
-no UI at all, and the closures it bakes into the routing graph are visible only
-through the data-manager's log and a single endpoint.
-
-This page walks each of them and points at the code or env var behind the
-behavior, so you can verify and tune rather than guess.
+| Symptom                               | Start here                        |
+| ------------------------------------- | --------------------------------- |
+| Dependency unavailable                | Status dashboard and service logs |
+| Feature has no usable regional data   | Coverage & freshness              |
+| Transit provider skipped or slow      | Transit provider health           |
+| Queued operation did not finish       | Activity → Jobs                   |
+| Unexpected administration change      | Activity → Audit Log              |
+| Road conditions do not affect routing | Live road conditions below        |
 
 ## Status dashboard
 
-`/status` is the public system-health snapshot — a quick "is everything up?"
-check across the pieces the instance depends on, linked from the admin
-**Overview** page. It calls `/api/status`, which reports `up`, `down`, or `not
+`/status` shows the public system-health snapshot, linked from **Admin → Overview**. It calls `/api/status`, which reports `up`, `down`, or `not
 configured` with a measured response time. This public representation never
 varies by session cookie and omits target URLs, dependency errors, and refresh
 error detail. Administrators can retrieve those fields from the separately
@@ -36,10 +32,7 @@ Two groups of checks run:
 
 - **Infrastructure and external services**, probed directly: PostgreSQL (a
   `SELECT 1`), Redis (a `PING`), the GitHub API (used by the catalog and store),
-  and SMTP (a TCP connect to the configured mail host). A dependency with no
-  configuration — no `REDIS_URL`, no `SMTP_HOST` — reports **Not configured**
-  rather than down, so a deliberately-omitted optional service doesn't show as a
-  failure.
+  and SMTP (a TCP connect to the configured mail host). A dependency without its required configuration, such as `REDIS_URL` or `SMTP_HOST`, reports **Not configured**.
 - **Integration health checks**, drawn from each enabled integration's manifest.
   The status endpoint reads the latest results produced by the background
   health scheduler instead of probing providers on every public request. This
@@ -87,71 +80,51 @@ for the timestamp meanings, sidecar diagnostics, and existing corrective
 workflows.
 
 :::note[Status vs. service catalog]
-The status dashboard reports _reachability_ — can the API talk to each
-dependency right now. It is not the Docker control plane. To start, stop, or
+The status dashboard reports whether the API can reach each dependency. It is not the Docker control plane. To start, stop, or
 inspect a container's lifecycle state, use the service catalog under
 `/admin/services`; see [Services administration](./services-administration.md).
 :::
 
 ## Transit provider health
 
-The transit and mobility chain has its own health surface, because it fans out
-across many upstream providers (regional transit APIs, MOTIS, GBFS feeds,
-OpenConditions) and a single bad provider shouldn't drag the rest down. It lives on
-`/admin/transit` as the **Provider health** table, at the bottom of the transit
-pipeline page.
+Open **Admin → Transit → Provider health**. The table shows success/failure
+counts, recent failure rate, latency and cooldown state from shared Redis/Valkey
+records. The shared circuit distinguishes `healthy`, `degraded` and `open`;
+after cooldown, one process can acquire the half-open probe lease.
 
-Every provider call the orchestrator makes — success or failure, with measured
-latency — is recorded into a **Redis-backed sliding window**, one per provider.
-From that window the table shows:
+| Transition or limit   | Default                                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------------ |
+| Recent window         | Up to 100 counted calls                                                                    |
+| Degraded              | Two consecutive counted failures, or at least four samples with failure rate at least 25%  |
+| Open                  | Five consecutive counted failures, or at least ten samples with failure rate above 50%     |
+| Cooldown sequence     | 5, 10, 20, 40, then 60 minutes on repeated opening                                         |
+| Recovery              | A successful half-open call moves to degraded; three consecutive successes restore healthy |
+| Half-open lease       | 30 seconds                                                                                 |
+| EMA latency weighting | 0.2                                                                                        |
+| Record expiry         | 30 days since last write                                                                   |
 
-- **OK / Fail** — cumulative success and failure counts since the provider was
-  first seen.
-- **Window fail %** — the failure rate over the recent window, color-coded
-  (green below 10%, amber to 50%, red above). This, not the lifetime totals, is
-  what drives auto-disable.
-- **EMA latency** — an exponential moving average of call latency in
-  milliseconds.
-- **Status** — `active`, or `disabled until <time>` when the provider is in
-  cooldown, with the disable reason on hover. The most recent failure reason is
-  shown inline under the provider id.
+Timeouts, connection failures, upstream 5xx, authentication failures and invalid
+payloads count toward opening. Valid empty responses, policy/input rejections,
+quota denial and caller cancellation do not. Lifetime failure totals can
+therefore differ from counted failures in the recent window.
 
-When a provider's windowed failure rate crosses the threshold (and the window
-has enough samples to be meaningful), the orchestrator **auto-disables** it for a
-cooldown period and skips it on subsequent requests — the rest of the chain keeps
-serving. After the cooldown the provider is tried again automatically. The
-defaults:
+If Redis is unavailable, the circuit returns a diagnostic and leaves provider
+requests enabled. This differs from the quota-bound upstream runtime, which
+refuses uncoordinated production refreshes without its store. Investigate store
+failures before interpreting an empty health table as healthy providers.
 
-| Parameter              | Default   | What it does                                                       |
-| ---------------------- | --------- | ------------------------------------------------------------------ |
-| Window size            | 100 calls | Capped sliding window per provider.                                |
-| Failure-rate threshold | 50%       | Window failure rate must exceed this to auto-disable.              |
-| Minimum sample size    | 10 calls  | Below this the threshold isn't evaluated (no cold-start flapping). |
-| Cooldown               | 5 minutes | How long an auto-disabled provider is skipped.                     |
-| EMA smoothing (α)      | 0.2       | Latency moving-average weighting.                                  |
-| Redis TTL              | 30 days   | Refreshed on every write; idle providers eventually expire.        |
+After fixing a credential or endpoint, **Reset** clears that provider's window
+and cooldown. Resetting does not repair the provider; verify a real request.
 
-State is keyed in Redis as `provider:health:<providerId>`, so you can inspect it
-directly — `redis-cli GET provider:health:<id>` returns the JSON window. Because
-it lives in Redis, sibling API processes share one view and the window survives a
-restart. Health tracking is observability only: if Redis is unavailable, recording
-fails quietly and never breaks a user's request.
+| Method | API path                                | Access                                          |
+| ------ | --------------------------------------- | ----------------------------------------------- |
+| GET    | `/api/data-manager/providers`           | Administrator or Data Manager service token     |
+| GET    | `/api/data-manager/providers/:id`       | Administrator or Data Manager service token     |
+| POST   | `/api/data-manager/providers/:id/reset` | Administrator; service token alone cannot reset |
 
-The **Reset** button per row clears a provider's window and cooldown — useful
-after you've fixed an upstream credential or endpoint and want to stop skipping
-it immediately rather than waiting out the cooldown. The same three operations
-are available on the API for scripting (admin session **or** the data-manager
-service token; the reset mutation requires a logged-in admin):
-
-| Method | Path                                    | Purpose                                  |
-| ------ | --------------------------------------- | ---------------------------------------- |
-| GET    | `/api/data-manager/providers`           | Every provider's current health summary. |
-| GET    | `/api/data-manager/providers/:id`       | The full window for one provider.        |
-| POST   | `/api/data-manager/providers/:id/reset` | Clear that provider's window + cooldown. |
-
-The rest of the transit pipeline page — Transitous sync state, per-feed import
-status and expiry, and the recent and in-flight jobs — is covered in
-[Public transit](../features/public-transit.md).
+Provider records use `provider:health:<providerId>` keys. Prefer the admin view
+or read API to direct Redis editing, which can bypass the circuit's atomic
+updates. See [Public transit](../features/public-transit.md) for feed/import jobs.
 
 ## Metrics
 
@@ -159,25 +132,25 @@ The transit and routing provider chains are instrumented with **OpenTelemetry**
 and exported in **Prometheus** text format. Alongside each provider-health write,
 the orchestrator bumps two transit instruments:
 
-- `transit_provider_calls_total` — a counter, one increment per provider call.
-- `transit_provider_call_duration_ms` — a histogram of per-call latency.
+- `transit_provider_calls_total`: a counter, one increment per provider call.
+- `transit_provider_call_duration_ms`: a histogram of per-call latency.
 
 Both carry the same labels: `provider_id`, `method` (the orchestrator operation),
-and `outcome` — a closed set of `ok`, `empty` (succeeded but returned nothing),
+and `outcome`, a closed set of `ok`, `empty` (succeeded but returned nothing),
 `error`, and `skipped` (the call was pre-empted by a health cooldown, a capability
 mismatch, or a bounding-box miss). No label carries user input, so the series
 cardinality is bounded by your provider catalogue.
 
-Routing requests add a second set of instruments:
+Routing requests add these instruments:
 
-- `routing_requests_total` and `routing_request_duration_ms` — request count and
+- `routing_requests_total` and `routing_request_duration_ms`: request count and
   end-to-end latency, labelled by provider, mode, operation, outcome, live-traffic
   use, and closure avoidance.
-- `routing_route_count` and `routing_alternate_count` — the number of routes the
+- `routing_route_count` and `routing_alternate_count`: the number of routes the
   selected provider returned, and the number beyond the primary route.
-- `routing_traffic_delay_seconds` — the signed live-duration minus baseline-duration
+- `routing_traffic_delay_seconds`: the signed live-duration minus baseline-duration
   delta. Negative values mean the live route was faster than its baseline.
-- `routing_baseline_available_total` — whether the provider returned a usable
+- `routing_baseline_available_total`: whether the provider returned a usable
   baseline duration for comparison.
 
 For a deployment-level smoke test, run `pnpm check-routing-canaries`. It checks
@@ -186,23 +159,23 @@ the minimum route count; it deliberately does not require a live route to be
 slower than its baseline or require every graph to produce the same number of
 alternatives. Set `ROUTING_BASE_URL` to probe a non-public deployment.
 
-Scrape them at:
+Air-quality instruments are listed under [Air-quality metrics](./integrations-administration.md#air-quality-metrics). Configure your scraper for:
 
 ```
 GET /api/internal/metrics
 ```
 
 :::warning[Keep the metrics endpoint internal]
-The endpoint emits no PII, but the labels reveal operational topology — which
-providers exist and how much traffic each one sees. It is meant to be reachable
-only from inside the Docker network. The bundled Traefik configuration rejects
+The route declares internal metadata but does not enforce an application
+session or token. Its bounded labels exclude user input, but reveal provider
+topology and request volumes. Restrict it to the monitoring network. The bundled Traefik configuration rejects
 `/api/internal/*` from outside that network with HTTP 403 via the
 `internal-deny` middleware. If you want external scraping, add a separate
 authenticated route rather than removing this middleware.
 :::
 
-A ready-to-import Grafana dashboard ships in the repo at
-`infra/docker/dashboards/transit-providers.json` — calls per second by provider
+A Grafana dashboard template ships in the repo at
+`infra/docker/dashboards/transit-providers.json`, with calls per second by provider
 and outcome, latency percentiles, windowed failure rate, and a count of currently
 cooled-down providers. Point a Grafana at a Prometheus that scrapes the endpoint
 above and import the JSON.
@@ -215,27 +188,29 @@ There are two log surfaces, and they answer different questions.
 
 For "what is this backend service doing right now," open a service's **Logs** tab
 (or the **Logs** button) under `/admin/services/<id>`. It streams that container's
-output live, tailing the most recent lines — the same output as the equivalent
+output live, tailing the most recent lines. It uses the same output as the equivalent
 `services logs` CLI command, in the browser. This is the place to watch a build
 finish or diagnose a container that won't come up. Full coverage is in
 [Services administration](./services-administration.md).
 
 ### Application logs
 
-For the platform's own logs — the API gateway and integration code, not a
-specific container — open `/admin/activity` and switch to the **Application Logs**
-tab. It renders the API's structured (pino) log stream with a console-style view:
+Open **Activity → Application Logs** for the API gateway and integration log stream. It renders the API's structured (pino) log stream with a console-style view:
 timestamp, level, source, and message, with any structured metadata appended.
 
-Filter by **level** (the filter is a floor — pick `warn` and you see warnings and
-above), by **source** (the emitting subsystem), and by **time range**, plus a
+Filter by **level** (a minimum level; `warn` includes warnings and higher levels), by **source** (the emitting subsystem), and by **time range**, plus a
 free-text search. Auto-refresh polls every five seconds and follows the tail; pause
 it to scroll back. Two things worth knowing about retention:
 
 - Recent logs at every level live in an **in-memory ring buffer** (the most recent
-  ~10,000 entries), so the viewer is fast but a restart clears them.
-- `warn`, `error`, and `fatal` lines are additionally **persisted to the database**
-  (the `app_logs` table) so the important events survive a restart.
+  10,000 entries by default), so the viewer is fast but a restart clears them.
+- `warn`, `error` and `fatal` entries are also submitted to `app_logs` on a
+  best-effort basis. Database unavailability can lose persisted entries; logs
+  are not a guaranteed audit or delivery channel.
+
+Persisted application logs are pruned daily using
+`LEGAL_SERVER_LOG_RETENTION_DAYS` (30 days by default). Review the value against
+the deployment's published policy.
 
 New application-log entries pass through the same bounded sanitizer before the
 in-memory buffer and database. Request lifecycle entries contain only an internal
@@ -271,215 +246,200 @@ retain a forensic copy, restrict access to the backup according to the same or
 stronger policy as the live database. There is intentionally no environment flag
 that restores raw request or URL logging.
 
-The viewer is read-only — it's for triage, not configuration.
+The viewer is read-only.
 
 ## Live road conditions in the routing graph
 
-When `OPENCONDITIONS_URL` is set, the data-manager runs a live-traffic cycle
-(`TRAFFIC_LIVE_CRON`, default every two minutes) that folds road conditions —
-closures and temporary speed limits — straight into the Valhalla traffic file
-the router reads. This is a background writer with no UI of its own, so its two
-observation surfaces are the data-manager's container log and one small
-endpoint. Both are described below.
+The Data Manager live-traffic cycle reads OpenConditions, resolves road events
+to Valhalla edges and publishes bounded application evidence. Its default
+schedule is `TRAFFIC_LIVE_CRON=*/2 * * * *`.
+
+Road-event overrides default to `TRAFFIC_ROAD_CONDITIONS_MODE=shadow`: the cycle
+evaluates candidates without writing their closures or speed caps. Enabling
+`active` changes routing behavior. Verify source rights, policy, graph identity,
+capacity and failure recovery in an isolated deployment before enabling it.
+Live-speed writes have their own source evidence and lease handling.
 
 ### What the writer puts into the graph
 
-For every condition that survives its filters, the cycle rewrites the affected
-directed edges in `traffic.tar`:
+In active mode, eligible car closures produce closed edge records and mandatory
+speed limits cap applicable live speeds. A closure takes precedence; the lower
+of two caps wins. The writer requires current routing evidence, allowed source
+policy, applicable vehicle/effect semantics and a complete span mapping. Crowd
+reports also need routing eligibility. Ambiguous bindings and unresolved partial
+events remain display/fallback evidence.
 
-- A **closure** becomes a genuine Valhalla _closed_ record — a valid record
-  (both breakpoints `255`) whose overall speed is `0`. Costings refuse a closed
-  edge, so the router detours around it natively; only a request that opts into
-  `ignore_closures` drives through.
-- A **temporary speed limit** becomes a cap: the edge is written at
-  `min(live speed, the condition's limit)`. A cap on an edge with no live speed
-  is written on its own.
-- On one edge a closure always outranks a cap, and between two caps the lower
-  one wins.
-
-Three filters decide whether a condition reaches an edge at all:
-
-- **Binding confidence.** Only bindings OpenConditions marked `exact` or
-  `likely` may move an edge. The feed also publishes `ambiguous` bindings; those
-  are fine to display but are never written.
-- **Origin.** Feed-sourced conditions are written as they arrive. A
-  crowd-sourced report additionally has to be marked routing-eligible by
-  OpenConditions' own trust model.
-- **Vehicle class.** A closure scoped to classes that exclude ordinary cars — a
-  lorry-only ban, say — is not written as an edge closure, because it does not
-  close the road for the traffic being routed. Such an event stays on the
-  point-exclusion path instead.
-
-The writer owns expiry: Valhalla never ages out live values by itself. Every
-edge written last cycle and not written again this cycle is cleared back to "no
-live data", so a lifted closure or an expired cap disappears within one cycle.
+Each write has a bounded lease, graph generation and engine-boot identity.
+Road-event validity is also bounded by source, policy and effect deadlines.
+The cycle renews leases when needed; expired snapshots expose no applied IDs or
+receipts. A recent timestamp alone does not prove that a returned route consumed
+the write.
 
 ### How a closure is narrowed to the edges it really covers
 
-A bound condition arrives as one or more _spans_ — a directed OSM way plus the
-occupied fraction of it, with the cut geometry. Closing the whole way would shut
-kilometres of motorway for a two-hundred-metre incident, so the cycle traces
-each span's geometry against `TRAFFIC_VALHALLA_URL`'s `/trace_attributes` and
-keeps only the returned edges that also appear in this deployment's way→edge
-map, on the same way and in the bound direction.
+The cycle traces each bound span through the configured Valhalla
+`/trace_attributes` endpoint and cross-checks returned edges against the current
+way-to-edge map and direction.
 
-- Cross-checked edges accepted → the span is applied **edge-exactly**.
-- Nothing acceptable came back, or the span had no usable geometry → the cycle
-  falls back to **every edge of the way in the bound direction**. That
-  over-closes, but it never under-closes.
+- A resolved span uses its verified edge subset.
+- Only a proven full-way span (`startFraction: 0`, `endFraction: 1`) can use the
+  complete directed-way map without a trace.
+- An unresolved partial span keeps the entire observation unapplied. It does
+  not fall back to closing the whole way.
 
-Trace verdicts are cached in `traffic/span-edges-cache.json` under the
-data-manager's data directory, and pruned each cycle down to the spans still
-being reported, so lifted closures fall out of the file. Two things are
-deliberately _not_ cached, so a bad minute cannot pin a span to the whole-way
-fallback for the rest of its life: a transport failure (the routing container
-unreachable, slow, or answering with an error), and a span left untraced because
-the pass hit its 30-second tracing budget. Both are retried on the next cycle.
+The trace cache lives at `traffic/span-edges-cache.json`. Its keys bind graph and
+source revisions. Negative traces are cached; transport failures and work skipped
+by the tracing dispatch budget are retried on the next cycle. The default
+30-second budget bounds new dispatch, while an already dispatched request keeps
+its own timeout. Lifted spans are pruned when current feed evidence is available.
 
 ### The applied set
 
-The router still has its own, coarser mechanism for closures: point-based
-exclusions handed to Valhalla per request. Applying both to the same event would
-be redundant and would needlessly narrow the alternatives the router can offer,
-so the writer publishes what it has already baked into the graph:
+Read `GET /traffic/conditions/applied` on Data Manager from the trusted service
+network, using its configured `Authorization: Bearer` service token. The running Data Manager requires authentication for this route. Production
+requires `DATA_MANAGER_AUTH_TOKEN`; development generates an ephemeral token
+when none is configured. Do not publish it as an anonymous monitoring endpoint.
 
-```bash
-curl -s http://localhost:4000/traffic/conditions/applied | jq
-```
+The response includes mode, write ID, engine boot, graph generation, policy
+revision, expiry, per-effect receipts, `writtenAt` and applied observation IDs.
+Before the first successful cycle, `writtenAt` is null. Without the traffic
+subsystem the endpoint returns 501. Expired leases return empty receipts/IDs.
 
-```json
-{
-  "writtenAt": "2026-09-07T09:14:02.511Z",
-  "observationIds": ["…"],
-  "resolverVersion": "…"
-}
-```
+The routing integration reads this snapshot with a two-second timeout, no
+reusable cache and a bounded response size. It compares each route's Valhalla
+traffic proof with the write/engine/graph IDs, current policy and complete
+per-effect receipts. Source revision, intended spans, licence and attribution
+must match. Missing or expired proof retains the fallback/limited assessment;
+an ID appearing in a writer response alone is insufficient.
 
-The route needs no bearer token — it is derived from public road-conditions
-feeds and is polled on the routing hot path. Until the first successful live
-cycle it truthfully answers `writtenAt: null` with an empty list, and on a
-deployment where `OPENCONDITIONS_URL` is unset — live traffic not configured —
-it answers `501`. An observation is listed only when
-**every** one of its override edges was actually written; if a single edge could
-not be resolved, the whole observation is withheld.
-
-Two limits are worth knowing. An applied closure is a fact about the graph, not
-about a departure time: a route planned for after the closure has ended still
-detours around it, whereas the point exclusions it replaces did honour the
-event's schedule. And the set asserts only that the _writer_ wrote the record,
-not that the router has reloaded the tar — a Valhalla restart that fails after a
-`traffic.tar` rebuild is the one case the freshness window does not catch.
-
-The routing integration polls this endpoint (through `DATA_MANAGER_URL`, default
-`http://localhost:4000`; compose sets the service DNS name) and caches the
-answer for 60 seconds. It drops its own point exclusions only for ids in a set
-whose `writtenAt` is less than ten minutes old. If the endpoint is unreachable,
-errors, or the set is stale, nothing is skipped and point exclusions keep
-working — the writer's liveness is the only switch, there is no flag to set.
+The [Coverage & freshness](./coverage-freshness.md) sidecar remains historical
+publication evidence and does not carry the route's serving-process proof.
+A successful graph-write row cannot by itself qualify traffic-aware routing.
 
 ### Log lines to watch
 
-All of these come from the data-manager container
-(`pnpm openmapx services logs data-manager`, or its **Logs** tab in the admin
-panel).
+Open Data Manager's **Logs** drawer or run
+`pnpm openmapx services logs data-manager`.
 
-| Line                                                                             | Means                                                                                                                                                                                                         |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `traffic-live: conditions applied`                                               | The healthy per-cycle summary: `closedEdges`, `cappedEdges`, `overridesUnresolved`, `requestedClosures`, `appliedConditions`, `edgeExactSpans`, `wholeWaySpans`, `missingWays`, `skipped`.                    |
-| `traffic-live: span tracing`                                                     | Tracing counters for the cycle: `traced`, `unanswered`, `negative`, `skippedBudget`, `cacheHits`, `edgeExactSpans`, `wholeWaySpans`.                                                                          |
-| `traffic-live: bound ways missing from way→edge map, scheduling refresh`         | Conditions referenced ways this deployment's map does not know; a way→edge rebuild was kicked off (at most hourly). Persistent counts mean the graph and the feed's road spine are on different OSM vintages. |
-| `traffic-live: conditions fetch failed, reusing last good set`                   | OpenConditions was unreachable; the previous set is still within `TRAFFIC_CONDITIONS_STALE_MS` and stays applied.                                                                                             |
-| `traffic-live: conditions fetch failed and last set is stale, dropping closures` | The outage outlasted `TRAFFIC_CONDITIONS_STALE_MS`. Closures are dropped from the graph; the router falls back to point exclusions.                                                                           |
-| `traffic-live: span tracing failed, falling back to whole-way binding`           | The tracing pass itself failed. Closures still apply, whole-way instead of edge-exactly.                                                                                                                      |
-| `traffic-live: conditions classification failed, writing no overrides`           | Turning conditions into edge overrides threw. Live speeds are still written, but this cycle applies no closures or caps; the next cycle retries.                                                              |
-| `traffic-live: span cache save failed`                                           | The trace cache could not be persisted. Harmless for correctness: the in-memory cache still serves the rest of this process, so only a restart loses the verdicts and re-traces them.                         |
-| `traffic-live: skipped out-of-range edges (traffic.tar/waysToEdges mismatch)`    | The way→edge map references edges the current `traffic.tar` does not have. The daily traffic-extract cron resolves this by rebuilding both.                                                                   |
+| Message or field                                                     | Check                                                                                                                             |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `traffic-live: conditions applied`                                   | `mode`, candidate/written edges, unresolved edges and applied-condition counts; shadow candidates do not prove active application |
+| `skipped`, `ineligibleReasons`, `withheld`                           | Why conditions produced no edge: see [Why a closure is not applied](#why-a-closure-is-not-applied)                                |
+| `traffic-live: span tracing`                                         | `unanswered`, `negative`, `skippedBudget`, cache hits and exact/full-way counts                                                   |
+| `graph generations unavailable or changed; withholding live effects` | Engine identity and graph/map maintenance state                                                                                   |
+| `span tracing failed; partial spans remain unapplied`                | Valhalla reachability and trace responses; partial spans stay unapplied                                                           |
+| `bound ways missing from way→edge map, scheduling refresh`           | Graph/feed vintage; refresh is limited to at most hourly                                                                          |
+| `conditions classification failed, writing no overrides`             | Classification failure; do not infer closures from live-speed success                                                             |
+| `span cache save failed`                                             | Persistence permissions; a restart will lose unsaved cache state                                                                  |
+| `skipped out-of-range edges (traffic.tar/waysToEdges mismatch)`      | Rebuild the graph-associated traffic/map artifacts through the normal maintenance workflow                                        |
 
-A healthy instance shows `unanswered` at zero and `edgeExactSpans` dominating
-`wholeWaySpans`. A rising `unanswered` points at the routing container, not at
-the conditions feed; a `wholeWaySpans` that never falls usually means
-`TRAFFIC_VALHALLA_URL` points somewhere other than the Valhalla holding this
-deployment's traffic graph.
+### Why a closure is not applied
+
+Each `traffic-live: conditions applied` line counts every condition that
+produced no edge under one `skipped` cause:
+
+- `binding`: the binding is not `exact` or `likely`; it stays display-only.
+- `crowdNotEligible`: a crowd or federated report not yet corroborated.
+- `noEffect`: nothing a car's edge costing carries, such as a lorry rule,
+  an advisory limit or a width limit.
+- `ineligible`: the routing decision refused it. `ineligibleReasons` counts
+  each reason, so one condition can appear under several. `unverified_rights`
+  means a needed permission (derived use, retention, commercial use) is
+  `unknown`, for example because no one has checked the publisher's licence
+  statement, while the data-use policy excludes grey-area sources;
+  `non_commercial_source` means the licence forbids commercial use while the
+  policy excludes non-commercial sources; `rights_denied` means the licence
+  forbids derived use or retention; `missing_attribution` means the credit the
+  licence asks for is missing; `action_not_routable` means the publisher marks
+  the action requested, rejected or approved but not yet carried out.
+- `incompleteSpans`: a span whose way is missing from the way→edge map (it is
+  also counted in `missingWays` and schedules a refresh) or whose partial span
+  traced to no edges.
+
+`withheld` names why no condition was classified at all this cycle:
+`graph_unattested` (the engine's graph and traffic extract are not attested:
+briefly after any Valhalla restart outside coordinated maintenance, until the
+engine serves and its tiles are hashed against the withdrawn manifest, and
+until the extract guard rebuilds and re-attests them if the tiles changed;
+Valhalla's log reports the check as `Traffic graph manifest after uncoordinated
+start: restored`, or `changed`, `invalid` or `unverifiable` before a rebuild),
+`policy_unavailable`,
+`policy_lease_ending`, `conditions_unavailable` or `conditions_stale`; it is
+`null` when classification ran.
+`endingBeforeRenewal` counts conditions left out because they end before the
+next lease renewal.
+
+### Closures on a planned trip
+
+A car trip with a departure or arrival time cannot use the live-traffic
+closures, which hold only for now. With closure avoidance on, the routing
+integration asks Data Manager's `GET /traffic/conditions/closures` for the
+bound closures in force at the trip's time, and plans again around those the
+route travels, closing only the closed direction. The route's road-condition
+reasons then say what happened:
+
+- `planned_closures_avoided`: the route was planned around one or more of them.
+- `planned_closure_on_route`: a route still travels one (availability
+  `limited`), for example when the exclusion budget ran out.
+- `planned_closures_unrepresentable`: a closure had no geometry to exclude.
+- `planned_closures_unavailable`: Data Manager answered no current set.
+- `planned_closures_shadow`: in shadow mode a route travels one; nothing was
+  excluded.
+
+For upstream failures, inspect the configured stale window
+`TRAFFIC_CONDITIONS_STALE_MS` and the source/policy expiry. Old conditions are
+not permitted to extend expired routing evidence. Repeated missing ways,
+negative traces or mismatched generations require investigation even if other
+cycle counters look healthy.
 
 ### Verifying edge closures end-to-end
 
-Once the cycle reports closures, three requests confirm the graph really carries
-them. First, check that conditions are arriving and that the writer credited
-some of them:
+Use an isolated, representative dataset and synthetic route coordinates:
 
-```bash
-curl -s "$OPENCONDITIONS_URL/segments/conditions.json" | jq '.conditions | length'
-curl -s http://localhost:4000/traffic/conditions/applied | jq
-```
+1. Confirm fresh source evidence, authoritative policy and a known closure
+   applicable to ordinary cars at the test time.
+2. Check the cycle's mode. Shadow results cannot prove a written closure. For an
+   approved active-mode test, inspect complete, unexpired receipts and the
+   matching engine/graph identity.
+3. Route across the closure and compare with a controlled request that uses
+   `ignore_closures`. Inspect route geometry and traffic proof as well as summary
+   distance/time. Equal summaries alone do not establish the cause.
+4. Route on the same way outside a partial closed span. Confirm that unrelated
+   edges remain usable; unresolved partial spans must not produce whole-way
+   closure.
+5. Exercise expiry, feed failure and engine restart. Confirm that expired or
+   mismatched proof cannot claim current application and that fallback behavior
+   remains available.
 
-Then pick one applied closure, take a pair of coordinates on the closed
-carriageway either side of it, and route across it:
-
-```bash
-curl -s http://127.0.0.1:8002/route -d '{
-  "locations":[{"lat":51.40,"lon":6.80},{"lat":51.45,"lon":6.95}],
-  "costing":"auto","date_time":{"type":0}}' | jq '.trip.summary'
-
-curl -s http://127.0.0.1:8002/route -d '{
-  "locations":[{"lat":51.40,"lon":6.80},{"lat":51.45,"lon":6.95}],
-  "costing":"auto","date_time":{"type":0},
-  "costing_options":{"auto":{"ignore_closures":true}}}' | jq '.trip.summary'
-```
-
-The first must detour — a longer distance or time than the second, which ignores
-closures and drives straight through. If the two summaries are identical, the
-closure is not in the graph: check `closedEdges` in `traffic-live: conditions
-applied` and whether the router is reading the same `traffic.tar` the writer
-writes.
-
-Finally, route between two points on the **same way but outside** the closed
-span, for example from just past the closure to the next exit:
-
-```bash
-curl -s http://127.0.0.1:8002/route -d '{
-  "locations":[{"lat":51.46,"lon":6.97},{"lat":51.48,"lon":7.02}],
-  "costing":"auto","date_time":{"type":0}}' | jq '.trip.summary'
-```
-
-This one must succeed and stay on that way. That is the difference between an
-edge-exact closure and the whole-way fallback: if it fails or detours, the span
-was applied whole-way, and the `traffic-live: span tracing` counters will show
-it as `negative`, `unanswered` or `skippedBudget` — unless the span was already
-traced in an earlier cycle, in which case it only shows in `cacheHits`.
+A writer log, a stored receipt or a mocked test is narrower evidence than this
+runtime drill. Record the source/graph revisions, test time and actual observed
+route behavior. Do not claim production acceptance from a source inspection.
 
 ## Audit log
 
-Every state-changing admin action is written to a durable audit trail. It's the
-record of _who did what, to what, and when_ — the accountability layer behind the
-panel. Find it on `/admin/activity` under the **Audit Log** tab.
+Administration handlers record supported mutations in `admin_audit_log`. Open **Activity → Audit Log** to inspect actor, target, action and time. Audit writes are generally best effort, so the trail is not a guarantee that every host or database action was recorded.
 
 Each entry captures the **action** (a dotted name like `service.restart` or
 `user.role.change`), the **actor** (the admin user, resolved to name and email),
-the **target** (type and id — the integration, service, user, backup, and so on it
-acted on), a **details** blob with action-specific context, the requester's **IP
-address**, and a timestamp. Filter by action (grouped by subsystem —
-Integrations, Services, Data, Backups, Settings, Users, and the rest), by target
+the **target** (type and ID), a **details** blob with action-specific context, the requester's **IP
+address**, and a timestamp. Filter by action (grouped by subsystem), by target
 type, or search by target id; destructive and auth-related actions are color-coded
 so a ban or a credential deletion stands out.
 
-The trail is written server-side by every admin endpoint as part of the action it
-records, so the client can't suppress it. A few properties matter operationally:
+The server writes the trail independently of the client. Its operational limits are:
 
 - **CLI and loopback actions are recorded too.** A request that comes in over the
   loopback short-circuit (how the `openmapx` CLI calls admin endpoints) has no
   user row, so it's logged with a null actor and a `(loopback)` marker on the
-  user-agent — the origin stays visible. See the
+  user-agent. See the
   [local admin escape hatch](./admin-panel.md) for that bypass.
 - **A failed write never breaks the action.** If the audit insert fails, the error
-  is logged and the underlying operation still completes — the audit log is
-  accountability, not a gate.
+  is logged and the underlying operation can still complete.
 - **Retention is bounded.** A daily prune deletes entries older than
   `AUDIT_LOG_RETENTION_DAYS` (default 90), so the table doesn't grow without limit
   on a long-lived instance. Raise or lower it via the env var.
 
-Sitting alongside the audit log on the same page is the **Jobs** tab — the running
-and recently-finished background jobs (installs, reloads, restarts, imports) with
-their streamed logs. Job rows are pruned after `ADMIN_JOB_RETENTION_DAYS` (default
+The **Jobs** tab lists running and recently finished background operations with their logs. Job rows are pruned after `ADMIN_JOB_RETENTION_DAYS` (default
 30). Between them, the audit log tells you the _intent_ of every admin action and
 the jobs view shows the _execution_.
 
@@ -502,16 +462,7 @@ polling.
 
 ## Where to go next
 
-- **[Admin panel](./admin-panel.md)** — the Overview dashboard and how access is
-  gated.
-- **[Services administration](./services-administration.md)** — container
-  lifecycle and the per-service log drawer.
-- **[Public transit](../features/public-transit.md)** — the transit pipeline the
-  provider-health table belongs to.
-- **[Users and access](./users-and-access.md)** — the roles and accounts the audit
-  log attributes actions to.
-- **[Backup and restore](./backup-and-restore.md)** — protecting the database the
-  audit log and persisted logs live in.
-- **[Configuration](../install/configuration.md)** — `OPENCONDITIONS_URL`,
-  `TRAFFIC_LIVE_CRON`, `TRAFFIC_CONDITIONS_STALE_MS` and `TRAFFIC_VALHALLA_URL`,
-  the knobs behind the live road-conditions cycle.
+Use [Services](./services-administration.md) for lifecycle actions,
+[Users](./users-and-access.md) for access controls and
+[Backup and restore](./backup-and-restore.md) for recovery. See
+[Configuration](../install/configuration.md) for traffic and retention variables.

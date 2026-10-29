@@ -1,26 +1,19 @@
 // IntegrationContext and RouteHandler live in integration-framework, NOT core.
-import type { IntegrationContext, RouteHandler } from "@openmapx/integration-framework";
+
+import type { StreetLevelImage } from "@openmapx/core";
+import type { IntegrationContext, StreetLevelProvider } from "@openmapx/integration-framework";
+import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setup } from "../index";
-
-interface RouteRegistration {
-  method: string;
-  path: string;
-  handler: RouteHandler;
-}
+import manifest from "../manifest.json";
 
 function buildCtx() {
-  const routes: RouteRegistration[] = [];
-  const registerStreetLevelProvider = vi.fn();
-  const ctx = {
+  const ctx = createMockIntegrationContext({
+    manifest: structuredClone(manifest) as IntegrationContext["manifest"],
     config: { instanceUrl: "https://example.test/api" },
-    log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-    registerRoute: (method: string, path: string, handler: RouteHandler) => {
-      routes.push({ method, path, handler });
-    },
-    registerStreetLevelProvider,
-  } as unknown as IntegrationContext;
-  return { ctx, routes, registerStreetLevelProvider };
+  });
+  const registerStreetLevelProvider = vi.spyOn(ctx, "registerStreetLevelProvider");
+  return { ctx, routes: ctx.registered.routes, registerStreetLevelProvider };
 }
 
 function makeReply() {
@@ -238,5 +231,86 @@ describe("GET /search", () => {
       );
     expect(reply.status).toHaveBeenCalledWith(502);
     vi.unstubAllGlobals();
+  });
+});
+
+describe("captured Panoramax image receipts", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const item = {
+    id: "captured-file",
+    geometry: { type: "Point", coordinates: [2.35, 48.85] },
+    providers: [{ name: "Per-file photographer", roles: ["producer"] }],
+    properties: { license: "CC-BY-SA-4.0" },
+    assets: { sd: { href: "https://image.test/file.jpg" } },
+    links: [{ rel: "license", href: "https://creativecommons.org/licenses/by-sa/4.0/" }],
+  };
+  function assertFile(image: StreetLevelImage) {
+    expect(image.contributors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceId: "panoramax",
+          name: "Panoramax",
+          url: "https://panoramax.xyz/#focus=pic&pic=captured-file",
+          publisher: { name: "Per-file photographer" },
+          licensing: expect.objectContaining({
+            bindings: [
+              expect.objectContaining({
+                scope: "imagery",
+                license: {
+                  kind: "spdx",
+                  expression: "CC-BY-SA-4.0",
+                  url: "https://creativecommons.org/licenses/by-sa/4.0/",
+                },
+              }),
+            ],
+          }),
+        }),
+      ]),
+    );
+    expect(JSON.stringify(image.contributors)).not.toContain("etalab");
+  }
+  it.each(["/search", "/images/:id", "/nearest"])(
+    "sends captured per-file creator, page and licence before %s caller caching",
+    async (path) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => Response.json(path === "/images/:id" ? item : { features: [item] })),
+      );
+      const { ctx, routes } = buildCtx();
+      setup(ctx);
+      const reply = makeReply();
+      await routes
+        .find((route) => route.path === path)
+        ?.handler(
+          { params: { id: item.id }, query: { lng: "2.35", lat: "48.85", radius: "400" } } as never,
+          reply as never,
+        );
+      expect(reply.status).not.toHaveBeenCalled();
+      const sent = reply.send.mock.calls[0]?.[0];
+      assertFile(path === "/search" ? sent[0] : sent);
+    },
+  );
+  it("registers the captured provider and snapshots source metadata before deferred acquisition", async () => {
+    let complete!: (value: Response) => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            complete = resolve;
+          }),
+      ),
+    );
+    const { ctx, registerStreetLevelProvider } = buildCtx();
+    setup(ctx);
+    const provider = registerStreetLevelProvider.mock.calls[0]?.[0] as StreetLevelProvider;
+    const pending = provider.getImage(item.id);
+    const source = ctx.manifest.dataSources?.[0];
+    if (!source) throw new Error("Expected declared Panoramax metadata");
+    source.name = "Renamed after acquisition";
+    complete(Response.json(item));
+    const image = await pending;
+    expect(image).not.toBeNull();
+    if (image) assertFile(image);
   });
 });

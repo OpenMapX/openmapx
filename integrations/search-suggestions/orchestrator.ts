@@ -7,13 +7,16 @@ import {
 } from "@openmapx/core";
 import {
   type IntegrationContext,
-  mapSettledWithConcurrency,
   ProviderCancelledError,
   ProviderTimeoutError,
   runWithProviderDeadline,
   type SearchSuggestionProvider,
 } from "@openmapx/integration-framework";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  captureResultContributors,
+  contributorsForRecords,
+} from "@openmapx/mobility-core/contributors";
+import { pMapSettled } from "p-map";
 
 export const PROVIDER_TIMEOUT_MS = 1_200;
 export const MAX_PROVIDER_CONCURRENCY = 4;
@@ -36,14 +39,6 @@ function collectProviders(ctx: IntegrationContext): ProviderEntry[] {
     for (const provider of providers) entries.push({ integrationId: integration.id, provider });
   }
   return entries;
-}
-
-function dedupeAttributions(attributions: Attribution[]): Attribution[] {
-  const bySource = new Map<string, Attribution>();
-  for (const attribution of attributions) {
-    if (!bySource.has(attribution.sourceId)) bySource.set(attribution.sourceId, attribution);
-  }
-  return [...bySource.values()];
 }
 
 async function invokeProvider(
@@ -113,9 +108,14 @@ export function createSearchSuggestionsOrchestrator(ctx: IntegrationContext): {
       const eligible = collectProviders(ctx).filter(
         ({ integrationId }) => integrationId !== ctx.id && !disallowed.has(integrationId),
       );
-      const settled = await mapSettledWithConcurrency(eligible, MAX_PROVIDER_CONCURRENCY, (entry) =>
-        invokeProvider(ctx, entry, query, signal),
-      );
+      const settled = await pMapSettled(
+        eligible,
+        (entry) => invokeProvider(ctx, entry, query, signal),
+        { concurrency: MAX_PROVIDER_CONCURRENCY, signal },
+      ).catch((error: unknown) => {
+        if (signal?.aborted) throw new ProviderCancelledError();
+        throw error;
+      });
       // Provider fan-out uses all-settled semantics so individual upstream
       // failures can produce a useful partial response. Caller cancellation is
       // different: it must escape as a rejection so cache layers never persist
@@ -127,6 +127,7 @@ export function createSearchSuggestionsOrchestrator(ctx: IntegrationContext): {
       const suggestions: SearchSuggestion[] = successful.flatMap(({ entry, result }) =>
         result.suggestions.map((suggestion) => ({
           ...suggestion,
+          contributors: captureResultContributors(suggestion, result.attributions),
           provider: suggestion.provider || entry.integrationId,
           contributingProviders:
             suggestion.contributingProviders && suggestion.contributingProviders.length > 0
@@ -138,16 +139,7 @@ export function createSearchSuggestionsOrchestrator(ctx: IntegrationContext): {
         query: query.query,
         proximity: query.proximity,
       }).slice(0, query.limit) as SearchSuggestion[];
-      const contributing = new Set(
-        merged.flatMap((suggestion) => suggestion.contributingProviders ?? [suggestion.provider]),
-      );
-      const attributions = dedupeAttributions(
-        successful.flatMap(({ entry, result }) =>
-          contributing.has(entry.integrationId) || contributing.has(entry.provider.id)
-            ? result.attributions
-            : [],
-        ),
-      );
+      const attributions = contributorsForRecords(merged);
       return {
         suggestions: merged,
         attributions,

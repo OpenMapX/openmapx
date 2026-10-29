@@ -89,7 +89,6 @@ export function createRegistryResourcePolicy(options: {
     allowDataType: options.resourceAuthority?.allowDataType ?? (() => false),
     allowCatalogRevision: options.resourceAuthority?.allowCatalogRevision ?? (() => false),
     allowUpdateJobId: options.resourceAuthority?.allowUpdateJobId ?? (() => false),
-    allowExtension: () => false,
     allowIntegration: (integrationId) => integrations.has(integrationId),
     allowTrustedRevision: () => false,
   };
@@ -99,10 +98,6 @@ function requiresTrustedSource(operation: OpsOperation): boolean {
   switch (operation.kind) {
     case "motis.primary.promote":
     case "feedProxy.validateAndReload":
-    case "extension.repository.inspect":
-    case "extension.install":
-    case "extension.update":
-    case "extension.remove":
     case "stack.render":
     case "serviceSelection.apply":
     case "serviceConfig.apply":
@@ -120,8 +115,8 @@ function claimedResourcePolicy(
 ): OpsResourcePolicy {
   const revisions = new Set<string>();
   const operationFields = operation as OpsOperation &
-    Partial<Record<"updateJobId" | "catalogEntryId" | "catalogRevisionId" | "revisionId", string>>;
-  for (const key of ["updateJobId", "catalogEntryId", "catalogRevisionId", "revisionId"] as const) {
+    Partial<Record<"updateJobId" | "catalogRevisionId" | "revisionId", string>>;
+  for (const key of ["updateJobId", "catalogRevisionId", "revisionId"] as const) {
     const value = operationFields[key];
     if (typeof value === "string") revisions.add(value);
   }
@@ -142,6 +137,7 @@ function claimedResourcePolicy(
       (operation.kind === "release.pull" ||
         operation.kind === "release.apply" ||
         operation.kind === "appApi.replace" ||
+        operation.kind === "agent.update" ||
         operation.kind === "system.update") &&
       kind === operation.kind &&
       id === operation.releaseId,
@@ -160,12 +156,6 @@ function claimedResourcePolicy(
       kind === operation.kind &&
       id === operation.catalogRevisionId,
     allowUpdateJobId: (id) => operation.kind === "appApi.replace" && id === operation.updateJobId,
-    allowExtension: (kind, id) =>
-      (operation.kind === "extension.install" ||
-        operation.kind === "extension.update" ||
-        operation.kind === "extension.remove") &&
-      kind === operation.kind &&
-      id === operation.extensionId,
     allowTrustedRevision: (kind, id) => kind === operation.kind && revisions.has(id),
   };
 }
@@ -181,7 +171,6 @@ function registryPreflightPolicy(ordinary: OpsResourcePolicy): OpsResourcePolicy
     allowDataType: () => true,
     allowCatalogRevision: () => true,
     allowUpdateJobId: () => true,
-    allowExtension: () => true,
     allowTrustedRevision: () => true,
   };
 }

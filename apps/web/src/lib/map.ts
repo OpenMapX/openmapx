@@ -1,49 +1,16 @@
 import type { OfflineMapPackageManifest } from "@openmapx/core";
-import { escapeHtml, sanitizeUrl } from "@openmapx/core";
+import { buildRuntimeAttributionHtml } from "@openmapx/core/attribution";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { ClientEnv } from "@/integration-api/runtime/env";
+import {
+  MAPTILER_ATTRIBUTION,
+  OPENFREEMAP_ATTRIBUTION,
+  OPENMAPTILES_ATTRIBUTION,
+  OSM_ATTRIBUTION,
+} from "./baseMapAttributions";
 import { resolveOfflinePackageStyle } from "./offlineAreas/packageStyle";
 
-/**
- * Canonical base-map credits — the single source of truth for the OSM /
- * OpenMapTiles / hosted-provider attribution shown across the app. `BaseAttributions`
- * registers these in the main map's attribution registry (rendered by
- * `MapFooter`); `baseMapCreditsHtml` (below) renders the same objects as HTML
- * for the embedded maps, which render them through `<MapCredits>` instead of
- * registering them. Defined once here so a credit/URL/license change can't
- * drift between the two rendering paths.
- *
- * Publisher names are proper nouns rendered verbatim across locales (the
- * providers treat them as untranslated identifiers); the leading "©" is
- * universal. Do not pipe these through next-intl.
- */
-export const OSM_ATTRIBUTION: Attribution = {
-  sourceId: "openstreetmap",
-  name: "© OpenStreetMap contributors",
-  url: "https://www.openstreetmap.org/copyright",
-  spdxLicense: "ODbL-1.0",
-  licenseUrl: "https://opendatacommons.org/licenses/odbl/",
-};
-
-export const OPENMAPTILES_ATTRIBUTION: Attribution = {
-  sourceId: "openmaptiles",
-  name: "© OpenMapTiles",
-  url: "https://openmaptiles.org/",
-  spdxLicense: "BSD-3-Clause",
-  licenseUrl: "https://github.com/openmaptiles/openmaptiles/blob/master/LICENSE.md",
-};
-
-export const OPENFREEMAP_ATTRIBUTION: Attribution = {
-  sourceId: "openfreemap",
-  name: "OpenFreeMap",
-  url: "https://openfreemap.org/",
-};
-
-export const MAPTILER_ATTRIBUTION: Attribution = {
-  sourceId: "maptiler",
-  name: "© MapTiler",
-  url: "https://www.maptiler.com/copyright/",
-};
+export { MAPTILER_ATTRIBUTION, OPENFREEMAP_ATTRIBUTION, OPENMAPTILES_ATTRIBUTION, OSM_ATTRIBUTION };
 
 /**
  * Render a base-map credit as an HTML anchor, keeping the leading "© " outside
@@ -51,13 +18,7 @@ export const MAPTILER_ATTRIBUTION: Attribution = {
  * dedup collapses identical credits regardless of which path emitted them.
  */
 function creditHtml(attr: Attribution): string {
-  const hasCopyright = attr.name.startsWith("© ");
-  const label = escapeHtml(hasCopyright ? attr.name.slice(2) : attr.name);
-  const safeUrl = attr.url ? sanitizeUrl(attr.url) : undefined;
-  const anchor = safeUrl
-    ? `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${label}</a>`
-    : label;
-  return hasCopyright ? `© ${anchor}` : anchor;
+  return buildRuntimeAttributionHtml(attr);
 }
 
 function apiRoute(env: ClientEnv, path: string): string {

@@ -11,6 +11,7 @@ import {
   createApiOpsClient,
   createDurableOpsKey,
   executeAndWait,
+  executeTrustedConfigurationAndWait,
   followOpsEvents,
   waitForOpsResult,
 } from "../ops-client.js";
@@ -54,6 +55,52 @@ describe("API ops client construction", () => {
 });
 
 describe("bounded async ops helpers", () => {
+  it.each([
+    "stack.start",
+    "service.start",
+    "service.stop",
+    "service.restart",
+    "service.recreate",
+    "service.recreateIsolated",
+    "service.remove",
+  ] as const)("derives a 635-second bounded result wait for %s", async (kind) => {
+    let now = 0;
+    const admission = {
+      execution: "async" as const,
+      operationId: "job1_abcdefghijklmnop",
+      operationKey: "opk1_abcdefghijklmnop",
+      kind,
+      state: "running" as const,
+    };
+    const client = fakeClient({
+      status: async () => ({
+        version: 1,
+        operationId: admission.operationId,
+        operationKey: admission.operationKey,
+        kind,
+        resourceId: "postgis",
+        state: "running",
+        submittedAt: "2026-08-23T10:00:00.000Z",
+        updatedAt: "2026-08-23T10:00:00.000Z",
+      }),
+    });
+    const checkpoints: number[] = [];
+    await expect(
+      waitForOpsResult(client, kind, admission, {
+        now: () => now,
+        pollIntervalMs: 10_000,
+        sleep: async (ms) => {
+          now += ms;
+          checkpoints.push(now);
+        },
+      }),
+    ).rejects.toMatchObject({ errorClass: "timeout" });
+    expect(checkpoints).toContain(630_000);
+    expect(now).toBe(635_000);
+    expect(client.execute).not.toHaveBeenCalled();
+    expect(client.cancel).not.toHaveBeenCalled();
+  });
+
   it("recovers a disconnected admission by key lookup without creating a fresh follow", async () => {
     const controller = new AbortController();
     controller.abort();
@@ -100,6 +147,20 @@ describe("bounded async ops helpers", () => {
     expect(execute).not.toHaveBeenCalled();
     expect(lookup).toHaveBeenCalled();
   });
+  it("fails a synchronous operation at once instead of looking it up", async () => {
+    const execute = vi.fn().mockRejectedValue(new ApiOpsError("runtime"));
+    const lookup = vi.fn();
+    const { submitOpsOperationWithRecovery } = await import("../ops-client.js");
+    await expect(
+      submitOpsOperationWithRecovery(
+        fakeClient({ execute, lookup }),
+        { kind: "communityServices.inspect" },
+        "opk1_syncNotJournaled00000",
+      ),
+    ).rejects.toMatchObject({ errorClass: "runtime" });
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
   it("recovers an admitted-but-response-lost operation with the exact same key", async () => {
     const operationKey = "opk1_ambiguousAdmission00";
     const admission = {
@@ -493,5 +554,75 @@ describe("bounded async ops helpers", () => {
 
     expect(result).toEqual({ cursor: 12, events: 2, bytes: 1, truncated: true });
     expect(progress).toHaveBeenLastCalledWith(result);
+  });
+});
+
+describe("configuration outcome evidence", () => {
+  const operation = {
+    expectedCurrentRevisionId: null,
+    kind: "stack.render" as const,
+    revisionId: `cfg1_${"a".repeat(43)}`,
+  };
+  it("treats arbitrary submission failure as unknown and submits once", async () => {
+    const client = fakeClient({
+      execute: vi.fn().mockRejectedValue(new Error("connection lost after send")),
+    });
+    expect(
+      await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome123"),
+    ).toEqual({ outcome: "unknown", reason: "transport_or_result" });
+    expect(client.execute).toHaveBeenCalledTimes(1);
+  });
+  it.each(["failed", "timed_out"] as const)(
+    "does not infer non-commit from generic %s job state",
+    async (state) => {
+      const client = fakeClient({
+        execute: vi.fn().mockResolvedValue({
+          execution: "async",
+          kind: operation.kind,
+          operationId: "job",
+          operationKey: "opk1_configOutcome123",
+          state: "queued",
+        }),
+        status: vi.fn().mockResolvedValue({
+          state,
+          operationKey: "opk1_configOutcome123",
+          errorClass: "runtime",
+        }),
+      });
+      expect(
+        await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome123"),
+      ).toEqual({ outcome: "unknown", reason: "transport_or_result" });
+      expect(client.execute).toHaveBeenCalledTimes(1);
+    },
+  );
+  it("accepts explicit conflict and rejects a committed result for another candidate", async () => {
+    const execute = vi
+      .fn()
+      .mockResolvedValueOnce({
+        execution: "sync",
+        value: {
+          outcome: "not_committed",
+          reason: "conflict",
+          currentRevisionId: null,
+          cleanupFailed: false,
+        },
+      })
+      .mockResolvedValueOnce({
+        execution: "sync",
+        value: {
+          outcome: "committed",
+          revisionId: `cfg1_${"b".repeat(43)}`,
+          enabledServiceIds: [],
+          followUp: "complete",
+          cleanupFailed: false,
+        },
+      });
+    const client = fakeClient({ execute });
+    expect(
+      await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome123"),
+    ).toMatchObject({ outcome: "not_committed", reason: "conflict" });
+    expect(
+      await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome456"),
+    ).toEqual({ outcome: "unknown", reason: "transport_or_result" });
   });
 });

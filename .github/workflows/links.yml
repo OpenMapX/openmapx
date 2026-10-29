@@ -57,4 +57,6 @@ jobs:
           title: Broken links found by lychee
           content-filepath: ./lychee/out.md
           issue-number: ${{ steps.find-issue.outputs.issue-number }}
-          labels: documentation, broken-link
+          # Token-created issues do not trigger the lifecycle workflow. Add
+          # initial triage here without re-triaging an existing report.
+          labels: ${{ steps.find-issue.outputs.issue-number == '' && 'documentation, needs-triage' || 'documentation' }}

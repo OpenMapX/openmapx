@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { wikipediaSource } from "./provider.js";
 
@@ -122,6 +123,7 @@ describe("Wikipedia knowledge provider", () => {
                   extmetadata: {
                     Artist: { value: "Benh LIEU SONG" },
                     LicenseShortName: { value: "CC BY-SA 3.0" },
+                    LicenseUrl: { value: "https://creativecommons.org/licenses/by-sa/3.0/" },
                   },
                 },
               ],
@@ -134,11 +136,11 @@ describe("Wikipedia knowledge provider", () => {
     const result = await wikipediaSource.lookup({ wikipedia: "en:Eiffel Tower" });
 
     expect(result?.photos).toHaveLength(1);
-    // Provider overrides the source to "wikipedia" for rich photos it attaches.
+    // The file is credited to Commons independently of the article supplier.
     expect(result?.photos?.[0]).toMatchObject({
-      source: "wikipedia",
+      source: "wikimedia-commons",
       author: "Benh LIEU SONG",
-      license: "CC BY-SA 3.0",
+      licensing: licensingFromDeclaration("CC BY-SA 3.0", undefined, "Commons file", "imagery"),
     });
     const titlesUrl = mockFetch.mock.calls
       .map((c) => String(c[0]))
@@ -146,20 +148,12 @@ describe("Wikipedia knowledge provider", () => {
     expect(titlesUrl).toContain("titles=File%3ATour_Eiffel.jpg");
   });
 
-  it("falls back to the raw image URLs when Commons metadata is unavailable", async () => {
+  it("defers the image when Commons metadata is unavailable", async () => {
     routes = { "/page/summary/": summaryBody(), "titles=": { query: { pages: {} } } };
 
     const result = await wikipediaSource.lookup({ wikipedia: "en:Eiffel Tower" });
 
-    expect(result?.photos?.[0]).toEqual({
-      url: "https://upload.wikimedia.org/wikipedia/commons/8/85/Tour_Eiffel.jpg",
-      thumbnailUrl:
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Tour_Eiffel.jpg/320px-Tour_Eiffel.jpg",
-      source: "wikipedia",
-      // Filename WAS extractable, so the file page is known even though the
-      // metadata fetch itself returned nothing.
-      pageUrl: "https://commons.wikimedia.org/wiki/File:Tour_Eiffel.jpg",
-    });
+    expect(result?.photos).toBeUndefined();
   });
 
   it("returns null when the summary request fails", async () => {

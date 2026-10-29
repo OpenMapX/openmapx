@@ -32,6 +32,7 @@ import { useWinterSportsStore } from "@integrations/overlay-winter-sports/store"
 import type { WeatherSubLayer } from "@openmapx/core";
 import {
   type BoundingBox,
+  bicycleQueryParameters,
   CATEGORY_DEFINITIONS,
   type CategoryId,
   createPlace,
@@ -114,7 +115,7 @@ const WEATHER_SUBLAYERS = [
 const EARTHQUAKE_TIME_RANGES = ["hour", "day", "week", "month"] as const;
 const EARTHQUAKE_COLOR_MODES = ["depth", "recency"] as const;
 const WILDFIRE_DAY_RANGES = [1, 2, 3] as const;
-const WILDFIRE_SOURCES = ["viirs", "modis"] as const;
+const WILDFIRE_SOURCES = ["viirs", "modis", "slstr"] as const;
 const ENVIRONMENT_SENSORS = [
   "temperature",
   "humidity",
@@ -412,6 +413,13 @@ function applyDirections(parsed: ParsedDeepLink["directions"]): void {
   directions.setAvoidHighways(parsed.avoid.includes("highways"));
   directions.setAvoidTolls(parsed.avoid.includes("tolls"));
   directions.setAvoidFerries(parsed.avoid.includes("ferries"));
+  if (mode === "cycling") {
+    directions.setBikeProfile(parsed.bikeProfile ?? "trekking");
+    directions.setBikeHillPreference(parsed.bikeHillPreference ?? "default");
+    directions.setBikePreferQuietRoads(parsed.bikePreferQuietRoads ?? false);
+    directions.setBikePreferSmoothSurfaces(parsed.bikePreferSmoothSurfaces ?? false);
+    directions.setBikeSpeedKmh(parsed.bikeSpeedKmh);
+  }
 
   const waypoints = parsed.waypoints.slice(0, 10);
   for (let index = 0; index < Math.max(0, waypoints.length - 2); index += 1) {
@@ -563,6 +571,8 @@ function encodeDirections(params: URLSearchParams): void {
   params.set("panel", PANEL.DIRECTIONS);
   if (directions.mode !== "driving") params.set("mode", directions.mode);
 
+  for (const [key, value] of Object.entries(bicycleQueryParameters(directions.mode, directions)))
+    params.set(key, value);
   const avoid = [
     directions.avoidHighways ? "highways" : "",
     directions.avoidTolls ? "tolls" : "",

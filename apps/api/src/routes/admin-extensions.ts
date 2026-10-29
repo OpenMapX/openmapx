@@ -1,5 +1,7 @@
+import type { AdminExtensionInstallRequest } from "@openmapx/core/api-contracts";
 import { services as coreServices } from "@openmapx/core/server";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
+import { normalizeExtensionInstallPayload } from "../services/extension-install-payload";
 import { previewExtensionInstall } from "../services/extension-installer";
 import {
   addExtensionSource,
@@ -11,21 +13,23 @@ import {
   type KillSwitch,
   listExtensionSources,
   listInstalledExtensions,
+  normalizeExtensionLocator,
   PLATFORM_VERSION,
   removeExtensionSource,
+  resolveDirectExtensionManifest,
   resolveExtensionManifest,
 } from "../services/extension-store";
+import { ExtensionStoreError } from "../services/extension-store-error";
 import { jobRunner } from "../services/job-runner";
 import { getServiceRegistry } from "../services/service-registry";
 import { writeAuditLog } from "../utils/audit-log";
-import { storeInstallLimit } from "../utils/rate-limit";
+import { extensionPreviewLimit, storeInstallLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { declareRouteAuth } from "../utils/route-auth";
-import { summarizeExternalUrl } from "../utils/safe-log-fields";
+import { safeErrorClass, summarizeExternalUrl } from "../utils/safe-log-fields";
+import { registerExtensionAdminRoute } from "./admin-extension-contract";
 
 const { computeServiceSecurityRating } = coreServices;
-
-type ExtensionInstallRequest = { id?: string; manifestUrl?: string; hostPortConfirmation?: string };
 
 class ExtensionInstallRequestError extends Error {
   constructor(
@@ -36,45 +40,52 @@ class ExtensionInstallRequestError extends Error {
   }
 }
 
-async function resolveInstallRequest(body: ExtensionInstallRequest): Promise<{
+function installFailure(request: FastifyRequest, error: unknown, fallback: string) {
+  request.log.warn({ errorClass: safeErrorClass(error) }, fallback);
+  return {
+    statusCode: error instanceof ExtensionInstallRequestError ? error.statusCode : (400 as const),
+    body: {
+      error:
+        error instanceof ExtensionInstallRequestError || error instanceof ExtensionStoreError
+          ? error.message
+          : fallback,
+    },
+  };
+}
+
+function assertAdmission(entry: ExtensionCatalogEntry, kill: KillSwitch): void {
+  if (kill.removed.has(entry.id)) throw new ExtensionInstallRequestError("Extension delisted");
+  if (kill.critical.has(entry.id))
+    throw new ExtensionInstallRequestError("Extension flagged critical");
+  if (!isExtensionCompatible(entry))
+    throw new ExtensionInstallRequestError("Extension requires a newer platform version");
+}
+
+async function resolveInstallRequest(body: AdminExtensionInstallRequest): Promise<{
   manifest: coreServices.ExtensionManifest;
   sourceUrl?: string;
   sourceTrust: "verified" | "community";
 }> {
-  const kill = await getKillSwitch();
   if (body.id) {
+    const kill = await getKillSwitch();
     const entry = await getExtensionCatalogEntry(body.id);
-    if (!entry) throw new ExtensionInstallRequestError(`Extension ${body.id} not found`, 404);
-    if (kill.removed.has(entry.id)) {
-      throw new ExtensionInstallRequestError(`Extension delisted: ${kill.removed.get(entry.id)}`);
-    }
-    if (kill.critical.has(entry.id)) {
-      throw new ExtensionInstallRequestError(
-        `Extension flagged critical: ${kill.critical.get(entry.id)?.reason}`,
-      );
-    }
-    if (!isExtensionCompatible(entry)) {
-      throw new ExtensionInstallRequestError(
-        `Requires platform >= ${entry.minPlatform} (this is ${PLATFORM_VERSION})`,
-      );
-    }
+    if (!entry) throw new ExtensionInstallRequestError("Extension not found", 404);
+    assertAdmission(entry, kill);
     return {
       manifest: await resolveExtensionManifest(entry),
-      sourceUrl: entry.manifest ?? undefined,
+      sourceUrl: entry.manifest ? normalizeExtensionLocator(entry.manifest) : undefined,
       sourceTrust: entry.trust === "verified" ? "verified" : "community",
     };
   }
   if (body.manifestUrl) {
-    return {
-      manifest: await resolveExtensionManifest({
-        id: "_direct",
-        name: "_direct",
-        version: "_",
-        manifest: body.manifestUrl,
-      }),
-      sourceUrl: body.manifestUrl,
-      sourceTrust: "community",
-    };
+    const sourceUrl = normalizeExtensionLocator(body.manifestUrl);
+    const manifest = await resolveDirectExtensionManifest(sourceUrl);
+    // The validated identity, never a selector sentinel or supplied trust, owns denial.
+    assertAdmission(
+      { id: manifest.id, name: manifest.name, minPlatform: manifest.platform },
+      await getKillSwitch(),
+    );
+    return { manifest, sourceUrl, sourceTrust: "community" };
   }
   throw new ExtensionInstallRequestError("Either `id` or `manifestUrl` is required");
 }
@@ -108,9 +119,7 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
   });
 
   // GET /admin/extensions/catalog
-  app.get<{
-    Querystring: { q?: string; category?: string; trust?: string; type?: string; sort?: string };
-  }>("/admin/extensions/catalog", async (request) => {
+  registerExtensionAdminRoute(app, "listAdminExtensionCatalog", async (request) => {
     const { q, category, trust, type, sort = "az" } = request.query;
     let entries = await getExtensionCatalog();
     const kill = await getKillSwitch();
@@ -164,7 +173,7 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
   });
 
   // GET /admin/extensions/catalog/:id
-  app.get<{ Params: { id: string } }>("/admin/extensions/catalog/:id", async (request, reply) => {
+  registerExtensionAdminRoute(app, "getAdminExtensionCatalogEntry", async (request, reply) => {
     const entry = await getExtensionCatalogEntry(request.params.id);
     if (!entry) return reply.status(404).send({ error: "Not found" });
     const kill = await getKillSwitch();
@@ -174,7 +183,10 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
       const manifest = await resolveExtensionManifest(entry);
       components = coreServices.extensionComponentSummary(manifest);
     } catch (err) {
-      request.log.warn({ err }, "failed to resolve extension manifest for detail");
+      request.log.warn(
+        { errorClass: safeErrorClass(err) },
+        "failed to resolve extension manifest for detail",
+      );
     }
 
     return {
@@ -188,7 +200,7 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
   });
 
   // GET /admin/extensions/installed
-  app.get("/admin/extensions/installed", async () => {
+  registerExtensionAdminRoute(app, "listAdminInstalledExtensions", async (request) => {
     const installed = await listInstalledExtensions();
     let registry: ReturnType<typeof getServiceRegistry> | null = null;
     try {
@@ -196,8 +208,18 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
     } catch {
       registry = null;
     }
-    const catalog = await getExtensionCatalog();
-    const catalogMap = new Map(catalog.map((e) => [e.id, e]));
+    // Catalog availability must not hide authoritative local inventory/removal.
+    // Keep DB reads and output validation outside this optional enrichment boundary.
+    let catalog: ExtensionCatalogEntry[] | undefined;
+    try {
+      catalog = await getExtensionCatalog();
+    } catch (error) {
+      request.log.warn(
+        { errorClass: safeErrorClass(error) },
+        "Installed extension update comparison unavailable",
+      );
+    }
+    const catalogMap = new Map(catalog?.map((e) => [e.id, e]));
 
     return {
       extensions: installed.map((ext) => {
@@ -224,7 +246,7 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
           installedAt: ext.installedAt.toISOString(),
           updatedAt: ext.updatedAt.toISOString(),
           components,
-          hasUpdate: !!entry && entry.version != null && entry.version !== ext.installedVersion,
+          hasUpdate: entry?.version != null ? entry.version !== ext.installedVersion : null,
           latestVersion: entry?.version ?? null,
         };
       }),
@@ -233,25 +255,25 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
 
   // POST /admin/extensions/install-preview — resolve and inspect the exact
   // community service snapshots without publishing or starting them.
-  app.post<{ Body: ExtensionInstallRequest }>(
-    "/admin/extensions/install-preview",
-    { preHandler: [storeInstallLimit.preHandler()] },
+  registerExtensionAdminRoute(
+    app,
+    "previewAdminExtensionInstall",
     async (request, reply) => {
       try {
         const resolved = await resolveInstallRequest(request.body ?? {});
         return await previewExtensionInstall(resolved);
       } catch (error) {
-        const statusCode =
-          error instanceof ExtensionInstallRequestError ? error.statusCode : (400 as const);
-        return reply.status(statusCode).send({ error: (error as Error).message });
+        const failure = installFailure(request, error, "Unable to preview extension installation");
+        return reply.status(failure.statusCode).send(failure.body);
       }
     },
+    { beforeValidation: extensionPreviewLimit.preHandler() },
   );
 
   // POST /admin/extensions/install — by catalog id or by direct manifest URL.
-  app.post<{ Body: ExtensionInstallRequest }>(
-    "/admin/extensions/install",
-    { preHandler: [storeInstallLimit.preHandler()] },
+  registerExtensionAdminRoute(
+    app,
+    "installAdminExtension",
     async (request, reply) => {
       const body = request.body ?? {};
       const adminSession = getAdminSession(request);
@@ -259,22 +281,21 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
       try {
         resolved = await resolveInstallRequest(body);
       } catch (error) {
-        const statusCode =
-          error instanceof ExtensionInstallRequestError ? error.statusCode : (400 as const);
-        return reply.status(statusCode).send({ error: (error as Error).message });
+        const failure = installFailure(request, error, "Unable to resolve extension installation");
+        return reply.status(failure.statusCode).send(failure.body);
       }
 
       const { manifest, sourceUrl, sourceTrust } = resolved;
 
       const jobId = await jobRunner.enqueue(
         "extension.install",
-        {
+        normalizeExtensionInstallPayload({
           manifest,
           sourceUrl,
           sourceTrust,
           actorId: adminSession.user.id,
           hostPortConfirmation: body.hostPortConfirmation,
-        },
+        }),
         adminSession.user.id,
       );
 
@@ -295,35 +316,43 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
       reply.status(202);
       return { jobId };
     },
+    { beforeValidation: storeInstallLimit.preHandler() },
   );
 
   // POST /admin/extensions/update/:id — re-pin to the catalog's current version.
-  app.post<{ Params: { id: string }; Body: { hostPortConfirmation?: string } }>(
-    "/admin/extensions/update/:id",
-    { preHandler: [storeInstallLimit.preHandler()] },
+  registerExtensionAdminRoute(
+    app,
+    "updateAdminExtension",
     async (request, reply) => {
       const { id } = request.params;
       const adminSession = getAdminSession(request);
-      const entry = await getExtensionCatalogEntry(id);
-      if (!entry) {
-        return reply.status(400).send({ error: "Extension is not in any catalog source" });
-      }
-      let manifest: coreServices.ExtensionManifest;
+      let resolved: Awaited<ReturnType<typeof resolveInstallRequest>>;
       try {
-        manifest = await resolveExtensionManifest(entry);
-      } catch (err) {
-        return reply.status(400).send({ error: (err as Error).message });
+        const entry = await getExtensionCatalogEntry(id);
+        if (!entry) {
+          return reply.status(400).send({ error: "Extension is not in any catalog source" });
+        }
+        assertAdmission(entry, await getKillSwitch());
+        resolved = {
+          manifest: await resolveExtensionManifest(entry),
+          sourceUrl: entry.manifest ? normalizeExtensionLocator(entry.manifest) : undefined,
+          sourceTrust: entry.trust === "verified" ? "verified" : "community",
+        };
+      } catch (error) {
+        const failure = installFailure(request, error, "Unable to resolve extension update");
+        return reply.status(failure.statusCode).send(failure.body);
       }
+      const { manifest, sourceUrl, sourceTrust } = resolved;
 
       const jobId = await jobRunner.enqueue(
         "extension.install",
-        {
+        normalizeExtensionInstallPayload({
           manifest,
-          sourceUrl: entry.manifest ?? undefined,
-          sourceTrust: entry.trust === "verified" ? "verified" : "community",
+          sourceUrl,
+          sourceTrust,
           actorId: adminSession.user.id,
           hostPortConfirmation: request.body?.hostPortConfirmation,
-        },
+        }),
         adminSession.user.id,
       );
 
@@ -339,10 +368,11 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
       reply.status(202);
       return { jobId };
     },
+    { beforeValidation: storeInstallLimit.preHandler() },
   );
 
   // DELETE /admin/extensions/:id
-  app.delete<{ Params: { id: string } }>("/admin/extensions/:id", async (request, reply) => {
+  registerExtensionAdminRoute(app, "removeAdminExtension", async (request, reply) => {
     const { id } = request.params;
     const adminSession = getAdminSession(request);
 
@@ -366,35 +396,33 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
   });
 
   // GET /admin/extensions/sources
-  app.get("/admin/extensions/sources", async () => {
+  registerExtensionAdminRoute(app, "listAdminExtensionSources", async () => {
     return { sources: await listExtensionSources() };
   });
 
   // POST /admin/extensions/sources
-  app.post<{ Body: { url: string; label: string } }>(
-    "/admin/extensions/sources",
-    async (request, reply) => {
-      const { url, label } = request.body ?? {};
-      if (!url) return reply.status(400).send({ error: "url is required" });
-      if (!label) return reply.status(400).send({ error: "label is required" });
-      const adminSession = getAdminSession(request);
-      try {
-        await addExtensionSource(url, label);
-      } catch (err) {
-        return reply.status(400).send({ error: (err as Error).message });
-      }
-      await writeAuditLog({
-        actorId: adminSession.user.id,
-        action: "extension.add_source",
-        details: { sourceUrl: summarizeExternalUrl(url), label },
-        request,
-      });
-      return { ok: true };
-    },
-  );
+  registerExtensionAdminRoute(app, "addAdminExtensionSource", async (request, reply) => {
+    const { url, label } = request.body ?? {};
+    if (!url) return reply.status(400).send({ error: "url is required" });
+    if (!label) return reply.status(400).send({ error: "label is required" });
+    const adminSession = getAdminSession(request);
+    try {
+      await addExtensionSource(url, label);
+    } catch (err) {
+      const failure = installFailure(request, err, "Unable to add extension source");
+      return reply.status(failure.statusCode).send(failure.body);
+    }
+    await writeAuditLog({
+      actorId: adminSession.user.id,
+      action: "extension.add_source",
+      details: { sourceUrl: summarizeExternalUrl(url), label },
+      request,
+    });
+    return { ok: true };
+  });
 
   // DELETE /admin/extensions/sources
-  app.delete<{ Body: { url: string } }>("/admin/extensions/sources", async (request, reply) => {
+  registerExtensionAdminRoute(app, "removeAdminExtensionSource", async (request, reply) => {
     const { url } = request.body ?? {};
     if (!url) return reply.status(400).send({ error: "url is required" });
     const adminSession = getAdminSession(request);
@@ -409,7 +437,7 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
   });
 
   // POST /admin/extensions/refresh-catalog
-  app.post("/admin/extensions/refresh-catalog", async (request) => {
+  registerExtensionAdminRoute(app, "refreshAdminExtensionCatalog", async (request) => {
     const adminSession = getAdminSession(request);
     const catalog = await getExtensionCatalog(true);
     await writeAuditLog({

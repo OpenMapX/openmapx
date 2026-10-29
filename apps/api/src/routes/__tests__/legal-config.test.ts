@@ -1,35 +1,12 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { mockAdminSession } from "../../test/auth.js";
 
-// The public /legal-config route reuses resolveSettings() from admin-settings,
-// so importing it pulls in that module's import-time dependencies. Mock the
-// same surface the admin-settings test does so nothing reaches a real DB,
-// mailer, or auth backend at module load.
-const fakeSession = mockAdminSession();
-vi.mock("../../utils/require-admin.js", () => ({
-  requireAdmin: vi.fn().mockResolvedValue(fakeSession),
-  getAdminSession: vi.fn().mockReturnValue(fakeSession),
-  tryAdminSession: vi.fn().mockResolvedValue(fakeSession),
-}));
-vi.mock("../../utils/audit-log.js", () => ({
-  writeAuditLog: vi.fn().mockResolvedValue(undefined),
-}));
-vi.mock("../../services/data-use-policy.js", () => ({
-  invalidateDataUsePolicy: vi.fn(),
-  refreshDataUsePolicy: vi.fn().mockResolvedValue(undefined),
-}));
+// Public legal reads must work independently of administration route setup.
+vi.mock("../admin-settings.js", () => {
+  throw new Error("Public legal settings must not load the admin route");
+});
 vi.mock("../../services/app-logger.js", () => ({
-  appLogger: { add: vi.fn(), getEntries: vi.fn(), getSources: vi.fn() },
-}));
-vi.mock("../../utils/email.js", () => ({
-  loadEmailConfig: vi.fn(),
-  sendViaEmailLabs: vi.fn(),
-  sendViaLettermint: vi.fn(),
-  sendViaSmtp: vi.fn(),
-}));
-vi.mock("../../utils/rate-limit.js", () => ({
-  emailTestLimit: { preHandler: () => vi.fn() },
+  appLogger: { add: vi.fn() },
 }));
 
 let selectResolveWith: unknown[] = [];
@@ -58,7 +35,7 @@ beforeAll(async () => {
   await app.ready();
 });
 
-afterAll(() => app.close());
+afterAll(() => app?.close());
 
 beforeEach(() => {
   selectResolveWith = [];

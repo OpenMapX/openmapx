@@ -1,12 +1,15 @@
+import { parseContributors } from "@openmapx/mobility-core/contributors";
+import { parseLicensing } from "@openmapx/mobility-core/licensing";
 import type { BBox } from "../types/geometry";
-import type {
-  LocalizedText,
-  RoadConditionEvent,
-  RoadConditionRoadRef,
-  RoadConditionSeverityLabel,
-  RouteFlowInput,
-  RouteFlowResponse,
-  RouteFlowSpan,
+import {
+  type LocalizedText,
+  ROAD_CONDITION_SEVERITY_LABELS,
+  type RoadConditionEvent,
+  type RoadConditionRoadRef,
+  type RoadConditionSeverityLabel,
+  type RouteFlowInput,
+  type RouteFlowResponse,
+  type RouteFlowSpan,
 } from "../types/roadConditions";
 import {
   readRoadConditionEffects,
@@ -62,7 +65,6 @@ function isWellFormedFeatureCollection(v: unknown): v is RoadConditionFeatureCol
   return Array.isArray((v as { features: unknown }).features);
 }
 
-const SEVERITY_LABELS = ["minor", "moderate", "major", "critical", "unknown"] as const;
 const CERTAINTIES = ["observed", "likely", "possible", "unlikely", "unknown"] as const;
 const TEMPORALITIES = ["live", "scheduled", "forecast"] as const;
 const ORIGINS = ["feed", "crowd", "federation", "derived"] as const;
@@ -109,9 +111,14 @@ function direction(v: unknown): RoadConditionEvent["direction"] {
   const d = object(v);
   const value = str(d?.value);
   if (!d || !value) return undefined;
+  const bearing = d.bearingDeg;
   return {
     value,
+    ...(str(d.basis) ? { basis: str(d.basis) } : {}),
     ...(str(d.compass) ? { compass: str(d.compass) } : {}),
+    ...(typeof bearing === "number" && Number.isFinite(bearing) ? { bearingDeg: bearing } : {}),
+    ...(str(d.loop) ? { loop: str(d.loop) } : {}),
+    ...(str(d.toward) ? { toward: str(d.toward) } : {}),
     ...(str(d.text) ? { text: str(d.text) } : {}),
   };
 }
@@ -137,10 +144,12 @@ export function roadConditionFeatureToEvent(
   const evidence = object(p.evidence);
   const roadRefs = roads(p.roads);
   const affectedDirection = direction(p.direction);
+  const contributors = parseContributors(p.contributors);
   const headline = text(p.headline);
   const description = text(p.description);
   return {
     id,
+    ...(contributors === undefined ? {} : { contributors }),
     source: str(p.source) ?? "",
     provider: str(p.provider) ?? "",
     ...(str(p.groupId) ? { groupId: str(p.groupId) } : {}),
@@ -148,7 +157,7 @@ export function roadConditionFeatureToEvent(
     type,
     ...(str(p.subtype) ? { subtype: str(p.subtype) } : {}),
     severity: {
-      label: oneOf(SEVERITY_LABELS, severity?.label, "unknown"),
+      label: oneOf(ROAD_CONDITION_SEVERITY_LABELS, severity?.label, "unknown"),
       ...(typeof severity?.level === "number" ? { level: severity.level } : {}),
     },
     certainty: oneOf(CERTAINTIES, p.certainty, "unknown"),
@@ -166,9 +175,13 @@ export function roadConditionFeatureToEvent(
       ? { evidence: evidence as RoadConditionEvent["evidence"] }
       : {}),
     attribution: {
-      provider: str(attribution?.provider) ?? str(p.source) ?? "",
-      ...(str(attribution?.license) ? { license: str(attribution?.license) } : {}),
+      provider: str(attribution?.provider) ?? "",
+      ...(parseLicensing(attribution?.licensing)
+        ? { licensing: parseLicensing(attribution?.licensing) }
+        : {}),
       ...(str(attribution?.url) ? { url: str(attribution?.url) } : {}),
+      ...(str(attribution?.sourceId) ? { sourceId: str(attribution?.sourceId) } : {}),
+      ...(str(attribution?.notice) ? { notice: str(attribution?.notice) } : {}),
     },
     ...(str(p.updatedAt) ? { updatedAt: str(p.updatedAt) } : {}),
     fetchedAt: str(p.fetchedAt) ?? "",

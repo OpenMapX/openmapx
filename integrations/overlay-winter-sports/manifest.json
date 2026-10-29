@@ -54,8 +54,6 @@
       "sourceId": "opensnowmap",
       "name": "OpenSnowMap",
       "url": "https://www.opensnowmap.org/",
-      "license": "CC BY-SA (tiles); ODbL (OSM data)",
-      "licenseUrl": "https://www.opensnowmap.org/iframes/about.eng.html",
       "attribution": "<a href=\"https://www.opensnowmap.org/\">OpenSnowMap</a>, © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "commercialUse": "yes",
       "providerCountry": "FR",
@@ -63,7 +61,50 @@
       "endUserExposure": "proxied",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "imagery",
+            "subject": "OpenSnowMap rendered tiles",
+            "license": {
+              "kind": "unknown",
+              "raw": "CC BY-SA"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://www.opensnowmap.org/iframes/about.eng.html"],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "Underlying OSM database",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": ["https://www.opensnowmap.org/iframes/about.eng.html"],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CC BY-SA (tiles); ODbL-1.0 (OSM data)",
+            "url": "https://www.opensnowmap.org/iframes/about.eng.html"
+          }
+        ]
+      }
     }
   ]
 }

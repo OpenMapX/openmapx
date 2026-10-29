@@ -1,13 +1,13 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import { useColorScheme } from "@mui/material/styles";
 import type * as maplibregl from "maplibre-gl";
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { MapCredits } from "@/components/map/MapCredits";
+import { useStandaloneMap, useStandaloneMapVariant } from "@/components/map/useStandaloneMap";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import { baseMapCreditsHtml, loadOpenMapXStyle } from "@/lib/map";
-import { loadMapLibreRuntime } from "@/lib/maplibreRuntime";
+import { baseMapVectorCredits, loadOpenMapXStyle } from "@/lib/map";
 import {
   configureDefaultOfflinePackageResolver,
   getDefaultOfflinePackageResolver,
@@ -15,6 +15,7 @@ import {
   type OfflinePackageRecord,
   registerOfflinePmtilesProtocol,
 } from "@/lib/offlineAreas";
+import { fitPackageBbox } from "./fitPackageBbox";
 
 const RECT_SOURCE = "offline-packages-source";
 const RECT_FILL = "offline-packages-fill";
@@ -84,67 +85,42 @@ interface Props {
 export function OfflineMapView({ packages, fitTo, height = 360 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const env = useEnv();
-  const { mode, systemMode } = useColorScheme();
-  const variant = (mode === "system" ? systemMode : mode) === "dark" ? "dark" : "light";
+  const variant = useStandaloneMapVariant();
 
-  useEffect(() => {
-    if (!containerRef.current || packages.length === 0) return;
-    let destroyed = false;
-    let map: maplibregl.Map | undefined;
+  useStandaloneMap(containerRef, () => {
+    if (packages.length === 0) return null;
     const frame = fitTo ?? unionBbox(packages);
-
-    void (async () => {
-      const maplibregl = await loadMapLibreRuntime();
-      let resolver = getDefaultOfflinePackageResolver();
-      if (!resolver) {
-        resolver = configureDefaultOfflinePackageResolver({
-          tileSchema: "openmaptiles",
-        });
-      }
-      if (!resolver) throw new Error("offline package resolver is not initialized");
-      await resolver.refresh();
-      const style = await loadOpenMapXStyle(
-        env,
-        variant,
-        packages.map((record) => ({ packageId: record.id, manifest: record.manifest })),
-      );
-      if (destroyed || !containerRef.current) return;
-      registerOfflinePmtilesProtocol(maplibregl, resolver);
-      map = new maplibregl.Map({
-        container: containerRef.current,
-        style: style as maplibregl.StyleSpecification,
+    return {
+      loadStyle: async (runtime) => {
+        const resolver =
+          getDefaultOfflinePackageResolver() ??
+          configureDefaultOfflinePackageResolver({ tileSchema: "openmaptiles" });
+        if (!resolver) throw new Error("offline package resolver is not initialized");
+        await resolver.refresh();
+        const style = await loadOpenMapXStyle(
+          env,
+          variant,
+          packages.map((record) => ({ packageId: record.id, manifest: record.manifest })),
+        );
+        registerOfflinePmtilesProtocol(runtime, resolver);
+        return style as maplibregl.StyleSpecification;
+      },
+      options: {
         center: frame ? [(frame.west + frame.east) / 2, (frame.south + frame.north) / 2] : [0, 20],
         zoom: frame ? 6 : 1,
-        attributionControl: false,
-        canvasContextAttributes: { antialias: true },
         dragRotate: false,
         pitchWithRotate: false,
         rollEnabled: false,
         touchPitch: false,
-      });
-      map.touchZoomRotate.disableRotation();
-      map.keyboard.disableRotation();
-      map.on("load", () => {
-        if (!map) return;
-        addRectLayers(map, packages.map(packageToFeature));
-        if (frame) {
-          map.fitBounds(
-            [
-              [frame.west, frame.south],
-              [frame.east, frame.north],
-            ],
-            { padding: 32, duration: 0 },
-          );
-        }
-      });
-    })().catch(() => {
-      // The surrounding settings UI still exposes package metadata when a
-      // browser cannot render a local archive.
-    });
-
-    return () => {
-      destroyed = true;
-      map?.remove();
+      },
+      setup: (map) => {
+        map.touchZoomRotate.disableRotation();
+        map.keyboard.disableRotation();
+        const features = packages.map(packageToFeature);
+        const unsubscribeStyle = subscribeStyleLoaded(map, () => addRectLayers(map, features));
+        if (frame) fitPackageBbox(map, frame, { padding: 32, duration: 0 });
+        return unsubscribeStyle;
+      },
     };
   }, [env, fitTo, packages, variant]);
 
@@ -162,7 +138,7 @@ export function OfflineMapView({ packages, fitTo, height = 360 }: Props) {
     >
       <Box ref={containerRef} sx={{ position: "absolute", inset: 0 }} />
       {packages.length === 0 ? null : (
-        <MapCredits html={baseMapCreditsHtml({ ...env, tilesUrl: "offline-package" })} />
+        <MapCredits attributions={baseMapVectorCredits({ ...env, tilesUrl: "offline-package" })} />
       )}
     </Box>
   );

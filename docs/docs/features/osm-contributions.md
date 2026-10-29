@@ -6,19 +6,23 @@ sidebar_position: 8
 
 # OpenStreetMap contributions
 
-Most of what you see in a place panel comes from
-[OpenStreetMap](https://www.openstreetmap.org/). When something there is wrong —
-a renamed café, a stale phone number, hours that changed last spring — you can
-fix it from inside OpenMapX instead of switching to a separate editor.
+Use **Improve this place** in a place's Overview tab to correct supported facts
+on an existing OpenStreetMap object. The control appears only when the operator
+has enabled contributions and the place has a valid OSM reference.
 
-This is deliberately a small feature. OpenMapX is not a general-purpose map
-editor, and it does not try to be one. It transports _your_ correction to
-OpenStreetMap in a way that keeps the project's public, attributable, verifiable
-editing model intact.
+1. Sign in to OpenMapX, then link and authorize your OpenStreetMap account.
+2. Read the current OSM values and choose the correction.
+3. State a permitted source, write a changeset comment, and review the old and
+   new values.
+4. Choose **Publish to OpenStreetMap**. Use the success link to inspect the
+   published changeset.
+
+Your OSM username, changeset, source, comment, and edit history are public.
+Read the source and privacy warnings below before publishing.
 
 ## What you can change
 
-Version 1 edits an **existing** OpenStreetMap element and nothing else:
+The editor changes these supported fields on one existing OSM element:
 
 - the **name**
 - the **category**, when the current and target categories are both unambiguous
@@ -27,8 +31,7 @@ Version 1 edits an **existing** OpenStreetMap element and nothing else:
 - **phone**, **email** and **website**
 - **wheelchair access**
 
-You can also explicitly **remove** a value you know is wrong, rather than
-blanking a box and hoping something happens.
+Use the explicit remove action to delete a value you know is wrong.
 
 ## What it deliberately will not do
 
@@ -81,7 +84,7 @@ The review screen is mandatory. It shows:
 - each change as a plain **old value → new value** row,
 - the **exact tag changes** the server will send, expandable,
 - your choice of source,
-- a **changeset comment you write yourself** — OpenMapX never drafts or
+- a **changeset comment you write yourself**: OpenMapX never drafts or
   suggests one for you, because the comment is how other mappers understand
   your edit (see
   [good changeset comments](https://wiki.openstreetmap.org/wiki/Good_changeset_comments)),
@@ -90,12 +93,12 @@ The review screen is mandatory. It shows:
 
 Then you press **Publish to OpenStreetMap**.
 
-## It is public, and it is yours
+## Public contributions {/* #it-is-public-and-it-is-yours */}
 
 The edit is made with **your** linked OpenStreetMap account. Your username, the
 changeset, your comment, your stated source, the resulting tags and your edit
 history are all public, and are governed by OpenStreetMap and the OpenStreetMap
-Foundation — not by OpenMapX. Deleting your OpenMapX account does not remove
+Foundation. Deleting your OpenMapX account does not remove
 contributions you made to OpenStreetMap.
 
 Contributing requires accepting the
@@ -115,8 +118,7 @@ re-applies your edit on top of someone else's.
 
 ## Public notes
 
-For anything the editor cannot express — a closed shop, a place in the wrong
-spot, something missing — you can leave a public
+For a closed shop, a misplaced feature, or another unsupported correction, leave a public
 [note](https://wiki.openstreetmap.org/wiki/Notes) instead. Notes are read by
 other mappers, who then make the actual change.
 
@@ -127,9 +129,8 @@ support channel for OpenMapX itself.
 ## Why your change may not show up immediately
 
 OpenStreetMap accepts your edit right away, but OpenMapX and other services
-rebuild their own copies of the data on their own schedule. It is normal for a
-correction to be live in OpenStreetMap while the place panel still shows the old
-value for a while. The success screen links to your changeset so you can confirm
+rebuild their own copies of the data on their own schedule. A correction can be live in OpenStreetMap while the place panel still shows the
+old value. The success screen links to your changeset so you can confirm
 it landed.
 
 ## Turning it on

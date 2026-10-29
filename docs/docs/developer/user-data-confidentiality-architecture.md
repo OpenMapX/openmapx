@@ -6,19 +6,17 @@ sidebar_position: 4
 
 # User-data trust boundaries and E2EE architecture decision
 
-**Status:** Accepted design; security review required before implementation
-
-**Date:** 2026-09-04
-
-**Issue:** [#312](https://github.com/OpenMapX/openmapx/issues/312)
-
-**Owners:** OpenMapX maintainers and security reviewers
+Accepted on 2026-09-04 for [issue #312](https://github.com/OpenMapX/openmapx/issues/312).
+OpenMapX maintainers and security reviewers own the decision. Independent
+security review is required before implementing the future client-key protocol.
+Existing encrypted Mangrove signing-key modes remain a separate, narrower contract.
 
 ## Decision summary
 
-OpenMapX will use a **selective, staged confidentiality model**. We will not
-describe the platform as end-to-end encrypted, and we will not add a single
-"encrypt everything" layer.
+OpenMapX uses the protection classes below. Ordinary synchronized content
+remains server-readable. Future client encryption must name its exact fields,
+feature changes, and threat boundary; the platform must not be described as
+end-to-end encrypted.
 
 The server must continue to read data that it needs to authenticate users,
 contact integrations, calculate routes, search, synchronize devices, resolve
@@ -42,8 +40,9 @@ The target model has five protection classes:
    that a processor must see but that OpenMapX should minimize and avoid
    retaining.
 5. **Client-encrypted content:** opaque ciphertext whose content keys remain on
-   enrolled client devices. This class will be introduced only after the key,
-   recovery, sharing, and client-integrity gates in this decision are met.
+   enrolled client devices. Extending this class beyond existing encrypted
+   Mangrove keys requires the key, recovery, sharing, and client-integrity gates
+   in this decision.
 
 This decision does not introduce a cryptosystem. It defines the trust claims,
 target architecture, migration boundary, and review gates for later work.
@@ -81,8 +80,8 @@ Keep required server processing explicit, minimize transient processing, retain
 existing client encryption where it is already honest, and make future
 persistent private content eligible for a versioned client envelope.
 
-**Accepted:** it improves the architecture without weakening current features or
-making a misleading security promise.
+Accepted. Existing server-readable features keep their current semantics;
+each future encrypted field needs an explicit compatibility decision.
 
 ## Current data inventory
 
@@ -98,7 +97,7 @@ application-layer control.
 | Password                            | Better Auth `account.password`                                                                                                                                                                                                                                  | Included in database backups as a hash.                                                                                                                                                                                                                                      | Scrypt hash; the plaintext is not stored.                                                                                                                                                                                                                 | **2.** Hash, never client-encrypt.                                                                                                                                                |
 | Sessions                            | PostgreSQL `session`: token, IP address, user agent, expiry                                                                                                                                                                                                     | Database backups contain active or expired rows present at snapshot time.                                                                                                                                                                                                    | Session token and expiry are server-managed; account deletion cascades. Admins can revoke sessions.                                                                                                                                                       | **2.** Server authentication state.                                                                                                                                               |
 | Passkeys                            | PostgreSQL `passkey`: credential public key, identifier, transports, counter, device metadata                                                                                                                                                                   | Database backups contain public credential material and metadata.                                                                                                                                                                                                            | The authenticator's private key remains on the authenticator. A passkey authenticates; it does not encrypt ordinary OpenMapX data.                                                                                                                        | **2.** Authentication, with optional future PRF use only as one key-unlock mechanism.                                                                                             |
-| Two-factor data                     | PostgreSQL `two_factor` through Better Auth                                                                                                                                                                                                                     | Database backups contain library-managed ciphertext.                                                                                                                                                                                                                         | TOTP secrets and backup codes are encrypted by Better Auth 1.7.1 with the authentication secret.                                                                                                                                                          | **2.** Retain server encryption; add explicit regression coverage if this configuration is customized.                                                                            |
+| Two-factor data                     | PostgreSQL `two_factor` through Better Auth                                                                                                                                                                                                                     | Database backups contain library-managed ciphertext.                                                                                                                                                                                                                         | TOTP secrets and backup codes are encrypted by the configured Better Auth with the authentication secret.                                                                                                                                                 | **2.** Retain server encryption; add explicit regression coverage if this configuration is customized.                                                                            |
 | Linked OAuth accounts               | PostgreSQL `account`: provider identifiers and access/refresh/ID tokens                                                                                                                                                                                         | Database backups contain identifiers and encrypted token values. Tokens are not returned to the browser.                                                                                                                                                                     | `account.encryptOAuthTokens` is enabled; Better Auth encrypts tokens with the authentication secret. Unlinking or account deletion removes the live rows.                                                                                                 | **2.** The server must decrypt provider tokens to call providers. Not E2EE.                                                                                                       |
 | OpenMapX OAuth-server state         | PostgreSQL OAuth client, consent, access-token, refresh-token, assertion, and resource tables                                                                                                                                                                   | Database backups contain rows present at snapshot time.                                                                                                                                                                                                                      | Issued secrets/tokens use Better Auth's hash/encryption behavior; user-owned state cascades on deletion where the schema has a user relation.                                                                                                             | **2.** Server authorization state.                                                                                                                                                |
 | Integration and service credentials | PostgreSQL `integration_secret` and `service_secret`; decrypted by the API only when invoking a service                                                                                                                                                         | Database backups contain ciphertext. Redaction removes secret-shaped fields and credentials from application logs.                                                                                                                                                           | AES-256-GCM under deployment-wide `OPENMAPX_SECRETS_KEY`. Current rows do not carry an envelope version or key identifier and are not bound to row context with AAD.                                                                                      | **2.** Keep server-readable; design a versioned, rotatable server envelope before changing fields.                                                                                |
@@ -106,7 +105,7 @@ application-layer control.
 | Routes                              | Active waypoints and calculated routes are primarily browser memory. An opted-in browser cache, browser navigation-session storage, mobile navigation database, or route share snapshot may retain them. Routing engines and API providers process coordinates. | Public routing/search responses can be cached only under the explicit recent-map-data setting. Browser navigation recovery and the mobile SQLite store retain an active session for bounded recovery. Route snapshot shares and database backups persist the shared payload. | There is no general saved-route table. Mobile termination removes location-bearing session rows; navigation sessions have bounded expiry.                                                                                                                 | **4** for calculation/navigation; **3** for snapshot shares. Future saved routes may use class 5, but server routing still sees submitted endpoints unless routing becomes local. |
 | Vehicles and parking                | PostgreSQL `personal_vehicle` and `parked_location`; vehicle and parking APIs                                                                                                                                                                                   | Browser state and database backups contain returned/current values.                                                                                                                                                                                                          | Vehicle profile, EV details, coordinates, address, note, and expiry are server-readable. Only the current parking location is stored; account deletion cascades.                                                                                          | **3, future 5 candidate.** Encrypt only after cross-device, expiry, and sharing/query requirements are designed.                                                                  |
 | Personal Timeline connection        | PostgreSQL `personal_timeline_connection`; OpenMapX API and selected Dawarich instance                                                                                                                                                                          | Timeline response bodies are excluded from Redis, service-worker, persisted-query, and browser-storage caches. Database backups contain connection metadata and encrypted credential.                                                                                        | Public origin, display name, upstream user/email, and timezone are server-readable. API key uses the deployment AES-GCM envelope. Account deletion removes the OpenMapX connection; the Dawarich instance remains a separate deletion/retention boundary. | Metadata **3**, credential **2**, requested history **4**. Do not persist Dawarich history in OpenMapX.                                                                           |
-| Review signing key                  | PostgreSQL `mangrove_keypair` and wrap rows; browser Mangrove client                                                                                                                                                                                            | Database backups contain a public JWK plus either ciphertext or, after explicit opt-in, a plaintext private JWK. The decrypted key is held in browser memory until locked.                                                                                                   | Recommended modes use age scrypt and/or WebAuthn PRF recipients. The explicit unencrypted mode places the operator inside the signing-key trust boundary.                                                                                                 | **5** in encrypted modes; **3** in unencrypted mode. Preserve the precise claim and consider deprecating the unencrypted mode separately.                                         |
+| Review signing key                  | PostgreSQL `mangrove_keypair` and wrap rows; browser Mangrove client                                                                                                                                                                                            | Database backups contain a public JWK, revision and ciphertext. The decrypted key is held in browser memory until locked.                                                                                                                                                    | Local keys use age scrypt and/or WebAuthn PRF recipients. Shared signing delegates key custody to Mangrove; its bearer session is kept in per-tab session storage.                                                                                        | **5** for local encrypted keys. Shared signing is delegated custody; no plaintext local private-key mode.                                                                         |
 | Reviews and images                  | Signed in the browser, relayed by OpenMapX, then published to Mangrove and its mirrors                                                                                                                                                                          | Public external systems and mirrors may retain the content.                                                                                                                                                                                                                  | Public, pseudonymous content cannot be recalled reliably by deleting the OpenMapX account or local signing key.                                                                                                                                           | **1.** Signing gives authenticity, not confidentiality.                                                                                                                           |
 | OSM contributions                   | Draft in the client; submitted by the API using the linked OSM token; published to OpenStreetMap                                                                                                                                                                | A short-lived content-free deduplication record is stored in Redis or memory. OSM retains the public edit under its policies.                                                                                                                                                | Provider token is server-encrypted. Permissions are rechecked with OSM before writes.                                                                                                                                                                     | Contribution **1**, credential **2**, draft **4**.                                                                                                                                |
 | Share links                         | PostgreSQL `share_link`; public bearer-link resolver                                                                                                                                                                                                            | Route/list snapshots are stored in JSON and included in database backups. Live list shares read current saved-place rows. Public responses use `no-store`.                                                                                                                   | Raw random token is not stored; its SHA-256 digest is stored. Anyone with the URL is an intended reader until expiry or revocation. Account deletion cascades.                                                                                            | **3 with deliberate bearer disclosure.** A fragment-key encrypted share would be a different product design.                                                                      |
@@ -148,8 +147,11 @@ Dawarich instances, and other processors have independent retention rules.
 
 ### Caches and local storage
 
-Redis holds public/operational caches, not account records or Timeline response
-bodies. When a user explicitly enables recent map-data retention, browser cache
+Redis holds public caches and operational controls, including subject-derived
+rate-limit/idempotency state. These controls have their own processing-registry
+entry; they must not be treated as anonymous merely because they use keyed
+identifiers. Redis does not hold synchronized saved-content records or Timeline
+response bodies. When a user explicitly enables recent map-data retention, browser cache
 storage may contain typed searches, geocoding results, route results, places,
 and tiles. A resumable navigation session can include route geometry and
 maneuvers. The mobile client stores an active navigation session and location
@@ -166,8 +168,8 @@ whether a response is publicly obtainable.
 | Passive Internet observer                                 | TLS at the deployment edge and HTTPS upstream connections protect content in transit when correctly configured.                                                                                    | TLS terminates at Traefik. Internal container traffic may use HTTP on the private Docker network, and metadata such as endpoints, timing, and sizes remains observable.                                                              |
 | Stolen database dump or backup without deployment secrets | Passwords and token digests remain one-way; application-encrypted credentials and encrypted Mangrove keys remain ciphertext. Ordinary synchronized content is exposed.                             | Server-envelope v2 can strengthen context binding and rotation. Client-encrypted content would remain opaque.                                                                                                                        |
 | Database administrator                                    | Can read ordinary private content and metadata; cannot necessarily use separately encrypted credentials without deployment keys.                                                                   | Future class-5 content is opaque, subject to metadata leakage.                                                                                                                                                                       |
-| Infrastructure or backup operator                         | Can access container traffic, volumes, database snapshots, deployment secrets, and running processes according to host privileges.                                                                 | This role is inside the trust boundary for classes 2–4. Class-5 content can remain opaque, but access patterns and other metadata remain visible.                                                                                    |
-| Hosted OpenMapX operator                                  | Can operate the API, access its plaintext processing, impersonate users through the admin feature, and deploy code.                                                                                | Operator is trusted for classes 2–4. Client encryption can narrow database/operator access, but a web operator that can deploy JavaScript remains capable of targeting decrypted data.                                               |
+| Infrastructure or backup operator                         | Can access container traffic, volumes, database snapshots, deployment secrets, and running processes according to host privileges.                                                                 | This role is inside the trust boundary for classes 2 to 4. Class-5 content can remain opaque, but access patterns and other metadata remain visible.                                                                                 |
+| Hosted OpenMapX operator                                  | Can operate the API, access its plaintext processing, impersonate users through the admin feature, and deploy code.                                                                                | Operator is trusted for classes 2 to 4. Client encryption can narrow database/operator access, but a web operator that can deploy JavaScript remains capable of targeting decrypted data.                                            |
 | Self-hosted operator                                      | Same technical capabilities as a hosted operator; often the user or organization is deliberately its own trust root.                                                                               | Documentation must not assume that self-hosting creates E2EE. It changes who the operator is.                                                                                                                                        |
 | Compromised application/API server                        | Can read all server-required and transient inputs, use loaded server keys, and alter responses. A compromised web origin can serve a client that steals decrypted data or substitutes public keys. | A strong active-server claim requires independently verifiable client code, authenticated key directories, and downgrade/rollback defenses. Signed native clients can provide a stronger delivery boundary than the current web app. |
 | Compromised integration/routing provider                  | Sees the fields sent to that provider, such as query or route coordinates.                                                                                                                         | Minimize fields, use local providers where available, document processors, and avoid retaining request content. E2EE cannot preserve arbitrary server-side processing.                                                               |
@@ -394,35 +396,32 @@ remaining metadata.
 
 ## Standards and primary references
 
-- [W3C Web Authentication Level 3](https://www.w3.org/TR/webauthn-3/) — PRF
+- [W3C Web Authentication Level 3](https://www.w3.org/TR/webauthn-3/): PRF
   capability and authenticator behavior.
-- [W3C Web Cryptography API](https://www.w3.org/TR/WebCryptoAPI/) — same-origin
+- [W3C Web Cryptography API](https://www.w3.org/TR/WebCryptoAPI/): same-origin
   script and key-storage security limitations.
-- [NIST Key Management Guidelines](https://csrc.nist.gov/projects/key-management/key-management-guidelines)
-  — lifecycle, rotation, protection, and recovery.
-- [NIST SP 800-38D](https://csrc.nist.gov/pubs/sp/800/38/d/final) — authenticated
+- [NIST Key Management Guidelines](https://csrc.nist.gov/projects/key-management/key-management-guidelines): lifecycle, rotation, protection, and recovery.
+- [NIST SP 800-38D](https://csrc.nist.gov/pubs/sp/800/38/d/final): authenticated
   encryption with GCM, IV requirements, and additional authenticated data.
-- [RFC 9180: HPKE](https://www.rfc-editor.org/rfc/rfc9180.html) — standardized
+- [RFC 9180: HPKE](https://www.rfc-editor.org/rfc/rfc9180.html): standardized
   recipient encryption/key wrapping.
-- [RFC 9420: MLS](https://www.rfc-editor.org/rfc/rfc9420.html) — group membership
+- [RFC 9420: MLS](https://www.rfc-editor.org/rfc/rfc9420.html): group membership
   epochs and message protection.
-- [RFC 9106: Argon2](https://www.rfc-editor.org/rfc/rfc9106.html) — password-based
+- [RFC 9106: Argon2](https://www.rfc-editor.org/rfc/rfc9106.html): password-based
   key derivation guidance.
-- [RFC 9958: Crypto Agility](https://www.rfc-editor.org/rfc/rfc9958.html) —
+- [RFC 9958: Crypto Agility](https://www.rfc-editor.org/rfc/rfc9958.html):
   versioning and algorithm replacement.
-- [RFC 8446: TLS 1.3](https://www.rfc-editor.org/rfc/rfc8446.html) — transport
+- [RFC 8446: TLS 1.3](https://www.rfc-editor.org/rfc/rfc8446.html): transport
   protection and traffic-analysis considerations.
 
 ## Consequences and follow-up work
 
-This decision immediately makes the trust model reviewable and prevents broad
-security claims. It does not hide existing server-readable content.
-
-Follow-up issues should be small and independently reviewable:
+The following work remains separate from this accepted decision. Verify its
+status against current source before opening an implementation issue:
 
 1. Specify and migrate a versioned server-secret envelope with key identifiers,
    AAD context binding, and rotation for `OPENMAPX_SECRETS_KEY` users.
-2. Decide whether to remove the explicit unencrypted Mangrove private-key mode.
+2. The Mangrove signer change removes plaintext private-key storage; preserve the distinction between encrypted local keys and delegated signing custody.
 3. Add automated assertions around cache classification and Better Auth's
    expected credential-at-rest behavior so dependency upgrades cannot silently
    weaken it.

@@ -1,6 +1,9 @@
 # Traefik Static Configuration
 # Reverse proxy for OpenMapX services.
-# Routing is generated into the file provider's `dynamic/` directory.
+# Render copies this file into each configuration generation, which Traefik
+# reads when it starts: edit it here, render, then recreate Traefik.
+# Routing is generated into the file provider's directory,
+# infra/docker/state/ops-agent/traefik/dynamic.
 
 api:
   dashboard: true
@@ -28,6 +31,18 @@ entryPoints:
         - hsts@file
       tls:
         certResolver: letsencrypt
+      # Place, transit and OpenConditions ids are opaque and travel encoded in
+      # path segments (`/api/places/osm%3Anode%2F1`). Traefik 3.6.4–3.6.6
+      # rejected these by default, so state what the app needs instead of
+      # following a default that has changed before.
+      encodedCharacters:
+        allowEncodedSlash: true
+        allowEncodedPercent: true
+        allowEncodedHash: true
+        allowEncodedQuestionMark: true
+        allowEncodedSemicolon: true
+        allowEncodedBackSlash: false
+        allowEncodedNullCharacter: false
       # To gate the deployment behind basic auth, copy
       # `dynamic/auth.yml.example` to `dynamic/auth.yml` (set credentials
       # there) and append `basic-auth@file` to the existing middleware list.
@@ -44,7 +59,8 @@ certificatesResolvers:
         entryPoint: web
 
 # Routing is generated from validated first-party service manifests into
-# `dynamic/`. Traefik holds no Docker socket: an internet-facing reverse proxy
+# infra/docker/state/ops-agent/traefik/dynamic, beside copies of the files in
+# this directory's `dynamic/`. Traefik holds no Docker socket: an internet-facing reverse proxy
 # with host authority is the exact escape this removes. Community services never
 # receive a platform route.
 providers:

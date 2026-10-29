@@ -47,17 +47,29 @@ overrides:
   # Docusaurus/AJV dependency tree.
   "fast-uri": "^3.1.6"
   # Security-patched transitive dependencies in the Docusaurus toolchain.
-  "dompurify": "^3.4.13"
+  "dompurify": "^3.4.17"
   "mermaid": "^11.16.1"
   "nanoid@3": "^3.3.18"
   "colord": "^2.9.4"
   "js-yaml@4": "^4.3.2"
+  # Docusaurus and Mermaid have not yet widened these transitive ranges to the
+  # current security-fixed releases. Keep the docs graph on the latest stable
+  # versions and verify its complete production build after every lock refresh.
+  "http-cache-semantics": "^4.3.0"
+  "katex": "^0.19.0"
+  "postcss-selector-parser": "^7.1.6"
+  "source-map-js": "^1.2.2"
+  "tinypool": "^2.2.0"
   # Docusaurus 3.10.2 still depends on webpack-dev-server 5, whose compatible
   # middleware range stops at 7.x. webpack-dev-middleware 7.4.6 dropped the
   # trusted-publisher evidence present on 7.4.5, while the attested 8.x line
   # requires webpack-dev-server 6. Keep the newest trusted compatible 7.x
   # release until Docusaurus adopts webpack-dev-server 6.
   "webpack-dev-middleware@7": "7.4.5"
+  # Docusaurus' dev server (express 4) and its fetch stack still resolve the
+  # releases before these denial-of-service fixes.
+  "body-parser@1": "^1.20.9" # GHSA-27r3-jxmh-p828
+  "undici@7": "^7.30.1" # GHSA-xjj6-f33q-929c
 
 patchedDependencies:
   image-size@2.0.4: patches/image-size@2.0.4.patch

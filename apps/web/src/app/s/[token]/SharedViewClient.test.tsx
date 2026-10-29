@@ -84,3 +84,53 @@ describe("SharedViewClient", () => {
     ).toBeInTheDocument();
   });
 });
+
+it("credits only the frozen shared row fields without a current registry fallback", () => {
+  const name = {
+    sourceId: "same",
+    name: "Original name publisher",
+    attributionText: "Original required wording",
+  };
+  const address = {
+    sourceId: "same",
+    name: "Original address publisher",
+    attributionText: "Different required wording",
+  };
+  const geometry = { sourceId: "geometry", name: "Map coordinate publisher" };
+  renderShare({
+    type: "list",
+    mode: "snapshot",
+    name: "Trip",
+    icon: null,
+    places: [
+      {
+        name: "Cafe",
+        address: "Street",
+        lat: 50,
+        lng: 8,
+        fieldContributors: { name: [name], address: [address], lat: [geometry], lng: [] },
+      },
+    ],
+  });
+  expect(screen.getByText("Original required wording")).toBeInTheDocument();
+  expect(screen.getByText("Different required wording")).toBeInTheDocument();
+  expect(screen.queryByText("Map coordinate publisher")).not.toBeInTheDocument();
+});
+
+it("collects repeated frozen shared row suppliers into one data credit action", () => {
+  const receipt = { sourceId: "shared", name: "Shared row supplier" };
+  renderShare({
+    type: "list",
+    mode: "snapshot",
+    name: "Trip",
+    icon: null,
+    places: ["One", "Two"].map((name, index) => ({
+      name,
+      lat: 50 + index,
+      lng: 8,
+      fieldContributors: { name: [receipt] },
+    })),
+  });
+  expect(screen.getAllByText("Shared row supplier")).toHaveLength(1);
+  expect(screen.getAllByRole("button", { name: "Credits" })).toHaveLength(1);
+});

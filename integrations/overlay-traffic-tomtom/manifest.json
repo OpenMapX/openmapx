@@ -69,8 +69,6 @@
       "sourceId": "tomtom",
       "name": "TomTom",
       "url": "https://developer.tomtom.com/",
-      "license": "Proprietary",
-      "licenseUrl": "https://developer.tomtom.com/terms-and-conditions",
       "attribution": "© <a href=\"https://www.tomtom.com/\">TomTom</a>",
       "commercialUse": "yes",
       "providerCountry": "NL",
@@ -79,7 +77,57 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": true,
-      "dpaUrl": "https://www.tomtom.com/legal/en_gb/third-party-product-terms/data-processing-schedule/"
+      "dpaUrl": "https://www.tomtom.com/legal/en_gb/third-party-product-terms/data-processing-schedule/",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "TomTom material",
+            "license": {
+              "kind": "unknown"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://docs.tomtom.com/legal/terms-and-conditions",
+                "https://docs.tomtom.com/_astro/LegalTabs.CZQaVJ02.js",
+                "https://docs.tomtom.com/map-display-api/documentation/tomtom-maps/v2/copyrights/copyrights"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "TomTom access/account contract",
+            "license": {
+              "kind": "unknown",
+              "url": "https://developer.tomtom.com/terms-and-conditions"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://docs.tomtom.com/legal/terms-and-conditions",
+                "https://docs.tomtom.com/_astro/LegalTabs.CZQaVJ02.js",
+                "https://docs.tomtom.com/map-display-api/documentation/tomtom-maps/v2/copyrights/copyrights"
+              ],
+              "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary",
+            "url": "https://developer.tomtom.com/terms-and-conditions"
+          }
+        ]
+      }
     }
   ]
 }

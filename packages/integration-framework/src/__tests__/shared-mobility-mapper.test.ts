@@ -859,3 +859,15 @@ describe("mapVehicleToDetail", () => {
     expect(findRow(section, "shared.row.status")?.[1]).toEqual({ $t: "value.available" });
   });
 });
+
+it("retains every source and captured contributor through shared station and vehicle mapping", () => {
+  const receipt = { sourceId: "gbfs", name: "GBFS", attributionText: "Required notice" };
+  const station = makeStation({ sources: ["transitous", "gbfs"], contributors: [receipt] });
+  const vehicle = makeVehicle({ sources: ["transitous", "gbfs"], contributors: [receipt] });
+  for (const result of [mapStationToResult(station), mapVehicleToResult(vehicle)]) {
+    expect(result.sources).toEqual(["transitous", "gbfs"]);
+    expect(result.contributors).toEqual([receipt]);
+  }
+  expect(mapStationToDetail(station).contributors).toEqual([receipt]);
+  expect(mapVehicleToDetail(vehicle).contributors).toEqual([receipt]);
+});

@@ -82,3 +82,85 @@ describe("useElevation", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 });
+
+it("keeps geometry and inline height snapshots on a non-driving computed profile", () => {
+  const geometry = { sourceId: "geometry", name: "Geometry", attributionText: "Geometry notice" };
+  const height = { sourceId: "height", name: "Height", attributionText: "Height notice" };
+  const unused = { sourceId: "unused", name: "Unused route metric" };
+  const route = makeRoute({
+    mode: "walking",
+    elevation: [10, 20, 30],
+    fieldContributors: { geometry: [geometry], elevation: [height], distance: [unused] },
+  });
+  const { result } = renderHook(() => useElevation({ route }), { wrapper: createQueryWrapper() });
+  expect(result.current.data?.contributors).toEqual([geometry, height]);
+  height.attributionText = "Changed";
+  expect(result.current.data?.contributors?.[1].attributionText).toBe("Height notice");
+});
+
+it("fetches driving height receipts and preserves the exact requested geometry before await", async () => {
+  const geometry = { sourceId: "geometry", name: "Geometry", attributionText: "Before request" };
+  const height = { sourceId: "height", name: "Height" };
+  const ignored = { sourceId: "ignored", name: "Ignored inline height" };
+  let resolve!: (value: unknown) => void;
+  vi.spyOn(apiClient, "post").mockImplementation(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }) as never,
+  );
+  const route = makeRoute({
+    elevation: [100, 200],
+    fieldContributors: { geometry: [geometry], elevation: [ignored] },
+  });
+  const { result } = renderHook(() => useElevation({ route }), { wrapper: createQueryWrapper() });
+  geometry.attributionText = "After request";
+  resolve({
+    points: [
+      { distance: 0, elevation: 1 },
+      { distance: 50, elevation: 2 },
+    ],
+    interval: 50,
+    contributors: [height],
+    contributorCoverage: "partial",
+  });
+  await waitFor(() => expect(result.current.data).not.toBeNull());
+  expect(result.current.data?.contributors).toEqual([
+    { ...geometry, attributionText: "Before request" },
+    height,
+  ]);
+  expect(result.current.data?.contributorCoverage).toBe("partial");
+});
+
+it("does not reuse a cached computed profile for a different interior shape or historical receipt", async () => {
+  const request = vi.spyOn(apiClient, "post").mockResolvedValue({
+    points: [
+      { distance: 0, elevation: 1 },
+      { distance: 50, elevation: 2 },
+    ],
+    interval: 50,
+    contributors: [],
+  } as never);
+  const a = { sourceId: "same", name: "Route", attributionText: "A" };
+  const b = { sourceId: "same", name: "Route", attributionText: "B" };
+  const geometry: [number, number][] = [
+    [0, 0],
+    [0.1, 0.1],
+    [0.2, 0.2],
+    [0.3, 0.3],
+    [0.4, 0.4],
+  ];
+  const { result, rerender } = renderHook(({ route }) => useElevation({ route }), {
+    initialProps: { route: makeRoute({ geometry, contributors: [a] }) },
+    wrapper: createQueryWrapper(),
+  });
+  await waitFor(() => expect(result.current.data).not.toBeNull());
+  rerender({
+    route: makeRoute({
+      geometry: geometry.map((p, i) => (i === 1 ? [0.15, 0.15] : p)),
+      contributors: [b],
+    }),
+  });
+  await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(result.current.data?.contributors).toEqual([b]));
+});

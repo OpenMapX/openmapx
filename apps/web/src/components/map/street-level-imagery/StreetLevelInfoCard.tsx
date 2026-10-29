@@ -6,15 +6,14 @@ import PlaceIcon from "@mui/icons-material/Place";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
-import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import {
+  buildLicensingHtml,
   createPlace,
   type LngLat,
   PANEL,
   type StreetLevelCapabilities,
   type StreetLevelImage,
-  safeHref,
   usePlaceStore,
   useReverseGeocoding,
   useSearchStore,
@@ -22,6 +21,8 @@ import {
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { AttributionText } from "@/components/ui/AttributionText";
 import { useMap } from "@/integration-api/map/MapContext";
 
 /** Capture month and year in the active locale, or null when unknown. */
@@ -70,8 +71,6 @@ export function StreetLevelInfoCard({
 
   const { data: reverseGeo } = useReverseGeocoding(debouncedLngLat);
   const captureDate = formatCaptureDate(image.capturedAt, locale);
-
-  if (!reverseGeo && !captureDate) return null;
 
   const showOnMap = () => {
     if (debouncedLngLat && reverseGeo) {
@@ -174,6 +173,13 @@ export function StreetLevelInfoCard({
         <Typography sx={{ fontSize: 13 }}>{provider.name}</Typography>
       </Box>
 
+      <AttributionStrip
+        attributions={[...(image.contributors ?? [])]}
+        surface="image"
+        variant="plain"
+        provenanceDisplay="details"
+        color="#fff"
+      />
       {image.author && (
         <Typography sx={{ fontSize: 12, color: "rgba(255,255,255,0.65)", mt: 0.5 }}>
           {image.author}
@@ -186,15 +192,13 @@ export function StreetLevelInfoCard({
         <Typography sx={{ fontSize: 12, color: "rgba(255,255,255,0.65)" }}>
           {captureDate ?? ""}
         </Typography>
-        {image.license && (
-          <Link
-            href={safeHref(image.licenseUrl ?? provider.licenseUrl)}
-            target="_blank"
-            rel="noopener noreferrer"
-            sx={{ fontSize: 12, color: "rgba(255,255,255,0.65)" }}
-          >
-            {image.license}
-          </Link>
+        {image.licensing && (
+          <AttributionText
+            html={buildLicensingHtml({
+              ...image.licensing,
+              bindings: image.licensing.bindings.filter((binding) => binding.scope !== "service"),
+            })}
+          />
         )}
       </Box>
     </Box>

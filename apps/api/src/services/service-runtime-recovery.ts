@@ -1,9 +1,9 @@
+import type { ServiceRuntimeRecovery } from "./community-repositories";
 import {
   mergeRuntimeRecovery,
   type RuntimeRecoveryJournal,
   type RuntimeRecoveryRecord,
 } from "./runtime-recovery-journal";
-import type { ServiceRuntimeRecovery } from "./service-repositories";
 
 interface ComposeResult {
   exitCode: number;

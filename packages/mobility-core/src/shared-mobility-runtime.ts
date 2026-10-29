@@ -16,6 +16,7 @@ import {
   type SharedMobilityOrchestratorResult,
   type SharedMobilitySourceDecision,
 } from "./shared-mobility-orchestrator.js";
+import type { Attribution } from "./types/attribution.js";
 import type { BoundingBox } from "./types/geometry.js";
 import type {
   GbfsCatalogEntry,
@@ -32,6 +33,7 @@ export interface SharedMobilityRuntimeOptions {
   transitousUrl?: string;
   nominatimUrl?: string;
   rentalSourceIndex?: readonly MotisRentalSourceIndexEntry[];
+  resolveContributors?: (sourceIds: readonly string[]) => Attribution[];
   onDecision?: (category: SharedMobilityCategory, decision: SharedMobilitySourceDecision) => void;
 }
 
@@ -41,6 +43,7 @@ export type RuntimeSharedMobilityOrchestratorConfig = Omit<
 >;
 
 export interface SharedMobilityRuntime {
+  dispose(): void;
   readonly cache: CacheClient;
   readonly transport: MobilityHttpTransport;
   loadCatalog(): Promise<GbfsCatalogEntry[]>;
@@ -59,15 +62,21 @@ export interface SharedMobilityRuntime {
   fetchMotisRentals(
     bbox: [number, number, number, number],
     formFactors?: VehicleFormFactor[],
+    resolveContributors?: (sourceIds: readonly string[]) => Attribution[],
   ): Promise<MotisRentalSnapshot>;
   enrichEnturMobilityItems(
     stations: SharedMobilityStation[],
     vehicles: SharedMobilityVehicle[],
     scope?: "map" | "detail",
+    resolveContributors?: (sourceIds: readonly string[]) => Attribution[],
   ): Promise<void>;
   buildEnturGeofencingMapContext(
     bbox: BoundingBox,
-    options?: { systemIds?: string[]; vehicleTypeIds?: string[] },
+    options?: {
+      systemIds?: string[];
+      vehicleTypeIds?: string[];
+      resolveContributors?: (sourceIds: readonly string[]) => Attribution[];
+    },
   ): Promise<SharedMobilityMapContext | null>;
   orchestrate(
     bbox: BoundingBox,
@@ -78,29 +87,50 @@ export interface SharedMobilityRuntime {
 export function createSharedMobilityRuntime(
   options: SharedMobilityRuntimeOptions,
 ): SharedMobilityRuntime {
-  const catalog = createGbfsCatalogClient({ cache: options.cache, transport: options.transport });
+  let cacheAvailable = !options.cache.onInvalidate;
+  const isCacheAvailable = () => cacheAvailable;
+  const catalog = createGbfsCatalogClient({
+    cache: options.cache,
+    transport: options.transport,
+    isCacheAvailable,
+  });
   const nominatim = createNominatimClient({
     transport: options.transport,
     url: options.nominatimUrl,
+    isCacheAvailable,
+  });
+  const unsubscribe = options.cache.onInvalidate?.(({ available }) => {
+    cacheAvailable = available;
+    catalog.clearCache();
+    nominatim.clearCache();
   });
   const motis = createMotisRentalsClient({
     motisUrl: options.motisUrl,
     transitousUrl: options.transitousUrl,
     rentalSourceIndex: options.rentalSourceIndex,
+    resolveContributors: options.resolveContributors,
   });
   const gbfsDependencies = {
     cache: options.cache,
     catalog,
     nominatim,
     transport: options.transport,
+    resolveContributors: options.resolveContributors,
   };
   const enturDependencies = {
     cache: options.cache,
     catalog,
     transport: options.transport,
+    resolveContributors: options.resolveContributors,
   };
 
   return {
+    dispose() {
+      unsubscribe?.();
+      cacheAvailable = false;
+      catalog.clearCache();
+      nominatim.clearCache();
+    },
     cache: options.cache,
     transport: options.transport,
     loadCatalog: catalog.loadCatalog,
@@ -111,14 +141,24 @@ export function createSharedMobilityRuntime(
     fetchSwissSharedMobilityDataForBbox: (bbox, formFactors, unknownFormFactor) =>
       fetchSwissSharedMobilityDataForBbox(bbox, formFactors, gbfsDependencies, unknownFormFactor),
     fetchMotisRentals: motis.fetchMotisRentals,
-    enrichEnturMobilityItems: (stations, vehicles, scope) =>
-      enrichEnturMobilityItems(stations, vehicles, { ...enturDependencies, scope }),
+    enrichEnturMobilityItems: (
+      stations,
+      vehicles,
+      scope,
+      resolveContributors = options.resolveContributors,
+    ) =>
+      enrichEnturMobilityItems(stations, vehicles, {
+        ...enturDependencies,
+        scope,
+        resolveContributors,
+      }),
     buildEnturGeofencingMapContext: (bbox, contextOptions = {}) =>
       buildEnturGeofencingMapContext(bbox, { ...enturDependencies, ...contextOptions }),
     orchestrate: (bbox, config) =>
       orchestrateSharedMobility(bbox, {
         ...config,
         fetchMotis: motis.fetchMotisRentals,
+        resolveContributors: config.resolveContributors ?? options.resolveContributors,
         onDecision: (decision) => options.onDecision?.(config.category, decision),
       }),
   };

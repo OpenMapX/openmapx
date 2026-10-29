@@ -1,4 +1,7 @@
+import { IntegrationRegistry } from "@openmapx/integration-framework";
+import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
 import { useRoadConditionsStore } from "../store";
 
@@ -8,9 +11,14 @@ let fake: FakeMap;
 let mockStyleVersion = 0;
 const popupHtml = vi.hoisted(() => vi.fn());
 const popupRemove = vi.hoisted(() => vi.fn());
+const MAP_REF = {
+  get current() {
+    return fake.map;
+  },
+};
 
 vi.mock("@/integration-api/map/MapContext", () => ({
-  useMap: () => ({ mapRef: { current: fake.map }, mapReady: true, styleVersion: mockStyleVersion }),
+  useMap: () => ({ mapRef: MAP_REF, mapReady: true, styleVersion: mockStyleVersion }),
 }));
 
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
@@ -54,6 +62,7 @@ vi.mock("maplibre-gl", () => ({
 }));
 
 import type { RoadConditionEvent } from "@openmapx/core";
+import { clearRoadConditionBindings } from "../bindings";
 import { eventsToFeatureCollection } from "../eventsToGeojson";
 import { buildRoadConditionPopupGroups, buildSources, RoadConditionsLayer } from "../map-layer";
 import { effect, situation, text } from "./fixtures";
@@ -61,6 +70,27 @@ import { effect, situation, text } from "./fixtures";
 const SOURCE = "omx-road-conditions";
 const MARKER_LAYER = "omx-road-conditions-markers";
 const LINE_LAYER = "omx-road-conditions-line";
+
+const creditRegistry = new IntegrationRegistry([
+  {
+    id: "openconditions",
+    enabled: true,
+    domains: ["road-conditions"],
+    dataSources: ["working", "offscreen", "missing-key"].map((sourceId) => ({
+      sourceId,
+      name: sourceId,
+      url: `https://${sourceId}.example`,
+      licensing: {
+        version: 1,
+        bindings: [
+          { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC0-1.0" } },
+        ],
+      } as const,
+      providerCountry: "DE",
+      providerPrivacyUrl: "https://example.com/privacy",
+    })),
+  },
+]);
 
 const fetchMock = vi.fn();
 
@@ -116,6 +146,98 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
   useRoadConditionsStore.setState({ panelOpen: true, layerVisible: true });
   useRoadConditionsStore.getState().resetFilters();
+  useMapAttributionStore.setState({ byLayer: {} });
+});
+
+describe("RoadConditionsLayer rendered attribution", () => {
+  it("credits no configured feed until its incident is rendered, and drops offscreen credits", async () => {
+    respondWith(
+      eventsToFeatureCollection([
+        situation({
+          id: "visible",
+          source: "working",
+          contributors: [{ sourceId: "working", name: "working" }],
+        }),
+        situation({
+          id: "outside",
+          source: "offscreen",
+          contributors: [{ sourceId: "offscreen", name: "offscreen" }],
+          geometry: { type: "Point", coordinates: [6, 53] },
+        }),
+      ]).features,
+    );
+    const view = render(
+      <IntegrationRegistryContext.Provider value={creditRegistry}>
+        <RoadConditionsLayer />
+      </IntegrationRegistryContext.Provider>,
+    );
+    await waitFor(() => expect(sourceFeatures("Point")).toHaveLength(2));
+    expect(
+      Object.values(useMapAttributionStore.getState().byLayer)
+        .flat()
+        .map((entry) => entry.fullHtml)
+        .join(" "),
+    ).toBe("");
+
+    const visible = sourceFeatures("Point").find((f) => f.properties?._id === "visible")!;
+    fake.setRenderedFeatures(MARKER_LAYER, [
+      {
+        ...visible,
+        layer: {
+          id: MARKER_LAYER,
+          type: "symbol",
+          layout: { "icon-image": visible.properties?._icon, "icon-size": 0.55 },
+        },
+        source: SOURCE,
+      } as never,
+    ]);
+    act(() => {
+      fake.emit("sourcedata", { sourceId: SOURCE });
+      fake.emit("render");
+      fake.emit("idle");
+    });
+    await waitFor(() => {
+      const html = Object.values(useMapAttributionStore.getState().byLayer)
+        .flat()
+        .map((entry) => entry.fullHtml)
+        .join(" ");
+      expect(html).toContain("working");
+      expect(html).not.toContain("offscreen");
+      expect(html).not.toContain("missing-key");
+    });
+
+    fetchMock.mockRejectedValueOnce(new Error("feed temporarily unavailable"));
+    act(() => useRoadConditionsStore.setState({ horizon: "week" }));
+    await waitFor(() =>
+      expect(useRoadConditionsStore.getState().viewportFetchStatus).toBe("stale"),
+    );
+    act(() => {
+      fake.emit("sourcedata", { sourceId: SOURCE });
+      fake.emit("render");
+    });
+    await waitFor(() =>
+      expect(
+        Object.values(useMapAttributionStore.getState().byLayer)
+          .flat()
+          .map((entry) => entry.fullHtml)
+          .join(" "),
+      ).toContain("working"),
+    );
+
+    fake.setRenderedFeatures(MARKER_LAYER, []);
+    act(() => {
+      fake.emit("move");
+      fake.emit("render");
+    });
+    await waitFor(() =>
+      expect(
+        Object.values(useMapAttributionStore.getState().byLayer)
+          .flat()
+          .map((entry) => entry.fullHtml),
+      ).toEqual([]),
+    );
+    view.unmount();
+  });
 });
 
 describe("RoadConditionsLayer marker images", () => {
@@ -136,6 +258,10 @@ describe("RoadConditionsLayer marker images", () => {
 describe("RoadConditionsLayer horizon query", () => {
   it("replays a response received before the map sources become ready", async () => {
     fake = createFakeMap({ styleLoaded: false });
+    const parsedStyle = fake.map.getStyle();
+    vi.spyOn(fake.map, "getStyle").mockImplementation(() =>
+      fake.state.styleLoaded ? parsedStyle : (undefined as never),
+    );
     respondWith([
       {
         geometry: {
@@ -154,7 +280,8 @@ describe("RoadConditionsLayer horizon query", () => {
     expect(fake.state.sources.has(SOURCE)).toBe(false);
 
     fake.state.styleLoaded = true;
-    fake.emit("idle");
+    fake.emit("styledata");
+    fake.emit("style.load");
 
     await waitFor(() => {
       expect(sourceFeatures("Point")[0]?.properties?._id).toBe("early");
@@ -247,6 +374,29 @@ describe("RoadConditionsLayer horizon query", () => {
     );
 
     expect(sourceFeatures("Point")[0]?.properties?._id).toBe("last-good");
+  });
+
+  it("rebuilds its layers with the last data after a style swap", async () => {
+    respondWith([
+      {
+        geometry: { type: "Point", coordinates: [13.4, 52.5] },
+        properties: props({ id: "kept" }),
+      },
+    ]);
+    render(<RoadConditionsLayer />);
+    await waitFor(() => {
+      expect(sourceFeatures("Point")[0]?.properties?._id).toBe("kept");
+    });
+
+    act(() => {
+      fake.map.setStyle({});
+    });
+
+    expect(fake.state.layers.has(MARKER_LAYER)).toBe(true);
+    expect(fake.state.layers.has(LINE_LAYER)).toBe(true);
+    await waitFor(() => {
+      expect(sourceFeatures("Point")[0]?.properties?._id).toBe("kept");
+    });
   });
 });
 
@@ -623,6 +773,50 @@ describe("RoadConditionsLayer viewport scheduler", () => {
     respondWith([]);
     await flush(FRESHNESS_DEADLINE_MS);
     expect(popupRemove).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads an open popup's bindings and says why one was kept off routing", async () => {
+    clearRoadConditionBindings();
+    const current = situation({
+      id: "oc:situation:nl-ndw:bound",
+      geometry: { type: "Point", coordinates: [10.5, 45.5] },
+    });
+    const features = eventsToFeatureCollection([current]).features;
+    fetchMock.mockImplementation(async (url: string) =>
+      url.includes("/road-conditions/bindings?")
+        ? {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              situation: { status: "ambiguous", reason: "direction_undecided" },
+              effects: {},
+            }),
+          }
+        : { ok: true, status: 200, json: async () => ({ type: "FeatureCollection", features }) },
+    );
+    render(<RoadConditionsLayer />);
+    await flush();
+    const marker = sourceFeatures("Point")[0]!;
+    fake.setRenderedFeatures(MARKER_LAYER, [
+      {
+        ...marker,
+        layer: { id: MARKER_LAYER, type: "symbol" },
+        source: SOURCE,
+        state: {},
+      } as unknown as import("maplibre-gl").MapGeoJSONFeature,
+    ]);
+    await act(async () => {
+      fake.emit("click", { point: { x: 10, y: 20 }, lngLat: { lng: 10.5, lat: 45.5 } });
+    });
+    await flush();
+    const asked = fetchMock.mock.calls
+      .map(([url]) => String(url))
+      .find((url) => url.includes("/bindings?"));
+    expect(asked).toContain("provider=road-conditions-openconditions");
+    expect(asked).toContain(`id=${encodeURIComponent(current.id)}`);
+    expect(popupHtml.mock.lastCall![0]).toContain(
+      "roadConditions.binding.ambiguous: roadConditions.bindingReason.direction_undecided",
+    );
   });
 
   it("bounds getBounds() reads and network requests under a 60Hz moveend burst that stays in the padded viewport", async () => {

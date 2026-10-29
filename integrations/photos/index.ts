@@ -1,8 +1,14 @@
 import { isDisplayablePhoto } from "@openmapx/core";
 import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
-import { getPhotoProviders, resolveOsmTags, searchPhotos } from "./orchestrator.js";
+import {
+  createOsmImagePhotoProvider,
+  getPhotoProviders,
+  resolveOsmTags,
+  searchPhotos,
+} from "./orchestrator.js";
 
 export function setup(ctx: IntegrationContext): void {
+  ctx.registerPhotoProvider(createOsmImagePhotoProvider(ctx));
   ctx.registerRoute("GET", "/search", async (req, reply) => {
     const lat = Number.parseFloat(scalarQueries(req.query).lat);
     const lng = Number.parseFloat(scalarQueries(req.query).lng);
@@ -22,21 +28,29 @@ export function setup(ctx: IntegrationContext): void {
 
     const nameKey = name ? `:${name.slice(0, 40)}` : "";
     const placeKey = placeId ? `:${placeId.slice(0, 40)}` : "";
-    const cacheKey = `cache:photos:${lat.toFixed(4)}:${lng.toFixed(4)}:${limit}${nameKey}${placeKey}`;
+    const cacheKey = `cache:photos:v3:${lat.toFixed(4)}:${lng.toFixed(4)}:${limit}${nameKey}${placeKey}`;
 
     try {
-      const photos = await ctx.cache.withCache(cacheKey, 3600, async () => {
+      const photos = await ctx.cache.withCache(cacheKey, 3600, async (signal) => {
         // If placeId is provided, resolve OSM tags for tag-based photo lookups
         let osmTags: Record<string, string> | undefined;
         if (placeId) {
           osmTags = await resolveOsmTags(placeId, name, lat, lng);
         }
         const providers = getPhotoProviders(ctx.getIntegrationsByDomain("photos"));
-        return searchPhotos({ lat, lng, name, limit, osmTags }, providers);
+        return searchPhotos({ lat, lng, name, limit, osmTags, signal }, providers);
       });
 
       reply.header("Cache-Control", "public, max-age=3600");
-      reply.send({ photos: photos.filter(isDisplayablePhoto) });
+      const disallowed = (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
+      reply.send({
+        photos: photos.filter(
+          (photo) =>
+            isDisplayablePhoto(photo) &&
+            !disallowed.has(photo.source) &&
+            !(photo.contributors ?? []).some((receipt) => disallowed.has(receipt.sourceId)),
+        ),
+      });
     } catch (err) {
       ctx.log.error("Photo search failed", err);
       reply.status(500).send({ error: "Photo search failed" });

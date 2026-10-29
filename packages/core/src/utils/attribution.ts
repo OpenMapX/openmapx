@@ -1,105 +1,146 @@
-import type { DataSourceAttribution } from "../types/dataSource";
+import { resolveBindingPlacement } from "@openmapx/mobility-core/attribution-placement";
+import {
+  type AttributionLogo,
+  type AttributionSurface,
+  DISPLAY_LICENSE_SCOPES,
+  isSafeAttributionUrl,
+  type Licensing,
+  licensingLinks,
+  licensingReferenceUrls,
+  parseLicensing,
+} from "@openmapx/mobility-core/licensing";
+import escapeHtml from "escape-html";
+import { type DefaultTreeAdapterTypes, parseFragment } from "parse5";
+import type { Attribution } from "../types/dataSource";
 import type { IntegrationDataSource } from "../types/integrationMeta";
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function safeExternalUrl(value: string | undefined): string | undefined {
+function safeExternalUrl(value: string | undefined, baseUrl?: string): string | undefined {
   if (!value) return undefined;
   try {
-    const url = new URL(value);
-    return url.protocol === "https:" || url.protocol === "http:" ? value : undefined;
+    const url = new URL(value, baseUrl);
+    return isSafeAttributionUrl(url.href) ? (baseUrl ? url.href : value) : undefined;
   } catch {
     return undefined;
   }
 }
 
-/**
- * Allowlist HTML sanitizer for manifest `dataSources[].attribution` strings.
- *
- * Parse-and-rebuild: output contains only escapeHtml()-escaped text plus
- * tags reconstructed here. Allowed elements:
- * - `<a>` — href must be http(s) (validated via safeExternalUrl); rebuilt
- *   as `<a href="…" target="_blank" rel="noopener noreferrer">`. All other
- *   attributes are dropped. Anchors with a missing/invalid href are
- *   unwrapped (children kept).
- * - `<code>` — rebuilt with no attributes.
- * Any other element is unwrapped (tag dropped, children kept), matching the
- * DOMParser sanitizer in apps/web/src/lib/useMapAttributions.ts. Tag-shaped
- * input that is not a valid tag (e.g. "a < b") is escaped as text.
- * Unclosed allowed tags are auto-closed at the end of the string.
- */
-export function sanitizeAttributionHtml(html: string): string {
-  let out = "";
-  const stack: { tag: "a" | "code"; emitted: boolean }[] = [];
-  let i = 0;
-  while (i < html.length) {
-    const lt = html.indexOf("<", i);
-    if (lt === -1) {
-      out += escapeHtml(html.slice(i));
-      break;
-    }
-    out += escapeHtml(html.slice(i, lt));
-    const gt = html.indexOf(">", lt + 1);
-    if (gt === -1) {
-      out += escapeHtml(html.slice(lt));
-      break;
-    }
-    const raw = html.slice(lt + 1, gt).trim();
-    const isClosing = raw.startsWith("/");
-    const body = isClosing ? raw.slice(1).trim() : raw;
-    const nameMatch = /^[a-zA-Z][a-zA-Z0-9]*/.exec(body);
-    if (!nameMatch) {
-      out += escapeHtml(html.slice(lt, gt + 1));
-      i = gt + 1;
-      continue;
-    }
-    const tag = nameMatch[0].toLowerCase();
-    if (isClosing) {
-      let idx = -1;
-      for (let j = stack.length - 1; j >= 0; j--) {
-        if (stack[j].tag === tag) {
-          idx = j;
-          break;
-        }
-      }
-      if (idx !== -1) {
-        for (let j = stack.length - 1; j > idx; j--) {
-          if (stack[j].emitted) out += `</${stack[j].tag}>`;
-        }
-        if (stack[idx].emitted) out += `</${tag}>`;
-        stack.length = idx;
-      }
-    } else if (tag === "a") {
-      const href = safeExternalUrl(extractHref(body.slice(nameMatch[0].length)));
-      if (href) {
-        out += `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">`;
-        stack.push({ tag: "a", emitted: true });
-      } else {
-        stack.push({ tag: "a", emitted: false });
-      }
-    } else if (tag === "code") {
-      out += "<code>";
-      stack.push({ tag: "code", emitted: true });
-    }
-    i = gt + 1;
-  }
-  for (let j = stack.length - 1; j >= 0; j--) {
-    if (stack[j].emitted) out += `</${stack[j].tag}>`;
-  }
-  return out;
+type HtmlNode = DefaultTreeAdapterTypes.Node;
+
+function attributionFragment(html: string): DefaultTreeAdapterTypes.DocumentFragment {
+  let incompleteTag = false;
+  const fragment = parseFragment(html, {
+    onParseError: (error) => {
+      if (error.code === "eof-in-tag") incompleteTag = true;
+    },
+  });
+  // The HTML parser drops dangling tags. Keep malformed notices in full as
+  // literal text, rather than silently losing their trailing source wording.
+  return incompleteTag ? parseFragment(escapeHtml(html)) : fragment;
 }
 
-function extractHref(attrs: string): string | undefined {
-  const match = /(?:^|\s)href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/i.exec(attrs);
-  if (!match) return undefined;
-  return match[1] ?? match[2] ?? match[3];
+function children(node: HtmlNode): HtmlNode[] {
+  if ("content" in node) return node.content.childNodes;
+  return "childNodes" in node ? node.childNodes : [];
+}
+
+function hiddenSpan(node: HtmlNode): boolean {
+  if (!("tagName" in node) || node.tagName !== "span") return false;
+  const style = node.attrs.find((attr) => attr.name === "style")?.value;
+  return (
+    style
+      ?.split(";")
+      .some((declaration) => /^\s*display\s*:\s*none\s*(?:!important)?\s*$/i.test(declaration)) ??
+    false
+  );
+}
+
+/** Plain text and HTTP(S) links, never HTML suitable for insertion into a DOM. */
+export function parseAttributionHtml(
+  html: string,
+  options: { linkBaseUrl?: string; omitHiddenSpans?: boolean } = {},
+): { text: string; links: { label: string; url: string }[] } {
+  const parts: string[] = [];
+  const links: { label: string; url: string }[] = [];
+  const pending: ({ node: HtmlNode } | { url: string; start: number })[] = [
+    { node: attributionFragment(html) },
+  ];
+  while (pending.length) {
+    const item = pending.pop();
+    if (!item) break;
+    if ("url" in item) {
+      links.push({ label: parts.slice(item.start).join("").trim(), url: item.url });
+      continue;
+    }
+    const node = item.node;
+    if (options.omitHiddenSpans && hiddenSpan(node)) continue;
+    if ("value" in node) {
+      parts.push(node.value.replace(/\u00a0/g, " "));
+      continue;
+    }
+    if ("tagName" in node && node.tagName === "a") {
+      const url = safeExternalUrl(
+        node.attrs.find((attr) => attr.name === "href")?.value,
+        options.linkBaseUrl,
+      );
+      if (url) pending.push({ url, start: parts.length });
+    }
+    const childNodes = children(node);
+    for (let i = childNodes.length - 1; i >= 0; i--) pending.push({ node: childNodes[i] });
+  }
+  return { text: parts.join("").trim(), links };
+}
+
+/**
+ * Parse-and-rebuild manifest HTML with only HTTP(S) anchors and bare code tags.
+ * Parsed text and attribute values are escaped; input never supplies tag syntax.
+ */
+export function sanitizeAttributionHtml(html: string, options: { urlLabel?: string } = {}): string {
+  const out: string[] = [];
+  const pending: (HtmlNode | "</a>" | "</code>")[] = [attributionFragment(html)];
+  while (pending.length) {
+    const node = pending.pop();
+    if (!node) break;
+    if (typeof node === "string") {
+      out.push(node);
+      continue;
+    }
+    if ("value" in node) {
+      const text = node.value.replace(/\u00a0/g, " ");
+      const parent = node.parentNode;
+      const linked = parent && "tagName" in parent && parent.tagName === "a";
+      if (options.urlLabel && linked && /^https?:\/\/\S+$/.test(text.trim())) {
+        out.push(escapeHtml(options.urlLabel));
+      } else if (options.urlLabel && !linked) {
+        // Link bare archive URLs instead of printing their transport spelling.
+        const tokens = text.split(/(https?:\/\/[^\s<>]+)/g);
+        out.push(
+          tokens
+            .map((token) => {
+              const match = token.match(/^(https?:\/\/.*?)([;,.]*)$/);
+              const url = match && safeExternalUrl(match[1]);
+              return url
+                ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(options.urlLabel ?? "")}</a>${escapeHtml(match?.[2] ?? "")}`
+                : escapeHtml(token);
+            })
+            .join(""),
+        );
+      } else out.push(escapeHtml(text));
+      continue;
+    }
+    if ("tagName" in node && node.tagName === "a") {
+      const href = safeExternalUrl(node.attrs.find((attr) => attr.name === "href")?.value);
+      if (href) {
+        out.push(`<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">`);
+        pending.push("</a>");
+      }
+    } else if ("tagName" in node && node.tagName === "code") {
+      out.push("<code>");
+      pending.push("</code>");
+    }
+    const childNodes = children(node);
+    for (let i = childNodes.length - 1; i >= 0; i--) pending.push(childNodes[i]);
+  }
+  return out.join("");
 }
 
 /**
@@ -121,81 +162,213 @@ function extractHref(attrs: string): string | undefined {
 export function buildAttributionHtml(ds: {
   name: string;
   url: string;
-  license: string;
-  licenseUrl?: string;
+  licensing?: Licensing;
   attribution?: string;
 }): string {
-  if (ds.attribution) return sanitizeAttributionHtml(ds.attribution);
   return buildRuntimeAttributionHtml({
-    text: ds.name,
+    sourceId: "",
+    name: ds.name,
     url: ds.url,
-    license: ds.license || undefined,
-    licenseUrl: ds.licenseUrl,
+    licensing: ds.licensing,
+    attributionText: ds.attribution,
   });
 }
 
-/**
- * Build safe HTML attribution for per-item attribution received at runtime.
- */
-export function buildRuntimeAttributionHtml(attribution: DataSourceAttribution): string {
-  const url = safeExternalUrl(attribution.url);
-  const name = escapeHtml(attribution.text);
-  const nameLink = url
-    ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${name}</a>`
-    : name;
-
-  if (!attribution.license) return nameLink;
-
-  const licenseUrl = safeExternalUrl(attribution.licenseUrl);
-  const license = escapeHtml(attribution.license);
-  const licenseLink = licenseUrl
-    ? `<a href="${escapeHtml(licenseUrl)}" target="_blank" rel="noopener noreferrer">${license}</a>`
-    : license;
-
-  return `${nameLink} (${licenseLink})`;
-}
-
-/**
- * Build combined attribution HTML for all data sources of an integration.
- * Joins unique attributions with " · " separator.
- */
-export function buildIntegrationAttribution(
-  dataSources: IntegrationDataSource[] | undefined,
+/** Render all applicable subjects and grants using the shared licence registry. */
+export function buildLicensingHtml(
+  licensing: Licensing,
+  options: { includeSoftware?: boolean; fullNames?: boolean } = {},
 ): string {
-  if (!dataSources?.length) return "";
-  const seen = new Set<string>();
-  return dataSources
-    .map((ds) => buildAttributionHtml(ds))
-    .filter((html) => {
-      if (seen.has(html)) return false;
-      seen.add(html);
-      return true;
+  const parts = licensingLinks(licensing, {
+    fullNames: options.fullNames,
+    scopes: options.includeSoftware ? undefined : DISPLAY_LICENSE_SCOPES,
+  });
+  const link = (label: string, url?: string) => {
+    const safe = safeExternalUrl(url);
+    return safe
+      ? `<a href="${escapeHtml(safe)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`
+      : escapeHtml(label);
+  };
+  return parts
+    .map((part) => {
+      const label = link(part.label, part.url);
+      const atoms =
+        part.licenses && part.licenses.length > 1
+          ? ` [${part.licenses.map((atom) => link(atom.label, atom.url)).join(", ")}]`
+          : "";
+      return `${parts.length > 1 ? `${escapeHtml(part.subject)}: ` : ""}${label}${atoms}${part.notice ? ` — ${escapeHtml(part.notice)}` : ""}${part.conditions?.length ? ` — ${part.conditions.map(escapeHtml).join("; ")}` : ""}`;
     })
-    .join(" · ");
+    .join("; ");
 }
 
-/**
- * Combine attribution HTML strings from multiple integrations, deduplicating
- * identical attribution entries across integrations.
- */
-export function combineAttributions(attributions: string[]): string {
-  const seen = new Set<string>();
-  const parts: string[] = [];
-  for (const attr of attributions) {
-    for (const part of attr.split(" · ")) {
-      const trimmed = part.trim();
-      if (trimmed && !seen.has(trimmed)) {
-        seen.add(trimmed);
-        parts.push(trimmed);
+/** Safe HTML for the same captured receipt used by every runtime surface. */
+export function buildRuntimeAttributionHtml(
+  attribution: Attribution,
+  options: { includeSoftware?: boolean } = {},
+): string {
+  const url = safeExternalUrl(attribution.url);
+  const copyright = attribution.name.startsWith("© ");
+  const name = escapeHtml(copyright ? attribution.name.slice(2) : attribution.name);
+  const nameLink = `${copyright ? "© " : ""}${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${name}</a>` : name}`;
+  const credit = attribution.attributionText
+    ? sanitizeAttributionHtml(attribution.attributionText)
+    : nameLink;
+  const licensing = attribution.licensing ? buildLicensingHtml(attribution.licensing, options) : "";
+  return licensing ? `${credit} (${licensing})` : credit;
+}
+
+export interface AttributionDetail {
+  html: string;
+  links?: readonly { label: string; url: string }[];
+  /** Captured identity and grants for a readable, structured credits view. */
+  attribution?: Attribution;
+}
+
+export interface AttributionPresentation {
+  detail?: Attribution;
+  /** Complete captured receipt, including software subjects and supplied notices. */
+  fullHtml: string;
+  /** Empty only when every applicable obligation supports direct details. */
+  visibleHtml: string;
+  /** Approved host assets, not remote URLs supplied by records or extensions. */
+  logos: AttributionLogo[];
+  prominence?: "normal";
+}
+
+/** Localised wording the presentation adds to a receipt's own. */
+export interface AttributionLabels {
+  /** Said beside the credit of data that was changed from its source (`Attribution.modified`). */
+  modified: string;
+}
+
+const DEFAULT_LABELS: AttributionLabels = { modified: "data modified" };
+
+/** Project one captured receipt without consulting mutable provider catalogues. */
+export function buildAttributionPresentation(
+  attribution: Attribution,
+  surface: AttributionSurface,
+  labels: AttributionLabels = DEFAULT_LABELS,
+): AttributionPresentation {
+  const detail = structuredClone(attribution);
+  let publisherHtml = "";
+  // A change notice belongs to the source note itself, wherever it is shown.
+  const modified = attribution.modified ? escapeHtml(labels.modified) : "";
+  const fullParts = [buildRuntimeAttributionHtml(attribution, { includeSoftware: true })];
+  const original = parseAttributionHtml(fullParts[0] ?? "");
+  const sourceUrl = safeExternalUrl(attribution.url);
+  const hasIdentity = original.text.includes(attribution.name);
+  const hasSourceLink =
+    !sourceUrl ||
+    original.links.some(
+      (link) =>
+        link.url === sourceUrl &&
+        (link.label.includes(attribution.name) || attribution.name.includes(link.label)),
+    );
+  if (!hasIdentity || !hasSourceLink) {
+    const identity = escapeHtml(attribution.name);
+    fullParts.push(
+      sourceUrl
+        ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">${identity}</a>`
+        : identity,
+    );
+  }
+  if (attribution.publisher) {
+    const publisherUrl = safeExternalUrl(attribution.publisher.url);
+    const name = escapeHtml(attribution.publisher.name);
+    publisherHtml = publisherUrl
+      ? `<a href="${escapeHtml(publisherUrl)}" target="_blank" rel="noopener noreferrer">${name}</a>`
+      : name;
+    fullParts.push(publisherHtml);
+  }
+  if (attribution.notes) fullParts.push(escapeHtml(attribution.notes));
+  if (modified) fullParts.push(modified);
+  if (attribution.retrievedAt) fullParts.push(escapeHtml(attribution.retrievedAt));
+  if (attribution.licensing) {
+    const represented = new Set(
+      parseAttributionHtml(fullParts.join(" — ")).links.map((link) => link.url),
+    );
+    for (const url of licensingReferenceUrls(attribution.licensing)) {
+      if (!represented.has(url)) {
+        fullParts.push(
+          `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Terms</a>`,
+        );
       }
     }
   }
-  return parts.join(" · ");
+  const fullHtml = fullParts.filter(Boolean).join(" — ");
+  const licensing =
+    attribution.licensing === undefined ? undefined : parseLicensing(attribution.licensing);
+  const noted = (html: string) => (html && modified ? `${html} — ${modified}` : html);
+  if (!licensing || licensing.bindings.length === 0) {
+    return {
+      detail,
+      fullHtml,
+      visibleHtml: noted(buildRuntimeAttributionHtml(attribution)),
+      logos: [],
+    };
+  }
+  const visible = licensing.bindings
+    .map((binding) => ({ binding, decision: resolveBindingPlacement(binding, surface) }))
+    .filter(({ decision }) => decision.placement === "visible");
+  const logos = [
+    ...new Set(visible.flatMap(({ decision }) => (decision.logo ? [decision.logo] : []))),
+  ];
+  if (visible.length === 0) return { detail, fullHtml, visibleHtml: "", logos };
+  const prominence = visible.some(({ decision }) => decision.prominence === "normal")
+    ? ("normal" as const)
+    : undefined;
+  const certified = visible.every(
+    ({ decision }) =>
+      decision.compactText !== undefined &&
+      parseAttributionHtml(sanitizeAttributionHtml(decision.compactText)).text.trim().length > 0,
+  );
+  const visibleHtml = certified
+    ? [
+        ...new Set(
+          visible.map(({ decision }) => sanitizeAttributionHtml(decision.compactText ?? "")),
+        ),
+      ].join(" | ")
+    : buildRuntimeAttributionHtml({
+        ...attribution,
+        licensing: {
+          ...licensing,
+          bindings: visible
+            .map(({ binding }) => binding)
+            .filter((binding) => binding.license.kind !== "per-item"),
+        },
+      });
+  // A partial compact override cannot replace another subject's unknown notice.
+  // Its independently required links/wording nevertheless still need display.
+  const publisher = visible.some(({ decision }) => decision.includePublisher) ? publisherHtml : "";
+  const perItemNotices = certified
+    ? []
+    : visible
+        .filter(({ binding }) => binding.license.kind === "per-item")
+        .flatMap(({ binding }) => [binding.notice, ...(binding.conditions ?? [])])
+        .filter((notice): notice is string => Boolean(notice))
+        .map(escapeHtml);
+  const supplemental = certified
+    ? []
+    : visible.flatMap(({ decision }) =>
+        decision.compactText ? [sanitizeAttributionHtml(decision.compactText)] : [],
+      );
+  return {
+    detail,
+    fullHtml,
+    visibleHtml: noted(
+      [...new Set([visibleHtml, ...supplemental, ...perItemNotices, publisher])]
+        .filter(Boolean)
+        .join(" | "),
+    ),
+    logos,
+    ...(prominence ? { prominence } : {}),
+  };
 }
 
 /**
  * From a set of integrations, pick the one whose `dataSources` cover the
- * most of `sources` (after prefix extraction).
+ * most of `sources` (after prefix extraction), for translation metadata ownership.
+ * This heuristic does not establish contributor receipts or display attribution.
  *
  * Several integrations declare the same generic `sourceId` (e.g. "osm" is
  * shared across parking, ev-charging, fuel, webcam). A naive `find(...some)`
@@ -234,29 +407,4 @@ export function extractSourcePrefix(source: string): string {
   if (slashIdx < 0) return source.slice(0, colonIdx);
   if (colonIdx < 0) return source.slice(0, slashIdx);
   return source.slice(0, Math.min(slashIdx, colonIdx));
-}
-
-/**
- * Build attribution HTML for specific source(s) within an integration.
- * Filters dataSources entries whose `sourceId` matches one of the given
- * source strings (after prefix extraction). Falls back to full integration
- * attribution if no sourceId matches.
- */
-export function buildSourceAttribution(
-  dataSources: IntegrationDataSource[],
-  sources: string[],
-): string {
-  const prefixes = new Set(sources.map(extractSourcePrefix));
-  const matching = dataSources.filter((ds) => prefixes.has(ds.sourceId));
-  const entries = matching.length > 0 ? matching : dataSources;
-
-  const seen = new Set<string>();
-  return entries
-    .map((ds) => buildAttributionHtml(ds))
-    .filter((html) => {
-      if (seen.has(html)) return false;
-      seen.add(html);
-      return true;
-    })
-    .join(" · ");
 }

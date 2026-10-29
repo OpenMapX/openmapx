@@ -1,7 +1,14 @@
 import type { AutocompleteResult } from "@openmapx/core";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, userEvent } from "@/test";
+import { fireEvent, render, screen, userEvent } from "@/test";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
+
+const brandPhoto = vi.hoisted(() => ({ data: undefined as unknown }));
+vi.mock("@openmapx/core", async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  useBrandLogoAttribution: () => brandPhoto,
+}));
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
@@ -380,4 +387,48 @@ describe("AutocompleteDropdown", () => {
     await user.hover(screen.getByRole("option", { name: /Two/ }));
     expect(onHighlight).toHaveBeenCalledWith(1);
   });
+});
+
+it("keeps exact-file logo credits outside the autocomplete option and icon column", () => {
+  brandPhoto.data = {
+    logoFile: "Brand.svg",
+    url: "https://image.test/brand.svg",
+    source: "wikimedia-commons",
+    author: "Autocomplete artist",
+    pageUrl: "https://commons.wikimedia.org/wiki/File:Brand.svg",
+    licensing: licensingFromDeclaration(
+      "CC BY 4.0",
+      "https://creativecommons.org/licenses/by/4.0/",
+    ),
+  };
+  try {
+    const onSelect = vi.fn();
+    const { container } = render(
+      <AutocompleteDropdown
+        suggestions={[
+          makeResult({
+            type: "brand",
+            label: "Brand",
+            brand: {
+              qid: "Q1",
+              name: "Brand",
+              kind: ["brand"],
+              logoFile: "Brand.svg",
+              contributors: [{ sourceId: "catalogue", name: "Captured catalogue" }],
+            },
+          }),
+        ]}
+        onSelect={onSelect}
+      />,
+    );
+    const option = screen.getByRole("option");
+    expect(option.querySelector("button, a")).toBeNull();
+    expect(container.querySelector(".MuiListItemIcon-root")?.textContent).toBe("");
+    expect(screen.getByText("Autocomplete artist", { exact: false })).toBeVisible();
+    expect(screen.getByText("Captured catalogue")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "photoGallery.credits" }));
+    expect(onSelect).not.toHaveBeenCalled();
+  } finally {
+    brandPhoto.data = undefined;
+  }
 });

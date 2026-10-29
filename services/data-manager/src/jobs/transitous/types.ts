@@ -1,4 +1,4 @@
-import type { TransitSource } from "@openmapx/transitous-core";
+import type { TransitousLock, TransitSource } from "@openmapx/transitous-core";
 import type { DatasetMetadata, StateStore } from "../../state.js";
 import type { MotisOperationsPolicy } from "./operations-profile.js";
 import type { OperatorFeedRelayStore } from "./operator-feed-relay.js";
@@ -115,6 +115,8 @@ export interface JobState {
   /** When non-zero some fetches succeeded but others did not. */
   partialSuccess?: boolean;
   proxyTransaction?: ProxyTransactionState;
+  /** The catalog lock prepare enforced; the capability snapshot records it. */
+  transitousLock?: TransitousLock;
   gbfsCompilation?: {
     output: string;
     healthy: number;
@@ -137,8 +139,6 @@ export interface ProxyTransactionState {
 export interface JobContext {
   /** ULID/UUID */
   jobId: string;
-  /** Monorepo root (used to resolve lockfile + overlay defaults). */
-  repoRoot: string;
   /** Absolute path, typically `infra/docker/data`. */
   dataDir: string;
   /** `<dataDir>/.transitous-catalog` */
@@ -191,9 +191,9 @@ export interface JobContext {
   /** Process-local one-run acquisition relay; Track 4 may inject a private-network base URL. */
   operatorFeedRelay: OperatorFeedRelayStore;
   /**
-   * Build from `transitous.lock.proposed.json` instead of the active
-   * `transitous.lock.json`. Used by the auto-bump cron to validate a candidate
-   * catalog ref in the staging slot before activating it. Defaults to false.
+   * Build from the operations agent's proposed pin instead of the pin in
+   * effect. Used by the auto-bump cron to validate a candidate catalog ref in
+   * the staging slot before approving it. Defaults to false.
    */
   useProposedLock?: boolean;
   /** Scratch state passed between stages. */

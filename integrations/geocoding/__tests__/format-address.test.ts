@@ -36,6 +36,57 @@ describe("formatAddress", () => {
   it("returns an empty string for empty components", () => {
     expect(formatAddress({})).toBe("");
   });
+
+  it("formats a numbered place address without losing its settlement", () => {
+    expect(
+      formatAddress(
+        {
+          place: "Little Hamlet",
+          house_number: "7",
+          postcode: "12345",
+          city: "Town",
+          country_code: "de",
+        },
+        { appendCountry: false },
+      ),
+    ).toBe("Little Hamlet 7, 12345 Town");
+  });
+
+  it("preserves a named premises without requiring a road or house number", () => {
+    expect(
+      formatAddress(
+        {
+          house: "Rose Cottage",
+          village: "Little Village",
+          postcode: "AB1 2CD",
+          country_code: "gb",
+        },
+        { appendCountry: false },
+      ),
+    ).toContain("Rose Cottage");
+  });
+
+  it("uses an explicit full address when structured components cannot describe the premises", () => {
+    expect(
+      formatAddress({ full: "東京都千代田区丸の内1丁目", city: "千代田区", country_code: "jp" }),
+    ).toBe("東京都千代田区丸の内1丁目");
+  });
+
+  it("does not replace a structured street with a conflicting full address", () => {
+    expect(
+      formatAddress(
+        { road: "Pontstraße", house_number: "156", full: "Other Street 99", country_code: "de" },
+        { appendCountry: false },
+      ),
+    ).toBe("Pontstraße 156");
+  });
+
+  it("trims empty premises components before choosing the full-address fallback", () => {
+    expect(formatAddress({ road: " ", house: " ", full: "  Named premises, Town  " })).toBe(
+      "Named premises, Town",
+    );
+    expect(formatAddress({ road: " ", city: " ", country_code: " " })).toBe("");
+  });
 });
 
 // Derives the display name for unnamed address/building features. Nominatim's

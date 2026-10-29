@@ -1,17 +1,14 @@
 "use client";
 
 import {
-  API_ENDPOINTS,
-  apiClient,
   clearLocalGarage,
   GARAGE_QUERY_KEY,
   hasImportedGarageFor,
   markGarageImported,
-  type ParkedLocation,
-  type PersonalVehicle,
   takeLocalGarage,
   useSession,
 } from "@openmapx/core";
+import * as sdk from "@openmapx/core/garage-sdk";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
@@ -41,12 +38,14 @@ export function GarageSyncBridge() {
     }
 
     let cancelled = false;
+    const controller = new AbortController();
+    const options = { signal: controller.signal };
 
     void (async () => {
       try {
-        const remote = await apiClient.get<{ vehicles: PersonalVehicle[] }>(API_ENDPOINTS.vehicles);
+        const remote = sdk.unwrapGarageResponse(await sdk.listGarageVehicles(options));
         if (cancelled) return;
-        const parking = await apiClient.get<{ parked: ParkedLocation[] }>(API_ENDPOINTS.parking);
+        const parking = sdk.unwrapGarageResponse(await sdk.listGarageParking(options));
         if (cancelled) return;
         const byName = new Map(remote.vehicles.map((v) => [v.name.trim().toLowerCase(), v.id]));
         const vehicleIds = new Map<string, string>();
@@ -61,8 +60,7 @@ export function GarageSyncBridge() {
             continue;
           }
           const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...draft } = vehicle;
-          const created = await apiClient.post<{ id: string }>(API_ENDPOINTS.vehicles, draft);
-          if (!created.id) throw new Error("Imported vehicle has no account ID");
+          const created = sdk.unwrapGarageResponse(await sdk.createGarageVehicle(draft, options));
           byName.set(name, created.id);
           vehicleIds.set(vehicle.id, created.id);
         }
@@ -74,7 +72,7 @@ export function GarageSyncBridge() {
           if (vehicleId === undefined) throw new Error("Parking vehicle was not imported");
           // Account pins also win on retries after a partially completed import.
           if (parkedIds.has(vehicleId)) continue;
-          await apiClient.put(API_ENDPOINTS.parking, { ...draft, vehicleId });
+          sdk.unwrapGarageResponse(await sdk.saveGarageParking({ ...draft, vehicleId }, options));
           parkedIds.add(vehicleId);
         }
 
@@ -89,6 +87,7 @@ export function GarageSyncBridge() {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [userId, queryClient]);
 

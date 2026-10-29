@@ -27,12 +27,18 @@
   ],
   "typedEffectRoles": {
     "api": [
+      "agent.handoff.inspect",
+      "agent.update",
       "appApi.replace",
       "appApi.runtime.inspect",
       "backup.create",
       "backup.delete",
       "backup.list",
       "backup.restore",
+      "communityServices.inspect",
+      "configuration.failure.inspect",
+      "configuration.hardlinks.inspect",
+      "configuration.inspect",
       "data.clean",
       "data.convertOverpass",
       "data.downloadFonts",
@@ -47,10 +53,12 @@
       "data.update",
       "dawarich.provisioning.inspect",
       "docker.status",
-      "extension.install",
-      "extension.remove",
-      "extension.repository.inspect",
-      "extension.update",
+      "installedIntegrations.inspect",
+      "integration.adopt",
+      "integration.inspect",
+      "integration.publish",
+      "integration.remove",
+      "integration.settle",
       "integrationConfig.apply",
       "release.apply",
       "release.inspect",
@@ -68,6 +76,10 @@
       "service.stop",
       "service.update",
       "serviceConfig.apply",
+      "serviceRepository.inspect",
+      "serviceRepository.publish",
+      "serviceRepository.remove",
+      "serviceRepository.settle",
       "serviceSelection.apply",
       "serviceSelection.inspect",
       "services.buildAll",
@@ -78,6 +90,7 @@
       "system.diagnostics",
       "system.inspect",
       "system.update",
+      "transitousPin.inspect",
       "vault.apply"
     ],
     "data-manager": [
@@ -99,10 +112,6 @@
     ]
   },
   "trustedDataSourceKinds": [
-    "extension.repository.inspect",
-    "extension.install",
-    "extension.update",
-    "extension.remove",
     "serviceSelection.apply",
     "serviceConfig.apply",
     "integrationConfig.apply",
@@ -110,6 +119,7 @@
     "release.pull",
     "release.apply",
     "appApi.replace",
+    "agent.update",
     "system.update",
     "backup.create",
     "backup.restore",
@@ -181,6 +191,20 @@
       ]
     },
     {
+      "id": "api.configuration-hardlinks",
+      "callSiteIds": [],
+      "semanticSources": ["apps/api/src/services/admin-ops.ts#applyGenerationHardlinks"],
+      "typedKinds": ["configuration.hardlinks.inspect"]
+    },
+    {
+      "id": "api.configuration-failure",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/trusted-config-operations.ts#readConfigurationFailure"
+      ],
+      "typedKinds": ["configuration.failure.inspect"]
+    },
+    {
       "id": "api.compose-runtime",
       "callSiteIds": [],
       "semanticSources": ["apps/api/src/utils/docker-compose.ts#dockerComposeAction"],
@@ -210,6 +234,8 @@
         "release.apply",
         "appApi.replace",
         "appApi.runtime.inspect",
+        "agent.update",
+        "agent.handoff.inspect",
         "system.diagnostics",
         "system.update",
         "system.inspect"
@@ -219,16 +245,44 @@
       "id": "api.extension-repository",
       "callSiteIds": [],
       "semanticSources": [
-        "apps/api/src/services/service-repositories.ts#prepareRepo",
-        "apps/api/src/services/service-repositories.ts#removeRepo",
+        "apps/api/src/services/community-repositories.ts#inspectServiceRepository",
+        "apps/api/src/services/community-repositories.ts#publishServiceRepository",
+        "apps/api/src/services/community-repositories.ts#settleServiceRepository",
+        "apps/api/src/services/community-repositories.ts#removeServiceRepository",
+        "apps/api/src/services/community-repositories.ts#readCommunityServices",
         "apps/api/src/services/extension-installer.ts#installExtension",
         "apps/api/src/services/extension-installer.ts#removeExtension"
       ],
       "typedKinds": [
-        "extension.repository.inspect",
-        "extension.install",
-        "extension.update",
-        "extension.remove"
+        "serviceRepository.inspect",
+        "serviceRepository.publish",
+        "serviceRepository.settle",
+        "serviceRepository.remove",
+        "communityServices.inspect"
+      ]
+    },
+    {
+      "id": "api.extension-integration",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/agent-integrations.ts#inspectIntegration",
+        "apps/api/src/services/agent-integrations.ts#publishIntegration",
+        "apps/api/src/services/agent-integrations.ts#settleIntegration",
+        "apps/api/src/services/agent-integrations.ts#removeIntegration",
+        "apps/api/src/services/agent-integrations.ts#adoptIntegration",
+        "apps/api/src/services/agent-integrations.ts#readInstalledIntegrations",
+        "apps/api/src/services/agent-integrations.ts#readLoadableIntegrations",
+        "apps/api/src/services/agent-integrations.ts#recoverAgentIntegrations",
+        "apps/api/src/services/extension-installer.ts#installExtension",
+        "apps/api/src/services/extension-installer.ts#removeExtension"
+      ],
+      "typedKinds": [
+        "integration.inspect",
+        "integration.publish",
+        "integration.settle",
+        "integration.remove",
+        "integration.adopt",
+        "installedIntegrations.inspect"
       ]
     },
     {
@@ -236,11 +290,13 @@
       "callSiteIds": [],
       "semanticSources": [
         "apps/api/src/services/trusted-config-operations.ts#applyTrustedConfiguration",
+        "apps/api/src/services/trusted-config-operations.ts#applyTrustedConfigurationWithEvidence",
         "apps/api/src/services/admin-cli.ts#validateServiceSelectionForWrite",
         "apps/api/src/routes/admin.ts#adminRoute",
         "apps/api/src/services/service-secrets.ts#setServiceSecret"
       ],
       "typedKinds": [
+        "configuration.inspect",
         "serviceSelection.apply",
         "serviceConfig.apply",
         "integrationConfig.apply",
@@ -274,19 +330,23 @@
     {
       "id": "data-manager.catalog-locks",
       "callSiteIds": [],
-      "semanticSources": ["services/data-manager/src/transitous-lock.ts#parseRefShaPair"],
+      "semanticSources": ["packages/transitous-core/src/catalog-pins.ts#parseRefShaPair"],
       "typedKinds": [
         "transitousLock.inspect",
         "transitousLock.propose",
         "transitousLock.approve",
-        "gbfsCatalogLock.inspect"
+        "gbfsCatalogLock.inspect",
+        "transitousPin.inspect"
       ]
     }
   ],
   "mounts": [
-    "app-api|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set \u2014 community integrations are stored under the host checkout}/custom_integrations|${OPENMAPX_CUSTOM_INTEGRATIONS_DIR:-/app/custom_integrations}|false",
     "ops-agent|@docker-socket|/var/run/docker.sock|false",
-    "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set \u2014 ops-agent renders and applies trusted local stack configuration}|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}|false",
+    "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — ops-agent renders and applies trusted local stack configuration}/infra/docker|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker|true",
+    "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/backups|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/backups|false",
+    "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/data|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/data|false",
+    "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/secrets|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/secrets|false",
+    "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/state|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/state|false",
     "ops-agent|${OPENMAPX_DOCKER_CONFIG_DIR:-/root/.docker}|/home/node/.docker|true"
   ],
   "providers": []

@@ -256,6 +256,29 @@ export async function readBoundedJsonResponse<T>(
   return JSON.parse(text) as T;
 }
 
+/**
+ * Caller headers that only describe the requested or supplied representation.
+ * Adding a name here weakens the redirect boundary and requires security review.
+ */
+const REDIRECT_SAFE_CALLER_HEADERS = new Set([
+  "accept",
+  "accept-language",
+  "content-type",
+  "if-none-match",
+  "if-modified-since",
+]);
+
+function hasPotentiallyCredentialBearingHeaders(
+  headers: Record<string, string> | undefined,
+): boolean {
+  return Boolean(
+    headers &&
+      Object.keys(headers).some(
+        (header) => !REDIRECT_SAFE_CALLER_HEADERS.has(header.toLowerCase()),
+      ),
+  );
+}
+
 export interface FetchJsonOptions {
   /** Caller cancellation, combined with this helper's own timeout. */
   signal?: AbortSignal;
@@ -269,7 +292,11 @@ export interface FetchJsonOptions {
    * truncated JSON document would parse into silently wrong data.
    */
   maxBytes?: number;
-  /** Extra request headers, merged on top of the `User-Agent`. */
+  /**
+   * Extra request headers, merged on top of the `User-Agent`. Supplying any
+   * header outside the representation-header allowlist makes redirects fail
+   * closed because provider-specific headers may contain credentials.
+   */
   headers?: Record<string, string>;
   /** Upstream name baked into thrown error messages, e.g. `"Open-Meteo HTTP 503"`. */
   label?: string;
@@ -341,6 +368,7 @@ async function request<T>(url: string, options: FetchJsonOptions): Promise<T> {
     signal.throwIfAborted();
     const fetchPromise = fetch(url, {
       ...init,
+      ...(hasPotentiallyCredentialBearingHeaders(headers) ? { redirect: "error" as const } : {}),
       signal,
       headers: { ...(userAgent ? { "User-Agent": userAgent } : {}), ...headers },
     });
@@ -390,6 +418,9 @@ async function request<T>(url: string, options: FetchJsonOptions): Promise<T> {
 
 /**
  * Fetch JSON with a `User-Agent` header and an `AbortController`-based timeout.
+ * Redirects are rejected whenever caller-supplied headers may carry provider
+ * credentials; representation-only headers preserve the caller's redirect
+ * mode and Fetch's default behavior.
  *
  * Throws on a non-2xx response (with `label` in the message) or on timeout /
  * network / parse errors — unless `nullOnError` is set, in which case it

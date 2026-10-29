@@ -6,6 +6,7 @@ import { ApiClientError, apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import { PersonalTimelineApiError } from "../api/personalTimeline";
 import { usePersonalTimelineStore } from "../stores/personalTimelineStore";
+import { connected, day, disconnected } from "../test/fixtures/personalTimeline";
 import {
   PERSONAL_TIMELINE_QUERY_KEY,
   useConnectTimeline,
@@ -34,7 +35,7 @@ afterEach(() => {
 describe("personal timeline hooks", () => {
   it("uses a stable connection key and fetches safe connection metadata", async () => {
     const client = queryClient();
-    const response = { connected: false, connection: null };
+    const response = disconnected;
     const get = vi.spyOn(apiClient, "get").mockResolvedValue(response as never);
 
     const { result } = renderHook(() => useTimelineConnection("user-a"), {
@@ -42,7 +43,7 @@ describe("personal timeline hooks", () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toBe(response);
+    expect(result.current.data).toEqual(response);
     expect(get).toHaveBeenCalledWith(API_ENDPOINTS.timelineConnection);
     expect(
       client
@@ -53,7 +54,7 @@ describe("personal timeline hooks", () => {
 
   it("gates day reads and uses the exact in-memory day key and lifetimes", async () => {
     const client = queryClient();
-    const get = vi.spyOn(apiClient, "get").mockResolvedValue({ version: 1 } as never);
+    const get = vi.spyOn(apiClient, "get").mockResolvedValue(day as never);
     const { result, rerender } = renderHook(
       ({ enabled }) => usePersonalTimelineDay("user-a", "2026-08-09", enabled),
       { wrapper: wrapperWith(client), initialProps: { enabled: false } },
@@ -108,8 +109,8 @@ describe("personal timeline hooks", () => {
   it("invalidates all connection/day queries after connect and test", async () => {
     const client = queryClient();
     const invalidate = vi.spyOn(client, "invalidateQueries").mockResolvedValue(undefined);
-    vi.spyOn(apiClient, "put").mockResolvedValue({ connected: true } as never);
-    vi.spyOn(apiClient, "post").mockResolvedValue({ connected: true } as never);
+    vi.spyOn(apiClient, "put").mockResolvedValue(connected as never);
+    vi.spyOn(apiClient, "post").mockResolvedValue(connected as never);
     const connect = renderHook(() => useConnectTimeline("user-a"), {
       wrapper: wrapperWith(client),
     });
@@ -213,7 +214,7 @@ describe("personal timeline hooks", () => {
 
   it("removes settled connect variables from the mutation cache when the observer resets", async () => {
     const client = queryClient();
-    vi.spyOn(apiClient, "put").mockResolvedValue({ connected: true } as never);
+    vi.spyOn(apiClient, "put").mockResolvedValue(connected as never);
     const { result } = renderHook(() => useConnectTimeline("user-a"), {
       wrapper: wrapperWith(client),
     });

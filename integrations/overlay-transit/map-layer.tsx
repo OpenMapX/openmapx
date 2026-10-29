@@ -1,16 +1,19 @@
 "use client";
 
 import { API_ENDPOINTS, apiClient, routeColor } from "@openmapx/core";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { serializeContributors } from "@openmapx/mobility-core/contributors";
 import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import type { TransitRoute } from "@openmapx/mobility-core/transit";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { addLayerInSlot } from "@/integration-api/map/layerStack";
 import { findVectorLineReference, setLayerVisibility } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
+import { EMPTY_FEATURE_COLLECTION, type MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useTransitItineraryOnMap } from "@/integration-api/map/useTransitItineraryOnMap";
-import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
 import { useTransitStore } from "./store";
 
@@ -33,14 +36,33 @@ const MOTIS_LINE_ID = "openmapx-transit-motis-line";
 const MOTIS_MIN_ZOOM = 11;
 const MOTIS_FETCH_DEBOUNCE_MS = 350;
 
-const EMPTY_FC: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
-
 const TRANSIT_LINE_OPACITY = 0.95;
 const MOTIS_LINE_OPACITY = 0.9;
 // While a chosen itinerary is drawn, the network recedes to context: still
 // readable as "where the lines run", but no longer competing with the one route
 // the traveller picked.
 const RECEDED_LINE_OPACITY = 0.25;
+
+function motisGroup(receded: boolean): MapLayerGroup {
+  return {
+    sources: { [MOTIS_SOURCE_ID]: { type: "geojson", data: EMPTY_FEATURE_COLLECTION } },
+    layers: [
+      {
+        id: MOTIS_LINE_ID,
+        type: "line",
+        source: MOTIS_SOURCE_ID,
+        paint: {
+          "line-color": ["get", "color"],
+          "line-opacity": receded ? RECEDED_LINE_OPACITY : MOTIS_LINE_OPACITY,
+          "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 14, 3, 17, 5],
+        },
+        layout: { "line-cap": "round", "line-join": "round" },
+        slot: "overlay-lines",
+        order: 5,
+      },
+    ],
+  };
+}
 
 export function TransitLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
@@ -57,120 +79,92 @@ export function TransitLayer() {
     visible: showTransit,
   });
 
-  // Runtime publisher credit carried by the MOTIS routes envelope. The manifest
-  // declares no static dataSources (the operated network comes from whatever
-  // feeds back the local/cloud MOTIS instance), so the only correct credit is
-  // the per-response `envelope.attributions`. Register it on the on-map strip
-  // while the operated routes are drawn.
-  const [routeAttributions, setRouteAttributions] = useState<Attribution[]>([]);
-  useMapAttributions("overlay-transit:routes", showTransit ? routeAttributions : []);
+  useRenderedMapAttributions("overlay-transit:routes", [MOTIS_LINE_ID], showTransit);
 
+  // The basemap transit lines are restyled from whichever vector source the
+  // current basemap draws them from, so the layer is placed by hand rather
+  // than declared in a group. It is hidden rather than removed when the
+  // overlay is switched off.
   useEffect(() => {
     void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
+    if (!showTransit) {
+      setLayerVisibility(map, TRANSIT_LAYER_ID, false);
+      return;
+    }
 
-    const syncLayer = () => {
-      if (!map.isStyleLoaded()) {
-        map.once("idle", syncLayer);
-        return;
-      }
-
-      if (showTransit && !map.getLayer(TRANSIT_LAYER_ID)) {
+    const opacity = receded ? RECEDED_LINE_OPACITY : TRANSIT_LINE_OPACITY;
+    return subscribeStyleLoaded(map, () => {
+      if (!map.getLayer(TRANSIT_LAYER_ID)) {
         const reference = findVectorLineReference(map, TRANSIT_LAYER_HINTS);
-        if (reference) {
-          addLayerInSlot(
-            map,
-            {
-              id: TRANSIT_LAYER_ID,
-              type: "line",
-              source: reference.source,
-              "source-layer": reference.sourceLayer,
-              filter: ["in", "class", "transit", "rail", "subway", "tram", "bus", "ferry", "train"],
-              paint: {
-                "line-color": [
-                  "match",
-                  ["get", "class"],
-                  "subway",
-                  PRIMARY_BLUE_HEX,
-                  "tram",
-                  "#0F9D58",
-                  "rail",
-                  "#5F6368",
-                  "bus",
-                  "#F29900",
-                  "ferry",
-                  "#00ACC1",
-                  "#34A853",
-                ],
-                "line-opacity": TRANSIT_LINE_OPACITY,
-                "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.9, 10, 1.8, 14, 3],
-              },
-              layout: {
-                "line-cap": "round",
-                "line-join": "round",
-              },
+        if (!reference) return;
+        addLayerInSlot(
+          map,
+          {
+            id: TRANSIT_LAYER_ID,
+            type: "line",
+            source: reference.source,
+            "source-layer": reference.sourceLayer,
+            filter: ["in", "class", "transit", "rail", "subway", "tram", "bus", "ferry", "train"],
+            paint: {
+              "line-color": [
+                "match",
+                ["get", "class"],
+                "subway",
+                PRIMARY_BLUE_HEX,
+                "tram",
+                "#0F9D58",
+                "rail",
+                "#5F6368",
+                "bus",
+                "#F29900",
+                "ferry",
+                "#00ACC1",
+                "#34A853",
+              ],
+              "line-opacity": opacity,
+              "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.9, 10, 1.8, 14, 3],
             },
-            "overlay-lines",
-            4,
-          );
-        }
+            layout: {
+              "line-cap": "round",
+              "line-join": "round",
+            },
+          },
+          "overlay-lines",
+          4,
+        );
       }
+      setLayerVisibility(map, TRANSIT_LAYER_ID, true);
+      // A paint change emits another `styledata`; skipping an unchanged value
+      // lets that pass settle.
+      if (map.getPaintProperty(TRANSIT_LAYER_ID, "line-opacity") !== opacity) {
+        map.setPaintProperty(TRANSIT_LAYER_ID, "line-opacity", opacity);
+      }
+    });
+  }, [mapReady, mapRef, styleVersion, showTransit, receded]);
 
-      setLayerVisibility(map, TRANSIT_LAYER_ID, showTransit);
-    };
+  useMapLayerGroup(
+    useMemo(() => (showTransit ? motisGroup(receded) : null), [showTransit, receded]),
+  );
 
-    syncLayer();
-    map.on("styledata", syncLayer);
-    return () => {
-      map.off("styledata", syncLayer);
-    };
-  }, [mapReady, mapRef, styleVersion, showTransit]);
-
-  // MOTIS operated-route network: a viewport-driven GeoJSON line layer fetched
-  // from /routes?bbox, layered above the basemap transit lines. Active only when
-  // the overlay is on and zoomed past MOTIS_MIN_ZOOM.
+  // The operated-route network follows the viewport: fetched from /routes?bbox
+  // after each move, and only past MOTIS_MIN_ZOOM.
   useEffect(() => {
     void styleVersion;
     const map = mapRef.current;
-    if (!map || !mapReady) return;
+    if (!map || !mapReady || !showTransit) return;
 
     let disposed = false;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     let activeRequest: ReturnType<typeof beginRequest> | null = null;
 
-    const ensureLayer = () => {
-      if (!map.isStyleLoaded() || map.getSource(MOTIS_SOURCE_ID)) return;
-      map.addSource(MOTIS_SOURCE_ID, { type: "geojson", data: EMPTY_FC });
-      addLayerInSlot(
-        map,
-        {
-          id: MOTIS_LINE_ID,
-          type: "line",
-          source: MOTIS_SOURCE_ID,
-          paint: {
-            "line-color": ["get", "color"],
-            "line-opacity": MOTIS_LINE_OPACITY,
-            "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 14, 3, 17, 5],
-          },
-          layout: { "line-cap": "round", "line-join": "round" },
-        },
-        "overlay-lines",
-        5,
-      );
-    };
-
-    const clearData = () => {
-      resetGeoJson([{ sourceId: MOTIS_SOURCE_ID, data: EMPTY_FC }]);
-      setRouteAttributions([]);
-    };
-
     const fetchNetwork = async () => {
-      if (disposed || !showTransit) return;
+      if (disposed) return;
       const request = beginRequest();
       activeRequest = request;
       if (map.getZoom() < MOTIS_MIN_ZOOM) {
-        clearData();
+        resetGeoJson([{ sourceId: MOTIS_SOURCE_ID, data: EMPTY_FEATURE_COLLECTION }]);
         return;
       }
       const b = map.getBounds();
@@ -188,19 +182,10 @@ export function TransitLayer() {
         );
         // Ignore stale responses (user kept panning) and post-unmount results.
         if (disposed || !request.isCurrent()) return;
-        const features: GeoJSON.Feature[] = (env.data ?? [])
-          .filter((r) => r.geometry)
-          .map((r) => ({
-            type: "Feature",
-            properties: { color: routeColor(r, "#34A853"), routeId: r.id },
-            geometry: r.geometry as GeoJSON.Geometry,
-          }));
+        const features = networkRouteFeatures(env.data ?? []);
         publishGeoJson([
           { sourceId: MOTIS_SOURCE_ID, data: { type: "FeatureCollection", features } },
         ]);
-        // Credit the feed publishers for the geometry now on screen; clear when
-        // nothing was drawn so the strip doesn't credit feeds with no visible data.
-        setRouteAttributions(features.length > 0 ? (env.attributions ?? []) : []);
       } catch {
         // Soft-fail: leave the basemap transit lines in place.
       }
@@ -211,58 +196,36 @@ export function TransitLayer() {
       debounceTimer = setTimeout(fetchNetwork, MOTIS_FETCH_DEBOUNCE_MS);
     };
 
-    const onMoveEnd = () => {
-      if (showTransit) scheduleFetch();
-    };
-
-    if (showTransit) {
-      ensureLayer();
-      setLayerVisibility(map, MOTIS_LINE_ID, true);
-      scheduleFetch();
-      map.on("moveend", onMoveEnd);
-      map.on("styledata", ensureLayer);
-    } else {
-      setLayerVisibility(map, MOTIS_LINE_ID, false);
-      clearData();
-    }
-
+    scheduleFetch();
+    map.on("moveend", scheduleFetch);
     return () => {
       disposed = true;
       activeRequest?.cancel();
       if (debounceTimer) clearTimeout(debounceTimer);
-      map.off("moveend", onMoveEnd);
-      map.off("styledata", ensureLayer);
+      map.off("moveend", scheduleFetch);
     };
   }, [beginRequest, mapReady, mapRef, publishGeoJson, resetGeoJson, styleVersion, showTransit]);
 
-  // Both network layers recede while an itinerary is on the map. Re-applied on
-  // styledata because either layer can be (re)created after this runs; MapLibre
-  // ignores a setPaintProperty that doesn't change the value, so this settles.
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-
-    const applyOpacity = () => {
-      const layers: Array<[string, number]> = [
-        [TRANSIT_LAYER_ID, TRANSIT_LINE_OPACITY],
-        [MOTIS_LINE_ID, MOTIS_LINE_OPACITY],
-      ];
-      for (const [layerId, full] of layers) {
-        if (!map.getLayer(layerId)) continue;
-        const opacity = receded ? RECEDED_LINE_OPACITY : full;
-        if (map.getPaintProperty(layerId, "line-opacity") !== opacity) {
-          map.setPaintProperty(layerId, "line-opacity", opacity);
-        }
-      }
-    };
-
-    applyOpacity();
-    map.on("styledata", applyOpacity);
-    return () => {
-      map.off("styledata", applyOpacity);
-    };
-  }, [mapReady, mapRef, styleVersion, receded]);
-
   return null;
+}
+
+/** Only drawable routes become map records; envelope peers are never their suppliers. */
+export function networkRouteFeatures(routes: readonly TransitRoute[]): GeoJSON.Feature[] {
+  return routes
+    .filter(
+      (route) =>
+        route.geometry &&
+        (route.geometry.type === "LineString"
+          ? route.geometry.coordinates.length >= 2
+          : route.geometry.coordinates.some((line) => line.length >= 2)),
+    )
+    .map((route) => ({
+      type: "Feature",
+      properties: {
+        color: routeColor(route, "#34A853"),
+        routeId: route.id,
+        _mapAttributions: serializeContributors(route.contributors ?? []),
+      },
+      geometry: route.geometry as GeoJSON.Geometry,
+    }));
 }

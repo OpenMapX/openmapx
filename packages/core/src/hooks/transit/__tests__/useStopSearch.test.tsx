@@ -11,7 +11,7 @@ describe("useStopSearch", () => {
   it("searches stops by name and unwraps the envelope", async () => {
     const envelope = {
       data: [{ id: "ms:s1", name: "Hauptbahnhof" }],
-      attributions: [{ name: "MOTIS" }],
+      attributions: [{ sourceId: "motis", name: "MOTIS" }],
       freshness: undefined,
     };
     const spy = vi.spyOn(apiClient, "get").mockResolvedValue(envelope as never);
@@ -21,7 +21,9 @@ describe("useStopSearch", () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual(envelope.data);
+    expect(result.current.data).toEqual(
+      envelope.data.map((row) => ({ ...row, contributors: envelope.attributions })),
+    );
     expect(result.current.attributions).toEqual(envelope.attributions);
     expect(spy).toHaveBeenCalledWith(API_ENDPOINTS.transitStopSearch, {
       q: "Haupt",

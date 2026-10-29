@@ -27,6 +27,11 @@ describe("parseDuration", () => {
     ["PT45M", 2700],
     ["PT30S", 30],
     ["PT2H", 7200],
+    ["P1DT2H", 93600],
+    ["PT0.5S", 0.5],
+    ["PT1M0.25S", 60.25],
+    ["garbagePT1Hgarbage", 0],
+    ["PT1Hjunk", 0],
     ["", 0],
     [undefined, 0],
     ["garbage", 0],
@@ -172,6 +177,15 @@ describe("mapTrip", () => {
   it("falls back to the trip-level ISO duration when no leg times are present", () => {
     const itinerary = mapTrip({ duration: "PT15M", legs: [{ type: "WALK" }] });
     expect(itinerary.duration).toBe(900);
+  });
+
+  it("uses fixed day/fractional durations for fallback travel time and walk distance", () => {
+    const itinerary = mapTrip({
+      duration: "P1DT2H",
+      legs: [{ type: "WALK", duration: "PT1M0.5S" }],
+    });
+    expect(itinerary.duration).toBe(93600);
+    expect(itinerary.walkDistance).toBe(84);
   });
 });
 

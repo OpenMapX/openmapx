@@ -81,7 +81,23 @@
         "attribution": {
           "provider": "EUMETNET - MeteoAlarm",
           "license": "LicenseRef-MeteoAlarm-Terms",
-          "licenseUrl": "https://meteoalarm.org/en/live/page/terms-and-conditions"
+          "licenseUrl": "https://meteoalarm.org/en/live/page/terms-and-conditions",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "EUMETNET - MeteoAlarm",
+                "license": {
+                  "kind": "custom",
+                  "id": "LicenseRef-MeteoAlarm-Terms",
+                  "namespace": "openconditions:licences",
+                  "name": "MeteoAlarm Terms and Conditions",
+                  "url": "https://meteoalarm.org/en/live/page/terms-and-conditions"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"
@@ -267,7 +283,23 @@
         "attribution": {
           "provider": "EUMETNET - MeteoAlarm",
           "license": "LicenseRef-MeteoAlarm-Terms",
-          "licenseUrl": "https://meteoalarm.org/en/live/page/terms-and-conditions"
+          "licenseUrl": "https://meteoalarm.org/en/live/page/terms-and-conditions",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "EUMETNET - MeteoAlarm",
+                "license": {
+                  "kind": "custom",
+                  "id": "LicenseRef-MeteoAlarm-Terms",
+                  "namespace": "openconditions:licences",
+                  "name": "MeteoAlarm Terms and Conditions",
+                  "url": "https://meteoalarm.org/en/live/page/terms-and-conditions"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"
@@ -458,7 +490,23 @@
         "attribution": {
           "provider": "National Weather Service (NOAA)",
           "license": "LicenseRef-US-Gov-Public-Domain",
-          "licenseUrl": "https://www.weather.gov/disclaimer"
+          "licenseUrl": "https://www.weather.gov/disclaimer",
+          "licensing": {
+            "version": 1,
+            "bindings": [
+              {
+                "scope": "data",
+                "subject": "National Weather Service (NOAA)",
+                "license": {
+                  "kind": "custom",
+                  "id": "LicenseRef-US-Gov-Public-Domain",
+                  "namespace": "openconditions:licences",
+                  "name": "U.S. Government Public Domain (17 U.S.C. §105)",
+                  "url": "https://www.weather.gov/disclaimer"
+                }
+              }
+            ]
+          }
         },
         "privacy": {
           "class": "authoritative"

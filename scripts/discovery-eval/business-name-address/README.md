@@ -12,7 +12,10 @@ This directory implements no search provider or ingestion process.
 - `sources-v1.json`: compact reviewed OSM/Overture identity/provenance records.
   A shared mall address or brand is not a verified business cross-link.
 - `evidence.test.ts`: real-adapter identity/order parity and specialized OSM
-  term-extractor behavior. Tests do not freeze historical ranking or UI state.
+  term-extractor behavior. Original identity namespaces and display fields stay
+  checked against the frozen projection; added direct OSM references are checked
+  separately, including EDEKA's exact shop object. Tests do not freeze historical
+  ranking or UI state.
 - `replay.ts`: current-checkout place-only combination/ranking/Enter comparison
   over fixed inputs. It reports its own revision/dirty state. The historical
   aggregate was empty/partial; absence from it proves no source gap. Shortcuts,

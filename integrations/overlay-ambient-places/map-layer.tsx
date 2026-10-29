@@ -4,14 +4,14 @@ import { useTheme } from "@mui/material/styles";
 import { categoryPlaceToPlace, PANEL, usePlaceStore, useSidebarStore } from "@openmapx/core";
 import {
   AMBIENT_LIMITS,
-  AMBIENT_MAX_AGE_MS,
-  type AmbientManifest,
   type AmbientPlace,
   ambientIdentityKeys,
+  ambientPlaceContributors,
   ambientPlaceFromTile,
   ambientPlaceToCategoryPlace,
   matchAmbientBasemap,
 } from "@openmapx/core/ambient-places";
+import { contributorsForRecordFields } from "@openmapx/mobility-core/contributors";
 import type {
   ExpressionSpecification,
   FilterSpecification,
@@ -19,7 +19,7 @@ import type {
   MapMouseEvent,
 } from "maplibre-gl";
 import { useLocale } from "next-intl";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   ambientBasemapKey,
   ambientPlaceStyle,
@@ -33,10 +33,9 @@ import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
-import { useSourceAttributions } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import integrationManifest from "./manifest.json";
-import { useAmbientPlacesStore } from "./store";
+import { useAmbientPublication } from "./useAmbientPublication";
 
 export const AMBIENT_SOURCE = "ambient-places-source";
 export const AMBIENT_LANDMARK_LAYER = "ambient-places-landmarks";
@@ -47,9 +46,6 @@ const LANDMARK: ExpressionSpecification = [
   [">=", ["get", "rank"], 2500],
   ["<", ["get", "rank"], 2600],
 ];
-const OSM_SOURCES = ["osm-ambient-places"];
-const COMBINED_SOURCES = integrationManifest.dataSources.map((source) => source.sourceId);
-const NO_SOURCES: string[] = [];
 function fromFeature(
   feature: Pick<MapGeoJSONFeature, "geometry" | "properties">,
 ): AmbientPlace | null {
@@ -57,27 +53,13 @@ function fromFeature(
     ? ambientPlaceFromTile(feature.properties ?? {}, feature.geometry.coordinates)
     : null;
 }
-function usable(manifest: AmbientManifest | null): boolean {
-  return Boolean(
-    manifest?.enabled &&
-      [
-        manifest.publishedAt,
-        manifest.sources.osm.publishedAt,
-        ...(manifest.sources.overture ? [manifest.sources.overture.publishedAt] : []),
-      ].every(
-        (date) =>
-          Number.isFinite(Date.parse(date)) && Date.now() - Date.parse(date) <= AMBIENT_MAX_AGE_MS,
-      ),
-  );
-}
 export function AmbientPlacesLayer() {
   const dark = useTheme().palette.mode === "dark";
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
   const locale = useLocale();
-  const shown = useAmbientPlacesStore((s) => s.panelOpen && s.layerVisible);
-  const manifest = useAmbientPlacesStore((s) => s.manifest);
-  const publication = useAmbientPlacesStore((s) => s.setPublication);
+  const matchedBasemap = useRef(new Map<string, AmbientPlace>());
+  const manifest = useAmbientPublication(env.apiUrl);
   const selected = usePlaceStore((s) => s.selectedPlace);
   const { filtered } = useActivePlaceResults(locale);
   const occupied = useMemo(
@@ -89,54 +71,37 @@ export function AmbientPlacesLayer() {
     [filtered, selected],
   );
 
-  useEffect(() => {
-    if (!shown) return;
-    let current = true;
-    let controller: AbortController | null = null;
-    const refresh = async () => {
-      controller?.abort();
-      controller = new AbortController();
-      const signal = controller.signal;
-      const existing = useAmbientPlacesStore.getState().manifest;
-      publication(existing, false, true);
-      try {
-        const response = await fetch(`${env.apiUrl}/api/ambient-places/manifest`, {
-          signal,
-          cache: "no-store",
-        });
-        if (!response.ok) throw new Error("Publication unavailable");
-        const body = (await response.json()) as { manifest: AmbientManifest | null };
-        if (
-          body.manifest &&
-          (body.manifest.version !== 1 ||
-            !body.manifest.generation ||
-            !body.manifest.region?.bounds ||
-            !body.manifest.sources?.osm)
-        )
-          throw new Error("Unsupported publication");
-        if (current && !signal.aborted) publication(body.manifest, false, false);
-      } catch {
-        if (current && !signal.aborted)
-          publication(usable(existing) ? existing : null, true, false);
-      }
-    };
-    void refresh();
-    const timer = setInterval(() => void refresh(), 60_000);
-    return () => {
-      current = false;
-      controller?.abort();
-      clearInterval(timer);
-    };
-  }, [shown, env.apiUrl, publication]);
-
-  const visible = shown && usable(manifest);
-  useSourceAttributions(
-    "overlay-ambient-places",
-    visible ? (manifest?.sources.overture ? COMBINED_SOURCES : OSM_SOURCES) : NO_SOURCES,
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mutable style is invalidated by styleVersion.
+  const attributionLayers = useMemo(
+    () => [...LAYERS, ...(mapRef.current ? getStylePoiLayerIds(mapRef.current) : [])],
+    [mapRef, mapReady, styleVersion],
   );
+  useRenderedMapAttributions("overlay-ambient-places", attributionLayers, manifest !== null, {
+    resolveFeatureContributors: (feature) => {
+      const own = LAYERS.includes(feature.layer.id);
+      const place = own
+        ? fromFeature(feature)
+        : matchedBasemap.current.get(ambientBasemapKey(feature));
+      if (
+        !place ||
+        place.minZoom > Math.floor(mapRef.current?.getZoom() ?? 0) ||
+        ambientIdentityKeys(place).some((id) => occupied.has(id))
+      )
+        return [];
+      if (own) return ambientPlaceContributors(place, locale);
+      // The actual basemap supplies geometry. The associated ambient identity
+      // supplies its clickable name/alias metadata, even when the duplicate is suppressed.
+      return place.fieldContributors === undefined
+        ? ambientPlaceContributors(place, locale)
+        : contributorsForRecordFields(place, [
+            place.names[locale.split("-")[0]] ? `names.${locale.split("-")[0]}` : "name",
+            "gersId",
+          ]);
+    },
+  });
   // biome-ignore lint/correctness/useExhaustiveDependencies: mapReady and styleVersion invalidate cartography read from the mutable mapRef.current style.
   const group = useMemo<MapLayerGroup | null>(() => {
-    if (!visible || !manifest) return null;
+    if (!manifest) return null;
     return {
       sources: {
         [AMBIENT_SOURCE]: {
@@ -168,15 +133,19 @@ export function AmbientPlacesLayer() {
         };
       }),
     };
-  }, [visible, manifest, env.apiUrl, locale, dark, mapRef, mapReady, styleVersion]);
+  }, [manifest, env.apiUrl, locale, dark, mapRef, mapReady, styleVersion]);
   useMapLayerGroup(group);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: dark and styleVersion recreate cartography through the group hook; reinstall suppression immediately after that lifecycle.
   useEffect(() => {
     const map = mapRef.current;
-    if (!visible || !manifest || !map || !mapReady) return;
+    if (!manifest || !map || !mapReady) return;
     const reconcile = () => {
-      if (!map.getSource(AMBIENT_SOURCE)) return;
+      if (!map.getSource(AMBIENT_SOURCE) || map.getZoom() < AMBIENT_LIMITS.minZoom) {
+        clearAmbientIdentities(map);
+        matchedBasemap.current.clear();
+        return;
+      }
       const unique = new Map<string, AmbientPlace>();
       for (const feature of map.querySourceFeatures(AMBIENT_SOURCE, {
         sourceLayer: "ambient_places",
@@ -224,7 +193,15 @@ export function AmbientPlacesLayer() {
           },
         ];
       });
-      const matched = matchAmbientBasemap(places, labels);
+      const matched = matchAmbientBasemap(
+        places.filter(
+          (place) =>
+            place.minZoom <= Math.floor(map.getZoom()) &&
+            !ambientIdentityKeys(place).some((id) => occupied.has(id)),
+        ),
+        labels,
+      );
+      matchedBasemap.current = matched;
       setAmbientIdentities(
         map,
         new Map([...matched].map(([key, p]) => [key, ambientPlaceToCategoryPlace(p, locale)])),
@@ -280,6 +257,7 @@ export function AmbientPlacesLayer() {
     };
     const style = () => {
       clearAmbientIdentities(map);
+      matchedBasemap.current.clear();
     };
     for (const id of LAYERS) INTERACTIVE_LAYER_IDS.add(id);
     map.on("idle", reconcile);
@@ -293,8 +271,9 @@ export function AmbientPlacesLayer() {
       map.off("style.load", style);
       map.off("click", click);
       clearAmbientIdentities(map);
+      matchedBasemap.current.clear();
       for (const id of LAYERS) INTERACTIVE_LAYER_IDS.delete(id);
     };
-  }, [mapRef, mapReady, visible, manifest, locale, occupied, dark, styleVersion]);
+  }, [mapRef, mapReady, manifest, locale, occupied, dark, styleVersion]);
   return null;
 }

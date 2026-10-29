@@ -1,5 +1,6 @@
 import type { BBox } from "@openmapx/core";
 import type { IntegrationContext, RealtimeProvider } from "@openmapx/integration-framework";
+import { captureTransitContributors } from "@openmapx/integration-framework";
 import type { LiveTransitVehicle, ServiceAlert } from "@openmapx/mobility-core/transit";
 import type { LiveTransitSnapshot } from "./types.js";
 
@@ -62,7 +63,7 @@ export function createLiveTransitOrchestrator(ctx: IntegrationContext) {
     const results = await Promise.allSettled(
       providers.map(async (provider) => {
         const result = await provider.getVehiclePositions?.(bbox);
-        return result?.data ?? [];
+        return result ? captureTransitContributors(result.data, result.attributions) : [];
       }),
     );
     for (let i = 0; i < results.length; i++) {
@@ -73,6 +74,8 @@ export function createLiveTransitOrchestrator(ctx: IntegrationContext) {
         );
       }
     }
+    if (providers.length > 0 && results.every((result) => result.status === "rejected"))
+      throw new Error("Live transit sources unavailable");
     const vehicles = results.flatMap((result) =>
       result.status === "fulfilled" ? result.value : [],
     );
@@ -84,7 +87,7 @@ export function createLiveTransitOrchestrator(ctx: IntegrationContext) {
     const results = await Promise.allSettled(
       providers.map(async (provider) => {
         const result = await provider.getAlertsForBbox?.(bbox);
-        return result?.data ?? [];
+        return result ? captureTransitContributors(result.data, result.attributions) : [];
       }),
     );
     for (let i = 0; i < results.length; i++) {
@@ -95,6 +98,8 @@ export function createLiveTransitOrchestrator(ctx: IntegrationContext) {
         );
       }
     }
+    if (providers.length > 0 && results.every((result) => result.status === "rejected"))
+      throw new Error("Live transit alert sources unavailable");
     return dedupeById(
       results.flatMap((result) => (result.status === "fulfilled" ? result.value : [])),
     );

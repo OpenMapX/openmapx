@@ -1,0 +1,22 @@
+{
+  "name": "@openmapx/otp-codegen",
+  "version": "1.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "generate": "node generate.mjs",
+    "check": "node generate.mjs --check"
+  },
+  "devDependencies": {
+    "@graphql-codegen/core": "6.2.2",
+    "@graphql-codegen/typescript-operations": "6.1.10",
+    "@graphql-codegen/typescript-generic-sdk": "5.0.1",
+    "graphql-codegen-typescript-validation-schema": "0.19.0",
+    "graphql": "16.14.2",
+    "graphql-tag": "2.12.6",
+    "graphql-sock": "1.0.1",
+    "zod": "4.6.7",
+    "typescript": "6.0.3"
+  }
+}

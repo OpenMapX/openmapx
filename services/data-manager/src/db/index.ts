@@ -17,7 +17,10 @@ assertProductionDatabaseUrlSecret(connectionString, process.env.NODE_ENV);
 
 // `postgres-js` is happy with a small connection pool here — the data-manager
 // is single-tenant and writes are infrequent (one INSERT per stage).
-export const sql = postgres(connectionString, { max: 4 });
+export const sql = postgres(connectionString, {
+  max: 4,
+  connection: { application_name: "openmapx-data-manager" },
+});
 export const db = drizzle(sql, {
   schema: {
     jobs,

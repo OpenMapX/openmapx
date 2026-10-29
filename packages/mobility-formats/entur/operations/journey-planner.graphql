@@ -1,0 +1,426 @@
+fragment StopPlaceFields on StopPlace {
+  id
+  name
+  latitude
+  longitude
+  transportMode
+}
+
+fragment QuayFields on Quay {
+  id
+  name
+  publicCode
+  latitude
+  longitude
+  stopPlace {
+    ...StopPlaceFields
+  }
+}
+
+fragment LineFields on Line {
+  id
+  publicCode
+  name
+  transportMode
+  authority {
+    name
+  }
+  operator {
+    name
+  }
+  presentation {
+    colour
+    textColour
+  }
+}
+
+fragment JourneyPatternFields on JourneyPattern {
+  id
+  pointsOnLink {
+    points
+  }
+  quays {
+    ...QuayFields
+  }
+}
+
+fragment SituationStopFields on StopPlace {
+  id
+  latitude
+  longitude
+}
+
+fragment SituationQuayFields on Quay {
+  id
+  latitude
+  longitude
+  stopPlace {
+    ...SituationStopFields
+  }
+}
+
+fragment SituationFields on PtSituationElement {
+  id
+  summary {
+    value
+    language
+  }
+  description {
+    value
+    language
+  }
+  reportType
+  severity
+  validityPeriods {
+    startTime
+    endTime
+  }
+  affects {
+    __typename
+    ... on AffectedLine {
+      line {
+        id
+      }
+    }
+    ... on AffectedServiceJourney {
+      serviceJourney {
+        line {
+          id
+        }
+      }
+      datedServiceJourney {
+        serviceJourney {
+          line {
+            id
+          }
+        }
+      }
+    }
+    ... on AffectedStopPlace {
+      stopPlace {
+        ...SituationStopFields
+      }
+      quay {
+        ...SituationQuayFields
+      }
+    }
+    ... on AffectedStopPlaceOnLine {
+      line {
+        id
+      }
+      stopPlace {
+        ...SituationStopFields
+      }
+      quay {
+        ...SituationQuayFields
+      }
+    }
+    ... on AffectedStopPlaceOnServiceJourney {
+      serviceJourney {
+        line {
+          id
+        }
+      }
+      datedServiceJourney {
+        serviceJourney {
+          line {
+            id
+          }
+        }
+      }
+      stopPlace {
+        ...SituationStopFields
+      }
+      quay {
+        ...SituationQuayFields
+      }
+    }
+  }
+}
+
+fragment BoardCallFields on EstimatedCall {
+  date
+  quay {
+    ...QuayFields
+  }
+  aimedArrivalTime
+  expectedArrivalTime
+  aimedDepartureTime
+  expectedDepartureTime
+  occupancyStatus
+  cancellation
+  destinationDisplay {
+    frontText
+  }
+  serviceJourney {
+    id
+    line {
+      ...LineFields
+    }
+  }
+  situations {
+    ...SituationFields
+  }
+}
+
+fragment JourneyCallFields on EstimatedCall {
+  quay {
+    ...QuayFields
+  }
+  aimedArrivalTime
+  expectedArrivalTime
+  actualArrivalTime
+  aimedDepartureTime
+  expectedDepartureTime
+  actualDepartureTime
+  occupancyStatus
+  cancellation
+  situations {
+    ...SituationFields
+  }
+}
+
+fragment TripLegFields on Leg {
+  mode
+  ride
+  expectedStartTime
+  expectedEndTime
+  distance
+  serviceDate
+  fromPlace {
+    name
+    latitude
+    longitude
+    quay {
+      id
+      stopPlace {
+        id
+      }
+    }
+  }
+  toPlace {
+    name
+    latitude
+    longitude
+    quay {
+      id
+      stopPlace {
+        id
+      }
+    }
+  }
+  fromEstimatedCall {
+    occupancyStatus
+  }
+  toEstimatedCall {
+    occupancyStatus
+  }
+  line {
+    ...LineFields
+  }
+  serviceJourney {
+    id
+  }
+  pointsOnLink {
+    points
+  }
+  intermediateEstimatedCalls {
+    occupancyStatus
+  }
+}
+
+query NearbyStops(
+  $latitude: Float!
+  $longitude: Float!
+  $maximumDistance: Float!
+  $maximumResults: Int!
+) {
+  nearest(
+    latitude: $latitude
+    longitude: $longitude
+    maximumDistance: $maximumDistance
+    maximumResults: $maximumResults
+    filterByPlaceTypes: [stopPlace]
+    filterByInUse: true
+    multiModalMode: parent
+  ) {
+    edges {
+      node {
+        place {
+          __typename
+          ... on StopPlace {
+            ...StopPlaceFields
+          }
+        }
+      }
+    }
+  }
+}
+
+query StopPlaceDetail($id: String!) {
+  stopPlace(id: $id) {
+    ...StopPlaceFields
+    quays {
+      ...QuayFields
+    }
+  }
+}
+
+query QuayDetail($id: String!) {
+  quay(id: $id) {
+    ...QuayFields
+  }
+}
+
+query StopPlaceBoard(
+  $id: String!
+  $timeRange: Int!
+  $numberOfDepartures: Int!
+  $arrivalDeparture: ArrivalDeparture!
+  $startTime: DateTime
+) {
+  stopPlace(id: $id) {
+    situations {
+      ...SituationFields
+    }
+    estimatedCalls(
+      startTime: $startTime
+      timeRange: $timeRange
+      numberOfDepartures: $numberOfDepartures
+      arrivalDeparture: $arrivalDeparture
+      includeCancelledTrips: true
+    ) {
+      ...BoardCallFields
+    }
+  }
+}
+
+query QuayBoard(
+  $id: String!
+  $timeRange: Int!
+  $numberOfDepartures: Int!
+  $arrivalDeparture: ArrivalDeparture!
+  $startTime: DateTime
+) {
+  quay(id: $id) {
+    situations {
+      ...SituationFields
+    }
+    estimatedCalls(
+      startTime: $startTime
+      timeRange: $timeRange
+      numberOfDepartures: $numberOfDepartures
+      arrivalDeparture: $arrivalDeparture
+      includeCancelledTrips: true
+    ) {
+      ...BoardCallFields
+    }
+  }
+}
+
+query StopPlaceRoutes($id: String!) {
+  stopPlace(id: $id) {
+    quays {
+      lines {
+        ...LineFields
+      }
+    }
+  }
+}
+
+query QuayRoutes($id: String!) {
+  quay(id: $id) {
+    lines {
+      ...LineFields
+    }
+  }
+}
+
+query LineDetail($id: ID!) {
+  line(id: $id) {
+    ...LineFields
+    journeyPatterns {
+      ...JourneyPatternFields
+    }
+    situations {
+      ...SituationFields
+    }
+  }
+}
+
+query PlanTrip(
+  $fromLat: Float!
+  $fromLon: Float!
+  $toLat: Float!
+  $toLon: Float!
+  $dateTime: DateTime!
+  $arriveBy: Boolean
+  $numTripPatterns: Int
+  $modes: Modes
+) {
+  trip(
+    from: { coordinates: { latitude: $fromLat, longitude: $fromLon }, name: "Origin" }
+    to: { coordinates: { latitude: $toLat, longitude: $toLon }, name: "Destination" }
+    dateTime: $dateTime
+    arriveBy: $arriveBy
+    numTripPatterns: $numTripPatterns
+    modes: $modes
+  ) {
+    fromPlace {
+      name
+      latitude
+      longitude
+    }
+    toPlace {
+      name
+      latitude
+      longitude
+    }
+    tripPatterns {
+      expectedStartTime
+      expectedEndTime
+      duration
+      streetDistance
+      emission {
+        co2
+      }
+      legs {
+        ...TripLegFields
+      }
+    }
+  }
+}
+
+query ServiceJourney($id: String!, $date: Date!) {
+  serviceJourney(id: $id) {
+    id
+    publicCode
+    situations {
+      ...SituationFields
+    }
+    line {
+      ...LineFields
+    }
+    journeyPattern {
+      ...JourneyPatternFields
+    }
+    pointsOnLink {
+      points
+    }
+    estimatedCalls(date: $date) {
+      ...JourneyCallFields
+    }
+  }
+}
+
+query NationalSituations {
+  situations {
+    ...SituationFields
+  }
+}
+
+query HealthCheck($id: String!) {
+  stopPlace(id: $id) {
+    id
+  }
+}

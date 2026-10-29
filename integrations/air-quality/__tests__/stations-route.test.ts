@@ -1,5 +1,6 @@
 import type { AirQualityProvider, IntegrationContext } from "@openmapx/integration-framework";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createOpaqueCursorCodec } from "../../../apps/api/src/services/opaque-cursor.js";
@@ -82,13 +83,34 @@ describe("canonical station route", () => {
       nextCursor: expect.any(String),
       meta: { candidateCount: 2, servedCount: 1 },
     });
+    const receiptFeatures = first.payload as {
+      features: Array<{ properties: { contributors?: unknown } }>;
+    };
+    expect(receiptFeatures.features[0]?.properties.contributors).toEqual([
+      {
+        sourceId: "fixture-source",
+        name: "Fixture source",
+        url: "https://example.test/data",
+        licensing: licensingFromDeclaration("CC-BY-4.0"),
+        attributionText: "Fixture authority",
+      },
+    ]);
     const firstBody = first.payload as { features: Array<{ id: string }>; nextCursor: string };
     upstream = [evidence({ at: now, spatialId: "changed", longitude: 14.8 })];
     const second = await invoke(ctx, { ...query, cursor: firstBody.nextCursor });
-    const secondBody = second.payload as { features: Array<{ id: string }>; nextCursor: null };
+    const secondBody = second.payload as {
+      features: Array<{
+        id: string;
+        properties: { contributors?: { sourceId: string; name: string }[] };
+      }>;
+      nextCursor: null;
+    };
     expect(secondBody.features).toHaveLength(1);
     expect(secondBody.features[0]?.id).not.toBe(firstBody.features[0]?.id);
     expect(secondBody.nextCursor).toBeNull();
+    expect(secondBody.features[0]?.properties.contributors).toMatchObject([
+      { sourceId: "fixture-source", name: "Fixture source" },
+    ]);
   });
 
   it("rejects a cursor bound to a different query", async () => {

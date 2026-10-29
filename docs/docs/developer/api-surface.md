@@ -1,32 +1,43 @@
 ---
 title: API surface
-description: How apps/api/openapi.json is generated, what it covers, and how to keep it accurate when you add a route.
+description: "How apps/api/openapi.json is generated, what it covers, and how to keep it accurate when you add a route."
 sidebar_position: 12
 ---
 
 # The API surface document
 
-`apps/api/openapi.json` is a generated, committed description of **every HTTP
-endpoint the API serves** — the core routes and the routes contributed by
-integrations. It is regenerated in-process, without a running server, a
-database, a cache, or network access, and a gate fails the build when it drifts.
+`apps/api/openapi.json` records the declared core API routes and statically
+collected built-in integration routes. It is generated and committed so route,
+method, authentication and adopted wire-contract changes appear in review.
+The generator needs no running server, database, cache or network connection.
+It describes the built-in surface, not which integrations are enabled on a
+particular deployment. Development-only host endpoints and Better Auth's
+individual wildcard subroutes are not expanded into separate operations.
 
-The point is accountability, not developer documentation. Because it is
-committed, a route that appears, disappears, changes method, or loses its
-authentication requirement shows up as a diff line in review. Nothing else in
-the repository makes that visible — in particular the 150+ integration routes
-have no other inventory.
+When changing a route:
+
+1. Register core routes through `registerCoreRoutes`, or use literal
+   `ctx.registerRoute` declarations for built-ins.
+2. Keep the auth declaration beside the actual runtime guard. Metadata alone
+   never enforces authentication.
+3. For an adopted SDK family, update its canonical request/response contract and
+   verify client-visible serialization.
+4. Generate OpenAPI, then regenerate the SDK if its input contract changed.
+5. Inspect the diffs and run the focused route/transport tests and freshness checks.
 
 ```bash
-pnpm openapi:generate   # rewrite the document
-pnpm check-openapi      # fail if it no longer matches the code
+pnpm openapi:generate
+pnpm check-openapi
+# When an adopted generated-client contract changes:
+pnpm sdk:generate
+pnpm check-api-sdk
 ```
 
-`check-openapi` runs in CI, and in `pre-commit` when the staged files could have
-moved the surface. There is also a Vitest suite (`openapi-freshness.test.ts`)
-that asserts the same thing plus two invariants: every operation declares how it
-authenticates, and no `/api/admin` operation is documented as anything but
-`admin`.
+`check-openapi` runs in CI. The current pre-commit hook checks the staged
+snapshot's formatting and lint; it does not run OpenAPI generation or the full
+policy suite. `apps/api/scripts/openapi/__tests__/openapi-freshness.test.ts`
+checks the committed document, authentication classification and admin-route
+classification.
 
 ## What gets collected, and how
 
@@ -42,12 +53,13 @@ clients are lazy and never connect.
 
 **If you add a core route, register it through `registerCoreRoutes`.** A route
 declared directly on the server instance in `server.ts` would be served but
-absent from the document — which is why `/health`, `/api/id-schemes` and
+absent from the document. This is why `/health`, `/api/id-schemes` and
 `/api/transit/registry` live in `routes/meta.ts` rather than inline.
 
 Whatever Fastify JSON schema a route declares (`querystring`, `params`, `body`,
-`response`) flows through into the document. Most routes declare none yet, so
-most operations describe a path and a method rather than a payload shape.
+`response`) flows through into the document. Inventory-only operations can describe only the path, method and auth level.
+Adopted contract families also define payloads, statuses and headers. Check the
+operation itself before treating it as a complete wire contract.
 
 ### Integration routes
 
@@ -57,11 +69,12 @@ wildcard routes, so Fastify's own introspection sees `/api/integrations/:id` and
 nothing else.
 
 They are therefore read **statically**, by parsing the `registerRoute` call
-sites with the TypeScript compiler API across the 106 built-in integrations.
+sites with the TypeScript compiler API across the built-in integration tree.
 Running every integration's `setup()` against a stub context executes arbitrary
-integration code — including registry loads — inside a commit gate, so the
-static scan was preferred. Both approaches independently verify the declared
-integration route surface.
+integration code, including registry loads, inside a gate. Static collection
+avoids those side effects. The static collector describes declarations without proving that an enabled
+integration reaches each registration at runtime. Focused setup and route tests
+verify that behavior.
 
 The consequence is a constraint: **`registerRoute` must be called with literal
 method and path strings.** A computed path fails the scan with an explanatory
@@ -70,7 +83,7 @@ error rather than silently vanishing from the document.
 ### Shared route factories
 
 A helper in `packages/integration-framework` can register routes on behalf of
-the integrations that call it — `createTidesIntegration` does, contributing
+the integrations that call it: `createTidesIntegration` does, contributing
 `GET /tides` to four integrations. Those are declared in `SHARED_ROUTE_FACTORIES`
 in `collect-integration-routes.ts`.
 
@@ -81,11 +94,18 @@ being declared.
 ## Declaring how a route authenticates
 
 Every operation carries `x-openmapx-auth`. For integration routes it is read
-from `registerRoute`'s `requireAuth` option. Core routes need it stated,
+from `registerRoute`'s `requireAuth` option. Omitted options or a literal options
+object without `requireAuth` mean public; an explicit `requireAuth` must be a
+literal `true` or `false`. The scanner rejects options identifiers, spreads,
+computed property names, prototype assignments, duplicate auth declarations and
+nonliteral auth values with the source file and route in its diagnostic. Keep
+these declarations literal rather than executing integration code during
+generation. Core routes need authentication stated,
 because guards run inside handlers or in a plugin `preHandler` hook and nothing
 about them is introspectable.
 
-State it once per plugin, next to the guard it describes:
+`declareRouteAuth` records metadata only. State the classification once per
+plugin, next to the guard it describes:
 
 ```ts
 export const savedRoute: FastifyPluginAsync = async (fastify) => {
@@ -107,14 +127,15 @@ A single route can override the plugin-wide level:
 fastify.post("/mobile-auth/issue", { config: { auth: "session" } }, handler);
 ```
 
-| Level         | Meaning                                                                                              |
-| ------------- | ---------------------------------------------------------------------------------------------------- |
-| `public`      | No credentials required.                                                                             |
-| `session`     | A signed-in user session.                                                                            |
-| `admin`       | An administrator session.                                                                            |
-| `service`     | An administrator session **or** a service-to-service token (`/api/data-manager`).                    |
-| `internal`    | No application check — reachability is expected to be restricted by the network (`/api/internal/*`). |
-| `unspecified` | Nobody has classified it. Fails the freshness test.                                                  |
+| Level           | Meaning                                                                                             |
+| --------------- | --------------------------------------------------------------------------------------------------- |
+| `public`        | No credentials required.                                                                            |
+| `session`       | A signed-in user session.                                                                           |
+| `admin`         | An administrator session.                                                                           |
+| `privacy_admin` | A least-privilege privacy caseworker or full administrator session.                                 |
+| `service`       | An administrator session **or** a service-to-service token (`/api/data-manager`).                   |
+| `internal`      | No application check: reachability is expected to be restricted by the network (`/api/internal/*`). |
+| `unspecified`   | Nobody has classified it. Fails the freshness test.                                                 |
 
 `unspecified` is deliberately distinct from `public`: an unclassified route must
 never be documented as open.
@@ -136,11 +157,11 @@ field bounds:
 | Operation                        | Field           | Accepted value or length                     |
 | -------------------------------- | --------------- | -------------------------------------------- |
 | `POST /api/mobile-auth/issue`    | `purpose`       | `sign-in`, `link-provider`, or `add-passkey` |
-|                                  | `codeChallenge` | 43–128 base64url characters                  |
-|                                  | `state`         | 16–128 base64url characters                  |
-| `POST /api/mobile-auth/exchange` | `callbackCode`  | 16–256 base64url characters                  |
-|                                  | `codeVerifier`  | 43–128 base64url characters                  |
-|                                  | `state`         | 16–128 base64url characters                  |
+|                                  | `codeChallenge` | 43 to 128 base64url characters               |
+|                                  | `state`         | 16 to 128 base64url characters               |
+| `POST /api/mobile-auth/exchange` | `callbackCode`  | 16 to 256 base64url characters               |
+|                                  | `codeVerifier`  | 43 to 128 base64url characters               |
+|                                  | `state`         | 16 to 128 base64url characters               |
 
 ### Cookie mutation and CSRF boundary
 
@@ -168,18 +189,19 @@ does not replace the mutation guard.
 
 ## What this document is not
 
-- **Not a response contract.** Adding a Fastify `response` schema is not
-  documentation — it is `fast-json-stringify` serialization, and it silently
-  drops any property you forget to declare. Response schemas are added per
-  route, with tests, not in a sweep.
-- **Not a request-validation project.** Adding `querystring`/`body` schemas
-  moves validation ahead of the handler and changes the 400 messages clients
-  see. Worth doing, route by route, as its own change.
-- **Not a published API.** It describes the internal surface the web and mobile
-  clients use. A stable, versioned public API is a separate design
-  (`/api/v1` + SDK), and this generator is the emitter it would build on.
-- **Not a description of Better Auth's endpoints.** Better Auth is mounted as a
-  single wildcard handler and appears as `/api/auth/{wildcard}`.
+The inventory is an internal application surface, not a promise of a stable
+versioned public API. Better Auth is mounted as one wildcard handler and appears
+as `/api/auth/{wildcard}`; its individual endpoints remain Better Auth's contract.
+
+Adding schemas changes runtime behavior as well as documentation:
+
+- A Fastify `response` schema controls serialization through `fast-json-stringify`
+  and can silently drop undeclared fields. Verify the actual response and
+  client before adopting one.
+- `querystring` and `body` schemas validate before the handler and can change
+  HTTP 400 behavior. Adopt them per route with tests.
+- Generated clients cover only explicitly adopted families. An inventory entry
+  alone provides no payload validator or SDK method.
 
 ## When the gate fails
 
@@ -188,9 +210,81 @@ does not replace the mutation guard.
   Run `pnpm openapi:generate` and commit the result alongside your route change.
 ```
 
-Regenerate and read the diff before committing it. If the diff shows a change
-you did not intend — a route you did not think you touched, or an auth level
-moving to something weaker — that is the gate doing its job.
+Regenerate and read the diff before committing it. Investigate unexpected routes, missing fields or weaker auth declarations
+before accepting the diff. Do not refresh the document merely to hide an
+unexplained change.
+
+## Generated runtime metadata SDK
+
+The application SDK generator selects each adopted family separately:
+
+| Family                          | Canonical source under `packages/core/src/` | Consumer entry point              |
+| ------------------------------- | ------------------------------------------- | --------------------------------- |
+| Runtime metadata                | `api/contracts/runtime-metadata.ts`         | `@openmapx/core/api-sdk`          |
+| Data-manager administration     | `api/contracts/data-manager-admin/`         | `@openmapx/core/api-admin-sdk`    |
+| Activity administration         | `api/contracts/activity-admin.ts`           | `@openmapx/core/api-admin-sdk`    |
+| Integration administration      | `api/contracts/integration-admin/`          | `@openmapx/core/api-admin-sdk`    |
+| Service/workflow administration | `api/contracts/service-admin/`              | `@openmapx/core/api-admin-sdk`    |
+| Extension administration        | `api/contracts/extension-admin/`            | `@openmapx/core/api-admin-sdk`    |
+| Internal data-manager           | `services/data-manager/contracts/`          | `@openmapx/core/data-manager-sdk` |
+
+The internal data-manager client has separate generation commands and service
+credentials. The browser administration client uses application API
+authentication. Do not substitute one transport for the other.
+
+`GET /api/capabilities` and `GET /api/integrations` have shared Zod response
+contracts in `@openmapx/core/api-contracts`. Their real Fastify response schemas
+feed named OpenAPI components. Other inventory-only endpoints are adopted in
+separate families when their actual wire contracts have been specified.
+
+After changing these contracts, run `pnpm openapi:generate`, then
+`pnpm sdk:generate`. Commit both the OpenAPI diff and generated SDK diff.
+`pnpm check-api-sdk` checks the complete generated file set without rewriting it
+and runs in the policy gate. Generation uses the committed OpenAPI document,
+selects the `runtime-metadata` family before validation, and performs no provider
+or database acquisition. Unrelated inventory entries are not SDK input.
+
+Import operations from `@openmapx/core/api-sdk`. Pass an isolated `ApiClient`
+through the operation's options for server/native or independently configured
+browser acquisition. The generated integration operation also accepts typed
+conditional request headers as its first argument. Its result distinguishes
+`200` with metadata from bodyless `304`. The transport owns credentials,
+cancellation through body consumption, deadlines and bounded redacted HTTP
+errors; the generated validator owns the response shape. Contract errors do
+not expose validation inputs. Legal pages use one `cache: "no-store"` snapshot.
+
+The pinned Orval configuration enables reusable recursive Zod schemas and
+selects generated **output** types for validated custom-client responses using
+its supported output transformer. Both are required to preserve recursive
+catalog types. Do not remove them without running SDK type/behavior tests.
+Public integration health metadata contains `type`, optional `name` and
+optional `category`; operational URLs, headers and configuration keys stay
+inside the host. Source licensing uses the portable structured output schema.
+
+## Generic weather forecasts
+
+`GET /api/integrations/weather/forecast` returns independent `hourly` and `daily`
+`WeatherForecastResponse` envelopes. Each envelope contains `points`, the exact
+selected `source`, and captured `contributors` projected from its returned
+points. Hourly and daily fallback can select different suppliers. A successful
+empty forecast keeps its selected source with empty points and receipts; when
+no provider succeeds, the source is `null` and both arrays are empty.
+
+Each forecast point retains its own canonical `contributors`, including
+authoritative `[]`, so clients can project credits after filtering or selecting
+points. The orchestrator captures the lookup catalogue before each provider
+acquisition and resolves only the response's explicit source or supplied
+receipts. Cached responses keep that acquisition metadata; they never rebuild
+credits from the current integration catalogue. The versioned forecast cache
+namespace excludes older bare-array payloads.
+
+The cache identity also includes the current disallowed-source set so a policy
+change reacquires an eligible fallback. If an adapter identifies its selected
+feed only in the response, the orchestrator rejects a disallowed returned
+source before exposing it. Such adapters still enforce acquisition policy
+internally. The host response filter remains the final authority: a policy
+change after handler resolution can replace a source-tagged envelope with
+`null`, as for other source-tagged API results.
 
 ## Canonical air-quality routes
 
@@ -199,11 +293,11 @@ They return `Cache-Control: private, max-age=0`; provider and distributed caches
 reduce upstream work without turning location-specific responses into shared
 browser-cache entries.
 
-| Route                                        | Required query                   | Optional query                                         | Bounds                                                                                        |
-| -------------------------------------------- | -------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| `GET /api/integrations/air-quality/current`  | `lat`, `lng`                     | `countryCode`, `subdivisionCode`, `comparisonStandard` | WGS84 coordinates; uppercase ISO hints                                                        |
-| `GET /api/integrations/air-quality/forecast` | `lat`, `lng`                     | current options plus `hours`                           | `hours` defaults to 48 and is 1–120                                                           |
-| `GET /api/integrations/air-quality/stations` | `south`, `west`, `north`, `east` | `zoom`, `pollutant`, `limit`, `cursor`                 | viewport at most 20° latitude × 30° longitude; antimeridian supported; zoom 0–22; limit 1–500 |
+| Route                                        | Required query                   | Optional query                                         | Bounds                                                                                              |
+| -------------------------------------------- | -------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `GET /api/integrations/air-quality/current`  | `lat`, `lng`                     | `countryCode`, `subdivisionCode`, `comparisonStandard` | WGS84 coordinates; uppercase ISO hints                                                              |
+| `GET /api/integrations/air-quality/forecast` | `lat`, `lng`                     | current options plus `hours`                           | `hours` defaults to 48 and is 1 to 120                                                              |
+| `GET /api/integrations/air-quality/stations` | `south`, `west`, `north`, `east` | `zoom`, `pollutant`, `limit`, `cursor`                 | viewport at most 20° latitude × 30° longitude; antimeridian supported; zoom 0 to 22; limit 1 to 500 |
 
 Every scalar key may occur once. Invalid/repeated values return HTTP 400 with
 `{ code: "INVALID_QUERY", message, details? }`. A valid request with no evidence
@@ -231,3 +325,389 @@ The deprecated `GET /api/integrations/weather-open-meteo-air-quality/aqi`
 route preserves its nine-field body. It now advertises `Deprecation`, `Sunset`,
 and a canonical successor `Link`. Source-policy exclusion is intentionally HTTP
 503 with exactly `{ "message": "Open-Meteo air quality is disabled by data-use policy" }`.
+
+## Internal data-manager service
+
+`services/data-manager/openapi.json` describes all explicit internal operations,
+including progress streams, binary downloads and HEAD responses. It is collected
+from the actual `registerApi` route registrations without starting jobs or
+connecting to a database. Optional offline-package routes are included using an
+inert collaborator. Automatic HEAD routes are excluded; explicit HEAD operations
+remain part of the contract.
+
+The canonical Zod operation table lives in
+`packages/core/src/services/data-manager/contracts`. It owns method, path,
+authentication, request validation, response statuses, wire schemas and required
+headers. Register producer handlers through `registerDataManagerRoute` so runtime
+validation and documentation use that same definition. Validate each hijacked
+NDJSON event before writing it; these streams bypass Fastify serialization.
+
+```bash
+pnpm data-manager:openapi:generate
+pnpm data-manager:sdk:generate
+pnpm check-data-manager-openapi
+pnpm check-data-manager-sdk
+```
+
+The last two commands run in `check:policy`. Commit both the document and generated
+SDK when changing a contract. Orval generates request serialization and plain wire
+types; operation-bound transport closures select the canonical runtime validators.
+Do not edit generated files or introduce a separate handwritten endpoint map.
+
+Server consumers import `@openmapx/core/data-manager-sdk`, explicitly construct a
+transport with their service URL and credentials, and call its generated functions.
+The transport enforces destination policy, deadlines, response sizes, declared
+statuses, media types, headers and payloads. Workflow adapters consume bounded,
+validated NDJSON progress and require a terminal event. Binary operations return an
+unconsumed `Response`; callers own streaming and release. This internal SDK must
+never receive browser credentials or replace the browser-facing API client.
+
+## Browser-facing data-manager administration
+
+The application API has a separate `data-manager-admin` contract family covering
+all 19 `/api/data-manager` operations and six `/api/admin/ambient-places`
+operations. Its portable schemas live under
+`packages/core/src/api/contracts/data-manager-admin`; API-owned database, Redis,
+operations-agent and merged-catalog projections are defined there rather than
+pretending they are internal data-manager responses.
+
+Register these handlers through `registerDataManagerAdminRoute` and keep their
+actual authentication guards beside the corresponding declarations. Authentication
+metadata does not grant or enforce access. The collector checks all 25 actual
+registrations, their stable operation IDs, status schemas and authentication
+classifications. Shared schema emission supports Fastify's draft-7 runtime and the
+OpenAPI 3.1 document without maintaining parallel handwritten schemas.
+
+```bash
+pnpm openapi:generate
+pnpm sdk:generate
+pnpm check-openapi
+pnpm check-api-sdk
+```
+
+Browser callers import `@openmapx/core/api-admin-sdk`. Generated named operations
+use `ApiClient` for the configured API origin, cookies, cancellation and deadlines.
+Their bound transport validates each declared status and its canonical JSON schema
+within response-size limits. `unwrapAdminResponse` returns successful data or a
+structured, redacted `ApiClientError`. Handle an expected absence such as an index
+status `404` before unwrapping; it is distinct from a malformed response or a
+successful published index. Query keys, polling and invalidation remain owned by
+the browser feature.
+
+The metadata and administration clients are generated together, with independent
+schema selection and one exact artifact-set check. Mechanical file emission and
+operation binding are shared with the internal SDK. Neither browser client uses
+internal service credentials or data-manager destinations.
+
+## Activity administration
+
+The `activity-admin` family adopts exactly five core operations: list jobs, inspect
+one source-qualified job, cancel an application job, read stream metrics and open
+an application-job SSE connection. `activityAdminOperations` in
+`@openmapx/core/api-contracts` supplies their request/response schemas. Routes use
+the shared administration registrar after their inherited admin guard; the older
+data-manager family retains its existing validation phase and hooks.
+
+The list query defaults to `limit=50` and `offset=0`; optional pagination accepts
+only bounded safe decimal integers. Detail and cancellation distinguish
+`application` and `data-manager` sources. Complete wire jobs include ISO dates,
+recursive JSON payload/result values, actors in list rows, logs and data-manager
+stages. Invalid output is rejected before Fastify can silently drop fields.
+
+Import the generated operations from `@openmapx/core/api-admin-sdk`. Finite
+operations return status-qualified validated responses. `streamAdminActivityJobEvents`
+returns an `AdminEventStreamTarget` with `url` and `withCredentials`; construct
+native `EventSource` in the browser and retain ownership of its lifetime. It does
+not fetch or parse SSE as JSON. The optional query cursor resumes an initial
+connection; native reconnections use `Last-Event-ID`, which takes precedence.
+Validate each received frame with `adminJobStreamEventSchemas` before applying it.
+
+The raw producer validates snapshots and every event before writing. Both the
+snapshot priming backlog and unflushed writes are bounded to 200 per viewer;
+overflow emits a qualified control event and closes. Invalid post-hijack state
+closes without exposing producer content, unsubscribes and clears heartbeat timers.
+Regenerate both `pnpm openapi:generate` and `pnpm sdk:generate` after a contract
+change, then run `pnpm check-openapi` and `pnpm check-api-sdk`.
+
+## Integration administration
+
+`integrationAdminOperations` owns all 22 integration, binding, credential and
+`/api/admin/overview` operations. Import the generated functions and canonical
+wire types from `@openmapx/core/api-admin-sdk`. The focused producer plugins inherit
+the administrator guard before contract parsing. Binding POST retains its earlier
+body-validation-before-handler-auth ordering. JSON parsing, global CSRF and rate
+limits retain their existing lifecycle positions. An omitted optional mutation
+body stays absent; explicit JSON null is invalid.
+
+Manifest/config-schema JSON remains lossless. Credential status uses the actual
+resolved winning layer, with stored-vault audit fields reported separately and
+without values. Health-history hours default to 24 and accept one integer from
+1 through 168. SQL timestamp-without-time-zone hour values are interpreted as UTC
+and emitted as ISO timestamps. Reload enqueue responses are HTTP 200 `{ok, jobId}`;
+they do not establish terminal job success.
+
+Configuration import validates the complete file against current manifests before
+writes. It replaces named non-secret overrides, preserves an omitted `enabled`,
+and leaves unnamed rows and the vault untouched. Declared top-level secret fields
+are omitted. Unknown/read-only/invalid fields and masked non-secret values reject
+the file. Exports omit secrets, obsolete/unknown DB fields and read-only fields;
+their optional `exportedAt` and `count` metadata is accepted by import. Empty imports
+are rejected, including an empty export with no saved overrides.
+
+Validation errors identify bounded entry numbers, known integration/field names
+and public rule categories. They never include supplied values, unknown keys,
+raw schema values or internal validator details.
+
+One DB transaction persists the batch. Before preparing the complete input, the
+API observes the current host revision through typed `configuration.inspect`;
+the initial `stack.render` must still own that revision at activation. A completed
+competing writer causes a conflict, with no automatic mutation retry. One normal
+reload follows a successful apply. A failed import returns HTTP 409 with
+`ok: false`, `phase`, `recovery`, `database`, optional `runtime`, and optional
+`apply`/`compensation` outcome evidence. `recovery: "restored"` is still a failed
+import, not success. `reconciliation_required` means an operator must inspect
+saved, applied and runtime state before another deliberate action; do not retry
+a mutation automatically. No secret-bearing snapshot enters this response.
+
+Recovery compares each named row's identity and PostgreSQL tuple version in an
+all-or-none transaction. It reverses only those integrations in the full payload
+actually submitted, preserving unrelated changes included during preparation.
+Before using previous DB rows as an inverse, recovery compares their named
+projections against fingerprints from that same authoritative host observation.
+Missing evidence or prior saved/applied divergence returns
+`reason: "previous_applied_not_proven"`, retains the imported DB rows, and requires
+reconciliation without replaying unproven values. The observation exposes no
+configuration values or secrets. An initial host conflict also requires
+reconciliation even if owned DB rows were restored: the competing generation may
+have included some of the imported settings.
+
+Host compensation authenticates `expectedCurrentRevisionId` using the committed
+import revision. A newer host generation conflicts rather than being overwritten.
+After a reload exception, a successful DB/host restoration also needs a recovery
+reload and a final DB ownership check. Unknown completion, lost ownership,
+compensation failure and incomplete cleanup remain explicit reconciliation.
+This is request-local compensation, not a crash-atomic DB/host/runtime transaction;
+process loss can require operator reconciliation. Live PostgreSQL and deployment
+acceptance are separate from provider-independent fixture qualification.
+
+Ordinary browser mutation completion effects capture the executing client and
+integration/credential owner. Replacement origins, identities and unmounted views
+cannot receive old callbacks, input clearing or feedback. Successful work can
+refresh its originating caches. Disposing the view does not cancel accepted host
+work; reload acceptance remains separate from Activity terminal completion.
+
+## Service and workflow administration
+
+`serviceAdminOperations` owns service inventory/detail, configuration,
+credentials, actions, logs, selection, backups, deployment/Compose, operation
+catalogue, shared-mobility rollback and Dawarich provisioning/rotation contracts.
+Producers use `registerServiceAdminRoute` after the runtime administrator guard.
+Import generated operations and canonical wire types from
+`@openmapx/core/api-admin-sdk`.
+
+Some statuses carry operational meaning that callers must preserve. Compose down
+returns an intentional 503 failure instead of a successful shutdown contract;
+managed platform credentials can return 409; queued actions return job acceptance
+without proving terminal completion. Handle expected status variants before
+unwrapping a response. Do not convert an unknown host outcome into a successful
+retry or rollback.
+
+`streamAdminServiceLogs` uses a bounded text-stream transport rather than JSON
+validation. The caller owns cancellation, consumption and release. The separate
+Activity observer owns accepted-job terminal effects; log closure alone cannot
+prove a service action completed. The generated operation table, transport and
+focused producer tests are the authority for each status and lifetime.
+
+Regenerate OpenAPI before the SDK and run both freshness checks after changing
+this family. Host configuration revision ownership is documented in
+[Service manifest](./service-manifest.md#configuration-generation-ownership-and-outcomes).
+
+## Extension administration
+
+`extensionAdminOperations` owns all eleven catalog, installed-extension, preview,
+install/update/remove, source and refresh operations. Producers use the shared
+administration registrar after the inherited admin guard. The independent
+extension preview limiter and the shared install/update store limiter run before
+structural validation; global CSRF, public rate limits
+and JSON parsing retain their lifecycle positions.
+
+Import the generated functions and canonical wire types from
+`@openmapx/core/api-admin-sdk`. Catalog list and detail are distinct projections;
+unfamiliar nested JSON remains inert and lossless, and unknown versions remain
+absent. Installed rows expose ISO timestamps and optional registry enrichment.
+Installed `hasUpdate` is `boolean | null`: `true` means a different matching
+catalog version, `false` means the same version, and `null` means comparison is
+unavailable (catalog failure, absent entry or missing version). `latestVersion`
+is null when unavailable; `installedVersion` remains authoritative local data.
+Catalog-list `hasUpdate` remains boolean. Optional catalog failures do not hide
+local inventory; database and response-validation failures still fail the read.
+The browser retains current-origin cached inventory after a failed refetch with
+a stale warning and removal controls, but disables update using stale evidence.
+Preview responses retain all effective ports, the inspected repository commit,
+full security rating and confirmation fingerprint. Install, update and remove
+return HTTP 202 `{jobId}` acceptance; Activity observation owns terminal outcomes.
+Mutations are never retried automatically.
+
+Requests reject unknown keys, wrong types and explicit JSON null. Update may
+omit its body; remove and refresh accept absence or an empty object. Selectors
+retain ID precedence when both are supplied. Source strings retain exact identity;
+URL, trust, provenance, revocation, persistence and host authorization remain domain
+responsibilities. Regenerate OpenAPI then SDK and run both freshness checks after
+contract changes.
+
+Direct manifest URLs use the real safe-fetch path and full portable manifest
+validation, then apply revocation and platform policy to the validated identity.
+They always resolve at community trust. Catalog resolution retains ID, declared
+version, digest and immutable verified authorization checks. All critical entries
+block preview/install/update and worker execution until cleared; `maxVersion`
+remains display-only metadata. Removal stays available. Existing stale-feed
+reporting and cached denial semantics are preserved.
+
+Preview has its own one-token/30-second network-key bucket. Install and update
+retain their shared bucket at the same limit; other store callers are unchanged.
+The guard still runs before the limiter and canonical structural validation.
+The HTTP preview and install/update endpoints have independent buckets, so an
+authenticated UI can submit a reviewed fingerprint directly to install/update.
+The operator CLI obtains another preview and therefore must also respect the
+preview bucket. Neither path automatically retries mutations.
+
+Extension-store validation errors select fixed public categories. Unknown
+provider, JSON, staging and source-persistence failures use fixed operation
+messages; route diagnostics contain only the operation message and safe error
+class. Never return or log arbitrary dependency messages, URLs, schema values or
+filesystem paths. Detail resolution failure retains its 200/empty-component
+fallback with safe diagnostics. The canonical wire schemas and generated SDK
+signatures are unchanged by these domain corrections.
+
+The browser extension consumer uses the generated family and canonical inferred
+contracts, including separate catalog list/detail projections and inert unknown
+JSON metadata. Its keys retain the raw configured API identity, including an empty
+same-origin value or trailing slash; only transport URL construction resolves the
+empty value against the document origin. Configured API bases must be HTTP(S)
+origins, without path prefixes, query strings or fragments. No global client is
+reconfigured. Queries consume cancellation through response bodies with a 30-second
+deadline; preview, mutation resolution and force refresh use 180 seconds and never
+retry automatically. Native EventSource observation has an independent lifetime.
+
+`AdminJobEffectsProvider` in the administration layout owns the shared accepted-job
+observer. Service and extension adapters capture client, raw API identity, job ID
+and feature terminal effects inside the executing mutation. View disposal suppresses
+UI callbacks without losing accepted work. Provider/origin replacement retires old
+registrations, including A-to-B-to-A replacement. Terminal extension effects cancel
+one union of affected origin-scoped extension, service, integration/configuration,
+credential inventory, runtime and overview reads before invalidating them; inactive queries remain stale
+and unrelated API origins are untouched. Synchronous source edits and refresh also
+invalidate catalog/detail/installed snapshots and installed badges.
+
+The private operator CLI uses these same generated operations with one isolated
+`ApiClient` per action. It reads `API_URL` → `OPENMAPX_API_URL` →
+`http://localhost:3001` late, omits credentials and always attaches
+`x-openmapx-local-admin` from the trimmed optional `OPENMAPX_LOCAL_ADMIN_TOKEN`
+(empty when absent). It does not configure the global client or create cookies,
+Origin headers or a new authentication mode. Other operator commands retain
+their existing transport.
+
+`ext preview <idOrUrl>` displays the complete validated inspected snapshot.
+Install/update preview again with their invocation client and selector before
+writing; port-bearing snapshots require an explicit matching
+`--host-port-confirmation <fingerprint>` supplied after human review. A mismatch
+requires new deliberate inspection. Generated functions own encoding exactly
+once, and omitted optional update/remove bodies stay absent. Reads use 30 seconds;
+preview and writes use finite 180-second deadlines through body consumption.
+Status/media/body/byte limits remain in the bound SDK transport. CLI failures use
+fixed safe messages and nonzero exits; validated 429 retains Retry-After without
+retrying. Timeouts are ambiguous and never cancel host jobs or trigger retries.
+The CLI prints queued 202 job IDs without adding an Activity watcher. Since
+install/update acquire another preview, a preceding explicit `ext preview` does
+not bypass the one-preview-per-30-seconds bucket; 429 ends that command without
+writing or automatically retrying.
+
+## Saved places application SDK
+
+The `saved-places` family covers all 14 session-authenticated `/api/saved`
+operations: list and place CRUD, labels, membership, import and export. Portable
+Zod contracts live under `packages/core/src/api/contracts/saved`; producer
+registration uses the shared HTTP contract registrar with session guards retained
+on the plugin. Authentication runs before application payload validation.
+
+Import generated functions from `@openmapx/core/saved-places-sdk` and unwrap their
+validated status envelopes with `unwrapSavedResponse`. Creation and update replies
+are receipts, not full read records. Saved read types are inferred from the
+canonical schemas. Keep React Query keys, session gating and invalidation in the
+feature hooks, and pass query cancellation signals to acquisition.
+
+Exports return consumed `Blob` values. The transport validates the media type
+against the requested GPX/GeoJSON/KML selector and requires attachment metadata.
+It consumes the UTF-8 response inside the application's cancellation/deadline
+lifetime, with a 40 MiB default download budget adjustable through request
+options. The web download adapter supplies a 60-second default deadline. Never
+return an unread response after releasing that lifetime or parse an XML download
+as JSON. Captured field attribution, licence bindings and import/export semantics
+remain part of the contract.
+
+Run `pnpm openapi:generate`, `pnpm sdk:generate`, `pnpm check-openapi` and
+`pnpm check-api-sdk` for contract changes. Existing metadata and administration
+artifacts are generated independently and should not change when this family is
+updated. Use actual serialized Fastify responses through the generated SDK in
+addition to hook tests; the migrated PostgreSQL saved suite qualifies persisted
+read shapes, import concurrency/rollback, receipt invalidation and ownership.
+
+## Personal garage SDK
+
+The eight `/api/vehicles` and `/api/parking` operations share canonical contracts
+and named functions from `@openmapx/core/garage-sdk`. Vehicle creation has a
+separate receipt without persisted timestamps; read records and parking upserts
+have validated ISO timestamps. Public record projection excludes owning account
+IDs. Successful SDK replies require `Cache-Control: no-store`.
+
+Structural request validation runs after session authentication. Existing garage
+normalizers retain trimming, defaults, electric/fuel rules and the write-only
+parking-expiry horizon. Partial updates preserve omitted fields. Account locks,
+ownership checks, default promotion, caps and database constraints stay in the
+producer. Core hooks retain identity-scoped local/remote query behavior;
+`GarageSyncBridge` consumes validated replies before clearing local rows and
+retires acquisition when its identity changes.
+
+Run `pnpm openapi:generate` and `pnpm sdk:generate` after contract changes, and
+commit both outputs. The exact-artifact gate protects previous generated families.
+
+## Sharing SDK
+
+The five `/api/shares` operations use canonical contracts and named functions
+from `@openmapx/core/sharing-sdk`. Creation returns `201` with its one-time token
+and owner projection. Owner reads never include token hashes or snapshots.
+Success validation requires the public `no-store` or owner
+`private, no-store`/`Pragma: no-cache`/`Vary: Cookie` headers. CORS explicitly
+exposes `Vary` so credentialed browser clients can validate this contract when
+the web application and API have different origins.
+
+The public page uses a request-local, cookie-free ApiClient with `cache: no-store`,
+independent of browser singleton configuration. Invalid public replies become
+unavailable before metadata or client rendering. Public lists retain captured
+attribution and the existing 1,000-place limit; this operation alone has a
+128 MiB JSON decoding ceiling, derived from bounded saved text and at most
+64 KiB captured attribution per place. Owner operations keep the default limit.
+
+Authentication precedes owner request validation. Account locking, ownership,
+expiry, token hashing, rate limits and route normalization stay in the producer.
+Regenerate OpenAPI and the SDK together. Tests cover serialized Fastify replies,
+anonymous SSR isolation, malformed successes, large attribution-bearing lists,
+and real migrated PostgreSQL ownership and share-cap concurrency.
+
+## Personal timeline response validation
+
+The five timeline calls keep the existing centralized client in
+`packages/core/src/api/personalTimeline.ts`. Successful connection metadata,
+disconnect receipts and normalized day replies are parsed with the shared Zod
+schemas in `packages/core/src/schemas/personalTimeline.ts`; their response types
+are inferred from those schemas. These application-wire schemas are separate
+from the Dawarich upstream validators. The OpenAPI entries remain inventory-only;
+this is not an adopted generated SDK family or Fastify serialization change.
+
+Parsing projects declared fields, including identifier-only map properties,
+before data enters timeline query/UI state. Invalid successful replies raise a
+payload-free `PersonalTimelineApiError` with `TIMELINE_RESPONSE_INVALID`. No raw
+response, schema issues or private history are attached to errors or persisted.
+Existing HTTP failure sanitization, owner isolation and partial-track warnings
+are preserved. Valid track positions can include elevation dimensions; no
+8 MiB generated-client limit is imposed on these larger normalized day replies.

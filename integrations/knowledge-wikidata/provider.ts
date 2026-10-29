@@ -62,10 +62,6 @@ const PROPS: PropConfig[] = [
 
 // Helpers
 /** Converts a Wikimedia Commons filename to a thumbnail URL. */
-function commonsUrl(filename: string, width = 800): string {
-  const encoded = encodeURIComponent(filename.replace(/ /g, "_"));
-  return `https://commons.wikimedia.org/wiki/Special:FilePath/${encoded}?width=${width}`;
-}
 
 /** Returns the best (preferred > normal) non-deprecated claim for a property, or undefined. */
 function bestClaim(claims: Record<string, Claim[]> | undefined, prop: string): Claim | undefined {
@@ -127,6 +123,9 @@ export const wikidataSource: KnowledgeProvider = {
     url.searchParams.set("languages", effectiveLang);
     url.searchParams.set("sitefilter", `${effectiveLang}wiki`);
     url.searchParams.set("format", "json");
+
+    // Share identical Wikimedia JSON only within one uncancelled full enrichment.
+    const scope = context?.cardPhoto || context?.signal ? undefined : context?.jsonScope;
 
     const data = await fetchJson<{ entities?: Record<string, WdEntity> }>(url.toString(), {
       headers: HEADERS,
@@ -209,10 +208,19 @@ export const wikidataSource: KnowledgeProvider = {
           const encodedTitle = encodeURIComponent(wikiTitle.replace(/ /g, "_"));
           result.wikipediaUrl = `https://${effectiveLang}.wikipedia.org/wiki/${encodedTitle}`;
 
-          const wpData = await fetchJson<{ extract?: string }>(
-            `https://${effectiveLang}.wikipedia.org/api/rest_v1/page/summary/${encodedTitle}`,
-            { timeoutMs: 3000, headers: { Accept: "application/json" }, nullOnError: true },
-          );
+          const summaryUrl = `https://${effectiveLang}.wikipedia.org/api/rest_v1/page/summary/${encodedTitle}`;
+          const wpData = scope
+            ? await scope
+                .getJson<{ extract?: string }>(summaryUrl, {
+                  timeoutMs: 3000,
+                  headers: { Accept: "application/json" },
+                })
+                .catch(() => null)
+            : await fetchJson<{ extract?: string }>(summaryUrl, {
+                timeoutMs: 3000,
+                headers: { Accept: "application/json" },
+                nullOnError: true,
+              });
           if (wpData?.extract) {
             result.wikipediaExtract = wpData.extract;
             result.wikipediaExtractSource = ["knowledge-wikidata", "knowledge-wikipedia"];
@@ -226,20 +234,11 @@ export const wikidataSource: KnowledgeProvider = {
           const p18Filename = p18.mainsnak.datavalue.value as string;
           const metadata = context?.cardPhoto
             ? await fetchCommonsMetadata([p18Filename], { strict: true, signal: context.signal })
-            : await fetchCommonsMetadata([p18Filename]);
+            : scope
+              ? await fetchCommonsMetadata([p18Filename], { getJson: scope.getJson })
+              : await fetchCommonsMetadata([p18Filename]);
           const richPhoto = metadata.get(p18Filename.replace(/_/g, " "));
-          if (richPhoto) {
-            result.photos = [richPhoto];
-          } else {
-            // Fallback if metadata fetch fails
-            result.photos = [
-              {
-                url: commonsUrl(p18Filename),
-                source: "wikimedia",
-                pageUrl: `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(p18Filename.replace(/ /g, "_"))}`,
-              },
-            ];
-          }
+          if (richPhoto) result.photos = [richPhoto];
         }
       })(),
       (async () => {

@@ -16,8 +16,16 @@ import {
   removeIntegration,
   validateIntegrationDirectory,
 } from "@openmapx/integration-framework/installer";
-import type { Command } from "commander";
+import { type Command, Option } from "commander";
 import kleur from "kleur";
+import {
+  agentContainerRunning,
+  installThroughAgentContainer,
+  installThroughLocalAgent,
+  removeThroughAgentContainer,
+  removeThroughLocalAgent,
+  runsInAgent,
+} from "../lib/agent-integrations";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 
@@ -114,10 +122,20 @@ function streamLog(line: string, stream: "stdout" | "stderr"): void {
   else log.dim(line);
 }
 
+/** The only source the agent's fixed CLI fetches itself: an https artifact pinned by SHA-256. */
+function agentArtifactSource(source: string | undefined, sha256: string | undefined) {
+  if (!source || !/^https:\/\//.test(source) || !sha256 || !/^[a-fA-F0-9]{64}$/.test(sha256)) {
+    throw new Error(
+      "Inside the operations agent, install an https artifact with --sha256, or run `pnpm openmapx integrations install` on the host",
+    );
+  }
+  return { kind: "artifact" as const, url: source, sha256: sha256.toLowerCase() };
+}
+
 export function registerIntegrationsCommands(program: Command): void {
   const integrations = program
     .command("integrations")
-    .description("Manage community integrations under custom_integrations/");
+    .description("Manage community integrations in the operations agent's integration store");
 
   integrations
     .command("scaffold <id>")
@@ -159,22 +177,46 @@ export function registerIntegrationsCommands(program: Command): void {
     });
 
   integrations
-    .command("install <source>")
+    .command("install [source]")
     .description("Install a declarative community integration from source or a .tar.gz artifact")
     .option("--ref <ref>", "Branch or tag to clone (Git sources only)")
     .option("--artifact", "Treat source as a prebuilt OpenMapX integration artifact")
     .option("--sha256 <hash>", "Expected sha256 for an artifact install")
+    .addOption(
+      new Option(
+        "--upload <sha256>",
+        "Install an archive staged for the operations agent",
+      ).hideHelp(),
+    )
     .action(
       async (
-        source: string,
+        source: string | undefined,
         options: {
           ref?: string;
           artifact?: boolean;
           sha256?: string;
+          upload?: string;
         },
       ) => {
         const paths = repoPaths();
         try {
+          if (runsInAgent()) {
+            // The operations agent's fixed CLI: the agent installs and records it.
+            const id = await installThroughLocalAgent(
+              options.upload
+                ? { kind: "upload", sha256: options.upload.toLowerCase() }
+                : agentArtifactSource(source, options.sha256),
+            );
+            log.ok(`Installed integration ${kleur.bold(id)} through the operations agent`);
+            return;
+          }
+          if (!source) throw new Error("A source is required");
+          if (await agentContainerRunning()) {
+            await installThroughAgentContainer({ source, ...options });
+            log.dim("Restart app-api so the integration host picks up the new manifest:");
+            log.dim("  pnpm openmapx services restart app-api");
+            return;
+          }
           const result = await installIntegration({
             rootDir: paths.root,
             source,
@@ -187,10 +229,9 @@ export function registerIntegrationsCommands(program: Command): void {
             `${result.replaced ? "Replaced" : "Installed"} integration ${kleur.bold(result.id)}`,
           );
           log.dim(result.directory);
-          log.info("");
-          log.info("Next steps:");
-          log.dim("  • Restart app-api so the integration host picks up the new manifest:");
-          log.dim(`      pnpm openmapx services restart app-api`);
+          log.warn(
+            "The operations agent is not running, so this was installed directly. The agent loads only integrations it installed: run this command again once the stack is up.",
+          );
         } catch (err) {
           log.err(`install failed: ${(err as Error).message}`);
           process.exit(1);
@@ -201,9 +242,19 @@ export function registerIntegrationsCommands(program: Command): void {
   integrations
     .command("remove <id>")
     .description("Remove a community integration")
-    .action((id: string) => {
+    .action(async (id: string) => {
       const paths = repoPaths();
       try {
+        if (runsInAgent()) {
+          const removed = await removeThroughLocalAgent(id);
+          log.ok(removed ? `Removed ${kleur.bold(id)}` : `${kleur.bold(id)} was not installed`);
+          return;
+        }
+        if (await agentContainerRunning()) {
+          await removeThroughAgentContainer(id);
+          log.dim("(restart app-api to deactivate)");
+          return;
+        }
         const result = removeIntegration({ rootDir: paths.root, id });
         log.ok(`Removed ${kleur.bold(id)}`);
         log.dim(result.directory);

@@ -1,3 +1,4 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 /**
  * Wuppertal car-sharing open data client.
  * GeoJSON with stations from Cambio, Flinkster, and RUHRAUTOE.
@@ -91,8 +92,10 @@ export const deNwWuppertalClient = createStaticCarSharingClient({
   attribution: {
     label: "Stadt Wuppertal",
     url: "https://www.offenedaten-wuppertal.de",
-    license: "CC BY 4.0",
-    licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+    licensing: licensingFromDeclaration(
+      "CC-BY-4.0",
+      "https://creativecommons.org/licenses/by/4.0/",
+    ),
   },
   parse,
 });

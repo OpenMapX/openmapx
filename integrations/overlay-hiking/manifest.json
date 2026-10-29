@@ -68,8 +68,6 @@
       "sourceId": "waymarked-trails",
       "name": "Waymarked Trails",
       "url": "https://waymarkedtrails.org/",
-      "license": "CC BY-SA 3.0 DE (tiles); ODbL (OSM data)",
-      "licenseUrl": "https://hiking.waymarkedtrails.org/#help-legal",
       "attribution": "© <a href=\"https://waymarkedtrails.org/\">waymarkedtrails.org</a>, © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "commercialUse": "yes",
       "providerCountry": "DE",
@@ -77,28 +75,73 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "imagery",
+            "subject": "Waymarked Trails tiles",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-SA-3.0-DE"
+            }
+          },
+          {
+            "scope": "data",
+            "subject": "Underlying OSM database",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CC-BY-SA-3.0-DE (tiles); ODbL-1.0 (OSM data)",
+            "url": "https://hiking.waymarkedtrails.org/#help-legal"
+          }
+        ]
+      }
     },
     {
       "sourceId": "refuges-info",
       "name": "Refuges.info",
       "url": "https://www.refuges.info/",
-      "license": "CC BY-SA 2.0 FR",
-      "licenseUrl": "https://www.refuges.info/wiki/licence",
       "commercialUse": "yes",
       "providerCountry": "FR",
       "providerPrivacyUrl": "https://www.refuges.info/wiki/mentions-legales",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Refuges.info material",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:refuges-info",
+              "id": "LicenseRef-CC-BY-SA-2.0-FR",
+              "name": "Creative Commons Attribution-ShareAlike 2.0 France",
+              "url": "https://www.refuges.info/wiki/licence"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CC BY-SA 2.0 FR",
+            "url": "https://www.refuges.info/wiki/licence"
+          }
+        ]
+      }
     },
     {
       "sourceId": "osm",
       "name": "OpenStreetMap",
       "url": "https://www.openstreetmap.org/",
-      "license": "ODbL 1.0",
-      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
       "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "commercialUse": "yes",
       "providerCountry": "UK",
@@ -106,7 +149,27 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "OpenStreetMap material",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0",
+              "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "ODbL-1.0",
+            "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+          }
+        ]
+      }
     }
   ]
 }

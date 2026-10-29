@@ -7,9 +7,13 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
+import type { Disclosure, IntegrationMetadata } from "@openmapx/core/api-contracts";
+import { buildLicensingHtml } from "@openmapx/core/attribution";
 import { legalConfig, sectionSlug } from "@openmapx/core/legal";
-import type { Disclosure, PublicLegalConfig } from "@openmapx/core/server-api";
+import type { PublicLegalConfig } from "@openmapx/core/server-api";
+import type { Licensing } from "@openmapx/mobility-core/licensing";
 import { TransitFeedAttribution } from "@/components/legal/TransitFeedAttribution";
+import { AttributionText } from "@/components/ui/AttributionText";
 import { generateAttributionSectionsFromManifests } from "../generateLegalSections";
 import { termsIds, termsTitles } from "./sections";
 
@@ -19,13 +23,11 @@ const T = termsTitles("de");
 const IDS = termsIds("de");
 
 export default function TermsContentDe({
-  capabilities: _capabilities = {},
   integrations = [],
   disclosures = [],
   legal,
 }: {
-  capabilities?: Record<string, boolean>;
-  integrations?: import("@openmapx/integration-framework").LoadedIntegrationMeta[];
+  integrations?: IntegrationMetadata[];
   disclosures?: Disclosure[];
   legal?: PublicLegalConfig | null;
 }) {
@@ -48,7 +50,7 @@ export default function TermsContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 5. September 2026
+        Zuletzt aktualisiert: 28. Oktober 2026
       </Typography>
       <Section title={T.scope}>
         <Typography>
@@ -400,9 +402,10 @@ export default function TermsContentDe({
           <Link href="https://mangrove.reviews/" target="_blank" rel="noopener noreferrer">
             Mangrove Open Reviews Standard
           </Link>{" "}
-          ein. Bewertungen, die Sie &uuml;ber OpenMapX einreichen, werden in Ihrem Browser signiert
-          und im Mangrove-Netzwerk ver&ouml;ffentlicht. F&uuml;r die von Ihnen erstellten
-          Bewertungsinhalte gelten insbesondere die folgenden Bestimmungen.
+          ein. Bewertungen, die Sie über OpenMapX einreichen, werden vom gemeinsamen
+          Mangrove-Signierdienst oder bei gewählter verschlüsselter lokaler Signierung in Ihrem
+          Browser signiert und im Mangrove-Netzwerk veröffentlicht. F&uuml;r die von Ihnen
+          erstellten Bewertungsinhalte gelten insbesondere die folgenden Bestimmungen.
         </Typography>
         <ul>
           <li>
@@ -481,15 +484,16 @@ export default function TermsContentDe({
           </li>
           <li>
             <Typography>
-              <strong>Verantwortung f&uuml;r den Signaturschl&uuml;ssel.</strong> Sie sind f&uuml;r
-              die sichere Aufbewahrung Ihrer Bewertungs-Passphrase und etwaiger registrierter
-              Passkeys verantwortlich. Wer diese besitzt, kann Bewertungen in Ihrem Namen signieren.
-              Wenn Sie den unverschl&uuml;sselten Schl&uuml;sselpaar-Modus ausw&auml;hlen,
-              akzeptieren Sie zus&auml;tzlich, dass der Betreiber technisch Zugriff auf Ihren
-              Signaturschl&uuml;ssel hat. Verlorene Passphrasen und Passkeys k&ouml;nnen nicht
-              wiederhergestellt werden; Sie k&ouml;nnen ein neues Schl&uuml;sselpaar generieren,
-              bestehende Bewertungen bleiben jedoch mit dem alten &ouml;ffentlichen Schl&uuml;ssel
-              verkn&uuml;pft.
+              <strong>Verantwortung für die Signaturidentität.</strong> Beim gemeinsamen
+              Signierdienst verwahrt Mangrove den privaten Schlüssel und signiert in Ihrem Namen.
+              Schützen Sie Anmeldung und Wiederherstellung dieses separaten Mangrove-Kontos und
+              verwalten Sie diese bei Mangrove. Bei der erweiterten verschlüsselten lokalen
+              Signierung schützen Sie Bewertungs-Passphrase, Passkeys und private
+              Schlüsselsicherungen; wer einen nutzbaren Schlüssel besitzt, kann in Ihrem Namen
+              signieren. OpenMapX kann einen lokalen Schlüssel nach Verlust aller Entsperrmethoden
+              und Sicherungen nicht wiederherstellen. Ein neuer Schlüssel überträgt bestehende
+              Bewertungen nicht vom alten öffentlichen Schlüssel. Eine lokale Schlüsselspeicherung
+              im Klartext wird nicht angeboten.
             </Typography>
           </li>
         </ul>
@@ -734,8 +738,7 @@ function Section({
 interface AttributionRow {
   source: string;
   desc: string;
-  license: string;
-  licenseUrl?: string;
+  licensing: Licensing;
   url?: string;
   notes?: string;
 }
@@ -780,13 +783,12 @@ function AttributionTable({ heading, rows }: { heading: string; rows: Attributio
                   )}
                 </TableCell>
                 <TableCell>
-                  {row.licenseUrl ? (
-                    <Link href={row.licenseUrl} target="_blank" rel="noopener noreferrer">
-                      {row.license}
-                    </Link>
-                  ) : (
-                    row.license
-                  )}
+                  <AttributionText
+                    html={buildLicensingHtml(row.licensing, {
+                      includeSoftware: true,
+                      fullNames: true,
+                    })}
+                  />
                 </TableCell>
               </TableRow>
             ))}

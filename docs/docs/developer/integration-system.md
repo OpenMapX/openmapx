@@ -1,53 +1,59 @@
 ---
 title: Integration system
-description: The manifest, the IntegrationContext, the typed provider contracts, domains, and the loader-to-host lifecycle that powers OpenMapX features.
+description: "The manifest, the IntegrationContext, the typed provider contracts, domains, and the loader-to-host lifecycle that powers OpenMapX features."
 sidebar_position: 3
 ---
 
 # Integration system
 
-An **integration** is an app-level feature, packaged so the platform can discover
-it, configure it, wire it to the backends it needs, and load it at runtime
-without code changes elsewhere. The geocoding orchestrator, the routing
-orchestrator, every transit provider, the map overlays, external POI data
-sources, photos, reviews, weather, and place enrichment are all integrations.
+An integration adds an application feature through a manifest and, for trusted
+built-ins, provider or UI code. Geocoding, routing, transit, map overlays,
+photos, reviews and weather use this system.
 
-This page is the conceptual reference for that machinery: the manifest schema,
-the `IntegrationContext` an integration runs against, the typed provider
-contracts and the domains they live in, and the lifecycle that takes a directory
-on disk to a live feature. If you have not yet met the
-service / integration / capability model, read
-[How it works](../overview/how-it-works.md) first — it frames where integrations
-sit relative to backend services. The administrator's side of the same system —
-configuring integrations, setting secrets, and binding capabilities — is covered
-in [Integrations & bindings](../administration/integrations-administration.md).
-This page complements it from the code side.
+Use this reference when declaring a manifest, choosing a provider contract or
+working with the host lifecycle. For a new built-in, follow
+[Writing an integration](./writing-an-integration.md). For a separately
+published declarative artifact or companion service, follow
+[Building an external extension](./building-an-external-extension.md).
+
+[How it works](../overview/how-it-works.md) explains the service, integration and
+capability model. [Integrations & bindings](../administration/integrations-administration.md)
+covers operator configuration, secrets and service selection.
+
+The main implementation boundaries are:
+
+| Boundary                                    | Current source                                                     |
+| ------------------------------------------- | ------------------------------------------------------------------ |
+| Portable manifest validation                | `packages/extension-contracts/src/integration.ts`                  |
+| Trusted runtime context and exports         | `packages/integration-framework/src/context.ts` and `src/index.ts` |
+| Discovery, setup, activation and retirement | `apps/api/src/integration-host.ts`                                 |
+| Dynamic route dispatch                      | `apps/api/src/integration-routes.ts`                               |
+| Built-in web-host API                       | `apps/web/src/integration-api/`                                    |
 
 ## Anatomy of an integration
 
 An integration is a directory. Built-in integrations live under `integrations/`
 and run directly from workspace TypeScript source; community integrations live
-under `custom_integrations/` and are limited to declarative metadata and
-frontend assets (see
-[Built-in versus community](#built-in-versus-community)). The host only requires
-two things to be present:
+in the operations agent's integration store, which app-api mounts at
+`custom_integrations/`, and contain declarative metadata and
+safe static assets (see
+[Built-in versus community](#built-in-versus-community)). The directory can contain these entry files:
 
-- **`manifest.json`** — declarative metadata. Required. This is what the host
+- **`manifest.json`**: declarative metadata. Required. This is what the host
   discovers and validates; an integration with only a manifest and no code is a
   valid (if inert) integration.
-- **`index.ts`** — the trusted built-in runtime entry point. Optional and not
+- **`index.ts`**: the trusted built-in runtime entry point. Optional and not
   permitted in an installable community artifact.
   It exports a `setup(ctx)` function that the host invokes once at load time,
   passing the [`IntegrationContext`](#the-integration-context). This is where an
   integration registers providers, routes, and lifecycle hooks.
 
 Most integrations also ship `strings/<locale>.json` localization files and, when
-they have a frontend, a map overlay — the MapLibre layer component, plus
+they have a frontend, a map overlay: the MapLibre layer component, plus
 optional legend and panel components. An overlay's legend can be declared in the
 manifest instead of shipped as code. See [Map overlays](#map-overlays).
 
-A backend entry point is typically very small — it wires implementations into
-the context and returns:
+A backend entry point wires its implementation into the context:
 
 ```ts
 import type { IntegrationContext } from "@openmapx/integration-framework";
@@ -59,8 +65,10 @@ export function setup(ctx: IntegrationContext): void {
 
 ## The manifest
 
-The manifest is validated against a Zod schema in
-`packages/integration-framework/src/manifest.ts`. The fields below are the ones
+The portable Zod schema lives in
+`packages/extension-contracts/src/integration.ts` and is re-exported by
+`packages/integration-framework/src/manifest.ts`. `validateManifest` adds semantic
+checks beyond the schema shape. The fields below are the ones
 that matter for understanding the system; the schema is the source of truth for
 the exhaustive list.
 
@@ -80,7 +88,7 @@ the exhaustive list.
 }
 ```
 
-The `id` is load-bearing: it names the integration's directory, its config cache
+The `id` names the integration's directory, its config cache
 namespace, its environment-variable prefix, and its API route prefix
 (`/api/integrations/<id>/...`). It is constrained to a safe slug because it also
 names files, URLs, and generated build-time identifiers.
@@ -94,13 +102,13 @@ names files, URLs, and generated build-time identifiers.
 ```
 
 `domains` is the integration's most important declaration. A **domain** is the
-feature area an integration participates in — `routing`, `geocoding`, `transit`,
+feature area an integration participates in: `routing`, `geocoding`, `transit`,
 `weather`, `data-source`, and so on. Domains are the join key between
 integrations and the orchestrators that consume them: a domain orchestrator asks
-the host for every enabled integration in its domain and merges their providers.
+the host for enabled integrations in its domain. Each orchestrator defines its
+own selection policy, such as first-success fallback or parallel merging.
 The field is a free-form string array, so one integration can serve several
-domains, and frontend-only conventions (for example `map-overlay` or
-`street-level-imagery`, which have no backend registrar) are expressed the same way. The
+domains, and frontend-only conventions (for example `map-overlay`, which has no backend registrar) are expressed the same way. The
 domains that carry a typed provider contract are enumerated in
 [Domains and provider contracts](#domains-and-provider-contracts).
 
@@ -113,7 +121,7 @@ domains that carry a typed provider contract are enumerated in
 }
 ```
 
-`dependencies` controls load order — the host topologically sorts integrations
+`dependencies` controls load order: the host topologically sorts integrations
 so a dependency is set up before its dependents. `requires` declares the
 **backend services** the integration needs. Each entry sets exactly one of
 `service` (a specific service slug) or `capability` (any service that provides
@@ -135,6 +143,7 @@ described in [Capability requirement resolution](#capability-requirement-resolut
       labelKey: string;
       icon?: string;
       preview?: string | null; // integration-root-relative SVG, e.g. "preview.svg"
+      quickSelector?: boolean; // include in the desktop quick selector
     };
     overlay?: {
       excludes?: string[];   // overlay ids this one is mutually exclusive with
@@ -151,7 +160,7 @@ described in [Capability requirement resolution](#capability-requirement-resolut
   };
   backend?: {
     routes?: boolean;        // registers routes via ctx.registerRoute
-    cron?: string | null;    // cron expression for a periodic task
+    cron?: string | null;    // declaration; the host does not schedule it
   };
 }
 ```
@@ -163,7 +172,8 @@ declarations the host renders (a search-bar category chip; a layer-selector
 entry). `overlay` carries mutual-exclusion rules (`excludes`), `minZoom`, and an
 optional **declarative legend** the host draws from the manifest, which an
 overlay can use instead of shipping a `legend.tsx`. `backend.routes` signals that
-the integration registers HTTP routes; `backend.cron` declares a recurring task.
+the integration registers HTTP routes; `backend.cron` is a declaration only; the current API host has no cron
+scheduler. A built-in that starts a timer owns its cleanup through `onShutdown`.
 How an overlay renders is detailed in [Map overlays](#map-overlays).
 
 Several enabled providers can intentionally share one overlay, as Mapillary and
@@ -173,9 +183,10 @@ layer and legend once, the layer selector exposes one toggle, and the overlay
 registry creates one entry using the first enabled participant's overlay
 metadata in registry order. Participants should declare the same overlay rules
 and selector metadata and render all contributing providers through the common
-component. Provider metadata stays available for domain attribution; sharing a
-frontend does not remove a provider's credits. Two frontend owners resolving to
-the same overlay without a matching shared-layer declaration remain an error.
+component. Each provider captures its own supplying-source receipts at acquisition;
+the shared renderer projects only the receipts for content it actually displays.
+Two frontend owners resolving to the same overlay without a matching shared-layer
+declaration remain an error.
 
 When `layerSelector.preview` is set, it names an SVG file relative to the
 integration root, such as `preview.svg` or `assets/layer-preview.svg`. The host
@@ -185,6 +196,10 @@ be SVG files no larger than 64 KiB. Remote URLs, data URLs, inline SVG values,
 absolute paths, and paths that escape the integration directory are not
 accepted. If `preview` is omitted or `null`, or if the image cannot be loaded at
 runtime, the layer selector uses its generic placeholder.
+
+`infrastructure` optionally declares `dataRequirements: string[]` and
+`planetScale: boolean` for administration information. These fields do not
+resolve a service or fetch a dataset; use `requires` for service wiring.
 
 ### Config schema
 
@@ -199,18 +214,42 @@ settings. The admin panel renders it as a form, and the host uses it to know
 which keys exist, their defaults, and which are secrets. A property marked
 `"x-openmapx-secret": true` is a credential: it is never shown in the config
 form or in API responses and is set through the Credentials tab instead. The
-layered resolution of these values — defaults, database, vault, `config.json`,
-and environment — is the **config cascade** documented in full on the
+**config cascade** resolves defaults, database values, vault secrets,
+`config.json` and environment overrides in that order. See the
 [admin page](../administration/integrations-administration.md#the-config-cascade).
 An integration that declares any secret field will refuse to load at startup
 unless the vault key (`OPENMAPX_SECRETS_KEY`) is present, so a missing key is a
 hard boot error rather than a silent degrade.
+
+### Personal-data storage declarations
+
+Built-in integrations also declare `subjectData`. The portable schema makes
+this field optional, but `pnpm check-subject-data` requires it for repository
+integrations. For an integration that stores no personal data:
+
+```json
+{
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  }
+}
+```
+
+Storage requiring automated collection uses `strategy: "collector"` and actual
+privacy-catalogue registration IDs. Operator-managed handling uses
+`strategy: "operator_task"` and bounded instructions. A declaration does not
+register a collector or grant database access. Transmitting a query upstream
+still needs source/privacy disclosures even when the integration stores none.
 
 ### Health checks
 
 ```ts
 {
   healthCheck?: HealthCheck | HealthCheck[];
+  healthCheckIntervalMs?: number;             // background cadence; default 60000, minimum 60000
 }
 
 interface HealthCheck {
@@ -228,7 +267,12 @@ A `healthCheck` makes the integration probeable. `urlTemplate` and `headers`
 interpolate `${configKey}` placeholders resolved through the config cascade, so a
 probe can carry an API key without hard-coding it. If a key listed in
 `requiredConfigKeys` is unset, the probe reports **unconfigured** rather than
-attempting the request — the difference between "not set up yet" and "broken."
+attempting a request without the required configuration.
+Use cheap, static endpoints for third-party reachability checks. Set
+`healthCheckIntervalMs` to a considerate background cadence (Mangrove uses
+900000 ms, or 15 minutes). The scheduler reuses cached results between probes
+and prevents overlapping scheduled probes of the same integration generation.
+Explicit administrator checks still probe immediately.
 An array of checks rolls up into one signal: all must pass. The states and how
 they surface are described on the
 [admin page](../administration/integrations-administration.md#integration-health).
@@ -242,8 +286,7 @@ they surface are described on the
     domain?: string;                  // one of `domains`; defaults to the first
     name: string;
     url: string;
-    license: string;
-    licenseUrl?: string;
+    licensing: Licensing;
     attribution?: string;
     providerCountry: string;          // ISO country code
     providerPrivacyUrl: string;
@@ -266,28 +309,175 @@ they surface are described on the
 `dataSources` is one entry per upstream API or dataset the integration touches.
 It is the single home for credit and privacy metadata: the legal pages
 (`/privacy`, `/terms`) and the per-result attribution chips are generated from
-these entries, and a host-side completeness gate blocks a commit if any
-generated table cell would be empty. The `sourceId` is globally unique across all
+these entries, and the legal-table policy check fails if any
+generated table cell would be empty when `pnpm check-legal-tables` runs. The `sourceId` is globally unique across all
 integrations, which lets attribution be resolved by source no matter which
-integration declared it. Provider code should not hand-roll `Attribution`
-objects — the framework's `createManifestAttribution()` helper turns
-`dataSources` into the canonical attribution shape so credit metadata lives only
-in the data source list: the static manifest list, or, for a runtime
-integration, the list it supplies with `setDataSources` (see
-[Runtime data sources](#runtime-data-sources)).
+integration declared it. `dataSourceToAttribution()` and the framework's
+contributor helpers convert declared metadata into canonical receipts. Capture
+that metadata when acquiring the data; the current catalogue is not evidence
+that every listed source supplied a result. Runtime integrations supply metadata
+with `setDataSources` (see [Runtime data sources](#runtime-data-sources));
+per-record receipts also retain exact runtime-feed and required notice metadata.
+
+Use the shared [licence metadata contract](./licensing.md): scoped subjects,
+registered SPDX expressions, captured custom definitions and explicit unknown
+or per-item states. The host derives labels and links; data sources do not
+provide scalar display labels. Preserve publisher notices and actual account
+conditions separately from data grants.
 
 An integration in several domains whose sources serve different ones sets
 `domain` on each source that does not belong to its first domain. The source is
-then listed under that domain's section of the legal pages, and an overlay that
-credits a whole domain credits it only there. The built-in OpenConditions
+then listed under that domain's section of the legal pages. A map overlay
+credits only the sources that supplied its rendered records. The built-in OpenConditions
 integration sets it on every source it supplies at runtime (see below), so its
 fuel feeds are not credited on the traffic overlays.
 
 :::note[Source IDs connect manifests to results]
-A provider tags each result with the `sourceId` it came from, and the host maps
-that back to the manifest entry to render the right license. Keep `sourceId`
-values stable; renaming one orphans existing attribution.
+A provider resolves each result's exact `sourceId` against metadata captured
+before acquisition and retains the resulting receipt with the record. Rendering
+uses that receipt, never today's manifest entry. Keep `sourceId` values stable
+so new acquisitions and source/privacy disclosures identify the same supplier.
 :::
+
+### Captured contributor contract
+
+Canonical `Attribution` is defined in `@openmapx/mobility-core/attribution`:
+
+```ts
+interface Attribution {
+  sourceId: string;
+  name: string;
+  url?: string;
+  licensing?: Licensing;
+  attributionText?: string;
+  publisher?: { name: string; url?: string };
+  retrievedAt?: string;
+  notes?: string;
+}
+```
+
+A record carries `contributors?: readonly Attribution[]`. A supplied array,
+including `[]`, is authoritative. Only `undefined` means unavailable captured provenance. `parseContributors(unknown)` accepts a validated array or
+its JSON encoding and returns a copied snapshot; malformed input returns
+`undefined`, while `"[]"` returns `[]`. Unknown provenance stays unknown. A
+missing exact source/feed identity must never expand to every source in an
+integration or domain, or be guessed from an ID prefix. A proven uniform
+single-supplier acquisition can stamp that supplier at its adapter boundary.
+
+Use `snapshotContributors`, `withContributors`, `contributorsForRecords`, and
+`withFeatureContributors` from `@openmapx/integration-framework` in built-ins.
+The same portable helpers are exported from
+`@openmapx/mobility-core/contributors`. They copy metadata, including publisher
+objects, and preserve distinct notices/URLs/licenses from the same `sourceId`.
+Do not deduplicate by source ID alone. Keep mandatory redistribution notices
+with the supplying dataset. Resolve a catalogue child's explicit canonical
+parent credit identity when the producer contract establishes that relationship;
+never infer the parent from a name or remove its notice.
+
+Capture metadata **before the first await for acquisition**, then stamp returned
+records before caching, validation, deduplication, truncation, or publication.
+For known IDs use `resolveIntegrationContributors(ctx, sourceIds)`; when a
+backend/feed is identified only by the response, capture a resolution catalogue
+with `captureIntegrationContributorCatalogue(ctx, domain)` before awaiting,
+then use `resolveCapturedContributors(catalogue, integrationId, evidence)`.
+That catalogue is a lookup, never a display union. Its single-declared-supplier
+compatibility option requires a proven uniform adapter. Registry reloads and
+new responses must not rewrite old cached record or tile generations.
+
+Road-condition events follow the same contract. Their trusted provider acquisition
+captures exact source or explicit parent receipts before awaiting; paginated
+OpenConditions reads capture each page independently. Source allowlisting and
+routing rights remain separate, live policy checks. GeoJSON, the core API reader
+and derived navigation alerts carry the receipts, including native `[]`.
+Rendering and locale/style republishing use those stored receipts only. Historical
+events without them may use their recorded `attribution` as bounded compatibility;
+a source ID alone cannot reconstruct a publisher or today's required notice.
+
+Reviews and review aggregates carry their own `contributors`. The shared
+`captureReviewProviderContributors` wrapper snapshots declared metadata before
+each read, resolves the returned exact `source` (or the proven provider ID), and
+clones results before caller caches. Supplied receipts, including `[]`, remain
+authoritative; an item's content licence is not replaced by service metadata.
+Review orchestration applies this wrapper before API/UI consumers receive the
+results. Deduplication and display union only retained reviews or the displayed
+aggregate; disabled providers or catalogue changes cannot relabel cached content.
+Cache namespaces must distinguish captured results from older receipt-less data.
+
+Compute result-envelope credits from the final retained records. A discarded
+duplicate contributes nothing; an actually merged field or external identity
+keeps its supplier's receipt. Clone cached bases before applying enrichment or
+realtime deltas. DTOs, validation, offline copies, GeoJSON and MVT must retain
+these snapshots. Legacy `attributions` fields remain at named compatibility
+boundaries; normalize their format with `legacyAttributionsToContributors`,
+rather than treating their presence as permission to overwrite `contributors`.
+
+Mixed records also carry `fieldContributors`, keyed by displayed fields such as
+`name`, `externalIds.wikidata`, or a structured container. Use
+`contributorsForRecordFields(record, displayedFields)` to project only fields
+actually displayed. With no field map it uses the record receipt as a legacy
+boundary; with a field map, a missing field stays unknown. An explicit container
+key certifies its child tree, and the nearest child entry overrides it, including
+`[]`. `captureFieldContributors(record, field, targetField?)` copies the entire
+winning container tree when moving or replacing a field; copying just the
+parent would lose authoritative empty children. Facts/photos keep item receipts
+and filtered views union only represented items. A Commons photo also needs its
+own author, license and file-page identity; a Wikimedia publisher receipt cannot
+substitute for that per-file metadata. Recover missing metadata or defer that
+file while keeping valid cached receipts.
+
+Acquisition boundaries inside providers own their receipts too: a wrapper cannot
+stamp today's catalogue onto an already cached hotel offer, tide prediction or
+observation. Independently refreshed fields retain their own `fieldContributors`.
+Availability receipts remain separate from quote receipts. Derived values, such
+as detours or animated positions, retain the receipts of their actual inputs;
+prepare animation ownership once per update rather than recalculating it in
+frame callbacks. Marker, label and popup channels project their own fields.
+
+OpenConditions expanded readings carry a bounded captured `provenance` credit
+snapshot, independently of the feature and current source catalogue. Their
+`contributors` source IDs identify fusion participants for filtering; they are
+not historical credit evidence. Preserve distinct captured snapshots from the
+same source ID and use the selected reading's capture for its displayed values.
+
+Saved places and labels use the focused `@openmapx/core/saved-place-contributors`
+contract: bounded `name`, `address`, `lat` and `lng` field receipts persist through
+storage, offline mirroring, sharing and GPX/KML/GeoJSON export and import.
+User edits clear ownership only for values that actually change. Static files
+retain complete notices and links alongside portable metadata; their credits
+must remain meaningful without a running OpenMapX instance.
+
+Contributor metadata is data, not executable presentation or permission. Host
+renderers use the shared credit HTML builders/sanitizer; names are text, only
+allowed markup and HTTP(S) links survive. Parsing a receipt establishes its
+shape, not HTML safety or a new source's privacy/rights clearance. Static
+upstreams still require manifest source/privacy metadata and source-ID-keyed
+localized disclosures. A producer's selected display lineage must not replace
+its broader rights/audit dependency set.
+
+### Reviewed placement of current credits
+
+Use the [shared attribution placement contract](./licensing.md#attribution-placement). Producer-captured per-binding source/product policies override reviewed exact licence defaults. The host renders permanent notices and one-action full details uniformly on map, content and image surfaces; do not infer placement from source names or hide mandatory notices using `maxVisible`. Preserve actual authors, publishers and API branding with each record/view.
+
+### Readable credit details
+
+The host keeps structured captured identities and licence bindings alongside the
+sanitized complete notice. `projectAttributionPresentations` groups equivalent
+source identities without discarding distinct destinations, supplied notices or
+grants. Its `details` projection feeds the shared credits dialog: source headings,
+content licences, provider notices, and separate software/service rows. Placement
+policy reasons and acquisition diagnostics are not display credit copy. Never
+reconstruct this view by concatenating source names and all binding subjects.
+
+For file metadata, keep source/acquisition descriptions separate from required
+permission, copyright and restriction notices. Commons `Credit` supplies
+`PlacePhoto.sourceDescription`; explicit `Attribution` still replaces the default
+artist/source credit. A repeated `UsageTerms` label may be omitted only when its
+canonical grant matches; every supplied source/rights link is retained. Captured
+receipts preserve the original source evidence. The photo UI may omit optional
+public-domain acquisition prose, while explicit required attribution, custom
+credits and unresolved file requirements remain available in their required
+presentation. Compact image credits link creator, file and licence rather than
+printing raw archive URLs.
 
 ### Runtime data sources
 
@@ -319,9 +509,10 @@ within one integration.
 
 The accepted list replaces `manifest.dataSources`. From then on:
 
-- `GET /api/integrations` serves it, so the legal pages and the web
-  attribution show it within one registry poll.
-- The attribution index is rebuilt from the live registry.
+- `GET /api/integrations` serves it, so legal catalogues show it within one
+  registry poll. Existing displayed/cached results keep their captured receipts.
+- The attribution index is rebuilt from the live registry for future acquisition
+  snapshots; it must not rewrite earlier record or tile receipts.
 - The data-use policy is re-evaluated. Its rules match on `commercialUse`, so
   a source the operator's policy excludes is excluded as soon as it appears.
 
@@ -371,8 +562,11 @@ instance lists at `GET /sources`. The integration reads that list during
 
 OpenConditions `roads` feeds are credited under `road-conditions`, `fuel` feeds
 under `fuel-stations`, `parking` feeds under `parking-sites`, `charging` feeds
-under `charging-sites`, `cameras` feeds under `cameras`, and `hazards` feeds
-under `hazards`. Feeds of other OpenConditions domains are left out.
+under `charging-sites`, `cameras` feeds under `cameras`, `hazards` feeds
+under `hazards`, `weather` feeds under `road-weather`, `vehicles` feeds under
+`service-vehicles`, and `border` feeds under `border-crossings`; the roads
+domain's message-sign feeds are credited under `road-conditions` too. Feeds of
+other OpenConditions domains are left out.
 OpenConditions lists restricted feeds too, since the list is metadata, not
 records. Each `/sources` answer names the `scope` it was served in, and an
 answer without one is malformed (the last good list stays). In the `public`
@@ -380,10 +574,15 @@ scope, which never serves a restricted feed's records, the integration lists
 only the unrestricted feeds as data sources; in the `operator` scope it lists
 every feed. The scope is OpenConditions' own: a token set in OpenMapX but not
 held by the instance still reads in public scope and credits no restricted
-feed. In a fused fuel reading, the contributor `crowd` (the instance's own
-community reports) is credited as such; any other contributor not on the list
-drops the reading.
+feed. The instance's own community reports are no feed: the answer states
+their credit beside the feeds as `crowd` (name, licence and an optional link),
+and a fuel, parking, charging or camera reading they contributed to credits
+them with it. While the answer states no crowd credit, such a reading is left
+out, as is any reading with a contributor that is not on the list.
 The providers serve only the sources the host accepted (see above).
+A record placed with a third-party location table (`location.locationTable`)
+also credits that table under the record's feed id; see
+[Location tables](./licensing.md#location-tables).
 
 Its `domain:<domain>` strings describe what each domain's sources receive in
 general terms, without naming a source, since the instance decides its feeds.
@@ -415,7 +614,7 @@ without a link take the `homepage` from the live list.
 
 ## The integration context
 
-When the host calls `setup(ctx)`, it passes an `IntegrationContext` — the
+When the host calls `setup(ctx)`, it passes an `IntegrationContext`: the
 integration's entire interface to the platform. The integration never imports the
 API server, the database driver, or Redis directly; it uses the context, which
 the host backs with concrete implementations. The structural definition lives in
@@ -432,7 +631,7 @@ interface IntegrationContext {
 }
 ```
 
-`config` arrives fully resolved — every layer of the cascade has already been
+`config` arrives fully resolved: every layer of the cascade has already been
 applied, so the integration reads plain values and does not concern itself with
 where they came from.
 
@@ -454,13 +653,80 @@ interface IntegrationContext {
 - **`cache`** is a key-value store namespaced per integration (`int:<id>:<key>`),
   with a `withCache(key, ttl, fn)` read-through helper. Namespacing means one
   integration cannot collide with another's keys.
+  Use `withCache` for provider acquisition: the host captures an invalidation
+  epoch before the read/loader and atomically refuses a fill whose epoch changed.
+  Direct `set` captures its invocation epoch, so it cannot identify a provider
+  request that began earlier. HTTP GET caching uses the same acquisition fence.
 - **`db`** is present only when the manifest requires the `postgis` service;
   otherwise it is `undefined`.
 - **`log`** is a structured logger tagged with the integration id.
 - **`secrets`** retrieves a decrypted credential from the vault.
 
-A second tier of services is optional — present in production, absent in tests
-and CLI scripts — and orchestrators treat absence as a benign no-op:
+#### Shared and local caches
+
+Redis owns shared results, distributed refresh leases and quota counters. A
+process-local LRU is only a disposable copy or a bounded lookup optimization;
+it does not coordinate workers or enforce upstream quotas.
+
+`cache.onInvalidate?.(listener)` is the host administration notification port.
+Registration immediately reports `{ available: boolean }` and returns an
+unsubscribe function. Clear local copies and advance their fill generation on
+every event. While unavailable, bypass local reads and writes. Unsubscribe on
+shutdown, and prevent an old pending response from repopulating retired state.
+Clients without host administration, such as CLI/test fixtures, may omit this
+capability.
+
+Admin cache clears notify affected integration scopes before and after Redis
+SCAN/UNLINK deletion, including when Redis is not configured. A targeted glob
+conservatively flushes the whole overlapping integration's local copies; Redis
+deletion retains its exact scope. Redis Pub/Sub propagates notifications across
+API workers asynchronously. A disconnect or heartbeat timeout clears and disables
+local copies; subscription acknowledgement clears them again before reuse. This
+is not a linearizable cross-worker read barrier: notifications are asynchronous
+and Pub/Sub can lose messages during a connection failure.
+
+A shared epoch and renewable clear leases under `openmapx:cache-control:` fence
+old fills and writes during concurrent clears. These control keys are outside
+the disposable `int:`/`cache:` prefixes. New callers use the current epoch in
+their single-flight identity, so they do not join pre-clear work. Redis control
+operations have a three-second deadline. A failed epoch capture skips the shared
+write; a failed clear control operation fails the clear request. These fences
+apply to host HTTP/cache acquisition, not the separate quota runtime's policy.
+
+For additional derived cache entries, managed hosts offer
+`const writer = await ctx.cache.captureWriter?.()` before acquisition. Use
+`writer?.set(key, value, ttlSeconds)` after the upstream await: it retains the
+original administrative invalidation fence. A direct `ctx.cache.set` captures
+its fence only when that write starts. Do not recapture after acquisition if the
+initial capture fails; hosts without this capability keep derived entries local.
+The writer fences the captured Redis invalidation epoch; callers must also guard
+local state/lifetime through `onInvalidate` and disposal. It does not create a
+linearizable cross-worker read barrier. Shared cache reads must retain the
+acquisition's original receipts and expiry.
+
+The server uses `lru-cache` for four stores. Limits are entry budgets, not heap
+byte guarantees. Reverse-city and reverse-country stores cache successful
+negative results; transport failures are not cached. Reads update eviction recency without extending the fixed TTL.
+
+| Store                     | Maximum entries | Freshness                      |
+| ------------------------- | --------------: | ------------------------------ |
+| Mobility reverse-city     |           4,096 | 24 hours                       |
+| Geocoding reverse-country |           4,096 | 24 hours                       |
+| GBFS resolved coverage    |          10,000 | 5 minutes                      |
+| Geocoding autocomplete L1 |           1,000 | Soft: 5 minutes; hard: 2 hours |
+
+Autocomplete serves soft-stale values while refreshing in the background and
+evicts them at the hard deadline. Its L1 belongs to one integration setup.
+Geocoding shared keys hash the current configuration, provider declarations and
+resolved service bindings, without exposing credential text. The host captures
+immutable resolved bindings for each loaded integration generation; those internal
+snapshots are not exposed by runtime metadata. Country lookups capture the
+Nominatim endpoint, and GBFS coverage keys include both system ID and discovery
+URL.
+
+A second tier of services is optional: present in production and sometimes
+absent in tests and CLI scripts. Consumers must define whether absence is safe
+for their upstream policy:
 
 ```ts
 interface IntegrationContext {
@@ -474,7 +740,7 @@ interface IntegrationContext {
 ```
 
 These let an orchestrator skip a provider that is in a failure cooldown, record
-per-call latency and outcome, and resolve attribution rows — without the
+per-call latency and outcome, and resolve attribution rows without the
 framework taking a compile-time dependency on the API server (they are declared
 as structural interfaces and injected by the host).
 
@@ -485,9 +751,91 @@ Do not replace it with process-local maps or counters in production. Redis
 failure must deny a new quota-consuming refresh, although eligible stale data
 may still be returned with its original evidence time.
 
-Use `http.getResponse()` when status or allowlisted rate-limit headers matter,
-and `http.getBytes()` for binary payloads. Both require a byte ceiling and media
-type allowlist; redirects can be rejected. Non-success bodies are bounded too.
+#### Shared request admission
+
+`upstreamRuntime.admitSharedRequest?({ scope, key, policy?, signal? })` is a
+separate opt-in capability for upstream identities shared across integrations and
+replicas. `scope` and `key` are nonempty strings supplied by the consumer; the
+host hashes them into `upstream-shared:` keys outside integration cache scopes.
+Choose the identity from the upstream's actual quota boundary. Do not include
+integration IDs, result receipts, bounding boxes or reload generations when
+those do not change that boundary. Result-cache identity may need those values
+even though admission identity must omit them.
+
+A numeric `policy` contains `id`, `limit`, `durationMs` and `minIntervalMs`.
+Admission atomically checks a shared cooldown and the policy's counter/spacing
+using Redis time. The window starts on its first admitted request; each policy
+ID has its own counter and spacing, while cooldown is shared by the whole
+`scope`/`key`. Allowed decisions return `remaining` (or `null` without a numeric
+policy); denials identify `spacing`, `quota`, `cooldown` or `store_unavailable`
+and return `retryAfterMs` where known. Calling without `policy` checks cooldown
+without inventing numeric quota counters.
+
+`deferSharedRequests?({ scope, key, delayMs, signal? })` extends a shared cooldown
+without shortening an existing one. Both methods support caller cancellation
+and bound each store operation to three seconds. A dispatched Redis command
+cannot be recalled: cancellation/timeout may leave a conservative reservation or
+cooldown, but its late result must not admit the retired caller or publish data.
+Admin cache clears target `int:*` / `cache:*`, preserving shared admission keys.
+An explicit store wipe, including CLI `cache clear --all` (`FLUSHDB`), removes
+them.
+
+This capability does not change existing `read`/`write`, lease or `consumeQuota`
+consumer policies. Consumers decide whether spacing can wait, whether failures
+may use eligible stale evidence, and whether an absent runtime is allowed. A
+supplied but unavailable admission runtime must never silently become local
+quota enforcement. It cannot count traffic from external applications that
+reuse the same upstream client identity outside the shared store.
+
+The Entur clients require both admission methods and working Redis for fresh
+Journey Planner requests. Their identity is upstream origin + client name + API
+family, with separate trip/other classes and family-wide cooldown. Other Entur
+APIs have no numeric policy: only an entirely absent runtime permits a bounded
+per-client observed cooldown fallback. The
+[Entur runtime guide](https://github.com/OpenMapX/openmapx/blob/main/packages/entur-client/README.md)
+documents those limits and the separate national-situations cache contract.
+
+Use `http.getResponse()` or `http.postResponse()` for JSON when status or
+allowlisted rate-limit headers matter, `http.getBytes()` for buffered binary
+payloads, and `http.getText()` / `http.postText()` for XML or other text.
+`postText()` sends its string unchanged; set the request `Content-Type` in
+`headers`. Unlike `get()` and `post()`, these methods return a non-success
+status instead of throwing for that status. JSON methods still require a valid
+JSON body. Text and streaming methods return bounded error bodies regardless of
+their media type, so callers can handle a plain-text 404 from a JSON endpoint.
+For `getText()`, `postText()` and `getStream()`, optional `successStatuses` narrows
+which statuses require the success `contentTypes` allowlist. It must be a nonempty
+list of integer 2xx statuses; omission preserves validation for all 2xx responses.
+For example, `[200]` lets a caller classify a headerless 204 or plain-text 201
+before decoding. By default, all statuses retain the same byte ceiling and body
+deadline. For metadata-only error classification, `discardErrorBody: true` cancels
+unsuccessful bodies immediately and returns an empty body with the status and
+selected headers. This lets a caller honor `Retry-After` on a non-JSON, oversized
+or stalled HTTP 429 without consuming its body. Successful bodies retain all media,
+byte and deadline checks. JSON and byte methods ignore these two options and
+retain their existing media validation.
+
+Every response method requires `maxBytes` and an exact `contentTypes` allowlist.
+`fallbackContentType` applies only when the upstream omits `Content-Type`, and
+must itself be allowlisted. The byte ceiling checks declared size and actual
+decoded response bytes, including error bodies unless explicitly discarded.
+
+`http.getStream()` returns `{ status, headers, stream }`, where `stream` is a
+pull-driven `ReadableStream<Uint8Array>`. Consume or cancel it; the host retains
+the byte ceiling and combined caller/timeout signal through the entire body.
+Consumer cancellation, timeouts and rejection of a response cancel its upstream
+reader. This allows archive downloads to stream to disk without buffering them.
+
+Use `redirect: "error"` to reject redirects or
+`redirect: { allowedHosts: ["downloads.example.org"], follow203: true }` to
+follow explicitly trusted targets. Host entries accept exact hostnames or
+`*.example.org` suffixes. `follow203` opts into APIs that use 203 with `Location`;
+`maxRedirects` optionally lowers the default limit of eight. Every redirect is
+checked, and the original timeout covers the whole chain and body. Standard
+authorization, cookie and proxy-authorization headers are removed permanently
+after a cross-origin hop; same-origin redirects retain them. Trusted redirects
+reject HTTPS-to-HTTP downgrades and URL credentials before contacting the target.
+Omitting `redirect` retains native fetch redirect behavior.
 Integration-local raw `fetch` is not an escape hatch for provider work.
 
 Route queries arrive exactly as Fastify parsed them: each value is a string, an
@@ -511,11 +859,15 @@ interface IntegrationContext {
   registerRealtimeProvider(p: RealtimeProvider): void; // → "live-transit"
   registerMobilityDataSource(p: MobilityDataSourceProvider): void; // → "data-source"
   registerWeatherProvider(p: WeatherProvider): void; // → "weather"
+  registerAirQualityProvider(p: AirQualityProvider): void; // → "air-quality"
   registerGeocodingProvider(p: GeocodingProvider): void; // → "geocoding"
   registerRoutingProvider(p: RoutingProvider): void; // → "routing"
+  registerRideProvider(p: RideProvider): void; // → "ride-hailing"
   registerPhotoProvider(p: PhotoProvider): void; // → "photos"
+  registerStreetLevelProvider(p: StreetLevelProvider): void; // → "street-level-imagery"
   registerReviewProvider(p: ReviewProvider): void; // → "reviews"
   registerPoiSearchProvider(p: PoiSearchProvider): void; // → "poi-search"
+  registerSearchSuggestionProvider(p: SearchSuggestionProvider): void; // → "search-suggestions"
   registerKnowledgeProvider(p: KnowledgeProvider): void; // → "knowledge"
   registerGtfsCatalogProvider(p: GtfsCatalogProvider): void; // → "gtfs-catalog"
   registerRoadConditionsProvider(p: RoadConditionsProvider): void; // → "road-conditions"
@@ -523,6 +875,10 @@ interface IntegrationContext {
   registerParkingSiteProvider(p: ParkingSiteProvider): void; // → "parking-sites"
   registerChargingSiteProvider(p: ChargingSiteProvider): void; // → "charging-sites"
   registerCameraProvider(p: CameraProvider): void; // → "cameras"
+  registerMessageSignProvider(p: MessageSignProvider): void; // → "message-signs"
+  registerRoadWeatherProvider(p: RoadWeatherProvider): void; // → "road-weather"
+  registerServiceVehicleProvider(p: ServiceVehicleProvider): void; // → "service-vehicles"
+  registerBorderCrossingProvider(p: BorderCrossingProvider): void; // → "border-crossings"
   registerHazardsProvider(p: HazardsProvider): void; // → "hazards"
 
   registerRoute(method, path, handler, options?): void; // options.rateLimitTier
@@ -536,10 +892,13 @@ The typed registrars enforce the contract shape at compile time, so the
 orchestrator can dispatch on a declared capability rather than reflecting over
 the object. `registerRoute` mounts a route under the integration's prefix; passing
 `{ requireAuth: true }` makes the host reject unauthenticated callers with 401
-before the handler runs. Every route consumes exactly one host limiter bucket:
-`rateLimitTier` defaults to `public`, upstream-heavy point/list routes use
-`expensive`, and tile fan-out uses `tile`. Do not add integration paths to the
-global URL-pattern limiter.
+before the handler runs. Every matched route consumes exactly one operation-tier
+bucket: `rateLimitTier` defaults to `public`, upstream-heavy point/list routes use
+`expensive`, and tile fan-out uses `tile`. In addition, `POST`, `PUT`, `PATCH`, and
+`DELETE` requests consume a separate per-client integration-ingress bucket before
+Fastify parses their bodies. `GET` and `HEAD` do not use that admission bucket, so
+bursty integration tile traffic retains its dedicated tier. Do not add integration
+paths to the global URL-pattern limiter.
 
 Provider health accepts only closed outcomes. Timeouts, connection failures,
 upstream 5xx responses, authentication failures, and invalid payloads affect the
@@ -555,6 +914,7 @@ compatibility fields; user strings and location identifiers are not labels.
 interface IntegrationContext {
   emit(event: string, data: unknown): void;
   on(event: string, handler: (data: unknown) => void): () => void;
+  onActivate(activate: () => void, rollback?: () => void): void;
   onShutdown(cleanup: () => Promise<void>): void;
   getIntegrationsByDomain(domain: string): LoadedIntegration[];
 
@@ -565,43 +925,60 @@ interface IntegrationContext {
 ```
 
 `emit`/`on` are a lightweight event bus shared across integrations.
-`onShutdown` registers cleanup run on reload and shutdown.
+`onActivate` publishes a synchronous process-wide mutation when the generation
+activates. During reload, the host defers it until staging succeeds; a rollback
+callback restores the old state if activation fails. Use it for shared setters
+or registries that staging must not change early. Keep ordinary provider state
+local to `setup` where possible.
+
+`onShutdown` registers cleanup run when a generation retires or is discarded.
+Register cleanup as resources are created. Abort pending requests, cancel timers
+and unsubscribe listeners; prevent retired requests from publishing into new
+state.
 `getIntegrationsByDomain` lets an orchestrator enumerate its peers.
 `getRequiredService(key)` is how an integration reads a resolved requirement at
 runtime (see below). The two `getDisallowed*` resolvers expose the operator's
-data-use policy: orchestrators skip providers whose source — or whole
-integration — the policy disallows, and fall back to the next.
+data-use policy: orchestrators skip providers whose source or whole
+integration the policy disallows, and fall back to the next.
 
 ## Domains and provider contracts
 
-For the data-rich domains, the framework defines an explicit TypeScript
-interface — a **provider contract** — in
+For the data-rich domains, the framework defines TypeScript provider contracts
+in
 `packages/integration-framework/src/contracts/`. A provider implements the
 interface; the domain orchestrator consumes the typed shape. The contracts in
 the mobility domains return their data wrapped in a `MobilityResult<T>`, so
 attribution and freshness flow through every call unmodified.
 
-| Domain            | Contract                     | What providers in it do                                                                                                                              |
-| ----------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `geocoding`       | `GeocodingProvider`          | Forward geocode, autocomplete, reverse geocode.                                                                                                      |
-| `routing`         | `RoutingProvider`            | Turn-by-turn directions, plus optional isochrones and map-matching.                                                                                  |
-| `transit`         | `TransitProvider`            | Stops, departures/arrivals, routes, trip planning, vehicle positions, alerts.                                                                        |
-| `live-transit`    | `RealtimeProvider`           | Realtime overlays: vehicle positions, service alerts, trip-update deltas.                                                                            |
-| `data-source`     | `MobilityDataSourceProvider` | Map data sources — bike/car/scooter sharing, and the user-facing merger over the charging-sites, parking-sites, fuel-stations and cameras providers. |
-| `weather`         | `WeatherProvider`            | Current conditions, hourly and daily forecasts.                                                                                                      |
-| `photos`          | `PhotoProvider`              | Place imagery, including fast OSM-tag-based hero lookups.                                                                                            |
-| `reviews`         | `ReviewProvider`             | Fetch, aggregate, and submit place reviews.                                                                                                          |
-| `poi-search`      | `PoiSearchProvider`          | Category and free-text POI search within a bounding box.                                                                                             |
-| `knowledge`       | `KnowledgeProvider`          | Place enrichment from reference sources.                                                                                                             |
-| `gtfs-catalog`    | `GtfsCatalogProvider`        | List GTFS feeds for the schedule-feed importer to ingest.                                                                                            |
-| `road-conditions` | `RoadConditionsProvider`     | Live road/traffic conditions — incidents, roadworks, closures, and per-segment congestion speeds.                                                    |
-| `charging-sites`  | `ChargingSiteProvider`       | EV charging sites with charge-point status and tariffs, merged by the `ev-charging` data source.                                                     |
-| `parking-sites`   | `ParkingSiteProvider`        | Parking facilities with live occupancy, merged by the `parking` data source.                                                                         |
-| `fuel-stations`   | `FuelStationProvider`        | Fuel stations with per-grade prices, merged by the `fuel` data source.                                                                               |
-| `cameras`         | `CameraProvider`             | Traffic and scenic cameras with their views, current stills and streams, merged by the `webcam` data source.                                         |
-| `hazards`         | `HazardsProvider`            | Weather alerts, natural hazards, fire detections and their density grid, read by the four hazard overlays through `createHazardsOrchestrator`.       |
+| Domain                 | Contract                     | What providers in it do                                                                                                                             |
+| ---------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `geocoding`            | `GeocodingProvider`          | Forward geocode, autocomplete, reverse geocode.                                                                                                     |
+| `ride-hailing`         | `RideProvider`               | Availability, fares and booking handoffs; driving geometry comes from routing.                                                                      |
+| `air-quality`          | `AirQualityProvider`         | Current, forecast, station and raster evidence; see [Air-quality integrations](./air-quality-integrations.md).                                      |
+| `search-suggestions`   | `SearchSuggestionProvider`   | Unified autocomplete contributions.                                                                                                                 |
+| `street-level-imagery` | `StreetLevelProvider`        | Image search, links, coverage and nearby street-level imagery.                                                                                      |
+| `routing`              | `RoutingProvider`            | Turn-by-turn directions, plus optional isochrones and map-matching.                                                                                 |
+| `transit`              | `TransitProvider`            | Stops, departures/arrivals, routes, trip planning, vehicle positions, alerts.                                                                       |
+| `live-transit`         | `RealtimeProvider`           | Realtime overlays: vehicle positions, service alerts, trip-update deltas.                                                                           |
+| `data-source`          | `MobilityDataSourceProvider` | Map data sources: bike/car/scooter sharing, and the user-facing merger over the charging-sites, parking-sites, fuel-stations and cameras providers. |
+| `weather`              | `WeatherProvider`            | Current conditions, hourly and daily forecasts.                                                                                                     |
+| `photos`               | `PhotoProvider`              | Place imagery, including fast OSM-tag-based hero lookups.                                                                                           |
+| `reviews`              | `ReviewProvider`             | Fetch, aggregate, and submit place reviews.                                                                                                         |
+| `poi-search`           | `PoiSearchProvider`          | Category and free-text POI search within a bounding box.                                                                                            |
+| `knowledge`            | `KnowledgeProvider`          | Place enrichment from reference sources.                                                                                                            |
+| `gtfs-catalog`         | `GtfsCatalogProvider`        | List GTFS feeds for the schedule-feed importer to ingest.                                                                                           |
+| `road-conditions`      | `RoadConditionsProvider`     | Live road/traffic conditions: incidents, roadworks, closures, and per-segment congestion speeds.                                                    |
+| `charging-sites`       | `ChargingSiteProvider`       | EV charging sites with charge-point status and tariffs, merged by the `ev-charging` data source.                                                    |
+| `parking-sites`        | `ParkingSiteProvider`        | Parking facilities with live occupancy, merged by the `parking` data source.                                                                        |
+| `fuel-stations`        | `FuelStationProvider`        | Fuel stations with per-grade prices, merged by the `fuel` data source.                                                                              |
+| `cameras`              | `CameraProvider`             | Traffic and scenic cameras with their views, current stills and streams, merged by the `webcam` data source.                                        |
+| `message-signs`        | `MessageSignProvider`        | Dynamic message signs and the pages each shows, merged by the `message-signs` data source.                                                          |
+| `road-weather`         | `RoadWeatherProvider`        | Road weather stations with the surface and air values they measure, merged by the `road-weather` data source.                                       |
+| `service-vehicles`     | `ServiceVehicleProvider`     | Where road service vehicles are and the work they report, merged by the `road-maintenance` data source.                                             |
+| `border-crossings`     | `BorderCrossingProvider`     | Land border crossings with each queue's wait in each direction, merged by the `border-crossings` data source.                                       |
+| `hazards`              | `HazardsProvider`            | Weather alerts, natural hazards, fire detections and their density grid, read by the four hazard overlays through `createHazardsOrchestrator`.      |
 
-A few patterns recur across the contracts and are worth calling out:
+The contracts share these conventions:
 
 - **Capability self-description.** `TransitProvider` and `RealtimeProvider` carry
   a `capabilities` object declaring which optional methods they actually
@@ -615,20 +992,26 @@ A few patterns recur across the contracts and are worth calling out:
   directly, and transit additionally offers `getFeedAttribution()` for
   integrations that front many feeds, each with its own license.
 
-Domains without a typed contract — frontend-only conventions such as
-`map-overlay` or `street-level-imagery` — still appear in `domains`, but they contribute
-UI surfaces and routes rather than a registered provider object.
+Domains without a typed contract, such as `map-overlay`, still appear in
+`domains`. They describe UI surfaces rather than a registered provider object.
 
-The per-contract authoring guides live alongside this reference: the
-data-source and transit how-tos, and the end-to-end walkthrough of writing an
-integration, are separate developer pages.
+Continue with [Data-source integrations](./data-source-integrations.md),
+[Transit integrations](./transit-integrations.md) or
+[Ride integrations](./ride-integrations.md) for the domain-specific rules.
 
 ## Map overlays
 
 A trusted built-in integration that draws on the map (`domains` includes
-`map-overlay`, with a `layerSelector` entry so users can toggle it) ships a
-`map-layer.tsx`. Its
+`map-overlay`) ships a `map-layer.tsx`. Its
 legend is the one part it can declare instead of writing.
+
+`map-overlay` is the internal rendering classification for such integrations; it
+does not by itself create a user control. A **user-selectable overlay** also
+declares `frontend.layerSelector` and `frontend.overlay`, which register overlay
+state and its `ov=` URL token. An integration that declares only
+`frontend.mapLayer` is **ambient map content**: the host mounts it while it is
+enabled, it owns its own lifecycle and credits, and it has no selector, legend,
+overlay store or URL state. `overlay-ambient-places` is the built-in example.
 
 ### Declarative legends (no shipped legend code)
 
@@ -650,14 +1033,58 @@ web host's focused integration API instead of importing arbitrary application
 modules:
 
 ```tsx
-import { useMap } from "@/integration-api/map/MapContext";
+import { useMemo } from "react";
+import { EMPTY_FEATURE_COLLECTION } from "@/integration-api/map/mapLayerGroup";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 
 export default function MapLayer() {
-  const { mapRef, mapReady, styleVersion } = useMap();
-  // add sources/layers, anchor with the host utilities, react to styleVersion…
+  const visible = useMyOverlayStore((s) => s.layerVisible);
+  useMapLayerGroup(
+    useMemo(
+      () =>
+        visible
+          ? {
+              sources: { "my-source": { type: "geojson", data: EMPTY_FEATURE_COLLECTION } },
+              layers: [
+                { id: "my-circles", type: "circle", source: "my-source", slot: "overlay-points" },
+              ],
+            }
+          : null,
+      [visible],
+    ),
+  );
   return null;
 }
 ```
+
+A style change (theme, basemap or satellite switch) destroys every source and
+layer an overlay added, so installation is a reconciliation, not a one-off
+call. Choose the narrowest lifecycle primitive:
+
+- `useMapLayerGroup` from `@/integration-api/map/useMapLayerGroup` declares the
+  sources and slotted layers as data. It reconciles on every render, rebuilds
+  inside the style change, applies a changed layer spec, and tears everything
+  down when the descriptor is `null`. Put GeoJSON data in the descriptor, or
+  declare `EMPTY_FEATURE_COLLECTION` and publish features through
+  `useGeoJsonSourceDataBridge`, which replays the latest payload onto a
+  recreated source. Its stable identity keeps a re-memoized descriptor from
+  resetting published data.
+- `useStyleSyncedLayer` covers one source and one layer whose source cannot be
+  declared as data, such as an attributed raster acquired through
+  `addAttributedRasterSource`.
+- `subscribeStyleLoaded` from `@/integration-api/map/styleLoadedSync` runs an
+  imperative reconciliation now and after every style mutation. Use it for
+  placement relative to basemap layers, custom layers or per-frame updates.
+  The callback runs often and must be cheap and idempotent: adding a source,
+  layer or image emits another `styledata`. Return its unsubscribe from the
+  effect, and remove what it added with `removeSlottedLayers`.
+
+Installation needs a parsed stylesheet, not loaded tiles. Do not gate it, or
+asynchronous image completion, on `isStyleLoaded()` or an idle event: an
+unrelated pending source or continuous animation would leave the overlay
+missing. Fence asynchronous completions by the current effect, map and source
+identity. Layer-scoped event listeners tolerate a layer that does not exist yet,
+so bind interactions to the overlay's visibility rather than to installation.
 
 The modules under `apps/web/src/integration-api/` are an app-local API for
 trusted integrations compiled into the OpenMapX web build. They group map,
@@ -669,18 +1096,133 @@ imports, path escapes, broad barrels, and dynamic host entry points.
 
 ### Crediting an overlay's sources
 
-The map layer registers its credits, and they appear in the map credits strip
-along the bottom of the map for as long as the layer is drawn. Legends never
-carry credits — they explain colors and symbols only, and can be collapsed away.
+The map layer owns the credits for content actually rendered; a legend's
+visibility never controls that ownership. Trusted built-ins import the focused
+host APIs:
 
-Credit an overlay's own `dataSources` with `useIntegrationAttribution(id,
-visible)`. When the overlay paints data published by _sibling_ integrations
-(a domain orchestrator such as live transit or road conditions), its own
-`dataSources` list is empty, so credit the whole domain instead with
-`useIntegrationDomainAttribution(domain, visible)` — crediting an empty list
-registers nothing. Credits that arrive with a response rather than a manifest
-(`MobilityResult.attributions`) go through `useMapAttributions(key, attributions)`.
-Either way the wording comes from the manifest, never from hand-rolled strings.
+```tsx
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
+import { useRasterMapAttributions } from "@/integration-api/overlay/useRasterMapAttributions";
+import { useMarkerMapAttributions } from "@/integration-api/overlay/useMarkerMapAttributions";
+```
+
+`withFeatureContributors(feature, captured)` writes the immutable receipt as JSON
+in `properties._mapAttributions` for GeoJSON/MVT. Register the actual layer IDs
+with `useRenderedMapAttributions(key, layerIds, visible, options?)`. The shared
+per-map scheduler refreshes after viewport/filter/zoom/source and placement
+changes on a shared 250 ms interval. Ordinary overlays use one union viewport
+query per scheduled pass. Native basemap receipts are published separately on
+installation/style events and never add viewport queries.
+It preserves visible old receipts during refresh/worker lag and does not wait for
+unrelated sources to become idle. Each hook instance owns its registration, even if readable keys
+are reused.
+
+`options.layerContributors` is a captured per-layer lookup only for proven
+uniform supplier layers. A bounded `resolveFeatureContributors(feature)` can
+project captured field ownership for the feature's rendered band. `undefined`
+falls through to the exact serialized feature receipt, then uniform-layer
+receipt; explicit `[]` stops fallback. Never resolve heterogeneous records from
+a whole query response. For example, FLOW casing owns geometry, while a color
+band owns only the fields used for its color/opacity; popup fields are projected
+separately.
+
+Visibility follows evaluated paint and actual rendered channels: stroke-only
+circles, visible labels without icons, and overlapping heatmap kernels can
+contribute. Independently placed icon/text channels require separate query
+layers. Layer min/max zoom governs disappearance; a source's maximum zoom still
+permits overzoom. Partial alpha gradients require split queryable geometry or a
+trusted `complementaryGradientGroups` certificate with the same geometry and
+receipt and complete alpha coverage. Threshold heatmap palettes need a host
+adapter that proves the painted pixels.
+
+The tracker groups queried hits by layer and memoizes validated presentations by
+complete captured content, including notices, timestamps and placement policies.
+It still observes render/idle changes for late symbol placement and transitions.
+For a trusted built-in `resolveFeatureContributors` callback,
+`options.featureContributorKey(feature)` can identify identical projection inputs
+within one layer and refresh. Include every input that can change the returned
+receipts, including explicit absence; never key only by provider/source ID. Omit
+this optimization when equivalence cannot be proven. Keys and resolver results
+are not reused across owners, layers, refreshes or option updates, and every hit
+still passes its evaluated paint visibility checks before grouping. Remote
+records or community payloads cannot supply these callbacks.
+
+Dense traffic-flow tiles deliberately use **conservative tile coverage**, rather
+than per-road viewport hit testing. The trusted host factory
+`createVectorTileCoverageContributorResolver` in
+`@/integration-api/overlay/vectorTileCoverageContributors` reads captured field
+receipts from currently renderable, nonempty uploaded vector-tile buckets. Pass
+its result through `options.resolveTileCoverageContributors` and leave those
+layers out of the exact query layer list. This includes suppliers from offscreen
+portions of edge tiles (and potentially filtered/occluded features); it is an
+explicit overcredit tradeoff, never evidence of an exact viewport hit. Incidents
+and ordinary overlays keep exact rendered attribution. Do not opt other layers
+into this scope without deciding that extra tile suppliers are acceptable.
+
+Create the resolver once with immutable options. Its equivalence key must cover
+all field-projection inputs for every configured layer, including full captured
+receipts and explicit absence. It scans properties once per raw payload/encoding,
+then reuses immutable projected snapshots through style reparsing, overzoom and
+refresh failures that retain drawable data. Errored/unloaded tiles that the
+renderer stops drawing contribute nothing. Successful replacement, source replacement, tile eviction,
+layer visibility/zoom and evaluated constant zero paint update the current union.
+No source catalog, provider manifest or successful-request history substitutes
+for retained tile receipts. The host owns the version-pinned MapLibre bridge;
+community payloads cannot configure executable resolvers. FLOW popup credits
+remain projected separately from the clicked feature's actual displayed fields.
+
+DOM markers use `useMarkerMapAttributions(key, element, captured)`, which checks
+painted marker visibility in the map container. Custom GPU/DOM drawing may use
+`options.resolveCustomContributors`, a **trusted host callback** proving the
+currently painted content and returning its captured receipts. It must not be
+a toggle, allocation counter, or response-wide union. Neither callbacks nor
+gradient certificates may come from community payloads.
+
+For raster content, use `useRasterMapAttributions(key, descriptors, visible)`.
+Each descriptor contains `{ layerId, sourceId, contributors }` for the actual
+mounted supplier, captured before its acquisition. Add the source with the
+focused `addAttributedRasterSource` helper **before adding its layer**, and call
+`updateRasterAcquisitionContributors` before changing tiles/URLs for future
+acquisitions. Both live in
+`@/integration-api/overlay/rasterMapContribution`. Opacity-zero preload frames,
+missing-key suppliers and failed first loads owe no active-frame credit;
+retained successful tiles and fading parents keep their original receipt during
+partial failures. The hook combines only content actually sampled by the raster
+renderer, including old and new suppliers during a fade.
+
+The host adapter wraps MapLibre's public `RasterTileSource.loadTile` acquisition
+entry point and observes the texture/loaded commit for each invocation. It also
+uses MapLibre 6.13's retained tile coordinates and evaluated raster paint to
+prove visible content. This engine coupling belongs in the host adapter, not in
+a provider. A MapLibre upgrade needs real-engine tests for initial load/failure,
+concurrent completion order and texture reuse, silent expiry/reload, partial
+failure, eviction/pan, fading parents, overzoom and style reload. A source
+settled event or a successful request in the past cannot prove present pixels.
+
+Native basemap receipts bind to the installed style/layer/source generation;
+pending or failed style acquisition keeps the retained generation's receipts.
+Source-object identity preserves the original supplier when a style diff retains
+cached content. Style-only backgrounds never establish a data supplier. The host
+conservatively credits the union of installed native receipts, including hidden,
+out-of-zoom, offscreen or raster-covered layers. It updates on installation and
+style events, without native feature queries, repaint requests, evaluated-paint
+exposure analysis, raster coverage clipping, mesh readback or tile-domain queries.
+Basemap crediting therefore does not depend on projection, terrain, placement,
+alpha or the current viewport. Overlay and incident record-level contribution
+filtering remains independent and uses the rendered-content APIs above.
+
+A MapLibre upgrade must still verify installed style/layer/source identity and
+style-load event ordering, including retained content during pending or failed
+style changes. Raster overlays retain their separate texture/fade adapter and
+its real-engine validation requirements described above.
+
+`useMapAttributions` remains a lower-level owner for already projected visible
+popup/custom credits, not a geometry visibility detector. Capture exact suppliers
+before acquisition and project the displayed record/field receipts; do not
+register credits from toggles, whole manifests/domains or live registry lookups.
+A static wiring guard checks actual focused host calls/imports and excludes
+test-only mentions; behavioral provider/rendering tests prove the supplied
+receipts and visible projection.
 
 ### Community presentation boundary
 
@@ -705,14 +1247,14 @@ and a reduced version on reload.
 ### 1. Discovery
 
 The host scans each configured integration directory (`integrations/` for
-built-ins, `custom_integrations/` for community installs), reads every
+built-ins, the mounted `custom_integrations/` for community installs), reads every
 `manifest.json`, and skips directories that begin with `_` or have no manifest.
-Discovery is metadata-only — no code runs yet — which is why an integration that
-later crashes during setup is still known to the host by id.
+Discovery runs no integration code. An integration that later fails during
+setup is still known to the host by ID.
 
 ### 2. Validation and ordering
 
-Each manifest is validated. The required invariants are minimal — an `id`, at
+Each manifest is validated. The required invariants are minimal: an `id`, at
 least one `domain`, and a `healthCheck` whenever the integration declares a
 required (non-optional) service dependency. Invalid manifests are skipped with a
 warning rather than aborting the boot. Surviving integrations are then
@@ -740,7 +1282,7 @@ For each integration in dependency order the host:
 
 A disabled integration (its `enabled` config resolves to `false`) is recorded but
 never set up. If `setup(ctx)` throws, the host marks the integration disabled,
-emits an error event, and continues — one broken integration does not take down
+emits an error event, and continues: one broken integration does not take down
 the rest.
 
 ### 4. Serving
@@ -752,18 +1294,21 @@ The host then exposes the integration surface to the rest of the API:
 - Integration-defined routes are served through a single mini-router
   (`/api/integrations/:id/*`). Fastify cannot register routes at runtime, so the
   host catches the wildcard and dispatches to the matching `registerRoute`
-  handler — which is what makes reload possible.
+  handler. This allows reload without registering new Fastify routes.
 - Health checks are seeded a few seconds after boot and refreshed on an interval.
 
 ### Reload versus restart
 
 In development, `POST /api/integrations/reload` re-runs discovery and setup.
-The host builds a detached generation, then atomically swaps its registry,
+The host builds a detached generation, then synchronously swaps its registry,
 dynamic routes, POI registrations, and event subscriptions before retiring the
-old generation. A failed setup leaves the serving generation untouched. Config
+old generation. A staging/setup failure leaves the serving generation untouched. Failures after
+activation require inspecting the serving state; reload is not a transaction
+across the database, host configuration and every follow-up index. Config
 and binding changes therefore take effect without exposing a partially rebuilt
-host. Trusted built-in backend imports are cache-busted when their entry file
-changes.
+host. Trusted built-in backend imports are cache-busted by the entry file
+mtime and size. Changes only in transitive modules can remain in the ESM cache;
+restart the API when those changes are not reflected.
 
 ## Capability requirement resolution
 
@@ -776,9 +1321,10 @@ integration through `ctx.getRequiredService(key)`. The resolution rules:
   it. With multiple providers it is _ambiguous_ and stays unresolved until an
   administrator picks a binding; the host logs a warning meanwhile. The lookup
   key is the capability name.
-- **`{ optional: true }`** that goes unresolved falls through silently — the
-  integration is expected to fall back to a public default (for example a public
-  routing endpoint).
+- **`{ optional: true }`** that goes unresolved falls through silently. The
+  integration chooses whether to use a declared public fallback, omit that
+  capability or report unavailability. A fallback must retain source-policy and
+  privacy controls.
 
 Inside `setup`, an integration reads the resolved target and applies its own
 fallback:
@@ -794,7 +1340,7 @@ export function setup(ctx: IntegrationContext) {
 A resolved entry returns `{ serviceId, url, enabled }`, where `url` is the
 service's address on the private Docker network. Whether a `capability`
 requirement with several candidates resolves at all depends on the
-administrator's **binding** — the stored `(integration, capability) → service`
+administrator's **binding**: the stored `(integration, capability) → service`
 mapping chosen in the admin panel. The host loads all bindings once at startup
 and re-reads them on reload. The full binding workflow is documented on the
 [Integrations & bindings](../administration/integrations-administration.md#capability-bindings)
@@ -806,20 +1352,28 @@ The host treats the two install locations differently, and the
 `isBuiltIn` flag on a loaded integration drives the distinction:
 
 - **Built-in integrations** ship in the repository under `integrations/`. They
-  run directly from workspace TypeScript source — the host imports their
-  `index.ts` — and need no build step. They carry `quality: "built-in"`.
-- **Community integrations** are installed under `custom_integrations/`. Their
+  run directly from workspace TypeScript source. The host imports their
+  `index.ts`; no separate integration build is needed. They carry `quality: "built-in"`.
+- **Community integrations** are installed by the operations agent in its
+  integration store, `infra/docker/state/ops-agent/custom-integrations/`, which
+  records the SHA-256 of every file it installs; app-api mounts the store
+  read-only at `custom_integrations/` and serves only files that match. Their
   manifests and safe static assets are discovered, but backend and frontend
   JavaScript is never imported by app-api: that process holds
-  database credentials, application secrets, a writable checkout, and Docker
-  authority and are not sandboxes. The installer rejects such entry points.
+  database credentials and application secrets and is not a sandbox. Host and
+  Docker operations are separately owned by the operations agent. The installer rejects such entry points.
   Backend behavior belongs in a separately containerized service component;
   executable presentation remains disabled until a cross-origin sandbox exists. A community
   integration may declare a minimum `platform` version in its manifest; if the
   running platform's major version differs, or its minor is lower, the host skips
   the integration with a warning. The platform version uses simple
-  `major.minor` semantics — the major is bumped for breaking changes to the
-  manifest schema, context, or contracts, the minor for additive ones.
+  `major.minor` semantics: the major is bumped for breaking protocol changes,
+  the minor for additive ones. This protocol version is independent of product,
+  npm package and extension release versions. The portable
+  `@openmapx/extension-contracts` package supplies the canonical authoring types,
+  validators and structural JSON Schemas; it does not expose host services or
+  grant runtime privileges. See the [external extension guide](./building-an-external-extension.md)
+  for standalone tooling and the current publication status.
 
 Installing and managing community integrations is an administrator task; see
 [Community extensions](../administration/community-extensions.md).

@@ -1,4 +1,10 @@
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import {
+  type ExtensionManifest,
+  extensionManifestSchema,
+} from "@openmapx/extension-contracts/extension";
+
+import { validateExtensionAuthoringInput } from "../extension-validation.js";
 
 export interface BundleOptions {
   id: string;
@@ -14,17 +20,7 @@ export interface BundleOptions {
   integration?: string[];
 }
 
-export interface ExtensionManifestDoc {
-  id: string;
-  name: string;
-  version: string;
-  platform?: string;
-  description?: string;
-  license?: string;
-  homepage?: string;
-  services?: Array<{ repo: string; ref?: string; service: string }>;
-  integrations?: Array<{ artifact: string; sha256: string; id: string }>;
-}
+export type ExtensionManifestDoc = ExtensionManifest;
 
 const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -55,17 +51,40 @@ export function buildExtensionManifest(opts: BundleOptions): ExtensionManifestDo
   }
 
   const doc: ExtensionManifestDoc = { id: opts.id, name: opts.name, version: opts.version };
-  if (opts.platform) doc.platform = opts.platform;
+  if (opts.platform !== undefined) doc.platform = opts.platform;
   if (opts.description) doc.description = opts.description;
   if (opts.license) doc.license = opts.license;
   if (opts.homepage) doc.homepage = opts.homepage;
   if (services.length) doc.services = services;
   if (integrations.length) doc.integrations = integrations;
-  return doc;
+  const result = validateExtensionAuthoringInput(doc);
+  if (!result.valid) throw new Error(result.errors.join("; "));
+  return extensionManifestSchema.parse(doc);
 }
 
-export function runBundle(opts: BundleOptions & { out: string }): string {
-  const doc = buildExtensionManifest(opts);
+export type BundleCommandOptions = Partial<BundleOptions> & { out: string; input?: string };
+export function runBundle(opts: BundleCommandOptions): string {
+  let doc: ExtensionManifest;
+  if (opts.input) {
+    const mixed = Object.entries(opts).some(
+      ([key, value]) =>
+        !["input", "out"].includes(key) &&
+        value !== undefined &&
+        (!Array.isArray(value) || value.length > 0),
+    );
+    if (mixed) throw new Error("Cannot combine --input with bundle metadata or component flags.");
+    const raw: unknown = JSON.parse(readFileSync(opts.input, "utf8"));
+    const result = validateExtensionAuthoringInput(raw);
+    if (!result.valid) throw new Error(result.errors.join("; "));
+    doc = extensionManifestSchema.parse(raw);
+  } else {
+    doc = buildExtensionManifest({
+      ...opts,
+      id: opts.id ?? "",
+      name: opts.name ?? "",
+      version: opts.version ?? "",
+    });
+  }
   writeFileSync(opts.out, `${JSON.stringify(doc, null, 2)}\n`, "utf-8");
   return opts.out;
 }

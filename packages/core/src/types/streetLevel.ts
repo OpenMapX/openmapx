@@ -1,3 +1,6 @@
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
+import type { Licensing } from "@openmapx/mobility-core/licensing";
 import type { LngLat } from "./geometry";
 
 /** A provider-qualified reference to one street-level image. */
@@ -14,7 +17,7 @@ export interface StreetLevelTiledAsset {
 }
 
 /** One street-level image, normalised across providers. */
-export interface StreetLevelImage {
+export interface StreetLevelImage extends ContributingRecord {
   id: string;
   providerId: string;
   lngLat: LngLat;
@@ -39,8 +42,7 @@ export interface StreetLevelImage {
     tiles?: StreetLevelTiledAsset;
   };
   author?: string;
-  license?: string;
-  licenseUrl?: string;
+  licensing?: Licensing;
   pageUrl?: string;
 }
 
@@ -61,6 +63,10 @@ export type StreetLevelCoverage =
       minzoom: number;
       maxzoom: number;
       layers: { sequences: string; pictures: string; grid?: string };
+      /** Exact declared dataset IDs per MVT source-layer, never provider prefixes. */
+      layerSourceIds?: Readonly<Record<string, readonly string[]>>;
+      /** Captured by the serving host before capabilities caching; [] is authoritative. */
+      layerContributors?: Readonly<Record<string, readonly Attribution[]>>;
       props: {
         id: string;
         isPano?: string;

@@ -6,7 +6,10 @@ import type {
   LoadedIntegration,
   TransitProvider,
 } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  createNoopLogger,
+} from "@openmapx/integration-framework/testing";
 import Fastify, { type FastifyInstance, type FastifyPluginAsync } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,6 +17,7 @@ vi.mock("../../utils/require-auth.js", () => ({
   requireAuth: vi.fn().mockRejectedValue(new Error("requireAuth should not be called")),
 }));
 
+import { createHttpClient } from "../../integration-clients.js";
 import {
   registerIntegrationRoute,
   registerIntegrationRouteDispatcher,
@@ -65,7 +69,8 @@ const transitProvider = {
 } as unknown as TransitProvider;
 
 function contextFor(id: string): IntegrationContext {
-  const ctx = createMockIntegrationContext({ id });
+  // The host's own client, so a relayed URL reaches `fetch` exactly as production builds it.
+  const ctx = createMockIntegrationContext({ id, http: createHttpClient(createNoopLogger()) });
   const transitIntegration = {
     id: "fake-transit",
     manifest: { dataSources: [] },
@@ -264,7 +269,7 @@ describe("integration route params over the production dispatcher", () => {
   );
 
   it("a crowd-report id is decoded once before the relay re-encodes it", async () => {
-    const fetchMock = vi.fn(async (_url: string) => new Response("{}", { status: 200 }));
+    const fetchMock = vi.fn(async (_url: string) => Response.json({}));
     vi.stubGlobal("fetch", fetchMock);
     const id = "oc:feature:x:a b@c=d#e%20f";
 
@@ -283,7 +288,7 @@ describe("integration route params over the production dispatcher", () => {
   });
 
   it("a crowd-report id with a slash reaches the handler, which rejects it", async () => {
-    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+    const fetchMock = vi.fn(async () => Response.json({}));
     vi.stubGlobal("fetch", fetchMock);
 
     const response = await app.inject({

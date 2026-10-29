@@ -2,6 +2,7 @@ import type { LngLat } from "../types/geometry";
 import type { Route, RouteStep } from "../types/routing";
 import { haversineDistance } from "../utils/coordinates";
 import { eta } from "./eta";
+import { navigationSpeed } from "./navigationSpeed";
 import { computeProgress, upcomingManeuverIndex } from "./progress";
 import { shouldReroute, updateOffRouteScore } from "./reroute";
 import { type PreparedRouteMatcher, routeMatcherFor, snapPreparedRoute } from "./routeMatcher";
@@ -117,20 +118,11 @@ export function processFix(
   );
   const prog = computeProgress(route, snap.alongMeters, gate.committedStepIndex);
 
-  // Prefer the GPS-reported ground speed; otherwise estimate it from how far we
-  // moved along the route since the previous fix. Feeds the follow camera's
-  // between-fix dead reckoning.
-  let speedMps = fix.speed != null && fix.speed >= 0 ? fix.speed : 0;
-  if (
-    (fix.speed == null || fix.speed < 0) &&
-    state.lastAlongMeters != null &&
-    state.lastFixMs != null
-  ) {
-    const dtSeconds = (fix.timestampMs - state.lastFixMs) / 1000;
-    if (dtSeconds > 0) {
-      speedMps = Math.max((snap.alongMeters - state.lastAlongMeters) / dtSeconds, 0);
-    }
-  }
+  const { speedMps, state: speedEstimate } = navigationSpeed(
+    state.speedEstimate,
+    fix,
+    snap.alongMeters,
+  );
 
   // Off-route test, with the threshold widened by the fix's reported accuracy so
   // a noisy fix in an urban canyon doesn't read as a deviation.
@@ -250,6 +242,7 @@ export function processFix(
       spokenCues,
       lastAlongMeters: snap.alongMeters,
       lastFixMs: fix.timestampMs,
+      speedEstimate,
       lastRaw: fix.coords,
       lastDeviation: snap.deviationMeters,
       uTurnSinceMs: needsReroute ? null : uTurnSinceMs,

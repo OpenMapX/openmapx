@@ -2,13 +2,23 @@
 
 import type { StreetLevelCapabilities } from "@openmapx/core";
 import { useOverlayExclusion, useStreetLevelStore } from "@openmapx/core";
-import type { FilterSpecification, MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
-import { useEffect } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  readCapturedContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
+import type {
+  FilterSpecification,
+  MapLayerMouseEvent,
+  Map as MapLibreMap,
+  MapMouseEvent,
+} from "maplibre-gl";
+import { useEffect, useRef } from "react";
+import { addLayerInSlot, removeSlottedLayers } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
-import { useIntegrationDomainAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useStreetLevelProviders } from "./useStreetLevelProviders";
 
@@ -61,8 +71,18 @@ function panoFilter(coverage: MvtCoverage, wantPano: boolean): FilterSpecificati
   ) as FilterSpecification;
 }
 
+/** Remove one provider's coverage layers and its tile source, by source id. */
+function removeCoverage(map: MapLibreMap, sourceId: string): void {
+  removeSlottedLayers(
+    map,
+    ["grid", "sequences", "pictures", "pictures-pano"].map((suffix) => `${sourceId}-${suffix}`),
+    [sourceId],
+  );
+}
+
 export function StreetLevelCoverageLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
+  const currentMap = mapRef.current;
   const { apiUrl } = useEnv();
   const { providers } = useStreetLevelProviders();
   const layerVisible = useStreetLevelStore((s) => s.layerVisible);
@@ -70,32 +90,61 @@ export function StreetLevelCoverageLayer() {
 
   useOverlayExclusion("street-level-imagery", layerVisible);
 
-  // Credits every visible street-level-imagery integration at once. The per-integration
-  // helper can't express this because one layer now serves several providers,
-  // and CC-BY-SA / Licence Ouverte imagery must be credited when displayed.
-  useIntegrationDomainAttribution("street-level-imagery", layerVisible);
+  // Each map/source generation owns its captured capabilities. Metadata refresh
+  // cannot relabel tile bytes already retained by MapLibre.
+  const snapshots = useRef(
+    new WeakMap<
+      MapLibreMap,
+      Map<string, { tileUrl: string; layers: Record<string, readonly Attribution[]> }>
+    >(),
+  );
+  const layerIds = providers.flatMap((provider) => Object.values(coverageLayerIds(provider.id)));
+  useRenderedMapAttributions("street-level-coverage", layerIds, layerVisible, {
+    resolveFeatureContributors: (feature) => {
+      const map = currentMap;
+      const native =
+        readCapturedContributors(feature.properties?._mapAttributions) ??
+        readCapturedContributors(feature.properties?.contributors);
+      if (native !== undefined) return native;
+      return map
+        ? (snapshots.current.get(map)?.get(feature.source ?? feature.layer.source)?.layers[
+            feature.layer.id
+          ] ?? [])
+        : [];
+    },
+  });
+
+  useEffect(
+    () => () => {
+      if (!currentMap) return;
+      const retained = snapshots.current.get(currentMap);
+      for (const sourceId of retained?.keys() ?? []) removeCoverage(currentMap, sourceId);
+      snapshots.current.delete(currentMap);
+    },
+    [currentMap],
+  );
 
   useEffect(() => {
     void styleVersion;
-    const map = mapRef.current;
+    const map = currentMap;
     if (!map || !mapReady) return;
 
+    let retained = snapshots.current.get(map);
+    if (!retained) {
+      retained = new Map();
+      snapshots.current.set(map, retained);
+    }
+    const sourceSnapshots = retained;
+    const removeProvider = (sourceId: string) => {
+      removeCoverage(map, sourceId);
+      sourceSnapshots.delete(sourceId);
+    };
     const syncLayers = () => {
+      const selected = new Set(providers.map((provider) => coverageSourceId(provider.id)));
+      for (const id of sourceSnapshots.keys())
+        if (!layerVisible || !selected.has(id)) removeProvider(id);
       if (!layerVisible) {
-        for (const provider of providers) {
-          try {
-            for (const layerId of Object.values(coverageLayerIds(provider.id))) {
-              if (map.getLayer(layerId)) map.removeLayer(layerId);
-            }
-            const sourceId = coverageSourceId(provider.id);
-            if (map.getSource(sourceId)) map.removeSource(sourceId);
-          } catch {
-            // Tiles may still be in-flight when the source is torn down
-          }
-          for (const layerId of Object.values(coverageLayerIds(provider.id))) {
-            unregisterLayerSlot(layerId);
-          }
-        }
+        for (const provider of providers) removeCoverage(map, coverageSourceId(provider.id));
         return;
       }
 
@@ -106,10 +155,35 @@ export function StreetLevelCoverageLayer() {
         const sourceId = coverageSourceId(provider.id);
         const ids = coverageLayerIds(provider.id);
 
+        const tileUrl = `${apiUrl}${coverage.tileUrlTemplate}`;
+        if (
+          sourceSnapshots.get(sourceId)?.tileUrl !== undefined &&
+          sourceSnapshots.get(sourceId)?.tileUrl !== tileUrl
+        )
+          removeProvider(sourceId);
+        if (!sourceSnapshots.has(sourceId)) {
+          sourceSnapshots.set(sourceId, {
+            tileUrl,
+            layers: {
+              [ids.sequences]: snapshotContributors(
+                coverage.layerContributors?.[coverage.layers.sequences] ?? [],
+              ),
+              [ids.pictures]: snapshotContributors(
+                coverage.layerContributors?.[coverage.layers.pictures] ?? [],
+              ),
+              [ids.picturesPano]: snapshotContributors(
+                coverage.layerContributors?.[coverage.layers.pictures] ?? [],
+              ),
+              [ids.grid]: snapshotContributors(
+                coverage.layerContributors?.[coverage.layers.grid ?? ""] ?? [],
+              ),
+            },
+          });
+        }
         if (!map.getSource(sourceId)) {
           map.addSource(sourceId, {
             type: "vector",
-            tiles: [`${apiUrl}${coverage.tileUrlTemplate}`],
+            tiles: [tileUrl],
             minzoom: coverage.minzoom,
             maxzoom: coverage.maxzoom,
           });
@@ -122,6 +196,7 @@ export function StreetLevelCoverageLayer() {
               id: ids.grid,
               type: "circle",
               source: sourceId,
+              minzoom: coverage.minzoom,
               "source-layer": coverage.layers.grid,
               maxzoom: 7,
               paint: {
@@ -142,6 +217,7 @@ export function StreetLevelCoverageLayer() {
               id: ids.sequences,
               type: "line",
               source: sourceId,
+              minzoom: coverage.minzoom,
               "source-layer": coverage.layers.sequences,
               layout: { "line-cap": "round", "line-join": "round" },
               paint: {
@@ -162,6 +238,7 @@ export function StreetLevelCoverageLayer() {
               id: ids.pictures,
               type: "circle",
               source: sourceId,
+              minzoom: coverage.minzoom,
               "source-layer": coverage.layers.pictures,
               filter: panoFilter(coverage, false),
               paint: {
@@ -183,6 +260,7 @@ export function StreetLevelCoverageLayer() {
               id: ids.picturesPano,
               type: "circle",
               source: sourceId,
+              minzoom: coverage.minzoom,
               "source-layer": coverage.layers.pictures,
               filter: panoFilter(coverage, true),
               paint: {
@@ -205,18 +283,18 @@ export function StreetLevelCoverageLayer() {
     }
 
     return subscribeStyleLoaded(map, syncLayers);
-  }, [mapReady, styleVersion, mapRef, layerVisible, providers, apiUrl]);
+  }, [mapReady, styleVersion, currentMap, layerVisible, providers, apiUrl]);
 
   useEffect(() => {
     void styleVersion;
-    const map = mapRef.current;
+    const map = currentMap;
     if (!map || !mapReady || !layerVisible) return;
 
     // Bind unconditionally rather than filtering by `map.getLayer(id)` here:
-    // layer creation is deferred until idle whenever the style is still
-    // loading, so an existence check at effect time would attach nothing and
-    // leave the dots permanently unclickable. MapLibre resolves the layer list
-    // at event time and ignores ids that don't exist yet.
+    // layer creation waits for the style to be parsed, so an existence check at
+    // effect time could attach nothing and leave the dots permanently
+    // unclickable. MapLibre resolves the layer list at event time and ignores
+    // ids that don't exist yet.
     const interactive = pictureLayerIds(providers);
     if (interactive.length === 0) return;
 
@@ -250,7 +328,7 @@ export function StreetLevelCoverageLayer() {
       map.off("mousemove", handleMouseMove);
       map.getCanvasContainer().style.cursor = "";
     };
-  }, [mapReady, styleVersion, mapRef, layerVisible, providers, requestImageLoad]);
+  }, [mapReady, styleVersion, currentMap, layerVisible, providers, requestImageLoad]);
 
   return null;
 }

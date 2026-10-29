@@ -7,15 +7,22 @@ import {
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
+import { dataSourceToAttribution } from "@openmapx/integration-framework";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import {
+  readCapturedContributors,
+  withFeatureContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { MapLayerMouseEvent } from "maplibre-gl";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { EMPTY_FEATURE_COLLECTION, type MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
-import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { type AirportTypeFilter, useAirportsOverlayStore } from "./store";
 
@@ -83,6 +90,58 @@ function typeQueryParams(filter: AirportTypeFilter): string {
 // Importing `maplibre-gl` types only — runtime instance comes from the page.
 import type * as maplibregl from "maplibre-gl";
 
+function airportsGroup(minZoom: number): MapLayerGroup {
+  return {
+    sources: { [SOURCE_ID]: { type: "geojson", data: EMPTY_FEATURE_COLLECTION } },
+    layers: [
+      {
+        id: CIRCLE_LAYER_ID,
+        type: "circle",
+        source: SOURCE_ID,
+        minzoom: minZoom,
+        slot: "overlay-points",
+        order: 6,
+        paint: {
+          "circle-radius": CIRCLE_RADIUS_EXPR,
+          "circle-color": RANK_COLOR_EXPR,
+          "circle-opacity": 0.85,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 1.2,
+        },
+      },
+      {
+        id: LABEL_LAYER_ID,
+        type: "symbol",
+        source: SOURCE_ID,
+        minzoom: LABEL_MIN_ZOOM,
+        filter: LABEL_FILTER,
+        slot: "overlay-markers",
+        order: 8,
+        layout: {
+          "text-field": [
+            "coalesce",
+            ["get", "iata"],
+            ["get", "icao"],
+            ["get", "ident"],
+            ["get", "name"],
+          ],
+          "text-font": ["Noto Sans Bold"],
+          "text-size": 11,
+          "text-anchor": "top",
+          "text-offset": [0, 0.8],
+          "text-allow-overlap": false,
+          "text-optional": true,
+        },
+        paint: {
+          "text-color": "#0f172a",
+          "text-halo-color": "#ffffff",
+          "text-halo-width": 1.5,
+        },
+      },
+    ],
+  };
+}
+
 export function AirportsOverlay() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
@@ -91,7 +150,8 @@ export function AirportsOverlay() {
   // applies: below it we skip fetching and keep the markers hidden, so an
   // overlay left on while zooming out can't pull a world-sized airport list.
   const minZoom = useOverlayMinZoom("ourairports");
-  useIntegrationAttribution("overlay-ourairports", layerVisible);
+  const registry = useIntegrationRegistry();
+  useRenderedMapAttributions("ourairports", [CIRCLE_LAYER_ID, LABEL_LAYER_ID], layerVisible);
   const filter = useAirportsOverlayStore((s) => s.filter);
   const setLoading = useAirportsOverlayStore((s) => s.setLoading);
   const setLastUpdated = useAirportsOverlayStore((s) => s.setLastUpdated);
@@ -135,111 +195,41 @@ export function AirportsOverlay() {
       if (!request.isCurrent() || !res.ok) return;
       const data = await res.json();
       if (!request.isCurrent()) return;
-      publishGeoJson([{ sourceId: SOURCE_ID, data }]);
+      const source = registry.findDataSource("ourairports");
+      const contributors = source ? [dataSourceToAttribution(source)] : [];
+      const captured = {
+        ...data,
+        features: (data.features as GeoJSON.Feature[]).map((feature) =>
+          withFeatureContributors(
+            feature,
+            readCapturedContributors(feature.properties?.contributors) ??
+              readCapturedContributors(feature.properties?._mapAttributions) ??
+              contributors,
+          ),
+        ),
+      };
+      publishGeoJson([{ sourceId: SOURCE_ID, data: captured }]);
       setLastUpdated(Date.now());
     } catch {
       // silent
     } finally {
       if (request.isLatest()) setLoading(false);
     }
-  }, [beginRequest, env, mapRef, filter, publishGeoJson, setLoading, setLastUpdated, minZoom]);
+  }, [
+    beginRequest,
+    env,
+    registry,
+    mapRef,
+    filter,
+    publishGeoJson,
+    setLoading,
+    setLastUpdated,
+    minZoom,
+  ]);
 
-  // Layer add / remove + initial load
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-
-    const syncLayers = () => {
-      if (!layerVisible) {
-        try {
-          if (map.getLayer(LABEL_LAYER_ID)) map.removeLayer(LABEL_LAYER_ID);
-          if (map.getLayer(CIRCLE_LAYER_ID)) map.removeLayer(CIRCLE_LAYER_ID);
-          if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        } catch {
-          // tiles in flight
-        }
-        unregisterLayerSlot(LABEL_LAYER_ID);
-        unregisterLayerSlot(CIRCLE_LAYER_ID);
-        fetchedKeyRef.current = null;
-        return;
-      }
-
-      try {
-        if (!map.getSource(SOURCE_ID)) {
-          map.addSource(SOURCE_ID, {
-            type: "geojson",
-            data: { type: "FeatureCollection", features: [] },
-          });
-        }
-        if (!map.getLayer(CIRCLE_LAYER_ID)) {
-          addLayerInSlot(
-            map,
-            {
-              id: CIRCLE_LAYER_ID,
-              type: "circle",
-              source: SOURCE_ID,
-              minzoom: minZoom,
-              paint: {
-                "circle-radius": CIRCLE_RADIUS_EXPR,
-                "circle-color": RANK_COLOR_EXPR,
-                "circle-opacity": 0.85,
-                "circle-stroke-color": "#ffffff",
-                "circle-stroke-width": 1.2,
-              },
-            },
-            "overlay-points",
-            6,
-          );
-        }
-        if (!map.getLayer(LABEL_LAYER_ID)) {
-          addLayerInSlot(
-            map,
-            {
-              id: LABEL_LAYER_ID,
-              type: "symbol",
-              source: SOURCE_ID,
-              minzoom: LABEL_MIN_ZOOM,
-              filter: LABEL_FILTER,
-              layout: {
-                "text-field": [
-                  "coalesce",
-                  ["get", "iata"],
-                  ["get", "icao"],
-                  ["get", "ident"],
-                  ["get", "name"],
-                ],
-                "text-font": ["Noto Sans Bold"],
-                "text-size": 11,
-                "text-anchor": "top",
-                "text-offset": [0, 0.8],
-                "text-allow-overlap": false,
-                "text-optional": true,
-              },
-              paint: {
-                "text-color": "#0f172a",
-                "text-halo-color": "#ffffff",
-                "text-halo-width": 1.5,
-              },
-            },
-            "overlay-markers",
-            8,
-          );
-        }
-      } catch {
-        map.once("idle", syncLayers);
-      }
-    };
-
-    syncLayers();
-    if (layerVisible) {
-      void fetchAirports();
-    }
-    map.on("styledata", syncLayers);
-    return () => {
-      map.off("styledata", syncLayers);
-    };
-  }, [mapReady, mapRef, styleVersion, layerVisible, fetchAirports, minZoom]);
+  useMapLayerGroup(
+    useMemo(() => (layerVisible ? airportsGroup(minZoom) : null), [layerVisible, minZoom]),
+  );
 
   // Refetch on viewport change (debounced via moveend)
   useEffect(() => {
@@ -254,13 +244,13 @@ export function AirportsOverlay() {
     };
   }, [mapRef, mapReady, layerVisible, fetchAirports]);
 
-  // Refetch when the filter changes — `fetchAirports` is recreated with the
-  // new filter baked in, so its identity is the change signal here.
+  // Fetch when the overlay is shown or the filter changes — `fetchAirports` is
+  // recreated with the new filter baked in, so its identity is the change signal here.
   useEffect(() => {
-    if (!layerVisible) return;
+    if (!mapReady || !layerVisible) return;
     fetchedKeyRef.current = null;
     void fetchAirports();
-  }, [layerVisible, fetchAirports]);
+  }, [mapReady, layerVisible, fetchAirports]);
 
   // Click → open place panel via the coordinate scheme. The reverse-geocode
   // chain will resolve the aerodrome, and `knowledge-ourairports` will

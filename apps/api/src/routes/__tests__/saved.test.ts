@@ -351,7 +351,20 @@ describe("DELETE /api/saved/lists/:id", () => {
 describe("GET /api/saved/lists/:id/places", () => {
   it("returns a list's places after confirming ownership", async () => {
     dbMock.queueSelect([{ id: "list-1" }]); // ownership lookup
-    dbMock.queueSelect([{ id: "pl-1", listId: "list-1", name: "Gate" }]); // places
+    dbMock.queueSelect([
+      {
+        id: "pl-1",
+        listId: "list-1",
+        name: "Gate",
+        address: null,
+        lat: 52,
+        lng: 13,
+        placeId: null,
+        note: null,
+        sortOrder: 0,
+        createdAt: new Date("2026-10-01T00:00:00Z"),
+      },
+    ]); // places
 
     const res = await app.inject({ method: "GET", url: "/api/saved/lists/list-1/places" });
 
@@ -465,7 +478,18 @@ describe("DELETE /api/saved/places/:id", () => {
 
 describe("GET /api/saved/labels", () => {
   it("returns only the caller's labels", async () => {
-    dbMock.queueSelect([{ id: "lab-1", userId: USER_ID, label: "home" }]);
+    dbMock.queueSelect([
+      {
+        id: "lab-1",
+        label: "home",
+        icon: null,
+        name: "Home",
+        address: null,
+        lat: 52,
+        lng: 13,
+        placeId: null,
+      },
+    ]);
 
     const res = await app.inject({ method: "GET", url: "/api/saved/labels" });
 

@@ -59,8 +59,8 @@ vi.mock("@/integration-api/map/useMapLayerGroup", () => ({
     test.group = group;
   },
 }));
-vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
-  useSourceAttributions: test.attribution,
+vi.mock("@/integration-api/overlay/useRenderedMapAttributions", () => ({
+  useRenderedMapAttributions: test.attribution,
 }));
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://fixture" }),
@@ -75,7 +75,6 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 import { getAmbientIdentity } from "@/components/map/ambientPlaceIdentity";
 import { localizeTextField } from "@/components/map/localizeTextField";
 import { AmbientPlacesLayer } from "./map-layer";
-import { useAmbientPlacesStore } from "./store";
 
 const manifest = {
   version: 1,
@@ -91,13 +90,6 @@ const manifest = {
   },
 };
 beforeEach(() => {
-  useAmbientPlacesStore.setState({
-    panelOpen: true,
-    layerVisible: true,
-    manifest: null,
-    error: false,
-    loading: false,
-  });
   test.group = null;
   test.styleVersion = 0;
   vi.clearAllMocks();
@@ -384,56 +376,123 @@ describe("ambient generation lifecycle", () => {
     // Landmarks use a separate symbol partition with six candidate positions.
     expect(positions(2559)).toHaveLength(12);
 
-    expect(test.attribution).toHaveBeenLastCalledWith("overlay-ambient-places", [
-      "osm-ambient-places",
-    ]);
-    act(() => useAmbientPlacesStore.setState({ layerVisible: false }));
-    await waitFor(() => expect(test.group).toBeNull());
+    expect(test.attribution).toHaveBeenLastCalledWith(
+      "overlay-ambient-places",
+      expect.arrayContaining(["ambient-places-labels"]),
+      true,
+      expect.objectContaining({ resolveFeatureContributors: expect.any(Function) }),
+    );
     view.unmount();
     expect(test.map.off).toHaveBeenCalled();
   });
-  it("keeps supported contributor credits for a combined publication and clears them on hide", async () => {
-    const combined = {
-      ...manifest,
-      sources: {
-        ...manifest.sources,
-        overture: {
-          region: "Germany",
-          release: "2026-09-23.1",
-          publishedAt: new Date().toISOString(),
-          count: 1,
+  it("registers combined publication for rendered receipt selection and releases it when a refresh disables it", async () => {
+    // Capture the one-minute discovery timer; testing-library's own polling needs real timers.
+    const refreshTicks: (() => void)[] = [];
+    const realSetInterval = globalThis.setInterval;
+    const interval = vi.spyOn(globalThis, "setInterval").mockImplementation(((
+      handler: () => void,
+      delay?: number,
+    ) => {
+      if (delay !== 60_000) return realSetInterval(handler, delay);
+      refreshTicks.push(handler);
+      return 0 as unknown as ReturnType<typeof setInterval>;
+    }) as typeof setInterval);
+    try {
+      const combined = {
+        ...manifest,
+        sources: {
+          ...manifest.sources,
+          overture: {
+            region: "Germany",
+            release: "2026-09-23.1",
+            publishedAt: new Date().toISOString(),
+            count: 1,
+          },
         },
-      },
-    };
+      };
+      let next: unknown = combined;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({ ok: true, json: async () => ({ manifest: next }) })),
+      );
+      render(<AmbientPlacesLayer />);
+      await waitFor(() => expect(test.group).not.toBeNull());
+      expect(test.attribution.mock.lastCall?.[2]).toBe(true);
+
+      next = { ...combined, enabled: false };
+      await act(async () => {
+        refreshTicks.at(-1)?.();
+      });
+      await waitFor(() => expect(test.group).toBeNull());
+      expect(test.attribution.mock.lastCall?.[2]).toBe(false);
+    } finally {
+      interval.mockRestore();
+    }
+  });
+  it("removes rendered places once the last-known publication ages out and refresh hangs", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-14T12:00:00Z"));
+    const refreshTicks: (() => void)[] = [];
+    const realSetInterval = globalThis.setInterval;
+    const interval = vi.spyOn(globalThis, "setInterval").mockImplementation(((
+      handler: () => void,
+      delay?: number,
+    ) => {
+      if (delay !== 60_000) return realSetInterval(handler, delay);
+      refreshTicks.push(handler);
+      return 0 as unknown as ReturnType<typeof setInterval>;
+    }) as typeof setInterval);
+    try {
+      const aged = new Date(Date.now() - 89 * 86_400_000).toISOString();
+      const published = {
+        ...manifest,
+        publishedAt: aged,
+        sources: { ...manifest.sources, osm: { ...manifest.sources.osm, publishedAt: aged } },
+      };
+      const fetches = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ manifest: published }) })
+        .mockImplementation(() => new Promise(() => {}));
+      vi.stubGlobal("fetch", fetches);
+      render(<AmbientPlacesLayer />);
+      await waitFor(() => expect(test.group).not.toBeNull());
+
+      vi.setSystemTime(Date.now() + 2 * 86_400_000);
+      await act(async () => {
+        refreshTicks.at(-1)?.();
+      });
+      expect(fetches).toHaveBeenCalledTimes(2);
+      await waitFor(() => expect(test.group).toBeNull());
+      expect(test.attribution.mock.lastCall?.[2]).toBe(false);
+    } finally {
+      interval.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+  it("ignores a late discovery after unmount and rediscovers when mounted again", async () => {
+    let resolve!: (value: unknown) => void;
+    const slow = vi.fn(
+      () =>
+        new Promise((r) => {
+          resolve = r;
+        }),
+    );
+    vi.stubGlobal("fetch", slow);
+    const view = render(<AmbientPlacesLayer />);
+    view.unmount();
+    await act(async () => resolve({ ok: true, json: async () => ({ manifest }) }));
+    expect(test.group).toBeNull();
+    // A reply that arrives after unmount never installs handlers or identities.
+    expect(test.map.on).not.toHaveBeenCalled();
+    expect(test.map.setFilter).not.toHaveBeenCalled();
+
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({ ok: true, json: async () => ({ manifest: combined }) })),
+      vi.fn(async () => ({ ok: true, json: async () => ({ manifest }) })),
     );
     render(<AmbientPlacesLayer />);
     await waitFor(() => expect(test.group).not.toBeNull());
-    const sources = test.attribution.mock.lastCall?.[1] as string[];
-    expect(sources).toEqual(
-      expect.arrayContaining(["osm-ambient-places", "overture", "foursquare"]),
-    );
-    act(() => useAmbientPlacesStore.setState({ layerVisible: false }));
-    expect(test.attribution).toHaveBeenLastCalledWith("overlay-ambient-places", []);
-  });
-  it("ignores late discovery after disable and leaves no-data browsing intact", async () => {
-    let resolve!: (value: unknown) => void;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        () =>
-          new Promise((r) => {
-            resolve = r;
-          }),
-      ),
-    );
-    render(<AmbientPlacesLayer />);
-    act(() => useAmbientPlacesStore.setState({ layerVisible: false }));
-    await act(async () => resolve({ ok: true, json: async () => ({ manifest }) }));
-    expect(test.group).toBeNull();
-    expect(useAmbientPlacesStore.getState().manifest).toBeNull();
+    expect(test.map.on).toHaveBeenCalledWith("click", expect.any(Function));
   });
   it("opens the canonical tile identity, suppresses its selected marker and reapplies filters after style replacement", async () => {
     const feature = {
@@ -689,7 +748,9 @@ describe("ambient generation lifecycle", () => {
       })),
     );
     render(<AmbientPlacesLayer />);
-    await waitFor(() => expect(useAmbientPlacesStore.getState().loading).toBe(false));
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    await act(async () => {});
     expect(test.group).toBeNull();
+    expect(test.map.on).not.toHaveBeenCalled();
   });
 });

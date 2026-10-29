@@ -17,6 +17,7 @@ import { PersistentStorageRequest } from "@/components/pwa/PersistentStorageRequ
 import { SwUpdateNotice } from "@/components/pwa/SwUpdateNotice";
 import { InstallPromptCapture } from "@/components/pwa/useInstallPrompt";
 import { EnvProvider } from "@/integration-api/runtime/EnvProvider";
+import { AttributionLabelsSync } from "@/lib/attributionLabels";
 import { loadClientEnv } from "@/lib/serverClientEnv";
 import { Providers } from "./providers";
 
@@ -77,6 +78,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                     would be missed if it lived inside the HamburgerMenu's
                     temporary Drawer subtree). Each component is a client
                     island with its own production / serviceWorker guards. */}
+                <AttributionLabelsSync />
                 <OfflineNotice />
                 <SwUpdateNotice />
                 <InstallPromptCapture />

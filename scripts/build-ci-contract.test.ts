@@ -18,25 +18,28 @@ describe("required production build gate", () => {
     expect(workflow).toMatch(/^ {2}build:\n/m);
     expect(workflow).toContain("pnpm build");
     expect(workflow).toContain("pnpm check-packed-packages");
-    expect(workflow).toMatch(/needs: \[[^\]]*build[^\]]*\]/);
+    expect(workflow).toMatch(/needs:\s*\[[^\]]*\bbuild\b[^\]]*\]/);
     expect(rootPackage.scripts["check-packed-packages"]).toBe(
       "node scripts/check-packed-packages.mjs",
     );
   });
 
-  it("executes the emitted traffic worker after the production build in the required build job", () => {
+  it("executes the bundled data-manager workers after the production build in the required build job", () => {
     const workflow = read(".github/workflows/ci.yml");
     const buildJob =
       workflow.match(/^ {2}build:\n[\s\S]*?(?=^ {2}\w[\w-]*:|$(?![\s\S]))/m)?.[0] ?? "";
-    const smoke =
-      "OPENMAPX_RUN_BUILT_WORKER_TESTS=1 pnpm exec vitest run --project node services/data-manager/src/__tests__/live-writer-worker.test.ts";
+    const smoke = [
+      "OPENMAPX_RUN_BUILT_WORKER_TESTS=1 pnpm exec vitest run --project node",
+      "services/data-manager/src/__tests__/live-writer-worker.test.ts",
+      "services/data-manager/src/__tests__/offline-extractor-worker.test.ts",
+    ].join(" ");
     const buildPosition = buildJob.indexOf("run: pnpm build");
     const smokePosition = buildJob.indexOf(`run: ${smoke}`);
     expect(buildPosition).toBeGreaterThan(-1);
     expect(smokePosition).toBeGreaterThan(buildPosition);
     // Neither step can be conditional or allowed to fail while the aggregate succeeds.
     expect(buildJob).not.toMatch(/continue-on-error:|^\s+if:/m);
-    expect(workflow).toMatch(/needs: \[[^\]]*build[^\]]*\]/);
+    expect(workflow).toMatch(/needs:\s*\[[^\]]*\bbuild\b[^\]]*\]/);
     expect(workflow).toContain("needs.build.result != 'success'");
   });
 

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { adminRoute } from "./admin";
+import { adminActivityRoute } from "./admin-activity";
 import { adminCacheRoute } from "./admin-cache";
 import { registerCapabilityBindingRoutes } from "./admin-capability-bindings";
 import { registerAdminComposeRoutes } from "./admin-compose";
@@ -19,6 +20,7 @@ import { dataManagerRoute } from "./data-manager";
 import { elevationRoute } from "./elevation";
 import { garageRoute } from "./garage";
 import { imageProxyRoute } from "./image-proxy";
+import { integrationsRoute } from "./integrations";
 import { internalMetricsRoute } from "./internal-metrics";
 import { isochroneRoute } from "./isochrone";
 import { legalConfigRoute } from "./legal-config";
@@ -75,6 +77,7 @@ export async function registerCoreRoutes(
   await server.register(metaRoute);
 
   await server.register(capabilitiesRoute, { prefix: "/api" });
+  await server.register(integrationsRoute);
   await server.register(legalConfigRoute, { prefix: "/api" });
   await server.register(privacyRequestsRoute, {
     prefix: "/api",
@@ -112,6 +115,7 @@ export async function registerCoreRoutes(
   await server.register(adminServicesRoute, { prefix: "/api" });
   await server.register(adminOperationsRoute, { prefix: "/api" });
   await server.register(adminCoverageRoute, { prefix: "/api" });
+  await server.register(adminActivityRoute, { prefix: "/api" });
   await server.register(adminJobEventsRoute, { prefix: "/api" });
   await server.register(adminDawarichRoute, { prefix: "/api" });
   await server.register(dataManagerRoute, { prefix: "/api" });
@@ -122,5 +126,5 @@ export async function registerCoreRoutes(
   await server.register(attributionRoute, { prefix: "/api" });
 
   await registerCapabilityBindingRoutes(server);
-  await registerAdminComposeRoutes(server);
+  await server.register(registerAdminComposeRoutes, { prefix: "/api" });
 }

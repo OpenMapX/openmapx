@@ -1,12 +1,9 @@
-import { execFile } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
-import { promisify } from "node:util";
 import { extractPmtilesPackage } from "@openmapx/cli/tile-pmtiles";
 import {
   canonicalizeOfflinePackageRequest,
@@ -166,23 +163,17 @@ describe("offline extraction worker", () => {
 });
 
 it.skipIf(process.env.OPENMAPX_RUN_BUILT_WORKER_TESTS !== "1")(
-  "runs the emitted offline client and worker against real MBTiles",
+  "runs the bundled offline extractor worker with plain Node against real MBTiles",
   async () => {
     const dir = mkdtempSync(join(tmpdir(), "openmapx-offline-built-"));
+    const client = createOfflinePackageExtractor({
+      workerUrl: new URL("../../dist/extractor-worker.mjs", import.meta.url),
+    });
     try {
       const sourceMbtilesPath = join(dir, "source.mbtiles");
       fixture(sourceMbtilesPath);
-      const loader = pathToFileURL(createRequire(import.meta.url).resolve("tsx/esm")).href;
-      const clientUrl = new URL("../../dist/offline-packages/extractor-client.js", import.meta.url)
-        .href;
       const input = { sourceMbtilesPath, destinationPath: join(dir, "built.pmtiles"), request };
-      const code = `import { createOfflinePackageExtractor } from ${JSON.stringify(clientUrl)}; const client = createOfflinePackageExtractor(); try { console.log(JSON.stringify(await client.extract(${JSON.stringify(input)}))); } finally { await client.close(); }`;
-      const { stdout } = await promisify(execFile)(
-        process.execPath,
-        ["--import", loader, "--input-type=module", "--eval", code],
-        { timeout: 15_000 },
-      );
-      const actual = JSON.parse(stdout);
+      const actual = await client.extract(input);
       const direct = await extractPmtilesPackage({
         ...input,
         destinationPath: join(dir, "direct.pmtiles"),
@@ -192,6 +183,7 @@ it.skipIf(process.env.OPENMAPX_RUN_BUILT_WORKER_TESTS !== "1")(
         readFileSync(join(dir, "direct.pmtiles")),
       );
     } finally {
+      await client.close();
       rmSync(dir, { recursive: true, force: true });
     }
   },

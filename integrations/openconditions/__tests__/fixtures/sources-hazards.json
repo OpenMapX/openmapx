@@ -14,8 +14,6 @@
       "accessMode": "bulk",
       "restricted": false,
       "license": "LicenseRef-ECCC-Data-Servers-End-use",
-      "licenseName": "Environment and Climate Change Canada Data Servers End-use Licence",
-      "licenseUrl": "https://eccc-msc.github.io/open-data/licence/readme_en/",
       "attribution": "Data Source: Environment and Climate Change Canada",
       "homepage": "https://weather.gc.ca/",
       "privacyUrl": "https://www.canada.ca/en/transparency/privacy.html",
@@ -34,6 +32,25 @@
       },
       "coverage": {
         "countries": ["CA"]
+      },
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "ECCC weather alerts",
+            "license": {
+              "kind": "custom",
+              "id": "LicenseRef-ECCC-Data-Servers-End-use",
+              "namespace": "openconditions:licences",
+              "name": "Environment and Climate Change Canada Data Servers End-use Licence",
+              "url": "https://eccc-msc.github.io/open-data/licence/readme_en/"
+            },
+            "conditions": [
+              "Weather alerts must be reproduced without alteration of their content or intent: their texts are kept verbatim in every language."
+            ]
+          }
+        ]
       }
     },
     {
@@ -48,8 +65,6 @@
       "accessMode": "bulk",
       "restricted": false,
       "license": "CC-BY-4.0",
-      "licenseName": "Creative Commons Attribution 4.0",
-      "licenseUrl": "https://www.dwd.de/DE/service/rechtliche_hinweise/rechtliche_hinweise_node.html",
       "attribution": "Deutscher Wetterdienst; Geobasisdaten © GeoBasis-DE / BKG 2021 (Daten modifiziert)",
       "homepage": "https://www.dwd.de/",
       "privacyUrl": "https://www.dwd.de/EN/service/dataprotection/dataprotection_node.html",
@@ -64,6 +79,20 @@
       "coverage": {
         "countries": ["DE"],
         "bbox": [5.5, 47.2, 15.1, 55.1]
+      },
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "DWD weather warnings",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-4.0",
+              "url": "https://www.dwd.de/DE/service/rechtliche_hinweise/rechtliche_hinweise_node.html"
+            }
+          }
+        ]
       }
     },
     {
@@ -77,8 +106,6 @@
       "accessMode": "bulk",
       "restricted": false,
       "license": "CC-BY-4.0",
-      "licenseName": "Creative Commons Attribution 4.0",
-      "licenseUrl": "https://forest-fire.emergency.copernicus.eu/about-effis/data-license",
       "attribution": "© European Union, 1995-2025, EFFIS (Copernicus Emergency Management Service), modified",
       "homepage": "https://forest-fire.emergency.copernicus.eu/",
       "privacyUrl": "https://commission.europa.eu/privacy-policy-websites-managed-european-commission_en",
@@ -92,6 +119,20 @@
       },
       "coverage": {
         "bbox": [-25, 25, 45, 72]
+      },
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "EFFIS burnt areas",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-4.0",
+              "url": "https://forest-fire.emergency.copernicus.eu/about-effis/data-license"
+            }
+          }
+        ]
       }
     },
     {
@@ -105,8 +146,6 @@
       "accessMode": "bulk",
       "restricted": true,
       "license": "LicenseRef-MeteoAlarm-Terms",
-      "licenseName": "MeteoAlarm Terms and Conditions",
-      "licenseUrl": "https://meteoalarm.org/en/live/page/terms-and-conditions",
       "attribution": "EUMETNET – MeteoAlarm",
       "homepage": "https://www.meteoalarm.org/",
       "privacyUrl": "https://api.meteoalarm.org/privacy",
@@ -165,6 +204,25 @@
           "UA",
           "GB"
         ]
+      },
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "MeteoAlarm warnings",
+            "license": {
+              "kind": "custom",
+              "id": "LicenseRef-MeteoAlarm-Terms",
+              "namespace": "openconditions:licences",
+              "name": "MeteoAlarm Terms and Conditions",
+              "url": "https://meteoalarm.org/en/live/page/terms-and-conditions"
+            },
+            "conditions": [
+              "Served in the operator's scope only: the shapes of areas named by EMMA id come from EUMETNET's geocode file, which no licence grants, and the terms require redistribution within ten minutes of MeteoAlarm's site, which the archive and federation cannot keep. A display shows the issuing service (\"EUMETNET – MeteoAlarm\" across countries), the issue time, a link to www.meteoalarm.org and the notice, and keeps the warning's text unaltered."
+            ]
+          }
+        ]
       }
     },
     {
@@ -178,8 +236,6 @@
       "accessMode": "bulk",
       "restricted": false,
       "license": "CC-BY-4.0",
-      "licenseName": "Creative Commons Attribution 4.0",
-      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
       "attribution": "GDACS, European Union (CC BY 4.0)",
       "homepage": "https://www.gdacs.org/",
       "privacyUrl": "https://commission.europa.eu/privacy-policy-websites-managed-european-commission_en",
@@ -198,6 +254,23 @@
       },
       "coverage": {
         "bbox": [-180, -90, 180, 90]
+      },
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "GDACS disaster alerts",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-4.0",
+              "url": "https://creativecommons.org/licenses/by/4.0/"
+            },
+            "conditions": [
+              "Licence stated in the RSS and CAP feeds; GDACS alerts are automatic model estimates, not official warnings."
+            ]
+          }
+        ]
       }
     },
     {
@@ -212,8 +285,6 @@
       "accessMode": "bulk",
       "restricted": false,
       "license": "CC0-1.0",
-      "licenseName": "Creative Commons Zero 1.0",
-      "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
       "attribution": "NASA Earth Observatory Natural Event Tracker (EONET)",
       "homepage": "https://eonet.gsfc.nasa.gov",
       "privacyUrl": "https://www.nasa.gov/privacy/",
@@ -232,6 +303,23 @@
       },
       "coverage": {
         "bbox": [-180, -90, 180, 90]
+      },
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "NASA EONET natural events",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC0-1.0",
+              "url": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+            },
+            "conditions": [
+              "Metadata for visualisation and general information, not official extents."
+            ]
+          }
+        ]
       }
     },
     {
@@ -246,8 +334,6 @@
       "accessMode": "bulk",
       "restricted": false,
       "license": "CC0-1.0",
-      "licenseName": "Creative Commons Zero 1.0",
-      "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
       "attribution": "NASA FIRMS (LANCE / ESDIS)",
       "homepage": "https://www.earthdata.nasa.gov/data/tools/firms",
       "privacyUrl": "https://www.nasa.gov/privacy/",
@@ -261,6 +347,20 @@
       },
       "coverage": {
         "bbox": [-180, -90, 180, 90]
+      },
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "NASA FIRMS MODIS active fires",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC0-1.0",
+              "url": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+            }
+          }
+        ]
       }
     },
     {
@@ -275,8 +375,6 @@
       "accessMode": "bulk",
       "restricted": false,
       "license": "CC0-1.0",
-      "licenseName": "Creative Commons Zero 1.0",
-      "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
       "attribution": "NASA FIRMS (LANCE / ESDIS)",
       "homepage": "https://www.earthdata.nasa.gov/data/tools/firms",
       "privacyUrl": "https://www.nasa.gov/privacy/",
@@ -290,6 +388,20 @@
       },
       "coverage": {
         "bbox": [-180, -90, 180, 90]
+      },
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "NASA FIRMS VIIRS active fires",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC0-1.0",
+              "url": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+            }
+          }
+        ]
       }
     },
     {
@@ -304,8 +416,6 @@
       "accessMode": "bulk",
       "restricted": false,
       "license": "LicenseRef-US-Gov-Public-Domain",
-      "licenseName": "U.S. Government Public Domain (17 U.S.C. §105)",
-      "licenseUrl": "https://www.arcgis.com/home/item.html?id=d1c32af3212341869b3c810f1a215824",
       "attribution": "National Interagency Fire Center (NIFC) / WFIGS and contributing agencies — dynamic data, not legal documents.",
       "homepage": "https://www.nifc.gov/",
       "privacyUrl": "https://www.doi.gov/privacy",
@@ -323,6 +433,25 @@
       },
       "coverage": {
         "countries": ["US"]
+      },
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "NIFC wildland fires",
+            "license": {
+              "kind": "custom",
+              "id": "LicenseRef-US-Gov-Public-Domain",
+              "namespace": "openconditions:licences",
+              "name": "U.S. Government Public Domain (17 U.S.C. §105)",
+              "url": "https://www.arcgis.com/home/item.html?id=d1c32af3212341869b3c810f1a215824"
+            },
+            "conditions": [
+              "Federal compilation (IRWIN) with state contributions; NIFC's disclaimer: dynamic data, not legal documents, no warranty."
+            ]
+          }
+        ]
       }
     },
     {
@@ -338,8 +467,6 @@
       "accessMode": "bulk",
       "restricted": false,
       "license": "CC0-1.0",
-      "licenseName": "Creative Commons Zero 1.0",
-      "licenseUrl": "https://www.arcgis.com/home/item.html?id=ab7a5fbd76e3499296350eabf599fc63",
       "attribution": "NOAA/NESDIS Hazard Mapping System (HMS)",
       "homepage": "https://www.ospo.noaa.gov/products/land/hms.html",
       "privacyUrl": "https://www.noaa.gov/protecting-your-privacy",
@@ -354,6 +481,20 @@
       "coverage": {
         "countries": ["US", "CA", "MX"],
         "bbox": [-170, 10, -50, 75]
+      },
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "NOAA HMS smoke",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC0-1.0",
+              "url": "https://www.arcgis.com/home/item.html?id=ab7a5fbd76e3499296350eabf599fc63"
+            }
+          }
+        ]
       }
     },
     {
@@ -368,8 +509,6 @@
       "accessMode": "bulk",
       "restricted": false,
       "license": "LicenseRef-US-Gov-Public-Domain",
-      "licenseName": "U.S. Government Public Domain (17 U.S.C. §105)",
-      "licenseUrl": "https://www.weather.gov/disclaimer",
       "attribution": "National Weather Service (NOAA)",
       "homepage": "https://www.weather.gov/",
       "privacyUrl": "https://www.weather.gov/privacy",
@@ -383,6 +522,22 @@
       },
       "coverage": {
         "countries": ["US", "PR", "GU", "AS", "VI", "MP"]
+      },
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "NWS weather alerts",
+            "license": {
+              "kind": "custom",
+              "id": "LicenseRef-US-Gov-Public-Domain",
+              "namespace": "openconditions:licences",
+              "name": "U.S. Government Public Domain (17 U.S.C. §105)",
+              "url": "https://www.weather.gov/disclaimer"
+            }
+          }
+        ]
       }
     },
     {
@@ -396,8 +551,6 @@
       "accessMode": "bulk",
       "restricted": false,
       "license": "LicenseRef-US-Gov-Public-Domain",
-      "licenseName": "U.S. Government Public Domain (17 U.S.C. §105)",
-      "licenseUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits",
       "attribution": "U.S. Geological Survey",
       "homepage": "https://earthquake.usgs.gov",
       "privacyUrl": "https://www.doi.gov/privacy",
@@ -411,6 +564,22 @@
       },
       "coverage": {
         "bbox": [-180, -90, 180, 90]
+      },
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "USGS earthquakes",
+            "license": {
+              "kind": "custom",
+              "id": "LicenseRef-US-Gov-Public-Domain",
+              "namespace": "openconditions:licences",
+              "name": "U.S. Government Public Domain (17 U.S.C. §105)",
+              "url": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
+            }
+          }
+        ]
       }
     }
   ]

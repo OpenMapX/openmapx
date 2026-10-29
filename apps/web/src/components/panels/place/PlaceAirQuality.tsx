@@ -117,7 +117,6 @@ function EvidenceSources({ evidence }: { evidence: AirQualityEvidence }) {
       </Typography>
       {evidence.sources.map((source) => {
         const sourceUrl = source.url ? safeHref(source.url) : undefined;
-        const licenseUrl = source.license?.url ? safeHref(source.license.url) : undefined;
         const methodologyUrl = source.methodologyUrl ? safeHref(source.methodologyUrl) : undefined;
         return (
           <Box key={source.sourceId}>
@@ -127,11 +126,16 @@ function EvidenceSources({ evidence }: { evidence: AirQualityEvidence }) {
               </Typography>
             )}
             <SectionAttribution
-              name={source.name}
-              url={sourceUrl}
-              license={source.license?.name}
-              licenseUrl={licenseUrl}
-              attribution={source.attribution ?? undefined}
+              keepVisibleWithContent
+              attributions={[
+                {
+                  sourceId: source.sourceId,
+                  name: source.name,
+                  url: sourceUrl,
+                  licensing: source.licensing ?? undefined,
+                  attributionText: source.attribution ?? undefined,
+                },
+              ]}
             />
             {methodologyUrl && (
               <Link

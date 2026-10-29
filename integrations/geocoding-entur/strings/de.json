@@ -3,9 +3,34 @@
   "description": "Vorwärtsgeokodierung, Autovervollständigung, Rückwärtsgeokodierung und NSR-gestützte ÖPNV-Haltestellenvorschläge für Norwegen",
   "dataSources": {
     "entur-geocoder": {
-      "purpose": "Suche nach norwegischen Orten, Adressen, POIs und Haltestellen über den Entur-Geocoder; Rückwärtsgeokodierung von Koordinaten; Erhalt von NSR-Haltestellen-IDs für nachgelagerte ÖPNV-Flows",
-      "dataSent": "Suchtext oder Koordinaten (Längengrad, Breitengrad), Sprache, optionaler Norwegen-Filter, Modus für multimodale Haltestellen, ET-Client-Name-Header",
-      "dataReceived": "GeoJSON-ähnliche Features mit Namen, Koordinaten, NSR- und Entur-IDs, Haltestellenkategorien, Verkehrsmodi und Orts-/Bezirkskontext"
+      "purpose": "Suche nach Orten, Adressen, POIs und Haltestellen, Rückwärtsgeocodierung und Auflösung exakter nativer IDs über Entur Geocoder v3",
+      "dataSent": "Suchtext, Koordinaten (Längen- und Breitengrad), exakte native IDs zur Ortsauflösung, Sprache, Ergebnislimit, optionales kleingeschriebenes ISO2-Land, Multimodal-Modus und ET-Client-Name-Header",
+      "dataReceived": "Native GeoJSON-Features mit strukturierten Namen und Adressen, Koordinaten, nativen IDs, Kategorien, Haltestellentypen, Verkehrsmitteln, Beschreibungen und Datenquelle"
+    },
+    "entur-geocoder-nsr": {
+      "purpose": "Bereitstellung von Entur National Stop Register geocoder data über Entur Geocoder v3",
+      "dataSent": "Keine direkte Anfrage an diesen Datenlieferanten; Suchtext, Koordinaten oder exakte native IDs und Filter werden an die Entur-API gesendet",
+      "dataReceived": "Native Features von Entur National Stop Register geocoder data mit Namen, Koordinaten, Kennungen und verfügbaren strukturierten Metadaten"
+    },
+    "entur-geocoder-osm": {
+      "purpose": "Bereitstellung von OpenStreetMap geocoder data über Entur Geocoder v3",
+      "dataSent": "Keine direkte Anfrage an diesen Datenlieferanten; Suchtext, Koordinaten oder exakte native IDs und Filter werden an die Entur-API gesendet",
+      "dataReceived": "Native Features von OpenStreetMap geocoder data mit Namen, Koordinaten, Kennungen und verfügbaren strukturierten Metadaten"
+    },
+    "entur-geocoder-kartverket-addresses": {
+      "purpose": "Bereitstellung von Kartverket address and street geocoder data über Entur Geocoder v3",
+      "dataSent": "Keine direkte Anfrage an diesen Datenlieferanten; Suchtext, Koordinaten oder exakte native IDs und Filter werden an die Entur-API gesendet",
+      "dataReceived": "Native Features von Kartverket address and street geocoder data mit Namen, Koordinaten, Kennungen und verfügbaren strukturierten Metadaten"
+    },
+    "entur-geocoder-kartverket-place-names": {
+      "purpose": "Bereitstellung von Kartverket place-name geocoder data über Entur Geocoder v3",
+      "dataSent": "Keine direkte Anfrage an diesen Datenlieferanten; Suchtext, Koordinaten oder exakte native IDs und Filter werden an die Entur-API gesendet",
+      "dataReceived": "Native Features von Kartverket place-name geocoder data mit Namen, Koordinaten, Kennungen und verfügbaren strukturierten Metadaten"
+    },
+    "entur-geocoder-custom-poi": {
+      "purpose": "Bereitstellung von Entur custom POI geocoder data über Entur Geocoder v3",
+      "dataSent": "Keine direkte Anfrage an diesen Datenlieferanten; Suchtext, Koordinaten oder exakte native IDs und Filter werden an die Entur-API gesendet",
+      "dataReceived": "Native Features von Entur custom POI geocoder data mit Namen, Koordinaten, Kennungen und verfügbaren strukturierten Metadaten"
     }
   }
 }

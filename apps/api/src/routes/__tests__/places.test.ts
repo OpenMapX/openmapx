@@ -1,6 +1,33 @@
-import { registerPlaceResolver } from "@openmapx/place-ids";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
+import * as placeIds from "@openmapx/place-ids";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+
+/** Complete controlled Commons fixture; licensing tests elsewhere keep unknown files unknown. */
+function licensedPhoto<
+  T extends {
+    url: string;
+    source: string;
+    author?: string;
+    licensing?: import("@openmapx/mobility-core/licensing").Licensing;
+    pageUrl?: string;
+  },
+>(photo: T) {
+  const image = new URL(photo.url);
+  const filename =
+    image.pathname.match(/\/[a-f0-9]\/[a-f0-9]{2}\/([^/]+)/)?.[1] ??
+    image.pathname.split("/").at(-1) ??
+    "Photo.jpg";
+  return {
+    ...photo,
+    source: "wikimedia-commons",
+    author: photo.author ?? "Controlled fixture creator",
+    licensing:
+      photo.licensing ??
+      licensingFromDeclaration("CC-BY-4.0", undefined, "Commons file", "imagery"),
+    pageUrl: photo.pageUrl ?? `https://commons.wikimedia.org/wiki/File:${filename}`,
+  };
+}
 
 // Mock nominatim lookup service
 
@@ -47,6 +74,12 @@ vi.mock("@integrations/reviews/orchestrator", () => ({
   fetchAggregate: mockFetchAggregate,
 }));
 
+const ratingCatalogue = vi.hoisted(() => ({
+  receipts: [] as import("@openmapx/mobility-core/attribution").Attribution[],
+}));
+vi.mock("../../services/attribution/index.js", () => ({
+  getAttributionIndex: () => ({ list: () => ratingCatalogue.receipts }),
+}));
 const mockIsIntegrationScheme = vi.fn().mockReturnValue(false);
 const mockIsEnabledIntegrationScheme = vi.fn().mockReturnValue(false);
 vi.mock("../../integration-host.js", () => ({
@@ -86,23 +119,24 @@ vi.mock("@openmapx/core/ambient-places-server", () => ({
   readAmbientPlaceByGers: (...args: unknown[]) => mockAmbientPlace(...args),
 }));
 
+const { placesRoute } = await import("../places.js");
+
 // App setup
 
 let app: FastifyInstance;
-const { placesRoute } = await import("../places.js");
 
 beforeAll(async () => {
   // Register the built-in scheme resolvers the route depends on. In the
   // running server these register themselves from each integration's
   // setup() during initIntegrations; the test boots the route in
   // isolation, so we wire them directly here.
-  registerPlaceResolver("osm", async (value, ctx) => {
+  placeIds.registerPlaceResolver("osm", async (value, ctx) => {
     const match = value.match(/^(node|way|relation)\/(\d+)/);
     if (!match) return null;
     const [, osmType, osmId] = match;
     return mockLookupByOsmRef(osmType, osmId, `osm:${value}`, ctx.lang);
   });
-  registerPlaceResolver("eva", async (value, ctx) => {
+  placeIds.registerPlaceResolver("eva", async (value, ctx) => {
     if (!/^\d+$/.test(value)) return null;
     return mockLookupDbStation(value, ctx.lang);
   });
@@ -113,11 +147,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await app.close();
+  await app?.close();
 });
 
 afterEach(() => {
   vi.useRealTimers();
+  ratingCatalogue.receipts = [];
   vi.clearAllMocks();
   mockFetchAggregate.mockReset().mockResolvedValue(null);
   mockSearchHeroPhotos.mockReset().mockResolvedValue([]);
@@ -196,17 +231,17 @@ describe("POST /places/card-enrichment", () => {
     const first = await app.inject(request);
     expect(first.json().results[0]).toEqual({
       id: place.id,
-      rating: { stars: 4, count: 5, source: "mangrove" },
+      rating: { stars: 4, count: 5, source: "mangrove", contributors: [] },
       outcomes: {
         photo: { status: "failed", retryAfterMs: expect.any(Number) },
         rating: { status: "available" },
       },
     });
     mockSearchHeroPhotos.mockResolvedValueOnce([
-      {
+      licensedPhoto({
         url: "https://upload.wikimedia.org/wikipedia/commons/a/aa/Recovered.jpg",
         source: "wikimedia",
-      },
+      }),
     ]);
     const second = await app.inject(request);
     expect(second.json().results[0].outcomes.photo.status).toBe("failed");
@@ -287,15 +322,15 @@ describe("POST /places/card-enrichment", () => {
   });
 
   it("returns a tagged photo with its credit and a qualifying provider-sourced rating", async () => {
-    const photo = {
+    const photo = licensedPhoto({
       url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Around_Aachener_Dom.JPG",
       thumbnailUrl:
         "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Around_Aachener_Dom.JPG/800px.jpg",
       source: "wikimedia",
       author: "Draupnir3",
-      license: "CC BY-SA 3.0",
+      licensing: licensingFromDeclaration("CC BY-SA 3.0", undefined),
       pageUrl: "https://commons.wikimedia.org/wiki/File:Around_Aachener_Dom.JPG",
-    };
+    });
     mockSearchHeroPhotos.mockResolvedValueOnce([photo]);
     mockFetchAggregate.mockResolvedValueOnce({
       stars: 4.25,
@@ -316,7 +351,7 @@ describe("POST /places/card-enrichment", () => {
         {
           id: place.id,
           photo,
-          rating: { stars: 4.25, count: 12, source: "mangrove" },
+          rating: { stars: 4.25, count: 12, source: "mangrove", contributors: [] },
           outcomes: { photo: { status: "available" }, rating: { status: "available" } },
         },
       ],
@@ -334,7 +369,7 @@ describe("POST /places/card-enrichment", () => {
           url: "https://weathercam.digitraffic.fi/C0150301.jpg",
           source: "wikimedia",
           author: "Fintraffic",
-          license: "CC BY 4.0",
+          licensing: licensingFromDeclaration("CC BY 4.0", undefined),
         },
       ]);
 
@@ -354,11 +389,11 @@ describe("POST /places/card-enrichment", () => {
   });
 
   it("keeps a hero photo and rating when knowledge lookup fails", async () => {
-    const photo = {
+    const photo = licensedPhoto({
       url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Dom.jpg",
       source: "wikimedia",
       author: "Aachen photographer",
-    };
+    });
     mockSearchHeroPhotos.mockResolvedValueOnce([photo]);
     mockGetPlaceKnowledge.mockRejectedValueOnce(new Error("knowledge unavailable"));
     mockFetchAggregate.mockResolvedValueOnce({
@@ -377,19 +412,19 @@ describe("POST /places/card-enrichment", () => {
     expect(response.json().results[0]).toEqual({
       id: place.id,
       photo,
-      rating: { stars: 4, count: 4, source: "mangrove" },
+      rating: { stars: 4, count: 4, source: "mangrove", contributors: [] },
       outcomes: { photo: { status: "available" }, rating: { status: "available" } },
     });
   });
 
   it("uses a place-level Wikidata knowledge photo when no hero tag returns one", async () => {
-    const photo = {
+    const photo = licensedPhoto({
       url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Dom-P18.jpg",
       source: "wikidata",
       author: "Commons contributor",
-      license: "CC BY-SA 4.0",
+      licensing: licensingFromDeclaration("CC BY-SA 4.0", undefined),
       pageUrl: "https://commons.wikimedia.org/wiki/File:Dom-P18.jpg",
-    };
+    });
     mockSearchHeroPhotos.mockResolvedValueOnce([]);
     mockGetPlaceKnowledge.mockResolvedValueOnce({ photos: [photo] });
     const response = await app.inject({
@@ -445,7 +480,7 @@ describe("POST /places/card-enrichment", () => {
       { id: "osm:node/2", outcomes: { photo: { status: "absent" }, rating: { status: "absent" } } },
       {
         id: "osm:node/3",
-        rating: { stars: 4, count: 3, source: "mangrove" },
+        rating: { stars: 4, count: 3, source: "mangrove", contributors: [] },
         outcomes: { photo: { status: "absent" }, rating: { status: "available" } },
       },
     ]);
@@ -482,13 +517,13 @@ describe("POST /places/card-enrichment", () => {
       return cache.get(key);
     });
     mockSearchHeroPhotos.mockImplementation(async (tags: Record<string, string>) => [
-      {
+      licensedPhoto({
         url:
           tags.image === "File:First.jpg"
             ? "https://upload.wikimedia.org/wikipedia/commons/a/aa/First.jpg"
             : "https://upload.wikimedia.org/wikipedia/commons/b/bb/Second.jpg",
         source: "osm",
-      },
+      }),
     ]);
     try {
       const first = await app.inject({
@@ -533,7 +568,10 @@ describe("POST /places/card-enrichment", () => {
       expect(mockWithCache.mock.calls).toEqual(
         expect.arrayContaining([
           expect.arrayContaining([expect.stringMatching(/^cache:card-photo:/), 3600]),
-          expect.arrayContaining([expect.stringMatching(/^cache:card-rating:/), 600]),
+          expect.arrayContaining([
+            expect.stringMatching(/^cache:card-rating:v3-contributors:/),
+            600,
+          ]),
         ]),
       );
     } finally {
@@ -574,11 +612,11 @@ describe("POST /places/card-enrichment", () => {
   });
 
   it("skips an invalid thumbnail and retains the next usable tagged photo", async () => {
-    const photo = {
+    const photo = licensedPhoto({
       url: "https://upload.wikimedia.org/wikipedia/commons/b/bb/Good.jpg",
       source: "wikimedia",
       author: "Author",
-    };
+    });
     mockSearchHeroPhotos.mockResolvedValueOnce([
       {
         url: "https://upload.wikimedia.org/wikipedia/commons/a/aa/Bad.jpg",
@@ -667,10 +705,10 @@ describe("POST /places/card-enrichment", () => {
           finishHero = resolve;
         }),
     );
-    const photo = {
+    const photo = licensedPhoto({
       url: "https://upload.wikimedia.org/wikipedia/commons/a/aa/Knowledge.jpg",
       source: "wikidata",
-    };
+    });
     mockGetPlaceKnowledge.mockResolvedValue({ photos: [photo] });
     try {
       const response = await app.inject({
@@ -693,10 +731,10 @@ describe("POST /places/card-enrichment", () => {
 
   it("retains an incremental hero photo while a sibling share preview hangs", async () => {
     let finishHero!: (photos: unknown[]) => void;
-    const photo = {
+    const photo = licensedPhoto({
       url: "https://upload.wikimedia.org/wikipedia/commons/a/aa/Provider.jpg",
       source: "wikimedia",
-    };
+    });
     mockSearchHeroPhotos.mockImplementation((_tags, _providers, options) => {
       options.onPhotos([photo]);
       return new Promise((resolve) => {
@@ -720,10 +758,10 @@ describe("POST /places/card-enrichment", () => {
 
   it("retains a completed knowledge source photo when another source stalls", async () => {
     let finishKnowledge!: (value: unknown) => void;
-    const photo = {
+    const photo = licensedPhoto({
       url: "https://upload.wikimedia.org/wikipedia/commons/a/aa/Knowledge-progress.jpg",
       source: "wikidata",
-    };
+    });
     mockGetPlaceKnowledge.mockImplementation((_place, _lang, options) => {
       options.onPhotos([photo]);
       return new Promise((resolve) => {
@@ -846,12 +884,12 @@ describe("GET /places/:id", () => {
     expect(after.headers["cache-control"]).toBe("no-store");
   });
   it("removes a cached Commons audio icon while retaining real photo credits", async () => {
-    const realPhoto = {
+    const realPhoto = licensedPhoto({
       url: "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/be/Aachen.jpg/800px-Aachen.jpg",
       source: "wikimedia",
       author: "CEphoto, Uwe Aranas",
-      license: "CC BY-SA 3.0",
-    };
+      licensing: licensingFromDeclaration("CC BY-SA 3.0", undefined),
+    });
     mockWithCache.mockResolvedValueOnce({
       ...MOCK_PLACE,
       photos: [
@@ -869,6 +907,53 @@ describe("GET /places/:id", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().photos).toEqual([realPhoto]);
   });
+  it("shares the enrichment limit across distinct HTTP requests and recovers after a failure", async () => {
+    const release = Promise.withResolvers<void>();
+    let active = 0;
+    let peak = 0;
+    const started: string[] = [];
+    mockLookupByOsmRef.mockImplementation(async (_type, _id, fullId) => ({
+      ...MOCK_PLACE,
+      id: fullId,
+    }));
+    mockGetPlaceKnowledge.mockImplementation(async (place) => {
+      active++;
+      peak = Math.max(peak, active);
+      started.push(place.id);
+      try {
+        await release.promise;
+        if (place.id === "osm:node/9000") throw new Error("one provider unavailable");
+        return MOCK_ENRICHMENT;
+      } finally {
+        active--;
+      }
+    });
+    const requests = Array.from({ length: 12 }, (_, i) =>
+      app
+        .inject({
+          method: "GET",
+          url: `/places/${encodeURIComponent(`osm:node/${9000 + i}`)}`,
+        })
+        .then((response) => response),
+    );
+    try {
+      await vi.waitFor(() => expect(started).toHaveLength(8));
+    } finally {
+      release.resolve();
+    }
+    const responses = await Promise.all(requests);
+    expect(peak).toBe(8);
+    expect(started).toHaveLength(12);
+    expect(responses[0].statusCode).toBe(500);
+    expect(responses.slice(1).every((response) => response.statusCode === 200)).toBe(true);
+    mockGetPlaceKnowledge.mockResolvedValue(MOCK_ENRICHMENT);
+    const recovered = await app.inject({
+      method: "GET",
+      url: `/places/${encodeURIComponent("osm:node/9012")}`,
+    });
+    expect(recovered.statusCode).toBe(200);
+  });
+
   it("returns place with knowledge data for OSM ref", async () => {
     mockLookupByOsmRef.mockResolvedValue(MOCK_PLACE);
     mockGetPlaceKnowledge.mockResolvedValue(MOCK_ENRICHMENT);
@@ -890,11 +975,64 @@ describe("GET /places/:id", () => {
       }),
     );
     expect(mockLookupByOsmRef).toHaveBeenCalledWith("node", "12345", "osm:node/12345", undefined);
-    expect(mockGetPlaceKnowledge).toHaveBeenCalledWith(MOCK_PLACE, undefined);
+    expect(mockGetPlaceKnowledge).toHaveBeenCalledWith(MOCK_PLACE, undefined, {
+      jsonScope: expect.objectContaining({ getJson: expect.any(Function) }),
+    });
     expect(mockBuildReviewLinks).toHaveBeenCalledWith(
       expect.objectContaining({ id: "osm:node/12345" }),
     );
     expect(res.headers["cache-control"]).toBe("no-store");
+  });
+
+  it("preserves field owners when base contacts win and a more-specific knowledge website replaces them", async () => {
+    const a = { sourceId: "base", name: "Base supplier" };
+    const b = { sourceId: "knowledge", name: "Knowledge supplier" };
+    mockLookupByOsmRef.mockResolvedValue({
+      ...MOCK_PLACE,
+      phone: "Base phone",
+      website: "https://example.test/",
+      contributors: [a],
+    });
+    mockGetPlaceKnowledge.mockResolvedValue({
+      phone: "Discarded phone",
+      website: "https://example.test/outlet/1",
+      description: "Added",
+      contributors: [b],
+    });
+    mockBuildReviewLinks.mockReturnValue([]);
+    const res = await app.inject({
+      method: "GET",
+      url: `/places/${encodeURIComponent("osm:node/12345")}`,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.phone).toBe("Base phone");
+    expect(body.fieldContributors.phone).toEqual([a]);
+    expect(body.fieldContributors.website).toEqual([b]);
+    expect(body.fieldContributors.description).toEqual([b]);
+    expect(body.fieldContributors.name).toEqual([a]);
+    expect(body.contributors).toEqual([a, b]);
+  });
+
+  it("retains separate brand label and ID receipts through generated OSM tags", async () => {
+    const a = { sourceId: "label", name: "Brand label" };
+    const b = { sourceId: "id", name: "Brand ID" };
+    mockLookupByOsmRef.mockResolvedValue({ ...MOCK_PLACE, osmTags: {} });
+    mockGetPlaceKnowledge.mockResolvedValue({
+      brand: { name: "Brand", wikidata: "Q1" },
+      contributors: [a, b],
+      fieldContributors: { brand: [a, b], "brand.name": [a], "brand.wikidata": [b] },
+    });
+    mockBuildReviewLinks.mockReturnValue([]);
+    const res = await app.inject({
+      method: "GET",
+      url: `/places/${encodeURIComponent("osm:node/12345")}`,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.fieldContributors["brand.name"]).toEqual([a]);
+    expect(body.fieldContributors["osmTags.brand"]).toEqual([a]);
+    expect(body.fieldContributors["osmTags.brand:wikidata"]).toEqual([b]);
   });
 
   it("gap-fills address, email, brand, and social contacts from Overture knowledge", async () => {
@@ -936,6 +1074,41 @@ describe("GET /places/:id", () => {
       { sourceId: "overpass", dataset: "OpenStreetMap" },
       { sourceId: "overture", dataset: "Overture Maps", release: "2026-07-22.0" },
       { sourceId: "foursquare", dataset: "Foursquare", recordId: "fsq-1" },
+    ]);
+  });
+
+  it("serializes evidence for the address winner through knowledge enrichment", async () => {
+    const own = {
+      source: "overpass",
+      method: "osm-tags",
+      recordId: "osm:node/12345",
+      components: { road: "Main St", house_number: "1" },
+    };
+    const other = {
+      source: "overture",
+      method: "provider-address",
+      recordId: "overture:1",
+      components: { full: "Other St 2" },
+    };
+    mockGetPlaceKnowledge.mockResolvedValue({
+      address: "Other St 2",
+      addressEvidence: other,
+      contributors: [{ sourceId: "overture", name: "Overture" }],
+    });
+    mockLookupByOsmRef.mockResolvedValue({
+      ...MOCK_PLACE,
+      address: "Main St 1",
+      addressEvidence: own,
+    });
+    const first = await app.inject({ method: "GET", url: "/places/osm%3Anode%2F12345" });
+    expect(first.json().address).toBe("Main St 1");
+    expect(first.json().addressEvidence).toEqual(own);
+    mockLookupByOsmRef.mockResolvedValue({ ...MOCK_PLACE, address: "", addressEvidence: own });
+    const second = await app.inject({ method: "GET", url: "/places/osm%3Anode%2F12345" });
+    expect(second.json().address).toBe("Other St 2");
+    expect(second.json().addressEvidence).toEqual(other);
+    expect(second.json().fieldContributors.addressEvidence).toEqual([
+      { sourceId: "overture", name: "Overture" },
     ]);
   });
 
@@ -1055,7 +1228,7 @@ describe("GET /places/:id", () => {
       address: "Some Street 1, Berlin",
       coordinates: [13.37, 52.52] as [number, number],
     });
-    registerPlaceResolver("fuel", fuelResolver);
+    placeIds.registerPlaceResolver("fuel", fuelResolver);
     mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
     mockBuildReviewLinks.mockReturnValue([]);
 
@@ -1082,7 +1255,7 @@ describe("GET /places/:id", () => {
       address: "Some Street 1, Berlin",
       coordinates: [13.37, 52.52] as [number, number],
     });
-    registerPlaceResolver("fuel", fuelResolver);
+    placeIds.registerPlaceResolver("fuel", fuelResolver);
     mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
     mockBuildReviewLinks.mockReturnValue([]);
 
@@ -1164,6 +1337,32 @@ describe("GET /places/:id", () => {
     expect(JSON.stringify(warn.mock.calls)).not.toContain("fixture-private-share-id");
 
     mockIsEnabledIntegrationScheme.mockReturnValue(false);
+  });
+
+  it("never substitutes a nearby place for an OSM reference whose resolver is unavailable", async () => {
+    const resolver = vi.spyOn(placeIds, "getPlaceResolver").mockReturnValue(undefined);
+    mockIsEnabledIntegrationScheme.mockReturnValue(false);
+    mockLookupByNameAndCoords.mockResolvedValue(MOCK_PLACE);
+    mockLookupByCoords.mockResolvedValue(MOCK_PLACE);
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
+    mockBuildReviewLinks.mockReturnValue([]);
+
+    try {
+      const res = await app.inject({
+        method: "GET",
+        url: `/places/${encodeURIComponent("osm:way/1204762785")}?${qs({
+          lat: "52.52",
+          lng: "13.37",
+          name: "EDEKA",
+        })}`,
+      });
+
+      expect(res.statusCode).toBe(404);
+      expect(mockLookupByNameAndCoords).not.toHaveBeenCalled();
+      expect(mockLookupByCoords).not.toHaveBeenCalled();
+    } finally {
+      resolver.mockRestore();
+    }
   });
 
   it("coord-falls-back for a config-disabled integration scheme with lat/lng/name", async () => {
@@ -1327,7 +1526,9 @@ describe("GET /places/:id", () => {
     });
 
     expect(mockLookupByOsmRef).toHaveBeenCalledWith("node", "12345", "osm:node/12345", "de");
-    expect(mockGetPlaceKnowledge).toHaveBeenCalledWith(MOCK_PLACE, "de");
+    expect(mockGetPlaceKnowledge).toHaveBeenCalledWith(MOCK_PLACE, "de", {
+      jsonScope: expect.objectContaining({ getJson: expect.any(Function) }),
+    });
   });
 
   it("handles way/ and relation/ OSM refs", async () => {
@@ -1355,6 +1556,46 @@ describe("GET /places/:id", () => {
     expect(res.statusCode).toBe(500);
     const body = res.json();
     expect(body.error).toBe("Internal server error");
+  });
+
+  it("retains independently acquired boundary receipts in the public place response", async () => {
+    const receipt = { sourceId: "boundary", name: "Boundary acquisition publisher" };
+    const unrelated = { sourceId: "name", name: "Resolved name publisher" };
+    const boundary = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [6, 50],
+          [7, 50],
+          [7, 51],
+          [6, 50],
+        ],
+      ],
+    };
+    mockLookupByOsmRef.mockResolvedValue({
+      ...MOCK_PLACE,
+      ids: { osm: "relation/42" },
+      osmTags: { boundary: "administrative" },
+      contributors: [unrelated],
+      fieldContributors: { name: [unrelated] },
+    });
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
+    mockBuildReviewLinks.mockReturnValue([]);
+    mockFetchOsmBoundary.mockResolvedValue({
+      boundary,
+      boundingBox: [6, 50, 7, 51],
+      contributors: [receipt],
+    });
+    const res = await app.inject({
+      method: "GET",
+      url: `/places/${encodeURIComponent("osm:relation/42")}`,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      boundary,
+      fieldContributors: { boundary: [receipt], boundingBox: [receipt] },
+    });
+    expect(res.json().fieldContributors.boundary).not.toContainEqual(unrelated);
   });
 
   it("starts boundary, photos, and reviews while place knowledge is still pending", async () => {
@@ -1387,7 +1628,9 @@ describe("GET /places/:id", () => {
     try {
       await vi.waitFor(() => expect(mockGetPlaceKnowledge).toHaveBeenCalledTimes(1));
       expect(mockFetchOsmBoundary).toHaveBeenCalledWith("relation/62422", undefined);
-      expect(mockSearchHeroPhotos).toHaveBeenCalledWith(adminPlace.osmTags, []);
+      expect(mockSearchHeroPhotos).toHaveBeenCalledWith(adminPlace.osmTags, [], {
+        getJson: expect.any(Function),
+      });
       expect(mockFetchAggregate).toHaveBeenCalled();
     } finally {
       releaseKnowledge({
@@ -1405,6 +1648,55 @@ describe("GET /places/:id", () => {
       description: "Knowledge description",
       photos: [heroPhoto, knowledgePhoto],
     });
+  });
+
+  it("shares one Wikimedia JSON scope between knowledge and hero photos per full enrichment", async () => {
+    mockLookupByOsmRef.mockResolvedValue(MOCK_PLACE);
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
+    mockBuildReviewLinks.mockReturnValue([]);
+    for (const id of ["osm:node/12345", "osm:node/12346"]) {
+      const res = await app.inject({ method: "GET", url: `/places/${encodeURIComponent(id)}` });
+      expect(res.statusCode).toBe(200);
+    }
+
+    const scopes = mockGetPlaceKnowledge.mock.calls.map(([, , options]) => options.jsonScope);
+    const heroGetters = mockSearchHeroPhotos.mock.calls.map(([, , options]) => options.getJson);
+    expect(scopes).toHaveLength(2);
+    expect(heroGetters).toHaveLength(2);
+    // The hero getter is the very scope handed to knowledge, and scopes never outlive a call.
+    expect(heroGetters[0]).toBe(scopes[0].getJson);
+    expect(heroGetters[1]).toBe(scopes[1].getJson);
+    expect(scopes[0]).not.toBe(scopes[1]);
+    expect(heroGetters[0]).not.toBe(heroGetters[1]);
+  });
+
+  it("never gives the strict card-photo path a shared Wikimedia JSON scope", async () => {
+    mockGetPlaceKnowledge.mockResolvedValueOnce({ photos: [] });
+    const response = await app.inject({
+      method: "POST",
+      url: "/places/card-enrichment",
+      payload: {
+        places: [
+          {
+            id: "osm:node/999902",
+            name: "Scope-free card",
+            coordinates: [6.08, 50.77],
+            photoTags: { wikidata: "Q1", wikimedia_commons: "File:Card.jpg" },
+            fields: ["photo"],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockGetPlaceKnowledge).toHaveBeenCalledTimes(1);
+    expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(1);
+    const knowledgeOptions = mockGetPlaceKnowledge.mock.calls[0]?.[2];
+    const heroOptions = mockSearchHeroPhotos.mock.calls[0]?.[2];
+    expect(knowledgeOptions).toMatchObject({ cardPhoto: true });
+    expect(knowledgeOptions).not.toHaveProperty("jsonScope");
+    expect(heroOptions).toMatchObject({ strict: true });
+    expect(heroOptions).not.toHaveProperty("getJson");
   });
 
   it("runs boundary, photo, and review calls in parallel within enrichPlace", async () => {
@@ -1540,7 +1832,7 @@ describe("published ambient GERS details without the search provider", () => {
     expect(mockLookupByNameAndCoords).not.toHaveBeenCalled();
     expect(mockLookupByCoords).not.toHaveBeenCalled();
     expect(mockHashKey).toHaveBeenCalledWith(
-      "cache:place",
+      "cache:place-v4-photo-metadata",
       expect.objectContaining({ ambientGeneration: "published-generation" }),
     );
   });
@@ -1558,4 +1850,136 @@ describe("published ambient GERS details without the search provider", () => {
     expect(mockAmbientPlace).toHaveBeenCalled();
     expect(mockLookupByNameAndCoords).toHaveBeenCalled();
   });
+});
+
+it("uses captured aggregate receipts for card ratings without borrowing live registry metadata", async () => {
+  ratingCatalogue.receipts = [{ sourceId: "rating-source", name: "Live registry supplier" }];
+  mockFetchAggregate.mockResolvedValueOnce({
+    stars: 4,
+    count: 5,
+    ratedCount: 5,
+    source: "rating-source",
+  });
+  const request = (id: number) =>
+    app.inject({
+      method: "POST",
+      url: "/places/card-enrichment",
+      payload: {
+        places: [
+          {
+            id: `osm:node/${id}`,
+            name: `Rating receipt ${id}`,
+            coordinates: [9, 50],
+            fields: ["rating"],
+          },
+        ],
+      },
+    });
+  const unknown = await request(90909);
+  expect(unknown.json().results[0].rating.contributors).toEqual([]);
+  mockFetchAggregate.mockResolvedValueOnce({
+    stars: 4,
+    count: 5,
+    ratedCount: 5,
+    source: "rating-source",
+    contributors: [{ sourceId: "rating-source", name: "Acquisition supplier" }],
+  });
+  const captured = await request(90910);
+  expect(captured.json().results[0].rating.contributors).toEqual([
+    { sourceId: "rating-source", name: "Acquisition supplier" },
+  ]);
+});
+
+it("preserves review rating receipts in place fields while retaining independent place suppliers", async () => {
+  const baseReceipt = { sourceId: "base", name: "Place supplier" };
+  const ratingReceipt = { sourceId: "rating", name: "Captured rating supplier" };
+  mockLookupByOsmRef.mockResolvedValue({ ...MOCK_PLACE, contributors: [baseReceipt] });
+  mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
+  mockBuildReviewLinks.mockReturnValue([]);
+  mockFetchAggregate.mockResolvedValue({ stars: 4, count: 5, contributors: [ratingReceipt] });
+  const response = await app.inject(`/places/${encodeURIComponent("osm:node/90911")}`);
+  expect(response.statusCode).toBe(200);
+  const body = response.json();
+  expect(body.rating).toBe(4);
+  expect(body.fieldContributors.rating).toEqual([ratingReceipt]);
+  expect(body.fieldContributors.reviewCount).toEqual([ratingReceipt]);
+  expect(body.fieldContributors.name).toEqual([baseReceipt]);
+  expect(body.contributors).toEqual(expect.arrayContaining([baseReceipt, ratingReceipt]));
+  mockFetchAggregate.mockResolvedValue({ stars: 0, count: 0, contributors: [ratingReceipt] });
+  const absent = (await app.inject(`/places/${encodeURIComponent("osm:node/90912")}`)).json();
+  expect(absent).not.toHaveProperty("rating");
+  expect(absent.fieldContributors.rating).toEqual([]);
+  expect(absent.contributors).not.toContainEqual(ratingReceipt);
+});
+
+it.each(["nsr:StopPlace:337", "entur:NSR:StopPlace:337"])(
+  "retains native geocoder field and ID receipts through detail enrichment and cache for %s",
+  async (id) => {
+    const { setup } = await import("../../../../../integrations/geocoding-entur/index.js");
+    const { collection } = await import(
+      "../../../../../integrations/geocoding-entur/test-support.js"
+    );
+    const { createMockIntegrationContext, fakeHttpClient } = await import(
+      "@openmapx/integration-framework/testing"
+    );
+    const { default: manifest } = await import(
+      "../../../../../integrations/geocoding-entur/manifest.json"
+    );
+    const http = fakeHttpClient(() => JSON.stringify(collection()));
+    const ctx = createMockIntegrationContext({
+      id: "geocoding-entur",
+      manifest: manifest as never,
+      http,
+    });
+    setup(ctx);
+    const stored = new Map<string, unknown>();
+    mockWithCache.mockImplementation(async (key, _ttl, fn) => {
+      if (stored.has(key)) return structuredClone(stored.get(key));
+      const value = await fn();
+      stored.set(key, structuredClone(value));
+      return value;
+    });
+    const knowledgeReceipt = { sourceId: "knowledge-test", name: "Captured knowledge" };
+    mockGetPlaceKnowledge.mockResolvedValue({
+      externalIds: { gers: "gers-test" },
+      website: "https://example.org",
+      contributors: [knowledgeReceipt],
+    });
+    mockBuildReviewLinks.mockReturnValue([]);
+    try {
+      const first = await app.inject(`/places/${encodeURIComponent(id)}?lang=en`);
+      expect(first.statusCode).toBe(200);
+      const body = first.json();
+      const sourceIds = ["entur-geocoder", "entur-geocoder-nsr"];
+      expect(body.ids).toEqual({
+        entur: "NSR:StopPlace:337",
+        nsr: "StopPlace:337",
+        gers: "gers-test",
+      });
+      for (const field of ["name", "address", "coordinates", "ids.entur", "ids.nsr"])
+        expect(body.fieldContributors[field].map((x: { sourceId: string }) => x.sourceId)).toEqual(
+          sourceIds,
+        );
+      expect(body.fieldContributors.website).toEqual([knowledgeReceipt]);
+      expect(body.fieldContributors["ids.gers"]).toEqual([knowledgeReceipt]);
+      Object.assign(ctx, { manifest: { ...ctx.manifest, dataSources: [] } });
+      const cached = await app.inject(`/places/${encodeURIComponent(id)}?lang=en`);
+      expect(cached.json()).toEqual(body);
+      expect(http.calls).toHaveLength(1);
+    } finally {
+      mockWithCache.mockImplementation((_key, _ttl, fn) => fn());
+    }
+  },
+);
+
+it("rejects an unbounded enrichment setting during route initialization", async () => {
+  vi.stubEnv("OPENMAPX_PLACE_ENRICH_CONCURRENCY", "Infinity");
+  vi.resetModules();
+  try {
+    await expect(import("../places.js")).rejects.toThrow(
+      /OPENMAPX_PLACE_ENRICH_CONCURRENCY.*finite/,
+    );
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });

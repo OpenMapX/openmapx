@@ -74,7 +74,7 @@ export {
   useBrandLogos,
 } from "./useBrandDetail";
 export { useBrandSuggest } from "./useBrandSuggest";
-export { type ServiceCapability, useCapabilities } from "./useCapabilities";
+export { useCapabilities } from "./useCapabilities";
 export { isAreaTooLarge, useCategorySearch } from "./useCategorySearch";
 export { useChipTranslations } from "./useChipTranslations";
 export { useCountryFromCoordinates } from "./useCountryFromCoordinates";
@@ -170,9 +170,12 @@ export { type RideQuoteResult, useRideQuotes } from "./useRideQuotes";
 export { routeFlowQueryKey, useRouteFlow } from "./useRouteFlow";
 export { useRouteInGermany } from "./useRouteInGermany";
 export {
+  type ImportPlacesInput,
+  type ImportPlacesResult,
   useCreateList,
   useDeleteLabel,
   useDeleteList,
+  useImportPlaces,
   useIsSaved,
   useLabeledPlaces,
   useRemovePlace,

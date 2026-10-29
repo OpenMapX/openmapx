@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   type ConfigurationInput,
@@ -8,10 +8,13 @@ import {
   readAppliedConfiguration,
   readAppliedServiceIds,
   renderConfiguration,
+  withConfigurationGenerationWriter,
 } from "../configuration-generation";
 import {
+  CURRENT_CONFIGURATION,
   readDesiredSelection,
   readServiceSelectionFile,
+  serviceSelectionPath,
   stackComposeArgs,
   writeServiceSelectionFile,
 } from "../deployment";
@@ -66,26 +69,59 @@ function input(overrides: Partial<ConfigurationInput> = {}): ConfigurationInput 
 }
 
 describe("configuration generations", () => {
-  it("names a generation by its content and makes it the applied one", async () => {
+  it("gives each application a fresh identity even when content repeats", async () => {
     const { root, infraDir } = checkout();
     const first = await commitConfigurationGeneration({ infraDir, services, input: input() });
     const again = await commitConfigurationGeneration({ infraDir, services, input: input() });
 
     expect(first.revisionId).toMatch(/^cfg1_[A-Za-z0-9_-]{43}$/);
-    expect(again.revisionId).toBe(first.revisionId);
+    expect(again.revisionId).not.toBe(first.revisionId);
     expect(first.enabledServiceIds).toEqual(["alpha"]);
     expect(readAppliedServiceIds(infraDir, services)).toEqual(new Set(["alpha"]));
     const compose = readFileSync(
-      join(infraDir, ".trusted-config-current", "docker-compose.generated.yml"),
+      join(infraDir, CURRENT_CONFIGURATION, "docker-compose.generated.yml"),
       "utf8",
     );
     expect(compose).toContain("alpha:");
     // The project is the file's, not its generation directory's.
     expect(compose.startsWith("name: docker\n")).toBe(true);
-    expect(existsSync(join(root, "services/traefik/config/dynamic/generated-routes.yml"))).toBe(
-      true,
-    );
-    expect(existsSync(join(root, "custom_integrations"))).toBe(true);
+    expect(
+      existsSync(join(root, "infra/docker/state/ops-agent/traefik/dynamic/generated-routes.yml")),
+    ).toBe(true);
+    // A checkout without Traefik's directory: no container mounts it, so it isn't created.
+    expect(existsSync(join(root, "services/traefik/config/dynamic"))).toBe(false);
+    // Installed integrations are no longer kept in the checkout.
+    expect(existsSync(join(root, "custom_integrations"))).toBe(false);
+  });
+
+  it("retains commit evidence even if the owner callback fails while its write is settling", async () => {
+    const { infraDir } = checkout();
+    const error = await withConfigurationGenerationWriter(infraDir, async (writer) => {
+      void writer.commit({
+        services,
+        input: input(),
+        afterCommit: async () => {
+          throw new Error("post-pointer fault");
+        },
+      });
+      throw new Error("callback fault");
+    }).catch((error) => error);
+    expect(error.result).toMatchObject({ outcome: "committed", followUp: "failed" });
+    expect(readAppliedServiceIds(infraDir, services)).toEqual(new Set(["alpha"]));
+  });
+  it("does not activate when cancellation arrives after staging rename", async () => {
+    const { infraDir } = checkout();
+    const controller = new AbortController();
+    const error = await commitConfigurationGeneration({
+      infraDir,
+      services,
+      input: input(),
+      signal: controller.signal,
+      afterGenerationRename: async () => {
+        controller.abort();
+      },
+    }).catch((error) => error);
+    expect(error.result).toMatchObject({ outcome: "not_committed" });
   });
 
   it("keeps what was saved for services that are not enabled, for a later render", async () => {
@@ -99,7 +135,7 @@ describe("configuration generations", () => {
 
     expect(readAppliedConfiguration(infraDir)).toEqual(saved);
     const compose = readFileSync(
-      join(infraDir, ".trusted-config-current", "docker-compose.generated.yml"),
+      join(infraDir, CURRENT_CONFIGURATION, "docker-compose.generated.yml"),
       "utf8",
     );
     expect(compose).not.toContain("beta:");
@@ -110,7 +146,7 @@ describe("configuration generations", () => {
       input: input({ ...saved, selectedRoots: ["alpha", "beta"] }),
     });
     const enabled = readFileSync(
-      join(infraDir, ".trusted-config-current", "docker-compose.generated.yml"),
+      join(infraDir, CURRENT_CONFIGURATION, "docker-compose.generated.yml"),
       "utf8",
     );
     expect(enabled).toContain("PUBLIC_SETTING: kept");
@@ -179,6 +215,7 @@ describe("desired selection", () => {
     });
   });
 
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: The test name documents literal Compose default-value syntax.
   it("treats an override that names no service as unset, as `${VAR:-}` passes an unset one", () => {
     const { infraDir } = checkout();
     writeServiceSelectionFile(infraDir, ["valhalla"]);
@@ -192,7 +229,9 @@ describe("desired selection", () => {
 
   it("rejects a malformed selection file", () => {
     const { infraDir } = checkout();
-    writeFileSync(join(infraDir, "service-selection.json"), '{"selected":"valhalla"}');
+    const path = serviceSelectionPath(infraDir);
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    writeFileSync(path, '{"selected":"valhalla"}', { mode: 0o600 });
     expect(() => readDesiredSelection(infraDir, {})).toThrow(/expected "selected" array/);
   });
 });
@@ -201,7 +240,7 @@ describe("stack compose arguments", () => {
   it("addresses the stack as one project with the deployment environment", () => {
     const paths = {
       infraDir: "/stack",
-      composePath: "/stack/.trusted-config-current/docker-compose.generated.yml",
+      composePath: `/stack/${CURRENT_CONFIGURATION}/docker-compose.generated.yml`,
       composeReleasePath: "/stack/docker-compose.release.yml",
     };
     expect(stackComposeArgs(paths, () => true)).toEqual([
@@ -209,14 +248,14 @@ describe("stack compose arguments", () => {
       "--env-file",
       "/stack/.env",
       "-f",
-      "/stack/.trusted-config-current/docker-compose.generated.yml",
+      `/stack/${CURRENT_CONFIGURATION}/docker-compose.generated.yml`,
       "-f",
       "/stack/docker-compose.release.yml",
     ]);
     expect(stackComposeArgs(paths, () => false)).toEqual([
       "compose",
       "-f",
-      "/stack/.trusted-config-current/docker-compose.generated.yml",
+      `/stack/${CURRENT_CONFIGURATION}/docker-compose.generated.yml`,
     ]);
   });
 });

@@ -65,7 +65,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await app.close();
+  await app?.close();
 });
 
 beforeEach(() => {
@@ -80,9 +80,33 @@ const VEHICLE_BODY = {
   fuelConsumptionLPer100Km: 6.4,
 };
 
+const at = "2026-10-23T00:00:00.000Z";
+const vehicleRow = {
+  id: "v1",
+  ...VEHICLE_BODY,
+  isDefault: true,
+  presetId: null,
+  ev: null,
+  createdAt: at,
+  updatedAt: at,
+};
+const parkingRow = {
+  id: "p1",
+  vehicleId: null,
+  lat: 51.5,
+  lng: 6.6,
+  address: null,
+  note: null,
+  expiresAt: null,
+  source: "manual",
+  accuracyMeters: null,
+  savedAt: at,
+  updatedAt: at,
+};
+
 describe("vehicles", () => {
   it("lists the caller's vehicles and never caches the response", async () => {
-    prime([{ id: "v1", name: "Blue Golf" }]);
+    prime([vehicleRow]);
     const res = await app.inject({ method: "GET", url: "/api/vehicles" });
     expect(res.statusCode).toBe(200);
     expect(res.json().vehicles).toHaveLength(1);
@@ -140,7 +164,7 @@ describe("vehicles", () => {
 
 describe("parking", () => {
   it("lists parked records without caching them", async () => {
-    prime([{ id: "p1", vehicleId: null, lat: 51.5, lng: 6.6 }]);
+    prime([parkingRow]);
     const res = await app.inject({ method: "GET", url: "/api/parking" });
     expect(res.statusCode).toBe(200);
     expect(res.json().parked).toHaveLength(1);
@@ -150,7 +174,7 @@ describe("parking", () => {
   });
 
   it("upserts the unassigned record", async () => {
-    prime([{ id: "p1", vehicleId: null, lat: 51.5, lng: 6.6 }]);
+    prime([parkingRow]);
     const res = await app.inject({
       method: "PUT",
       url: "/api/parking",
@@ -255,5 +279,21 @@ describe("successful write ownership predicates", () => {
       expect(predicate.sql).toContain("user_id");
       expect(predicate.params).toEqual(["p1", "user-1"]);
     }
+  });
+});
+
+describe("garage response contracts", () => {
+  it("does not publish malformed persisted vehicles as a successful typed response", async () => {
+    prime([{ id: "broken", name: "Private malformed record", kind: "hovercraft" }]);
+    const response = await app.inject({ method: "GET", url: "/api/vehicles" });
+    expect(response.statusCode).toBe(500);
+    expect(response.body).not.toContain("Private malformed record");
+    expect(response.headers["cache-control"]).toBe("no-store");
+  });
+  it("does not publish malformed parked coordinates", async () => {
+    prime([{ id: "broken", vehicleId: null, lat: "51.5", lng: 6.6 }]);
+    const response = await app.inject({ method: "GET", url: "/api/parking" });
+    expect(response.statusCode).toBe(500);
+    expect(response.headers["cache-control"]).toBe("no-store");
   });
 });

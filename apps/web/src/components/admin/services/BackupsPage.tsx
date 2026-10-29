@@ -29,11 +29,16 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import * as sdk from "@openmapx/core/api-admin-sdk";
+import type { AdminServiceBackup } from "@openmapx/core/api-contracts";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import { serviceAdminQueries, serviceOrThrow } from "@/lib/admin/serviceAdmin";
+import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
+import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { formatBytes } from "@/lib/storageFormat";
+import { useActivityClient } from "../activity/activityQueries";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
@@ -41,23 +46,6 @@ import { useAdminToast } from "../shared/AdminToast";
 import { TableEmptyState } from "../shared/TableEmptyState";
 import { TableSearchField, TableToolbar } from "../shared/TableToolbar";
 import { useClientPagination, useTextFilter } from "../shared/tableHooks";
-
-interface BackupSummary {
-  name: string;
-  createdAt: string;
-  openmapxVersion?: string;
-  services: number;
-  volumes: number;
-  totalBytes: number;
-  corrupt?: boolean;
-  corruptReason?: string;
-}
-
-interface BackupsResponse {
-  backups: BackupSummary[];
-  warnings: string[];
-  root: string;
-}
 
 function parseServiceIds(raw: string): string[] {
   return raw
@@ -67,100 +55,105 @@ function parseServiceIds(raw: string): string[] {
 }
 
 export function BackupsPage() {
-  const { apiUrl } = useEnv();
-  const qc = useQueryClient();
+  const { apiUrl } = useActivityClient();
+  return <BackupsView key={apiUrl} />;
+}
+function BackupsView() {
+  const { client, apiUrl } = useActivityClient();
+  const register = useServiceJobRegistration();
   const showToast = useAdminToast();
 
   const [createName, setCreateName] = useState("");
-  const [restoreTarget, setRestoreTarget] = useState<BackupSummary | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<AdminServiceBackup | null>(null);
   const [restoreServiceIds, setRestoreServiceIds] = useState("");
   const [restoreStopRunning, setRestoreStopRunning] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<BackupSummary | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AdminServiceBackup | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | "valid" | "corrupt">("all");
 
-  const { data, isLoading, isError, refetch, isFetching } = useQuery<BackupsResponse>({
-    queryKey: ["admin", "services", "backups"],
-    queryFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/services/backups`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load backups");
-      return res.json();
-    },
+  const [dialogGeneration, setDialogGeneration] = useState(0);
+  const createOwner = useAdminMutationOwner(client, createName);
+  const dialogOwner = useAdminMutationOwner(
+    client,
+    JSON.stringify([
+      dialogGeneration,
+      restoreTarget?.name,
+      deleteTarget?.name,
+      restoreServiceIds,
+      restoreStopRunning,
+    ]),
+  );
+  const { data, isLoading, isError, refetch, isFetching } = useQuery({
+    ...serviceAdminQueries(client, apiUrl).backups(),
     refetchInterval: 60_000,
   });
-
   const createMutation = useMutation({
+    retry: false,
     mutationFn: async (name: string) => {
-      const res = await fetch(`${apiUrl}/api/admin/services/backups`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim() || undefined }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error ?? "Failed to queue backup create");
+      const execution = createOwner;
+      const effect = { kind: "backups" } as const;
+      try {
+        const result = await serviceOrThrow(
+          sdk.createAdminServiceBackup({ name: name.trim() || undefined }, { client }),
+        );
+        register({ client, apiUrl, jobId: result.jobId, effect });
+        if (execution.active) {
+          showToast(`Backup create queued (${result.jobId})`);
+          setCreateName("");
+        }
+      } catch (error) {
+        if (execution.active)
+          showToast(error instanceof Error ? error.message : "Backup create failed", "error");
+        throw error;
       }
-      return res.json() as Promise<{ jobId: string }>;
     },
-    onSuccess: ({ jobId }) => {
-      showToast(`Backup create queued (${jobId})`);
-      setCreateName("");
-      void qc.invalidateQueries({ queryKey: ["admin", "services", "backups"] });
-      void qc.invalidateQueries({ queryKey: ["admin", "jobs"] });
-    },
-    onError: (err) =>
-      showToast(err instanceof Error ? err.message : "Backup create failed", "error"),
   });
-
   const restoreMutation = useMutation({
+    retry: false,
     mutationFn: async (payload: { name: string; serviceIds: string[]; stopRunning: boolean }) => {
-      const res = await fetch(
-        `${apiUrl}/api/admin/services/backups/${encodeURIComponent(payload.name)}/restore`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            serviceIds: payload.serviceIds,
-            stopRunning: payload.stopRunning,
-          }),
-        },
-      );
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error ?? "Failed to queue backup restore");
+      const execution = dialogOwner;
+      const effect = { kind: "backups" } as const;
+      try {
+        const result = await serviceOrThrow(
+          sdk.restoreAdminServiceBackup(
+            payload.name,
+            { serviceIds: payload.serviceIds, stopRunning: payload.stopRunning },
+            { client },
+          ),
+        );
+        register({ client, apiUrl, jobId: result.jobId, effect });
+        if (execution.active) {
+          showToast(`Restore queued for ${payload.name} (${result.jobId})`);
+          setRestoreTarget(null);
+          setRestoreServiceIds("");
+          setRestoreStopRunning(false);
+        }
+      } catch (error) {
+        if (execution.active)
+          showToast(error instanceof Error ? error.message : "Restore failed", "error");
+        throw error;
       }
-      return res.json() as Promise<{ jobId: string }>;
     },
-    onSuccess: ({ jobId }, vars) => {
-      showToast(`Restore queued for ${vars.name} (${jobId})`);
-      setRestoreTarget(null);
-      setRestoreServiceIds("");
-      setRestoreStopRunning(false);
-      void qc.invalidateQueries({ queryKey: ["admin", "jobs"] });
-    },
-    onError: (err) => showToast(err instanceof Error ? err.message : "Restore failed", "error"),
   });
-
   const deleteMutation = useMutation({
+    retry: false,
     mutationFn: async (name: string) => {
-      const res = await fetch(`${apiUrl}/api/admin/services/backups/${encodeURIComponent(name)}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error ?? "Failed to queue backup delete");
+      const execution = dialogOwner;
+      const effect = { kind: "backups" } as const;
+      try {
+        const result = await serviceOrThrow(
+          sdk.deleteAdminServiceBackup(name, undefined, { client }),
+        );
+        register({ client, apiUrl, jobId: result.jobId, effect });
+        if (execution.active) {
+          showToast(`Delete queued for ${name} (${result.jobId})`);
+          setDeleteTarget(null);
+        }
+      } catch (error) {
+        if (execution.active)
+          showToast(error instanceof Error ? error.message : "Delete failed", "error");
+        throw error;
       }
-      return res.json() as Promise<{ jobId: string }>;
     },
-    onSuccess: ({ jobId }, name) => {
-      showToast(`Delete queued for ${name} (${jobId})`);
-      setDeleteTarget(null);
-      void qc.invalidateQueries({ queryKey: ["admin", "services", "backups"] });
-      void qc.invalidateQueries({ queryKey: ["admin", "jobs"] });
-    },
-    onError: (err) => showToast(err instanceof Error ? err.message : "Delete failed", "error"),
   });
 
   const sortedBackups = [...(data?.backups ?? [])].sort((a, b) =>
@@ -234,6 +227,7 @@ export function BackupsPage() {
           Allowed: letters, numbers, dot, dash, underscore.
         </Typography>
       </Paper>
+      {data && <Typography variant="caption">Backup storage: {data.root}</Typography>}
       {isLoading && (
         <Box
           sx={{
@@ -342,8 +336,8 @@ export function BackupsPage() {
                       <TableCell>
                         {backup.corrupt ? "—" : (backup.openmapxVersion ?? "—")}
                       </TableCell>
-                      <TableCell>{backup.corrupt ? "—" : backup.services}</TableCell>
-                      <TableCell>{backup.corrupt ? "—" : backup.volumes}</TableCell>
+                      <TableCell>{backup.corrupt ? "—" : backup.serviceCount}</TableCell>
+                      <TableCell>{backup.corrupt ? "—" : backup.volumeCount}</TableCell>
                       <TableCell>{backup.corrupt ? "—" : formatBytes(backup.totalBytes)}</TableCell>
                       <TableCell align="right">
                         <Stack
@@ -364,12 +358,15 @@ export function BackupsPage() {
                               <IconButton
                                 size="small"
                                 color="primary"
-                                onClick={() => setRestoreTarget(backup)}
-                                disabled={
-                                  backup.corrupt ||
-                                  restoreMutation.isPending ||
-                                  deleteMutation.isPending
-                                }
+                                aria-label="Restore backup"
+                                onClick={() => {
+                                  restoreMutation.reset();
+                                  setDialogGeneration((n) => n + 1);
+                                  setRestoreServiceIds("");
+                                  setRestoreStopRunning(false);
+                                  setRestoreTarget(backup);
+                                }}
+                                disabled={backup.corrupt}
                               >
                                 <RestoreIcon fontSize="small" />
                               </IconButton>
@@ -380,8 +377,12 @@ export function BackupsPage() {
                               <IconButton
                                 size="small"
                                 color="error"
-                                onClick={() => setDeleteTarget(backup)}
-                                disabled={restoreMutation.isPending || deleteMutation.isPending}
+                                aria-label="Delete backup"
+                                onClick={() => {
+                                  deleteMutation.reset();
+                                  setDialogGeneration((n) => n + 1);
+                                  setDeleteTarget(backup);
+                                }}
                               >
                                 <DeleteIcon fontSize="small" />
                               </IconButton>

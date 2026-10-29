@@ -1,3 +1,4 @@
+export type { AddressEvidence, DirectOsmReference, PlaceAddressComponents } from "./address";
 export type {
   BrandDetail,
   BrandKind,
@@ -23,7 +24,7 @@ export {
   toPoiSearchOutcome,
 } from "./category";
 export type {
-  DataSourceAttribution,
+  Attribution,
   DataSourceBranding,
   DataSourceDetail,
   DataSourceDetailSection,
@@ -59,6 +60,7 @@ export type {
   CurrentStandard,
   EvVehicleSpec,
 } from "./ev";
+export { CONNECTOR_STANDARDS } from "./ev";
 export type {
   CabinClass,
   FlightProviderCapabilities,
@@ -88,7 +90,7 @@ export type {
   HotelProviderInfo,
   HotelSearchParams,
 } from "./hotel";
-export type { I18nToken, MoneyValue, Translatable } from "./i18nToken";
+export type { I18nToken, MoneyValue, Translatable, WallClockValue } from "./i18nToken";
 export type { Identified, Ids } from "./identified";
 export { makeId, parseId, withId } from "./identified";
 export type {
@@ -206,7 +208,10 @@ export { isQuoteExpired } from "./ride";
 export type {
   LocalizedText,
   RoadConditionAttribution,
+  RoadConditionBinding,
+  RoadConditionBindingDetail,
   RoadConditionBindingStatus,
+  RoadConditionDirection,
   RoadConditionEffect,
   RoadConditionEvent,
   RoadConditionRoadRef,
@@ -222,7 +227,12 @@ export type {
   RouteFlowSpan,
   VehicleApplicability,
 } from "./roadConditions";
+export {
+  ROAD_CONDITION_BINDING_REASONS,
+  ROAD_CONDITION_SEVERITY_LABELS,
+} from "./roadConditions";
 export type {
+  DirectedExclusion,
   DirectionsResult,
   EvChargeStop,
   EvDirectionsRequest,
@@ -317,6 +327,7 @@ export type {
   RadarFrame,
   RadarMeta,
   TemperatureUnit,
+  WeatherForecastResponse,
   WeatherOptions,
   WeatherResponse,
   WeatherSubLayer,

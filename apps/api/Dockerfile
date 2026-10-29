@@ -1,22 +1,27 @@
-# syntax=docker/dockerfile:1.19
+# syntax=docker/dockerfile:1.20
 
-FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS base
+FROM node:24.22.1-alpine@sha256:6a1c190e17215d844926b0677f4bf87273ff7d5e54db06d3b5b5863ab0b09a3d AS base
 # Read the pnpm version directly from the repo root package.json to ensure
 # lockfile resolution stays reproducible across local and CI Docker builds.
 COPY package.json /tmp/package.json
-RUN corepack enable && corepack prepare "$(node -e "console.log(require('/tmp/package.json').packageManager)")" --activate
+RUN corepack enable && \
+    corepack prepare "$(node -e "console.log(require('/tmp/package.json').packageManager)")" --activate && \
+    pnpm --version
 
 # Install all dependencies (for building)
 FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/core/package.json packages/core/
+COPY packages/extension-contracts/package.json packages/extension-contracts/
 COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
 COPY packages/mobility-core/package.json packages/mobility-core/
 COPY packages/ev-charge-planner/package.json packages/ev-charge-planner/
 COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-config/
 COPY packages/mobility-formats/package.json packages/mobility-formats/
+COPY packages/entur-client/package.json packages/entur-client/
+COPY packages/otp-client/package.json packages/otp-client/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
 COPY packages/cli/package.json packages/cli/
@@ -31,7 +36,8 @@ COPY packages/place-ids/package.json packages/place-ids/
 COPY packages/presets/package.json packages/presets/
 COPY packages/brands/package.json packages/brands/
 COPY apps/api/package.json apps/api/
-COPY integrations/ integrations/
+# Keep integration source changes out of the dependency-install cache key.
+COPY --parents integrations/*/package.json ./
 RUN pnpm install --frozen-lockfile
 
 # Install production dependencies only (for runtime)
@@ -39,12 +45,15 @@ FROM base AS prod-deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/core/package.json packages/core/
+COPY packages/extension-contracts/package.json packages/extension-contracts/
 COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
 COPY packages/mobility-core/package.json packages/mobility-core/
 COPY packages/ev-charge-planner/package.json packages/ev-charge-planner/
 COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-config/
 COPY packages/mobility-formats/package.json packages/mobility-formats/
+COPY packages/entur-client/package.json packages/entur-client/
+COPY packages/otp-client/package.json packages/otp-client/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
 COPY packages/cli/package.json packages/cli/
@@ -59,7 +68,8 @@ COPY packages/place-ids/package.json packages/place-ids/
 COPY packages/presets/package.json packages/presets/
 COPY packages/brands/package.json packages/brands/
 COPY apps/api/package.json apps/api/
-COPY integrations/ integrations/
+# Keep integration source changes out of the dependency-install cache key.
+COPY --parents integrations/*/package.json ./
 # The install and targeted pnpm-store pruning intentionally share a layer;
 # changing WORKDIR here would make the unpruned dependencies part of the image.
 # hadolint ignore=DL3003
@@ -80,14 +90,16 @@ WORKDIR /app
 COPY --from=deps /app ./
 
 COPY --exclude=*/package.json packages/ packages/
+COPY integrations/ integrations/
 COPY apps/api/ apps/api/
 # The privacy source fingerprint is computed inside this build stage. Copy
 # every reviewed external source boundary with its repository-relative path so
 # the strict fingerprint is identical to a local build and fails if a required
 # input is removed.
 COPY apps/ops-agent/src/ apps/ops-agent/src/
-COPY apps/ops-agent/Dockerfile apps/ops-agent/package.json apps/ops-agent/tsconfig.json apps/ops-agent/tsconfig.build.json apps/ops-agent/
-COPY .github/workflows/docker.yml .github/workflows/docker.yml
+COPY apps/ops-agent/Dockerfile apps/ops-agent/package.json apps/ops-agent/tsconfig.json apps/ops-agent/
+COPY scripts/build-runtime-bundles.mjs scripts/module-specifiers.mjs scripts/
+COPY .github/workflows/docker.yml .github/workflows/product-release.yml .github/workflows/
 COPY apps/web/src/app/(legal)/ apps/web/src/app/(legal)/
 COPY apps/web/src/app/admin/(full-admin)/privacy-setup/ apps/web/src/app/admin/(full-admin)/privacy-setup/
 COPY apps/web/src/components/admin/settings/ apps/web/src/components/admin/settings/
@@ -100,18 +112,19 @@ COPY apps/web/src/components/auth/AuthDialog.tsx apps/web/src/components/auth/Au
 COPY apps/web/src/components/auth/PrivacyDataSection.tsx apps/web/src/components/auth/PrivacyDataSection.tsx
 COPY scripts/check-subject-data.ts scripts/check-subject-data.ts
 COPY scripts/validate-privacy-release.mjs scripts/validate-privacy-release.mjs
+COPY scripts/product-release-config.mjs scripts/product-release-plan.mjs scripts/product-release.mjs scripts/product-release-io.mjs scripts/
 COPY services/ services/
 COPY tsconfig.base.json ./
 COPY turbo.json ./
 
 WORKDIR /app/apps/api
 # The dependency stage already installed the reviewed lockfile with --frozen-lockfile.
-# pnpm 11 otherwise performs an implicit, unfrozen install after workspace COPYs,
+# pnpm otherwise performs an implicit, unfrozen install after workspace COPYs,
 # mutating the lockfile that the release fingerprint must identify exactly.
 RUN --network=none pnpm --config.verify-deps-before-run=false build
 
 # Production image
-FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS runner
+FROM node:24.22.1-alpine@sha256:6a1c190e17215d844926b0677f4bf87273ff7d5e54db06d3b5b5863ab0b09a3d AS runner
 WORKDIR /app
 
 # curl is required by the container healthcheck (generated from
@@ -119,11 +132,11 @@ WORKDIR /app
 # `curl -fs http://localhost:3001/health`). Alpine ships wget but not curl,
 # so we install it explicitly. ca-certificates gives node outgoing HTTPS.
 #
-# git is required by admin Store / community-service repository installs:
-# both the community integration installer and service-repo refresh path clone
-# or fetch allowlisted Git URLs from inside the app-api container. Those clones
-# are bounded by time, entry count, size, path length, and file type, and the
-# URL is validated to a credential-free allowlisted host before `git` runs.
+# git is required by the community integration installer, which clones
+# allowlisted Git URLs from inside the app-api container. Those clones are
+# bounded by time, entry count, size, path length, and file type, and the URL is
+# validated to a credential-free allowlisted host before `git` runs. Community
+# service repositories are fetched by the operations agent instead.
 #
 # The Docker CLI is deliberately ABSENT. Every host effect the admin GUI
 # triggers is now a typed operation sent to the private operations agent, which
@@ -132,8 +145,16 @@ WORKDIR /app
 # socket became reachable.
 # The pinned base predates Alpine's OpenSSL fix for CVE-2026-14456, and git
 # pulls in libexpat, whose CVE-2026-66046 fix landed after this base was cut.
+# curl pulls in brotli-libs; 1.2.1-r0 fixes CVE-2026-111497. curl and libcurl
+# 8.23.0-r0 fix CVE-2026-92392. `apk add` alone is not enough: a release build
+# can restore this layer from the registry build cache with the curl it held
+# then. Naming curl here, and the version floor checked after, change this
+# instruction, which keeps such a layer from being reused; the floor also
+# fails the build on a mirror that doesn't have the fix yet.
 RUN apk add --no-cache curl ca-certificates git && \
-    apk upgrade --no-cache libcrypto3 libssl3 libexpat && \
+    apk upgrade --no-cache libcrypto3 libssl3 libexpat brotli-libs curl libcurl && \
+    libcurl="$(apk query --fields version libcurl)" && libcurl="${libcurl#Version: }" && \
+    test -n "$libcurl" && test "$(apk version -t "$libcurl" 8.23.0-r0)" != "<" && \
     rm -rf /usr/local/lib/node_modules/npm && \
     rm -f /usr/local/bin/npm /usr/local/bin/npx
 
@@ -154,12 +175,16 @@ COPY --from=prod-deps /app/apps/api/node_modules ./apps/api/node_modules
 # .ts file's location upward, so `@better-auth/passkey` imported from
 # packages/core must be reachable via packages/core/node_modules).
 COPY packages/core/ packages/core/
+COPY packages/extension-contracts/ ./packages/extension-contracts/
+COPY --from=prod-deps /app/packages/extension-contracts/node_modules ./packages/extension-contracts/node_modules
 COPY packages/i18n/ packages/i18n/
 COPY packages/db-schema/ packages/db-schema/
 COPY packages/hardlinks/ packages/hardlinks/
 COPY packages/mobility-core/ packages/mobility-core/
 COPY packages/ev-charge-planner/ packages/ev-charge-planner/
 COPY packages/mobility-formats/ packages/mobility-formats/
+COPY packages/entur-client/ packages/entur-client/
+COPY packages/otp-client/ packages/otp-client/
 COPY packages/motis-feed-proxy-config/ packages/motis-feed-proxy-config/
 COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
 COPY packages/air-quality/ packages/air-quality/
@@ -177,6 +202,8 @@ COPY --from=prod-deps /app/packages/db-schema/node_modules ./packages/db-schema/
 COPY --from=prod-deps /app/packages/mobility-core/node_modules ./packages/mobility-core/node_modules
 COPY --from=prod-deps /app/packages/ev-charge-planner/node_modules ./packages/ev-charge-planner/node_modules
 COPY --from=prod-deps /app/packages/mobility-formats/node_modules ./packages/mobility-formats/node_modules
+COPY --from=prod-deps /app/packages/entur-client/node_modules ./packages/entur-client/node_modules
+COPY --from=prod-deps /app/packages/otp-client/node_modules ./packages/otp-client/node_modules
 COPY --from=prod-deps /app/packages/air-quality/node_modules ./packages/air-quality/node_modules
 COPY --from=prod-deps /app/packages/integration-framework/node_modules ./packages/integration-framework/node_modules
 COPY --from=prod-deps /app/packages/mangrove-client/node_modules ./packages/mangrove-client/node_modules
@@ -202,6 +229,7 @@ COPY --from=prod-deps /app/packages/transitous-core/node_modules ./packages/tran
 
 # Integrations with pnpm-resolved node_modules (manifests + code + deps)
 COPY --from=prod-deps /app/integrations ./integrations
+COPY integrations/ integrations/
 
 # Service manifests are read at runtime by the API service registry. They are
 # not needed for the bundle itself, but without them self-hosted containers
@@ -225,18 +253,21 @@ COPY tsconfig.base.json ./
 COPY apps/api/tsconfig.json ./apps/api/
 COPY packages/core/tsconfig.json ./packages/core/
 
-# Run as the image's existing non-root `node` user (uid/gid 1000). Only the
-# directories the runtime actually writes are handed over; the rest of /app
-# stays read-only to the process. A root API process was the difference between
+# Compose runs the API as the deployment's user (`user: "${UID}:${GID}"`),
+# whatever its uid; `node` is only the image's default. /app stays root-owned
+# and read-only to the process. A root API process was the difference between
 # "compromised service" and "compromised container" for every remaining mount.
 #
-# The runtime-recovery journal must be a 0700 directory the process owns; it
-# is a named volume, which Docker seeds with this directory's owner and mode.
+# The API writes bind mounts the host creates for that user, and two named
+# volumes, which Docker seeds with the owner and mode of these directories:
+# root-owned, world-writable and sticky, like /tmp, so the API's uid creates
+# its own 0700 directory inside (see private-volume-directory.ts). Only the
+# API mounts them. Volumes seeded by earlier images belong to uid 1000 and are
+# used as they are by an API running as that uid.
 RUN mkdir -p /app/custom_integrations /var/lib/openmapx/trusted-config \
+      /var/lib/openmapx/erasure /var/lib/openmapx/subject-exports \
       /app/infra/docker/.runtime-recovery && \
-    chown -R node:node /app/custom_integrations /var/lib/openmapx \
-      /app/infra/docker/.runtime-recovery && \
-    chmod 0700 /app/infra/docker/.runtime-recovery
+    chmod 1777 /var/lib/openmapx/subject-exports /app/infra/docker/.runtime-recovery
 USER node
 
 WORKDIR /app/apps/api

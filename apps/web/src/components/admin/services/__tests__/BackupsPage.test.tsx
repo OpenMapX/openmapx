@@ -10,6 +10,8 @@ vi.mock("@/integration-api/runtime/EnvProvider", () => ({
 const fetchMock = vi.fn();
 vi.stubGlobal("fetch", fetchMock);
 
+import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
+
 import { BackupsPage } from "../BackupsPage";
 
 /** Build N backups, oldest first, so we can verify sort-then-slice ordering. */
@@ -23,8 +25,8 @@ function makeBackups(count: number) {
       name: `backup-${String(i).padStart(3, "0")}`,
       createdAt: `2026-01-01T00:${minutes}:00.000Z`,
       openmapxVersion: "1.0.0",
-      services: 1,
-      volumes: 1,
+      serviceCount: 1,
+      volumeCount: 1,
       totalBytes: 1024,
     };
   });
@@ -36,14 +38,18 @@ afterEach(() => {
 
 describe("BackupsPage pagination", () => {
   beforeEach(() => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ backups: makeBackups(60), warnings: [], root: "/data" }),
-    });
+    fetchMock.mockImplementation(async () =>
+      Response.json({ backups: makeBackups(60), warnings: [], root: "ops-agent-managed" }),
+    );
   });
 
   it("renders at most rowsPerPage rows for an oversized dataset", async () => {
-    render(<BackupsPage />, { wrapper: createQueryWrapper() });
+    render(
+      <AdminJobEffectsProvider>
+        <BackupsPage />
+      </AdminJobEffectsProvider>,
+      { wrapper: createQueryWrapper() },
+    );
 
     // Wait for the rows to appear, then count the data rows in the table body.
     await screen.findByText("backup-059");
@@ -52,7 +58,12 @@ describe("BackupsPage pagination", () => {
   });
 
   it("sorts newest-first then slices (page 1 shows the newest 25)", async () => {
-    render(<BackupsPage />, { wrapper: createQueryWrapper() });
+    render(
+      <AdminJobEffectsProvider>
+        <BackupsPage />
+      </AdminJobEffectsProvider>,
+      { wrapper: createQueryWrapper() },
+    );
 
     // Newest is backup-059 (highest createdAt); it must be on page 1.
     await screen.findByText("backup-059");
@@ -62,7 +73,12 @@ describe("BackupsPage pagination", () => {
 
   it("shows the next slice when paging forward", async () => {
     const user = userEvent.setup();
-    render(<BackupsPage />, { wrapper: createQueryWrapper() });
+    render(
+      <AdminJobEffectsProvider>
+        <BackupsPage />
+      </AdminJobEffectsProvider>,
+      { wrapper: createQueryWrapper() },
+    );
 
     await screen.findByText("backup-059");
     const nextButton = await screen.findByRole("button", { name: /next page/i });
@@ -75,7 +91,12 @@ describe("BackupsPage pagination", () => {
   });
 
   it("reports the full count in the pager, not the page size", async () => {
-    render(<BackupsPage />, { wrapper: createQueryWrapper() });
+    render(
+      <AdminJobEffectsProvider>
+        <BackupsPage />
+      </AdminJobEffectsProvider>,
+      { wrapper: createQueryWrapper() },
+    );
     await screen.findByText("backup-059");
     // The pager shows the full filtered count (60), not the 25 rendered rows.
     await screen.findByText(/of 60/);

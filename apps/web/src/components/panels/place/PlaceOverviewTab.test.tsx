@@ -93,6 +93,22 @@ function renderOverview(place: Place) {
   );
 }
 
+it("credits only the two quick facts actually displayed in the overview", () => {
+  const shown = { sourceId: "shown", name: "Shown fact supplier" };
+  const hidden = { sourceId: "hidden", name: "Hidden fact supplier" };
+  renderOverview({
+    ...ENRICHED,
+    description: undefined,
+    facts: [
+      { label: "Founded", value: "1900", contributors: [shown] },
+      { label: "Height", value: "20m", contributors: [shown] },
+      { label: "Architect", value: "Other", contributors: [hidden] },
+    ],
+  });
+  expect(screen.getByText("Shown fact supplier")).toBeVisible();
+  expect(screen.queryByText("Hidden fact supplier")).not.toBeInTheDocument();
+});
+
 describe("OSM contribution entry placement", () => {
   it("passes only the canonical OSM reference, never enriched place content", () => {
     entryProps.mockClear();
@@ -423,4 +439,30 @@ describe("detail copy actions", () => {
     await user.click(screen.getByRole("button", { name: "copyPlusCode" }));
     expect(writeText).toHaveBeenCalledWith(computePlusCode(ENRICHED.coordinates));
   });
+});
+
+it("excludes hidden scalar socials and whitespace-only address from overview credits", () => {
+  renderOverview({
+    ...ENRICHED,
+    address: "   ",
+    socials: ["https://facebook.com/hidden"],
+    fieldContributors: {
+      socials: [{ sourceId: "hidden-socials", name: "Hidden social supplier" }],
+      address: [{ sourceId: "hidden-address", name: "Hidden address supplier" }],
+    },
+  });
+  expect(screen.queryByText("Hidden social supplier")).toBeNull();
+  expect(screen.queryByText("Hidden address supplier")).toBeNull();
+});
+
+it("does not credit a raw schedule without a displayed hours status", () => {
+  renderOverview({
+    ...ENRICHED,
+    openingHours: "24/7",
+    openingHoursInfo: undefined,
+    fieldContributors: {
+      openingHours: [{ sourceId: "hidden-hours", name: "Hidden schedule supplier" }],
+    },
+  });
+  expect(screen.queryByText("Hidden schedule supplier")).toBeNull();
 });

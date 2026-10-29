@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,35 +11,18 @@ import {
   parseDawarichTarStream,
   spoolDawarichTar,
 } from "../dawarich-source-part.js";
-
-function member(name: string, content: Buffer): Buffer {
-  const header = Buffer.alloc(512);
-  header.write(name, 0, 100, "utf8");
-  header.write("0000600\0", 100, 8, "ascii");
-  header.write("0000000\0", 108, 8, "ascii");
-  header.write("0000000\0", 116, 8, "ascii");
-  header.write(`${content.byteLength.toString(8).padStart(11, "0")}\0`, 124, 12, "ascii");
-  header.write("00000000000\0", 136, 12, "ascii");
-  header[156] = 48;
-  header.write("        ", 148, 8, "ascii");
-  const checksum = header.reduce((sum, value) => sum + value, 0);
-  header.write(`${checksum.toString(8).padStart(6, "0")}\0 `, 148, 8, "ascii");
-  const padding = Buffer.alloc((512 - (content.byteLength % 512)) % 512);
-  return Buffer.concat([header, content, padding]);
-}
-
-function tar(entries: Array<[string, Buffer]>): Buffer {
-  return Buffer.concat([
-    ...entries.map(([name, content]) => member(name, content)),
-    Buffer.alloc(1024),
-  ]);
-}
+import {
+  invalidTarCases,
+  invalidTarEndings,
+  tarMember as member,
+  tar,
+} from "./fixtures/source-tar.js";
 
 const tuple = {
   version: 1,
-  image: "freikin/dawarich:1.15.2",
-  imageDigest: "sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d",
-  upstreamCommit: "d81abc4fc467e119f542c56602c78488fbab86fb",
+  image: "freikin/dawarich:1.15.3",
+  imageDigest: "sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498",
+  upstreamCommit: "e32b70701b2467b862d4b5bc27ac428999997c1b",
   subjectUserIdDigest: "a".repeat(64),
   cutoff: "2026-01-01T00:00:00Z",
   snapshotAt: "2026-01-01T00:00:00Z",
@@ -49,6 +33,93 @@ const tuple = {
 };
 
 describe("Dawarich source-part parser", () => {
+  const area = Buffer.from("{}\n");
+  const declaration = {
+    id: "areas",
+    bytes: area.length,
+    sha256: createHash("sha256").update(area).digest("hex"),
+    records: 1,
+    article15: true,
+    portability: true,
+    redactionCodes: [],
+  };
+  it.each([
+    [
+      "undeclared member",
+      [
+        ["dawarich/areas.jsonl", area],
+        ["dawarich/source-manifest.json", Buffer.from(JSON.stringify(tuple))],
+      ],
+    ],
+    [
+      "missing member",
+      [
+        [
+          "dawarich/source-manifest.json",
+          Buffer.from(JSON.stringify({ ...tuple, entries: [declaration] })),
+        ],
+      ],
+    ],
+    [
+      "incorrect digest",
+      [
+        ["dawarich/areas.jsonl", area],
+        [
+          "dawarich/source-manifest.json",
+          Buffer.from(
+            JSON.stringify({ ...tuple, entries: [{ ...declaration, sha256: "0".repeat(64) }] }),
+          ),
+        ],
+      ],
+    ],
+    [
+      "incorrect size",
+      [
+        ["dawarich/areas.jsonl", area],
+        [
+          "dawarich/source-manifest.json",
+          Buffer.from(
+            JSON.stringify({ ...tuple, entries: [{ ...declaration, bytes: area.length + 1 }] }),
+          ),
+        ],
+      ],
+    ],
+    [
+      "member after final manifest",
+      [
+        ["dawarich/source-manifest.json", Buffer.from(JSON.stringify(tuple))],
+        ["dawarich/areas.jsonl", area],
+      ],
+    ],
+  ] as Array<[string, Array<[string, Buffer]>]>)("rejects %s", async (_name, entries) => {
+    await expect(parseDawarichTar(Readable.from([tar(entries)]))).rejects.toMatchObject({
+      code: "manifest_mismatch",
+    });
+  });
+  it.each([{ cutoff: "2026-02-01T00:00:00Z" }, { subjectUserIdDigest: "b".repeat(64) }])(
+    "rejects a different expected subject or cutoff: %j",
+    async (expected) => {
+      const input = tar([["dawarich/source-manifest.json", Buffer.from(JSON.stringify(tuple))]]);
+      await expect(
+        parseDawarichTarStream(
+          Readable.from([input]),
+          async ({ content }) => {
+            for await (const _chunk of content) {
+            }
+          },
+          { expected },
+        ),
+      ).rejects.toMatchObject({ code: "manifest_mismatch" });
+    },
+  );
+  it.each(
+    invalidTarEndings(tar([["dawarich/source-manifest.json", Buffer.from(JSON.stringify(tuple))]])),
+  )("rejects %s", async (_name, input, code) => {
+    await expect(parseDawarichTar(Readable.from([input]))).rejects.toMatchObject({ code });
+  });
+  it.each(invalidTarCases("dawarich/areas.jsonl"))("rejects %s", async (_name, input, code) => {
+    await expect(parseDawarichTar(Readable.from([input]))).rejects.toMatchObject({ code });
+  });
   it("accepts monthly points and content-addressed attachments across chunks", async () => {
     const points = Buffer.from('{"id":1}\n');
     const attachment = Buffer.from("fixture");

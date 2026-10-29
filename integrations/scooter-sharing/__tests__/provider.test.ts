@@ -84,10 +84,10 @@ describe("scooterSharingProvider.search", () => {
     const results = (await scooterSharingProvider.search(makeBbox())).data;
 
     expect(mapVehicleToResult).toHaveBeenCalledTimes(4);
-    expect(mapVehicleToResult).toHaveBeenCalledWith(gbfsVehicle);
-    expect(mapVehicleToResult).toHaveBeenCalledWith(felyxVehicle);
-    expect(mapVehicleToResult).toHaveBeenCalledWith(nrwVehicle);
-    expect(mapVehicleToResult).toHaveBeenCalledWith(motisVehicle);
+    expect(mapVehicleToResult).toHaveBeenCalledWith(expect.objectContaining(gbfsVehicle));
+    expect(mapVehicleToResult).toHaveBeenCalledWith(expect.objectContaining(felyxVehicle));
+    expect(mapVehicleToResult).toHaveBeenCalledWith(expect.objectContaining(nrwVehicle));
+    expect(mapVehicleToResult).toHaveBeenCalledWith(expect.objectContaining(motisVehicle));
     expect(results).toHaveLength(4);
   });
 
@@ -167,6 +167,7 @@ describe("scooterSharingProvider.search", () => {
     expect(fetchMotisRentals).toHaveBeenCalledWith(
       [bbox.west, bbox.south, bbox.east, bbox.north],
       ["scooter_standing", "scooter_seated", "moped"],
+      expect.any(Function),
     );
   });
 

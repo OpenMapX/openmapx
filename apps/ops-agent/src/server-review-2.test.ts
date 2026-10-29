@@ -66,7 +66,11 @@ describe("reviewed durable admission boundary", () => {
   it("rolls back an authenticated late claim after the claim timeout without admitting a job", async () => {
     let finish!: () => void;
     let rollbacks = 0;
-    const operation = { kind: "stack.render" as const, revisionId: `cfg1_${"t".repeat(43)}` };
+    const operation = {
+      expectedCurrentRevisionId: null,
+      kind: "stack.render" as const,
+      revisionId: `cfg1_${"t".repeat(43)}`,
+    };
     const app = buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       claimTimeoutMs: 5,
@@ -114,6 +118,7 @@ describe("reviewed durable admission boundary", () => {
       let retained = true;
       let committed = false;
       const operation = {
+        expectedCurrentRevisionId: null,
         kind: "stack.render" as const,
         revisionId: `cfg1_${"r".repeat(43)}`,
       };
@@ -141,7 +146,13 @@ describe("reviewed durable admission boundary", () => {
         dispatch: async () => {
           expect(retained).toBe(true);
           if (outcome === "failed") throw new Error("runtime failed");
-          return { revisionId: operation.revisionId, enabledServiceIds: [] };
+          return {
+            outcome: "committed",
+            revisionId: operation.revisionId,
+            enabledServiceIds: [],
+            followUp: "complete",
+            cleanupFailed: false,
+          };
         },
       });
       const admitted = await app.inject({
@@ -379,6 +390,8 @@ describe("reviewed durable admission boundary", () => {
     roots.push(root);
     const path = join(root, "journal", "jobs-v1.json");
     const durable = await openOpsJobJournal(path);
+    let resolveTerminalSnapshot!: () => void;
+    const terminalSnapshot = new Promise<void>((resolve) => (resolveTerminalSnapshot = resolve));
     let blockAdmission = false;
     let entered!: () => void;
     let unblock!: () => void;
@@ -393,6 +406,8 @@ describe("reviewed durable admission boundary", () => {
           await admissionBlocked;
         }
         await durable.replace(records);
+        if (records.length === 2 && records.every((record) => record.state === "succeeded"))
+          resolveTerminalSnapshot();
       },
     };
     let releaseFirst!: () => void;
@@ -433,10 +448,7 @@ describe("reviewed durable admission boundary", () => {
     releaseFirst();
     unblock();
     expect((await secondPromise).statusCode).toBe(202);
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      if (durable.records().every((record) => record.state === "succeeded")) break;
-      await new Promise((resolve) => setTimeout(resolve, 1));
-    }
+    await terminalSnapshot;
     await app.close();
     const reopened = await openOpsJobJournal(path);
     expect(reopened.records()).toHaveLength(2);
@@ -810,5 +822,124 @@ describe("reviewed durable admission boundary", () => {
     await new Promise((resolve) => setTimeout(resolve, 2));
     expect((await send("ops1_auditAfterLate00", "opk1_auditAfterLate00")).statusCode).toBe(200);
     await app.close();
+  });
+});
+
+describe("operation context for agent replacement", () => {
+  it("counts the other unfinished operations the agent is running", async () => {
+    let releaseFirst: () => void = () => {};
+    const firstRunning = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const counts: number[] = [];
+    const journal: OpsJobJournal = { records: () => [], replace: async () => {} };
+    const app = buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      resourceClaimer: allow,
+      journal,
+      now: () => new Date(baseTime),
+      dispatch: async (operation, _runtime, context) => {
+        if (operation.kind === "service.restart") {
+          await firstRunning;
+          return { changed: true };
+        }
+        counts.push(context.otherActiveOperations?.() ?? -1);
+        return { handoffId: "handoff-1", replaced: false };
+      },
+    });
+    try {
+      const restart = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: auth(),
+        payload: request(
+          { kind: "service.restart", serviceId: "redis" },
+          "ops1_activeRestart0000",
+          "opk1_activeRestart0000",
+        ),
+      });
+      expect(restart.statusCode).toBe(202);
+      const update = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: auth(),
+        payload: request(
+          {
+            kind: "agent.update",
+            releaseId: "release-2",
+            expectedDigest: "a".repeat(64),
+            handoffId: "handoff-1",
+          },
+          "ops1_activeUpdate00000",
+          "opk1_activeUpdate00000",
+        ),
+      });
+      expect(update.statusCode).toBe(202);
+      for (let attempt = 0; attempt < 100 && counts.length === 0; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+      }
+      expect(counts).toEqual([1]);
+    } finally {
+      releaseFirst();
+      await app.close();
+    }
+  });
+});
+
+describe("admission during an agent replacement", () => {
+  it("refuses new asynchronous operations but lets the agent update re-attach", async () => {
+    const dispatch = vi.fn(async () => ({ handoffId: "handoff-1", replaced: true }));
+    const journal: OpsJobJournal = { records: () => [], replace: async () => {} };
+    let replacing = false;
+    const app = buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      resourceClaimer: allow,
+      journal,
+      now: () => new Date(baseTime),
+      replacementInProgress: () => replacing,
+      dispatch,
+    });
+    const update = request(
+      {
+        kind: "agent.update",
+        releaseId: "release-2",
+        expectedDigest: "a".repeat(64),
+        handoffId: "handoff-1",
+      },
+      "ops1_gateUpdate000000",
+      "opk1_gateUpdate000000",
+    );
+    try {
+      const first = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: auth(),
+        payload: update,
+      });
+      expect(first.statusCode).toBe(202);
+      replacing = true;
+      const restart = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: auth(),
+        payload: request(
+          { kind: "service.restart", serviceId: "redis" },
+          "ops1_gateRestart00000",
+          "opk1_gateRestart00000",
+        ),
+      });
+      expect(restart.statusCode).toBe(409);
+      expect(restart.json()).toMatchObject({ error: { class: "busy" } });
+      const resumed = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: auth(),
+        payload: { ...update, requestId: "ops1_gateUpdate000001" },
+      });
+      expect(resumed.statusCode).toBe(202);
+      expect(resumed.json().result.operationId).toBe(first.json().result.operationId);
+    } finally {
+      await app.close();
+    }
   });
 });

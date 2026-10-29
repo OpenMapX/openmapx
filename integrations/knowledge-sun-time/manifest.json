@@ -30,15 +30,70 @@
       "sourceId": "sunrise-sunset",
       "name": "Sunrise-Sunset.org",
       "url": "https://sunrise-sunset.org/",
-      "license": "Proprietary (free with attribution)",
-      "licenseUrl": "https://sunrise-sunset.org/terms",
       "commercialUse": "unknown",
       "providerCountry": "Unknown",
       "providerPrivacyUrl": "https://sunrise-sunset.org/privacy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Sunrise-Sunset.org material",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "Sunrise-Sunset.org access/account contract",
+            "license": {
+              "kind": "unknown",
+              "url": "https://sunrise-sunset.org/terms"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary (free with attribution)",
+            "url": "https://sunrise-sunset.org/terms"
+          }
+        ]
+      }
+    },
+    {
+      "sourceId": "timezone-boundary-builder",
+      "name": "Timezone Boundary Builder",
+      "url": "https://github.com/evansiroky/timezone-boundary-builder",
+      "owner": "Timezone Boundary Builder contributors",
+      "termsUrl": "https://github.com/evansiroky/timezone-boundary-builder/blob/master/DATA_LICENSE",
+      "providerCountry": "Unknown",
+      "providerPrivacyUrl": "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement",
+      "endUserExposure": "build-time",
+      "credentialOwner": "none",
+      "dataUseClass": "share-alike",
+      "commercialUse": "yes",
+      "reviewedAt": "2026-10-14",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Bundled timezone boundary data used by geo-tz",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0"
+            },
+            "notice": "Timezone Boundary Builder; derived from OpenStreetMap data"
+          }
+        ]
+      }
     }
   ]
 }

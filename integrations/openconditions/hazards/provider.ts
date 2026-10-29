@@ -1,5 +1,9 @@
 import type { BBox, DataSourcePartialReason } from "@openmapx/core";
-import type { FireDensityCell, HazardsProvider } from "@openmapx/integration-framework";
+import type {
+  FireDensityCell,
+  FireInstrument,
+  HazardsProvider,
+} from "@openmapx/integration-framework";
 import type { OpenConditionsClient, OpenConditionsParams } from "../client.js";
 import { type Rec, rec, str } from "../features/record.js";
 import type { LiveSources } from "../sources.js";
@@ -45,6 +49,10 @@ export function gridStrips(bbox: BBox, cellDeg: number): BBox[] {
 
 type Page = { records?: unknown; next?: unknown };
 
+/** The confidence filter of a fire read: `minConfidence=nominal` leaves out low-confidence detections. */
+const confidenceParams = (excludeLow: boolean | undefined): OpenConditionsParams =>
+  excludeLow ? { minConfidence: "nominal" } : {};
+
 export interface HazardsProviderOptions {
   /** The clock a natural-hazard window ends at. */
   now?: () => Date;
@@ -59,8 +67,9 @@ export interface HazardsProviderOptions {
  *
  * It fails closed on the live source list: until the first list arrives
  * every read is empty and `unavailable`; after it, a record whose source is
- * not listed is left out, and a fire read asks only for the listed FIRMS
- * feeds of its instrument. An alert without a geometry is not returned.
+ * not listed is left out, and a fire read asks only for the listed fire-pixel
+ * feeds of its instrument, without low-confidence detections when asked to
+ * leave them out. An alert without a geometry is not returned.
  * A read stops at 20,000 situations (a fire read at its `limit`), and says
  * the area is only partly covered.
  */
@@ -120,9 +129,9 @@ export function createHazardsProvider(
     partial: "unavailable",
   });
 
-  /** The listed FIRMS feeds of an instrument the deployment has not excluded. */
-  const firmsFeeds = (instrument: "viirs" | "modis", excluded?: readonly string[]): string[] =>
-    sources.firmsSources(instrument).filter((id) => !excluded?.includes(id));
+  /** The listed fire-pixel feeds of an instrument the deployment has not excluded. */
+  const fireFeeds = (instrument: FireInstrument, excluded?: readonly string[]): string[] =>
+    sources.fireSources(instrument).filter((id) => !excluded?.includes(id));
 
   const situationParams = (
     bbox: BBox,
@@ -171,7 +180,7 @@ export function createHazardsProvider(
     },
     async getFirePixels(bbox, q) {
       if (!sources.ready) return unavailable({ pixels: [] });
-      const feeds = firmsFeeds(q.instrument, q.excludedSourceIds);
+      const feeds = fireFeeds(q.instrument, q.excludedSourceIds);
       if (feeds.length === 0 || q.limit <= 0) return { pixels: [] };
       const { records, partArea } = await readPages(
         "/observations/latest",
@@ -180,21 +189,22 @@ export function createHazardsProvider(
           property: "fire.frp",
           since: q.since,
           source: feeds.join(","),
+          ...confidenceParams(q.excludeLowConfidence),
         },
         q.limit,
       );
       const pixels = records.flatMap((record) =>
-        listed(record) ? (readingToFirePixel(record, q.instrument) ?? []) : [],
+        listed(record) ? (readingToFirePixel(record, q.instrument, sources) ?? []) : [],
       );
       return partArea ? { pixels, partial: "area" } : { pixels };
     },
     async getFireDensity(bbox, q) {
       if (!sources.ready) return unavailable({ cells: [], sources: [] });
-      const feeds = firmsFeeds(q.instrument, q.excludedSourceIds);
+      const feeds = fireFeeds(q.instrument, q.excludedSourceIds);
       if (feeds.length === 0) return { cells: [], sources: [] };
       const answers = await Promise.all(
         gridStrips(bbox, q.cellDeg).map((strip) =>
-          client.get<{ cells?: unknown; sources?: unknown }>(
+          client.get<{ cells?: unknown; sources?: unknown; cell_contributors?: unknown }>(
             "/observations/grid",
             {
               property: "fire.frp",
@@ -202,6 +212,7 @@ export function createHazardsProvider(
               cellDeg: q.cellDeg,
               since: q.since,
               source: feeds.join(","),
+              ...confidenceParams(q.excludeLowConfidence),
             },
             { maxResponseBytes: MAX_RESPONSE_BYTES },
           ),
@@ -212,7 +223,7 @@ export function createHazardsProvider(
       const byCell = new Map<string, FireDensityCell>();
       const named = new Set<string>();
       for (const answer of answers) {
-        for (const cell of gridCellsOf(answer.cells)) {
+        for (const cell of gridCellsOf(answer.cells, answer.cell_contributors)) {
           const key = cell.point.join(",");
           const seen = byCell.get(key);
           if (!seen || cell.count > seen.count) byCell.set(key, cell);

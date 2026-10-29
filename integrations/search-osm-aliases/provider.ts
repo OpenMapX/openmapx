@@ -7,6 +7,7 @@ import {
 } from "@openmapx/core";
 import type { IntegrationContext, SearchSuggestionProvider } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 
 interface IndexStateRow {
   epoch: string;
@@ -32,8 +33,20 @@ const OSM_ATTRIBUTION: Attribution = {
   sourceId: "openstreetmap",
   name: "OpenStreetMap contributors",
   url: "https://www.openstreetmap.org/copyright",
-  spdxLicense: "ODbL-1.0",
-  licenseUrl: "https://opendatacommons.org/licenses/odbl/1-0/",
+  licensing: {
+    version: 1,
+    bindings: [
+      {
+        scope: "data",
+        subject: "Data",
+        license: {
+          kind: "spdx",
+          expression: "ODbL-1.0",
+          url: "https://opendatacommons.org/licenses/odbl/1-0/",
+        },
+      },
+    ],
+  } as const,
   attributionText: "© OpenStreetMap contributors",
 };
 
@@ -97,6 +110,7 @@ function mapRow(row: SearchRow): SearchSuggestion {
     importance: Number(row.importance),
     provider: "search-osm-aliases",
     contributingProviders: ["search-osm-aliases"],
+    contributors: snapshotContributors([OSM_ATTRIBUTION]),
   };
 }
 
@@ -123,7 +137,7 @@ export function createOsmAliasSuggestionProvider(
       const normalized = normalizeSearchTerm(query.query);
       const proximity = query.proximity;
       const key = [
-        "osm-alias",
+        "osm-alias-v2-contributors",
         state.epoch,
         normalized,
         query.lang,

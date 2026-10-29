@@ -1,210 +1,116 @@
 ---
-title: Mobility & live data
-description: Live points of interest on the map — EV chargers, fuel prices, parking, shared bikes and scooters, car-sharing, and traffic webcams, drawn from open mobility data.
+title: Mobility and live data
+description: Find charging, fuel, parking, shared vehicles, webcams, and current road information.
 sidebar_position: 9
 ---
 
-# Mobility & live data
+# Mobility and live data
 
-Beyond the base map and its [overlays](./map-layers.md), OpenMapX can plot
-real-world points of interest with live detail attached. Pick **EV charging**
-and the map fills with charging stations, each colored by whether it's available
-or in use, with connector types and power on click. Pick **Gas Stations** and
-you get live fuel prices per grade. There's also parking with live occupancy from OpenConditions,
-shared bikes and e-scooters and car-sharing vehicles you can actually rent right
-now, and traffic and scenic webcams.
+OpenMapX can show places and vehicles with current information, such as charger
+availability, fuel prices, parking occupancy, or available shared bikes. The
+sources enabled by the instance operator determine coverage and which categories
+appear. A location without a live value is not a promise of availability.
 
-These are different from map overlays. An overlay paints a theme across the whole
-map; a mobility data source answers a question about the area you're looking at
-("what chargers are near here?") and returns individual, clickable points with
-their own details, freshness, and source credits.
+## Find a service nearby {/* #what-you-get */}
 
-## What you get
+Choose a category in the bar above the map to search the visible area. Select a
+marker to open its details. After moving the map, use **Search this area** to
+request results for the new view.
 
-Each data source is a category you can switch on, and each plots its own kind of
-point with category-appropriate detail in the place panel:
+| Category     | Available details depend on the source                                             |
+| ------------ | ---------------------------------------------------------------------------------- |
+| EV charging  | Connectors, power, operational status, tariffs, and live charge-point availability |
+| Fuel         | Station information and prices by fuel grade                                       |
+| Parking      | Facilities, Park & Ride sites, and free-space counts                               |
+| Bike sharing | Docked or free-floating bikes, available bikes, and free docks                     |
+| Car sharing  | Stations or vehicles, availability, and published pricing                          |
+| E-scooters   | Available vehicles and operator no-ride, no-parking, or slow zones                 |
+| Webcams      | Traffic or scenic still images and, where offered, video                           |
 
-- **EV charging** — charging stations colored by operational status, with
-  connector types, power ratings, tariffs, and live charge-point status where a
-  feed publishes it.
-- **Fuel** — gas stations with live prices per fuel grade (diesel, E5, E10, and
-  national equivalents) where a pricing feed covers the area.
-- **Parking** — parking facilities and Park & Ride lots, with live free-space
-  counts where the upstream feed reports them.
-- **Bike sharing** — docking stations and free-floating bikes, with the number
-  of bikes and free docks currently available.
-- **Car sharing** — car-sharing stations and vehicles, with availability and
-  pricing where published.
-- **E-scooters** — free-floating scooters and any operator no-ride, no-parking,
-  or slow zones drawn as shaded areas on the map.
-- **Webcams** — traffic and scenic cameras. A camera with several views shows
-  each view's still, refreshed while the panel is open; streams and players
-  load in the panel after you allow external media. A camera whose views are
-  all offline or no longer updated is drawn dimmed.
+An open panel uses the same [place information](./places.md) as other map
+results, with additional details for that category. Filters depend on the
+selected source; charging can expose connector, speed, or available-now filters,
+for example.
 
-Selecting a category queries the visible map, drops markers, and — because these
-feeds are area-based — shows a **Search this area** chip when you pan or zoom so
-you can refetch for the new viewport rather than reloading constantly. Click any
-marker to open its [place card](./places.md), which inherits the same enrichment
-(photos, knowledge, links) as any other place on the map.
+A webcam can have several views. Stills refresh while the panel is open;
+external streams and players load only after you allow external media. Offline
+or outdated cameras appear dimmed. External media has a different privacy
+boundary from an image fetched through the OpenMapX API.
 
-## How it works
+## Read road information
 
-All of these features are built on one generic mechanism: the **data-source
-system**. It's a single integration (`data-source`) that defines a common
-contract, and every category above is a small integration that implements that
-contract for its domain. That shared design is why a charging station, a parking
-garage, and a shared scooter all behave consistently on the map despite coming
-from completely different upstreams.
+The [Road conditions overlay](./map-layers.md) includes information about the
+road itself, alongside incidents:
 
-A data-source integration answers four kinds of question for a given map
-viewport:
+- Message signs show their current pages and publication time. A blank or failed
+  sign is marked accordingly.
+- Road-weather stations show available surface and air observations. Check the
+  measurement time and any offline, stale, or suspected-fault notice.
+- Maintenance vehicles can show their current task and a short recent trail.
+  Coverage and reporting frequency depend on the source.
+- Border crossings can show queues by direction and vehicle class, with reported
+  waiting times, open lanes, and observation times.
 
-- **Search** — given a bounding box (and any active filters), return the points
-  to plot.
-- **Detail** — given one point, return the rich content for the place panel.
-- **Filters** — describe the filter controls to offer (connector type, fuel
-  grade, operator, available-only, and so on).
-- **Map context** — optional shaded zones that belong with the points, such as a
-  scooter operator's no-parking areas.
+Use each layer's legend to interpret its symbols. A missing observation, an
+empty viewport, and a source failure are different states; none establishes
+that a road is clear or a service is available.
 
-Two properties of the contract matter for everyone running OpenMapX:
+## Sources and freshness {/* #how-it-works */}
 
-**Multi-source merge.** A single category usually draws on _several_ upstream
-feeds at once. The integration queries every feed that covers the visible area
-in parallel and merges the results into one set of points, so you don't pick a
-provider — you get whichever sources have coverage where you're looking. Fuel
-prices in Germany come from Tankerkönig; pan to France and the French national
-feed takes over; everywhere else, OpenStreetMap supplies locations without
-prices. The same point can even be assembled from more than one feed.
-
-**Attribution and freshness travel with the data.** Every response carries the
-credits for exactly the sources that contributed to _this_ view and a freshness
-stamp (when it was fetched, whether it's realtime, whether it's gone stale).
-Browsing fuel in one German city credits only Tankerkönig, not the whole
-European stack of feeds. The credits appear in the map's attribution strip while
-the layer is on and disappear when you switch it off — license-required
-attribution is handled for you, automatically and per-view.
-
-Responses are cached server-side so a popular viewport isn't re-fetched from the
-upstream on every pan, and — like every other external call in OpenMapX —
-requests are proxied through your server, so upstream providers see your
-server's address rather than your users'.
+A category can combine several providers. Results carry source credits and
+freshness information so you can check who supplied a value and when it was
+reported. The displayed source time can differ from the time OpenMapX fetched
+the response. Cached or delayed observations can remain useful, but should not
+be read as a live guarantee.
 
 ### Where the data lives
 
-The sharing categories are queried live from the upstream API for the bounding
-box you're looking at. EV charging, parking, fuel, and webcams come from
-[OpenConditions](../administration/community-extensions.md#example-openconditions),
-which fetches, parses, and links the national registers on its own schedule;
-OpenMapX reads only the sites that intersect your viewport. From the map this
-is invisible; the practical difference is operational, covered under
-[enabling and configuring](#enabling-and-configuring) below.
+Shared-mobility integrations use feeds such as GBFS and regional operator APIs.
+Charging, fuel, parking, cameras, message signs, road weather, maintenance
+vehicles, and border crossings can be supplied by
+[OpenConditions](../administration/community-extensions.md#example-openconditions).
+OpenConditions ingests and links its own datasets; OpenMapX reads its provider
+responses for the requested area.
 
-## The built-in sources
+### Available sources {/* #the-built-in-sources */}
 
-OpenMapX ships seven data-source categories. The table groups them by what they
-show; the _Origins_ column is a representative sample, not the full list — most
-categories aggregate many regional feeds, and OpenStreetMap is the global
-fallback for the location-only sources.
+There is no single worldwide coverage guarantee. Sources differ by country,
+operator, licence, credentials, and whether they publish locations, live values,
+or both. OpenStreetMap-backed location data does not by itself provide live
+availability or prices.
 
-| Category         | What it shows                                 | Origins (representative)                                                                                                                                                                                                                                                                                                                 |
-| ---------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **EV charging**  | Charging stations, status, connectors         | Every enabled charging-site provider: OpenConditions' charging feeds (Bundesnetzagentur and MobiData BW (DE), AFDC (US), France IRVE, NOBIL (NO), Digitraffic (FI), NDW (NL), SFOE (CH), and national registers across Europe, Asia, and Australia; with the operator token also Open Charge Map, OpenStreetMap and Slovenia's register) |
-| **Fuel**         | Gas stations + per-grade prices               | Every enabled fuel-station provider: OpenConditions' national price feeds (Prix Carburants, Minetur; with the operator token also Tankerkönig/MTS-K and E-Control) and OpenStreetMap (operator token only)                                                                                                                               |
-| **Parking**      | Parking + Park & Ride, live occupancy         | Every enabled parking provider: OpenConditions' parking feeds (MobiData BW, NRW.Mobidrom, DB BahnPark, SBB, RDW and NDW truck parking (NL), HDB (SG), and many city and regional open-data portals; with the operator token also the Mobidrom Park & Ride lots, the French BNLS and OpenStreetMap)                                       |
-| **Bike sharing** | Docks + free-floating bikes, availability     | GBFS feeds via the MobilityData catalog, CityBikes, Nextbike, Donkey Republic, Deutsche Bahn, Entur (NO)                                                                                                                                                                                                                                 |
-| **Car sharing**  | Car-sharing stations + vehicles               | GBFS catalog, Entur, Cambio, Communauto, CoopStroom, Dégage, and German municipal portals                                                                                                                                                                                                                                                |
-| **E-scooters**   | Free-floating scooters + operator zones       | GBFS catalog, Entur (NO), NRW.Mobidrom (Voi, Lime), Felyx                                                                                                                                                                                                                                                                                |
-| **Webcams**      | Traffic + scenic cameras, still or live video | Every enabled camera provider: OpenConditions' camera feeds (Digitraffic (FI), Trafikverket (SE), Statens vegvesen (NO), Vegagerðin (IS), DGT (ES), Ontario 511, Hong Kong TD, Transport for NSW, TDX (TW), TfL, Caltrans, NPS, Oregon TripCheck; with the operator token also Windy, OpenStreetMap and five US 511 states)              |
-
-A few notes on origins:
-
-- **Sharing categories** lean heavily on **GBFS** (the General Bikeshare Feed
-  Specification), the open standard most micro-mobility operators publish. The
-  MobilityData GBFS catalog lets a single integration discover and read hundreds
-  of operator feeds worldwide, which is why bike, car, and scooter sharing reach
-  far beyond the named operators above.
-- **OpenStreetMap** (queried via the Overpass service) backs the location-only
-  sources everywhere a richer feed doesn't reach — chargers, fuel stations,
-  car parks and webcams all fall back to it. OpenStreetMap's car parks, fuel
-  stations and webcams come through OpenConditions (`osm-parking`, `osm-fuel`,
-  `osm-cameras`) and only with the operator token.
-- **Licenses vary by source**, from public-domain and CC BY open data to
-  bilateral commercial terms; each source declares its own license and
-  attribution in its manifest, which is what feeds the per-view credits and the
-  generated `/privacy` and `/terms` pages.
+Check the credits on a result and the instance's privacy information for the
+sources actually in use. OpenConditions' feed catalogue is the detailed inventory
+for its datasets. For freshness and coverage diagnostics, operators should use
+[Coverage and freshness](../administration/coverage-freshness.md).
 
 ## Enabling and configuring
 
-Each category is its own [integration](../overview/how-it-works.md), and the
-generic `data-source` integration it depends on must be enabled too. A category
-appears in the search chips only when its integration is enabled — disabling
-`fuel`, for example, removes the **Gas Stations** chip entirely. Manage these
-from the admin panel's integration list.
+Operators manage categories and providers in
+[Admin → Integrations](../administration/integrations-administration.md).
+The category integration and its provider must both be available. For example,
+the charging and fuel categories are unavailable when they have no registered
+site provider; enabling their UI integration alone does not supply data.
 
-Many sources work out of the box from open feeds and need no setup. Others
-require credentials, declared per integration:
+To use OpenConditions, install and configure its companion services and the
+built-in adapter as described in
+[Community extensions](../administration/community-extensions.md#example-openconditions).
+Configure upstream ingest credentials on the OpenConditions service that owns
+those feeds. Restricted sources additionally need the
+[operator token](../administration/community-extensions.md#the-operator-token)
+on both sides. A token controls access; it does not grant additional data rights.
 
-- **EV charging** comes from [OpenConditions](../administration/community-extensions.md#example-openconditions);
-  without it the charging source is not offered and has no chip. Credentials
-  for the keyed feeds (AFDC, NOBIL, Open Charge Map, and the Korean, Singapore,
-  Slovenian and Taiwanese registers) are OpenConditions ingest feed
-  credentials: set them in the admin panel as service credentials of
-  `openconditions-ingest`. Open Charge Map (redistribution not granted),
-  OpenStreetMap (ODbL share-alike) and Slovenia's register (CC BY-SA) are
-  restricted sources and reach OpenMapX only with the
-  [operator token](../administration/community-extensions.md#the-operator-token)
-  set on both sides.
-- **Fuel** comes from [OpenConditions](../administration/community-extensions.md#example-openconditions);
-  without it the fuel source is not offered and has no chip. Credentials for
-  keyed price feeds (such as Tankerkönig for Germany) are configured in
-  OpenConditions. Germany (Tankerkönig: redistribution not granted), Austria
-  (E-Control: no licence asserted) and every station known only from
-  OpenStreetMap (ODbL share-alike) also need the
-  [operator token](../administration/community-extensions.md#the-operator-token)
-  set on both sides; without it the fuel layer shows France and Spain only.
-- **Parking** comes from [OpenConditions](../administration/community-extensions.md#example-openconditions);
-  without it the parking source is not offered and has no chip. Credentials for
-  the keyed feeds (DB BahnPark, North East UTMC, Transport for NSW) are
-  OpenConditions ingest feed credentials: set them in the admin panel as service
-  credentials of `openconditions-ingest`. The Mobidrom Park & Ride lots
-  (CC BY-SA), the French BNLS (ODbL) and every facility known only from
-  OpenStreetMap are restricted sources and reach OpenMapX only with the
-  [operator token](../administration/community-extensions.md#the-operator-token)
-  set on both sides.
-- **Webcams** come from [OpenConditions](../administration/community-extensions.md#example-openconditions);
-  without it the webcam source is not offered and has no chip. Credentials for
-  the keyed feeds (Trafikverket, Ontario 511, Transport for NSW, TDX, NPS,
-  Oregon TripCheck, Windy and the US 511 states) are OpenConditions ingest feed
-  credentials: set them in the admin panel as service credentials of
-  `openconditions-ingest`. Windy (redistribution not granted), OpenStreetMap
-  (ODbL share-alike) and the Georgia, Arizona, Idaho, Utah and Louisiana 511
-  systems (no data licence) are restricted sources and reach OpenMapX only with
-  the [operator token](../administration/community-extensions.md#the-operator-token)
-  set on both sides. Stills are shown only from image hosts a live camera
-  source declares.
+Provider acquisition follows source policy and attribution requirements. The
+backend provider requests normally pass through OpenMapX's server. External
+links and consented media players contact their destination directly.
 
-Charging coverage also includes open registries for Belgium, Cyprus, Spain,
-Luxembourg, Lithuania, Hong Kong, New Zealand, and several
-Australian states. OpenConditions' feed catalogue is the authoritative
-per-source license and configuration inventory.
-
-Where a source has no key, it's simply skipped and the others still answer. Keys
-set on an integration follow the usual config cascade — admin panel or `.env`.
-
-Some sources also lean on backend services: the OpenStreetMap fallback needs the
-**Overpass** service, and the sharing categories use the transit engine and geocoder for station naming. A source whose
-required backend isn't running simply stays quiet rather than erroring. See
-[Managing services](../install/managing-services.md) for enabling those backends.
+Developers adding a category or provider should read
+[Data-source integrations](../developer/data-source-integrations.md) for search,
+detail, filtering, attribution, and freshness contracts.
 
 ## Related features
 
-- [Map layers & overlays](./map-layers.md) — the whole-map themes these
-  point sources complement (including a live-transit-positions overlay).
-- [Places](./places.md) — the place card that opens when you click a data-source
-  marker, with photos, knowledge, and reviews.
-- [Search](./search.md) — the search bar and category chips these sources appear
-  in.
-- [Directions](./directions.md) and [public transit](./public-transit.md) —
-  routing to a charger, parking lot, or station you found here.
+- [Map layers](./map-layers.md): road conditions and other whole-map overlays.
+- [Directions](./directions.md): plan a trip to a charger, parking site, or station.
+- [Public transit](./public-transit.md): journeys, departures, and live vehicles.
+- [Vehicles and parking](./vehicles-and-parking.md): your own vehicles and parked locations.

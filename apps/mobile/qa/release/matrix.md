@@ -1,29 +1,32 @@
 # Release-candidate qualification matrix
 
-What must be run before a candidate may be uploaded to a beta track, and — just
-as importantly — what a virtual device cannot establish no matter how carefully
-it is run.
+Complete the virtual cases before beta upload. Physical cases remain open until
+tested on the processed store build. Bind each report to source, configuration,
+web build and artifact identity using the release-candidate schema.
 
-Every report binds to one artifact hash. A report that does not name one is a
-report about a build nobody can identify later, which is the same as no report.
+The current foreground shell lacks navigation and auth command composition.
+Signing identities are placeholders and native version/signing inputs need
+verification. These are candidate blockers, not `pending-physical` outcomes. See
+`docs/docs/developer/mobile-release.md` and `qa/results/beta/README.md`.
+Remove the root `$comment` and all placeholder outcomes from `rc-template.json`
+before using it; it is not a completed or schema-valid evidence report.
 
 ## Pre-beta virtual matrix
 
-| Path                                                               | Why it is here                                                                         |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| Current iOS simulator                                              | The version most users will be on                                                      |
-| Minimum-target iOS simulator (16.4) where Xcode supplies one       | The oldest supported OS, where layout and API availability diverge                     |
-| Android API 36 emulator                                            | The target SDK                                                                         |
-| Android API 24 emulator                                            | The minimum SDK                                                                        |
-| Android 16 KiB page-size emulator, compatibility mode **disabled** | Play requires 16 KiB support from 31 August 2026; compatibility mode hides the failure |
-| Small-screen and tablet layout smoke                               | Not to claim tablet support, but to confirm nothing is unreachable                     |
+| Path                                                               | Why it is here                                                     |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| Current iOS simulator                                              | The version most users will be on                                  |
+| Minimum-target iOS simulator (16.4) where Xcode supplies one       | The oldest supported OS, where layout and API availability diverge |
+| Android API 36 emulator                                            | The target SDK                                                     |
+| Android API 24 emulator                                            | The minimum SDK                                                    |
+| Android 16 KiB page-size emulator, compatibility mode **disabled** | Exercise bundled native libraries without a compatibility fallback |
+| Small-screen and tablet layout smoke                               | Not to claim tablet support, but to confirm nothing is unreachable |
 
 ## Volunteer target matrix (blocks public rollout, not beta upload)
 
 - One current-iOS iPhone.
 - One Android 16 / API 36 Pixel-class device.
-- One recent Samsung device with **default** battery management — the settings
-  most users never change are the ones that terminate background services.
+- One recent Samsung device with **default** battery management . Record the actual power settings used.
 
 ## Functional, lifecycle and offline
 
@@ -93,7 +96,7 @@ consent screen, verified App Links.
 - [ ] Dark, light and high-contrast.
 - [ ] Nothing is conveyed by colour alone.
 - [ ] Switch and keyboard focus order is sensible.
-- [ ] Touch targets meet 44 pt / 48 dp.
+- [ ] Touch targets meet the project targets of 44 pt / 48 dp.
 - [ ] English and German: no truncation, correct plurals, permission strings fit.
 - [ ] RTL does not corrupt controls, even though no RTL locale ships.
 
@@ -107,14 +110,15 @@ deterministic callback gaps, cue-intent latency and duplication, WebView memory
 and renderer recovery, download and install size, crashes and ANRs, and
 stop-to-zero-mutation time.
 
-Battery per hour, thermal state, and spoken-cue latency are **not** recorded
-here. A simulator number for any of them would be a fabrication, and a
-fabricated number is worse than a blank.
+Do not use simulator measurements to qualify physical battery drain, thermal
+state or spoken-cue latency. Leave those hardware results open for beta testing.
 
 ## Sign-off
 
-Every report must reference the same source commit and configuration, and every
-scenario must conclude `pass` or `pending-physical`. A single `fail` requires a
+Reports for one candidate must reference the same source and configuration.
+Required virtual cases must pass. Use `pending-physical` only for a hardware case
+that virtual testing cannot establish, never an unrun virtual case. The schema
+also allows `not-applicable`; explain each exclusion and have it reviewed. A single `fail` requires a
 new build number, newly built artifacts, and a rerun of the affected plus core
 gates.
 

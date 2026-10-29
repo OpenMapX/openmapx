@@ -1,6 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { applyTrustedConfiguration } from "../../services/trusted-config-operations";
+import { TrustedConfigurationApplyError } from "../../services/trusted-config-outcome";
 import { createAdminTestApp, installAdminRouteMocks } from "./admin-test-helpers.js";
+import { serviceDataFixture, serviceSelectionFixture } from "./helpers/service-admin-fixtures";
 
 const {
   session: fakeSession,
@@ -68,8 +71,7 @@ vi.mock("../../db/schema.js", () => ({
 
 // admin-cli helpers
 const mockGetServiceSelectionSummary = vi.fn().mockReturnValue({
-  selectedRoots: [],
-  effectiveIds: [],
+  ...serviceSelectionFixture,
 });
 const mockListBackupSummaries = vi
   .fn()
@@ -102,11 +104,13 @@ vi.mock("../../services/service-config-resolver.js", () => ({
     mockResolveServiceConfigWithSources(...args),
 }));
 
+const mockRestoreServiceConfig = vi.fn().mockResolvedValue(true);
 const mockMergeServiceConfig = vi.fn().mockResolvedValue(undefined);
 vi.mock("../../services/service-config-writer.js", () => ({
-  mergeServiceConfig: (...args: unknown[]) => mockMergeServiceConfig(...args),
-  readStoredServiceConfig: vi.fn().mockResolvedValue(null),
-  restoreStoredServiceConfig: vi.fn().mockResolvedValue(undefined),
+  persistServiceConfigPatch: async (...args: unknown[]) => {
+    await mockMergeServiceConfig(...args);
+    return { restore: mockRestoreServiceConfig };
+  },
 }));
 vi.mock("../../services/trusted-config-operations.js", () => ({
   applyTrustedConfiguration: vi.fn().mockResolvedValue({ revisionId: "revision_1" }),
@@ -155,10 +159,11 @@ const MOCK_SERVICE_RUNNING = {
     name: "MOTIS",
     version: "2.11.3",
     description: "Transit routing engine",
-    quality: "stable",
+    quality: "built-in",
     provides: [],
-    exposure: "internal",
+    container: { image: "example/service", tag: "1.0.0" },
   },
+  directory: "/synthetic/service",
   enabled: true,
   isBuiltIn: true,
 };
@@ -169,10 +174,11 @@ const MOCK_SERVICE_STOPPED = {
     name: "Valhalla",
     version: "3.4.0",
     description: "Street routing",
-    quality: "stable",
+    quality: "built-in",
     provides: [],
-    exposure: "internal",
+    container: { image: "example/service", tag: "1.0.0" },
   },
+  directory: "/synthetic/service",
   enabled: true,
   isBuiltIn: true,
 };
@@ -185,8 +191,9 @@ const MOCK_COMMUNITY_RUNNING = {
     description: "Community service",
     quality: "community",
     provides: [],
-    exposure: "internal",
+    container: { image: "example/service", tag: "1.0.0" },
   },
+  directory: "/synthetic/service",
   enabled: true,
   isBuiltIn: false,
 };
@@ -198,7 +205,7 @@ beforeAll(async () => {
   app = await createAdminTestApp(adminServicesRoute);
 });
 
-afterAll(() => app.close());
+afterAll(() => app?.close());
 afterEach(() => {
   vi.clearAllMocks();
   mockRegistryGet.mockReset();
@@ -259,11 +266,7 @@ describe("strict administrative effect bodies", () => {
 
 describe("GET /admin/services/data", () => {
   it("loads a kind-only inventory from ops-agent without passing a host path", async () => {
-    const inventory = {
-      osm: { found: false },
-      builds: [{ target: "valhalla", built: false }],
-      motisTransitous: { configFound: false },
-    };
+    const inventory = serviceDataFixture;
     mockExecuteAndWait.mockResolvedValueOnce(inventory);
 
     const response = await app.inject({ method: "GET", url: "/admin/services/data" });
@@ -498,13 +501,14 @@ describe("POST /admin/services/:id/action", () => {
     });
 
     expect(res.statusCode).toBe(400);
-    expect(res.json().error).toContain("Invalid action");
+    expect(res.json().error).toContain("Invalid administration body");
   });
 });
 
 describe("GET /admin/services/selection", () => {
   it("returns service selection summary", async () => {
     mockGetServiceSelectionSummary.mockReturnValueOnce({
+      ...serviceSelectionFixture,
       selectedRoots: ["motis"],
       effectiveIds: ["motis", "valhalla"],
     });
@@ -563,7 +567,7 @@ describe("service credentials", () => {
       manifest: {
         id: serviceId,
         name: serviceId,
-        version: "1.15.2",
+        version: "1.15.3",
         quality: "built-in",
         configSchema: {
           properties: {
@@ -619,6 +623,56 @@ describe("service credentials", () => {
   });
 
   describe("POST /admin/services/:id/config", () => {
+    it.each(["unknown", "committed", "not_committed"] as const)(
+      "restores saved overrides only with proven non-commit (%s)",
+      async (outcome) => {
+        const error = new TrustedConfigurationApplyError({
+          ...(outcome === "unknown"
+            ? { outcome, reason: "transport_or_result" as const }
+            : outcome === "committed"
+              ? {
+                  outcome,
+                  revisionId: `cfg1_${"a".repeat(43)}`,
+                  enabledServiceIds: [],
+                  followUp: "failed" as const,
+                  cleanupFailed: false,
+                }
+              : { outcome, reason: "failed" as const, cleanupFailed: false }),
+          publisherCleanupFailed: false,
+          registryUpdateFailed: false,
+        });
+        vi.mocked(applyTrustedConfiguration).mockRejectedValueOnce(error);
+        const res = await app.inject({
+          method: "POST",
+          url: "/admin/services/openconditions-ingest/config",
+          payload: { config: {} },
+        });
+        expect(res.statusCode).toBe(500);
+        expect(mockRestoreServiceConfig).toHaveBeenCalledTimes(outcome === "not_committed" ? 1 : 0);
+      },
+    );
+    it("answers an apply the operator can fix with its reason, after restoring what was saved", async () => {
+      const problem =
+        "infra/docker/overrides/services/martin/config/martin.yaml can't be used: it is a symbolic link. Render refuses it rather than use the release's file in its place: make it a regular file of yours that only you may write, or delete it.";
+      vi.mocked(applyTrustedConfiguration).mockRejectedValueOnce(
+        new TrustedConfigurationApplyError({
+          outcome: "not_committed",
+          reason: "failed",
+          cleanupFailed: false,
+          publisherCleanupFailed: false,
+          registryUpdateFailed: false,
+          problem,
+        }),
+      );
+      const res = await app.inject({
+        method: "POST",
+        url: "/admin/services/openconditions-ingest/config",
+        payload: { config: {} },
+      });
+      expect(res.statusCode).toBe(409);
+      expect(res.json()).toEqual({ error: problem });
+      expect(mockRestoreServiceConfig).toHaveBeenCalledTimes(1);
+    });
     it("persists only the route-validated update through the atomic writer", async () => {
       mockValidateConfigBody.mockReturnValueOnce({
         updates: { RATE_LIMIT_MAX: 240 },
@@ -865,5 +919,24 @@ describe("service credentials", () => {
 
     expect(res.statusCode).toBe(200);
     expect(mockDeleteServiceSecret).toHaveBeenCalledWith("openconditions-ingest", "LEGACY_KEY");
+  });
+});
+
+describe("explicit destructive selection intent", () => {
+  beforeEach(() => {
+    mockGetServiceRegistry.mockReturnValue({ list: mockRegistryList, get: mockRegistryGet });
+  });
+  it.each([
+    {},
+    { selectedRoots: null },
+    { selectedRoots: "motis" },
+    { selectedRoots: ["motis", 7] },
+    { selectedRoots: [""] },
+  ])("rejects malformed selection %j before any persistence or host work", async (payload) => {
+    const response = await app.inject({ method: "PUT", url: "/admin/services/selection", payload });
+    expect(response.statusCode).toBe(400);
+    expect(mockValidateServiceSelectionForWrite).not.toHaveBeenCalled();
+    expect(applyTrustedConfiguration).not.toHaveBeenCalled();
+    expect(mockWriteAuditLog).not.toHaveBeenCalled();
   });
 });

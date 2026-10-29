@@ -1,10 +1,12 @@
 "use client";
 
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import CopyIcon from "@mui/icons-material/ContentCopy";
 import DiagnosticsIcon from "@mui/icons-material/MonitorHeart";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import UpdateIcon from "@mui/icons-material/SystemUpdateAlt";
 import Alert from "@mui/material/Alert";
+import AlertTitle from "@mui/material/AlertTitle";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
@@ -28,13 +30,17 @@ import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import { activityJobQueryOptions, useActivityClient } from "../activity/activityQueries";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { useAdminToast } from "../shared/AdminToast";
 import { ErrorState } from "../shared/ErrorState";
 
 const CONFIRMATION = "UPDATE OPENMAPX";
+const HOST_UPDATE_COMMANDS = [
+  "pnpm openmapx compose release",
+  "pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner",
+].join("\n");
 
 interface ImageStatus {
   id: string;
@@ -48,7 +54,17 @@ interface ImageStatus {
   error?: string;
 }
 
+interface ReleaseStatus {
+  configuredSelector?: string;
+  currentReleaseId?: string;
+  availableReleaseId?: string;
+  currentVersion?: string;
+  availableVersion?: string;
+  availableDigest?: string;
+}
+
 interface SystemStatus {
+  release?: ReleaseStatus;
   deployment: {
     dockerAvailable: boolean;
     composeRendered: boolean;
@@ -59,15 +75,68 @@ interface SystemStatus {
 }
 
 interface TrackedJob {
+  path: string;
   id: string;
   label: string;
 }
 
-interface JobStatus {
-  id: string;
-  status: "queued" | "running" | "success" | "failed" | "canceled";
-  progress: number | null;
-  error: string | null;
+type SubmissionPath = "updates/check" | "updates/apply" | "diagnostics";
+const SUBMISSION_PATHS: SubmissionPath[] = ["updates/check", "updates/apply", "diagnostics"];
+
+/**
+ * A submission the API refused before any job existed; nothing is tracked or polled for it.
+ * `until` is the server-declared retry deadline (epoch ms) while that action must wait.
+ */
+interface SubmissionRejection {
+  path: SubmissionPath;
+  label: string;
+  status: number | null;
+  /** A 409 that names the active job, as opposed to other conflicts such as unavailable host control. */
+  busy: boolean;
+  message: string;
+  retrySeconds: number | null;
+  until: number | null;
+}
+
+const MAX_RETRY_SECONDS = 3_600;
+
+class SubmissionError extends Error {
+  constructor(
+    message: string,
+    readonly status: number | null,
+    readonly retrySeconds: number | null,
+    readonly busy: boolean,
+  ) {
+    super(message);
+  }
+}
+
+function boundedSeconds(seconds: number): number | null {
+  return Number.isFinite(seconds) && seconds >= 0 && seconds <= MAX_RETRY_SECONDS
+    ? Math.ceil(seconds)
+    : null;
+}
+
+const HTTP_DATE = /^[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/;
+
+/** Seconds from a Retry-After header: delta-seconds or an HTTP date (IMF-fixdate); else null. */
+function headerRetrySeconds(header: string | null): number | null {
+  const value = header?.trim();
+  if (!value) return null;
+  if (/^\d+$/.test(value)) return boundedSeconds(Number(value));
+  if (!HTTP_DATE.test(value)) return null;
+  const at = Date.parse(value);
+  // Round-tripping rejects normalized calendar dates (31 Sep) and wrong weekday/month tokens.
+  if (!Number.isFinite(at) || new Date(at).toUTCString() !== value) return null;
+  return boundedSeconds(Math.max(0, (at - Date.now()) / 1000));
+}
+
+/** Server-declared wait: a usable Retry-After first, else a valid bounded body `retryAfter`. */
+function declaredRetrySeconds(header: string | null, body: unknown): number | null {
+  const fromHeader = headerRetrySeconds(header);
+  if (fromHeader !== null) return fromHeader;
+  const fallback = (body as { retryAfter?: unknown } | null)?.retryAfter;
+  return typeof fallback === "number" ? boundedSeconds(fallback) : null;
 }
 
 export function buildSystemJobRequestInit(body?: Record<string, unknown>): RequestInit {
@@ -89,7 +158,7 @@ function digest(value: string | null): string {
 }
 
 function imageStatusChip(image: ImageStatus) {
-  if (image.status === "update-available") return <Chip color="warning" label="Update ready" />;
+  if (image.status === "update-available") return <Chip color="warning" label="Update available" />;
   if (image.status === "up-to-date") {
     return <Chip color="success" variant="outlined" label="Up to date" />;
   }
@@ -98,13 +167,42 @@ function imageStatusChip(image: ImageStatus) {
 }
 
 export function SystemMaintenance() {
-  const { apiUrl } = useEnv();
+  const { apiUrl, client } = useActivityClient();
   const queryClient = useQueryClient();
   const showToast = useAdminToast();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [candidateToApply, setCandidateToApply] = useState<{
+    releaseId: string;
+    expectedDigest: string;
+  } | null>(null);
   const [confirmation, setConfirmation] = useState("");
   const [createBackup, setCreateBackup] = useState(true);
   const [trackedJob, setTrackedJob] = useState<TrackedJob | null>(null);
+  const [blockedCandidate, setBlockedCandidate] = useState<string | null>(null);
+  // Latest refusal per action, so one action's feedback and wait never replace another's.
+  const [rejections, setRejections] = useState<
+    Partial<Record<SubmissionPath, SubmissionRejection>>
+  >({});
+
+  useEffect(() => {
+    const timers = SUBMISSION_PATHS.flatMap((path) => {
+      const until = rejections[path]?.until;
+      if (!until) return [];
+      return setTimeout(
+        () =>
+          setRejections((current) => {
+            const entry = current[path];
+            return entry?.until === until
+              ? { ...current, [path]: { ...entry, until: null } }
+              : current;
+          }),
+        Math.max(0, until - Date.now()),
+      );
+    });
+    return () => {
+      for (const timer of timers) clearTimeout(timer);
+    };
+  }, [rejections]);
 
   const statusQuery = useQuery<SystemStatus>({
     queryKey: ["admin", "system"],
@@ -116,16 +214,8 @@ export function SystemMaintenance() {
     refetchInterval: trackedJob ? 5_000 : false,
   });
 
-  const jobQuery = useQuery<JobStatus>({
-    queryKey: ["admin", "jobs", trackedJob?.id],
-    enabled: Boolean(trackedJob),
-    queryFn: async () => {
-      const response = await fetch(`${apiUrl}/api/admin/jobs/${trackedJob?.id}`, {
-        credentials: "include",
-      });
-      if (!response.ok) throw new Error("Failed to read maintenance job");
-      return response.json();
-    },
+  const jobQuery = useQuery({
+    ...activityJobQueryOptions(client, apiUrl, trackedJob?.id, "application"),
     refetchInterval: trackedJob ? 3_000 : false,
     retry: true,
   });
@@ -133,20 +223,32 @@ export function SystemMaintenance() {
   useEffect(() => {
     const job = jobQuery.data;
     if (!trackedJob || !job || !["success", "failed", "canceled"].includes(job.status)) return;
-    if (job.status === "success") showToast(`${trackedJob.label} completed`);
-    else showToast(job.error || `${trackedJob.label} ${job.status}`, "error");
+    if (
+      job.result &&
+      typeof job.result === "object" &&
+      !Array.isArray(job.result) &&
+      job.result.errorCode === "host_update_required"
+    ) {
+      setBlockedCandidate(candidateToApply?.expectedDigest ?? null);
+    }
+    if (job.status === "success") {
+      if (trackedJob.path === "updates/check") setBlockedCandidate(null);
+      showToast(`${trackedJob.label} completed`);
+    } else showToast(job.error || `${trackedJob.label} ${job.status}`, "error");
     void queryClient.invalidateQueries({ queryKey: ["admin", "system"] });
     void queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
     setTrackedJob(null);
-  }, [jobQuery.data, queryClient, showToast, trackedJob]);
+  }, [candidateToApply, jobQuery.data, queryClient, showToast, trackedJob]);
 
   const queueJob = useMutation({
+    // Maintenance actions are never repeated automatically, whatever the client defaults are.
+    retry: false,
     mutationFn: async ({
       path,
       body,
       label,
     }: {
-      path: string;
+      path: SubmissionPath;
       body?: Record<string, unknown>;
       label: string;
     }) => {
@@ -157,23 +259,105 @@ export function SystemMaintenance() {
       const result = (await response.json().catch(() => ({}))) as {
         jobId?: string;
         error?: string;
+        retryAfter?: unknown;
       };
-      if (!response.ok || !result.jobId)
-        throw new Error(result.error ?? `Failed to queue ${label}`);
-      return { id: result.jobId, label };
+      if (!response.ok || !result.jobId) {
+        throw new SubmissionError(
+          result.error ??
+            (response.status === 429 ? "Too many requests" : `Failed to queue ${label}`),
+          response.status,
+          response.status === 429
+            ? declaredRetrySeconds(response.headers.get("Retry-After"), result)
+            : null,
+          response.status === 409 && typeof result.jobId === "string",
+        );
+      }
+      return { id: result.jobId, label, path };
     },
+    onMutate: ({ path }) =>
+      setRejections((current) => {
+        const { [path]: _cleared, ...others } = current;
+        return others;
+      }),
     onSuccess: (job) => {
       setTrackedJob(job);
+      if (job.path === "updates/apply") {
+        setDialogOpen(false);
+        setConfirmation("");
+      }
       showToast(`${job.label} queued`);
     },
-    onError: (error) =>
-      showToast(error instanceof Error ? error.message : "Request failed", "error"),
+    onError: (error, { path, label }) => {
+      const message = error instanceof Error ? error.message : "Request failed";
+      const submission = error instanceof SubmissionError ? error : null;
+      const retrySeconds = submission?.retrySeconds ?? null;
+      setRejections((current) => ({
+        ...current,
+        [path]: {
+          path,
+          label,
+          status: submission?.status ?? null,
+          busy: submission?.busy ?? false,
+          message,
+          retrySeconds,
+          until: retrySeconds ? Date.now() + retrySeconds * 1000 : null,
+        },
+      }));
+      showToast(message, "error");
+    },
   });
 
   const status = statusQuery.data;
   const active = Boolean(trackedJob || queueJob.isPending);
+  const waiting = (path: SubmissionPath) => Boolean(rejections[path]?.until);
+  const rejectionAlert = (rejection: SubmissionRejection) => (
+    <Alert key={rejection.path} severity="warning" sx={{ minWidth: 0 }}>
+      <AlertTitle>{rejection.label} was not queued</AlertTitle>
+      {rejection.message.replace(/[.\s]+$/, "")}.{" "}
+      {waiting(rejection.path) && rejection.retrySeconds
+        ? `Try again in about ${rejection.retrySeconds} ${rejection.retrySeconds === 1 ? "second" : "seconds"}.`
+        : rejection.status !== 409
+          ? "You can try again."
+          : rejection.busy
+            ? "Try again once the active operation has finished."
+            : "Check the host-control readiness below, then try again."}
+    </Alert>
+  );
+  const rejectionInDialog = dialogOpen && Boolean(rejections["updates/apply"]);
+  const pageRejections = SUBMISSION_PATHS.flatMap((path) => {
+    const rejection = rejections[path];
+    return rejection && !(path === "updates/apply" && rejectionInDialog) ? [rejection] : [];
+  });
   const progress = jobQuery.data?.progress ?? 0;
   const updateCount = status?.images.filter((image) => image.updateAvailable).length ?? 0;
+  const checkedCandidate =
+    status?.release?.availableReleaseId && status.release.availableDigest
+      ? {
+          releaseId: status.release.availableReleaseId,
+          expectedDigest: status.release.availableDigest,
+        }
+      : null;
+  // The agent status includes the backup helper pin check, even when its image is current.
+  // An outdated agent is replaced by the update itself; an unverifiable agent, or
+  // a replacement that failed for this release, still needs the host.
+  const agent = status?.images.find((image) => image.id === "ops-agent");
+  const agentReplacementFailed = Boolean(
+    checkedCandidate && blockedCandidate === checkedCandidate.expectedDigest,
+  );
+  const hostUpdateRequired = Boolean(
+    checkedCandidate &&
+      (agentReplacementFailed ||
+        (agent?.status !== "up-to-date" && agent?.status !== "update-available")),
+  );
+  const replacesAgent = Boolean(
+    checkedCandidate && !hostUpdateRequired && agent?.status === "update-available",
+  );
+  const canUpdate = Boolean(
+    checkedCandidate &&
+      !hostUpdateRequired &&
+      (updateCount > 0 ||
+        status?.release?.availableReleaseId !== status?.release?.currentReleaseId),
+  );
 
   if (statusQuery.isError) {
     return (
@@ -203,6 +387,76 @@ export function SystemMaintenance() {
         </Alert>
       )}
 
+      <Paper variant="outlined" sx={{ p: 2, overflowWrap: "anywhere" }}>
+        <Typography variant="subtitle1">Release selection</Typography>
+        <Typography variant="body2">
+          Configured channel: {status?.release?.configuredSelector ?? "unknown"}
+        </Typography>
+        <Typography variant="body2">
+          Current release: {status?.release?.currentReleaseId ?? "unknown"}
+        </Typography>
+        <Typography variant="body2">
+          Checked release: {status?.release?.availableReleaseId ?? "not checked"}
+        </Typography>
+        {status?.release?.availableDigest && (
+          <Typography variant="caption" sx={{ display: "block", color: "text.secondary" }}>
+            Manifest: {status.release.availableDigest}
+          </Typography>
+        )}
+        <Typography variant="body2" sx={{ mt: 1, color: "text.secondary" }}>
+          Check reads the configured release manifest without downloading images or restarting
+          services. Update downloads that exact checked release before replacing any container.
+          Change channels in the host configuration.
+        </Typography>
+      </Paper>
+
+      {hostUpdateRequired && (
+        <Alert severity="warning" sx={{ minWidth: 0 }}>
+          <AlertTitle>Host update required</AlertTitle>
+          <Typography variant="body2">
+            {agentReplacementFailed
+              ? "The operations agent could not be updated from the admin panel. The previous agent keeps running."
+              : "The operations agent or its backup helper could not be verified for this release. Updating from the admin panel is blocked."}{" "}
+            Run these commands from an updated OpenMapX checkout on the host.
+          </Typography>
+          <Box
+            component="pre"
+            sx={{
+              whiteSpace: "pre-wrap",
+              overflowWrap: "anywhere",
+              fontSize: "0.8125rem",
+              my: 1.5,
+            }}
+          >
+            {HOST_UPDATE_COMMANDS}
+          </Box>
+          <Button
+            size="small"
+            startIcon={<CopyIcon />}
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(HOST_UPDATE_COMMANDS);
+                showToast("Host update commands copied");
+              } catch {
+                showToast("Could not copy commands. Select and copy the commands above.", "error");
+              }
+            }}
+          >
+            Copy commands
+          </Button>
+        </Alert>
+      )}
+
+      {replacesAgent && (
+        <Alert severity="info">
+          This release also updates the operations agent. The update replaces it first and checks
+          that the new agent starts. If it does not, the previous agent is restored and the update
+          stops before any other service changes.
+        </Alert>
+      )}
+
+      {pageRejections.map(rejectionAlert)}
+
       {trackedJob && (
         <Paper variant="outlined" sx={{ p: 1.5 }}>
           <Stack direction="row" sx={{ alignItems: "center", gap: 1, mb: 1 }}>
@@ -220,17 +474,22 @@ export function SystemMaintenance() {
 
       <AdminTableSurface
         title="OpenMapX application"
-        description="Checking pulls current image tags into the local cache without restarting anything."
+        description="Checking compares running images with the release. Only Update downloads images."
         toolbar={
           <Stack
             direction={{ xs: "column", sm: "row" }}
             sx={{ gap: 1, alignItems: { sm: "center" } }}
           >
-            {updateCount > 0 && <Chip color="warning" label={`${updateCount} update ready`} />}
+            {updateCount > 0 && (
+              <Chip
+                color="warning"
+                label={`${updateCount} ${updateCount === 1 ? "update" : "updates"} available`}
+              />
+            )}
             <Button
               variant="outlined"
               startIcon={<RefreshIcon />}
-              disabled={active || !status?.deployment.maintenanceReady}
+              disabled={active || !status?.deployment.maintenanceReady || waiting("updates/check")}
               onClick={() => queueJob.mutate({ path: "updates/check", label: "Update check" })}
             >
               Check for updates
@@ -238,9 +497,22 @@ export function SystemMaintenance() {
             <Button
               variant="contained"
               startIcon={<UpdateIcon />}
-              disabled={active || !status?.deployment.maintenanceReady || updateCount === 0}
-              title={updateCount === 0 ? "All core images are up to date" : undefined}
-              onClick={() => setDialogOpen(true)}
+              disabled={active || !status?.deployment.maintenanceReady || !canUpdate}
+              title={
+                hostUpdateRequired
+                  ? "This release requires an update on the host"
+                  : !canUpdate
+                    ? "Check for a release with changes before updating"
+                    : undefined
+              }
+              onClick={() => {
+                setCandidateToApply(checkedCandidate);
+                // Stale feedback goes; an active server wait keeps its explanation.
+                if (!waiting("updates/apply")) {
+                  setRejections(({ "updates/apply": _stale, ...others }) => others);
+                }
+                setDialogOpen(true);
+              }}
             >
               Update OpenMapX
             </Button>
@@ -302,7 +574,7 @@ export function SystemMaintenance() {
           <Button
             variant="outlined"
             startIcon={<DiagnosticsIcon />}
-            disabled={active || !status?.deployment.maintenanceReady}
+            disabled={active || !status?.deployment.maintenanceReady || waiting("diagnostics")}
             onClick={() => queueJob.mutate({ path: "diagnostics", label: "Deep diagnostics" })}
           >
             Run diagnostics
@@ -340,10 +612,16 @@ export function SystemMaintenance() {
         <DialogTitle>Update OpenMapX</DialogTitle>
         <DialogContent>
           <Stack sx={{ gap: 2, pt: 0.5 }}>
+            <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
+              Apply checked release {candidateToApply?.releaseId}. Manifest:{" "}
+              {candidateToApply?.expectedDigest}
+            </Typography>
             <Alert severity="info">
-              Images are pulled before any container is replaced. Data Manager and Web update first;
-              API updates last and briefly interrupts this page.
+              Images are downloaded before any container is replaced. The operations agent updates
+              first when the release changes it, then Data Manager and Web; API updates last and
+              briefly interrupts this page.
             </Alert>
+            {rejections["updates/apply"] && rejectionAlert(rejections["updates/apply"])}
             <FormControlLabel
               control={
                 <Checkbox
@@ -377,16 +655,21 @@ export function SystemMaintenance() {
             variant="contained"
             color="warning"
             startIcon={<UpdateIcon />}
-            disabled={confirmation !== CONFIRMATION || queueJob.isPending || updateCount === 0}
-            onClick={() => {
+            disabled={
+              confirmation !== CONFIRMATION ||
+              queueJob.isPending ||
+              !candidateToApply ||
+              hostUpdateRequired ||
+              waiting("updates/apply")
+            }
+            onClick={() =>
+              // The dialog closes only once the update is accepted (see onSuccess).
               queueJob.mutate({
                 path: "updates/apply",
-                body: { confirmation, createBackup },
+                body: { confirmation, createBackup, ...candidateToApply },
                 label: "OpenMapX update",
-              });
-              setDialogOpen(false);
-              setConfirmation("");
-            }}
+              })
+            }
           >
             Update application
           </Button>

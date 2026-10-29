@@ -1,37 +1,34 @@
 "use client";
 
-import type * as maplibregl from "maplibre-gl";
+import { captureHazardFeatures } from "@openmapx/integration-framework";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
+import { EMPTY_FEATURE_COLLECTION } from "@/integration-api/map/mapLayerGroup";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import type { WildfirePopupController } from "../popup-controller";
 import {
   buildEffisPopupModel,
   EFFIS_BURNED_AREA_STYLE,
-  renderWildfirePopupModel,
   type WildfirePopupTranslate,
 } from "../presentation";
 import type { EffisProperties, WildfireFeatureCollection } from "../types";
-import { usePolygonLayerLifecycle } from "./nifc-perimeter-layer";
+import { type FillPaint, type LinePaint, usePolygonLayerLifecycle } from "./polygon-layer";
 import { useViewportWildfireSource } from "./use-viewport-wildfire-source";
 
 export const EFFIS_SOURCE = "openmapx-wildfires-effis-source";
 export const EFFIS_FILL = "openmapx-wildfires-effis-fill";
 export const EFFIS_LINE = "openmapx-wildfires-effis-line";
 
-const EMPTY_COLLECTION: GeoJSON.FeatureCollection = {
-  type: "FeatureCollection",
-  features: [],
-};
-
-const EFFIS_FILL_PAINT: Extract<maplibregl.AddLayerObject, { type: "fill" }>["paint"] = {
+const EFFIS_FILL_PAINT: FillPaint = {
   "fill-color": EFFIS_BURNED_AREA_STYLE.fillColor,
   "fill-opacity": EFFIS_BURNED_AREA_STYLE.fillOpacity,
 };
 
-const EFFIS_LINE_PAINT: Extract<maplibregl.AddLayerObject, { type: "line" }>["paint"] = {
+const EFFIS_LINE_PAINT: LinePaint = {
   "line-color": EFFIS_BURNED_AREA_STYLE.lineColor,
   "line-width": EFFIS_BURNED_AREA_STYLE.lineWidth,
   "line-dasharray": EFFIS_BURNED_AREA_STYLE.lineDasharray,
@@ -47,6 +44,8 @@ export function EffisBurnedAreaLayer({ active, popupController }: EffisBurnedAre
   const env = useEnv();
   const locale = useLocale();
   const translate = useTranslations("wildfires") as WildfirePopupTranslate;
+  const resolveContributors = useContributorResolver();
+  useRenderedMapAttributions("wildfires-effis", [EFFIS_FILL, EFFIS_LINE], active);
   const bridge = useGeoJsonSourceDataBridge({
     mapRef: mapContext.mapRef,
     mapReady: mapContext.mapReady,
@@ -55,22 +54,26 @@ export function EffisBurnedAreaLayer({ active, popupController }: EffisBurnedAre
   });
   const publish = useCallback(
     (data: WildfireFeatureCollection) => {
-      bridge.publish([{ sourceId: EFFIS_SOURCE, data }]);
+      const captured = captureHazardFeatures(data, resolveContributors, (feature) =>
+        Array.isArray(feature.properties?.sources)
+          ? feature.properties.sources
+          : typeof feature.properties?.provider === "string"
+            ? [feature.properties.provider]
+            : [],
+      );
+      bridge.publish([{ sourceId: EFFIS_SOURCE, data: captured }]);
     },
-    [bridge.publish],
+    [bridge.publish, resolveContributors],
   );
   const clear = useCallback(() => {
-    bridge.reset([{ sourceId: EFFIS_SOURCE, data: EMPTY_COLLECTION }]);
+    bridge.reset([{ sourceId: EFFIS_SOURCE, data: EMPTY_FEATURE_COLLECTION }]);
   }, [bridge.reset]);
-  const popupHtml = useCallback(
-    (properties: Record<string, unknown>) => {
-      if (properties.kind !== "satellite-burned-area") return null;
-      return renderWildfirePopupModel(
-        buildEffisPopupModel(properties as unknown as EffisProperties, locale),
-        translate,
-      );
-    },
-    [locale, translate],
+  const popupModel = useCallback(
+    (properties: Record<string, unknown>) =>
+      properties.kind === "satellite-burned-area"
+        ? buildEffisPopupModel(properties as unknown as EffisProperties, locale)
+        : null,
+    [locale],
   );
 
   const aboveMinZoom = useViewportWildfireSource({
@@ -89,10 +92,12 @@ export function EffisBurnedAreaLayer({ active, popupController }: EffisBurnedAre
     lineId: EFFIS_LINE,
     fillOrder: 10,
     lineOrder: 11,
+    minZoom: 3,
     fillPaint: EFFIS_FILL_PAINT,
     linePaint: EFFIS_LINE_PAINT,
     popupController,
-    popupHtml,
+    popupModel,
+    translate,
   });
 
   return null;

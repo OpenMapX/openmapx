@@ -4,6 +4,10 @@ import {
   navOptionsForMode,
   prepareRouteMatcher,
   processFix,
+  readRouteMatcherCounters,
+  resetRouteMatcherCounters,
+  routeFingerprint,
+  setRouteMatcherCounting,
 } from "@openmapx/core/navigation";
 import { groundSessionFixture } from "../../storage/testing/sessionFixture";
 import { GroundNavigationProcessor } from "./GroundNavigationProcessor";
@@ -369,6 +373,277 @@ describe("processGroundBatch cue selection", () => {
     expect((outcome.effects ?? []).filter((e) => e.kind === "speak")).toEqual([]);
     // The engine still progressed, so turning voice back on does not replay.
     expect((outcome.session as GroundMobileSession).cueLedger.spoken.length).toBeGreaterThan(0);
+  });
+});
+
+describe("GroundRouteCache retention across reloaded sessions", () => {
+  beforeEach(() => {
+    resetRouteMatcherCounters();
+    setRouteMatcherCounting(true);
+  });
+  afterEach(() => {
+    setRouteMatcherCounting(false);
+    resetRouteMatcherCounters();
+  });
+
+  const preparations = () => readRouteMatcherCounters().preparations;
+
+  /** What storage does on every load: validated, deep-copied, fresh arrays. */
+  function reloaded(current: GroundMobileSession): GroundMobileSession {
+    return structuredClone(current);
+  }
+
+  function withGeometry(
+    current: GroundMobileSession,
+    geometry: Array<[number, number]>,
+  ): GroundMobileSession {
+    const next = structuredClone(current);
+    next.payload.startPackage.route.geometry = geometry as never;
+    return next;
+  }
+
+  /** Runs one fix on a brand-new cache, the reference for any reuse. */
+  function cold(current: GroundMobileSession, fix: FixInput) {
+    return processGroundBatch({
+      session: structuredClone(current),
+      fixes: [fix],
+      nowMs: fix.timestampMs,
+      cache: new GroundRouteCache(),
+    });
+  }
+
+  it("prepares once for equal geometry delivered in a new array each time", () => {
+    const cache = new GroundRouteCache();
+    let current = session();
+    for (let index = 0; index < 8; index += 1) {
+      const outcome = processGroundBatch({
+        session: reloaded(current),
+        fixes: [fixAt(index, NOW + index * 1_000)],
+        nowMs: NOW + index * 1_000,
+        cache,
+      });
+      current = outcome.session as GroundMobileSession;
+    }
+
+    expect(preparations()).toBe(1);
+    expect(current.revision).toBe(session().revision + 8);
+  });
+
+  it("matches a cold cache after every reused call", () => {
+    const warm = new GroundRouteCache();
+    let reusedState = session();
+    let coldState = session();
+    for (let index = 0; index < 10; index += 1) {
+      const fix = fixAt(index, NOW + index * 1_000);
+      reusedState = processGroundBatch({
+        session: reloaded(reusedState),
+        fixes: [fix],
+        nowMs: fix.timestampMs,
+        cache: warm,
+      }).session as GroundMobileSession;
+      coldState = processGroundBatch({
+        session: reloaded(coldState),
+        fixes: [fix],
+        nowMs: fix.timestampMs,
+        cache: new GroundRouteCache(),
+      }).session as GroundMobileSession;
+      expect(reusedState).toEqual(coldState);
+    }
+  });
+
+  it("prepares again for a new session with identical geometry", () => {
+    const cache = new GroundRouteCache();
+    const first = session();
+    processGroundBatch({ session: first, fixes: [fixAt(1, NOW)], nowMs: NOW, cache });
+    const second = { ...reloaded(first), sessionId: "another-session" };
+    processGroundBatch({
+      session: second,
+      fixes: [fixAt(2, NOW + 1_000)],
+      nowMs: NOW + 1_000,
+      cache,
+    });
+
+    expect(preparations()).toBe(2);
+  });
+
+  it("prepares again when one interior coordinate changes beneath the same fingerprint", () => {
+    const cache = new GroundRouteCache();
+    const first = session();
+    const edited = withGeometry(first, structuredClone(first.payload.startPackage.route.geometry));
+    // A sub-metre edit (about 0.4 m) within the fingerprint's rounding: a
+    // fingerprint-keyed reuse would treat this as the same road.
+    edited.payload.startPackage.route.geometry[30][1] += 4e-6;
+    expect(routeFingerprint(edited.payload.startPackage.route.geometry)).toBe(
+      routeFingerprint(first.payload.startPackage.route.geometry),
+    );
+
+    processGroundBatch({ session: first, fixes: [fixAt(1, NOW)], nowMs: NOW, cache });
+    const fix = fixAt(2, NOW + 1_000);
+    const reused = processGroundBatch({
+      session: edited,
+      fixes: [fix],
+      nowMs: fix.timestampMs,
+      cache,
+    });
+
+    expect(preparations()).toBe(2);
+    expect(cache.matcherFor(edited).geometry[30]).toEqual(
+      edited.payload.startPackage.route.geometry[30],
+    );
+    expect(reused.session).toEqual(cold(edited, fix).session);
+  });
+
+  it("prepares again when the geometry gains or loses vertices", () => {
+    const cache = new GroundRouteCache();
+    const first = session();
+    const geometry = first.payload.startPackage.route.geometry as Array<[number, number]>;
+    processGroundBatch({ session: first, fixes: [fixAt(1, NOW)], nowMs: NOW, cache });
+
+    const shorter = withGeometry(first, geometry.slice(0, -1));
+    processGroundBatch({
+      session: shorter,
+      fixes: [fixAt(2, NOW + 1_000)],
+      nowMs: NOW + 1_000,
+      cache,
+    });
+    expect(preparations()).toBe(2);
+    expect(cache.matcherFor(shorter).geometry).toHaveLength(geometry.length - 1);
+
+    const longer = withGeometry(first, [...geometry, [8.68 + 60 * 0.001, 50.11]]);
+    processGroundBatch({
+      session: longer,
+      fixes: [fixAt(3, NOW + 2_000)],
+      nowMs: NOW + 2_000,
+      cache,
+    });
+    expect(preparations()).toBe(3);
+    expect(cache.matcherFor(longer).geometry).toHaveLength(geometry.length + 1);
+  });
+
+  it("prepares again after invalidate and on a cold cache", () => {
+    const cache = new GroundRouteCache();
+    const first = session();
+    processGroundBatch({ session: first, fixes: [fixAt(1, NOW)], nowMs: NOW, cache });
+    processGroundBatch({
+      session: reloaded(first),
+      fixes: [fixAt(2, NOW + 1_000)],
+      nowMs: NOW + 1_000,
+      cache,
+    });
+    expect(preparations()).toBe(1);
+
+    cache.invalidate();
+    processGroundBatch({
+      session: reloaded(first),
+      fixes: [fixAt(3, NOW + 2_000)],
+      nowMs: NOW + 2_000,
+      cache,
+    });
+    expect(preparations()).toBe(2);
+
+    processGroundBatch({
+      session: reloaded(first),
+      fixes: [fixAt(4, NOW + 3_000)],
+      nowMs: NOW + 3_000,
+      cache: new GroundRouteCache(),
+    });
+    expect(preparations()).toBe(3);
+  });
+
+  it("owns its geometry: later edits to an input array cannot poison the index", () => {
+    const cache = new GroundRouteCache();
+    const first = session();
+    processGroundBatch({ session: first, fixes: [fixAt(1, NOW)], nowMs: NOW, cache });
+    const owned = cache.matcherFor(first).geometry;
+    const snapshot = structuredClone(owned);
+    expect(owned).not.toBe(first.payload.startPackage.route.geometry);
+
+    // The caller edits the array it handed in; the retained copy is unaffected.
+    (first.payload.startPackage.route.geometry as Array<[number, number]>)[10][1] += 0.5;
+    expect(cache.matcherFor(reloaded(session())).geometry).toEqual(snapshot);
+    expect(preparations()).toBe(1);
+
+    // And the edited geometry is recognised as a different road, not waved
+    // through because the same array object came back.
+    processGroundBatch({
+      session: first,
+      fixes: [fixAt(2, NOW + 1_000)],
+      nowMs: NOW + 1_000,
+      cache,
+    });
+    expect(preparations()).toBe(2);
+    expect(cache.matcherFor(first).geometry[10][1]).toBeCloseTo(50.61);
+  });
+
+  it("does not mutate the session or route it was given", () => {
+    const frozen = structuredClone(session());
+    const deepFreeze = (value: unknown): void => {
+      if (value && typeof value === "object" && !Object.isFrozen(value)) {
+        Object.freeze(value);
+        for (const child of Object.values(value)) deepFreeze(child);
+      }
+    };
+    deepFreeze(frozen);
+    const before = structuredClone(frozen);
+    const cache = new GroundRouteCache();
+
+    for (let index = 0; index < 3; index += 1) {
+      processGroundBatch({
+        session: frozen,
+        fixes: [fixAt(index, NOW + index * 1_000)],
+        nowMs: NOW + index * 1_000,
+        cache,
+      });
+    }
+
+    expect(frozen).toEqual(before);
+    expect(preparations()).toBe(1);
+  });
+
+  it("uses the newest route metadata even when the geometry is reused", () => {
+    const cache = new GroundRouteCache();
+    const first = session();
+    processGroundBatch({ session: first, fixes: [fixAt(1, NOW)], nowMs: NOW, cache });
+
+    const changed = reloaded(first);
+    const route = changed.payload.startPackage.route as unknown as {
+      distance: number;
+      duration: number;
+      steps: Array<{ distance: number; duration: number }>;
+      segmentSpeedLimits: number[];
+    };
+    route.distance = 5_300;
+    route.duration = 480;
+    route.steps[0].distance = 1_300;
+    route.steps[0].duration = 100;
+    route.steps[1].distance = 4_000;
+    route.steps[1].duration = 380;
+    route.segmentSpeedLimits = Array.from({ length: 59 }, () => 30);
+
+    const fixes = Array.from({ length: 25 }, (_, index) =>
+      fixAt(index + 2, NOW + (index + 1) * 1_000),
+    );
+    const reused = processGroundBatch({ session: changed, fixes, nowMs: NOW + 26_000, cache });
+    expect(preparations()).toBe(1);
+    const fresh = processGroundBatch({
+      session: structuredClone(changed),
+      fixes,
+      nowMs: NOW + 26_000,
+      cache: new GroundRouteCache(),
+    });
+
+    expect(reused).toEqual(fresh);
+    expect((reused.session as GroundMobileSession).payload.currentSpeedLimit).toBe(30);
+
+    // The metadata change is observable: the same fixes on the original route
+    // give a different result, so reusing the old route would have been caught.
+    const original = processGroundBatch({
+      session: reloaded(first),
+      fixes,
+      nowMs: NOW + 26_000,
+      cache: new GroundRouteCache(),
+    });
+    expect(original.session).not.toEqual(reused.session);
   });
 });
 

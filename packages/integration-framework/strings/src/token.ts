@@ -1,6 +1,6 @@
 import deShared from "../locales/de.json" with { type: "json" };
 import enShared from "../locales/en.json" with { type: "json" };
-import type { I18nToken, LocaleStrings } from "./types";
+import type { I18nToken, LocaleStrings, WallClockValue } from "./types";
 
 /**
  * The framework's shared-vocabulary catalog. Indexed by locale code; each
@@ -39,6 +39,17 @@ export function money(amount: number, currency: string, minDigits?: number): I18
 }
 
 /**
+ * A wall-clock date (`2026-12-24`), date and time of day
+ * (`2026-12-24T14:00`) or time of day alone (`14:00`, for the end of a period
+ * on the day it starts) as a placeholder value, formatted by the client in the
+ * reader's locale but never moved into the reader's time zone. The caller
+ * reads the instant in the place's own zone first.
+ */
+export function wallClock(value: string): WallClockValue {
+  return { $wallClock: value };
+}
+
+/**
  * Typed accessors for the framework's shared catalog. Use these wherever an
  * integration's mapper wants to emit cross-integration vocabulary (Source,
  * Last Updated, Open, etc.). Editor autocomplete prevents typos.
@@ -72,6 +83,8 @@ export const sharedT = {
     access: { $t: "shared.row.access" } as I18nToken,
     address: { $t: "shared.row.address" } as I18nToken,
     operator: { $t: "shared.row.operator" } as I18nToken,
+    payment: { $t: "shared.row.payment" } as I18nToken,
+    amenities: { $t: "shared.row.amenities" } as I18nToken,
   },
   value: {
     yes: { $t: "shared.value.yes" } as I18nToken,
@@ -86,3 +99,33 @@ export const sharedT = {
     public: { $t: "shared.value.public" } as I18nToken,
   },
 } as const;
+
+/** The vocabularies the shared catalog labels value by value, each under `shared.<vocabulary>`. */
+export type SharedVocabulary = "payment" | "authentication" | "amenity";
+
+/** A code as words where no catalog names it: "fuel_additives" as "Fuel additives". */
+function humanizeCode(code: string): string {
+  const words = code.trim().replaceAll("_", " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/**
+ * A value of a shared vocabulary — a payment or authentication method, an
+ * amenity — as its shared label, or for a value the catalog does not name
+ * yet, the value in words, so a new upstream code never shows as a key.
+ */
+export function vocabularyLabel(vocabulary: SharedVocabulary, code: string): I18nToken | string {
+  return Object.hasOwn(enShared.shared[vocabulary], code)
+    ? { $t: `shared.${vocabulary}.${code}` }
+    : humanizeCode(code);
+}
+
+/** Each distinct value of a vocabulary list as its label, in the order given. */
+export function vocabularyLabels(
+  vocabulary: SharedVocabulary,
+  codes: readonly string[],
+): (I18nToken | string)[] {
+  return [...new Set(codes.filter((code) => code.trim() !== ""))].map((code) =>
+    vocabularyLabel(vocabulary, code),
+  );
+}

@@ -10,7 +10,7 @@ describe("useStopTimetable", () => {
   it("fetches the timetable for a stop on a given date", async () => {
     const envelope = {
       data: [{ tripId: "t1", line: "U2" }],
-      attributions: [{ name: "MOTIS" }],
+      attributions: [{ sourceId: "motis", name: "MOTIS" }],
       freshness: undefined,
     };
     const spy = vi.spyOn(apiClient, "get").mockResolvedValue(envelope as never);
@@ -20,7 +20,9 @@ describe("useStopTimetable", () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual(envelope.data);
+    expect(result.current.data).toEqual(
+      envelope.data.map((row) => ({ ...row, contributors: envelope.attributions })),
+    );
     expect(result.current.attributions).toEqual(envelope.attributions);
     expect(spy).toHaveBeenCalledWith("/api/integrations/transit/stops/ms%3Astop%201/timetable", {
       date: "2026-06-14",

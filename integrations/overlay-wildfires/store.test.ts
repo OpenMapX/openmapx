@@ -23,6 +23,7 @@ describe("useWildfireStore", () => {
       showEffisBurnedAreas: true,
       showNoaaSmoke: false,
       showHeatmap: false,
+      showLowConfidence: false,
       dayRange: 1,
       statuses: {
         firms: { ...IDLE_STATUS },
@@ -33,14 +34,22 @@ describe("useWildfireStore", () => {
     });
   });
 
-  it("starts with FIRMS, NIFC, and EFFIS visible while smoke and heatmap are opt-in", () => {
+  it("starts with FIRMS, NIFC, and EFFIS visible while smoke, heatmap and low-confidence detections are opt-in", () => {
     expect(MODULE_DEFAULTS).toMatchObject({
       showHotspots: true,
       showNifcPerimeters: true,
       showEffisBurnedAreas: true,
       showNoaaSmoke: false,
       showHeatmap: false,
+      showLowConfidence: false,
     });
+  });
+
+  it("turns low-confidence detections on and off", () => {
+    useWildfireStore.getState().setShowLowConfidence(true);
+    expect(useWildfireStore.getState().showLowConfidence).toBe(true);
+    useWildfireStore.getState().setShowLowConfidence(false);
+    expect(useWildfireStore.getState().showLowConfidence).toBe(false);
   });
 
   it("changes each source visibility without changing the other source choices", () => {

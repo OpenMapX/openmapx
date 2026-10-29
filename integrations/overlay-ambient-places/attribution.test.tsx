@@ -1,20 +1,15 @@
 import { act, cleanup, render, waitFor } from "@testing-library/react";
+import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
-import manifest from "./manifest.json";
-import { AmbientPlacesLayer } from "./map-layer";
-import { useAmbientPlacesStore } from "./store";
+import { createFakeMap } from "@/test";
+import { AMBIENT_LABEL_LAYER, AmbientPlacesLayer } from "./map-layer";
 
-vi.mock("@openmapx/integration-framework/react", () => ({
-  useIntegrationRegistry: () => ({
-    get: () => manifest,
-    findDataSource: (id: string) => manifest.dataSources.find((source) => source.sourceId === id),
-  }),
-}));
+const fake = createFakeMap({ zoom: 16, styleLoaded: true });
+const mapRef = { current: fake.map };
 vi.mock("@/integration-api/map/MapContext", () => ({
-  useMap: () => ({ mapRef: { current: null }, mapReady: false }),
+  useMap: () => ({ mapRef, mapReady: true, styleVersion: 0 }),
 }));
-vi.mock("@/integration-api/map/useMapLayerGroup", () => ({ useMapLayerGroup: () => {} }));
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://fixture" }),
 }));
@@ -25,65 +20,181 @@ vi.mock("@/lib/useExploreReachResults", () => {
 vi.mock("next-intl", () => ({ useLocale: () => "de" }));
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  useAmbientPlacesStore.setState({ manifest: null, panelOpen: false, layerVisible: true });
+  fake.state.renderedFeatures.clear();
+  fake.state.layers.clear();
+  fake.state.sources.clear();
+  fake.state.handlers.clear();
+  fake.state.zoom = 16;
   useMapAttributionStore.setState({ byLayer: {} });
 });
-it("credits only published sources and clears credits when ambient places are hidden", async () => {
-  const now = new Date().toISOString();
-  const publication = {
-    version: 1 as const,
-    policyVersion: 2,
-    generation: "11111111-1111-4111-8111-111111111111",
-    publishedAt: now,
-    region: {
-      name: "Neuss",
-      bounds: [6.58, 50.89, 7.07, 51.31] as [number, number, number, number],
+const credits = () =>
+  Object.values(useMapAttributionStore.getState().byLayer)
+    .flat()
+    .map((entry) => entry.fullHtml)
+    .join(" ");
+const now = new Date().toISOString();
+const publication = {
+  version: 2 as const,
+  policyVersion: 2,
+  generation: "11111111-1111-4111-8111-111111111111",
+  publishedAt: now,
+  region: { name: "Neuss", bounds: [6.58, 50.89, 7.07, 51.31] as [number, number, number, number] },
+  placeCount: 1,
+  enabled: true,
+  sources: {
+    osm: { region: "germany", epoch: "one", publishedAt: now, count: 1 },
+    overture: { region: "germany", release: "2026-10-01.0", publishedAt: now, count: 1 },
+  },
+};
+function feature(): MapGeoJSONFeature {
+  return {
+    type: "Feature",
+    source: "ambient-places-source",
+    sourceLayer: "ambient_places",
+    geometry: { type: "Point", coordinates: [6.7, 51.2] },
+    properties: {
+      id: "overture:fixture",
+      gers_id: "fixture",
+      name: "Cafe",
+      name_de: "Kaffee",
+      category: "cafe",
+      min_zoom: 15,
+      sources: "overture",
+      format_version: 2,
+      _mapAttributions: JSON.stringify([
+        { sourceId: "meta-places", name: "Hidden name source" },
+        { sourceId: "microsoft-places", name: "Captured German name" },
+      ]),
+      field_contributors: JSON.stringify({
+        name: [{ sourceId: "meta-places", name: "Hidden name source" }],
+        "names.de": [{ sourceId: "microsoft-places", name: "Captured German name" }],
+        gersId: [{ sourceId: "overture", name: "Captured Overture" }],
+      }),
     },
-    placeCount: 1,
-    enabled: true,
-    sources: {
-      osm: { region: "europe/germany", epoch: "one", publishedAt: now, count: 1 },
-      overture: null,
+    layer: {
+      id: AMBIENT_LABEL_LAYER,
+      type: "symbol",
+      layout: { "text-field": "Kaffee", "text-size": 12 },
+      paint: { "text-opacity": 1 },
     },
-  };
-  // The network is the only asynchronous boundary: source selection and the
-  // attribution hook/store remain real so a missing hook export cannot hide.
+  } as MapGeoJSONFeature;
+}
+function start() {
   vi.stubGlobal(
     "fetch",
-    vi.fn().mockResolvedValue({ ok: true, json: async () => ({ manifest: publication }) }),
+    vi.fn(async () => ({ ok: true, json: async () => ({ manifest: publication }) })),
   );
-  useAmbientPlacesStore.setState({ manifest: publication, panelOpen: true, layerVisible: true });
-  const view = render(<AmbientPlacesLayer />);
-  const credits = () => Object.values(useMapAttributionStore.getState().byLayer).flat().join(" ");
-  await waitFor(() => expect(credits()).toContain("OpenStreetMap contributors"));
-  await waitFor(() => expect(useAmbientPlacesStore.getState().loading).toBe(false));
-  expect(credits()).toContain("https://www.openstreetmap.org/copyright");
-  expect(credits()).not.toContain("Overture");
+  return render(<AmbientPlacesLayer />);
+}
+it("credits the actual placed locale, and removes credits for unrendered and hidden content", async () => {
+  const view = start();
+  await waitFor(() => expect(fake.map.getLayer(AMBIENT_LABEL_LAYER)).toBeTruthy());
+  expect(credits()).toBe("");
+  act(() => {
+    fake.setRenderedFeatures(AMBIENT_LABEL_LAYER, [feature()]);
+    fake.emit("render");
+  });
+  await waitFor(() => expect(credits()).toContain("Captured German name"));
+  expect(credits()).not.toContain("Hidden name source");
   expect(credits()).not.toContain("Foursquare");
-
-  act(() =>
-    useAmbientPlacesStore.setState({
-      manifest: {
-        ...publication,
-        sources: {
-          ...publication.sources,
-          overture: {
-            region: "europe/germany",
-            release: "2026-09-23.0",
-            publishedAt: now,
-            count: 1,
-          },
-        },
-      },
-    }),
-  );
-  await waitFor(() => expect(credits()).toContain("Overture Maps"));
-  expect(credits()).toContain("OpenStreetMap contributors");
-  expect(credits()).toContain("Data from Foursquare. Copyright 2024 Foursquare Labs, Inc.");
-  expect(credits()).toContain("Apache 2.0");
-
-  act(() => useAmbientPlacesStore.setState({ layerVisible: false }));
+  act(() => {
+    const transparent = feature();
+    transparent.layer.paint = { "text-opacity": 0 };
+    fake.setRenderedFeatures(AMBIENT_LABEL_LAYER, [transparent]);
+    fake.emit("render");
+  });
   await waitFor(() => expect(credits()).toBe(""));
+  act(() => {
+    fake.setRenderedFeatures(AMBIENT_LABEL_LAYER, []);
+    fake.emit("render");
+  });
+  await waitFor(() => expect(credits()).toBe(""));
+  act(() => {
+    fake.setRenderedFeatures(AMBIENT_LABEL_LAYER, [feature()]);
+    fake.emit("render");
+  });
+  await waitFor(() => expect(credits()).toContain("Captured German name"));
+  act(() => {
+    fake.state.zoom = 12;
+    fake.emit("idle");
+  });
+  await waitFor(() => expect(credits()).toBe(""));
+  act(() => {
+    fake.state.zoom = 16;
+    fake.emit("idle");
+  });
+  await waitFor(() => expect(credits()).toContain("Captured German name"));
   view.unmount();
+  await waitFor(() => expect(credits()).toBe(""));
+});
+it("removes the credits of rendered places when a refreshed publication is disabled", async () => {
+  // Capture the one-minute discovery timer; testing-library's own polling needs real timers.
+  const refreshTicks: (() => void)[] = [];
+  const realSetInterval = globalThis.setInterval;
+  const interval = vi.spyOn(globalThis, "setInterval").mockImplementation(((
+    handler: () => void,
+    delay?: number,
+  ) => {
+    if (delay !== 60_000) return realSetInterval(handler, delay);
+    refreshTicks.push(handler);
+    return 0 as unknown as ReturnType<typeof setInterval>;
+  }) as typeof setInterval);
+  try {
+    let next: unknown = publication;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => ({ manifest: next }) })),
+    );
+    render(<AmbientPlacesLayer />);
+    await waitFor(() => expect(fake.map.getLayer(AMBIENT_LABEL_LAYER)).toBeTruthy());
+    act(() => {
+      fake.setRenderedFeatures(AMBIENT_LABEL_LAYER, [feature()]);
+      fake.emit("render");
+    });
+    await waitFor(() => expect(credits()).toContain("Captured German name"));
+
+    next = { ...publication, enabled: false };
+    await act(async () => {
+      refreshTicks.at(-1)?.();
+    });
+    await waitFor(() => expect(fake.map.getLayer(AMBIENT_LABEL_LAYER)).toBeUndefined());
+    expect(credits()).toBe("");
+  } finally {
+    interval.mockRestore();
+  }
+});
+it("credits a suppressed duplicate only through the actual rendered matched basemap feature", async () => {
+  fake.map.addLayer({
+    id: "base-poi",
+    type: "symbol",
+    source: "basemap",
+    "source-layer": "poi",
+    layout: { "text-field": "Kaffee" },
+  });
+  const source = feature();
+  vi.spyOn(fake.map, "querySourceFeatures").mockReturnValue([source]);
+  const base = {
+    ...source,
+    source: "basemap",
+    sourceLayer: "poi",
+    id: 7,
+    properties: { name: "Kaffee", class: "cafe" },
+    layer: {
+      id: "base-poi",
+      type: "symbol",
+      layout: { "text-field": "Kaffee" },
+      paint: { "text-opacity": 1 },
+    },
+  } as MapGeoJSONFeature;
+  fake.setRenderedFeatures("base-poi", [base]);
+  start();
+  act(() => fake.emit("idle"));
+  await waitFor(() => expect(credits()).toContain("Captured German name"));
+  act(() => {
+    fake.setRenderedFeatures("base-poi", []);
+    fake.emit("render");
+  });
+  await waitFor(() => expect(credits()).toBe(""));
 });

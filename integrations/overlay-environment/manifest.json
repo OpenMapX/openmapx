@@ -49,29 +49,74 @@
       "sourceId": "opensensemap",
       "name": "openSenseMap",
       "url": "https://api.opensensemap.org/",
-      "license": "PDDL 1.0 (data); MIT (code)",
-      "licenseUrl": "https://opendatacommons.org/licenses/pddl/1-0/",
       "commercialUse": "yes",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://sensebox.de/en/privacy.html",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "openSenseMap database/data",
+            "license": {
+              "kind": "spdx",
+              "expression": "PDDL-1.0"
+            }
+          },
+          {
+            "scope": "software",
+            "subject": "openSenseMap code",
+            "license": {
+              "kind": "spdx",
+              "expression": "MIT"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "PDDL-1.0 (data); MIT (code)",
+            "url": "https://opendatacommons.org/licenses/pddl/1-0/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "sensor-community",
       "name": "Sensor.Community",
       "url": "https://sensor.community/",
-      "license": "DbCL 1.0",
-      "licenseUrl": "https://opendatacommons.org/licenses/dbcl/1-0/",
       "commercialUse": "yes",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://sensor.community/en/privacy-terms/",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Sensor.Community material",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:sensor-community",
+              "id": "LicenseRef-DbCL-1.0",
+              "name": "Database Contents License 1.0",
+              "url": "https://opendatacommons.org/licenses/dbcl/1-0/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "DbCL 1.0",
+            "url": "https://opendatacommons.org/licenses/dbcl/1-0/"
+          }
+        ]
+      }
     }
   ]
 }

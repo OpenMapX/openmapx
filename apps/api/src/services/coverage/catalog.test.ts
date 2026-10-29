@@ -1,4 +1,5 @@
 import type { IntegrationManifest, LoadedIntegration } from "@openmapx/integration-framework";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it } from "vitest";
 import { buildCoverageCatalog } from "./catalog.js";
 
@@ -24,7 +25,7 @@ const baseSource = {
   sourceId: "fixture-source",
   name: "Fixture source",
   url: "https://example.com/source",
-  license: "Recorded license",
+  licensing: licensingFromDeclaration("Recorded license", undefined, "Fixture source"),
   providerCountry: "DE",
   providerPrivacyUrl: "https://example.com/privacy",
 };

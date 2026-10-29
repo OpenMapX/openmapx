@@ -209,7 +209,7 @@ export const motisGeocodingService: GeocodingProviderImpl = {
         const defaultArea = match.areas.find((a) => a.default === true);
         const city = defaultArea?.name ?? "";
 
-        return { address, city };
+        return { address, city, sourceIds: sourceIdsFor(inst) };
       } catch {
         // Try next instance
       }

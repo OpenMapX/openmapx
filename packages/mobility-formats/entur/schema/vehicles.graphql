@@ -1,0 +1,653 @@
+# Generated schema snapshot from https://api.entur.io/realtime/v2/vehicles/graphql
+# Data made available by Entur AS under NLOD-2.0. See ../README.md.
+
+"""
+This directive allows results to be deferred during execution
+"""
+directive @defer(
+  """
+  Deferred behaviour is controlled by this argument
+  """
+  if: Boolean! = true
+
+  """
+  A unique label that represents the fragment being deferred
+  """
+  label: String
+) on FRAGMENT_SPREAD | INLINE_FRAGMENT
+
+"""
+This directive disables error propagation when a non nullable field returns null for the given operation.
+"""
+directive @experimental_disableErrorPropagation on MUTATION | QUERY | SUBSCRIPTION
+
+type AffectedLine {
+  " The part of this line's geometry the situation affects. A line has many journey\n patterns, so this is one representative pattern rather than the line as a whole:\n with stops, the span between the first and last affected stop on the first pattern\n they locate on; without stops - meaning the line is affected as a whole - the entire\n route of the line's longest pattern.\n Null when the line has no pattern geometry, when exactly one stop is affected (a\n point is not a span), or when the affected stops locate on none of its patterns."
+  affectedPointsOnLink: PointsOnLink
+  line: Line
+  stops: [AffectedStop]
+}
+
+type AffectedStop {
+  stop: Stop
+  stopConditions: [StopConditionEnumeration]
+}
+
+type AffectedVehicleJourney {
+  " The part of this journey's geometry the situation affects: the span between the first\n and last affected stop, or - when the situation names no stops at all, meaning the\n journey is affected as a whole - the journey's entire route. An empty `stops` list is\n what tells those two cases apart.\n Null when the journey has no pattern geometry, when exactly one stop is affected (a\n point is not a span), or when any affected stop cannot be located on the route - a\n partial span would draw a confident line over the wrong part of it.\n A `datedServiceJourney` the planned data could not resolve - including one whose ref is\n really a ServiceJourney id, which some producers publish in that slot - is still used as\n a journey id here, so this can carry geometry where `datedServiceJourney.serviceJourney`\n is null. The ref itself is left exactly as the producer sent it."
+  affectedPointsOnLink: PointsOnLink
+  datedServiceJourney: DatedServiceJourney
+
+  """
+  Context for display. A journey entry is scoped to the journey it names, never to this line.
+  """
+  line: Line
+  operator: Operator
+  serviceJourney: ServiceJourney
+  stops: [AffectedStop]
+}
+
+type Affects {
+  " Every line the situation names as affected in its own right, with the stops it is\n affected at. A line named only as context for an affected journey is not here - it is\n on that journey's entry."
+  affectedLines: [AffectedLine]
+  operators: [Operator]
+  stopPlaces: [Stop]
+  stopPoints: [Stop]
+
+  " The journey-to-stops pairing SIRI carries: a situation is often tagged on a journey\n AND the stops it is affected at, and is only relevant to a traveller whose trip visits\n them. Every journey the situation names appears here, so this is the only place to read\n them from - there is no flat serviceJourneys list beside it."
+  vehicleJourneys: [AffectedVehicleJourney]
+  vehicleModes: [VehicleModeEnumeration]
+}
+
+input BoundingBox {
+  maxLat: Float!
+  maxLon: Float!
+  minLat: Float!
+  minLon: Float!
+}
+
+type Call {
+  actualArrivalTime: DateTime
+  actualArrivalTimeEpochSecond: Float
+  actualDepartureTime: DateTime
+  actualDepartureTimeEpochSecond: Float
+  aimedArrivalTime: DateTime
+  aimedArrivalTimeEpochSecond: Float
+  aimedDepartureTime: DateTime
+  aimedDepartureTimeEpochSecond: Float
+  arrivalBoardingActivity: String
+  callType: CallTypeEnumeration
+  cancellation: Boolean
+  departureBoardingActivity: String
+  expectedArrivalTime: DateTime
+  expectedArrivalTimeEpochSecond: Float
+  expectedDepartureTime: DateTime
+  expectedDepartureTimeEpochSecond: Float
+  forBoarding: Boolean
+  occupancyStatus: OccupancyStatus
+  order: Int
+
+  " Situations affecting this stop while the vehicle is here. A situation on a quay that\n ends before the vehicle arrives is not included. A situation affecting several of the\n journey's stops is reported against every one of them."
+  situations: [Situation]
+  stopPoint: Stop
+}
+
+enum CallTypeEnumeration {
+  ESTIMATED
+  RECORDED
+}
+
+type Codespace {
+  codespaceId: String!
+}
+
+"""
+Java ZonedDateTime as scalar.
+"""
+scalar DateTime
+
+type DatedServiceJourney {
+  """
+  ID that defines this journey
+  """
+  id: String!
+
+  """
+  Calendar date (yyyy-MM-dd) of the operating day, when known from the planned data
+  """
+  operatingDay: String
+  serviceJourney: ServiceJourney
+}
+
+"""
+Java Duration as scalar - e.g. "PT1M".
+"""
+scalar Duration
+
+type EstimatedTimetableUpdate {
+  calls: [Call]
+  cancellation: Boolean
+  codespace: Codespace
+  datedServiceJourney: DatedServiceJourney
+  destinationName: String
+  destinationRef: String
+  direction: String
+  expiration: DateTime
+  expirationEpochSecond: Float
+  lastUpdated: DateTime
+  lastUpdatedEpochSecond: Float
+  line: Line
+  mode: VehicleModeEnumeration
+  monitored: Boolean
+  occupancyStatus: OccupancyStatus
+  operator: Operator
+  originName: String
+  originRef: String
+  serviceJourney: ServiceJourney
+
+  " Situations affecting this journey as a whole: those naming the journey, its dated\n journey or its line and overlapping the journey. A situation reported against one of\n the journey's calls is not repeated here, so select calls { situations } as well to\n see every disruption affecting this journey. Closed situations are never included."
+  situations: [Situation]
+  vehicleId: String
+
+  """
+  Reported status of the vehicle
+  """
+  vehicleStatus: VehicleStatusEnumeration
+}
+
+type InfoLink {
+  labels: [TranslatedString]
+  uri: String
+}
+
+type Line {
+  lineName: String
+  lineRef: String
+
+  """
+  The line's colours from NeTEx. Null when the line publishes none.
+  """
+  presentation: Presentation
+  publicCode: String
+}
+
+type Location {
+  latitude: Float!
+  longitude: Float!
+}
+
+type MonitoredCall {
+  order: Int
+  stopPointRef: String
+  vehicleAtStop: Boolean
+}
+
+enum OccupancyEnumeration {
+  FEW_SEATS_AVAILABLE
+  FULL
+  MANY_SEATS_AVAILABLE
+  NOT_ACCEPTING_PASSENGERS
+  SEATS_AVAILABLE
+  STANDING_AVAILABLE
+  UNKNOWN
+}
+
+enum OccupancyStatus {
+  """
+  The vehicle or carriage can currently accommodate only standing passengers and has limited
+  space for them. There isn't a big difference between this and `full` so it's possible to
+  handle them as the same value, if one wants to limit the number of different values.
+  SIRI nordic profile: merge into `standingRoomOnly`.
+  """
+  crushedStandingRoomOnly
+
+  """
+  The vehicle is considered empty by most measures, and has few or no passengers onboard, but is
+  still accepting passengers. There isn't a big difference between this and `manySeatsAvailable`
+  so it's possible to handle them as the same value, if one wants to limit the number of different
+  values.
+  SIRI nordic profile: merge these into `manySeatsAvailable`.
+  """
+  empty
+
+  """
+  The vehicle or carriage has a few seats available.
+  SIRI nordic profile: less than ~50% of seats available.
+  """
+  fewSeatsAvailable
+
+  """
+  The vehicle or carriage is considered full by most measures, but may still be allowing
+  passengers to board.
+  """
+  full
+
+  """
+  The vehicle or carriage has a large number of seats available.
+  SIRI nordic profile: more than ~50% of seats available.
+  """
+  manySeatsAvailable
+
+  """
+  The vehicle or carriage doesn't have any occupancy data available.
+  """
+  noData
+
+  """
+  The vehicle or carriage has no seats or standing room available.
+  SIRI nordic profile: if vehicle/carriage is not in use / unavailable, or passengers are only
+  allowed to alight due to e.g. crowding.
+  """
+  notAcceptingPassengers
+
+  """
+  The vehicle or carriage has seats available. Deprecated in SIRI 2.1
+  """
+  seatsAvailable
+
+  """
+  The vehicle or carriage has no seats available. Deprecated in SIRI 2.1
+  """
+  standingAvailable
+
+  """
+  The vehicle or carriage only has standing room available.
+  SIRI nordic profile: less than ~10% of seats available.
+  """
+  standingRoomOnly
+}
+
+type Operator {
+  name: String
+  operatorRef: String!
+}
+
+type PointsOnLink {
+  length: Float
+  points: String
+}
+
+"""
+A line's colours as published in NeTEx, with no defaulting or normalisation. Mirrors Journey Planner's Line.presentation.
+"""
+type Presentation {
+  """
+  Six hex digits without '#', e.g. 76A300. Null when the line publishes none.
+  """
+  colour: String
+
+  """
+  Six hex digits without '#'. Null when the line publishes none.
+  """
+  textColour: String
+}
+
+type ProgressBetweenStops {
+  linkDistance: Float
+  percentage: Float
+}
+
+type Query {
+  codespaces: [Codespace]
+
+  """
+  A dated service journey from the planned data, or null if the id is unknown.
+  """
+  datedServiceJourney(id: String!): DatedServiceJourney
+
+  """
+  Dated service journeys from the planned data. Results keep the order of `ids`, unknown ids are skipped.
+  """
+  datedServiceJourneys(ids: [String!]!): [DatedServiceJourney]
+  lines(codespaceId: String): [Line]
+  operators(codespaceId: String): [Operator]
+  serviceJourney(id: String!): ServiceJourney
+
+  " Looks up service journeys in the planned data. At least one of `ids`, `lineRef` or `codespaceId` is required.\n `ids` accepts ServiceJourney ids as well as DatedServiceJourney ids (resolved to the journey and its operating date);\n results keep the order of `ids`, unknown ids are skipped. `lineRef` and `codespaceId` further narrow the result."
+  serviceJourneys(codespaceId: String, ids: [String!], lineRef: String): [ServiceJourney]
+  situations(
+    codespaceId: String
+    datedServiceJourneyId: String
+    includeClosed: Boolean = false
+    lineRef: String
+
+    """
+    Only situations created longer ago than this, as Duration (e.g. `P30D`).
+    """
+    minAge: Duration
+    mode: VehicleModeEnumeration
+
+    """
+    When true, only situations where no validity period carries an end time.
+    """
+    openEnded: Boolean
+    operatorRef: String
+    reportType: String
+    serviceJourneyId: String
+    severity: SeverityEnumeration
+    situationNumbers: [String]
+
+    """
+    Matches affected stop points and stop places alike.
+    """
+    stopRef: String
+
+    """
+    When true, only situations that are valid at the time of the request.
+    """
+    validNow: Boolean
+  ): [Situation]
+  timetables(
+    cancellation: Boolean
+    codespaceId: String
+    datedServiceJourneyIds: [String]
+    lineRef: String
+    mode: VehicleModeEnumeration
+    monitored: Boolean
+    serviceJourneyIdAndDates: [ServiceJourneyIdAndDate]
+  ): [EstimatedTimetableUpdate] @deprecated(reason: "Experimental.")
+  vehicles(
+    boundingBox: BoundingBox
+    codespaceId: String
+
+    """
+    Date as in "Operating date" when realtime-updates are referenced by ServiceJourneyId + Date
+    """
+    date: String
+    datedServiceJourneyId: String
+    datedServiceJourneyIds: [String]
+
+    """
+    Include vehicles whose reported coordinates are known to be invalid (e.g. 0,0).
+    Such vehicles are excluded by default.
+    """
+    includeInvalidLocations: Boolean = false
+    lineName: String
+    lineRef: String
+
+    """
+    Maximum age of data in the response as Duration (e.g. `PT1M`). If lastUpdated is older than this, it will not be included in the response.
+    """
+    maxDataAge: Duration
+    mode: VehicleModeEnumeration
+    monitored: Boolean
+    operatorRef: String
+    serviceJourneyId: String
+    serviceJourneyIdAndDates: [ServiceJourneyIdAndDate]
+    vehicleId: String
+    vehicleIds: [String]
+  ): [VehicleUpdate]
+}
+
+type ServiceJourney {
+  """
+  Date as provided when realtime-updates are referenced by ServiceJourneyId + Date
+  """
+  date: String
+
+  """
+  ID that defines this journey
+  """
+  id: String!
+  pointsOnLink: PointsOnLink
+    @deprecated(reason: "Experimental - should not be used with subscription")
+  serviceJourneyId: String! @deprecated(reason: "Use 'id' instead.")
+}
+
+input ServiceJourneyIdAndDate {
+  """
+  Date as in "Operating date" when realtime-updates are referenced by ServiceJourneyId + Date.
+  """
+  date: String
+
+  """
+  ServiceJourneyId as referenced in planned data
+  """
+  id: String!
+}
+
+enum SeverityEnumeration {
+  noImpact
+  normal
+  severe
+  slight
+  undefined
+  unknown
+  verySevere
+  verySlight
+}
+
+type Situation {
+  advice: [TranslatedString]
+  affects: Affects
+
+  """
+  Time elapsed since creationTime. Null when creationTime is absent.
+  """
+  age: Duration
+  codespace: Codespace
+  creationTime: DateTime
+  description: [TranslatedString]
+  detail: [TranslatedString]
+
+  """
+  Null when the situation never expires.
+  """
+  expiration: DateTime
+  expirationEpochSecond: Float
+  infoLinks: [InfoLink]
+  keywords: [String]
+  lastUpdated: DateTime
+  lastUpdatedEpochSecond: Float
+
+  """
+  True when no validity period carries an end time.
+  """
+  openEnded: Boolean
+  participantRef: String
+  planned: Boolean
+  priority: Int
+  progress: WorkflowStatusEnumeration
+  reportType: String
+  severity: SeverityEnumeration
+  situationNumber: String!
+  sourceType: String
+  summary: [TranslatedString]
+  validityPeriods: [ValidityPeriod]
+
+  " The subscription stream is only eventually consistent: two concurrent updates\n to the same situation can be published in reverse version order. Clients should\n keep the highest version seen per situationNumber and discard a regression."
+  version: Int
+  versionedAtTime: DateTime
+}
+
+type Stop {
+  id: String!
+  location: Location
+  name: String
+}
+
+enum StopConditionEnumeration {
+  destination
+  exceptionalStop
+  notStopping
+  requestStop
+  startPoint
+}
+
+type Subscription {
+  situations(
+    """
+    Number of updates buffered before data is pushed. May be used in combination with bufferTime.
+    """
+    bufferSize: Int = 20
+
+    """
+    How long - in milliseconds - data is buffered before data is pushed. May be used in combination with bufferSize.
+    """
+    bufferTime: Int = 250
+    codespaceId: String
+    datedServiceJourneyId: String
+
+    " Defaults to true here (unlike Query.situations, which defaults to false):\n a live subscriber needs to observe a situation transitioning to\n progress: closed so it can remove it from display. One consequence:\n a new subscriber's initial snapshot also includes situations closed\n within the grace period, not just live ones."
+    includeClosed: Boolean = true
+    lineRef: String
+    minAge: Duration
+    mode: VehicleModeEnumeration
+    openEnded: Boolean
+    operatorRef: String
+    reportType: String
+    serviceJourneyId: String
+    severity: SeverityEnumeration
+    situationNumbers: [String]
+
+    """
+    Matches affected stop points and stop places alike.
+    """
+    stopRef: String
+    validNow: Boolean
+  ): [Situation] @deprecated(reason: "Experimental.")
+  timetables(
+    """
+    Number of updates buffered before data is pushed. May be used in combination with bufferTime.
+    """
+    bufferSize: Int = 20
+
+    """
+    How long - in milliseconds - data is buffered before data is pushed. May be used in combination with bufferSize.
+    """
+    bufferTime: Int = 250
+    cancellation: Boolean
+    codespaceId: String
+    datedServiceJourneyIds: [String]
+    lineRef: String
+    mode: VehicleModeEnumeration
+    monitored: Boolean
+    serviceJourneyIdAndDates: [ServiceJourneyIdAndDate]
+  ): [EstimatedTimetableUpdate] @deprecated(reason: "Experimental.")
+  vehicles(
+    boundingBox: BoundingBox
+
+    """
+    Number of updates buffered before data is pushed. May be used in combination with bufferTime.
+    """
+    bufferSize: Int = 20
+
+    """
+    How long - in milliseconds - data is buffered before data is pushed. May be used in combination with bufferSize.
+    """
+    bufferTime: Int = 250
+    codespaceId: String
+
+    """
+    Date as in "Operating date" when realtime-updates are referenced by ServiceJourneyId + Date
+    """
+    date: String
+    datedServiceJourneyId: String
+    datedServiceJourneyIds: [String]
+
+    """
+    Include vehicles whose reported coordinates are known to be invalid (e.g. 0,0).
+    Such vehicles are excluded by default.
+    """
+    includeInvalidLocations: Boolean = false
+    lineName: String
+    lineRef: String
+
+    """
+    Maximum age of data in the response as Duration (e.g. `PT1M`). If lastUpdated is older than this, it will not be included in the initial response.
+    """
+    maxDataAge: Duration
+    mode: VehicleModeEnumeration
+    monitored: Boolean
+    operatorRef: String
+    serviceJourneyId: String
+    serviceJourneyIdAndDates: [ServiceJourneyIdAndDate]
+    vehicleId: String
+    vehicleIds: [String]
+  ): [VehicleUpdate]
+}
+
+type TranslatedString {
+  language: String
+  value: String
+}
+
+type ValidityPeriod {
+  endTime: DateTime
+  startTime: DateTime
+}
+
+enum VehicleModeEnumeration {
+  AIR
+  BUS
+  COACH
+  FERRY
+  METRO
+  RAIL
+  TAXI
+  TRAM
+}
+
+enum VehicleStatusEnumeration {
+  ASSIGNED
+  AT_ORIGIN
+  CANCELLED
+  COMPLETED
+  IN_PROGRESS
+  OFF_ROUTE
+}
+
+type VehicleUpdate {
+  " Compass bearing in degrees. When the producer reports none, it is calculated from the\n vehicle's previous position; null until the vehicle has moved."
+  bearing: Float
+  codespace: Codespace
+  datedServiceJourney: DatedServiceJourney
+
+  """
+  The current delay in seconds - negative delay means ahead of schedule
+  """
+  delay: Float
+  destinationName: String
+  destinationRef: String
+  direction: String
+  expiration: DateTime
+  expirationEpochSecond: Float
+  heading: Float @deprecated(reason: "Use 'bearing''.")
+
+  """
+  Whether the vehicle is affected by traffic jams or other circumstances which may lead to further delays. If `null`, current status is unknown.
+  """
+  inCongestion: Boolean
+  lastUpdated: DateTime
+  lastUpdatedEpochSecond: Float
+  line: Line
+  location: Location
+  mode: VehicleModeEnumeration
+  monitored: Boolean
+  monitoredCall: MonitoredCall
+  occupancy: OccupancyEnumeration @deprecated(reason: "Use 'occupancyStatus'.")
+  occupancyStatus: OccupancyStatus
+  operator: Operator
+  originName: String
+  originRef: String
+  progressBetweenStops: ProgressBetweenStops
+  serviceJourney: ServiceJourney
+  speed: Float
+  vehicleId: String
+  vehicleRef: String @deprecated(reason: "Use 'vehicleId'.")
+
+  """
+  Reported status of the vehicle
+  """
+  vehicleStatus: VehicleStatusEnumeration
+}
+
+enum WorkflowStatusEnumeration {
+  approvedDraft
+  closed
+  closing
+  draft
+  open
+  pendingApproval
+  published
+}

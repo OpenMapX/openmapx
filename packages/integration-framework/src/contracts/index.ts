@@ -17,6 +17,15 @@ export {
   assertTransitProviderContract,
 } from "./assert-contract";
 export type {
+  BorderCrossing,
+  BorderCrossingMode,
+  BorderCrossingProgram,
+  BorderCrossingProvider,
+  BorderCrossingQuery,
+  BorderCrossingQueue,
+  BorderWaitStatus,
+} from "./border-crossing-provider.js";
+export type {
   Camera,
   CameraProvider,
   CameraQuery,
@@ -56,6 +65,7 @@ export type {
   FireDensityCell,
   FireInstrument,
   FirePixel,
+  FireQuery,
   HazardAlert,
   HazardsProvider,
   HazardsQuery,
@@ -68,7 +78,14 @@ export type {
   KnowledgeResult,
 } from "./knowledge-provider.js";
 export type {
-  DataSourceAttribution,
+  MessageSign,
+  MessageSignProvider,
+  MessageSignQuery,
+  MessageSignStatus,
+  MessageSignType,
+} from "./message-sign-provider.js";
+export type {
+  Attribution,
   DataSourceBranding,
   DataSourceDetail,
   DataSourceDetailSection,
@@ -88,6 +105,7 @@ export type {
   PricingPlanEntry,
 } from "./mobility-data-source-provider.js";
 export type {
+  OperationalBindingReason,
   OperationalEvidence,
   OperationalFeedCoverage,
   OperationalFeedEvidence,
@@ -152,6 +170,8 @@ export type {
 export type {
   LocalizedText,
   RoadConditionAttribution,
+  RoadConditionBinding,
+  RoadConditionBindingDetail,
   RoadConditionEffect,
   RoadConditionEvent,
   RoadConditionRoadRef,
@@ -163,6 +183,16 @@ export type {
   RoadFlowQuery,
   RoadFlowSegment,
 } from "./road-conditions-provider.js";
+export type {
+  PrecipitationType,
+  RoadSurfaceSensor,
+  RoadSurfaceState,
+  RoadWeatherAir,
+  RoadWeatherProvider,
+  RoadWeatherQuery,
+  RoadWeatherStation,
+  RoadWeatherValue,
+} from "./road-weather-provider.js";
 export { RoutingProviderError } from "./routing-provider";
 export type {
   DirectionsResult,
@@ -204,6 +234,12 @@ export type {
 } from "./search-nlp-provider.js";
 export type { SearchSuggestionProvider } from "./search-suggestion-provider.js";
 export type {
+  ServiceVehicle,
+  ServiceVehicleActivity,
+  ServiceVehicleProvider,
+  ServiceVehicleQuery,
+} from "./service-vehicle-provider.js";
+export type {
   StreetLevelCapabilities,
   StreetLevelCoverage,
   StreetLevelImage,
@@ -233,6 +269,7 @@ export type {
   CurrentWeather,
   DailyForecastPoint,
   HourlyForecastPoint,
+  WeatherForecastResponse,
   WeatherOptions,
   WeatherProvider,
   WeatherResponse,

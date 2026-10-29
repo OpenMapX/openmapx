@@ -11,6 +11,7 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { adminErrorMessage } from "@openmapx/core/api-admin-sdk";
 import { useState } from "react";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
 import { formatTransitAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
@@ -52,7 +53,7 @@ export function LockfileCard({ state }: { state: TransitStateSummary }) {
           size="small"
           color={hasLock ? "success" : "warning"}
           variant="outlined"
-          label={hasLock ? "locked" : "no lockfile"}
+          label={hasLock ? "locked" : "no pin"}
         />
         <Button
           size="small"
@@ -66,8 +67,8 @@ export function LockfileCard({ state }: { state: TransitStateSummary }) {
       </Stack>
       {!hasLock && (
         <Alert severity="warning" sx={{ mb: 1 }}>
-          No <code>infra/docker/transitous.lock.json</code> found. Run the bump CLI to pin the
-          catalog to a specific upstream ref before syncing.
+          The operations agent reports no Transitous pin, so syncing refuses to run. Every release
+          ships one: check the agent with <strong>Run diagnostics</strong> under Maintenance.
         </Alert>
       )}
       <Stack
@@ -153,7 +154,13 @@ export function LockfileCard({ state }: { state: TransitStateSummary }) {
               setConfirmOpen(false);
             },
             onError: (error) =>
-              showToast(error instanceof Error ? error.message : "Pin update failed", "error"),
+              showToast(
+                adminErrorMessage(
+                  error,
+                  error instanceof Error ? error.message : "Pin update failed",
+                ),
+                "error",
+              ),
           })
         }
       />

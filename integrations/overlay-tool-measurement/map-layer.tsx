@@ -6,12 +6,13 @@ import { area } from "@turf/area";
 import { lineString, polygon as turfPolygon } from "@turf/helpers";
 import { length } from "@turf/length";
 import type { MapMouseEvent } from "maplibre-gl";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { claimMapClick } from "@/integration-api/map/mapClickOwnership";
+import { EMPTY_FEATURE_COLLECTION, type MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useMeasurementStore } from "./store";
 
 const SOURCE_ID = "measurement-source";
@@ -176,6 +177,127 @@ function buildGeoJSON(
   return { lineGeoJSON, polygonGeoJSON, verticesGeoJSON, labelsGeoJSON };
 }
 
+function measurementGroup(measurement: GeoJSON.FeatureCollection): MapLayerGroup {
+  // `route-markers`, not an overlay band: the ruler is the user's active
+  // in-progress edit, drawn above the base labels exactly like the route's
+  // own waypoint pins, so vertices and distance labels stay legible over
+  // any road/place text underneath.
+  return {
+    sources: {
+      [SOURCE_ID]: { type: "geojson", data: measurement },
+      // The rubber band follows the cursor and is pushed through the data bridge.
+      [RUBBERBAND_SOURCE]: { type: "geojson", data: EMPTY_FEATURE_COLLECTION },
+    },
+    layers: [
+      {
+        id: POLYGON_FILL_LAYER,
+        type: "fill",
+        source: SOURCE_ID,
+        filter: ["==", "$type", "Polygon"],
+        slot: "route-markers",
+        order: 10,
+        paint: { "fill-color": PRIMARY_BLUE, "fill-opacity": 0.1 },
+      },
+      // White casing for contrast.
+      {
+        id: LINE_CASING_LAYER,
+        type: "line",
+        source: SOURCE_ID,
+        filter: ["==", "$type", "LineString"],
+        slot: "route-markers",
+        order: 11,
+        paint: { "line-color": "#FFFFFF", "line-width": 6, "line-opacity": 1 },
+        layout: { "line-cap": "round", "line-join": "round" },
+      },
+      {
+        id: LINE_LAYER,
+        type: "line",
+        source: SOURCE_ID,
+        filter: ["==", "$type", "LineString"],
+        slot: "route-markers",
+        order: 12,
+        paint: { "line-color": PRIMARY_BLUE, "line-width": 3 },
+        layout: { "line-cap": "round", "line-join": "round" },
+      },
+      {
+        id: POLYGON_OUTLINE_LAYER,
+        type: "line",
+        source: SOURCE_ID,
+        filter: ["==", "$type", "Polygon"],
+        slot: "route-markers",
+        order: 13,
+        paint: { "line-color": PRIMARY_BLUE, "line-width": 3 },
+        layout: { "line-cap": "round", "line-join": "round" },
+      },
+      {
+        id: RUBBERBAND_LAYER,
+        type: "line",
+        source: RUBBERBAND_SOURCE,
+        slot: "route-markers",
+        order: 14,
+        paint: {
+          "line-color": PRIMARY_BLUE,
+          "line-width": 2,
+          "line-dasharray": [4, 4],
+          "line-opacity": 0.6,
+        },
+        layout: { "line-cap": "round" },
+      },
+      {
+        id: VERTICES_LAYER,
+        type: "circle",
+        source: SOURCE_ID,
+        filter: ["==", "$type", "Point"],
+        slot: "route-markers",
+        order: 15,
+        paint: {
+          "circle-radius": [
+            "case",
+            ["==", ["get", "type"], "segment"],
+            0,
+            ["==", ["get", "type"], "total"],
+            0,
+            ["==", ["get", "type"], "area"],
+            0,
+            ["==", ["get", "isFirst"], true],
+            6,
+            5,
+          ],
+          "circle-color": "#FFFFFF",
+          "circle-stroke-color": PRIMARY_BLUE,
+          "circle-stroke-width": 2,
+        },
+      },
+      {
+        id: LABELS_LAYER,
+        type: "symbol",
+        source: SOURCE_ID,
+        filter: ["has", "label"],
+        slot: "route-markers",
+        order: 16,
+        layout: {
+          "text-field": ["get", "label"],
+          "text-size": [
+            "case",
+            ["any", ["==", ["get", "type"], "total"], ["==", ["get", "type"], "area"]],
+            14,
+            12,
+          ],
+          "text-font": ["Noto Sans Bold"],
+          "text-offset": [0, -1.2],
+          "text-allow-overlap": true,
+          "text-ignore-placement": true,
+        },
+        paint: {
+          "text-color": PRIMARY_BLUE,
+          "text-halo-color": "#FFFFFF",
+          "text-halo-width": 2,
+        },
+      },
+    ],
+  };
+}
+
 export function MeasurementLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const isActive = useMeasurementStore((s) => s.isActive);
@@ -202,213 +324,27 @@ export function MeasurementLayer() {
     };
   }, [isActive]);
 
-  // Set up sources and layers
-  useEffect(() => {
-    void styleVersion;
-    const map = mapRef.current;
-    if (!map || !mapReady || !isActive) return;
-
-    const setup = () => {
-      if (map.getSource(SOURCE_ID)) return;
-
-      const emptyFC: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
-
-      map.addSource(SOURCE_ID, { type: "geojson", data: emptyFC });
-      map.addSource(RUBBERBAND_SOURCE, { type: "geojson", data: emptyFC });
-
-      // `route-markers`, not an overlay band: the ruler is the user's active
-      // in-progress edit, drawn above the base labels exactly like the route's
-      // own waypoint pins, so vertices and distance labels stay legible over
-      // any road/place text underneath.
-      // Polygon fill
-      addLayerInSlot(
-        map,
-        {
-          id: POLYGON_FILL_LAYER,
-          type: "fill",
-          source: SOURCE_ID,
-          filter: ["==", "$type", "Polygon"],
-          paint: { "fill-color": PRIMARY_BLUE, "fill-opacity": 0.1 },
-        },
-        "route-markers",
-        10,
-      );
-
-      // Line casing (white outline for contrast)
-      addLayerInSlot(
-        map,
-        {
-          id: LINE_CASING_LAYER,
-          type: "line",
-          source: SOURCE_ID,
-          filter: ["==", "$type", "LineString"],
-          paint: { "line-color": "#FFFFFF", "line-width": 6, "line-opacity": 1 },
-          layout: { "line-cap": "round", "line-join": "round" },
-        },
-        "route-markers",
-        11,
-      );
-
-      // Line
-      addLayerInSlot(
-        map,
-        {
-          id: LINE_LAYER,
-          type: "line",
-          source: SOURCE_ID,
-          filter: ["==", "$type", "LineString"],
-          paint: { "line-color": PRIMARY_BLUE, "line-width": 3 },
-          layout: { "line-cap": "round", "line-join": "round" },
-        },
-        "route-markers",
-        12,
-      );
-
-      // Polygon outline (on top of line)
-      addLayerInSlot(
-        map,
-        {
-          id: POLYGON_OUTLINE_LAYER,
-          type: "line",
-          source: SOURCE_ID,
-          filter: ["==", "$type", "Polygon"],
-          paint: { "line-color": PRIMARY_BLUE, "line-width": 3 },
-          layout: { "line-cap": "round", "line-join": "round" },
-        },
-        "route-markers",
-        13,
-      );
-
-      // Rubber band
-      addLayerInSlot(
-        map,
-        {
-          id: RUBBERBAND_LAYER,
-          type: "line",
-          source: RUBBERBAND_SOURCE,
-          paint: {
-            "line-color": PRIMARY_BLUE,
-            "line-width": 2,
-            "line-dasharray": [4, 4],
-            "line-opacity": 0.6,
-          },
-          layout: { "line-cap": "round" },
-        },
-        "route-markers",
-        14,
-      );
-
-      // Vertices
-      addLayerInSlot(
-        map,
-        {
-          id: VERTICES_LAYER,
-          type: "circle",
-          source: SOURCE_ID,
-          filter: ["==", "$type", "Point"],
-          paint: {
-            "circle-radius": [
-              "case",
-              ["==", ["get", "type"], "segment"],
-              0,
-              ["==", ["get", "type"], "total"],
-              0,
-              ["==", ["get", "type"], "area"],
-              0,
-              ["==", ["get", "isFirst"], true],
-              6,
-              5,
-            ],
-            "circle-color": "#FFFFFF",
-            "circle-stroke-color": PRIMARY_BLUE,
-            "circle-stroke-width": 2,
-          },
-        },
-        "route-markers",
-        15,
-      );
-
-      // Labels
-      addLayerInSlot(
-        map,
-        {
-          id: LABELS_LAYER,
-          type: "symbol",
-          source: SOURCE_ID,
-          filter: ["has", "label"],
-          layout: {
-            "text-field": ["get", "label"],
-            "text-size": [
-              "case",
-              ["any", ["==", ["get", "type"], "total"], ["==", ["get", "type"], "area"]],
-              14,
-              12,
-            ],
-            "text-font": ["Noto Sans Bold"],
-            "text-offset": [0, -1.2],
-            "text-allow-overlap": true,
-            "text-ignore-placement": true,
-          },
-          paint: {
-            "text-color": PRIMARY_BLUE,
-            "text-halo-color": "#FFFFFF",
-            "text-halo-width": 2,
-          },
-        },
-        "route-markers",
-        16,
-      );
-    };
-
-    if (map.isStyleLoaded()) {
-      setup();
-    } else {
-      map.once("styledata", setup);
-    }
-
-    return () => {
-      if (!map.getStyle()) return;
-      for (const id of [
-        LABELS_LAYER,
-        VERTICES_LAYER,
-        RUBBERBAND_LAYER,
-        POLYGON_OUTLINE_LAYER,
-        LINE_LAYER,
-        LINE_CASING_LAYER,
-        POLYGON_FILL_LAYER,
-      ]) {
-        if (map.getLayer(id)) map.removeLayer(id);
-        unregisterLayerSlot(id);
-      }
-      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      if (map.getSource(RUBBERBAND_SOURCE)) map.removeSource(RUBBERBAND_SOURCE);
-    };
-  }, [mapRef, mapReady, styleVersion, isActive]);
-
-  // Update GeoJSON data when points/mode/units change
-  useEffect(() => {
-    void styleVersion;
-    if (!mapReady || !isActive) return;
-
+  const measurement = useMemo(() => {
     const { lineGeoJSON, polygonGeoJSON, verticesGeoJSON, labelsGeoJSON } = buildGeoJSON(
       points,
       mode,
       unitSystem,
       isFinalized,
     );
+    return {
+      type: "FeatureCollection" as const,
+      features: [
+        ...polygonGeoJSON.features,
+        ...lineGeoJSON.features,
+        ...verticesGeoJSON.features,
+        ...labelsGeoJSON.features,
+      ],
+    };
+  }, [isFinalized, mode, points, unitSystem]);
 
-    // Merge all features into the single source
-    const allFeatures: GeoJSON.Feature[] = [
-      ...polygonGeoJSON.features,
-      ...lineGeoJSON.features,
-      ...verticesGeoJSON.features,
-      ...labelsGeoJSON.features,
-    ];
-
-    publishGeoJson([
-      { sourceId: SOURCE_ID, data: { type: "FeatureCollection", features: allFeatures } },
-    ]);
-  }, [isActive, isFinalized, mapReady, mode, points, publishGeoJson, styleVersion, unitSystem]);
+  useMapLayerGroup(
+    useMemo(() => (isActive ? measurementGroup(measurement) : null), [isActive, measurement]),
+  );
 
   // Rubber band line following cursor
   const updateRubberBand = useCallback(
@@ -451,7 +387,6 @@ export function MeasurementLayer() {
 
   // Map click handler for adding points
   useEffect(() => {
-    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !isActive) return;
 
@@ -496,11 +431,10 @@ export function MeasurementLayer() {
       map.off("click", onClick);
       map.off("dblclick", onDblClick);
     };
-  }, [mapRef, mapReady, styleVersion, isActive]);
+  }, [mapRef, mapReady, isActive]);
 
   // Mousemove handler for rubber band + cursor
   useEffect(() => {
-    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !isActive) return;
 
@@ -525,11 +459,10 @@ export function MeasurementLayer() {
       map.off("mousemove", onMouseMove);
       map.getCanvas().style.cursor = "";
     };
-  }, [mapRef, mapReady, styleVersion, isActive, updateRubberBand]);
+  }, [mapRef, mapReady, isActive, updateRubberBand]);
 
   // Vertex dragging
   useEffect(() => {
-    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !isActive) return;
 
@@ -577,7 +510,7 @@ export function MeasurementLayer() {
         map.dragPan.enable();
       }
     };
-  }, [mapRef, mapReady, styleVersion, isActive]);
+  }, [mapRef, mapReady, isActive]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -643,7 +576,6 @@ export function MeasurementLayer() {
 
   // Suppress double-tap zoom on mobile while active
   useEffect(() => {
-    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
     if (isActive) {
@@ -654,7 +586,7 @@ export function MeasurementLayer() {
     return () => {
       map.doubleClickZoom.enable();
     };
-  }, [mapRef, mapReady, styleVersion, isActive]);
+  }, [mapRef, mapReady, isActive]);
 
   return null;
 }

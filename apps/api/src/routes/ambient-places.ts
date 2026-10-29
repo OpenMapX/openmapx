@@ -1,16 +1,11 @@
-import { readBoundedResponseText } from "@openmapx/core";
-import {
-  AMBIENT_GENERATION_PATTERN,
-  AMBIENT_LIMITS,
-  type AmbientManifest,
-  validateAmbientRegion,
-} from "@openmapx/core/ambient-places";
+import { AMBIENT_LIMITS, type AmbientManifest } from "@openmapx/core/ambient-places";
 import {
   readAmbientManifest,
   readAmbientTile,
   validAmbientTile,
 } from "@openmapx/core/ambient-places-server";
-import { services } from "@openmapx/core/server";
+import { dataManagerAdminOperations } from "@openmapx/core/api-contracts";
+import * as dm from "@openmapx/core/data-manager-sdk";
 import { envString } from "@openmapx/core/server-env";
 import type { FastifyInstance } from "fastify";
 import { sql } from "../db/index.js";
@@ -18,29 +13,52 @@ import { writeAuditLog } from "../utils/audit-log.js";
 import { systemMaintenanceLimit } from "../utils/rate-limit.js";
 import { getAdminSession, requireAdmin } from "../utils/require-admin.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
+import { registerDataManagerAdminRoute } from "./data-manager-admin-contract.js";
 
 interface AmbientRouteOptions {
   readManifest?: () => Promise<AmbientManifest | null>;
   readTile?: (generation: string, z: number, x: number, y: number) => Promise<Buffer | null>;
 }
-async function proxy(method: "GET" | "POST", action: string, body?: unknown) {
-  const base = services.validateDataManagerBaseUrl(
-    envString("DATA_MANAGER_URL", "http://localhost:4000"),
-  );
-  const response = await fetch(`${base}/ambient-places/${action}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${envString("DATA_MANAGER_AUTH_TOKEN", "")}`,
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    redirect: "error",
-    signal: AbortSignal.timeout(15_000),
-  });
-  const text = await readBoundedResponseText(response, 256 * 1024, {
-    label: "ambient operator response",
-  });
-  return { status: response.status, body: JSON.parse(text) };
+type AmbientAction = "status" | "build" | "enabled" | "rollback" | "resume" | "discard";
+async function proxy(action: AmbientAction, body?: unknown) {
+  const options = {
+    transport: dm.createDataManagerTransport({
+      baseUrl: envString("DATA_MANAGER_URL", "http://localhost:4000"),
+      authToken: envString("DATA_MANAGER_AUTH_TOKEN", ""),
+      maxJsonBytes: 256 * 1024,
+      requestTimeoutMs: 15_000,
+    }),
+  };
+  const operations = dataManagerAdminOperations;
+  const response = await (() => {
+    switch (action) {
+      case "status":
+        return dm.getAmbientPlacesStatus(options);
+      case "build":
+        return dm.buildAmbientPlaces(
+          operations.postApiAdminAmbientPlacesBuild.request.body.parse(body),
+          options,
+        );
+      case "enabled":
+        return dm.setAmbientPlacesEnabled(
+          operations.postApiAdminAmbientPlacesEnabled.request.body.parse(body),
+          options,
+        );
+      case "rollback":
+        return dm.rollbackAmbientPlaces(options);
+      case "resume":
+        return dm.resumeAmbientPlaces(
+          operations.postApiAdminAmbientPlacesResume.request.body.parse(body),
+          options,
+        );
+      case "discard":
+        return dm.discardAmbientPlaces(
+          operations.postApiAdminAmbientPlacesDiscard.request.body.parse(body),
+          options,
+        );
+    }
+  })();
+  return { status: response.status, body: response.data };
 }
 export async function ambientPlacesRoute(
   app: FastifyInstance,
@@ -123,67 +141,22 @@ export async function ambientPlacesRoute(
     admin.addHook("onRequest", async (request) => {
       request.adminSession = await requireAdmin(request);
     });
-    for (const action of ["status", "build", "enabled", "rollback", "resume", "discard"] as const) {
-      admin.route({
-        method: action === "status" ? "GET" : "POST",
-        url: `/admin/ambient-places/${action}`,
-        schema:
-          action === "build"
-            ? {
-                body: {
-                  type: "object",
-                  required: ["name", "bounds"],
-                  additionalProperties: false,
-                  properties: {
-                    name: { type: "string", minLength: 1, maxLength: 80 },
-                    coverage: { type: "string", enum: ["germany", "planet"] },
-                    bounds: { type: "array", minItems: 4, maxItems: 4, items: { type: "number" } },
-                  },
-                },
-              }
-            : action === "resume" || action === "discard"
-              ? {
-                  body: {
-                    type: "object",
-                    required: ["generation"],
-                    additionalProperties: false,
-                    properties: {
-                      generation: { type: "string", pattern: AMBIENT_GENERATION_PATTERN },
-                    },
-                  },
-                }
-              : action === "enabled"
-                ? {
-                    body: {
-                      type: "object",
-                      required: ["enabled"],
-                      additionalProperties: false,
-                      properties: { enabled: { type: "boolean" } },
-                    },
-                  }
-                : undefined,
-        preHandler: ["build", "resume", "discard"].includes(action)
-          ? systemMaintenanceLimit.preHandler()
-          : undefined,
-        handler: async (request, reply) => {
+    const operations = {
+      status: "getApiAdminAmbientPlacesStatus",
+      build: "postApiAdminAmbientPlacesBuild",
+      enabled: "postApiAdminAmbientPlacesEnabled",
+      rollback: "postApiAdminAmbientPlacesRollback",
+      resume: "postApiAdminAmbientPlacesResume",
+      discard: "postApiAdminAmbientPlacesDiscard",
+    } as const;
+    for (const action of Object.keys(operations) as AmbientAction[]) {
+      registerDataManagerAdminRoute(
+        admin,
+        operations[action],
+        async (request, reply) => {
           reply.header("Cache-Control", "no-store");
-          if (action === "build")
-            try {
-              validateAmbientRegion(request.body);
-            } catch (error) {
-              return reply.code(400).send({ error: (error as Error).message });
-            }
-          if (
-            action === "enabled" &&
-            typeof (request.body as { enabled?: unknown })?.enabled !== "boolean"
-          )
-            return reply.code(400).send({ error: "enabled must be a boolean" });
           try {
-            const result = await proxy(
-              action === "status" ? "GET" : "POST",
-              action,
-              action === "status" ? undefined : request.body,
-            );
+            const result = await proxy(action, action === "status" ? undefined : request.body);
             if (action !== "status")
               await writeAuditLog({
                 actorId: getAdminSession(request).user.id,
@@ -201,7 +174,12 @@ export async function ambientPlacesRoute(
             return reply.code(503).send({ error: "Ambient publication service unavailable" });
           }
         },
-      });
+        {
+          preHandler: ["build", "resume", "discard"].includes(action)
+            ? systemMaintenanceLimit.preHandler()
+            : undefined,
+        },
+      );
     }
   });
 }

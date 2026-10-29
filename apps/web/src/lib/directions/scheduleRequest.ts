@@ -1,9 +1,15 @@
 "use client";
 
-import type { ScheduleDirectionsRequest, TravelMode, Waypoint } from "@openmapx/core";
+import {
+  type BikeRoutingOptions,
+  bicycleOptions,
+  type ScheduleDirectionsRequest,
+  type TravelMode,
+  type Waypoint,
+} from "@openmapx/core";
 import { toDateTimeLocalString } from "@/components/panels/directions/TimeModePicker";
 
-export interface ScheduleRequestInput {
+export interface ScheduleRequestInput extends BikeRoutingOptions {
   waypoints: Waypoint[];
   mode: TravelMode;
   timeMode: "now" | "depart" | "arrive";
@@ -36,6 +42,7 @@ export function buildScheduleRequest(
     waypoints: coords as [number, number][],
     schedules: input.waypoints.map((wp) => wp.schedule ?? null),
     mode: input.mode,
+    ...bicycleOptions(input.mode, input),
     ...(wallClock && input.timeMode === "depart" ? { departAt: wallClock } : {}),
     ...(wallClock && input.timeMode === "arrive" ? { arriveBy: wallClock } : {}),
     // Highways and tolls only apply to driving; the UI hides their toggles for

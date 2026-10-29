@@ -14,9 +14,9 @@
   },
   "container": {
     "image": "ghcr.io/openmapx/data-manager",
-    "tag": "latest",
+    "tag": "main",
     "expose": [4000],
-    "user": "${UID:-1000}:${GID:-1000}",
+    "user": "${UID:?UID must be set, run pnpm openmapx compose render}:${GID:?GID must be set, run pnpm openmapx compose render}",
     "environment": {
       "HOME": "/tmp",
       "DATA_DIR": "/data",
@@ -29,8 +29,6 @@
       "OPS_AGENT_TOKEN_FILE": "/run/secrets/ops-agent-data-manager-token",
       "TRANSITOUS_RUNNER_URL": "${TRANSITOUS_RUNNER_URL:-http://transitous-runner:4400}",
       "TRANSITOUS_RUNNER_CAPABILITY_KEY_FILE": "/run/secrets/transitous-runner-capability",
-      "OPENMAPX_ROOT_DIR": "/app",
-      "TSX_TSCONFIG_PATH": "/app/tsconfig.base.json",
       "APP_API_BASE_URL": "${APP_API_BASE_URL:-http://app-api:3001}",
       "MOTIS_URL": "${MOTIS_URL:-http://motis:8080}",
       "MOTIS_STAGING_URL": "${MOTIS_STAGING_URL:-http://motis-staging:8080}",
@@ -101,6 +99,9 @@
       "OFFLINE_PACKAGE_MAX_COUNT": "${OFFLINE_PACKAGE_MAX_COUNT:-}",
       "OFFLINE_PACKAGE_MAX_TOTAL_BYTES": "${OFFLINE_PACKAGE_MAX_TOTAL_BYTES:-}",
       "OFFLINE_PACKAGE_MIN_FREE_BYTES": "${OFFLINE_PACKAGE_MIN_FREE_BYTES:-}",
+      "OFFLINE_PACKAGE_DELIVERY_MAX_BYTES": "${OFFLINE_PACKAGE_DELIVERY_MAX_BYTES:-32000000000}",
+      "OFFLINE_PACKAGE_DELIVERY_WINDOW_MS": "${OFFLINE_PACKAGE_DELIVERY_WINDOW_MS:-600000}",
+      "OFFLINE_PACKAGE_DELIVERY_MAX_CONCURRENT": "${OFFLINE_PACKAGE_DELIVERY_MAX_CONCURRENT:-16}",
       "OVERTURE_ENABLED": "${OVERTURE_ENABLED:-}",
       "OVERTURE_SYNC_CRON": "${OVERTURE_SYNC_CRON:-}",
       "OVERTURE_CONFLATION_RETRY_CRON": "${OVERTURE_CONFLATION_RETRY_CRON:-}",
@@ -167,9 +168,10 @@
     },
     { "source": "@infra:data", "target": "/data", "readOnly": false },
     {
-      "source": "@service:motis:tools/transitous",
+      "source": "@infra:secrets/transitous-api-keys",
       "target": "/config/transitous",
-      "readOnly": true
+      "readOnly": true,
+      "optional": true
     },
     {
       "source": "@infra:secrets/transitous-feed-proxy.age",

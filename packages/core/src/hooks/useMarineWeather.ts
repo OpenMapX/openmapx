@@ -1,3 +1,4 @@
+import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 
@@ -47,7 +48,7 @@ export interface MarineCurrent {
   seaState: DouglasSeaState;
 }
 
-export interface MarineWeatherResponse {
+export interface MarineWeatherResponse extends ContributingRecord {
   location: { lat: number; lng: number };
   current: MarineCurrent;
   hourly: MarineHourlyPoint[];

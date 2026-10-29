@@ -1,3 +1,7 @@
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import type { CacheClient } from "@openmapx/mobility-core/cache";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 /**
  * Cambio car-sharing API client.
  * Station-based car-sharing in Germany and Belgium.
@@ -105,7 +109,11 @@ async function fetchRegionStations(
 /**
  * Search Cambio stations within a bounding box.
  */
-async function searchDeCambio(bbox: BoundingBox): Promise<SharedMobilityStation[]> {
+async function searchDeCambio(
+  bbox: BoundingBox,
+  _cache?: CacheClient,
+  contributors?: readonly Attribution[],
+): Promise<SharedMobilityStation[]> {
   const regions = findRegionsInBbox(bbox);
   if (regions.length === 0) return [];
 
@@ -115,7 +123,11 @@ async function searchDeCambio(bbox: BoundingBox): Promise<SharedMobilityStation[
   for (const r of results) {
     if (r.status === "fulfilled") stations.push(...r.value);
   }
-  return stations;
+  return stations.map((station) =>
+    contributors === undefined
+      ? station
+      : { ...station, contributors: snapshotContributors(contributors) },
+  );
 }
 
 export const deCambioClient: RegionalCarSharingClient = {
@@ -128,8 +140,7 @@ export const deCambioClient: RegionalCarSharingClient = {
   attribution: {
     label: "Cambio",
     url: "https://www.cambio-carsharing.de",
-    license: "ODbL",
-    licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+    licensing: licensingFromDeclaration("ODbL", "https://opendatacommons.org/licenses/odbl/"),
   },
   search: searchDeCambio,
 };

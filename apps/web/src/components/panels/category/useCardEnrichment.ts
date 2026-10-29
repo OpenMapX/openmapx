@@ -7,8 +7,10 @@ import {
   apiClient,
   isApiClientError,
   isApiRequestAbortedError,
+  isDisplayablePhoto,
   useCategorySearchStore,
 } from "@openmapx/core";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import { type RefObject, useEffect, useRef, useState } from "react";
 
 type CardInput = CategoryCardEnrichmentRequest["places"][number];
@@ -77,7 +79,10 @@ export function cachedSummary(
   lang: string,
 ): CardSummary | undefined {
   const entry = cache.get(cardIdentity(place, lang));
-  return entry && entry.expiresAt > Date.now() ? entry.summary : undefined;
+  if (!entry || entry.expiresAt <= Date.now()) return undefined;
+  return entry.summary.photo && !isDisplayablePhoto(entry.summary.photo)
+    ? { ...entry.summary, photo: undefined }
+    : entry.summary;
 }
 
 function cardFailureDelay(error: unknown): number | null {
@@ -241,8 +246,17 @@ export function useCardEnrichment({
           const summary: CardSummary = {
             ...old,
             id: place.id,
-            ...(received?.photo ? { photo: received.photo } : {}),
-            ...(received?.rating ? { rating: received.rating } : {}),
+            ...(received?.photo && isDisplayablePhoto(received.photo)
+              ? { photo: received.photo }
+              : {}),
+            ...(received?.rating
+              ? {
+                  rating: {
+                    ...received.rating,
+                    contributors: snapshotContributors(received.rating.contributors ?? []),
+                  },
+                }
+              : {}),
             outcomes: { ...old?.outcomes },
           };
           let hasSettled = false;

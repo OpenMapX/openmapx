@@ -7,6 +7,9 @@ import {
   parseMobileSession,
   redactSessionForDiagnostics,
 } from "./mobileSession";
+import { navOptionsForMode } from "./options";
+import { processFix } from "./processFix";
+import type { NavTickState } from "./types";
 
 const NOW = 1_700_000_000_000;
 const SECRET_TOKEN = "rotating-refresh-token-xyz";
@@ -107,6 +110,50 @@ function transitSession(overrides: Record<string, unknown> = {}): Record<string,
 }
 
 describe("round trip", () => {
+  it("keeps speed evidence through a persisted ground-session round trip", () => {
+    const source = groundSession();
+    const payload = source.payload as { tickState: NavTickState };
+    const route = {
+      distance: 1000,
+      duration: 100,
+      mode: "driving" as const,
+      legs: [],
+      steps: [],
+      geometry: [
+        [0, 0],
+        [0.01, 0],
+      ] as [number, number][],
+    };
+    const options = navOptionsForMode("driving");
+    const first = processFix(
+      route,
+      { coords: [0.002, 0], accuracy: 20, speed: 30, timestampMs: NOW },
+      payload.tickState,
+      options,
+    );
+    payload.tickState = first.nextState;
+    const restored = parseMobileSession(JSON.stringify(source));
+    if (!restored.ok || restored.session.kind !== "ground")
+      throw new Error("expected ground session");
+    const fix = { coords: [0.00227, 0] as [number, number], accuracy: 20, timestampMs: NOW + 1000 };
+    const uninterrupted = processFix(route, fix, first.nextState, options);
+    const resumed = processFix(
+      route,
+      fix,
+      restored.session.payload.tickState as NavTickState,
+      options,
+    );
+    expect(resumed.progress?.speedMps).toBeCloseTo(30, 0);
+    expect(resumed).toEqual(uninterrupted);
+  });
+
+  it("rejects malformed persisted speed-estimator statistics", () => {
+    const source = groundSession();
+    const payload = source.payload as { tickState: Record<string, unknown> };
+    payload.tickState.speedEstimate = { weight: -1, timestampMs: NOW };
+    expect(parseMobileSession(source).ok).toBe(false);
+  });
+
   it("accepts a ground session and keeps its discriminant", () => {
     const result = parseMobileSession(groundSession());
     expect(result.ok).toBe(true);

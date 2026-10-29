@@ -1,4 +1,5 @@
 import type { BBox } from "@openmapx/core";
+import type { Licensing } from "@openmapx/mobility-core/licensing";
 
 /**
  * Catalog entry surfaced by a `gtfs-catalog` discovery provider. Operators can
@@ -12,11 +13,10 @@ export interface GtfsCatalogFeed {
   source: string;
   countryCode: string;
   url: string;
-  license?: string;
+  licensing?: Licensing;
   bbox?: BBox;
 
   mdbId?: string;
-  licenseUrl?: string;
   latestDatasetUrl?: string;
   latestDatasetHash?: string;
   latestDatasetDownloadedAt?: string;

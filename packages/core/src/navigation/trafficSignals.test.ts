@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MatchResult } from "../types/routing";
 
+import { cumulativeDistances } from "./deadReckon";
 import { extractTrafficSignals, windowGeometry } from "./trafficSignals";
 
 function match(partial: Partial<MatchResult>): MatchResult {
@@ -90,6 +91,54 @@ describe("windowGeometry", () => {
     expect(w.done).toBe(false);
     // overlap by one point: next window starts at the last point of this one
     expect(w.nextStart).toBe(2);
+  });
+
+  it("bounds sparse long routes by distance with overlapping windows through the destination", () => {
+    const long: [number, number][] = [
+      [0, 0],
+      [0, 0.3],
+      [0, 0.6],
+      [0, 0.9],
+      [0, 1.2],
+      [0, 1.5],
+    ];
+    const cum = cumulativeDistances(long);
+    const first = windowGeometry(long, 0, 4500, cum, 100_000);
+    expect(first.trace).toEqual([
+      [0, 0],
+      [0, 0.3],
+      [0, 0.6],
+    ]);
+    expect(first.nextStart).toBe(2);
+    expect(first.done).toBe(false);
+    expect(first.endMeters).toBeLessThanOrEqual(100_000);
+
+    const second = windowGeometry(long, first.nextStart, 4500, cum, 100_000);
+    expect(second.trace).toEqual([
+      [0, 0.6],
+      [0, 0.9],
+      [0, 1.2],
+    ]);
+    expect(second.nextStart).toBe(4);
+    expect(second.done).toBe(false);
+    expect(second.endMeters - first.endMeters).toBeLessThanOrEqual(100_000);
+
+    const last = windowGeometry(long, second.nextStart, 4500, cum, 100_000);
+    expect(last.trace).toEqual([
+      [0, 1.2],
+      [0, 1.5],
+    ]);
+    expect(last.done).toBe(true);
+  });
+
+  it("still advances when a single segment exceeds the distance budget", () => {
+    const w = windowGeometry(geo, 0, 4500, undefined, 50);
+    expect(w.trace).toEqual([
+      [0, 0],
+      [0, 0.001],
+    ]);
+    expect(w.nextStart).toBe(1);
+    expect(w.done).toBe(false);
   });
 
   it("advances from a mid-route start and terminates", () => {

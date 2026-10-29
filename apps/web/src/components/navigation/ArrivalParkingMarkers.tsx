@@ -1,12 +1,16 @@
 "use client";
 
 import type { CategoryPlace } from "@openmapx/core";
+import { contributorsForField, snapshotContributors } from "@openmapx/mobility-core/contributors";
 import type * as maplibregl from "maplibre-gl";
 import { Marker } from "maplibre-gl";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
+import { markerMapContributors } from "@/integration-api/overlay/markerMapContribution";
+import { renderedMapAttributionTracker } from "@/integration-api/overlay/renderedMapAttributionTracker";
 import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
 import { getParkingCoords } from "./parkingCoords";
 
@@ -25,6 +29,8 @@ export function ArrivalParkingMarkers({
 }: ArrivalParkingMarkersProps) {
   const t = useTranslations("navigation");
   const mapCtx = useMapOptional();
+  const instance = useId();
+  const owner = `arrival-parking::${instance}`;
   const markersRef = useRef<maplibregl.Marker[]>([]);
 
   useEffect(() => {
@@ -43,6 +49,10 @@ export function ArrivalParkingMarkers({
 
     clearMarkers();
 
+    const evidence: {
+      element: HTMLElement;
+      contributors: ReturnType<typeof contributorsForField>;
+    }[] = [];
     places.forEach((place) => {
       const coords = getParkingCoords(place);
       if (!coords) return;
@@ -85,12 +95,29 @@ export function ArrivalParkingMarkers({
       const marker = new Marker({ element: el }).setLngLat(coords).addTo(map);
 
       markersRef.current.push(marker);
+      evidence.push({ element: el, contributors: contributorsForField(place, "coordinates") });
     });
 
+    const unsubscribe = renderedMapAttributionTracker(map).subscribe(owner, {
+      kind: "geometry",
+      layerIds: [],
+      resolveCustomContributors: () =>
+        snapshotContributors(
+          ...evidence.map(({ element, contributors }) =>
+            markerMapContributors(map.getContainer(), element, contributors),
+          ),
+        ),
+      publish: (entries) => {
+        const store = useMapAttributionStore.getState();
+        if (entries.length) store.setLayer(owner, entries);
+        else store.clearLayer(owner);
+      },
+    });
     return () => {
       clearMarkers();
+      unsubscribe();
     };
-  }, [disabled, mapCtx, places, selectedPlace, onSelectPlace, t]);
+  }, [disabled, mapCtx, places, selectedPlace, onSelectPlace, owner, t]);
 
   return null;
 }

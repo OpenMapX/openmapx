@@ -14,10 +14,12 @@ import {
   usePlaceStore,
   useSettingsStore,
 } from "@openmapx/core";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SearchInAreaChip } from "@/components/map/SearchInAreaChip";
 import { MobileSheetContext } from "@/components/panels/sheet/sheetState";
+import { categoryCardContributors, categoryRatingSourceName } from "@/components/ui/PlaceResultRow";
 import { MapProvider, useMap } from "@/integration-api/map/MapContext";
 import { act, createFakeMap, type FakeMap, fireEvent, render, screen, waitFor } from "@/test";
 import { createQueryWrapper } from "@/test/query";
@@ -1392,7 +1394,10 @@ describe("visible category card enrichment", () => {
       source: "wikimedia",
       author: "Draupnir3",
       authorUrl: "https://commons.wikimedia.org/wiki/User:Draupnir3",
-      license: "CC BY-SA 3.0",
+      licensing: licensingFromDeclaration(
+        "CC BY-SA 3.0",
+        "https://creativecommons.org/licenses/by-sa/3.0/",
+      ),
       pageUrl: "https://commons.wikimedia.org/wiki/File:Dom.jpg",
     };
     const post = vi.spyOn(apiClient, "post").mockResolvedValue({
@@ -1777,4 +1782,218 @@ describe("CategoryResultsContent brand empty state", () => {
     expect(screen.getByText("search.noBrandLocationsInView")).toBeInTheDocument();
     expect(screen.queryByText("search.noResultsFound")).not.toBeInTheDocument();
   });
+});
+
+it("credits captured retained row fields without consulting diagnostic provenance", () => {
+  const exact = { sourceId: "exact", name: "Exact row supplier" };
+  mockUseExploreReachResults.mockReturnValue({
+    filtered: [
+      {
+        id: "osm:node/80",
+        name: "Receipt cafe",
+        coordinates: [8, 50],
+        address: "",
+        provenance: [{ sourceId: "discarded", dataset: "Unused enrichment" }],
+        fieldContributors: {
+          name: [exact],
+          phone: [{ sourceId: "hidden", name: "Hidden phone supplier" }],
+        },
+      },
+    ],
+    isLoading: false,
+    isError: false,
+    partial: false,
+    truncated: false,
+    relaxed: [],
+    isTransitCategory: false,
+    refetch: vi.fn(),
+  });
+  renderPanel(vi.fn());
+  expect(screen.getByText("Receipt cafe")).toBeInTheDocument();
+  expect(screen.getByText("Exact row supplier")).toBeInTheDocument();
+  expect(screen.queryByText("Hidden phone supplier")).toBeNull();
+});
+
+it("projects only capped displayed attributes, distance, hours and independent captured rating", async () => {
+  const credit = (sourceId: string) => [{ sourceId, name: sourceId }];
+  const place: CategoryPlace = {
+    id: "osm:node/82",
+    name: "Cafe",
+    coordinates: [8, 50],
+    address: "Street",
+    category: "cafe",
+    isOpen: false,
+    osmTags: { cuisine: "italian", outdoor_seating: "yes", wheelchair: "yes" },
+    fieldContributors: {
+      name: credit("name"),
+      coordinates: credit("distance"),
+      address: credit("address"),
+      category: credit("category"),
+      isOpen: credit("hours"),
+      "osmTags.cuisine": credit("cuisine"),
+      "osmTags.outdoor_seating": credit("seating"),
+      "osmTags.wheelchair": credit("capped"),
+      phone: credit("hidden"),
+    },
+  };
+  const summary = {
+    id: place.id,
+    rating: { stars: 4, count: 5, source: "rating", contributors: credit("rating") },
+  };
+  expect(categoryCardContributors(place, summary, null).map((r) => r.sourceId)).toEqual([
+    "name",
+    "category",
+    "address",
+    "cuisine",
+    "seating",
+    "hours",
+    "rating",
+  ]);
+  expect(
+    categoryCardContributors(
+      place,
+      { ...summary, rating: { ...summary.rating, contributors: [] } },
+      null,
+    ).map((r) => r.sourceId),
+  ).not.toContain("rating");
+});
+
+it("uses the captured rating source label and keeps native empty receipts independent of the live registry", async () => {
+  const rating = {
+    stars: 4,
+    count: 5,
+    source: "rating",
+    contributors: [{ sourceId: "rating", name: "Captured original" }],
+  };
+  const catalogue = { findDataSource: () => ({ name: "Changed live label" }) };
+  expect(categoryRatingSourceName(rating, catalogue)).toBe("Captured original");
+  expect(categoryRatingSourceName({ ...rating, contributors: [] }, catalogue)).toBe("rating");
+  expect(categoryRatingSourceName({ ...rating, contributors: undefined }, catalogue)).toBe(
+    "Changed live label",
+  );
+});
+
+it("credits displayed transit fields with full notices, native empty rows and nearest child ownership", async () => {
+  const receipt = (name: string) => ({
+    sourceId: "same-feed",
+    name,
+    attributionText: `${name} required notice`,
+  });
+  const a = receipt("Name supplier");
+  const b = receipt("Mode supplier");
+  const hidden = receipt("Hidden supplier");
+  vi.spyOn(apiClient, "get").mockResolvedValue({
+    data: [
+      {
+        id: "stop:one",
+        name: "Displayed station",
+        modes: ["bus", "rail", "rail"],
+        coordinates: { lat: 51, lng: 6 },
+        provider: "test",
+        contributors: [hidden],
+        fieldContributors: {
+          name: [a],
+          modes: [hidden],
+          "modes.0": [],
+          "modes.1": [b],
+          "modes.2": [hidden],
+          coordinates: [hidden],
+        },
+      },
+      {
+        id: "stop:empty",
+        name: "Empty station",
+        modes: ["bus"],
+        coordinates: { lat: 51, lng: 6 },
+        provider: "test",
+        contributors: [],
+      },
+    ],
+    attributions: [hidden],
+    freshness: undefined,
+  } as never);
+  act(() => {
+    useCategorySearchStore.getState().setActiveCategory("transit");
+    useCategorySearchStore.getState().setSearchBbox({ west: 5, east: 7, south: 50, north: 52 });
+  });
+  mockUseExploreReachResults.mockReturnValue({
+    filtered: undefined,
+    isLoading: false,
+    isError: false,
+    isTransitCategory: true,
+    refetch: vi.fn(),
+  });
+  renderPanel(vi.fn());
+  await screen.findByText("Displayed station");
+  expect(screen.getByText("Empty station")).toBeInTheDocument();
+  expect(screen.getByText("Name supplier required notice")).toBeInTheDocument();
+  expect(screen.getByText("Mode supplier required notice")).toBeInTheDocument();
+  expect(screen.queryByText(/Hidden supplier/)).toBeNull();
+});
+
+it("keeps brand credit controls outside result selection and collects catalogue provenance once", async () => {
+  const catalogue = { sourceId: "name-suggestion-index", name: "Captured catalogue" };
+  const brand = {
+    qid: "Q123",
+    name: "Brand",
+    kind: ["brand"],
+    logoFile: "Brand.svg",
+    contributors: [catalogue],
+  };
+  const photo = {
+    logoFile: "Brand.svg",
+    url: "https://images.test/brand.svg",
+    source: "wikimedia-commons",
+    author: "File artist",
+    pageUrl: "https://commons.wikimedia.org/wiki/File:Brand.svg",
+    licensing: licensingFromDeclaration(
+      "CC BY 4.0",
+      "https://creativecommons.org/licenses/by/4.0/",
+    ),
+  };
+  const get = vi
+    .spyOn(apiClient, "get")
+    .mockImplementation(async (url) =>
+      String(url).includes("logo-attribution") ? photo : (brand as never),
+    );
+  const places = ["One", "Two"].map(
+    (name, index) =>
+      ({
+        id: `osm:node/${index}`,
+        name,
+        coordinates: [6, 51],
+        osmTags: { "brand:wikidata": "Q123" },
+      }) as CategoryPlace,
+  );
+  act(() => useCategorySearchStore.setState({ activeCategory: "hotels" }));
+  mockUseExploreReachResults.mockReturnValue({
+    filtered: places,
+    isLoading: false,
+    isError: false,
+    isTransitCategory: false,
+  });
+  try {
+    const { container } = renderPanel(vi.fn());
+    await screen.findAllByRole("img", { name: "One" });
+    const rows = [
+      screen.getByRole("button", { name: /^One/ }),
+      screen.getByRole("button", { name: /^Two/ }),
+    ];
+    for (const row of rows) expect(row.querySelector("button, a")).toBeNull();
+    expect(container.querySelector("button button")).toBeNull();
+    expect(screen.getAllByText("File artist", { exact: false })).toHaveLength(2);
+    expect(screen.getAllByText("Captured catalogue")).toHaveLength(1);
+    fireEvent.click(screen.getAllByRole("button", { name: "photoGallery.credits" })[0]);
+    expect(usePlaceStore.getState().selectedPlace?.name).not.toBe("One");
+    fireEvent.click(screen.getByRole("button", { name: "common.close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.error(screen.getByRole("img", { name: "One" }));
+    expect(screen.getAllByText("File artist", { exact: false })).toHaveLength(1);
+    expect(screen.getAllByText("Captured catalogue")).toHaveLength(1);
+    fireEvent.error(screen.getByRole("img", { name: "Two" }));
+    expect(screen.queryByText("File artist", { exact: false })).toBeNull();
+    expect(screen.queryByText("Captured catalogue")).toBeNull();
+  } finally {
+    get.mockRestore();
+  }
 });

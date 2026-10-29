@@ -1,7 +1,6 @@
 import "@openmapx/core/undici-fetch";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { isDeepStrictEqual } from "node:util";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import { compactErasureJournal } from "@openmapx/core/erasure-journal";
@@ -10,7 +9,7 @@ import {
   DAWARICH_SUPPORTED_IMAGE,
   DAWARICH_SUPPORTED_IMAGE_DIGEST,
 } from "@openmapx/core/privacy";
-import { createFatalProcessHandler, findRepoRoot } from "@openmapx/core/server";
+import { createFatalProcessHandler } from "@openmapx/core/server";
 import { envInt, envString } from "@openmapx/core/server-env";
 import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { eq } from "drizzle-orm";
@@ -18,13 +17,14 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import Fastify from "fastify";
 import { auth } from "./auth";
 import { db, sql } from "./db/index";
-import { dataSubjectRequest, dataSubjectRequestTask, installedExtension } from "./db/schema";
+import { dataSubjectRequest, dataSubjectRequestTask } from "./db/schema";
 import {
   getAllIntegrations,
   initIntegrations,
   reloadIntegrations,
   setDisallowedIntegrationResolver,
   setDisallowedSourceResolver,
+  setInstalledIntegrationResolver,
   setIntegrationSourcesChangedHook,
   setRoadConditionsPolicyResolver,
   shutdownIntegrations,
@@ -87,14 +87,10 @@ import {
   handleServiceBulkJob,
 } from "./services/admin-job-handlers";
 import { validateAdminOperationCatalog } from "./services/admin-operation-catalog";
-import {
-  renderAndPersistCompose,
-  serviceApply,
-  serviceRestart,
-  serviceStart,
-  serviceStop,
-} from "./services/admin-ops";
+import { serviceApply, serviceRestart, serviceStart, serviceStop } from "./services/admin-ops";
+import { readLoadableIntegrations } from "./services/agent-integrations";
 import { appLogger } from "./services/app-logger";
+import { cacheInvalidation } from "./services/cache-invalidation";
 import {
   filterGatedSources,
   getGatedIntegrationIds,
@@ -105,33 +101,30 @@ import {
   refreshDataUsePolicy,
   startDataUsePolicyRefresh,
 } from "./services/data-use-policy";
-import { reconcileExtensionInstallJournals } from "./services/extension-install-journal";
 import {
   handleExtensionInstallJob,
   handleExtensionRemoveJob,
 } from "./services/extension-installer";
+import {
+  adoptUnrecordedIntegrations,
+  recoverInterruptedExtensionChanges,
+  warnAboutLegacyInstallJournals,
+  withExtensionChangeLock,
+} from "./services/extension-recovery";
 import { pruneOldRecords } from "./services/health-history";
 import { jobRunner } from "./services/job-runner";
 import { readOfflinePackagePrincipalKeyFile } from "./services/offline-package-principal.js";
-import { createDurableOpsKey } from "./services/ops-client";
-import { openRuntimeRecoveryAuthority } from "./services/runtime-recovery-authority";
-import {
-  mergeRuntimeRecovery,
-  type RuntimeRecoveryRecord,
-} from "./services/runtime-recovery-journal";
+import { API_VOLUMES, privateVolumeDirectory } from "./services/private-volume-directory";
 import { getServiceRegistry, initServiceRegistry } from "./services/service-registry";
-import { reconcileRepoBackups } from "./services/service-repositories";
-import { reconcileDurableServiceRuntime } from "./services/service-runtime-recovery";
 import { handleSystemDiagnosticsJob, handleSystemUpdateJob } from "./services/system-maintenance";
-import { applyTrustedConfiguration } from "./services/trusted-config-operations";
 import { configurePrivacyArtifactDeleter, readJournalKey } from "./services/user-erasure.js";
 import { applyRequiredMigrations } from "./startup-migrations";
 import { configuredTrustedWebOrigins, makeCsrfGuardHook } from "./utils/csrf";
-import { dockerComposeAction } from "./utils/docker-compose";
 import { sendMail } from "./utils/email.js";
 import {
   authLimit,
   expensivePublicApiLimit,
+  integrationIngressApiLimit,
   publicApiLimit,
   statusPublicApiLimit,
   tilePublicApiLimit,
@@ -188,73 +181,20 @@ try {
   throw err;
 }
 
+// Settle what an interrupted extension change left in the operations agent.
+// An unreachable agent must not keep the API down; every extension job runs
+// this recovery again before it changes anything.
 try {
-  await reconcileExtensionInstallJournals(findRepoRoot(), async (journal) => {
-    const [row] = await db
-      .select({ manifest: installedExtension.manifest })
-      .from(installedExtension)
-      .where(eq(installedExtension.id, journal.extensionId))
-      .limit(1);
-    return !!row && isDeepStrictEqual(row.manifest, journal.targetManifest);
-  });
-  server.log.info("Extension integration install journals reconciled");
-  const root = findRepoRoot();
-  const runtimeRecoveryJournal = await openRuntimeRecoveryAuthority(root);
-  const serviceRecovery = await reconcileRepoBackups({
-    restoreSelection: async (roots, recoveryId) => {
-      await initServiceRegistry();
-      await applyTrustedConfiguration({
-        kind: "serviceSelection.apply",
-        selectedRoots: roots,
-        operationKey: createDurableOpsKey("startup.selection.recovery", recoveryId),
-      });
-    },
-    persistRuntimeRecovery: async (recovery) => {
-      if (!recovery.incidentId) {
-        throw new Error("Service runtime recovery is missing its durable incident identity");
-      }
-      const discovered: RuntimeRecoveryRecord = {
-        version: 1,
-        incidentId: recovery.incidentId,
-        orphanedServiceIds: [...recovery.orphanedServiceIds],
-        restartServiceIds: [...recovery.restartServiceIds],
-      };
-      const retained = runtimeRecoveryJournal.record();
-      await runtimeRecoveryJournal.replace(
-        retained === null ? discovered : mergeRuntimeRecovery(retained, discovered),
-      );
-    },
-  });
-  await reconcileDurableServiceRuntime(serviceRecovery, runtimeRecoveryJournal, {
-    // Startup runtime recovery uses the same typed operations as every other
-    // lifecycle path, so recovery never needs a Docker socket either.
-    remove: (serviceId) =>
-      dockerComposeAction(serviceId, "remove", {
-        operationKey: createDurableOpsKey(
-          "startup.runtime-recovery.remove",
-          `${serviceRecovery.incidentId ?? "recovery-without-incident"}:${serviceId}`,
-        ),
-      }),
-    recreate: (serviceId) =>
-      dockerComposeAction(serviceId, "recreate-isolated", {
-        operationKey: createDurableOpsKey(
-          "startup.runtime-recovery.recreate",
-          `${serviceRecovery.incidentId ?? "recovery-without-incident"}:${serviceId}`,
-        ),
-      }),
-    initializeRegistry: initServiceRegistry,
-    renderCompose: () =>
-      renderAndPersistCompose({
-        operationKey: createDurableOpsKey(
-          "startup.runtime-recovery.render",
-          serviceRecovery.incidentId ?? "recovery-without-incident",
-        ),
-      }),
-  });
-  server.log.info("Service repository rollbacks reconciled");
+  // Adoption downloads archives again, so it waits until the API listens.
+  await withExtensionChangeLock(() =>
+    recoverInterruptedExtensionChanges(undefined, { adoptIntegrations: false }),
+  );
+  server.log.info("Interrupted extension changes recovered");
 } catch (err) {
-  server.log.fatal(err, "Service repository rollback reconciliation failed; refusing to start");
-  throw err;
+  server.log.error(
+    err,
+    "Interrupted extension changes could not be recovered yet; extension jobs will retry",
+  );
 }
 
 const trustedWebOrigins = configuredTrustedWebOrigins();
@@ -268,6 +208,7 @@ const rateLimitTiers = {
   auth: authLimit.preHandler(),
   tile: tilePublicApiLimit.preHandler(),
   expensive: makeTimelineAwareRateLimit(expensivePublicApiLimit),
+  integrationIngress: integrationIngressApiLimit.preHandler(),
   status: makeStatusAwareRateLimit(statusPublicApiLimit),
   public: makeTimelineAwareRateLimit(publicApiLimit),
 };
@@ -335,10 +276,10 @@ setIntegrationSourcesChangedHook(() => {
 let privacyArtifactStore: EncryptedBlobStore | undefined;
 let privacyKeyRing: MasterKeyRing | undefined;
 try {
-  const exportRoot = envString(
-    "OPENMAPX_EXPORT_STORAGE_DIR",
-    "/var/lib/openmapx/subject-exports",
-  ).trim();
+  const exportRoot = privateVolumeDirectory(
+    envString("OPENMAPX_EXPORT_STORAGE_DIR", "/var/lib/openmapx/subject-exports").trim(),
+    API_VOLUMES.subjectExports,
+  );
   const exportRing = await loadMasterKeyRingAsync();
   privacyKeyRing = exportRing;
   const artifactStore = new EncryptedBlobStore({
@@ -544,7 +485,7 @@ const managedDawarichState = () => {
           managed.manifest.subjectData?.strategy === "collector" &&
           managed.manifest.subjectData.registrationIds?.includes("managed-dawarich") &&
           managed.manifest.container.image === DAWARICH_SUPPORTED_IMAGE.split(":")[0] &&
-          managed.manifest.container.tag === "1.15.2" &&
+          managed.manifest.container.tag === "1.15.3" &&
           managed.manifest.container.digest === DAWARICH_SUPPORTED_IMAGE_DIGEST &&
           managed.manifest.container.environment?.OPENMAPX_DAWARICH_COMMIT ===
             DAWARICH_SUPPORTED_COMMIT,
@@ -647,19 +588,34 @@ try {
 }
 
 // Integration framework
-// Built-ins are loaded from the immutable app-api image. Community integrations
-// are loaded from a writable, bind-mounted runtime directory so admin/CLI
-// installs survive app-api container replacement.
+// Built-ins are loaded from the immutable app-api image. Installed integrations
+// are loaded from the bind-mounted host directory the operations agent owns
+// and app-api only reads. With an agent, only integrations it reports intact
+// are loaded, and their files are checked against the digests it recorded.
 const runtimeRootDir = join(import.meta.dirname ?? ".", "..", "..", "..");
 const integrationsDir = join(runtimeRootDir, "integrations");
+// The container always names its mount; an API run from the host checkout
+// reads the agent's integration store there directly.
 const customIntegrationsDir =
   process.env.OPENMAPX_CUSTOM_INTEGRATIONS_DIR?.trim() ||
-  join(runtimeRootDir, "custom_integrations");
+  join(runtimeRootDir, "infra", "docker", "state", "ops-agent", "custom-integrations");
+warnAboutLegacyInstallJournals(customIntegrationsDir, (message) => server.log.warn(message));
+setInstalledIntegrationResolver(() =>
+  readLoadableIntegrations({
+    // The agent was unreachable and now reports a different set.
+    onChange: () => {
+      reloadIntegrations().catch((err) =>
+        server.log.warn(err, "Reloading integrations the operations agent reported failed"),
+      );
+    },
+  }),
+);
 // Register core-owned id-scheme views (OSM, Wikidata, social platforms,
 // internal handles). Integrations can re-register their own schemes in
 // their setup functions — registration is idempotent.
 registerBuiltinIdSchemeViews();
 
+await cacheInvalidation.start();
 await initIntegrations(server, [
   { directory: integrationsDir, isBuiltIn: true },
   { directory: customIntegrationsDir, isBuiltIn: false },
@@ -783,6 +739,15 @@ try {
   process.exit(1);
 }
 
+// Integrations earlier releases installed load once the operations agent has
+// verified them against their extensions' archives; every extension job retries.
+void withExtensionChangeLock(() => adoptUnrecordedIntegrations()).catch((err) =>
+  server.log.warn(
+    err,
+    "Installed integrations could not be adopted yet; extension jobs will retry",
+  ),
+);
+
 // Only complete a checkpointed self-update after the replacement API is
 // genuinely listening, migrations succeeded, and Docker confirms that this
 // process is running the exact image pulled by the update job.
@@ -798,6 +763,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     clearInterval(privacyEscalationTimer);
     await shutdownIntegrations();
     await server.close();
+    await cacheInvalidation.stop();
     await redis?.disconnect();
     await sql.end();
     process.exit(0);

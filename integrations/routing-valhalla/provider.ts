@@ -559,6 +559,24 @@ export function buildCostingOptions(
   costing: string,
 ): Record<string, unknown> {
   const costingOptions: Record<string, unknown> = {};
+  if (costing === "bicycle") {
+    if (options.bikeProfile)
+      costingOptions.bicycle_type = {
+        trekking: "hybrid",
+        road: "road",
+        gravel: "cross",
+        mountain: "mountain",
+      }[options.bikeProfile];
+    // Penalties are relative to the bike type, and remain soft even in smooth mode.
+    const surfacePenalty = { road: 0.75, trekking: 0.5, gravel: 0.25, mountain: 0.1 };
+    costingOptions.avoid_bad_surfaces = options.bikePreferSmoothSurfaces
+      ? 0.9
+      : surfacePenalty[options.bikeProfile ?? "trekking"];
+    if (options.bikeSpeedKmh !== undefined) costingOptions.cycling_speed = options.bikeSpeedKmh;
+    if (options.bikeHillPreference && options.bikeHillPreference !== "default")
+      costingOptions.use_hills = options.bikeHillPreference === "strongly-avoid" ? 0 : 0.1;
+    if (options.bikePreferQuietRoads) costingOptions.use_roads = 0.1;
+  }
   if (options.avoidHighways) costingOptions.use_highways = 0;
   if (options.avoidTolls) costingOptions.use_tolls = 0;
   if (options.avoidFerries) costingOptions.use_ferry = 0;
@@ -649,8 +667,20 @@ export function buildTrafficRequestExtras(
   return extras;
 }
 
+/**
+ * How far from a directed exclusion's heading an edge may run and still be
+ * excluded. The opposite carriageway or direction runs about 180 degrees off;
+ * a bend within a sampled edge stays well inside this.
+ */
+const DIRECTED_EXCLUSION_TOLERANCE_DEG = 45;
+
 type ValhallaExclusions = {
-  exclude_locations?: Array<{ lon: number; lat: number }>;
+  exclude_locations?: Array<{
+    lon: number;
+    lat: number;
+    heading?: number;
+    heading_tolerance?: number;
+  }>;
   exclude_polygons?: Array<Array<[number, number]>>;
 };
 
@@ -662,12 +692,22 @@ type ValhallaExclusions = {
 export function buildExclusions(options: RoutingOptions): ValhallaExclusions {
   const sanitized = sanitizeValhallaExclusions({
     points: options.excludeLocations as ValhallaLngLat[] | undefined,
+    directed: options.directedExclusions,
     polygons: options.excludePolygons as ValhallaLngLat[][] | undefined,
   });
   const result: ValhallaExclusions = {};
-  if (sanitized.points.length) {
-    result.exclude_locations = sanitized.points.map(([lon, lat]) => ({ lon, lat }));
-  }
+  // Valhalla correlates a heading-bearing exclusion only to edges running
+  // within the tolerance of it, so the opposite direction keeps routing.
+  const locations = [
+    ...sanitized.points.map(([lon, lat]) => ({ lon, lat })),
+    ...sanitized.directed.map(({ point: [lon, lat], heading }) => ({
+      lon,
+      lat,
+      heading,
+      heading_tolerance: DIRECTED_EXCLUSION_TOLERANCE_DEG,
+    })),
+  ];
+  if (locations.length) result.exclude_locations = locations;
   if (sanitized.polygons.length) {
     result.exclude_polygons = sanitized.polygons;
   }
@@ -771,6 +811,7 @@ export const valhallaService: RoutingProvider = {
   supportedModes: ["walking", "cycling", "driving", "motorcycle"] as TravelMode[],
   supportsTimeAware: true,
   supportsExclusions: true,
+  supportsDirectedExclusions: true,
   temporal: {
     tripDepartAt: "native",
     tripArriveBy: "native",
@@ -785,6 +826,7 @@ export const valhallaService: RoutingProvider = {
     mode: TravelMode,
     options: RoutingOptions = {},
   ): Promise<DirectionsResult> {
+    const sourceIds = valhallaSourceIds();
     const { costingOptions, usesCurrentClosures } = buildClosureSafeCostingOptions(options, mode);
     const effectiveTrafficOptions = { ...options, useLiveTraffic: usesCurrentClosures };
 
@@ -865,7 +907,6 @@ export const valhallaService: RoutingProvider = {
       }
     }
 
-    const sourceIds = valhallaSourceIds();
     for (const route of routes) {
       route.sourceIds = sourceIds;
       if (trafficProof) route.trafficProof = trafficProof;
@@ -883,6 +924,7 @@ export const valhallaService: RoutingProvider = {
     mode: TravelMode,
     options: RoutingOptions = {},
   ): Promise<DirectionsResult> {
+    const sourceIds = valhallaSourceIds();
     const { costingOptions, usesCurrentClosures } = buildClosureSafeCostingOptions(options, mode);
 
     const locations = waypoints.map((wp) => ({
@@ -933,7 +975,6 @@ export const valhallaService: RoutingProvider = {
     const optimizedOrder =
       data.trip.locations?.map((loc) => loc.original_index ?? 0) ?? waypoints.map((_, i) => i);
 
-    const sourceIds = valhallaSourceIds();
     for (const route of routes) {
       route.sourceIds = sourceIds;
       if (trafficProof) route.trafficProof = trafficProof;

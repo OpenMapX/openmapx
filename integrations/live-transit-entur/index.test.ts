@@ -1,7 +1,36 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  createNoopLogger,
+} from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createCacheClient, createHttpClient } from "../../apps/api/src/integration-clients";
+
+const { values } = vi.hoisted(() => ({
+  values: new Map<string, { value: string; expires: number }>(),
+}));
+vi.mock("../../apps/api/src/redis", () => ({
+  redis: {
+    get: async (key: string) => {
+      const entry = values.get(key);
+      return entry && Date.now() < entry.expires ? entry.value : null;
+    },
+    setex: async (key: string, ttl: number, value: string) => {
+      values.set(key, { value, expires: Date.now() + ttl * 1000 });
+    },
+    del: async (key: string) => (values.delete(key) ? 1 : 0),
+    eval: async (_script: string, count: number, ...args: (string | number)[]) => {
+      const [epochKey, key, ...rest] = args;
+      if (count === 3) rest.shift();
+      const [epoch, value, ttl] = rest;
+      if ((values.get(String(epochKey))?.value ?? "0") !== epoch) return 0;
+      values.set(String(key), { value: String(value), expires: Date.now() + Number(ttl) * 1000 });
+      return 1;
+    },
+  },
+}));
+
 import { setup } from "./index.js";
 
 const DATA_SOURCES = JSON.parse(readFileSync(join(__dirname, "manifest.json"), "utf-8"))
@@ -16,7 +45,15 @@ function registerProvider(config: Record<string, unknown> = {}) {
   const ctx = createMockIntegrationContext({
     id: "live-transit-entur",
     config,
+    http: createHttpClient(createNoopLogger()),
+    cache: createCacheClient("live-transit-entur"),
     manifest: { dataSources: DATA_SOURCES } as never,
+  });
+  Object.assign(ctx, {
+    upstreamRuntime: {
+      admitSharedRequest: async () => ({ allowed: true }),
+      deferSharedRequests: async () => {},
+    },
   });
   setup(ctx);
   const provider = ctx.registered.realtime[0];
@@ -27,6 +64,7 @@ function registerProvider(config: Record<string, unknown> = {}) {
 let mockFetch: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  values.clear();
   mockFetch = vi.fn();
   vi.stubGlobal("fetch", mockFetch);
 });
@@ -51,12 +89,13 @@ describe("getVehiclePositions", () => {
     mockFetch.mockResolvedValueOnce(
       mockOk({
         vehicles: [
+          null,
           {
             vehicleId: "RUT:Vehicle:123",
             lastUpdated: "2026-03-10T10:00:00Z",
             bearing: 90,
             speed: 12.5,
-            mode: "metro",
+            mode: "METRO",
             line: { lineRef: "RUT:Line:5", lineName: "Vestli", publicCode: "5" },
             serviceJourney: { id: "RUT:ServiceJourney:7", date: "2026-03-10" },
             operator: { name: "Ruter" },
@@ -71,6 +110,7 @@ describe("getVehiclePositions", () => {
 
     expect(result.data).toEqual([
       {
+        contributors: result.attributions,
         id: "entur-live-vehicles:RUT:Vehicle:123",
         provider: "entur-live-vehicles",
         sourceId: "entur-live-vehicles",
@@ -134,10 +174,19 @@ describe("getAlertsForBbox", () => {
             description: [{ value: "Signal failure", language: "en" }],
             reportType: "incident",
             severity: "severe",
-            validityPeriod: { startTime: "2026-03-10T08:00:00Z", endTime: "2026-03-10T12:00:00Z" },
-            lines: [{ id: "RUT:Line:5" }],
-            stopPlaces: [{ id: "NSR:StopPlace:337", latitude: 59.91, longitude: 10.75 }],
-            quays: [{ id: "NSR:Quay:1", stopPlace: { id: "NSR:StopPlace:337" } }],
+            validityPeriods: [
+              { startTime: "2026-03-10T08:00:00Z", endTime: "2026-03-10T12:00:00Z" },
+              { startTime: "2026-03-11T08:00:00Z", endTime: null },
+              { startTime: null, endTime: "2026-03-12T12:00:00Z" },
+            ],
+            affects: [
+              {
+                __typename: "AffectedStopPlaceOnLine",
+                line: { id: "RUT:Line:5" },
+                stopPlace: { id: "NSR:StopPlace:337", latitude: 59.91, longitude: 10.75 },
+                quay: { id: "NSR:Quay:1", stopPlace: { id: "NSR:StopPlace:337" } },
+              },
+            ],
           },
         ],
       }),
@@ -147,6 +196,7 @@ describe("getAlertsForBbox", () => {
 
     expect(result?.data).toEqual([
       {
+        contributors: result?.attributions,
         id: "entur:RUT:Situation:9",
         providers: ["entur"],
         severity: "severe",
@@ -155,7 +205,11 @@ describe("getAlertsForBbox", () => {
         description: "Signal failure",
         affectedRouteIds: ["entur:RUT:Line:5"],
         affectedStopIds: ["entur:NSR:StopPlace:337", "entur:NSR:Quay:1"],
-        activePeriods: [{ start: "2026-03-10T08:00:00Z", end: "2026-03-10T12:00:00Z" }],
+        activePeriods: [
+          { start: "2026-03-10T08:00:00Z", end: "2026-03-10T12:00:00Z" },
+          { start: "2026-03-11T08:00:00Z", end: undefined },
+          { start: undefined, end: "2026-03-12T12:00:00Z" },
+        ],
       },
     ]);
     expect(String(mockFetch.mock.calls[0]?.[0])).toContain("/journey-planner/v3/graphql");
@@ -168,7 +222,13 @@ describe("getAlertsForBbox", () => {
           {
             id: "RUT:Situation:far",
             summary: [{ value: "x", language: "en" }],
-            stopPlaces: [{ id: "NSR:StopPlace:1", latitude: 0, longitude: 0 }],
+            affects: [
+              {
+                __typename: "AffectedStopPlace",
+                stopPlace: { id: "NSR:StopPlace:1", latitude: 0, longitude: 0 },
+                quay: null,
+              },
+            ],
           },
         ],
       }),
@@ -183,7 +243,15 @@ describe("national situation snapshot cache", () => {
   const situation = (id: string, longitude: number) => ({
     id,
     summary: [{ value: id, language: "en" }],
-    stopPlaces: [{ id: `stop:${id}`, latitude: 60, longitude }],
+    affects: [
+      {
+        __typename: "AffectedStopPlace",
+        stopPlace: { id: `stop:${id}`, latitude: 60, longitude },
+        quay: null,
+      },
+    ],
+    validityPeriods: [],
+    description: [],
   });
 
   it("coalesces distinct concurrent areas while independently filtering each area", async () => {
@@ -198,7 +266,7 @@ describe("national situation snapshot cache", () => {
     const requests = Array.from({ length: 10 }, (_, i) =>
       provider.getAlertsForBbox([10 + i, 59, 10.5 + i, 61]),
     );
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
     resolve(
       mockOk({ situations: Array.from({ length: 10 }, (_, i) => situation(String(i), 10.25 + i)) }),
     );
@@ -227,7 +295,9 @@ describe("national situation snapshot cache", () => {
   it("retries after a failed fetch rather than caching the failure", async () => {
     const provider = registerProvider();
     mockFetch.mockResolvedValueOnce(Response.json({ errors: [{ message: "unavailable" }] }));
-    await expect(provider.getAlertsForBbox([4, 57, 32, 71.5])).rejects.toThrow("unavailable");
+    await expect(provider.getAlertsForBbox([4, 57, 32, 71.5])).rejects.toMatchObject({
+      kind: "graphql",
+    });
     mockFetch.mockResolvedValueOnce(mockOk({ situations: [] }));
     expect((await provider.getAlertsForBbox([4, 57, 32, 71.5])).data).toEqual([]);
     expect(mockFetch).toHaveBeenCalledTimes(2);
@@ -243,6 +313,7 @@ describe("national situation snapshot cache", () => {
         }),
     );
     const oldRequest = old.getAlertsForBbox([4, 57, 32, 71.5]);
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledOnce());
     const current = registerProvider({
       journeyPlannerEndpoint: "https://example.test/graphql",
       clientName: "new-client",
@@ -258,5 +329,149 @@ describe("national situation snapshot cache", () => {
     expect((mockFetch.mock.calls[1]?.[1] as RequestInit).headers).toMatchObject({
       "ET-Client-Name": "new-client",
     });
+  });
+});
+
+const affectedStop = { id: "NSR:StopPlace:variant", latitude: 60, longitude: 11 };
+const affectedQuay = {
+  id: "NSR:Quay:variant",
+  latitude: 60,
+  longitude: 11,
+  stopPlace: affectedStop,
+};
+const affectedJourney = { id: "RUT:ServiceJourney:variant", line: { id: "RUT:Line:journey" } };
+
+describe("current Entur situation affects", () => {
+  it.each([
+    {
+      type: "AffectedLine",
+      affect: { __typename: "AffectedLine", line: { id: "RUT:Line:direct" } },
+      routes: ["entur:RUT:Line:direct"],
+      stops: [],
+    },
+    {
+      type: "AffectedServiceJourney",
+      affect: { __typename: "AffectedServiceJourney", serviceJourney: affectedJourney },
+      routes: ["entur:RUT:Line:journey"],
+      stops: [],
+    },
+    {
+      type: "AffectedServiceJourney with only a dated journey",
+      affect: {
+        __typename: "AffectedServiceJourney",
+        serviceJourney: null,
+        datedServiceJourney: { serviceJourney: { line: { id: "RUT:Line:dated" } } },
+      },
+      routes: ["entur:RUT:Line:dated"],
+      stops: [],
+    },
+    {
+      type: "AffectedStopPlace",
+      affect: { __typename: "AffectedStopPlace", stopPlace: affectedStop, quay: affectedQuay },
+      routes: [],
+      stops: ["entur:NSR:Quay:variant", "entur:NSR:StopPlace:variant"],
+    },
+    {
+      type: "AffectedStopPlaceOnLine",
+      affect: {
+        __typename: "AffectedStopPlaceOnLine",
+        line: { id: "RUT:Line:direct" },
+        stopPlace: affectedStop,
+        quay: affectedQuay,
+      },
+      routes: ["entur:RUT:Line:direct"],
+      stops: ["entur:NSR:Quay:variant", "entur:NSR:StopPlace:variant"],
+    },
+    {
+      type: "AffectedStopPlaceOnServiceJourney",
+      affect: {
+        __typename: "AffectedStopPlaceOnServiceJourney",
+        serviceJourney: affectedJourney,
+        stopPlace: affectedStop,
+        quay: affectedQuay,
+      },
+      routes: ["entur:RUT:Line:journey"],
+      stops: ["entur:NSR:Quay:variant", "entur:NSR:StopPlace:variant"],
+    },
+    {
+      type: "AffectedStopPlaceOnServiceJourney with only a dated journey",
+      affect: {
+        __typename: "AffectedStopPlaceOnServiceJourney",
+        serviceJourney: null,
+        datedServiceJourney: { serviceJourney: { line: { id: "RUT:Line:dated" } } },
+        stopPlace: affectedStop,
+        quay: affectedQuay,
+      },
+      routes: ["entur:RUT:Line:dated"],
+      stops: ["entur:NSR:Quay:variant", "entur:NSR:StopPlace:variant"],
+    },
+    {
+      type: "AffectedUnknown",
+      affect: { __typename: "AffectedUnknown", description: "Unspecified effect" },
+      routes: [],
+      stops: [],
+    },
+  ])(
+    "retains $type identities without inventing unrelated routes or stops",
+    async ({ affect, routes, stops }) => {
+      mockFetch.mockResolvedValueOnce(
+        mockOk({
+          situations: [
+            {
+              id: "RUT:Situation:variant",
+              summary: [{ value: "Affected service", language: "en" }],
+              description: [],
+              validityPeriods: [],
+              affects: [
+                {
+                  __typename: "AffectedStopPlace",
+                  stopPlace: { id: "NSR:StopPlace:anchor", latitude: 60, longitude: 10 },
+                  quay: null,
+                },
+                affect,
+              ],
+            },
+          ],
+        }),
+      );
+      const result = await registerProvider().getAlertsForBbox([9, 59, 12, 61]);
+      expect(result.data).toHaveLength(1);
+      expect(result.data.map((alert) => [...alert.affectedRouteIds].sort())).toEqual([routes]);
+      expect(result.data.map((alert) => [...alert.affectedStopIds].sort())).toEqual([
+        ["entur:NSR:StopPlace:anchor", ...stops].sort(),
+      ]);
+      expect(result.attributions.map((receipt) => receipt.sourceId)).toEqual([
+        "entur-live-situations",
+      ]);
+    },
+  );
+
+  it("includes a situation located only by an affected quay's parent stop", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        situations: [
+          {
+            id: "RUT:Situation:quay",
+            summary: [],
+            description: [],
+            validityPeriods: [],
+            affects: [
+              {
+                __typename: "AffectedStopPlace",
+                stopPlace: null,
+                quay: {
+                  id: "NSR:Quay:variant",
+                  latitude: null,
+                  longitude: null,
+                  stopPlace: affectedStop,
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const result = await registerProvider().getAlertsForBbox([10, 59, 12, 61]);
+    expect(result.data.map((alert) => alert.id)).toEqual(["entur:RUT:Situation:quay"]);
   });
 });

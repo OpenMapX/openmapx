@@ -97,6 +97,9 @@ const UNMIGRATED = new Set([
   // The primitive and the helper it replaces.
   "mapLayerGroup.ts",
   "layerStyleUtils.ts",
+  // Atomic raster acquisition primitive: fills a source and installs its
+  // retained-content receipt before any layer can start requesting tiles.
+  "rasterMapContribution.ts",
   // Standalone `new maplibregl.Map(...)` instances for offline region select,
   // preview, and the public share page — no shared stack, nothing to race.
   "AreaPickerMap.tsx",
@@ -105,11 +108,7 @@ const UNMIGRATED = new Set([
   // Awaiting the follow-up migration.
   "RasterBaseLayer.tsx",
   "RouteSearchResultsLayer.tsx",
-  "SelectedStopInfrastructureLayer.tsx",
   "StreetLevelCoverageLayer.tsx",
-  "TransitItineraryLayer.tsx",
-  "TransitRouteLayer.tsx",
-  "VehicleLiveLayer.tsx",
 ]);
 
 describe("map layers keep their data with their sources", () => {

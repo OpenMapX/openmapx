@@ -1,6 +1,8 @@
+import type { IntegrationMetadata } from "@openmapx/core/api-contracts";
 import deCatalog from "@openmapx/i18n/locales/de.json";
 import enCatalog from "@openmapx/i18n/locales/en.json";
-import type { IntegrationDataSource, LoadedIntegrationMeta } from "@openmapx/integration-framework";
+import type { IntegrationDataSource } from "@openmapx/integration-framework";
+import type { Licensing } from "@openmapx/mobility-core/licensing";
 
 export interface PrivacyServiceRow {
   service: string;
@@ -14,8 +16,7 @@ export interface PrivacyServiceRow {
 export interface AttributionRow {
   source: string;
   desc: string;
-  license: string;
-  licenseUrl?: string;
+  licensing: Licensing;
   url: string;
   attributionHtml?: string;
   commercialUse?: string;
@@ -50,6 +51,10 @@ export const DOMAIN_TO_SECTION_KEY: Record<string, string> = {
   "parking-sites": "parkingSites",
   "charging-sites": "chargingSites",
   cameras: "cameras",
+  "message-signs": "messageSigns",
+  "road-weather": "roadWeather",
+  "service-vehicles": "serviceVehicles",
+  "border-crossings": "borderCrossings",
   hazards: "hazards",
   "gtfs-catalog": "transitDataCatalogs",
   "flight-search": "flights",
@@ -94,7 +99,7 @@ export function legalSectionStrings(locale: string): LegalSectionStrings {
  * empties — and any accidental array shape — into commit-blocking errors.
  */
 function localizedDataSourceField(
-  integration: LoadedIntegrationMeta,
+  integration: IntegrationMetadata,
   locale: string,
   source: Pick<IntegrationDataSource, "sourceId" | "domain">,
   field: string,
@@ -109,7 +114,7 @@ function localizedDataSourceField(
   return typeof val === "string" ? val : "";
 }
 
-function localized(integration: LoadedIntegrationMeta, locale: string, path: string): string {
+function localized(integration: IntegrationMetadata, locale: string, path: string): string {
   const localeStrings = integration.strings?.[locale];
   if (!localeStrings) return "";
 
@@ -130,14 +135,14 @@ function localized(integration: LoadedIntegrationMeta, locale: string, path: str
  * instead of silently falling back to the raw, untranslated domain string.
  */
 export function legalSectionDomain(
-  integration: Pick<LoadedIntegrationMeta, "domains">,
+  integration: Pick<IntegrationMetadata, "domains">,
   source: Pick<IntegrationDataSource, "domain">,
 ): string {
   return source.domain ?? integration.domains[0] ?? "map-overlay";
 }
 
 export function generatePrivacySectionsFromManifests(
-  integrations: LoadedIntegrationMeta[],
+  integrations: IntegrationMetadata[],
   locale: string,
 ): { key: string; labelEn: string; labelDe: string; rows: PrivacyServiceRow[] }[] {
   // Headings are returned for both locales (the per-locale content.{en,de}.tsx
@@ -188,7 +193,7 @@ export function generatePrivacySectionsFromManifests(
 }
 
 export function generateAttributionSectionsFromManifests(
-  integrations: LoadedIntegrationMeta[],
+  integrations: IntegrationMetadata[],
   locale: string,
 ): { heading: string; headingDe: string; rows: AttributionRow[] }[] {
   // Headings are returned for both locales (content.{en,de}.tsx pick their field).
@@ -215,8 +220,7 @@ export function generateAttributionSectionsFromManifests(
       grouped.get(key)?.rows.push({
         source: ds.name,
         desc,
-        license: ds.license,
-        licenseUrl: ds.licenseUrl,
+        licensing: ds.licensing,
         url: ds.url,
         attributionHtml: ds.attribution,
         commercialUse: ds.commercialUse,

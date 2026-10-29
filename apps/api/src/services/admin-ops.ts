@@ -1,33 +1,21 @@
-import { createHash } from "node:crypto";
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { services as coreServices, repoPaths } from "@openmapx/core/server";
-import { parseMotisConfigExpectations } from "@openmapx/transitous-core";
 import {
-  type DockerComposeAction,
-  dockerComposeAction,
-  dockerStatus,
-} from "../utils/docker-compose";
+  createDataManagerTransport,
+  getStatus,
+  link,
+  unwrapDataManagerResponse,
+} from "@openmapx/core/data-manager-sdk";
+import { repoPaths } from "@openmapx/core/server";
+import { dockerComposeAction, dockerStatus } from "../utils/docker-compose";
+import { executeAdminJobOperation } from "./admin-job-ops";
 import type { JobContext } from "./job-runner";
-import { createDurableOpsKey } from "./ops-client";
+import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-client";
 import { getServiceRegistry } from "./service-registry";
 import { applyTrustedConfiguration } from "./trusted-config-operations";
 
-const { DataManagerClient } = coreServices;
-
-const HARDLINK_PLAN_FILE = "docker-compose.generated.hardlinks.json";
 const DATA_MANAGER_STARTUP_TIMEOUT_MS = 60_000;
 const DATA_MANAGER_POLL_INTERVAL_MS = 2_000;
-
-interface HardlinkPlanEntry {
-  source: string;
-  target: string;
-  consumerService: string;
-  dataType: string;
-  targetFilename?: string;
-}
 
 export interface HardlinkApplySummary {
   applied: boolean;
@@ -38,17 +26,15 @@ export interface HardlinkApplySummary {
   via?: string;
 }
 
-// Path resolution
+// Path resolution for an API running on the host (`pnpm dev`), which can read
+// the deployment directly. The app-api container has no host checkout: its
+// `/app/infra/docker` holds no configuration, and the deployment reaches it
+// through baked environment and typed ops-agent operations instead.
 //
-// Order of preference (matches the rest of apps/api):
+// Order of preference:
 //   1. `DOCKER_INFRA_DIR` — explicit override.
-//   2. `OPENMAPX_ROOT_DIR` (resolved by `repoPaths()`) — set by the rendered
-//      compose to the host repo path that is bind-mounted at the same
-//      absolute path inside the container, so `<root>/infra/docker/data`
-//      always points at the real data dir.
-//   3. Walk up from this file's location — only useful in dev (`pnpm dev`),
-//      because esbuild's bundled `apps/api/dist/server.js` collapses the
-//      directory layout and a `../../../..` walk lands on `/app`.
+//   2. `repoPaths()` — `OPENMAPX_ROOT_DIR` or the checkout found by walking up.
+//   3. Walk up from this file's location.
 
 function findInfraDir(): string {
   if (process.env.DOCKER_INFRA_DIR) return process.env.DOCKER_INFRA_DIR;
@@ -64,7 +50,6 @@ function findInfraDir(): string {
 }
 
 export const INFRA_DIR = findInfraDir();
-export const DATA_DIR = join(INFRA_DIR, "data");
 
 // Docker availability — checked solely via `docker info`. The generated compose
 // file is rendered on demand by `pnpm openmapx compose render` and is not a
@@ -98,8 +83,9 @@ export function resetDockerCache(): void {
 export async function renderAndPersistCompose(options: {
   operationKey: string;
   signal?: AbortSignal;
-}): Promise<void> {
-  await applyTrustedConfiguration({ kind: "stack.render", ...options });
+}): Promise<{ revisionId: string }> {
+  const { revisionId } = await applyTrustedConfiguration({ kind: "stack.render", ...options });
+  return { revisionId };
 }
 
 function dataManagerEnabled(): boolean {
@@ -121,8 +107,8 @@ function dataManagerUrlCandidates(): string[] {
   return [...new Set(out)];
 }
 
-async function waitForDataManagerClient(): Promise<{
-  client: coreServices.DataManagerClient;
+async function waitForDataManagerTransport(): Promise<{
+  transport: ReturnType<typeof createDataManagerTransport>;
   url: string;
 }> {
   const urls = dataManagerUrlCandidates();
@@ -131,10 +117,13 @@ async function waitForDataManagerClient(): Promise<{
 
   while (Date.now() < deadline) {
     for (const url of urls) {
-      const client = new DataManagerClient({ baseUrl: url });
+      const transport = createDataManagerTransport({
+        baseUrl: url,
+        authToken: process.env.DATA_MANAGER_AUTH_TOKEN?.trim(),
+      });
       try {
-        await client.status();
-        return { client, url };
+        unwrapDataManagerResponse(await getStatus({ transport }));
+        return { transport, url };
       } catch (err) {
         lastErr = err;
       }
@@ -148,32 +137,24 @@ async function waitForDataManagerClient(): Promise<{
   );
 }
 
-function readHardlinkPlanFromDisk(): HardlinkPlanEntry[] {
-  const paths = repoPaths();
-  const filePath = join(paths.infraDir, ".trusted-config-current", HARDLINK_PLAN_FILE);
-  if (!existsSync(filePath)) {
-    throw new Error(`Hardlink plan not found at ${filePath}. Render compose first.`);
-  }
-  const parsed = JSON.parse(readFileSync(filePath, "utf-8")) as unknown;
-  if (!Array.isArray(parsed)) {
-    throw new Error(`Hardlink plan at ${filePath} is not an array.`);
-  }
-  return parsed as HardlinkPlanEntry[];
-}
-
 /**
- * Ensure consumer data mounts are refreshed from producer directories before a
- * service/container start. Uses the data-manager `/link` endpoint because the
- * API container may not have direct host write access to infra/docker/data.
+ * Link consumer data directories to their producers as the configuration
+ * generation just applied describes. The plan lives in that generation on the
+ * host, which only the operations agent can read; data-manager applies it,
+ * because its mounts confine the links and prunes to the data root.
  */
-export async function applyHardlinksFromPlan(
-  opts: {
-    log?: (msg: string) => Promise<void> | void;
-    operationIdentity?: string;
-    signal?: AbortSignal;
-  } = {},
-): Promise<HardlinkApplySummary> {
-  const plan = readHardlinkPlanFromDisk();
+export async function applyGenerationHardlinks(opts: {
+  revisionId: string;
+  operationIdentity: string;
+  log?: (msg: string) => Promise<void> | void;
+  signal?: AbortSignal;
+}): Promise<HardlinkApplySummary> {
+  const { plan } = await executeAndWait(
+    createApiOpsClient(),
+    { kind: "configuration.hardlinks.inspect", revisionId: opts.revisionId },
+    createDurableOpsKey("admin-job.hardlinks.inspect", opts.operationIdentity),
+    { signal: opts.signal },
+  );
   if (plan.length === 0) {
     return { applied: true, linked: 0, skipped: 0, pruned: 0, entries: 0 };
   }
@@ -184,7 +165,6 @@ export async function applyHardlinksFromPlan(
   }
 
   await opts.log?.("Ensuring data-manager is running for hardlink apply...");
-  if (!opts.operationIdentity) throw new Error("Durable hardlink operation identity is required");
   const dmStart = await dockerComposeAction("data-manager", "start", {
     operationKey: createDurableOpsKey(
       "admin-job.hardlinks.start",
@@ -197,8 +177,8 @@ export async function applyHardlinksFromPlan(
   }
 
   await opts.log?.(`Applying hardlink plan (${plan.length} entries, prune enabled)...`);
-  const { client, url } = await waitForDataManagerClient();
-  const result = await client.link(plan, { prune: true });
+  const { transport, url } = await waitForDataManagerTransport();
+  const result = unwrapDataManagerResponse(await link({ plan, prune: true }, { transport }));
   return { applied: true, entries: plan.length, via: url, ...result };
 }
 
@@ -221,38 +201,61 @@ function assertKnownService(service: string) {
   return svc;
 }
 
+type ServiceLifecycleAction = "start" | "stop" | "restart" | "recreate";
+
+function lifecycleOperation(service: string, action: ServiceLifecycleAction) {
+  switch (action) {
+    case "start":
+      return { kind: "service.start", serviceId: service } as const;
+    case "stop":
+      return { kind: "service.stop", serviceId: service } as const;
+    case "restart":
+      return { kind: "service.restart", serviceId: service } as const;
+    case "recreate":
+      return { kind: "service.recreate", serviceId: service } as const;
+  }
+}
+
 async function serviceComposeAction(
   service: string,
-  action: Exclude<DockerComposeAction, "recreate-isolated">,
+  action: ServiceLifecycleAction,
   ctx: JobContext,
 ): Promise<{ exitCode: number }> {
   assertKnownService(service);
-  // Community and built-in services now take the same typed path: the agent
-  // authorizes the id against its own trusted selection, so the API no longer
-  // needs a direct-Docker adapter for community lifecycle.
-  return dockerComposeAction(service, action, {
-    operationKey: createDurableOpsKey(`admin-job.service.${action}`, `${ctx.jobId}:${service}`),
-    signal: ctx.signal,
-  });
+  // Community and built-in services take the same typed path: the agent
+  // authorizes the id against its own trusted selection, so the API needs no
+  // direct-Docker adapter for community lifecycle. The broker persists the
+  // admitted operation before waiting, which is what lets a job cancellation
+  // reach this exact agent operation.
+  const operation = lifecycleOperation(service, action);
+  try {
+    await executeAdminJobOperation(ctx, operation, `admin-job.service.${action}`, {
+      durableIdentity: service,
+    });
+    return { exitCode: 0 };
+  } catch {
+    // Callers report the established exit-code wording; raw agent and
+    // transport detail is never surfaced.
+    return { exitCode: 1 };
+  }
 }
 
 export async function serviceStart(service: string, ctx: JobContext): Promise<void> {
   assertKnownService(service);
   await ctx.log(`Rendering compose for latest config...`);
-  await renderAndPersistCompose({
+  const { revisionId } = await renderAndPersistCompose({
     operationKey: createDurableOpsKey("admin-job.config.render", `${ctx.jobId}:${service}`),
     signal: ctx.signal,
   });
-  const hardlinks = await applyHardlinksFromPlan({
+  const hardlinks = await applyGenerationHardlinks({
+    revisionId,
+    operationIdentity: `${ctx.jobId}:${service}`,
     log: (m) => ctx.log(m),
-    operationIdentity: ctx.jobId,
     signal: ctx.signal,
   });
-  if (hardlinks.applied) {
-    await ctx.log(
-      `Hardlinks applied (${hardlinks.linked} linked, ${hardlinks.skipped} already linked, ${hardlinks.pruned} pruned)`,
-    );
-  }
+  await ctx.log(
+    `Hardlinks applied (${hardlinks.linked} linked, ${hardlinks.skipped} already linked, ${hardlinks.pruned} pruned)`,
+  );
   await ctx.log(`Starting ${service}...`);
   const r = await serviceComposeAction(service, "start", ctx);
   if (r.exitCode !== 0) throw new Error(`docker compose up exited with ${r.exitCode}`);
@@ -263,29 +266,27 @@ export async function serviceApply(service: string, ctx: JobContext): Promise<vo
   assertKnownService(service);
   await ctx.log(`Rendering compose for latest config + secrets...`);
   const configurationKind = ctx.payload.configurationKind;
-  if (configurationKind === "vault") {
-    await applyTrustedConfiguration({
-      kind: "vault.apply",
-      serviceId: service,
-      operationKey: createDurableOpsKey("admin-job.vault.apply", `${ctx.jobId}:${service}`),
-      signal: ctx.signal,
-    });
-  } else {
-    await renderAndPersistCompose({
-      operationKey: createDurableOpsKey("admin-job.config.apply", `${ctx.jobId}:${service}`),
-      signal: ctx.signal,
-    });
-  }
-  const hardlinks = await applyHardlinksFromPlan({
+  const { revisionId } =
+    configurationKind === "vault"
+      ? await applyTrustedConfiguration({
+          kind: "vault.apply",
+          serviceId: service,
+          operationKey: createDurableOpsKey("admin-job.vault.apply", `${ctx.jobId}:${service}`),
+          signal: ctx.signal,
+        })
+      : await renderAndPersistCompose({
+          operationKey: createDurableOpsKey("admin-job.config.apply", `${ctx.jobId}:${service}`),
+          signal: ctx.signal,
+        });
+  const hardlinks = await applyGenerationHardlinks({
+    revisionId,
+    operationIdentity: `${ctx.jobId}:${service}`,
     log: (m) => ctx.log(m),
-    operationIdentity: ctx.jobId,
     signal: ctx.signal,
   });
-  if (hardlinks.applied) {
-    await ctx.log(
-      `Hardlinks applied (${hardlinks.linked} linked, ${hardlinks.skipped} already linked, ${hardlinks.pruned} pruned)`,
-    );
-  }
+  await ctx.log(
+    `Hardlinks applied (${hardlinks.linked} linked, ${hardlinks.skipped} already linked, ${hardlinks.pruned} pruned)`,
+  );
   await ctx.log(`Applying rendered configuration to ${service}...`);
   const r = await serviceComposeAction(service, "recreate", ctx);
   if (r.exitCode !== 0)
@@ -305,450 +306,4 @@ export async function serviceRestart(service: string, ctx: JobContext): Promise<
   const r = await serviceComposeAction(service, "restart", ctx);
   if (r.exitCode !== 0) throw new Error(`docker compose restart exited with ${r.exitCode}`);
   await ctx.log(`${service} restarted.`);
-}
-
-// Data inventory — used by the admin "Data" workflow page to show which OSM
-// PBF was downloaded and which heavy build artifacts (Valhalla tiles, OSRM
-// graph, Nominatim database, etc.) are present on disk. Build creation itself
-// has moved into the per-service `data-manager` flow + service startup; this
-// surface is read-only.
-
-export interface OsmPbfInfo {
-  found: boolean;
-  filename?: string;
-  sizeBytes?: number;
-  modifiedAt?: string;
-  region?: string;
-}
-
-export async function getOsmPbfInfo(): Promise<OsmPbfInfo> {
-  const osmDir = join(DATA_DIR, "osm");
-  const dir = existsSync(osmDir) ? osmDir : DATA_DIR;
-  if (!existsSync(dir)) return { found: false };
-  try {
-    const files = await readdir(dir);
-    const pbf = files.find((f) => f.endsWith(".osm.pbf"));
-    if (!pbf) return { found: false };
-    const stat = statSync(join(dir, pbf));
-    return {
-      found: true,
-      filename: pbf,
-      sizeBytes: stat.size,
-      modifiedAt: stat.mtime.toISOString(),
-      region: pbf.replace(/-latest\.osm\.pbf$/, "").replace(/\.osm\.pbf$/, ""),
-    };
-  } catch {
-    return { found: false };
-  }
-}
-
-export interface BuildStatus {
-  target: string;
-  built: boolean;
-  builtAt?: string;
-}
-
-// Heuristic check — looks at well-known directories under `data/` and reports
-// whether each appears to have been populated. The producer for each varies
-// (services build themselves on first start, data-manager populates the OSM
-// dir, etc.) so this is intentionally a directory-mtime probe, not an exact
-// "has the build completed?" answer.
-const BUILT_PRODUCT_DIRS: Record<string, string> = {
-  valhalla: "valhalla",
-  osrm: "osrm-graph",
-  otp: "otp-graph",
-  motis: "motis/live",
-  motisFeedProxy: "motis-feed-proxy",
-  tiles: "tile-mbtiles",
-  pelias: "pelias",
-  nominatim: "nominatim",
-  photon: "photon",
-  overpass: "overpass",
-};
-
-export async function getBuildStatuses(): Promise<BuildStatus[]> {
-  return Promise.all(
-    Object.entries(BUILT_PRODUCT_DIRS).map(([target, rel]) => {
-      const p = join(DATA_DIR, rel);
-      if (!existsSync(p)) return { target, built: false };
-      try {
-        const stat = statSync(p);
-        return { target, built: true, builtAt: stat.mtime.toISOString() };
-      } catch {
-        return { target, built: false };
-      }
-    }),
-  );
-}
-
-export interface MotisTransitousStatus {
-  configFound: boolean;
-  datasetCount: number;
-  realtimeFeedCount: number;
-  gbfsFeedCount: number;
-  feedProxyUrlCount: number;
-  gbfsProxyUrl: string | null;
-  feedProxyMode: "none" | "self-hosted" | "transitous-cloud" | "mixed";
-  feedProxyConfigFound: boolean;
-  feedProxyVarsFound: boolean;
-  feedProxyFeedCount: number;
-  capabilityState: "healthy" | "stale" | "missing" | "error";
-  capabilityError?: string;
-  activeEpoch: string | null;
-  candidateEpoch: string | null;
-  testedAt: string | null;
-  configHash: string | null;
-  licenseHash: string | null;
-  rentalProviderCount: number;
-  rentalProviderGroupCount: number;
-  rollbackAvailable: boolean;
-  operationsProfile: "regional-assisted" | "regional-sovereign" | "planet" | "unknown";
-  activeSlot: "A" | "B" | null;
-  previousHealthySlot: "A" | "B" | null;
-  preflightState: "passed" | "blocked" | "missing";
-  preflightRequiredDiskBytes: number | null;
-  preflightFreeDiskBytes: number | null;
-  pinProposalPending: boolean;
-  crowdsourceState: "disabled-pending-review";
-  gbfsCatalog: {
-    state: "active" | "missing" | "error";
-    commit: string | null;
-    lockedAt: string | null;
-    registryRows: number;
-    registryAdded: number;
-    transitousPreferred: number;
-    quarantined: number;
-    validationFailed: number;
-    sources: Array<{
-      sourceId: string;
-      country: string;
-      status: "configured" | "excluded";
-      observation: "validated" | "unknown";
-      errorClass?: string;
-      lastObservedSuccess?: string;
-      lastErrorAt?: string;
-      dataAge: "unknown";
-    }>;
-  };
-}
-
-interface MobilityCapabilitySnapshot {
-  schemaVersion: 1;
-  testedAt: string;
-  epoch: string;
-  artifacts: { config: { sha256: string }; license: { sha256: string } };
-  rentals?: { providerIds?: string[]; providerGroupIds?: string[] };
-}
-
-function readGbfsCatalogStatus(motisDir: string): MotisTransitousStatus["gbfsCatalog"] {
-  const missing: MotisTransitousStatus["gbfsCatalog"] = {
-    state: "missing",
-    commit: null,
-    lockedAt: null,
-    registryRows: 0,
-    registryAdded: 0,
-    transitousPreferred: 0,
-    quarantined: 0,
-    validationFailed: 0,
-    sources: [],
-  };
-  const path = join(motisDir, "gbfs-source-index.json");
-  if (!existsSync(path)) return missing;
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf-8")) as {
-      schemaVersion?: unknown;
-      lock?: { commit?: unknown; lockedAt?: unknown };
-      summary?: Record<string, unknown>;
-      validations?: Array<{ sourceId?: unknown; ok?: unknown }>;
-      sources?: Array<{
-        sourceId?: unknown;
-        country?: unknown;
-        status?: unknown;
-        exclusionReason?: unknown;
-        observation?: {
-          state?: unknown;
-          lastObservedSuccess?: unknown;
-          lastErrorAt?: unknown;
-          lastErrorClass?: unknown;
-          dataAge?: unknown;
-        };
-      }>;
-    };
-    if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.sources))
-      throw new Error("unsupported source index");
-    const validated = new Set(
-      (parsed.validations ?? [])
-        .filter((entry) => entry.ok === true && typeof entry.sourceId === "string")
-        .map((entry) => entry.sourceId as string),
-    );
-    const sources = parsed.sources
-      .filter((entry) => entry.status === "included" || entry.exclusionReason === "validation")
-      .slice(0, 500)
-      .map((entry) => ({
-        sourceId: typeof entry.sourceId === "string" ? entry.sourceId : "unknown",
-        country: typeof entry.country === "string" ? entry.country : "unknown",
-        status: entry.status === "included" ? ("configured" as const) : ("excluded" as const),
-        observation:
-          entry.observation?.state === "validated" ||
-          (typeof entry.sourceId === "string" && validated.has(entry.sourceId))
-            ? ("validated" as const)
-            : ("unknown" as const),
-        errorClass:
-          typeof entry.observation?.lastErrorClass === "string"
-            ? entry.observation.lastErrorClass
-            : typeof entry.exclusionReason === "string"
-              ? entry.exclusionReason
-              : undefined,
-        lastObservedSuccess:
-          typeof entry.observation?.lastObservedSuccess === "string"
-            ? entry.observation.lastObservedSuccess
-            : undefined,
-        lastErrorAt:
-          typeof entry.observation?.lastErrorAt === "string"
-            ? entry.observation.lastErrorAt
-            : undefined,
-        dataAge: "unknown" as const,
-      }));
-    const number = (key: string): number =>
-      typeof parsed.summary?.[key] === "number" ? (parsed.summary[key] as number) : 0;
-    return {
-      state: "active",
-      commit: typeof parsed.lock?.commit === "string" ? parsed.lock.commit : null,
-      lockedAt: typeof parsed.lock?.lockedAt === "string" ? parsed.lock.lockedAt : null,
-      registryRows: number("registryRows"),
-      registryAdded: number("healthy"),
-      transitousPreferred: number("duplicate"),
-      quarantined: number("quarantined"),
-      validationFailed: number("failed"),
-      sources,
-    };
-  } catch {
-    return { ...missing, state: "error" };
-  }
-}
-
-function hashFile(path: string): string | null {
-  if (!existsSync(path)) return null;
-  return createHash("sha256").update(readFileSync(path)).digest("hex");
-}
-
-function readEpoch(path: string): string | null {
-  if (!existsSync(path)) return null;
-  try {
-    const value = JSON.parse(readFileSync(path, "utf-8")) as { epoch?: unknown };
-    return typeof value.epoch === "string" ? value.epoch : null;
-  } catch {
-    return null;
-  }
-}
-
-export function getMotisTransitousStatus(): MotisTransitousStatus {
-  const motisDir = join(DATA_DIR, "motis", "live");
-  const feedProxyDir = join(DATA_DIR, "motis-feed-proxy");
-  const configPath = join(motisDir, "config.yml");
-  const feedProxyConfigPath = join(feedProxyDir, "conf", "default.conf");
-  const feedProxyVarsPath = join(feedProxyDir, "feed-proxy-vars.json");
-  const snapshotPath = join(motisDir, "mobility-capabilities.json");
-  const candidateEpoch = readEpoch(
-    join(DATA_DIR, "motis", "staging", "motis-candidate-manifest.json"),
-  );
-  const slotStatePath = join(DATA_DIR, "motis", "slot-state.json");
-  const activeManifestPath = join(motisDir, "motis-candidate-manifest.json");
-  const preflightPath = join(DATA_DIR, "motis", "preflight.json");
-  const parsedJson = (path: string): Record<string, unknown> | null => {
-    try {
-      const value = JSON.parse(readFileSync(path, "utf-8"));
-      return value && typeof value === "object" && !Array.isArray(value)
-        ? (value as Record<string, unknown>)
-        : null;
-    } catch {
-      return null;
-    }
-  };
-  const slotState = parsedJson(slotStatePath);
-  const activeManifest = parsedJson(activeManifestPath);
-  const preflight = parsedJson(preflightPath);
-  const operationsPolicy = activeManifest?.operationsPolicy as Record<string, unknown> | undefined;
-  const profile = operationsPolicy?.profile;
-  const operationsProfile = ["regional-assisted", "regional-sovereign", "planet"].includes(
-    String(profile),
-  )
-    ? (profile as MotisTransitousStatus["operationsProfile"])
-    : "unknown";
-  const activeSlot = ["A", "B"].includes(String(slotState?.activeSlot))
-    ? (slotState?.activeSlot as "A" | "B")
-    : null;
-  const previousHealthySlot = ["A", "B"].includes(String(slotState?.previousHealthySlot))
-    ? (slotState?.previousHealthySlot as "A" | "B")
-    : null;
-  const estimate = preflight?.estimate as Record<string, unknown> | undefined;
-  const capacity = preflight?.capacity as Record<string, unknown> | undefined;
-  const operationsStatus = {
-    operationsProfile,
-    activeSlot,
-    previousHealthySlot,
-    preflightState: preflight ? (preflight.ok === true ? "passed" : "blocked") : "missing",
-    preflightRequiredDiskBytes:
-      typeof estimate?.requiredDiskBytes === "number" ? estimate.requiredDiskBytes : null,
-    preflightFreeDiskBytes:
-      typeof capacity?.freeDiskBytes === "number" ? capacity.freeDiskBytes : null,
-    pinProposalPending: existsSync(join(INFRA_DIR, "transitous.lock.proposed.json")),
-    crowdsourceState: "disabled-pending-review" as const,
-  } satisfies Pick<
-    MotisTransitousStatus,
-    | "operationsProfile"
-    | "activeSlot"
-    | "previousHealthySlot"
-    | "preflightState"
-    | "preflightRequiredDiskBytes"
-    | "preflightFreeDiskBytes"
-    | "pinProposalPending"
-    | "crowdsourceState"
-  >;
-  const rollbackAvailable = Boolean(previousHealthySlot) || existsSync(`${motisDir}.previous`);
-  const gbfsCatalog = readGbfsCatalogStatus(motisDir);
-
-  let snapshot: MobilityCapabilitySnapshot | null = null;
-  let capabilityError: string | undefined;
-  if (existsSync(snapshotPath)) {
-    try {
-      const parsed = JSON.parse(readFileSync(snapshotPath, "utf-8")) as MobilityCapabilitySnapshot;
-      if (parsed.schemaVersion !== 1 || typeof parsed.epoch !== "string") {
-        throw new Error("unsupported capability snapshot schema");
-      }
-      snapshot = parsed;
-    } catch (error) {
-      capabilityError = (error as Error).message;
-    }
-  }
-
-  const feedProxyConfigFound = existsSync(feedProxyConfigPath);
-  const feedProxyVarsFound = existsSync(feedProxyVarsPath);
-  let feedProxyFeedCount = 0;
-  if (feedProxyVarsFound) {
-    try {
-      const parsed = JSON.parse(readFileSync(feedProxyVarsPath, "utf-8")) as unknown;
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        feedProxyFeedCount = Object.keys(parsed).length;
-      }
-    } catch {
-      feedProxyFeedCount = 0;
-    }
-  }
-
-  if (!existsSync(configPath)) {
-    return {
-      configFound: false,
-      datasetCount: 0,
-      realtimeFeedCount: 0,
-      gbfsFeedCount: 0,
-      feedProxyUrlCount: 0,
-      gbfsProxyUrl: null,
-      feedProxyMode: "none",
-      feedProxyConfigFound,
-      feedProxyVarsFound,
-      feedProxyFeedCount,
-      capabilityState: capabilityError ? "error" : "missing",
-      capabilityError,
-      activeEpoch: snapshot?.epoch ?? null,
-      candidateEpoch,
-      testedAt: snapshot?.testedAt ?? null,
-      configHash: null,
-      licenseHash: hashFile(join(motisDir, "license.json")),
-      rentalProviderCount: snapshot?.rentals?.providerIds?.length ?? 0,
-      rentalProviderGroupCount: snapshot?.rentals?.providerGroupIds?.length ?? 0,
-      rollbackAvailable,
-      ...operationsStatus,
-      gbfsCatalog,
-    };
-  }
-
-  const configText = readFileSync(configPath, "utf-8");
-  let expectations: ReturnType<typeof parseMotisConfigExpectations>;
-  try {
-    expectations = parseMotisConfigExpectations(configText);
-  } catch (error) {
-    expectations = {
-      timetableDatasets: 0,
-      realtimeFeeds: 0,
-      gbfsFeeds: 0,
-      expectsGbfs: false,
-      tilesEnabled: false,
-      elevationEnabled: false,
-      routedTransfersEnabled: false,
-      gbfsProxyUrl: null,
-      feedProxyUrls: [],
-    };
-    capabilityError ??= `invalid MOTIS config: ${(error as Error).message}`;
-  }
-  const datasetCount = expectations.timetableDatasets;
-  const realtimeFeedCount = expectations.realtimeFeeds;
-  const gbfsFeedCount = expectations.gbfsFeeds;
-
-  const feedProxyHosts = expectations.feedProxyUrls
-    .map((raw) => {
-      try {
-        return new URL(raw).hostname.toLowerCase();
-      } catch {
-        return null;
-      }
-    })
-    .filter((host): host is string => Boolean(host));
-
-  const uniqueHosts = new Set(feedProxyHosts);
-  const gbfsProxyUrl = expectations.gbfsProxyUrl;
-  if (gbfsProxyUrl) {
-    try {
-      uniqueHosts.add(new URL(gbfsProxyUrl).hostname.toLowerCase());
-    } catch {
-      // Invalid operator YAML remains visible via gbfsProxyUrl; it is not
-      // classified as a healthy self-hosted endpoint.
-    }
-  }
-  const feedProxyUrlCount = feedProxyHosts.length;
-  const hasTransitousProxy = uniqueHosts.has("rt.triptix.tech");
-  const hasOtherProxy = [...uniqueHosts].some((host) => host !== "rt.triptix.tech");
-  const feedProxyMode: MotisTransitousStatus["feedProxyMode"] =
-    uniqueHosts.size === 0
-      ? "none"
-      : hasTransitousProxy && hasOtherProxy
-        ? "mixed"
-        : hasTransitousProxy
-          ? "transitous-cloud"
-          : "self-hosted";
-  const configHash = hashFile(configPath);
-  const licenseHash = hashFile(join(motisDir, "license.json"));
-  const capabilityState: MotisTransitousStatus["capabilityState"] = capabilityError
-    ? "error"
-    : !snapshot
-      ? "missing"
-      : snapshot.artifacts.config.sha256 !== configHash ||
-          snapshot.artifacts.license.sha256 !== licenseHash
-        ? "stale"
-        : "healthy";
-
-  return {
-    configFound: true,
-    datasetCount,
-    realtimeFeedCount,
-    gbfsFeedCount,
-    feedProxyUrlCount,
-    gbfsProxyUrl,
-    feedProxyMode,
-    feedProxyConfigFound,
-    feedProxyVarsFound,
-    feedProxyFeedCount,
-    capabilityState,
-    capabilityError,
-    activeEpoch: snapshot?.epoch ?? null,
-    candidateEpoch,
-    testedAt: snapshot?.testedAt ?? null,
-    configHash,
-    licenseHash,
-    rentalProviderCount: snapshot?.rentals?.providerIds?.length ?? 0,
-    rentalProviderGroupCount: snapshot?.rentals?.providerGroupIds?.length ?? 0,
-    rollbackAvailable,
-    ...operationsStatus,
-    gbfsCatalog,
-  };
 }

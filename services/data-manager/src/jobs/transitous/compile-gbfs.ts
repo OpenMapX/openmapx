@@ -9,10 +9,12 @@ import {
   type GbfsSourceIndexEntry,
   parseMobilityDataGbfsCsv,
 } from "@openmapx/transitous-core";
+import pMap from "p-map";
 import { runOpsOperation } from "../../ops-client.js";
 import { atomicWriteJsonSync } from "../../utils/atomic-write.js";
 import { scrubSecrets } from "../../utils/scrub-secrets.js";
 import { readFeedOverlay } from "../transitous-feeds-overlay.js";
+import { resolveTransitOverlayPath } from "./internal.js";
 import type { StageFn, StageResult } from "./types.js";
 
 interface ObservedFeedLicense {
@@ -200,24 +202,6 @@ export async function validateGbfsAddition(
   }
 }
 
-async function mapConcurrent<T, R>(
-  items: T[],
-  concurrency: number,
-  task: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const output = new Array<R>(items.length);
-  let cursor = 0;
-  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-    while (cursor < items.length) {
-      const index = cursor++;
-      const item = items[index];
-      if (item !== undefined) output[index] = await task(item);
-    }
-  });
-  await Promise.all(workers);
-  return output;
-}
-
 function readValidationCache(path: string, registrySha256: string): Map<string, ValidationResult> {
   if (!existsSync(path)) return new Map();
   try {
@@ -315,10 +299,7 @@ export const run: StageFn = async (ctx) => {
       throw new Error(`GBFS registry hash mismatch: expected ${lock.sha256}, got ${actualHash}`);
 
     const catalogDir = ctx.state.catalogDir ?? ctx.catalogDir;
-    const overlayPath =
-      ctx.feedsOverlayPath ??
-      process.env.TRANSITOUS_FEEDS_OVERLAY_PATH ??
-      join(ctx.repoRoot, "infra", "docker", "data", "overrides", "feeds-overlay.json");
+    const overlayPath = resolveTransitOverlayPath(ctx.dataDir, ctx.feedsOverlayPath);
     const overlay = existsSync(overlayPath) ? readFeedOverlay(overlayPath) : null;
     const compiled = compileGbfsCatalog({
       rows: parseMobilityDataGbfsCsv(csv),
@@ -332,10 +313,10 @@ export const run: StageFn = async (ctx) => {
     const cachePath = join(ctx.dataDir, ".gbfs-validation-cache.json");
     const cache = readValidationCache(cachePath, lock.sha256);
     const uncached = compiled.additions.filter((addition) => !cache.has(addition.sourceId));
-    const freshValidations = await mapConcurrent(
+    const freshValidations = await pMap(
       uncached,
-      intEnv("MOTIS_GBFS_CATALOG_CONCURRENCY", 4),
       (addition) => validateGbfsAddition(addition, timeoutMs, checkedAt),
+      { concurrency: intEnv("MOTIS_GBFS_CATALOG_CONCURRENCY", 4) },
     );
     const freshById = new Map(freshValidations.map((result) => [result.sourceId, result]));
     const validations = compiled.additions

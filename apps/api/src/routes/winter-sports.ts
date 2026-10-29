@@ -44,7 +44,7 @@ export const winterSportsRoute: FastifyPluginAsync = async (fastify) => {
       const rw = round(west, 2);
       const rn = round(north, 2);
       const re = round(east, 2);
-      const cacheKey = `cache:winter-sports:features:${rs},${rw},${rn},${re}`;
+      const cacheKey = `cache:winter-sports:features-v2:${rs},${rw},${rn},${re}`;
 
       try {
         const { data, status } = await withCacheStatus(cacheKey, TTL.winterSports, () =>

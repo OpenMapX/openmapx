@@ -5,10 +5,11 @@ import {
   API_ENDPOINTS,
   apiClient,
   categoryPlaceToPlace,
-  commonsLogoUrl,
   firstBrandIdentity,
+  isDisplayablePhoto,
   makeSyntheticStopPlace,
   PANEL,
+  type PlacePhoto,
   poiCategoryIconPath,
   proxyImageUrl,
   resolvePoiCategoryId,
@@ -18,18 +19,34 @@ import {
   useSidebarStore,
   useTransitStops,
 } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  contributorsForField,
+  contributorsForRecordFields,
+  readCapturedContributors,
+  readCapturedFieldContributors,
+  serializeContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
-import type { FilterSpecification, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
+import type {
+  ExpressionSpecification,
+  FilterSpecification,
+  Map as MaplibreMap,
+  MapMouseEvent,
+} from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { usePinMarker } from "@/hooks/usePinMarker";
 import { usePlaceEnrichment } from "@/hooks/usePlaceEnrichment";
-import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { addLayerInSlot, removeSlottedLayers } from "@/integration-api/map/layerStack";
 import { createGeoJsonSourcePublisher } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
+import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { createBrandMarkerSvg, createMarkerSvg } from "@/lib/markerSvg";
 import { useExploreReachResults } from "@/lib/useExploreReachResults";
+import { resultMarkerLayers } from "./resultMarkerLayers";
 
 const SOURCE_ID = "category-results-source";
 const LAYER_ID = "category-results-layer";
@@ -105,19 +122,42 @@ export function brandImageId(qid: string): string {
  * any step fails; callers fall back to the category marker, so a broken or
  * missing logo costs a plain pin rather than a missing one.
  */
+const brandAssetReceipts = new WeakMap<MaplibreMap, Map<string, readonly Attribution[]>>();
+
+/** Receipts certify only the image currently installed in this map; clone before exposing them. */
+export function loadedBrandMarkerContributors(map: MaplibreMap, qid: string): Attribution[] {
+  const id = brandImageId(qid);
+  return map.hasImage(id) ? snapshotContributors(brandAssetReceipts.get(map)?.get(id) ?? []) : [];
+}
+
 export async function loadBrandMarkerImage(
   map: MaplibreMap,
   qid: string,
   isCurrent: () => boolean = () => true,
 ): Promise<boolean> {
   const imageId = brandImageId(qid);
-  if (map.hasImage(imageId)) return true;
+  if (map.hasImage(imageId) && brandAssetReceipts.get(map)?.has(imageId)) return true;
 
   try {
-    const detail = await apiClient.get<BrandDetail>(`${API_ENDPOINTS.brandDetail}/${qid}`);
+    const detail = await apiClient.get<BrandDetail>(`${API_ENDPOINTS.brandDetail}/${qid}`, {
+      catalogue: "2",
+    });
     if (!detail.logoFile) return false;
 
-    const response = await fetch(proxyImageUrl(commonsLogoUrl(detail.logoFile, 72)));
+    const photo = await apiClient.get<PlacePhoto & { logoFile: string }>(
+      `${API_ENDPOINTS.brandLogoAttribution}/${qid}/logo-attribution`,
+    );
+    if (
+      photo.logoFile !== detail.logoFile ||
+      !isDisplayablePhoto(photo) ||
+      !photo.contributors?.length
+    )
+      return false;
+    const receipts = snapshotContributors(
+      contributorsForField(detail, "logoFile"),
+      photo.contributors,
+    );
+    const response = await fetch(proxyImageUrl(photo.thumbnailUrl ?? photo.url));
     if (!response.ok) return false;
     const blob = await response.blob();
     const dataUri = await new Promise<string>((resolve, reject) => {
@@ -134,7 +174,15 @@ export async function loadBrandMarkerImage(
           resolve(false);
           return;
         }
-        if (!map.hasImage(imageId)) map.addImage(imageId, img, { pixelRatio: 2 });
+        // An old uncredited image cannot certify the newly acquired file.
+        if (map.hasImage(imageId)) map.removeImage(imageId);
+        map.addImage(imageId, img, { pixelRatio: 2 });
+        let captured = brandAssetReceipts.get(map);
+        if (!captured) {
+          captured = new Map();
+          brandAssetReceipts.set(map, captured);
+        }
+        captured.set(imageId, receipts);
         resolve(true);
       };
       img.onerror = () => resolve(false);
@@ -178,12 +226,32 @@ export function buildGeoJson(
   results: CategoryPlace[],
   markerImageFor: (place: CategoryPlace) => string,
   brandImageIds: ReadonlySet<string>,
+  categoryFromResult = false,
+  assetReceipts: ReadonlyMap<string, readonly Attribution[]> = new Map(),
 ) {
   return {
     type: "FeatureCollection" as const,
     features: results.map((place) => {
       const qid = placeBrandQid(place);
       const branded = qid !== undefined && brandImageIds.has(brandImageId(qid));
+      const imageId = branded && qid !== undefined ? brandImageId(qid) : markerImageFor(place);
+      const markerFields = ["coordinates"];
+      if (branded) {
+        const identity = placeBrandIdentity(place);
+        if (identity) markerFields.push(`osmTags.${identity.kind}:wikidata`);
+      } else if (categoryFromResult) {
+        for (const [field, candidate] of [
+          ["category", place.category],
+          ["osmTags.amenity", place.osmTags?.amenity],
+          ["osmTags.shop", place.osmTags?.shop],
+          ["osmTags.tourism", place.osmTags?.tourism],
+        ] as const) {
+          if (candidate && resolvePoiCategoryId(candidate)) {
+            markerFields.push(field);
+            break;
+          }
+        }
+      }
       return {
         type: "Feature" as const,
         geometry: { type: "Point" as const, coordinates: place.coordinates },
@@ -195,7 +263,16 @@ export function buildGeoJson(
           phone: place.phone ?? "",
           website: place.website ?? "",
           openingHours: place.openingHours ?? "",
-          imageId: branded && qid !== undefined ? brandImageId(qid) : markerImageFor(place),
+          imageId,
+          _mapMarkerAttributions: serializeContributors(
+            snapshotContributors(
+              contributorsForRecordFields(place, markerFields),
+              branded ? (assetReceipts.get(imageId) ?? []) : [],
+            ),
+          ),
+          _mapLabelAttributions: serializeContributors(
+            contributorsForRecordFields(place, ["coordinates", "name"]),
+          ),
         },
       };
     }),
@@ -263,6 +340,14 @@ function buildTransitGeoJson(stops: TransitStop[]) {
         platformCode: stop.platformCode ?? "",
         parentStationId: stop.parentStationId ?? "",
         imageId: `transit-marker-${stop.modes[0] ?? "bus"}`,
+        _mapMarkerAttributions: serializeContributors(
+          contributorsForRecordFields(stop, ["lat", "lng", "modes"]),
+        ),
+        _mapLabelAttributions: serializeContributors(
+          contributorsForRecordFields(stop, ["lat", "lng", "name"]),
+        ),
+        _recordContributors: serializeContributors(stop.contributors ?? []),
+        _fieldContributors: JSON.stringify(stop.fieldContributors),
       },
     })),
   };
@@ -271,6 +356,21 @@ function buildTransitGeoJson(stops: TransitStop[]) {
 export function CategoryResultMarkers() {
   const publish = useRef(createGeoJsonSourcePublisher()).current;
   const { mapRef, mapReady, styleVersion, flyTo } = useMap();
+  useRenderedMapAttributions(
+    "category-results",
+    [LAYER_ID, LABEL_LAYER_ID, TRANSIT_LAYER_ID, TRANSIT_LABEL_LAYER_ID],
+    true,
+    {
+      resolveFeatureContributors: (feature) =>
+        readCapturedContributors(
+          feature.properties?.[
+            feature.layer.id === LABEL_LAYER_ID || feature.layer.id === TRANSIT_LABEL_LAYER_ID
+              ? "_mapLabelAttributions"
+              : "_mapMarkerAttributions"
+          ],
+        ) ?? [],
+    },
+  );
   const activeCategory = useCategorySearchStore((s) => s.activeCategory);
   const mode = useCategorySearchStore((s) => s.mode);
   const textQuery = useCategorySearchStore((s) => s.textQuery);
@@ -309,15 +409,21 @@ export function CategoryResultMarkers() {
     true,
     undefined,
     hoverPinPlace ? activateHoverPin : undefined,
+    hoverPinPlace ? contributorsForField(hoverPinPlace, "coordinates") : [],
+    hoverPinPlace ? contributorsForRecordFields(hoverPinPlace, ["coordinates", "name"]) : [],
   );
 
   const focusFilter = useMemo<FilterSpecification>(
-    () => [
-      "all",
-      ["!=", ["get", "id"], selectedResultId ?? ""],
-      ["!=", ["get", "id"], hoveredCategoryPlaceId ?? ""],
-    ],
-    [selectedResultId, hoveredCategoryPlaceId],
+    () => ["!=", ["get", "id"], selectedResultId ?? ""],
+    [selectedResultId],
+  );
+  // The hovered result keeps its marker under the hover pin, and only its name
+  // fades out because the pin labels it. Hiding the label through opacity
+  // rather than a filter keeps the symbol placed, so it still answers hover
+  // queries and the neighbouring labels do not reshuffle.
+  const hoverLabelOpacity = useMemo<ExpressionSpecification>(
+    () => ["case", ["==", ["get", "id"], hoveredCategoryPlaceId ?? ""], 0, 1],
+    [hoveredCategoryPlaceId],
   );
   const applyFocusRef = useRef<() => void>(() => {});
 
@@ -332,6 +438,13 @@ export function CategoryResultMarkers() {
           map.setFilter(layerId, focusFilter);
         }
       }
+      if (
+        map.getLayer(LABEL_LAYER_ID) &&
+        JSON.stringify(map.getPaintProperty(LABEL_LAYER_ID, "text-opacity")) !==
+          JSON.stringify(hoverLabelOpacity)
+      ) {
+        map.setPaintProperty(LABEL_LAYER_ID, "text-opacity", hoverLabelOpacity);
+      }
     };
     applyFocusRef.current = applyFocus;
     const unsubscribe = subscribeStyleLoaded(map, applyFocus);
@@ -339,15 +452,15 @@ export function CategoryResultMarkers() {
       unsubscribe();
       applyFocusRef.current = () => {};
     };
-  }, [mapRef, mapReady, styleVersion, focusFilter]);
+  }, [mapRef, mapReady, styleVersion, focusFilter, hoverLabelOpacity]);
 
   const markerImageFor = useMemo(
     () => (mode === "text" ? textResultImageId : () => categoryMarkerImageId(activeCategory ?? "")),
     [mode, activeCategory],
   );
   const categoryGeojson = useMemo(
-    () => buildGeoJson(results ?? [], markerImageFor, new Set()),
-    [results, markerImageFor],
+    () => buildGeoJson(results ?? [], markerImageFor, new Set(), mode === "text"),
+    [results, markerImageFor, mode],
   );
   const markerImageIds = useMemo(
     () => [...new Set((results ?? []).map(markerImageFor))],
@@ -379,21 +492,17 @@ export function CategoryResultMarkers() {
     const brandPublished = new WeakMap<object, string>();
     let categoryData = categoryGeojson;
 
-    const removeCategoryLayers = () => {
-      if (map.getLayer(LABEL_LAYER_ID)) map.removeLayer(LABEL_LAYER_ID);
-      if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      unregisterLayerSlot(LABEL_LAYER_ID);
-      unregisterLayerSlot(LAYER_ID);
-    };
+    const removeCategoryLayers = () =>
+      removeSlottedLayers(map, [LABEL_LAYER_ID, LAYER_ID], [SOURCE_ID]);
+    const removeTransitLayers = () =>
+      removeSlottedLayers(map, [TRANSIT_LABEL_LAYER_ID, TRANSIT_LAYER_ID], [TRANSIT_SOURCE_ID]);
 
-    const removeTransitLayers = () => {
-      if (map.getLayer(TRANSIT_LABEL_LAYER_ID)) map.removeLayer(TRANSIT_LABEL_LAYER_ID);
-      if (map.getLayer(TRANSIT_LAYER_ID)) map.removeLayer(TRANSIT_LAYER_ID);
-      if (map.getSource(TRANSIT_SOURCE_ID)) map.removeSource(TRANSIT_SOURCE_ID);
-      unregisterLayerSlot(TRANSIT_LABEL_LAYER_ID);
-      unregisterLayerSlot(TRANSIT_LAYER_ID);
-    };
+    // Asynchronous image completions belong to this effect, this map and the
+    // exact source instance they were started for. The source identity also
+    // certifies the parsed style: isStyleLoaded() waits for tiles, and image or
+    // layer completion need not emit another styledata to be retried.
+    const ownsSource = (sourceId: string, source: object) => () =>
+      !cancelled && mapRef.current === map && map.getSource(sourceId) === source;
 
     const sync = () => {
       const hasContext = mode === "text" ? Boolean(textQuery) : Boolean(activeCategory);
@@ -421,64 +530,56 @@ export function CategoryResultMarkers() {
         )
           return;
         markerPending.add(source);
+        const isCurrent = ownsSource(TRANSIT_SOURCE_ID, source);
 
         // Reconcile missing layers/images without republishing unchanged data.
-        void Promise.all(
-          transitModes.map((m) =>
-            loadTransitMarkerImage(
-              map,
-              m,
-              () =>
-                !cancelled &&
-                map.getSource(TRANSIT_SOURCE_ID) === source &&
-                map.isStyleLoaded() === true,
-            ),
-          ),
-        ).then(() => {
-          markerPending.delete(source);
-          if (cancelled || map.getSource(TRANSIT_SOURCE_ID) !== source) return;
-          if (!map.getLayer(TRANSIT_LAYER_ID)) {
-            addLayerInSlot(
-              map,
-              {
-                id: TRANSIT_LAYER_ID,
-                type: "symbol",
-                source: TRANSIT_SOURCE_ID,
-                layout: {
-                  "icon-image": ["get", "imageId"],
-                  "icon-allow-overlap": true,
-                  "icon-ignore-placement": true,
+        void Promise.all(transitModes.map((m) => loadTransitMarkerImage(map, m, isCurrent))).then(
+          () => {
+            markerPending.delete(source);
+            if (!isCurrent()) return;
+            if (!map.getLayer(TRANSIT_LAYER_ID)) {
+              addLayerInSlot(
+                map,
+                {
+                  id: TRANSIT_LAYER_ID,
+                  type: "symbol",
+                  source: TRANSIT_SOURCE_ID,
+                  layout: {
+                    "icon-image": ["get", "imageId"],
+                    "icon-allow-overlap": true,
+                    "icon-ignore-placement": true,
+                  },
                 },
-              },
-              "route-markers",
-              8,
-            );
-          }
-          if (!map.getLayer(TRANSIT_LABEL_LAYER_ID)) {
-            addLayerInSlot(
-              map,
-              {
-                id: TRANSIT_LABEL_LAYER_ID,
-                type: "symbol",
-                source: TRANSIT_SOURCE_ID,
-                layout: {
-                  "text-field": ["get", "name"],
-                  "text-size": 11,
-                  "text-offset": [0, 2.0],
-                  "text-anchor": "top",
-                  "text-max-width": 8,
+                "route-markers",
+                8,
+              );
+            }
+            if (!map.getLayer(TRANSIT_LABEL_LAYER_ID)) {
+              addLayerInSlot(
+                map,
+                {
+                  id: TRANSIT_LABEL_LAYER_ID,
+                  type: "symbol",
+                  source: TRANSIT_SOURCE_ID,
+                  layout: {
+                    "text-field": ["get", "name"],
+                    "text-size": 11,
+                    "text-offset": [0, 2.0],
+                    "text-anchor": "top",
+                    "text-max-width": 8,
+                  },
+                  paint: {
+                    "text-color": "#333333",
+                    "text-halo-color": "#FFFFFF",
+                    "text-halo-width": 1.5,
+                  },
                 },
-                paint: {
-                  "text-color": "#333333",
-                  "text-halo-color": "#FFFFFF",
-                  "text-halo-width": 1.5,
-                },
-              },
-              "route-markers",
-              9,
-            );
-          }
-        });
+                "route-markers",
+                9,
+              );
+            }
+          },
+        );
         return;
       }
 
@@ -498,7 +599,7 @@ export function CategoryResultMarkers() {
       const source = publish(map, SOURCE_ID, categoryData);
       initialized.add(source);
 
-      // Load images then add layers (images may already be cached)
+      // Load images then add layers (images may already be cached).
       if (
         !markerPending.has(source) &&
         (!map.getLayer(LAYER_ID) ||
@@ -506,61 +607,20 @@ export function CategoryResultMarkers() {
           !markerImageIds.every((imageId) => map.hasImage(imageId)))
       ) {
         markerPending.add(source);
-        const isCurrent = () =>
-          !cancelled && map.getSource(SOURCE_ID) === source && map.isStyleLoaded() === true;
+        const isCurrent = ownsSource(SOURCE_ID, source);
         void Promise.all(
           markerImageIds.map((imageId) =>
             loadMarkerImage(map, imageId, markerIconPath(imageId), isCurrent),
           ),
         ).then(() => {
           markerPending.delete(source);
-          if (cancelled || map.getSource(SOURCE_ID) !== source || !map.isStyleLoaded()) return;
-          if (!map.getLayer(LAYER_ID)) {
-            addLayerInSlot(
-              map,
-              {
-                id: LAYER_ID,
-                type: "symbol",
-                source: SOURCE_ID,
-                layout: {
-                  "icon-image": ["get", "imageId"],
-                  "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.45, 14, 0.6, 17, 0.85],
-                  "icon-allow-overlap": false,
-                  "icon-ignore-placement": false,
-                },
-              },
-              "route-markers",
-              6,
-            );
-          }
-          if (!map.getLayer(LABEL_LAYER_ID)) {
-            addLayerInSlot(
-              map,
-              {
-                id: LABEL_LAYER_ID,
-                type: "symbol",
-                source: SOURCE_ID,
-                minzoom: 15,
-                layout: {
-                  "text-field": ["get", "name"],
-                  "text-size": 11,
-                  "text-offset": [0, 2.0],
-                  "text-anchor": "top",
-                  "text-max-width": 8,
-                  "text-allow-overlap": false,
-                  "text-ignore-placement": false,
-                },
-                paint: {
-                  // The pin's red, deepened for text, so a result's name reads
-                  // apart from the basemap's own category-coloured labels.
-                  "text-color": "#B3261E",
-                  "text-halo-color": "#FFFFFF",
-                  "text-halo-width": 2,
-                },
-              },
-              "route-markers",
-              7,
-            );
+          if (!isCurrent()) return;
+          for (const [index, layer] of resultMarkerLayers(
+            SOURCE_ID,
+            LAYER_ID,
+            LABEL_LAYER_ID,
+          ).entries()) {
+            if (!map.getLayer(layer.id)) addLayerInSlot(map, layer, "route-markers", 6 + index);
           }
           applyFocusRef.current();
         });
@@ -570,8 +630,8 @@ export function CategoryResultMarkers() {
       // (`loadBrandMarkerImage` short-circuits on `map.hasImage`, so panning
       // back over the same chain never refetches). Runs independently of the
       // fallback-icon load above; once resolved, swap the matching pins over
-      // to their logo. `cancelled`/`getSource` re-checked here because this can
-      // resolve after a newer `sync()` call (or teardown) already moved on.
+      // to their logo. Ownership is re-checked because this can resolve after a
+      // newer `sync()` call (or teardown) already moved on.
       const allBrandIds = qids.map(brandImageId);
       if (
         qids.length > 0 &&
@@ -582,27 +642,25 @@ export function CategoryResultMarkers() {
         )
       ) {
         brandPending.add(source);
+        const isCurrent = ownsSource(SOURCE_ID, source);
         void Promise.all(
-          qids.map(async (qid) =>
-            (await loadBrandMarkerImage(
-              map,
-              qid,
-              () =>
-                !cancelled && map.getSource(SOURCE_ID) === source && map.isStyleLoaded() === true,
-            ))
-              ? qid
-              : null,
-          ),
+          qids.map(async (qid) => ((await loadBrandMarkerImage(map, qid, isCurrent)) ? qid : null)),
         ).then((loaded) => {
           brandPending.delete(source);
-          if (cancelled || map.getSource(SOURCE_ID) !== source) return;
+          if (!isCurrent()) return;
           const brandImageIds = new Set(
             loaded.filter((qid): qid is string => qid !== null).map((qid) => brandImageId(qid)),
           );
           const revision = [...brandImageIds].join(",");
           if (brandImageIds.size === 0 || brandPublished.get(source) === revision) return;
           brandPublished.set(source, revision);
-          categoryData = buildGeoJson(results, markerImageFor, brandImageIds);
+          categoryData = buildGeoJson(
+            results,
+            markerImageFor,
+            brandImageIds,
+            mode === "text",
+            brandAssetReceipts.get(map),
+          );
           publish(map, SOURCE_ID, categoryData);
         });
       }
@@ -637,20 +695,11 @@ export function CategoryResultMarkers() {
     return () => {
       const map = mapRef.current;
       if (!map) return;
-      try {
-        if (map.getLayer(LABEL_LAYER_ID)) map.removeLayer(LABEL_LAYER_ID);
-        if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        if (map.getLayer(TRANSIT_LABEL_LAYER_ID)) map.removeLayer(TRANSIT_LABEL_LAYER_ID);
-        if (map.getLayer(TRANSIT_LAYER_ID)) map.removeLayer(TRANSIT_LAYER_ID);
-        if (map.getSource(TRANSIT_SOURCE_ID)) map.removeSource(TRANSIT_SOURCE_ID);
-      } catch {
-        // Map may already be destroyed
-      }
-      unregisterLayerSlot(LABEL_LAYER_ID);
-      unregisterLayerSlot(LAYER_ID);
-      unregisterLayerSlot(TRANSIT_LABEL_LAYER_ID);
-      unregisterLayerSlot(TRANSIT_LAYER_ID);
+      removeSlottedLayers(
+        map,
+        [LABEL_LAYER_ID, LAYER_ID, TRANSIT_LABEL_LAYER_ID, TRANSIT_LAYER_ID],
+        [SOURCE_ID, TRANSIT_SOURCE_ID],
+      );
     };
   }, [mapRef]);
 
@@ -733,6 +782,10 @@ export function CategoryResultMarkers() {
         provider: props.provider,
         platformCode: props.platformCode || undefined,
         parentStationId: props.parentStationId || undefined,
+        contributors: readCapturedContributors(features[0].properties?._recordContributors) ?? [],
+        fieldContributors: readCapturedFieldContributors(
+          features[0].properties?._fieldContributors,
+        ),
       };
       flyTo([stop.lng, stop.lat], 16);
       selectWithEnrichment(makeSyntheticStopPlace(stop), () => resolveStopAsPlace(stop));

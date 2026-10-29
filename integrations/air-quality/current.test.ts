@@ -1,5 +1,6 @@
 import type { AirQualityEvidence } from "@openmapx/air-quality";
 import { indexId, observationId } from "@openmapx/air-quality/ids";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it } from "vitest";
 
 import { hasEcccCommunityMatch } from "./current.js";
@@ -74,10 +75,10 @@ function officialCommunity(): AirQualityEvidence {
         name: "ECCC AQHI",
         url: "https://api.weather.gc.ca/collections/aqhi-observations-realtime",
         owner: "Environment and Climate Change Canada",
-        license: {
-          name: "Open Government Licence – Canada",
-          url: "https://open.canada.ca/en/open-government-licence-canada",
-        },
+        licensing: licensingFromDeclaration(
+          "Open Government Licence – Canada",
+          "https://open.canada.ca/en/open-government-licence-canada" ?? undefined,
+        ),
         methodologyUrl: "https://eccc-msc.github.io/open-data/msc-data/aqhi/readme_aqhi_en/",
         attribution: "Environment and Climate Change Canada",
       },

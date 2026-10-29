@@ -9,6 +9,7 @@ import type {
   TemporalCapabilities,
   TravelMode,
 } from "@openmapx/core";
+import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
 
 export type {
   DirectionsResult,
@@ -65,6 +66,12 @@ export interface RoutingProvider {
    */
   readonly supportsExclusions?: boolean;
   /**
+   * Whether route and optimize requests honour `RoutingOptions.directedExclusions`,
+   * excluding only travel in the given heading at each point. The orchestrator
+   * routes a request carrying them only through providers that declare this.
+   */
+  readonly supportsDirectedExclusions?: boolean;
+  /**
    * Per-semantic temporal support, read by the schedule planner. Providers that
    * omit it are interpreted through `supportsTimeAware` by
    * `resolveTemporalCapabilities`, so an existing provider keeps working.
@@ -99,7 +106,7 @@ export interface RoutingProvider {
     sources: LngLat[],
     targets: LngLat[],
     opts?: { mode?: TravelMode },
-  ): Promise<({ seconds: number; km: number } | null)[][]>;
+  ): Promise<(({ seconds: number; km: number } & ContributingRecord) | null)[][]>;
 }
 
 export type RoutingProviderErrorCode = "unsupported-exclusions";

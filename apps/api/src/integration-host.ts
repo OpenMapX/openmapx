@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   type ActivationTransactionScope,
@@ -20,7 +20,6 @@ import {
   type RouteHandler,
   type RouteOptions,
   satisfiesPlatformVersion,
-  toIntegrationMeta,
   validateDataSource,
   validateManifest,
 } from "@openmapx/integration-framework";
@@ -28,7 +27,7 @@ import {
   integrationBackendBundlePath,
   resolveLayerSelectorPreview,
 } from "@openmapx/integration-framework/installer";
-import { sharedStrings } from "@openmapx/integration-framework/strings";
+import { parseLicensing } from "@openmapx/mobility-core/licensing";
 import {
   beginPlaceResolverStaging,
   commitPlaceResolverStaging,
@@ -44,6 +43,7 @@ import {
   resolveConfigWithSources,
   warnInvalidConfig,
 } from "./integration-config";
+import { readIntegrationFile, setVerifiedIntegrationFiles } from "./integration-files";
 import {
   beginIntegrationRouteStaging,
   commitIntegrationRouteStaging,
@@ -75,7 +75,6 @@ import {
 import { getSecret, isSecretsConfigured } from "./services/secrets";
 import { getServiceRegistry, resolveRequiresForIntegration } from "./services/service-registry";
 import { createRedisUpstreamRuntime, type UpstreamRedisClient } from "./services/upstream-runtime";
-import { getEmailDisclosure } from "./utils/email";
 
 export type { ConfigSource, ConfigValueWithSource };
 export { resolveConfigWithSources };
@@ -103,6 +102,49 @@ function normalizeIntegrationDirs(
   );
 }
 
+/** An installed integration the operations agent reports intact, with the digests of its files. */
+export interface AgentInstalledIntegration {
+  integrationId: string;
+  files: ReadonlyArray<{ path: string; sha256: string }>;
+}
+
+/**
+ * The installed integrations the operations agent reports loadable, injected
+ * by server.ts. It resolves to null when no agent is configured (host
+ * development); the custom directories are then scanned as they are.
+ */
+let installedIntegrationResolver:
+  | (() => Promise<readonly AgentInstalledIntegration[] | null>)
+  | null = null;
+
+export function setInstalledIntegrationResolver(
+  fn: (() => Promise<readonly AgentInstalledIntegration[] | null>) | null,
+): void {
+  installedIntegrationResolver = fn;
+}
+
+async function resolveInstalledIntegrations(): Promise<
+  readonly AgentInstalledIntegration[] | null
+> {
+  if (!installedIntegrationResolver) return null;
+  try {
+    return await installedIntegrationResolver();
+  } catch (error) {
+    // Unknown is not "scan the directory": load none of them.
+    _fastify?.log.warn(error, "Installed integrations are unavailable; none are loaded");
+    return [];
+  }
+}
+
+function parseManifest(bytes: Buffer | null): ReturnType<typeof JSON.parse> | null {
+  if (!bytes) return null;
+  try {
+    return JSON.parse(bytes.toString("utf-8"));
+  } catch {
+    return null;
+  }
+}
+
 async function discoverManifests(
   dirs: NormalizedIntegrationDirectory[],
 ): Promise<
@@ -114,7 +156,38 @@ async function discoverManifests(
     isBuiltIn: boolean;
   }> = [];
 
+  // With an operations agent, an installed directory is loaded only when the
+  // agent reports it intact, and each file read from it is verified against
+  // the digests the agent recorded.
+  const installed = dirs.some((dir) => !dir.isBuiltIn)
+    ? await resolveInstalledIntegrations()
+    : null;
+  const verifiedRoots = installed
+    ? dirs.filter((dir) => !dir.isBuiltIn).map((dir) => dir.directory)
+    : [];
+  const verified = new Map<string, AgentInstalledIntegration["files"]>();
+  for (const root of verifiedRoots) {
+    for (const entry of installed ?? [])
+      verified.set(resolve(root, entry.integrationId), entry.files);
+  }
+  setVerifiedIntegrationFiles(verifiedRoots, verified);
+
   for (const { directory: baseDir, isBuiltIn } of dirs) {
+    if (!isBuiltIn && installed) {
+      for (const { integrationId } of installed) {
+        const directory = resolve(baseDir, integrationId);
+        const manifest = parseManifest(readIntegrationFile(directory, "manifest.json"));
+        if (!manifest) {
+          _fastify?.log.warn(
+            { integrationId },
+            `Skipping installed integration ${integrationId}: its manifest.json is not the one the operations agent installed`,
+          );
+          continue;
+        }
+        results.push({ manifest, directory, isBuiltIn });
+      }
+      continue;
+    }
     if (!existsSync(baseDir)) continue;
 
     const entries = readdirSync(baseDir, { withFileTypes: true });
@@ -148,7 +221,9 @@ function loadStrings(directory: string): IntegrationStrings {
     for (const file of readdirSync(stringsDir)) {
       if (!file.endsWith(".json")) continue;
       const locale = file.replace(".json", "");
-      const content = JSON.parse(readFileSync(join(stringsDir, file), "utf-8"));
+      const bytes = readIntegrationFile(directory, join("strings", file));
+      if (!bytes) continue;
+      const content = JSON.parse(bytes.toString("utf-8"));
       if (content && typeof content === "object") {
         strings[locale] = content;
       }
@@ -219,7 +294,27 @@ function topologicalSort(entries: DiscoveredEntry[]): DiscoveredEntry[] {
   const byId = new Map<string, DiscoveredEntry>();
   for (const entry of entries) {
     const id = entry.manifest.id as string;
-    if (id) byId.set(id, entry);
+    if (!id) continue;
+
+    const existing = byId.get(id);
+    if (!existing) {
+      byId.set(id, entry);
+      continue;
+    }
+
+    if (!existing.isBuiltIn && entry.isBuiltIn) {
+      byId.set(id, entry);
+      console.warn(
+        `[integration-host] Ignoring duplicate integration id "${id}": community integration was replaced by the built-in integration`,
+      );
+      continue;
+    }
+
+    const reason =
+      existing.isBuiltIn && !entry.isBuiltIn
+        ? "community integration was ignored in favor of the built-in integration"
+        : "the later integration was ignored";
+    console.warn(`[integration-host] Ignoring duplicate integration id "${id}": ${reason}`);
   }
 
   const visited = new Set<string>();
@@ -284,8 +379,7 @@ function collectManifestDataSources(
         sourceId: row.sourceId,
         name: row.name,
         url: typeof row.url === "string" ? row.url : undefined,
-        license: typeof row.license === "string" ? row.license : undefined,
-        licenseUrl: typeof row.licenseUrl === "string" ? row.licenseUrl : undefined,
+        licensing: parseLicensing(row.licensing),
         attribution: typeof row.attribution === "string" ? row.attribution : undefined,
         commercialUse:
           typeof row.commercialUse === "string"
@@ -539,6 +633,11 @@ function buildIntegrationContext(args: {
     activationScope,
   } = args;
   const { integration } = args;
+  integration.resolvedServices = Object.freeze(
+    Object.fromEntries(
+      [...requiresMap].map(([key, service]) => [key, Object.freeze({ ...service })]),
+    ),
+  );
   return {
     id,
     manifest,
@@ -628,6 +727,26 @@ function buildIntegrationContext(args: {
       existing.push(provider);
       providers.set("cameras", existing);
     },
+    registerMessageSignProvider(provider) {
+      const existing = providers.get("message-signs") ?? [];
+      existing.push(provider);
+      providers.set("message-signs", existing);
+    },
+    registerRoadWeatherProvider(provider) {
+      const existing = providers.get("road-weather") ?? [];
+      existing.push(provider);
+      providers.set("road-weather", existing);
+    },
+    registerServiceVehicleProvider(provider) {
+      const existing = providers.get("service-vehicles") ?? [];
+      existing.push(provider);
+      providers.set("service-vehicles", existing);
+    },
+    registerBorderCrossingProvider(provider) {
+      const existing = providers.get("border-crossings") ?? [];
+      existing.push(provider);
+      providers.set("border-crossings", existing);
+    },
     registerHazardsProvider(provider) {
       const existing = providers.get("hazards") ?? [];
       existing.push(provider);
@@ -708,7 +827,14 @@ function buildIntegrationContext(args: {
     async getRoadConditionsPolicySnapshot() {
       return roadConditionsPolicyResolver
         ? roadConditionsPolicyResolver()
-        : { authoritative: false, revision: "", validUntil: null, disallowedSourceIds: [] };
+        : {
+            authoritative: false,
+            revision: "",
+            validUntil: null,
+            disallowedSourceIds: [],
+            allowGreyArea: false,
+            allowNonCommercial: false,
+          };
     },
     getDisallowedIntegrationIds() {
       return disallowedIntegrationResolver
@@ -728,14 +854,15 @@ export async function initIntegrations(
   resetIntegrationRoutes();
 
   const discovered = await discoverManifests(_integrationDirs);
+  const sorted = topologicalSort(discovered);
 
-  // Hard-fail at startup when any installed integration declares vault-backed
+  // Hard-fail at startup when any selected integration declares vault-backed
   // secret fields but OPENMAPX_SECRETS_KEY is missing. The lazy fallback in
   // secrets.ts already throws on first decrypt, but lazy failure means the
   // operator only finds out via a 500 from a user-facing route; bailing here
   // surfaces it as a boot error with a clear remediation hint.
   if (!isSecretsConfigured()) {
-    const requiringSecrets = discovered.filter((d) =>
+    const requiringSecrets = sorted.filter((d) =>
       manifestDeclaresSecretFields(d.manifest as IntegrationManifest),
     );
     if (requiringSecrets.length > 0) {
@@ -749,9 +876,6 @@ export async function initIntegrations(
       "OPENMAPX_SECRETS_KEY is not set — vault-backed integration secrets cannot be stored or decrypted",
     );
   }
-
-  // Topological sort by manifest.dependencies to ensure deps load first
-  const sorted = topologicalSort(discovered);
 
   // Load all capability bindings once for requires: resolution.
   // Falls back gracefully if DB is unavailable (e.g. no PostgreSQL in dev).
@@ -946,51 +1070,6 @@ export async function initIntegrations(
   // supplied their sources during setup, so re-index from the live registry.
   await refreshAttributionFromRegistry();
 
-  // Register the /api/integrations endpoint
-  fastify.get("/api/integrations", async (request, reply) => {
-    const disclosures = Array.from(integrations.values())
-      .filter((i) => i.enabled)
-      .flatMap((i) => i.disclosures ?? []);
-    try {
-      disclosures.push(await getEmailDisclosure());
-    } catch (err) {
-      // Don't fail the whole endpoint if the email disclosure can't be resolved.
-      fastify.log.warn({ err }, "email disclosure unavailable; omitting from /api/integrations");
-    }
-    const metadata = {
-      integrations: Array.from(integrations.values())
-        .filter((i) => i.enabled)
-        .map((i) => ({
-          ...toIntegrationMeta(i),
-          isBuiltIn: i.isBuiltIn,
-        })),
-      frameworkStrings: sharedStrings,
-      disclosures,
-    };
-    const revision = createHash("sha256").update(JSON.stringify(metadata)).digest("hex");
-    const etag = `"${revision}"`;
-    reply.header("Cache-Control", "private, no-cache");
-    reply.header("ETag", etag);
-
-    const ifNoneMatch = request.headers["if-none-match"];
-    const validators: string[] =
-      typeof ifNoneMatch === "string"
-        ? ifNoneMatch.split(",")
-        : Array.isArray(ifNoneMatch)
-          ? ifNoneMatch
-          : [];
-    if (
-      validators.some((validator) => {
-        const candidate = validator.trim();
-        return candidate === "*" || candidate.replace(/^W\//, "") === etag;
-      })
-    ) {
-      return reply.status(304).send();
-    }
-
-    return { revision, ...metadata };
-  });
-
   const warnedPreviewIds = new Set<string>();
   fastify.get<{ Params: { id: string } }>("/api/integrations/:id/preview", async (req, reply) => {
     const integration = integrations.get(req.params.id);
@@ -1018,7 +1097,13 @@ export async function initIntegrations(
       return reply.status(404).send({ error: "Not found" });
     }
 
-    const bytes = readFileSync(previewPath);
+    const bytes = readIntegrationFile(
+      integration.directory,
+      relative(realpathSync(integration.directory), previewPath),
+    );
+    if (!bytes) {
+      return reply.status(404).send({ error: "Not found" });
+    }
     const etag = `"${createHash("sha256").update(bytes).digest("hex")}"`;
     reply.header("Content-Type", "image/svg+xml; charset=utf-8");
     reply.header("X-Content-Type-Options", "nosniff");
@@ -1070,7 +1155,7 @@ export async function initIntegrations(
   // Run initial health check to seed the cache, then periodically refresh
   const runHealthRefresh = () => {
     const enabled = Array.from(integrations.values()).filter((i) => i.enabled);
-    executeAllIntegrationHealthChecks(enabled).catch((err) =>
+    executeAllIntegrationHealthChecks(enabled, { scheduled: true }).catch((err) =>
       fastify.log.warn(err, "Health cache refresh failed"),
     );
   };
@@ -1079,6 +1164,11 @@ export async function initIntegrations(
   // Refresh every 60 seconds
   const healthInterval = setInterval(runHealthRefresh, 60_000);
   healthInterval.unref();
+}
+
+/** Whether `initIntegrations` has run, so `reloadIntegrations` can. */
+export function isIntegrationHostInitialized(): boolean {
+  return _fastify !== null;
 }
 
 export function getIntegration(id: string): LoadedIntegration | undefined {

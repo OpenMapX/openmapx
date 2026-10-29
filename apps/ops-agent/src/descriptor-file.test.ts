@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   fstatSync,
   linkSync,
   mkdirSync,
@@ -11,7 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type DescriptorReadOptions,
   listDescriptorAnchoredDirectory,
@@ -98,6 +99,50 @@ describe("descriptor-anchored bounded reads", () => {
     expect(() => listTestDirectory(root, ["one", "two"], 1)).toThrow(
       "Trusted directory listing rejected",
     );
+  });
+
+  it("refuses an anchor directory another account owns", () => {
+    const { root } = fixture();
+    expect(listTestDirectory(root, ["one", "two"], 2)).toHaveLength(1);
+    const spy = vi.spyOn(process, "geteuid").mockReturnValue((process.geteuid?.() ?? 0) + 1);
+    try {
+      expect(() => listTestDirectory(root, ["one", "two"], 2)).toThrow();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("allows group write only where the anchor's writers share this user", () => {
+    const { root, file } = fixture("shared");
+    for (const directory of [root, join(root, "one"), join(root, "one", "two")]) {
+      chmodSync(directory, 0o775);
+    }
+    chmodSync(file, 0o664);
+    expect(() =>
+      readDescriptorAnchoredUtf8(root, ["one", "two", "value.json"], { maximumBytes: 64 }),
+    ).toThrow();
+    expect(
+      readDescriptorAnchoredUtf8(root, ["one", "two", "value.json"], {
+        maximumBytes: 64,
+        allowGroupWritable: true,
+      }),
+    ).toBe("shared");
+    // Not writable by others, and still this user's own, with one link.
+    chmodSync(file, 0o666);
+    expect(() =>
+      readDescriptorAnchoredUtf8(root, ["one", "two", "value.json"], {
+        maximumBytes: 64,
+        allowGroupWritable: true,
+      }),
+    ).toThrow();
+    chmodSync(file, 0o664);
+    linkSync(file, join(root, "alias.json"));
+    expect(() =>
+      readDescriptorAnchoredUtf8(root, ["one", "two", "value.json"], {
+        maximumBytes: 64,
+        allowGroupWritable: true,
+      }),
+    ).toThrow();
   });
 
   it("reads an exact stable regular file through opened directory descriptors", () => {

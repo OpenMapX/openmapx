@@ -27,9 +27,15 @@ import {
   useDebounce,
   useNavigationStore,
 } from "@openmapx/core";
+import {
+  contributorsForRecordFields,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import { useTranslations } from "next-intl";
+import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { BrandLogo } from "@/components/search/BrandLogo";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";
@@ -125,6 +131,19 @@ export function RouteSearchControl() {
   const { results, isLoading, addStop, cancelAddStop } = useRouteSearch(query);
   const selected = results.find((poi) => poi.place.id === selectedId) ?? null;
   const copy = selected ? routeStopCopy(selected) : null;
+  const selectedAttributions = selected
+    ? snapshotContributors(
+        contributorsForRecordFields(selected.place, [
+          "name",
+          selected.detour?.access.kind === "entrance" || selected.place.routingEntrance
+            ? "routingEntrance"
+            : "coordinates",
+        ]),
+        selected.detour?.kind === "network"
+          ? contributorsForRecordFields(selected.detour, ["seconds", "meters"])
+          : [],
+      )
+    : [];
   // A new search or route must retire any pending selection in this sheet.
   const route = useNavigationStore((s) => s.route);
   const session = useNavigationStore((s) => s.navigationStartedAtMs);
@@ -242,6 +261,49 @@ export function RouteSearchControl() {
     setAddFailed(true);
   };
 
+  const renderSelectedHeading = (mark: ReactNode, credits?: ReactNode) =>
+    selected && (
+      <>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.5 }}>
+          <Box
+            sx={{
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: brand ? "background.paper" : BRAND,
+              border: brand ? "1px solid" : "none",
+              borderColor: "divider",
+              color: "#fff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            {mark}
+          </Box>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 600 }} noWrap>
+              {selected.place.name}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" aria-live="polite">
+              {copy && t(copy.key, copy.values)}
+            </Typography>
+            {selected.detour?.kind === "network" && (
+              <Typography variant="body2" color="text.secondary">
+                {t("rsDetourDistance", {
+                  kilometers: (selected.detour.meters / 1000).toFixed(1),
+                })}
+              </Typography>
+            )}
+          </Box>
+        </Box>
+        {credits && (
+          <Box sx={{ mb: 1.5, color: "text.secondary", fontSize: "0.65rem" }}>{credits}</Box>
+        )}
+      </>
+    );
+
   return (
     <>
       {/* Result pins stay rendered whenever a category or brand is active. */}
@@ -331,16 +393,24 @@ export function RouteSearchControl() {
           {brandMatches.length > 0 && (
             <List dense sx={{ mt: 0.5, maxHeight: 240, overflowY: "auto" }}>
               {brandMatches.map((b) => (
-                <ListItemButton
+                <BrandLogo
                   key={b.qid}
-                  onClick={() => handleSelectBrand(b)}
-                  sx={{ borderRadius: 1 }}
-                >
-                  <ListItemIcon sx={{ minWidth: 32 }}>
-                    <BrandLogo brand={b} size={20} />
-                  </ListItemIcon>
-                  <ListItemText primary={b.name} secondary={b.description} />
-                </ListItemButton>
+                  brand={b}
+                  size={20}
+                  render={({ mark, credits }) => (
+                    <>
+                      <ListItemButton onClick={() => handleSelectBrand(b)} sx={{ borderRadius: 1 }}>
+                        <ListItemIcon sx={{ minWidth: 32 }}>{mark}</ListItemIcon>
+                        <ListItemText primary={b.name} secondary={b.description} />
+                      </ListItemButton>
+                      {credits && (
+                        <Box sx={{ px: 2, pb: 1, color: "text.secondary", fontSize: "0.65rem" }}>
+                          {credits}
+                        </Box>
+                      )}
+                    </>
+                  )}
+                />
               ))}
             </List>
           )}
@@ -398,44 +468,15 @@ export function RouteSearchControl() {
             p: 2,
           }}
         >
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.5 }}>
-            <Box
-              sx={{
-                width: 40,
-                height: 40,
-                borderRadius: "50%",
-                bgcolor: brand ? "background.paper" : BRAND,
-                border: brand ? "1px solid" : "none",
-                borderColor: "divider",
-                color: "#fff",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              {brand ? (
-                <BrandLogo brand={brand} size={28} />
-              ) : (
-                <Glyph path={activeIconPath} size={22} />
-              )}
-            </Box>
-            <Box sx={{ minWidth: 0 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 600 }} noWrap>
-                {selected.place.name}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" aria-live="polite">
-                {copy && t(copy.key, copy.values)}
-              </Typography>
-              {selected.detour?.kind === "network" && (
-                <Typography variant="body2" color="text.secondary">
-                  {t("rsDetourDistance", {
-                    kilometers: (selected.detour.meters / 1000).toFixed(1),
-                  })}
-                </Typography>
-              )}
-            </Box>
-          </Box>
+          {brand ? (
+            <BrandLogo
+              brand={brand}
+              size={28}
+              render={({ mark, credits }) => renderSelectedHeading(mark, credits)}
+            />
+          ) : (
+            renderSelectedHeading(<Glyph path={activeIconPath} size={22} />)
+          )}
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
             {t(
               selected.detour?.access.kind === "entrance" || selected.place.routingEntrance
@@ -443,6 +484,11 @@ export function RouteSearchControl() {
                 : "rsDetourCoordinate",
             )}
           </Typography>
+          <AttributionStrip
+            attributions={selectedAttributions}
+            variant="plain"
+            provenanceDisplay="details"
+          />
           {addFailed && (
             <Typography role="alert" color="error" variant="body2" sx={{ mb: 1 }}>
               {t("rsAddFailed")}

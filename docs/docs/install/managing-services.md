@@ -6,12 +6,10 @@ sidebar_position: 4
 
 # Managing services
 
-A **service** is a backend daemon that OpenMapX runs as a Docker container — a
-database, a routing engine, a geocoder, a transit engine, a tile server. Each one
-is described by a `service.json` manifest under `services/<slug>/`, and the
-compose renderer turns the services you enable into a generated stack. See
-[How it works](../overview/how-it-works.md) for the model; this page is about
-operating those services day to day.
+Use the `openmapx` CLI to select, configure, and run backend containers. Each
+service has a manifest under `services/<id>/service.json`; the renderer combines
+the selected manifests into a Docker Compose stack. See
+[How it works](../overview/how-it-works.md) for the service model.
 
 Everything here runs through the `openmapx` CLI from the repo root:
 
@@ -25,9 +23,8 @@ scope for every command.
 
 ## Seeing what's available
 
-`services list` discovers and validates every `service.json` — both the
-first-party services in `services/` and any community services you've installed
-— and prints a compact table:
+`services list` validates installed first-party and community manifests and
+prints a table:
 
 ```bash
 pnpm openmapx services list
@@ -58,8 +55,7 @@ To inspect one service's full manifest:
 pnpm openmapx services get valhalla
 ```
 
-And to see the whole vocabulary of capabilities and shared data types across the
-registry — who provides each, who consumes each:
+List capabilities, shared data types, their providers, and consumers:
 
 ```bash
 pnpm openmapx services capabilities
@@ -69,59 +65,67 @@ pnpm openmapx services capabilities --unrecognised      # flag non-standard capa
 ## Enabling and disabling services
 
 The set of services that participate in your deployment is the **selection**.
-The always-on core — `traefik`, `well-known`, `app-api`, `app-web`, `postgis`,
-`redis`, `data-manager`, and `ops-agent` — is selected by default; everything heavy
-(routing, geocoding, transit, OSM queries, tiles) is opt-in.
+The default roots are `traefik`, `well-known`, `app-api`, `app-web`, `postgis`,
+`redis`, and `data-manager`. Dependencies add `ops-agent` and `transitous-runner`.
+Routing, geocoding, transit, OSM queries, and tiles are opt-in. Custom selections
+replace the defaults; the core is not unconditionally added to every selection.
 
 ```bash
 pnpm openmapx services enable valhalla photon          # add services to the selection
 pnpm openmapx services disable osrm                    # remove services from the selection
 ```
 
-These commands persist the change to `infra/docker/service-selection.json`, a
-small file you can read and commit:
+These commands persist the change to `infra/docker/state/ops-agent/service-selection.json`, a
+deployment file. For example, a selection retaining the default app roots is:
 
 ```json
 {
-  "selected": ["valhalla", "photon"]
+  "selected": [
+    "traefik",
+    "well-known",
+    "app-api",
+    "app-web",
+    "postgis",
+    "redis",
+    "data-manager",
+    "valhalla",
+    "photon"
+  ]
 }
 ```
 
 You only list the **root** services you want. The renderer expands the rest
-automatically — a service's `dependsOn`, the `traefik` proxy when a service
-exposes a route, and any `data-manager` producer whose data a service consumes
-all get pulled in. To see both the roots you asked for and the effective set
+automatically from declared dependencies, data producers, and proxy exposure. To see both the roots you asked for and the effective set
 after expansion:
 
 ```bash
 pnpm openmapx services selected
 ```
 
-```
-Source: file
-Requested: valhalla, photon
-Effective: traefik, well-known, app-api, app-web, postgis, redis, data-manager, ops-agent, valhalla, photon
-```
+The output names the source (`env`, `file`, or `default`), requested roots,
+and effective set after dependency expansion.
 
 The selection is resolved from the first source that's present, in this order:
 
 1. an explicit `--services` flag on `compose render` / `compose up`
 2. the `OPENMAPX_ENABLED_SERVICES` environment variable
-3. `infra/docker/service-selection.json`
+3. `infra/docker/state/ops-agent/service-selection.json`
 4. the built-in core defaults
 
 When `OPENMAPX_ENABLED_SERVICES` is set, `enable` and `disable` refuse to edit
-the file — the environment variable is the source of truth in that case, and the
-CLI keeps it unambiguous.
+the file. Edit the environment selection instead, or unset it to resume file-based
+selection.
 
 The admin panel works on the same selection: **Save Selection** writes
-`infra/docker/service-selection.json` too, and its Services page shows the
+`infra/docker/state/ops-agent/service-selection.json` too, and its Services page shows the
 selection exactly as `services selected` does.
 
 :::note[Selection is not the same as running]
-Editing the selection changes what _will_ be rendered and started. It does not
-touch running containers. Enabling a service is followed by a render and a start
-(below) before it actually comes up.
+Editing the selection does not stop or remove containers. To retire an optional
+service, stop it while it is still in the rendered stack, disable its root, then
+render. Check `services selected` afterward: a remaining dependency can select it
+again. To stop the entire generated stack, use `pnpm openmapx compose down`; avoid
+`--volumes` unless you intend to destroy named-volume data.
 :::
 
 ### Presets
@@ -144,9 +148,9 @@ routing stack" instead of listing every id. Presets work on `services start`,
 | `tiles`     | `tileserver`                                                  |
 | `martin`    | `martin`                                                      |
 
-Services that are not grouped into a preset — including `data-manager`,
+Services outside a preset, including `data-manager`,
 `ops-agent`, `local-ai`, `dawarich-app`, `dawarich-postgis`, `dawarich-redis`,
-`dawarich-sidekiq`, `transitous-runner`, and `motis-staging` — are targeted
+`dawarich-sidekiq`, `transitous-runner`, and `motis-staging`, are targeted
 directly by service id.
 
 Presets compose, and they mix freely with explicit ids:
@@ -166,17 +170,16 @@ pnpm openmapx compose render
 ```
 
 Each render writes a **configuration generation** under
-`infra/docker/.trusted-config-generations/` and points
-`infra/docker/.trusted-config-current` at it. A generation holds:
+`infra/docker/state/ops-agent/configuration/generations/` and points
+`infra/docker/state/ops-agent/configuration/current` at it. A generation holds:
 
-- `docker-compose.generated.yml` — the compose file of the stack
-- `docker-compose.generated.hardlinks.json` — the plan that maps each consumer
+- `docker-compose.generated.yml`: the compose file of the stack
+- `docker-compose.generated.hardlinks.json`: the plan that maps each consumer
   to its data producer (applied later by `openmapx data link`)
 - the selection it was rendered from, and the service settings and vault
   credentials saved in the admin panel
 
-The admin panel's **Apply changes** writes the same kind of generation, so the
-CLI and the admin panel always run the same stack. A CLI render keeps what was
+The admin panel's **Apply changes** writes the same kind of generation. A CLI render keeps what was
 saved in the admin panel: it cannot read the database, so it takes those
 settings and credentials from the current generation. Settings in `.env`
 (`SERVICE_<ID>_<KEY>`) win over them in both.
@@ -186,22 +189,25 @@ its environment. To run Compose by hand, name both:
 
 ```bash
 docker compose --env-file infra/docker/.env \
-  -f infra/docker/.trusted-config-current/docker-compose.generated.yml ps
+  -f infra/docker/state/ops-agent/configuration/current/docker-compose.generated.yml ps
 ```
 
-Render is deterministic — same manifests, `.env` and saved settings in, same
-generation out — so it's cheap to re-run. Re-render any time the manifests, your
+Rendering the same configuration produces the same stack content. Re-render any time the manifests, your
 `.env`, the selection, or the registered community repos change. You can
 override the selection or domain for a single render without touching the
 persisted selection:
 
 ```bash
-pnpm openmapx compose render --services valhalla,photon
-pnpm openmapx compose render --preset routing
+pnpm openmapx compose render --services app-api,app-web,well-known,data-manager,valhalla,photon
+# --preset routing alone renders only that preset and its dependencies.
 pnpm openmapx compose render --domain maps.example.com
 ```
 
-`--domain` defaults to `DOMAIN` from `infra/docker/.env`, so you rarely need it.
+`--domain` defaults to `DOMAIN` from `infra/docker/.env`. An explicit selection
+alters the applied generation but not the desired selection file; the next normal
+start/render returns to the persisted selection. Prefer `services enable` for
+lasting changes. Presets on lifecycle commands target already-selected services;
+they do not enable them.
 
 ## Starting, stopping, and restarting
 
@@ -238,14 +244,24 @@ pnpm openmapx compose rotate-redis-password --confirm-clients-stopped # rotate R
 The distinction between `restart` and `start`/`update` matters:
 
 - **`restart`** reboots the container in place. It does not re-render, so it
-  won't pick up a changed manifest, `.env`, or selection — use it to bounce a
+  won't pick up a changed manifest, `.env`, or selection; use it to bounce a
   service whose image and config are unchanged.
 - **`start`** re-renders first, so it picks up compose-file changes.
-- **`update`** re-renders, pulls the latest images, and replaces the container — the
-  command to reach for after a `git pull` that bumps image tags.
-- **`compose rotate-redis-password`** atomically rotates Redis credentials while
-  Redis clients (`app-api`, `data-manager`) are stopped, updating both secret files
-  and Redis ACL configuration safely.
+- **`update`** re-renders, pulls the selected images, and force-recreates the
+  target containers. An existing release overlay remains pinned. Select a newer
+  application release with `compose release` first; see [Upgrading](./upgrading.md).
+  Use `--no-deps` to replace only the named containers when dependencies are already
+  healthy.
+- **`compose rotate-redis-password`** rotates Redis credentials after clients
+  (`app-api`, `data-manager`, and any extension clients) are stopped. Follow the
+  [Redis rotation procedure](../guides/supporting-infrastructure.md#valkey--the-cache)
+  for application and partial-failure recovery.
+
+The PostGIS entrypoint forwards the first stop signal to PostgreSQL and waits
+for it to exit, preserving its exit status. Docker allows the declared five-minute
+shutdown grace before forcing termination. A stop during startup cancels readiness
+or password synchronization without marking the database healthy. This container
+grace is separate from the deadline of the service-management request.
 
 For a single one-off check of the running containers across the stack:
 
@@ -260,6 +276,35 @@ pnpm openmapx services capabilities
 pnpm openmapx services capabilities --unrecognised
 ```
 
+For MOTIS upgrades, update ops-agent and data-manager together before resuming
+promotion. Both must support confirmed primary and staging stops. If a stop or
+recovery has an unknown outcome, inspect the containers and keep promotion
+paused. See [MOTIS operations profiles](../administration/motis-operations-profiles.md)
+for dataset recovery; a restart acknowledgement alone is not a health check.
+
+### Lifecycle operation deadlines
+
+Admin/API lifecycle operations run through the ops-agent with a finite budget for the
+whole Docker Compose command: ten minutes for stack start and service start,
+stop, restart, recreate, isolated recreate, and removal. This accommodates the
+built-in PostGIS five-minute shutdown grace with room for startup work. The
+broker allows another thirty seconds for settlement, and the API's result wait
+adds five seconds to that broker deadline; async HTTP submission timeouts remain
+unchanged. Host CLI lifecycle commands invoke Docker Compose directly and do
+not inherit this broker deadline.
+
+The ten-minute limit includes all stop/start work in a command, including
+sequential dependency work. It does not grow with the number of services.
+Longer custom shutdown graces, or a dependency chain whose aggregate work
+exceeds ten minutes, are outside this guarantee and remain subject to the
+bounded deadlines. The manifest duration syntax is unchanged.
+
+Cancellation and deadline expiry terminate the Docker CLI process group, but
+Docker may continue work in the daemon after the CLI exits. A timeout therefore
+does not establish the final container state. Inspect the affected services
+before deciding what to do next; do not automatically retry or repair the
+operation.
+
 ## Viewing logs
 
 ```bash
@@ -270,14 +315,13 @@ pnpm openmapx services logs valhalla --follow          # stream
 
 ## Building prepared artifacts
 
-A few engines can't boot from raw OSM data — they need a prepared graph or tile
+A few engines can't boot from raw OSM data; they need a prepared graph or tile
 set built first. Those services declare a build hook in their manifest; today
 that's `osrm`, `otp`, `motis`, `pelias`, and `tileserver`. The build runs inside
 a Dockerized helper, so you don't install `osmium` or friends on the host.
 
 ```bash
-pnpm openmapx services build motis tileserver --region europe/germany
-pnpm openmapx services build-all --region europe/germany
+pnpm openmapx services build osrm tileserver --region europe/germany
 ```
 
 `--region` picks the OSM extract to build against. After a successful build, the
@@ -285,7 +329,14 @@ CLI re-renders and re-applies hardlinks so the new artifacts are wired into the
 stack. Use `--continue-on-error` (on `build`) or `--fail-fast` (on `build-all`)
 to control behavior when one service's build fails.
 
-Building is only half the story — the source data those builds consume (OSM
+`services build-all` builds every installed service declaring a build command,
+including engines outside your selection. It currently plans OSRM, OTP, MOTIS,
+Pelias, and TileServer GL in that order. Prefer explicit IDs for a small deployment.
+Builds refuse running consumers; [Preparing data](./preparing-data.md#building-prepared-artifacts)
+lists the consumers to stop. MOTIS operating-dataset updates use transactional
+sync instead of the low-level build.
+
+The source data those builds consume (OSM
 extracts, GTFS feeds, map glyphs) is downloaded and refreshed separately. See
 [Preparing data](./preparing-data.md) for the full data workflow, including the
 one-command `data update` refresh that downloads, builds, renders, and links in
@@ -322,53 +373,155 @@ pnpm openmapx compose render
 pnpm openmapx services update valhalla
 ```
 
-The admin panel's **Save & Apply** button does the equivalent in one
-click for the service it is pressed on. The two are not interchangeable,
-though:
+The admin panel's **Save & Apply** reads the database configuration and vault,
+writes a generation, and recreates the affected service. A host CLI render has
+no direct database/vault access: it preserves values from the **last applied
+generation** and overlays environment settings. Values saved in the database but
+not yet applied are therefore unavailable to a fresh CLI render.
 
-- The CLI renders without database access, so it resolves only defaults and
-  `.env`, and every value saved in the admin config form falls back to its
-  default in that render.
-- **Save & Apply** applies the values saved in the form and recreates only
-  that one service. It never reads `.env`, so a setting kept there is applied
-  with the CLI. The admin panel never recreates `app-api` itself.
+Apply newly saved admin settings before using the CLI to recreate their services.
+After that apply, CLI renders preserve them. The API receives schema-backed
+`SERVICE_*` overrides as environment references; after editing `.env`, use a host
+CLI render/start to apply them and recreate `app-api` when its environment needs
+updating. A container restart does not reload changed environment variables.
 
-Pick one home per setting: keep it in `.env` as `SERVICE_<ID>_<KEY>` and apply
-it with the CLI, or save it in the form and apply it with **Save & Apply**.
-`app-api` and the data-manager read `.env` only when their containers are
-created; after changing a variable they read, recreate them from the host with
-`pnpm openmapx services start app-api data-manager`. For the broader picture of what goes in `.env` and how the admin panel
-fits in, see [Configuration](./configuration.md).
+For example:
+
+```bash
+pnpm openmapx services start valhalla
+# When API or data-manager environment changed:
+pnpm openmapx services start app-api data-manager
+```
 
 :::note[Data-manager credentials are separate]
 The transit pipelines run inside the `data-manager` container, which can't
-see the integration host's config cascade. Feeds that need API keys read them
-from data-manager environment variables set directly in `infra/docker/.env`,
-not from the admin UI.
+see the integration host's config cascade. Authenticated catalog feeds use the Transitous API-key file mounted at
+`/config/transitous/api-keys.json`. Other daemon settings must be explicitly
+forwarded by `services/data-manager/service.json`; placing an arbitrary variable
+in `.env` does not pass it to that container.
 :::
+
+## Changing a service's files {/* #service-file-overrides */}
+
+Services mount configuration files and scripts that the release ships: Martin's
+`martin.yaml`, OTP's `build-config.json`, Traefik's `traefik.yml` and
+middlewares, PostGIS's entrypoint, and others. They come from the release the
+stack runs, not from the checkout. Render copies them into
+`infra/docker/state/ops-agent/service-files/<service>/<hash>/` with each
+configuration generation, and the containers mount those copies read-only. Editing a
+file under `services/` in the checkout changes nothing.
+
+To change one, put the whole file in an override, at the same path below
+`infra/docker/overrides/services/<service>/`:
+
+```bash
+(umask 022
+  mkdir -p infra/docker/overrides/services/martin/config
+  cp services/martin/config/martin.yaml infra/docker/overrides/services/martin/config/)
+"$EDITOR" infra/docker/overrides/services/martin/config/martin.yaml
+pnpm openmapx compose render
+pnpm openmapx services update martin
+```
+
+The `umask 022` matters on Debian and Ubuntu, whose default umask of `002`
+makes new files and directories group-writable, and render refuses those. To
+fix existing ones: `chmod -R g-w,o-w infra/docker/overrides`.
+
+Render uses the override in place of the release's file. Because the copy's
+directory is named after what it holds, `services update` (or **Recreate** in
+the admin panel) gives the service its new file. Delete the override to go
+back to the release's file.
+
+- An override is a whole file, owned by the deployment's user, with one link,
+  that neither its group nor others may write. Its directories must be the
+  same, and none of them may be a symbolic link. A directory at a file's path
+  (as `mkdir -p` of the file's own path leaves) is not an override of it.
+- If an override replaces a file the release ships but breaks these rules, render
+  fails and names the file. Using the release's file instead could silently
+  drop what the override changes, a basic-auth gate for example. A
+  configuration saved in the admin panel then fails with the same reason, and
+  is not applied.
+- An override of a path the release doesn't ship is reported and ignored.
+  The one exception is Traefik's dynamic directory. A YAML or TOML file there,
+  such as `traefik/config/dynamic/auth.yml`, is added to Traefik's
+  configuration. `generated-routes.yml` is render's own.
+- Render's output, the operations agent's log, `pnpm openmapx check` and
+  **Run diagnostics** list the overrides in use, by name only. That list, the
+  files the one-time import carried over, and, for an agent without the
+  checkout, the note that it doesn't compare the checkout's files, are
+  information. A changed release file under an override, an ignored override,
+  an import that waits, or a container still on the checkout's files is a
+  warning (⚠), and so is shown apart in Run diagnostics.
+
+**When a release changes a file you override.** The agent's state records, for
+each override, the release file it replaced. When a later release changes that
+file, render, `check` and Run diagnostics say so, and the override keeps
+replacing it. Compare your override with the new release file, carry over what
+you need, and save the override again. **Editing the override is how you
+acknowledge the release's change**: render then records the current release
+file as reviewed. If the override needs no change, any change to its bytes
+acknowledges it, a comment or a blank line at the end for example.
+
+**Files a container rewrites.** Valhalla's `configure_valhalla.sh` rewrites
+`valhalla.json` on every start. Such a file (`writableCopy` in its manifest)
+gets a writable copy, here `infra/docker/data/valhalla/config/valhalla.json`.
+Render seeds the copy from the release's file or your override, and seeds it
+again only when that seed changes. In between, Valhalla's own rewrite stays.
+A missing copy is seeded before the configuration is applied; if that fails,
+render fails with the reason, since Docker would otherwise create a directory
+in its place and Valhalla could not start.
+Override `services/valhalla/config/valhalla.json` to change what it starts
+from; editing the copy lasts only until the next seed.
+
+**Upgrading from a release before this.** The first render with the release's
+files imports, once, every service file in the checkout that differs from
+every version a release shipped, as an override. This includes an `auth.yml`
+and a changed `traefik.yml`. Files a container writes are never imported, and
+nothing in the checkout is changed. The render lists what it imported. A
+checkout service file you edit afterwards is reported as unused; move it into
+`infra/docker/overrides` to keep it.
+
+The import runs only from a checkout at or behind the selected release's
+source revision. A checkout ahead of it can hold newer upstream files, which
+also match no released version. Until then the import waits: render imports
+and records nothing, says why on every render, in `check` and in Run
+diagnostics, lists the checkout files it does not use, and uses the release's.
+Traefik is the exception: while the import waits, render refuses if the
+checkout holds a Traefik file the import would carry over, an `auth.yml` or
+another dynamic YAML or TOML file the release doesn't ship, or a changed
+`traefik.yml`. Using the release's files instead could drop a basic-auth gate.
+The refusal names the files. Put each in
+`infra/docker/overrides/services/traefik/` at the same path, under `umask 022`
+(`auth.yml` with mode 0600), and render goes on: an override ends the wait for
+that file.
+The host CLI asks git; the operations agent goes by the checkout's
+`services/service-file-history.json`, which each commit keeps current. A
+checkout without that file predates it and is taken to be behind.
+
+Under `OPENMAPX_RELEASE=local`, for development, the checkout's files are the
+release's, for the host CLI and the operations agent alike. Overrides still
+apply, and nothing is imported.
 
 ## Exposure: what's reachable from outside
 
 By default every service is reachable **only** on the private `openmapx` Docker
-network — other containers reach it by service id (`http://valhalla:8002`,
+network; other containers reach it by service id (`http://valhalla:8002`,
 `http://nominatim:8080`). Nothing is exposed to the host or the internet unless
 its manifest opts in, in one of two ways:
 
-- **Traefik routing** (`exposure.proxy`) — the common case for HTTP services.
-  The renderer attaches Traefik labels so requests for a path prefix under your
+- **Proxy routing** (`exposure.proxy`) generates file-provider routes for
+  bundled Traefik, or Docker labels for an operator-run Traefik. Requests under your
   domain route to the container. TileServer GL, for example, is served at
   `https://${DOMAIN}/tiles/`.
-- **Host port binding** (`exposure.hostPorts`) — publishes a container port on
+- **Host port binding** (`exposure.hostPorts`) publishes a container port on
   the host. These default to binding `127.0.0.1` (loopback only), so a port is
   reachable from the host itself but not the public internet unless the manifest
   deliberately binds a non-loopback address.
 
-The practical takeaway for an operator: putting a service in the selection makes
-it available to the rest of the stack, not to the outside world. Public reach is
-a property of the manifest, and the admin install preview flags any community
-service that requests a non-loopback host port as **publicly accessible** before
-you confirm. The exposure fields themselves are documented in the Developer
-section's service-manifest reference.
+Inspect exposure before starting a service. A community service requesting a
+non-loopback host port is flagged as publicly accessible in the install preview.
+Approved platform proxy routes and community host ports have different trust
+boundaries; see the [service-manifest contract](../developer/service-manifest.md).
 
 A loopback port that is already taken on the host can be moved from
 `infra/docker/.env` with `<SERVICE>_HOST_PORT`, for example
@@ -402,12 +555,63 @@ The bundled Traefik also adds HSTS on its entrypoint. Behind your own proxy,
 configure HSTS there, for example with the `hsts@file` middleware from the same
 file.
 
+Place, transit and road-condition ids travel encoded in the request path, for
+example `/api/places/osm%3Anode%2F1`. Traefik 3.6.4 to 3.6.6 rejects encoded
+slashes and similar characters with a 400 by default, so give the external
+entrypoint the same `encodedCharacters` settings as the bundled
+`services/traefik/config/traefik.yml`. Without them, opening a place or a
+transit stop fails on those versions.
+
 ## Where to go next
 
-- **[Getting started](./getting-started.md)** — the first-deployment walkthrough
+- [Getting started](./getting-started.md): the first-deployment walkthrough
   that ties these commands together.
-- **[Preparing data](./preparing-data.md)** — downloading OSM, GTFS, and map glyphs,
+- [Preparing data](./preparing-data.md): downloading OSM, GTFS, and map glyphs,
   and the build/link pipeline.
-- **[Configuration](./configuration.md)** — `.env`, secrets, and the admin
+- [Configuration](./configuration.md): `.env`, secrets, and the admin
   panel.
-- **[Upgrading](./upgrading.md)** — pulling new images and re-rendering safely.
+- [Upgrading](./upgrading.md): pulling new images and re-rendering safely.
+
+## PostgreSQL workload diagnostics
+
+API and data-manager connections carry the bounded static application names
+`openmapx-api` and `openmapx-data-manager`. Inspect them in `pg_stat_activity`
+without exposing connection URLs. Application names label clients;
+`pg_stat_statements` aggregates statements by database, user and query identity,
+not by application name. Attribute jobs with isolated replay windows or spans.
+
+`POSTGIS_DIAGNOSTICS=false` and `POSTGIS_TRACK_IO_TIMING=false` are independent
+container defaults. With both disabled the wrapper adds no diagnostic arguments.
+On an initialized database, diagnostics opt-in resolves the effective
+`shared_preload_libraries` with PostgreSQL's own configuration reader, preserves
+its entries and adds `pg_stat_statements` once. Unresolvable or unusual quoted
+preload syntax fails closed with a bounded message. Initialize the database with
+diagnostics disabled first. Planning tracking stays off; I/O timing requires its
+own opt-in and a separate overhead measurement.
+
+These diagnostics are opt-in; the default deployment leaves them disabled. Before enabling either flag, verify a
+backup and restore, accept the wrapper's graceful shutdown and the ops-agent stop
+deadlines together, rehearse on disposable staging, and arrange a restart window.
+Set the chosen flags as `POSTGIS_DIAGNOSTICS` / `POSTGIS_TRACK_IO_TIMING` in `.env`, render
+and recreate the service in that window. A restart alone does not apply changed
+container environment. A database operator then installs the extension with
+`CREATE EXTENSION IF NOT EXISTS pg_stat_statements`. Verify the settings,
+extension availability, health and an actual query before returning traffic.
+
+Collect existing counters without resetting production statistics. Use
+`pg_stat_statements(false)` and select only counters and identifiers; do not expose
+query text or grant public statistics access. Measure I/O timing overhead against
+the same disposable workload before enabling it. Rollback restores the previous
+flag values through the same authority and uses another scheduled safe restart;
+it preserves prior preload entries and saved evidence. No automatic activation,
+production statistics reset or shutdown acceptance is implied by these options.
+
+The [disposable replay protocol](../developer/self-hosting-replay.md) describes
+source-level comparisons and their acceptance limits.
+
+## Optional BRouter bicycle routing
+
+BRouter is an opt-in service for cycling. Its segment downloads use an independent
+region setting and need room for active and replacement generations. Follow
+[Optional BRouter bicycle routing](../guides/routing-engines.md#optional-brouter-bicycle-routing)
+for setup, tuning, update behavior, fallback limits, and attribution.

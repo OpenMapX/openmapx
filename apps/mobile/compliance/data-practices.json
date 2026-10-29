@@ -6,20 +6,20 @@
       "dataType": "Precise location (GPS), while a navigation session the user started is running",
       "source": "device-sensor",
       "leavesDevice": false,
-      "purpose": "Advancing progress along the route the user is already following, deciding when to speak the next instruction, and detecting that they have left the route. Computed entirely on the device against the route captured when navigation started.",
+      "purpose": "Native navigation components use the latest fix to advance route progress, time instructions and detect departure from a captured route on the device. App.tsx does not currently compose these components into installed navigation.",
       "linkedToAccount": false,
       "retention": {
         "kind": "bounded",
         "maxHours": 24,
-        "note": "Only the latest accepted fix and the active session are kept, in local app storage excluded from device backup, so a crash or a phone restart can resume the trip in progress. Deleted when the session ends and expired after 24 hours regardless."
+        "note": "The native session stores the route and latest accepted fix in SQLite, with a maximum session age of 24 hours. Termination removes location-bearing session rows; expiry is handled when navigation or recovery runs, not by a guaranteed deletion timer. Verify backup exclusion in the candidate binary."
       },
       "shared": "none",
-      "userControl": "Revoke location permission, switch to foreground-only, or end navigation. Ending navigation deletes the session immediately.",
+      "userControl": "Once native navigation is composed, end the session or revoke location permission. Foreground-only mode is implemented in components and still needs installed-device qualification.",
       "appleLabel": {
         "collected": false,
         "category": "Precise Location",
         "usedForTracking": false,
-        "exemptionReason": "The fixes are processed on the device and are not transmitted; nothing leaves for this practice."
+        "exemptionReason": "Proposed local-processing classification for native route progress only. Rerouting and other transmitted location uses require separate review."
       },
       "googleDataSafety": {
         "collected": false,
@@ -27,27 +27,27 @@
         "category": "Location"
       },
       "legalSection": "navigation-location",
-      "notes": "This is the row that makes background location legitimate. It is also the row a reviewer will check hardest, so it must stay literally true."
+      "notes": "DRAFT registry: classification values are proposals pending privacy review against the exact binary, served web/API builds, deployment and providers. Native component behavior is not proof of installed availability. App.tsx does not compose navigation or system-auth dispatch."
     },
     {
       "id": "background-location-active-navigation",
       "dataType": "Precise location while the screen is locked or the app is in the background",
       "source": "device-sensor",
       "leavesDevice": false,
-      "purpose": "Continuing the same guidance when the user puts the phone in a pocket or the screen turns off, which is the ordinary way people navigate. Only ever active during a navigation session the user explicitly started.",
+      "purpose": "Native components are intended to continue guidance during a user-started session while the screen is locked or the app is backgrounded. App.tsx does not currently compose native navigation, so this behavior is unavailable in the installed shell.",
       "linkedToAccount": false,
       "retention": {
         "kind": "bounded",
         "maxHours": 24,
-        "note": "Identical to the foreground case; background is a delivery mode, not a different practice."
+        "note": "The intended native session uses the same 24-hour maximum age as foreground navigation. Termination removes its location-bearing rows; expiry cleanup requires navigation or recovery execution."
       },
       "shared": "none",
-      "userControl": "End navigation, or grant only foreground location — the app keeps working and says clearly that guidance stops when the screen locks.",
+      "userControl": "The permission controller supports foreground-only mode and the coordinator supports ending navigation. Both require foreground composition and qualification in the candidate binary.",
       "appleLabel": {
         "collected": false,
         "category": "Precise Location",
         "usedForTracking": false,
-        "exemptionReason": "Processed on the device and not transmitted."
+        "exemptionReason": "Proposed classification for fixes processed locally by native guidance components. Installed background guidance and its data flows remain unqualified."
       },
       "googleDataSafety": {
         "collected": false,
@@ -62,16 +62,16 @@
       "source": "user-entered",
       "leavesDevice": true,
       "recipient": "The OpenMapX API operated by this deployment",
-      "endpoint": "POST /api/directions",
-      "purpose": "Computing the route the user asked for. A router cannot produce a route without the endpoints, so this is the irreducible transmission.",
+      "endpoint": "GET /api/integrations/routing/directions; POST /api/integrations/routing/directions/schedule; POST /api/integrations/routing/directions/ev",
+      "purpose": "Computing directions from the start, destination and waypoints supplied to the OpenMapX API and its configured routing providers.",
       "linkedToAccount": false,
       "retention": {
         "kind": "ephemeral",
-        "note": "Answered and discarded. Request bodies are not written to application or proxy logs."
+        "note": "Ephemeral handling is proposed. Verify API, router, cache, application/proxy logging and processor retention for the selected deployment; this registry does not establish immediate disposal."
       },
       "shared": "processor",
       "encryptedInTransit": true,
-      "userControl": "Do not request a route. Nothing is sent until the user asks for directions.",
+      "userControl": "Request directions only when willing to send route inputs to this deployment and its configured providers.",
       "appleLabel": {
         "collected": true,
         "category": "Precise Location",
@@ -90,20 +90,20 @@
     },
     {
       "id": "reroute-coordinates",
-      "dataType": "Current position, sent once when a reroute or replan is needed",
+      "dataType": "Current position submitted for a reroute or replan",
       "source": "device-sensor",
       "leavesDevice": true,
       "recipient": "The OpenMapX API operated by this deployment",
-      "endpoint": "POST /api/directions, POST /api/transit/plan",
-      "purpose": "Producing a new route from where the user actually is, after they have left the previous one or a connection has been missed. Sent once per reroute, never continuously.",
+      "endpoint": "GET /api/integrations/routing/directions; GET /api/integrations/transit/plan",
+      "purpose": "Native components request a replacement route when a session leaves its route or misses a transit connection. Requests follow reroute decisions, not a continuous location stream. Installed native navigation is not currently composed.",
       "linkedToAccount": false,
       "retention": {
         "kind": "ephemeral",
-        "note": "Answered and discarded, exactly like an initial route request."
+        "note": "Ephemeral handling is proposed, as for initial route requests. Review routing/transit provider retention, request metadata, caches and deployment logs."
       },
       "shared": "processor",
       "encryptedInTransit": true,
-      "userControl": "Navigate offline — rerouting is refused rather than attempted, and the app says so.",
+      "userControl": "The offline navigation components suppress network rerouting. Installed navigation and this control still require composition and device qualification.",
       "appleLabel": {
         "collected": true,
         "category": "Precise Location",
@@ -119,7 +119,7 @@
         "purposes": ["App functionality"]
       },
       "legalSection": "routing",
-      "notes": "The distinction from a continuous stream is the whole point and must survive any future change: one request per reroute decision."
+      "notes": "Verify retry and reroute behavior in the candidate runtime. This row describes request-based rerouting, not proof that each decision produces exactly one network transmission."
     },
     {
       "id": "transit-plan-and-refresh",
@@ -127,16 +127,16 @@
       "source": "user-entered",
       "leavesDevice": true,
       "recipient": "The OpenMapX API, which queries the configured schedule service",
-      "endpoint": "POST /api/transit/plan, POST /api/transit/refresh",
-      "purpose": "Planning a public-transit journey and, while it is running, refreshing its live times and platforms. The refresh token identifies the itinerary, not the person.",
+      "endpoint": "GET /api/integrations/transit/plan; POST /api/integrations/transit/plan/chain; POST /api/integrations/transit/plan/refresh",
+      "purpose": "Planning a journey through the API and configured transit providers. Native components also support live refresh during navigation, which is not currently composed in App.tsx. The refresh token represents itinerary state; it does not establish anonymity.",
       "linkedToAccount": false,
       "retention": {
         "kind": "ephemeral",
-        "note": "The token is short-lived and rotates; it is never written to native storage, diagnostics, or a snapshot."
+        "note": "Ephemeral classification is pending review. Native transit session payloads contain the refresh token and itinerary and are serialized to SQLite; snapshot builders strip token fields. Check API/provider state, token lifetime and cleanup separately."
       },
       "shared": "processor",
       "encryptedInTransit": true,
-      "userControl": "Do not plan a transit journey, or navigate offline, where refresh is refused and the app says times are scheduled rather than live.",
+      "userControl": "Avoid transit planning to avoid its request. Native components suppress live refresh offline; this is not a qualified installed-shell feature.",
       "appleLabel": {
         "collected": true,
         "category": "Precise Location",
@@ -158,15 +158,15 @@
       "dataType": "The board-to-alight stop list of each ridden leg",
       "source": "third-party",
       "leavesDevice": false,
-      "purpose": "Counting stops so the rider knows when to get off when there is no signal. Fetched once before the journey starts, while the connection still works, and then used entirely on the device.",
+      "purpose": "Native transit components use a captured board-to-alight stop list for stop counting without further network access. The list is obtained online before navigation. Installed transit navigation is not currently composed.",
       "linkedToAccount": false,
       "retention": {
         "kind": "bounded",
         "maxHours": 24,
-        "note": "Held with the active session and deleted when it ends."
+        "note": "Captured stops belong to the native session, whose maximum age is 24 hours. Termination deletes location-bearing session rows; expiry cleanup runs through navigation or recovery."
       },
       "shared": "none",
-      "userControl": "End navigation, which deletes the session and its captures immediately.",
+      "userControl": "Once native transit navigation is composed, end navigation to remove the session and its captures. Verify the complete flow on the candidate device.",
       "appleLabel": {
         "collected": false,
         "category": "Other Data",
@@ -183,15 +183,15 @@
       "dataType": "Scheduled local notifications for the get-off alert",
       "source": "derived",
       "leavesDevice": false,
-      "purpose": "Waking the rider before their stop when the screen is locked. Scheduled on the device by the operating system; no server is involved and there is no push service.",
+      "purpose": "Native transit components can schedule an operating-system notification before the alighting stop, without a remote push service. App.tsx does not currently compose the navigation and notification ports.",
       "linkedToAccount": false,
       "retention": {
         "kind": "bounded",
         "maxHours": 24,
-        "note": "Cancelled when the leg or the session ends."
+        "note": "Components reconcile or cancel alerts when legs or sessions end. The proposed 24-hour budget requires verification of OS delivery and cancellation in the candidate runtime."
       },
       "shared": "none",
-      "userControl": "Turn off the alight alert in navigation settings, or revoke notification permission.",
+      "userControl": "The intended controls are disabling the alight alert or revoking notification permission. Their installed availability and behavior require qualification.",
       "appleLabel": {
         "collected": false,
         "category": "Other Data",
@@ -210,11 +210,11 @@
       "leavesDevice": true,
       "recipient": "The OpenMapX API operated by this deployment",
       "endpoint": "/api/auth/*",
-      "purpose": "Creating and using an account so that saved places and settings follow the user between devices. Passwords are hashed; the app never holds a session itself.",
+      "purpose": "Creating and using an account for synchronized saved content and account features. Authentication uses server sessions and WebView cookies. The native system-browser helper returns handoff material rather than a session cookie; it is not currently composed into App.tsx.",
       "linkedToAccount": true,
       "retention": {
         "kind": "account-lifetime",
-        "note": "Deleted when the account is deleted, except records a security or statutory obligation requires be kept, which the deletion result names explicitly."
+        "note": "Account erasure handles live data and reports retained or failed work. Preservation rules, security/statutory retention, processors and backups need separate review; account deletion does not immediately erase every copy."
       },
       "shared": "none",
       "encryptedInTransit": true,
@@ -242,15 +242,15 @@
       "leavesDevice": true,
       "recipient": "The OpenMapX API operated by this deployment",
       "endpoint": "/api/saved/*",
-      "purpose": "Keeping the user's own saved places available across their devices. Stored against their account and visible to nobody else.",
+      "purpose": "Synchronizing saved lists and labels across devices. The API and operators with application or database access can read them. Users can publish live or snapshot share links that anyone holding the link can read. Some app preferences remain local.",
       "linkedToAccount": true,
       "retention": {
         "kind": "account-lifetime",
-        "note": "Deleted with the account."
+        "note": "Account deletion handles live saved data and owned share links, subject to erasure and preservation rules. Backups and copies made by share recipients are separate; revocation cannot retract recipient copies."
       },
       "shared": "none",
       "encryptedInTransit": true,
-      "userControl": "Delete individual saved places, or delete the account.",
+      "userControl": "Delete saved content or the account, and manage share links separately. Review shared content before publishing; revoke links to prevent further reads through those links.",
       "appleLabel": {
         "collected": true,
         "category": "Other Data",
@@ -269,16 +269,16 @@
     },
     {
       "id": "review-keypair",
-      "dataType": "Review signing key material",
+      "dataType": "Encrypted local review signing key material and public unlock metadata",
       "source": "derived",
       "leavesDevice": true,
-      "recipient": "The OpenMapX API, which stores it encrypted",
+      "recipient": "The OpenMapX API, which stores encrypted private-key material, the public key and unlock-method metadata",
       "endpoint": "/api/reviews/keypair",
-      "purpose": "Letting a user sign reviews they publish to Mangrove from any of their devices. The private key is encrypted with the user's passphrase or passkey before it is sent, so the server cannot use it.",
+      "purpose": "Synchronizing an optional local signing key. The browser encrypts the private key with a passphrase or supported passkey before upload; plaintext private-key storage is not supported. This protects stored material against database-only disclosure, not compromised application code.",
       "linkedToAccount": true,
       "retention": {
         "kind": "account-lifetime",
-        "note": "Deleted with the account."
+        "note": "Deleting the review identity or account removes live key records, subject to applicable erasure/preservation handling. Backup retention and exported private-key copies require separate review."
       },
       "shared": "none",
       "encryptedInTransit": true,
@@ -300,21 +300,54 @@
       "legalSection": "reviews"
     },
     {
-      "id": "published-reviews",
-      "dataType": "Review text and rating the user chooses to publish",
+      "id": "review-shared-signer",
+      "dataType": "Signer session token, provider login information, review content and public signing identity",
       "source": "user-entered",
       "leavesDevice": true,
-      "recipient": "Mangrove.reviews, an independent public review commons",
-      "endpoint": "https://api.mangrove.reviews",
-      "purpose": "Publishing the review the user wrote. Mangrove is a public dataset by design, so a published review is public and permanent — which is stated before publishing, not after.",
-      "linkedToAccount": false,
+      "recipient": "The OpenMapX API relay, signer.mangrove.reviews and the selected OpenStreetMap, Bluesky or passkey login provider",
+      "endpoint": "/api/integrations/reviews-mangrove/signer/*; browser redirect to signer.mangrove.reviews/auth/login",
+      "purpose": "Optional shared signing across apps and devices. Provider login exposes browser request and login data to the selected providers. Mangrove holds the private key and signs review content; this is delegated custody, not end-to-end encryption. OpenMapX relays the token and review without storing the token in its database.",
+      "linkedToAccount": true,
       "retention": {
         "kind": "account-lifetime",
-        "note": "Held by Mangrove, not by OpenMapX. Deleting an OpenMapX account does not retract a published public review, and the deletion result says so."
+        "note": "The token stays in tab session storage, bound to the exact OpenMapX session; same-origin scripts can access it. Signer sessions normally expire after 24 hours. Disconnect or sign-out removes local credentials and attempts remote revocation. Mangrove controls remote identity/key retention; OpenMapX account deletion does not delete that identity. A reconnect draft may remain in tab storage and is eligible for restore for one hour, without publishing consent."
       },
       "shared": "third-party-controller",
       "encryptedInTransit": true,
-      "userControl": "Do not publish a review.",
+      "userControl": "Choose shared signing or encrypted local signing. Disconnect the signer or sign out to remove the local token; manage or delete the remote account at Mangrove.",
+      "appleLabel": {
+        "collected": true,
+        "category": "Other Data",
+        "purposes": ["App Functionality"],
+        "linkedToIdentity": true,
+        "usedForTracking": false
+      },
+      "googleDataSafety": {
+        "collected": true,
+        "shared": true,
+        "category": "App activity",
+        "optional": true,
+        "purposes": ["App functionality"]
+      },
+      "legalSection": "reviews",
+      "notes": "Draft classification for the served web flow. Installed-device auth, storage, provider retention and store-console answers require candidate-specific qualification."
+    },
+    {
+      "id": "published-reviews",
+      "dataType": "Review text, rating, nickname, photos and public signing identity the user chooses to publish",
+      "source": "user-entered",
+      "leavesDevice": true,
+      "recipient": "The OpenMapX API relay and Mangrove.reviews, an independent public review commons",
+      "endpoint": "POST /api/integrations/reviews/submit; POST /api/integrations/reviews/image",
+      "purpose": "Publishing reviews signed by the shared signer or an encrypted local key through an authenticated OpenMapX API relay. The public signing key connects reviews under that identity. The API can associate the submission request with the signed-in account; the proposed identity classification needs review.",
+      "linkedToAccount": false,
+      "retention": {
+        "kind": "account-lifetime",
+        "note": "OpenMapX account deletion does not retract a published public review. Key holders can submit signed edits or deletions to Mangrove. Provider retention, OpenMapX read caches and copies held by other readers require review."
+      },
+      "shared": "third-party-controller",
+      "encryptedInTransit": true,
+      "userControl": "Choose whether to publish. Keep the signing key to edit or delete reviews later; deleting the OpenMapX account alone does not remove them.",
       "appleLabel": {
         "collected": true,
         "category": "User Content",
@@ -336,15 +369,15 @@
       "dataType": "Bounded native diagnostic records",
       "source": "derived",
       "leavesDevice": false,
-      "purpose": "Letting a user who reports a problem show what happened. Held locally, bounded in size, and containing shapes and reasons rather than payloads. Nothing is uploaded automatically; there is no crash reporter and no analytics.",
+      "purpose": "Native diagnostic components record bounded, allowlisted scalar fields locally and support deliberate export through a share sheet. There is no automatic upload path in these components. Export availability and the exact binary dependency inventory require verification.",
       "linkedToAccount": false,
       "retention": {
         "kind": "bounded",
         "maxHours": 24,
-        "note": "A rolling local buffer."
+        "note": "The repository trims diagnostics by row count and bytes and exposes explicit clearing. A 24-hour age purge is not implemented here; the retained numeric budget is a proposal pending review."
       },
       "shared": "none",
-      "userControl": "Export and share it deliberately, or never — sharing is entirely user-initiated.",
+      "userControl": "The export component requires an explicit sharing action. Verify that the candidate exposes the intended export/clear controls and review any recipient handling separately.",
       "appleLabel": {
         "collected": false,
         "category": "Diagnostics",
@@ -363,21 +396,21 @@
       "leavesDevice": true,
       "recipient": "The OpenMapX API operated by this deployment",
       "endpoint": "POST /api/mobile-auth/issue, POST /api/mobile-auth/exchange",
-      "purpose": "Carrying a sign-in that had to happen in the system browser back into the app. The code is opaque and useless without the verifier, which never leaves the device's memory.",
+      "purpose": "The system-browser helper returns a callback code, state and PKCE verifier through auth.result to the WebView, which sends them to the API /mobile-auth/exchange endpoint. The server checks the verifier against its stored challenge and releases a one-time token. App.tsx does not currently compose this flow.",
       "linkedToAccount": true,
       "retention": {
         "kind": "bounded",
         "maxHours": 0.034,
-        "note": "Two minutes, single use. The stored row holds a hash of the code, never the code, and is deleted the moment it is redeemed."
+        "note": "Codes are redeemable for two minutes and single use. The server row contains the code hash, account userId, state, challenge and encrypted token. Successful exchange deletes it; invalid attempts can leave consumed rows, and expired-row cleanup is opportunistic and subject to preservation rules. The verifier is received but not stored by this service."
       },
       "shared": "none",
       "encryptedInTransit": true,
-      "userControl": "Cancel the sign-in; nothing is issued.",
+      "userControl": "Cancel the browser attempt to stop completing sign-in. A row already issued by the server can remain until cleanup even if the user cancels.",
       "appleLabel": {
         "collected": false,
         "category": "Other Data",
         "usedForTracking": false,
-        "exemptionReason": "The code is opaque, single-use and expires in two minutes; it identifies one sign-in attempt rather than a person, and the verifier it is useless without never leaves the device."
+        "exemptionReason": "UNRESOLVED proposal, not an approved exemption. The verifier is transmitted to the API and the server row is account-linked. An opaque code and short redemption lifetime do not establish Apple real-time-only retention or Google ephemeral handling."
       },
       "googleDataSafety": {
         "collected": false,
@@ -388,17 +421,17 @@
     },
     {
       "id": "webview-storage",
-      "dataType": "The web app's own cookies, service-worker cache, and local storage",
+      "dataType": "Cookies, local storage, IndexedDB, service-worker caches and offline archives used by the web app",
       "source": "derived",
       "leavesDevice": false,
-      "purpose": "Keeping the user signed in and letting the interface load quickly. This is the same storage the website uses in an ordinary browser, in a WebView limited to the compiled origin.",
+      "purpose": "Retaining browser state and local copies for the web UI at the compiled origin. This row describes local storage: session cookies are also sent with authenticated requests, and cached/offline data comes from network-backed features covered separately.",
       "linkedToAccount": true,
       "retention": {
         "kind": "account-lifetime",
-        "note": "Cleared by signing out, by clearing website data, or by uninstalling."
+        "note": "Sign-out invalidates the account session and clears the active review key and its query envelope; saved-data mirroring also handles observed sign-out. It does not clear all local storage, caches or downloaded offline areas. Each store has its own expiry, eviction or explicit removal behavior."
       },
       "shared": "none",
-      "userControl": "Sign out, or clear website data through the operating system.",
+      "userControl": "Sign out to end the account session. Remove offline areas and clear recent map data through their separate controls; clearing app/site data depends on the platform and must be verified.",
       "appleLabel": {
         "collected": false,
         "category": "Other Data",
@@ -412,19 +445,19 @@
     },
     {
       "id": "map-and-media-providers",
-      "dataType": "Tile and imagery requests, which reveal the area being viewed",
+      "dataType": "Tile and imagery requests revealing the viewed area, with network metadata such as IP address",
       "source": "derived",
       "leavesDevice": true,
       "recipient": "The map tile and imagery providers this deployment is configured to use",
-      "purpose": "Drawing the map. Which tiles are requested necessarily indicates roughly where the user is looking; a map that fetched no tiles would not be a map.",
+      "purpose": "Loading map tiles and imagery from the configured sources. Request coordinates or tile paths reveal the viewed area; direct provider requests also expose network metadata to that provider.",
       "linkedToAccount": false,
       "retention": {
         "kind": "ephemeral",
-        "note": "Held by the provider under the provider's own terms; OpenMapX retains nothing."
+        "note": "Provider retention is not established by this registry. The retained ephemeral values are proposals pending review of each selected provider, intermediary, cache and log configuration."
       },
       "shared": "third-party-controller",
       "encryptedInTransit": true,
-      "userControl": "Self-host the tile service, or use a deployment that does.",
+      "userControl": "Operators select hosted or self-hosted sources. Users should review the deployment disclosures; local map downloads do not cover every imagery or media source.",
       "appleLabel": {
         "collected": true,
         "category": "Coarse Location",
@@ -447,11 +480,11 @@
       "source": "os",
       "leavesDevice": true,
       "recipient": "Apple and Google, as the app's distributors",
-      "purpose": "Distributing and updating the app. This happens because the app is delivered by a store, not because the app asks for it — OpenMapX receives none of it and ships no analytics or crash SDK.",
+      "purpose": "Store distribution, updates and optional platform diagnostics are governed by Apple/Google settings and terms. Review the candidate binary and developer-console access before deciding what the distributor collects or makes available to the operator.",
       "linkedToAccount": false,
       "retention": {
         "kind": "account-lifetime",
-        "note": "Held by the store under the store's own terms and the user's device settings."
+        "note": "Review the applicable store retention terms and user diagnostics settings. The retained account-lifetime value is a proposal and does not establish a store retention period."
       },
       "shared": "third-party-controller",
       "userControl": "The operating system's own diagnostics and analytics settings.",
@@ -465,7 +498,7 @@
         "shared": false
       },
       "legalSection": "third-parties",
-      "notes": "Declared here so the registry is complete, and deliberately not declared as app-collected: the app neither requests nor receives it.",
+      "notes": "Pending review of distributor handling, developer access and the exact binary SDK inventory. The retained not-collected values do not establish a real-time-processing exemption or prove that the operator receives no store diagnostics.",
       "encryptedInTransit": true
     }
   ]

@@ -1061,3 +1061,49 @@ describe("route flow scaling", () => {
     }
   });
 });
+
+describe("captured flow attribution boundaries", () => {
+  const a = { sourceId: "a", name: "A" };
+  const b = { sourceId: "b", name: "B" };
+  it("retains selected receipts during projection and copies nested metadata", () => {
+    const route = northRoute(2000);
+    const input = segment(
+      [
+        [8, 50 + 500 * M],
+        [8, 50 + 1000 * M],
+      ],
+      { fieldContributors: { ratio: [a], los: [b] } },
+    );
+    const [span] = projectFlowToRoute([input], route);
+    expect(span.fieldContributors).toEqual({ ratio: [a], los: [b] });
+    expect(span.fieldContributors).not.toBe(input.fieldContributors);
+  });
+  it("does not join equal-looking intervals supplied by different sources", () => {
+    const spans = resolveFlowOverlaps(
+      [
+        {
+          rank: 3,
+          startMeters: 0,
+          endMeters: 100,
+          los: "queuing",
+          confidence: "measured",
+          speedRatio: 0.5,
+          fieldContributors: { ratio: [a] },
+        },
+        {
+          rank: 3,
+          startMeters: 100,
+          endMeters: 200,
+          los: "queuing",
+          confidence: "measured",
+          speedRatio: 0.5,
+          fieldContributors: { ratio: [b] },
+        },
+      ],
+      25,
+      60,
+    );
+    expect(spans).toHaveLength(2);
+    expect(spans.map((span) => span.fieldContributors)).toEqual([{ ratio: [a] }, { ratio: [b] }]);
+  });
+});

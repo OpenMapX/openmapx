@@ -24,12 +24,12 @@ describe("usePlaceDetails", () => {
     expect(result.current.data).toEqual(place);
     expect(spy).toHaveBeenCalledWith(
       `${API_ENDPOINTS.places}/osm%3Away%2F1%20a`,
-      { lat: "52.5", lng: "13.4", name: "Gate", lang: "en", hasAddress: "1" },
+      { fileMetadata: "3", lat: "52.5", lng: "13.4", name: "Gate", lang: "en", hasAddress: "1" },
       expect.objectContaining({ signal: expect.anything(), timeoutMs: 20_000 }),
     );
   });
 
-  it("sends an empty params object when only the id is provided", async () => {
+  it("versions the HTTP cache even when only the id is provided", async () => {
     const spy = vi.spyOn(apiClient, "get").mockResolvedValue({ name: "x" } as never);
 
     const { result } = renderHook(() => usePlaceDetails("p1"), {
@@ -39,7 +39,7 @@ describe("usePlaceDetails", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(spy).toHaveBeenCalledWith(
       `${API_ENDPOINTS.places}/p1`,
-      {},
+      { fileMetadata: "3" },
       expect.objectContaining({ signal: expect.anything(), timeoutMs: 20_000 }),
     );
   });
@@ -47,7 +47,7 @@ describe("usePlaceDetails", () => {
   it("hides a Commons file icon in a persisted place query without refetching", async () => {
     const client = createTestQueryClient();
     client.setQueryData(
-      ["place", { id: "p1", lng: null, lat: null, name: null, lang: null, hasAddress: false }],
+      ["place", { id: "p1", lng: null, lat: null, name: null, lang: null, hasAddress: false }, 3],
       {
         name: "Aachen",
         photos: [

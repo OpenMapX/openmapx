@@ -6,11 +6,13 @@ import {
   matchesMediaHost,
 } from "@openmapx/integration-framework";
 import {
+  readCapturedContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
+import {
   allowedReadings,
-  CROWD_CREDIT,
   countryOf,
   credit,
-  crowdReported,
   firstText,
   itemIdOf,
   keyPrefixesOf,
@@ -19,6 +21,7 @@ import {
   newestReading,
   pointOf,
   type Rec,
+  readingCredits,
   readingFeeds,
   rec,
   sourcesOf,
@@ -55,13 +58,13 @@ const STREAM_TYPES: ReadonlySet<string> = new Set<NonNullable<CameraView["stream
 
 /**
  * What the mapper asks of the live sources: each source's credit link, the
- * licence names its credits show, and each source's declared image hosts.
+ * crowd's credit, and each source's declared image hosts.
  */
-export type CameraSources = Pick<MediaSources, "link" | "licenseName" | "mediaHosts">;
+export type CameraSources = Pick<MediaSources, "link" | "crowd" | "mediaHosts">;
 
 const NO_SOURCES: CameraSources = {
   link: () => undefined,
-  licenseName: () => undefined,
+  crowd: () => undefined,
   mediaHosts: () => [],
 };
 
@@ -84,13 +87,13 @@ function webUrl(value: unknown): string | undefined {
 /** A free-text direction from a `DirectionRef`: its text, else its compass point. */
 function directionOf(value: unknown): string | undefined {
   const direction = rec(value);
-  return str(direction["text"]) ?? str(direction["compass"]);
+  return str(direction.text) ?? str(direction.compass);
 }
 
 /** A road from a `RoadRef`: its number, else its name. */
 function roadOf(value: unknown): string | undefined {
   const road = rec(value);
-  return str(road["ref"]) ?? firstText(road["name"]);
+  return str(road.ref) ?? firstText(road.name);
 }
 
 /**
@@ -128,9 +131,9 @@ export function recordToCamera(
   now: Date = new Date(),
 ): Camera | null {
   const id = itemIdOf(record);
-  const location = rec(record["location"]);
+  const location = rec(record.location);
   const coordinates = pointOf(location);
-  if (!id || record["kind"] !== "camera" || !coordinates) return null;
+  if (!id || record.kind !== "camera" || !coordinates) return null;
   const all = sourcesOf(record);
   const survivor = all[0];
   if (survivor === undefined || excluded(survivor.id)) return null;
@@ -140,40 +143,38 @@ export function recordToCamera(
     all.map((s) => s.id),
   );
   const readings = allowedReadings(latest, excluded);
-  const details = rec(record["details"]);
-  const refreshSec = positive(details["refreshSec"]);
-  const cameraPage = webUrl(details["detailUrl"]);
+  const details = rec(record.details);
+  const refreshSec = positive(details.refreshSec);
+  const cameraPage = webUrl(details.detailUrl);
   const cameraTerms = oneOf<NonNullable<CameraView["imageRedistribution"]>>(
     REDISTRIBUTION,
-    details["imageRedistribution"],
+    details.imageRedistribution,
   );
   let detailUrl = cameraPage;
-  let crowd = false;
 
   const views: CameraView[] = [];
-  for (const component of list(record["components"])) {
-    const key = str(component["key"]);
-    if (component["kind"] !== "camera_view" || !key) continue;
+  for (const component of list(record.components)) {
+    const key = str(component.key);
+    if (component.kind !== "camera_view" || !key) continue;
     const owner = splitKey(key, prefixes).source ?? survivor.id;
     if (excluded(owner)) continue;
-    const viewDetails = rec(component["details"]);
+    const viewDetails = rec(component.details);
     const ownView = owner === survivor.id;
-    let viewPage = webUrl(viewDetails["detailUrl"]) ?? (ownView ? cameraPage : undefined);
+    let viewPage = webUrl(viewDetails.detailUrl) ?? (ownView ? cameraPage : undefined);
     const imageRedistribution =
       oneOf<NonNullable<CameraView["imageRedistribution"]>>(
         REDISTRIBUTION,
-        viewDetails["imageRedistribution"],
+        viewDetails.imageRedistribution,
       ) ?? (ownView ? cameraTerms : undefined);
 
     const reading = newestReading(readings, "camera.image", key);
-    if (crowdReported(reading)) crowd = true;
-    const value = rec(rec(reading?.result)["value"]);
+    const value = rec(rec(reading?.result).value);
     // A fused reading names its contributors; any of them declaring the host admits the still.
     const contributors = reading ? readingFeeds(reading) : [];
     const declared = (url: string) =>
       contributors.some((sourceId) => matchesMediaHost(url, sources.mediaHosts(sourceId)));
 
-    let imageUrl = str(value["imageUrl"]);
+    let imageUrl = str(value.imageUrl);
     let still = true;
     if (imageUrl !== undefined && !declared(imageUrl)) {
       viewPage ??= webUrl(imageUrl);
@@ -183,28 +184,38 @@ export function recordToCamera(
       still = false;
     }
     // A thumbnail goes with an undeclared still: it stands for the same image.
-    const thumbnail = str(value["thumbnailUrl"]);
+    const thumbnail = str(value.thumbnailUrl);
     const thumbnailUrl =
       still && thumbnail !== undefined && declared(thumbnail) ? thumbnail : undefined;
     // The browser opens the stream itself, so only a web link is passed on.
-    const streamUrl = webUrl(value["streamUrl"]);
-    const streamType = oneOf<NonNullable<CameraView["streamType"]>>(
-      STREAM_TYPES,
-      value["streamType"],
-    );
-    const imageAt = str(value["imageAt"]);
+    const streamUrl = webUrl(value.streamUrl);
+    const streamType = oneOf<NonNullable<CameraView["streamType"]>>(STREAM_TYPES, value.streamType);
+    const imageAt = str(value.imageAt);
     const until = reading?.validUntil === undefined ? Number.NaN : Date.parse(reading.validUntil);
 
-    const name = firstText(component["name"]) ?? firstText(viewDetails["name"]);
-    const bearingDeg = viewDetails["bearingDeg"];
+    const name = firstText(component.name) ?? firstText(viewDetails.name);
+    const bearingDeg = viewDetails.bearingDeg;
     const bearing =
       typeof bearingDeg === "number" && bearingDeg >= 0 && bearingDeg < 360
         ? bearingDeg
         : undefined;
-    const direction = directionOf(viewDetails["direction"]);
-    const road = roadOf(viewDetails["road"]);
+    const direction = directionOf(viewDetails.direction);
+    const road = roadOf(viewDetails.road);
+    const native = readCapturedContributors(
+      component.contributors ?? rec(component.provenance).contributors,
+    );
+    const selectedSources = kept.filter((source) => source.id === owner);
+    const viewCredits = snapshotContributors(
+      native ??
+        snapshotContributors(
+          selectedSources.map((source) => credit(source, sources)),
+          upstreamCredits(selectedSources, sources),
+        ),
+      readingCredits(reading),
+    );
     views.push({
       key,
+      contributors: viewCredits,
       ...(name ? { name } : {}),
       ...(bearing !== undefined ? { bearing } : {}),
       ...(direction ? { direction } : {}),
@@ -213,7 +224,7 @@ export function recordToCamera(
       ...(thumbnailUrl ? { thumbnailUrl } : {}),
       ...(streamUrl ? { streamUrl } : {}),
       ...(streamUrl && streamType ? { streamType } : {}),
-      status: (reading && oneOf<CameraStatus>(CAMERA_STATUSES, value["status"])) || "unknown",
+      status: (reading && oneOf<CameraStatus>(CAMERA_STATUSES, value.status)) || "unknown",
       ...(refreshSec !== undefined ? { refreshSec } : {}),
       ...(imageAt ? { imageAt } : {}),
       stale: reading === undefined || (Number.isFinite(until) && until < now.getTime()),
@@ -224,29 +235,42 @@ export function recordToCamera(
   // A camera is its views: with none left there is nothing to show.
   if (views.length === 0) return null;
 
-  const name = firstText(record["name"]);
+  const name = firstText(record.name);
   const country = countryOf(location);
-  const operator = rec(record["operator"]);
-  const operatorName = firstText(operator["name"]);
-  const operatorSite = webUrl(operator["website"]);
-  const playerEmbedUrl = webUrl(details["playerEmbedUrl"]);
+  const operator = rec(record.operator);
+  const operatorName = firstText(operator.name);
+  const operatorSite = webUrl(operator.website);
+  const playerEmbedUrl = webUrl(details.playerEmbedUrl);
   return {
     id,
     name: name ?? "",
-    type: oneOf<CameraType>(CAMERA_TYPES, record["type"]) ?? "other",
+    type: oneOf<CameraType>(CAMERA_TYPES, record.type) ?? "other",
     ...(country ? { country } : {}),
     coordinates,
     ...(operatorName
       ? { operator: { name: operatorName, ...(operatorSite ? { website: operatorSite } : {}) } }
       : {}),
     ...(detailUrl ? { detailUrl } : {}),
-    ...(playerEmbedUrl ? { playerEmbedUrl } : {}),
+    ...(playerEmbedUrl
+      ? {
+          playerEmbedUrl,
+          playerContributors: snapshotContributors(
+            kept
+              .filter((source) => source.id === survivor.id)
+              .map((source) => credit(source, sources)),
+            upstreamCredits(
+              kept.filter((source) => source.id === survivor.id),
+              sources,
+            ),
+          ),
+        }
+      : {}),
     views,
-    sources: kept.map((s) => s.id),
-    attributions: [
-      ...kept.map((s) => credit(s, sources)),
-      ...upstreamCredits(kept, sources),
-      ...(crowd ? [CROWD_CREDIT] : []),
-    ],
+    sources: [...new Set(kept.map((s) => s.id))],
+    attributions: snapshotContributors(
+      kept.map((s) => credit(s, sources)),
+      upstreamCredits(kept, sources),
+      views.flatMap((view) => view.contributors ?? []),
+    ),
   };
 }

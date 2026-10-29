@@ -9,6 +9,7 @@ import {
   parseCsvRecords,
 } from "@openmapx/mobility-formats";
 import { MOBILITYDATA_GBFS_CATALOG_URL } from "@openmapx/transitous-core";
+import { LRUCache } from "lru-cache";
 import { type CacheClient, TTL, withCache } from "./cache.js";
 import { isEnturGbfsUrl } from "./entur-gbfs.js";
 import { fetchGbfsSystem, type GbfsSystemData } from "./gbfs-client.js";
@@ -18,7 +19,7 @@ import type { GbfsCatalogEntry, VehicleFormFactor } from "./types/shared-mobilit
 
 // Runtime fallback stays enabled until the MOTIS-first rollout (Plan 006), but
 // it consumes the same immutable registry revision as the import compiler.
-// Bumped transactionally by `openmapx transitous bump`; never point this at master.
+// Bumped with its lock by maintainers (`pnpm pin:gbfs-catalog`); never point this at master.
 const CATALOG_URL = MOBILITYDATA_GBFS_CATALOG_URL;
 const CATALOG_CACHE_KEY = "shared-mobility:gbfs-catalog";
 const ENTUR_CATALOG_CACHE_KEY = "shared-mobility:gbfs-catalog:entur";
@@ -39,11 +40,17 @@ const CATALOG_REFRESH_MS = 24 * 60 * 60 * 1000;
 interface GbfsCatalogState {
   entries: GbfsCatalogEntry[] | null;
   loadedAt: number;
-  systemBboxes: Map<string, { bbox: BoundingBox; vehicleTypes: Set<string>; expiresAt: number }>;
+  generation: number;
+  isCacheAvailable: () => boolean;
+  systemBboxes: LRUCache<
+    string,
+    { bbox: BoundingBox; vehicleTypes: Set<string>; expiresAt: number }
+  >;
   inflightProbes: Map<string, Promise<GbfsSystemProbe | null>>;
 }
 
 export interface GbfsCatalogClient {
+  clearCache(): void;
   loadCatalog(): Promise<GbfsCatalogEntry[]>;
   probeSystem(entry: GbfsCatalogEntry): Promise<GbfsSystemProbe | null>;
 }
@@ -51,14 +58,30 @@ export interface GbfsCatalogClient {
 export function createGbfsCatalogClient(options: {
   cache: CacheClient;
   transport: MobilityHttpTransport;
+  /** Runtime updates availability and calls clearCache on each invalidation. */
+  isCacheAvailable?: () => boolean;
 }): GbfsCatalogClient {
   const state: GbfsCatalogState = {
     entries: null,
     loadedAt: 0,
-    systemBboxes: new Map(),
+    generation: 0,
+    isCacheAvailable: options.isCacheAvailable ?? (() => true),
+    // Entry budget, rather than a memory-byte estimate.
+    systemBboxes: new LRUCache({
+      max: 10000,
+      ttl: SYSTEM_CACHE_TTL * 1000,
+      updateAgeOnGet: false,
+    }),
     inflightProbes: new Map(),
   };
   return {
+    clearCache() {
+      state.generation++;
+      state.entries = null;
+      state.loadedAt = 0;
+      state.systemBboxes.clear();
+      state.inflightProbes.clear();
+    },
     loadCatalog: () => loadCatalog(state, options.cache, options.transport),
     probeSystem: (entry) => probeSystem(state, entry, options.transport),
   };
@@ -73,7 +96,12 @@ async function loadCatalog(
   cache: CacheClient,
   transport: MobilityHttpTransport,
 ): Promise<GbfsCatalogEntry[]> {
-  if (state.entries && Date.now() - state.loadedAt < CATALOG_REFRESH_MS) {
+  const startedGeneration = state.generation;
+  if (
+    state.isCacheAvailable() &&
+    state.entries &&
+    Date.now() - state.loadedAt < CATALOG_REFRESH_MS
+  ) {
     return state.entries;
   }
 
@@ -118,8 +146,10 @@ async function loadCatalog(
     SWISS_SHARED_MOBILITY_ENTRY,
   ]);
 
-  state.entries = entries;
-  state.loadedAt = Date.now();
+  if (state.generation === startedGeneration && state.isCacheAvailable()) {
+    state.entries = entries;
+    state.loadedAt = Date.now();
+  }
   return entries;
 }
 
@@ -301,18 +331,21 @@ async function probeSystem(
   entry: GbfsCatalogEntry,
   transport: MobilityHttpTransport,
 ): Promise<GbfsSystemProbe | null> {
-  const cached = state.systemBboxes.get(entry.systemId);
+  const key = JSON.stringify([entry.systemId, entry.autoDiscoveryUrl]);
+  const startedGeneration = state.generation;
+  const cached = state.isCacheAvailable() ? state.systemBboxes.get(key) : undefined;
+  // Keep the strict deadline: lru-cache may still return an entry at exactly its TTL.
   if (cached && cached.expiresAt > Date.now()) {
     return { bbox: cached.bbox, vehicleTypes: cached.vehicleTypes };
   }
 
-  const existing = state.inflightProbes.get(entry.systemId);
+  const existing = state.isCacheAvailable() ? state.inflightProbes.get(key) : undefined;
   if (existing) return existing;
 
-  const promise = probeSystemInner(state, entry, transport).finally(() => {
-    state.inflightProbes.delete(entry.systemId);
+  const promise = probeSystemInner(state, entry, transport, key, startedGeneration).finally(() => {
+    if (state.inflightProbes.get(key) === promise) state.inflightProbes.delete(key);
   });
-  state.inflightProbes.set(entry.systemId, promise);
+  if (state.isCacheAvailable()) state.inflightProbes.set(key, promise);
   return promise;
 }
 
@@ -320,6 +353,8 @@ async function probeSystemInner(
   state: GbfsCatalogState,
   entry: GbfsCatalogEntry,
   transport: MobilityHttpTransport,
+  key: string,
+  startedGeneration: number,
 ): Promise<GbfsSystemProbe | null> {
   const system = await fetchGbfsSystem(entry.autoDiscoveryUrl, getGbfsDiscoveryHeaders(entry), {
     transport,
@@ -373,11 +408,13 @@ async function probeSystemInner(
     vehicleTypes.add("other");
   }
 
-  state.systemBboxes.set(entry.systemId, {
-    bbox,
-    vehicleTypes,
-    expiresAt: Date.now() + SYSTEM_CACHE_TTL * 1000,
-  });
+  if (state.generation === startedGeneration && state.isCacheAvailable()) {
+    state.systemBboxes.set(key, {
+      bbox,
+      vehicleTypes,
+      expiresAt: Date.now() + SYSTEM_CACHE_TTL * 1000,
+    });
+  }
 
   return { bbox, systemData: system, vehicleTypes };
 }

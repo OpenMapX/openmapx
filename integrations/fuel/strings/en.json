@@ -2,7 +2,11 @@
   "name": "Fuel Prices",
   "description": "Gas stations with their fuel grades and prices, from every enabled fuel-station provider",
   "section": {
-    "fuelPrices": "Fuel Prices"
+    "fuelPrices": "Fuel Prices",
+    "services": "Services"
+  },
+  "row": {
+    "truckSuitable": "Suitable for HGVs"
   },
   "column": {
     "fuelType": "Fuel Type",
@@ -45,7 +49,10 @@
     "e5_premium": "Premium 95 (E5)",
     "sp98_e10": "Super 98 (E10)",
     "cng_bio": "Bio-CNG",
-    "lng_bio": "Bio-LNG"
+    "lng_bio": "Bio-LNG",
+    "sp100": "SP100 (Super 100)",
+    "b20": "B20 diesel",
+    "b30": "B30 diesel"
   },
   "summary": {
     "priceList": "{scope, select, car {{prices}} hgv {{hgvPrices} (HGV)} other {{prices} · {hgvPrices} (HGV)}}",
@@ -78,9 +85,13 @@
       "e5_premium": "Premium 95 (E5)",
       "sp98_e10": "Super 98 (E10)",
       "cng_bio": "Bio-CNG",
-      "lng_bio": "Bio-LNG"
+      "lng_bio": "Bio-LNG",
+      "sp100": "SP100",
+      "b20": "B20",
+      "b30": "B30"
     }
   },
   "fuelHgv": "{grade} (HGV)",
+  "literal": "{value}",
   "stationFallbackName": "Fuel station"
 }

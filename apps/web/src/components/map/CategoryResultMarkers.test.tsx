@@ -5,7 +5,8 @@ import {
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
-import { act, render } from "@testing-library/react";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
+import { act, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { usePinMarker } from "@/hooks/usePinMarker";
 import { createFakeMap } from "@/test";
@@ -139,7 +140,7 @@ it("reuses category data across style events and restores it after replacement",
 
 it("keeps brand-enriched data on unrelated events and fences old image completions after a style replacement", async () => {
   const OriginalImage = globalThis.Image;
-  const images: Array<{ onload: (() => void) | null }> = [];
+  const images: Array<{ onload: (() => void) | null; src: string }> = [];
   globalThis.Image = class {
     onload: (() => void) | null = null;
     onerror: (() => void) | null = null;
@@ -151,7 +152,52 @@ it("keeps brand-enriched data on unrelated events and fences old image completio
   const oldResults = reach.filtered;
   try {
     fake.map.setStyle({} as never);
-    fake.map.addImage("brand-marker-Q1", {} as never);
+    const { apiClient } = await import("@openmapx/core");
+    const { loadBrandMarkerImage, loadedBrandMarkerContributors } = await import(
+      "./CategoryResultMarkers"
+    );
+    const photo = {
+      logoFile: "Logo.svg",
+      url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Logo.svg",
+      source: "wikimedia-commons",
+      author: "Logo creator",
+      licensing: licensingFromDeclaration(
+        "CC BY 4.0",
+        "https://creativecommons.org/licenses/by/4.0/",
+      ),
+      pageUrl: "https://commons.wikimedia.org/wiki/File:Logo.svg",
+      contributors: [
+        {
+          sourceId: "wikimedia-commons",
+          name: "Logo Commons credit",
+          attributionText: "Required logo artist",
+          url: "https://commons.wikimedia.org/wiki/File:Logo.svg",
+        },
+      ],
+    };
+    vi.spyOn(apiClient, "get").mockImplementation(async (url) =>
+      String(url).endsWith("logo-attribution")
+        ? photo
+        : {
+            logoFile: "Logo.svg",
+            fieldContributors: {
+              logoFile: [{ sourceId: "name-suggestion-index", name: "NSI logo selection" }],
+            },
+          },
+    );
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(new Blob(["logo"])));
+    const loaded = loadBrandMarkerImage(fake.map, "Q1");
+    await waitFor(() => expect(images.length).toBeGreaterThan(0));
+    images.at(-1)?.onload?.();
+    expect(await loaded).toBe(true);
+    const loadedReceipts = loadedBrandMarkerContributors(fake.map, "Q1");
+    expect(loadedReceipts.map((receipt) => receipt.name)).toEqual([
+      "NSI logo selection",
+      "Logo Commons credit",
+    ]);
+    loadedReceipts[0].name = "Mutated consumer";
+    expect(loadedBrandMarkerContributors(fake.map, "Q1")[0].name).toBe("NSI logo selection");
+
     reach.filtered = [
       {
         id: "brand",
@@ -166,6 +212,11 @@ it("keeps brand-enriched data on unrelated events and fences old image completio
     const data = () =>
       fake.state.sources.get("category-results-source")?.data as GeoJSON.FeatureCollection;
     expect(data().features[0].properties?.imageId).toBe("brand-marker-Q1");
+    expect(data().features[0].properties?._mapMarkerAttributions).toContain("Required logo artist");
+    expect(data().features[0].properties?._mapMarkerAttributions).toContain("NSI logo selection");
+    expect(data().features[0].properties?._mapLabelAttributions).not.toContain(
+      "Required logo artist",
+    );
     const uploads = fake.state.counts.setData.get("category-results-source");
     await act(async () => {
       for (let i = 0; i < 100; i++) fake.emit("styledata");
@@ -176,10 +227,24 @@ it("keeps brand-enriched data on unrelated events and fences old image completio
     act(() => {
       fake.map.setStyle({} as never);
     });
+    expect(loadedBrandMarkerContributors(fake.map, "Q1")).toEqual([]);
+    fake.state.styleLoaded = false;
     await act(async () => {
       oldImage.onload?.();
     });
     expect(fake.state.layers.has("category-results-layer")).toBe(false);
+    // Resolve this style's optional logo while an unrelated source stays pending.
+    await waitFor(() =>
+      expect(
+        images.slice(1).some((image) => decodeURIComponent(image.src).includes("<image ")),
+      ).toBe(true),
+    );
+    await act(async () => {
+      for (const image of images.slice(1)) image.onload?.();
+    });
+    expect(fake.map.hasImage("brand-marker-Q1")).toBe(true);
+    expect(data().features[0].properties?.imageId).toBe("brand-marker-Q1");
+    expect(data().features[0].properties?._mapMarkerAttributions).toContain("Required logo artist");
     reach.filtered = [{ id: "new", name: "New", coordinates: [9, 51] }];
     view.rerender(<CategoryResultMarkers />);
     await act(async () => {
@@ -190,6 +255,8 @@ it("keeps brand-enriched data on unrelated events and fences old image completio
   } finally {
     globalThis.Image = OriginalImage;
     reach.filtered = oldResults;
+    fake.state.styleLoaded = true;
+    vi.restoreAllMocks();
   }
 });
 
@@ -314,23 +381,25 @@ it("keeps the selected result out of the ordinary layers through hover and style
     view = render(<CategoryResultMarkers />);
     await act(async () => {});
 
-    const filter = ["all", ["!=", ["get", "id"], "osm:node/1"], ["!=", ["get", "id"], ""]];
+    const filter = ["!=", ["get", "id"], "osm:node/1"];
+    const labelOpacity = () => fake.map.getPaintProperty("category-results-labels", "text-opacity");
+    const hiddenLabel = (id: string) => ["case", ["==", ["get", "id"], id], 0, 1];
     expect(fake.state.filters.get("category-results-layer")).toEqual(filter);
     expect(fake.state.filters.get("category-results-labels")).toEqual(filter);
+    expect(labelOpacity()).toEqual(hiddenLabel(""));
     const uploads = fake.state.counts.setData.get("category-results-source") ?? 0;
     act(() => useCategorySearchStore.getState().setHoveredCategoryPlaceId("osm:node/2"));
-    const hoveredFilter = [
-      "all",
-      ["!=", ["get", "id"], "osm:node/1"],
-      ["!=", ["get", "id"], "osm:node/2"],
-    ];
-    expect(fake.state.filters.get("category-results-layer")).toEqual(hoveredFilter);
+    // The hovered marker stays rendered under the hover pin; only its label hides.
+    expect(fake.state.filters.get("category-results-layer")).toEqual(filter);
+    expect(fake.state.filters.get("category-results-labels")).toEqual(filter);
+    expect(labelOpacity()).toEqual(hiddenLabel("osm:node/2"));
     expect(fake.state.counts.setData.get("category-results-source") ?? 0).toBe(uploads);
     act(() => fake.map.setStyle({} as never));
     await act(async () => images.at(-1)?.onload?.());
-    expect(fake.state.filters.get("category-results-layer")).toEqual(hoveredFilter);
-    act(() => useCategorySearchStore.getState().setHoveredCategoryPlaceId(null));
     expect(fake.state.filters.get("category-results-layer")).toEqual(filter);
+    expect(labelOpacity()).toEqual(hiddenLabel("osm:node/2"));
+    act(() => useCategorySearchStore.getState().setHoveredCategoryPlaceId(null));
+    expect(labelOpacity()).toEqual(hiddenLabel(""));
   } finally {
     view?.unmount();
     usePlaceStore.setState({ selectedPlace: null });
@@ -339,34 +408,59 @@ it("keeps the selected result out of the ordinary layers through hover and style
   }
 });
 
-it("waits for style readiness if an image finishes while the style is loading", async () => {
-  const OriginalImage = globalThis.Image;
-  const images: Array<{ onload: (() => void) | null }> = [];
-  globalThis.Image = class {
-    onload: (() => void) | null = null;
-    onerror: (() => void) | null = null;
-    src = "";
-    constructor() {
-      images.push(this);
+it.each([
+  { mode: "category", transit: false, cached: false, imageId: "category-marker-hotels" },
+  { mode: "category", transit: false, cached: true, imageId: "category-marker-hotels" },
+  { mode: "text", transit: false, cached: false, imageId: "category-marker-text" },
+  { mode: "category", transit: true, cached: false, imageId: "transit-marker-bus" },
+] as const)(
+  "installs $mode markers while sources remain pending (transit=$transit cached=$cached)",
+  async ({ mode, transit, cached, imageId }) => {
+    const OriginalImage = globalThis.Image;
+    const images: Array<{ onload: (() => void) | null }> = [];
+    globalThis.Image = class {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      src = "";
+      constructor() {
+        images.push(this);
+      }
+    } as unknown as typeof Image;
+    let view: ReturnType<typeof render> | undefined;
+    const layerId = transit ? "transit-stops-layer" : "category-results-layer";
+    const sourceId = transit ? "transit-stops-source" : "category-results-source";
+    try {
+      fake.map.setStyle({} as never);
+      // A parsed stylesheet is writable even while this or another source loads.
+      fake.state.styleLoaded = false;
+      if (cached) fake.map.addImage(imageId, {} as never);
+      reach.isTransitCategory = transit;
+      transitStops = transit
+        ? [{ id: "stop", name: "Stop", lat: 50, lng: 8, modes: ["bus"], provider: "test" }]
+        : undefined;
+      useCategorySearchStore.setState({ activeCategory: "hotels", mode, textQuery: "Hotels" });
+      view = render(<CategoryResultMarkers />);
+      expect(fake.map.getSource(sourceId)).toBeDefined();
+      await act(async () => {
+        for (const image of images) image.onload?.();
+      });
+      // No source-ready, idle or artificial styledata event is needed.
+      expect(fake.map.hasImage(imageId)).toBe(true);
+      expect(fake.map.getLayer(layerId)).toBeDefined();
+      expect(
+        fake.map.getLayer(transit ? "transit-stops-labels" : "category-results-labels"),
+      ).toBeDefined();
+      expect(fake.map.isStyleLoaded()).toBe(false);
+    } finally {
+      view?.unmount();
+      fake.state.styleLoaded = true;
+      reach.isTransitCategory = false;
+      transitStops = undefined;
+      useCategorySearchStore.setState({ mode: "category", textQuery: "" });
+      globalThis.Image = OriginalImage;
     }
-  } as unknown as typeof Image;
-  try {
-    fake.map.setStyle({} as never);
-    useCategorySearchStore.setState({ activeCategory: "restaurant" });
-    const view = render(<CategoryResultMarkers />);
-    fake.state.styleLoaded = false;
-    await act(async () => images[0].onload?.());
-    expect(fake.state.layers.has("category-results-layer")).toBe(false);
-    fake.state.styleLoaded = true;
-    await act(async () => fake.emit("styledata"));
-    await act(async () => images.at(-1)?.onload?.());
-    expect(fake.state.layers.has("category-results-layer")).toBe(true);
-    view.unmount();
-  } finally {
-    fake.state.styleLoaded = true;
-    globalThis.Image = OriginalImage;
-  }
-});
+  },
+);
 
 it("opens full result details from focused and ordinary markers", async () => {
   fake.map.setStyle({} as never);
@@ -508,5 +602,103 @@ it("does not register a stale marker image after the category changes", async ()
   } finally {
     view?.unmount();
     globalThis.Image = OriginalImage;
+  }
+});
+
+it("credits only the actually placed marker and label fields, keeping cached receipts", async () => {
+  vi.useFakeTimers();
+  const { useMapAttributionStore } = await import("@/integration-api/overlay/mapAttributionStore");
+  const old = reach.filtered;
+  const geometry = { sourceId: "geometry", name: "Geometry notice" };
+  const label = { sourceId: "label", name: "Label notice" };
+  const contact = { sourceId: "contact", name: "Hidden phone notice" };
+  let view: ReturnType<typeof render> | undefined;
+  try {
+    fake.map.setStyle({} as never);
+    fake.state.zoom = 14;
+    fake.map.addImage("category-marker-restaurant", {} as never);
+    useMapAttributionStore.setState({ byLayer: {} });
+    useCategorySearchStore.setState({ activeCategory: "restaurant", hoveredCategoryPlaceId: null });
+    reach.isTransitCategory = false;
+    reach.filtered = [
+      {
+        id: "receipt",
+        name: "Name",
+        coordinates: [8, 50],
+        phone: "123",
+        contributors: [geometry, label, contact],
+        fieldContributors: {
+          coordinates: [geometry],
+          name: [label],
+          phone: [contact],
+          category: [],
+        },
+      } as typeof result,
+    ];
+    view = render(<CategoryResultMarkers />);
+    await act(async () => {});
+    const data = fake.state.sources.get("category-results-source")
+      ?.data as GeoJSON.FeatureCollection;
+    fake.setRenderedFeatures("category-results-layer", [
+      {
+        ...data.features[0],
+        layer: {
+          id: "category-results-layer",
+          type: "symbol",
+          layout: { "icon-image": "category-marker-restaurant", "icon-size": 0.6 },
+        },
+      } as never,
+    ]);
+    fake.setRenderedFeatures("category-results-labels", [
+      {
+        ...data.features[0],
+        layer: {
+          id: "category-results-labels",
+          type: "symbol",
+          layout: { "text-field": "Name", "text-size": 11 },
+        },
+      } as never,
+    ]);
+    const flush = () =>
+      act(() => {
+        fake.emit("render");
+        vi.advanceTimersByTime(250);
+      });
+    const html = () =>
+      Object.values(useMapAttributionStore.getState().byLayer)
+        .flat()
+        .map((entry) => entry.fullHtml)
+        .join(" ");
+    flush();
+    expect(html()).toContain("Geometry notice");
+    expect(html()).not.toContain("Label notice");
+    expect(html()).not.toContain("Hidden phone notice");
+    geometry.name = "Changed catalogue";
+    fake.state.styleLoaded = false;
+    fake.state.zoom = 16;
+    fake.setRenderedFeatures("category-results-layer", []);
+    flush();
+    expect(html()).toContain("Geometry notice");
+    expect(html()).toContain("Label notice");
+    expect(html()).not.toContain("Changed catalogue");
+    fake.setRenderedFeatures("category-results-labels", []);
+    flush();
+    expect(html()).toBe("");
+  } finally {
+    view?.unmount();
+    reach.filtered = old;
+    vi.useRealTimers();
+  }
+});
+
+it("does not trust a pre-existing brand map image with no captured file receipt", async () => {
+  const { loadBrandMarkerImage } = await import("./CategoryResultMarkers");
+  const { apiClient } = await import("@openmapx/core");
+  fake.map.addImage("brand-marker-Q999", {} as never);
+  const get = vi.spyOn(apiClient, "get").mockResolvedValue({ qid: "Q999", logoFile: "Logo.svg" });
+  try {
+    expect(await loadBrandMarkerImage(fake.map, "Q999")).toBe(false);
+  } finally {
+    get.mockRestore();
   }
 });

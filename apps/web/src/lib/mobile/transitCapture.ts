@@ -1,3 +1,4 @@
+import pMap from "p-map";
 /**
  * Capturing a transit trip before it starts.
  *
@@ -77,25 +78,6 @@ function riddenTripIds(itinerary: TripItinerary): string[] {
   return [...seen];
 }
 
-/** Runs `task` over `items`, at most `limit` at a time, preserving order. */
-async function mapWithLimit<T, R>(
-  items: readonly T[],
-  limit: number,
-  task: (item: T, index: number) => Promise<R>,
-): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let next = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      const index = next;
-      next += 1;
-      results[index] = await task(items[index], index);
-    }
-  });
-  await Promise.all(workers);
-  return results;
-}
-
 /**
  * Fetches one journey, or reports that it could not be had.
  *
@@ -164,18 +146,26 @@ async function fetchStopArea(
 export async function prepareTransitStart(
   input: PrepareTransitStartInput,
 ): Promise<PrepareTransitStartResult> {
+  if (input.signal?.aborted) return { ok: false, code: "aborted" };
   const tripIds = riddenTripIds(input.itinerary);
 
   // The stops' shapes travel too: underground there is no fetching them later.
   const needs = transitStopsNeedingAreas(input.itinerary);
-  const [fetched, areas] = await Promise.all([
-    mapWithLimit(tripIds, CAPTURE_CONCURRENCY, (tripId) =>
-      fetchJourneyStops(tripId, input.client, input.signal),
-    ),
-    mapWithLimit(needs, CAPTURE_CONCURRENCY, (stop) =>
-      fetchStopArea(stop, input.client, input.signal),
-    ),
-  ]);
+  const captures = await Promise.all([
+    pMap(tripIds, (tripId) => fetchJourneyStops(tripId, input.client, input.signal), {
+      concurrency: CAPTURE_CONCURRENCY,
+      signal: input.signal,
+    }),
+    pMap(needs, (stop) => fetchStopArea(stop, input.client, input.signal), {
+      concurrency: CAPTURE_CONCURRENCY,
+      signal: input.signal,
+    }),
+  ]).catch((error: unknown) => {
+    if (input.signal?.aborted) return null;
+    throw error;
+  });
+  if (!captures) return { ok: false, code: "aborted" };
+  const [fetched, areas] = captures;
   if (input.signal?.aborted || fetched.some((result) => result.aborted)) {
     return { ok: false, code: "aborted" };
   }

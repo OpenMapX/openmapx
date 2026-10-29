@@ -146,6 +146,25 @@ function mockOk(data: unknown) {
 
 function getHandler(): RouteHandler {
   const ctx = createMockIntegrationContext();
+  ctx.manifest.dataSources = [
+    {
+      sourceId: "open-meteo-marine",
+      name: "Captured marine supplier",
+      url: "https://open-meteo.com/",
+      providerCountry: "DE",
+      providerPrivacyUrl: "https://open-meteo.com/en/terms",
+      licensing: {
+        version: 1,
+        bindings: [
+          {
+            scope: "data",
+            subject: "Marine data",
+            license: { kind: "spdx", expression: "CC-BY-4.0" },
+          },
+        ],
+      },
+    },
+  ];
   setup(ctx);
   const route = ctx.registered.routes.find((r) => r.path === "/marine");
   if (!route) throw new Error("/marine route was not registered");
@@ -204,6 +223,9 @@ describe("GET /marine route", () => {
     expect(payload.source).toBe("open-meteo-marine");
     expect(payload.current.seaState).toBe("slight");
     expect(payload.hourly).toHaveLength(2);
+    expect(reply.payload).toMatchObject({
+      contributors: [{ sourceId: "open-meteo-marine", name: "Captured marine supplier" }],
+    });
   });
 
   it("400s on out-of-range coordinates without calling upstream", async () => {

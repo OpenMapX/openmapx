@@ -1,22 +1,19 @@
 import {
-  createManifestAttribution,
+  captureTransitContributors,
   type IntegrationContext,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { withAttribution } from "@openmapx/mobility-core/result";
+import { OtpError } from "@openmapx/otp-client";
 import { getAdapter } from "./adapters.js";
 import { fetchRegistryEntries, setCache, setGithubToken } from "./fetcher.js";
 import { setRedis } from "./hafas-mgate.js";
 import { RegistryManager, registry } from "./registry.js";
 
-// Manifest declares the static infrastructure credits (jsdelivr CDN, GitHub
-// catalog). Per-upstream credits are constructed at runtime from the dynamic
-// registry payload itself — those entries can't be enumerated in a static
-// manifest because they're fetched from a community-maintained catalog at
-// startup.
-const attribution = createManifestAttribution();
-
+// Provider receipts belong to each captured catalog entry; infrastructure disclosures
+// remain in the manifest rather than replacing the actual operator credit.
 function buildAttributionFor(
   entryId: string,
   entryAttribution: {
@@ -26,17 +23,21 @@ function buildAttributionFor(
   },
 ): Attribution[] {
   return [
-    ...attribution.all(),
     {
       sourceId: `dyn:${entryId}`,
       name: entryAttribution.name,
       url: entryAttribution.homepage,
-      spdxLicense: entryAttribution.license,
+      licensing: licensingFromDeclaration(
+        entryAttribution.license,
+        undefined,
+        entryAttribution.name,
+      ),
     },
   ];
 }
 
 export async function setup(ctx: IntegrationContext): Promise<void> {
+  const generation = new AbortController();
   const githubToken = ctx.config.githubToken as string | undefined;
 
   // Inject Redis for cached-hafas-client if available via config
@@ -49,8 +50,22 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
     .catch(() => {});
 
   // Register each discovered entry as a transit provider
-  for (const entry of stagedRegistry.listEntries()) {
-    const adapter = getAdapter(entry.protocol);
+  for (const entry of stagedRegistry.snapshotEntries()) {
+    const adapter = getAdapter(entry.protocol, {
+      http: ctx.http,
+      upstreamRuntime: ctx.upstreamRuntime,
+      signal: generation.signal,
+      digitransitApiKey: ctx.config.digitransitApiKey,
+      isSourceAllowed: async (owner, sourceId) => {
+        const denied = await ctx.getDisallowedSourceIds?.();
+        return (
+          !denied?.has(ctx.id) &&
+          !denied?.has(`dyn:${owner.id}`) &&
+          !denied?.has(sourceId) &&
+          !denied?.has("regional-operators")
+        );
+      },
+    });
     if (!adapter) continue;
 
     // Capture the real operator attribution from the registry entry so it
@@ -59,25 +74,40 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
     // TransitStop.provider carries downstream.
     const attributionKey = entry.prefix.replace(/:$/, "");
     const attributionRow = entry.attribution
-      ? {
-          label: entry.attribution.name,
-          url: entry.attribution.homepage,
-          license: entry.attribution.license,
-        }
+      ? buildAttributionFor(entry.id, entry.attribution)[0]
       : null;
 
     const entryAttribution = entry.attribution
       ? buildAttributionFor(entry.id, entry.attribution)
-      : attribution.all();
+      : [];
 
-    const wrap = <T>(data: T) => withAttribution(data, entryAttribution, freshnessNow());
+    async function assertPublication() {
+      await adapter?.assertAvailable?.(entry);
+    }
+    // This fence must run in the synchronous publishing continuation, after every await.
+    function assertNotRetired() {
+      if (entry.protocol === "otpGraphQl" && generation.signal.aborted)
+        throw new OtpError("cancelled");
+    }
+    const wrap = <T>(data: T) => {
+      assertNotRetired();
+      return withAttribution(
+        captureTransitContributors(data, entryAttribution),
+        entryAttribution,
+        freshnessNow(),
+      );
+    };
     const wrapRT = <T>(data: T) =>
-      withAttribution(data, entryAttribution, freshnessNow({ hasRealtimeData: true }));
+      withAttribution(
+        captureTransitContributors(data, entryAttribution),
+        entryAttribution,
+        freshnessNow({ hasRealtimeData: true }),
+      );
 
     ctx.registerTransitProvider({
       id: `dyn:${entry.id}`,
       prefix: entry.prefix,
-      coverage: { bbox: entry.bbox },
+      coverage: { bbox: entry.coverage.bbox },
       priority: 5,
       role: "enrichment",
       attribution: entryAttribution,
@@ -104,21 +134,38 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
         ? async (lat, lng, r) => {
             const fn = adapter.getStopsNearby;
             if (!fn) return wrap([]);
-            return wrap(await fn(entry as never, lat, lng, r));
+            const result = await fn(entry, lat, lng, r);
+            await assertPublication();
+            return wrap(result);
           }
         : undefined,
       getDepartures: adapter.getDepartures
         ? async (id, min) => {
             const fn = adapter.getDepartures;
             if (!fn) return wrapRT([]);
-            return wrapRT(await fn(entry as never, id, min));
+            const departures = await fn(entry, id, min);
+            await assertPublication();
+            assertNotRetired();
+            return entry.protocol === "otpGraphQl"
+              ? withAttribution(
+                  captureTransitContributors(departures, entryAttribution),
+                  entryAttribution,
+                  freshnessNow({
+                    hasRealtimeData: departures.some(
+                      (call) => call.expectedAt !== undefined || call.canceled === true,
+                    ),
+                  }),
+                )
+              : wrapRT(departures);
           }
         : undefined,
       searchStopsByName: adapter.searchByName
         ? async (q, limit) => {
             const fn = adapter.searchByName;
             if (!fn) return wrap([]);
-            return wrap(await fn(entry as never, q, limit ?? 10));
+            const result = await fn(entry, q, limit ?? 10);
+            await assertPublication();
+            return wrap(result);
           }
         : undefined,
       getFeedAttribution: attributionRow
@@ -129,7 +176,6 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
 
   let releaseRefresh: (() => void) | null = null;
   ctx.onActivate(() => {
-    attribution.set(ctx.manifest.dataSources ?? []);
     setCache(ctx.cache);
     setGithubToken(githubToken);
     // Clear the previous generation's adapter as well as installing a new one;
@@ -139,7 +185,10 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
     registry.replaceWith(stagedRegistry);
     releaseRefresh = registry.startRefresh();
   });
-  ctx.onShutdown(async () => releaseRefresh?.());
+  ctx.onShutdown(async () => {
+    generation.abort();
+    releaseRefresh?.();
+  });
 }
 
 export type { ProtocolAdapter } from "./adapter-types";

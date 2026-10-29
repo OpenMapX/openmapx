@@ -1,3 +1,4 @@
+import type { Licensing } from "@openmapx/mobility-core/licensing";
 /** The eight operational domains shown by the coverage report. */
 export type CoverageDomain =
   | "addresses"
@@ -164,6 +165,8 @@ export interface RoadConditionOperationalMetrics {
   rejectedCount: number | null;
   consecutiveFailures: number | null;
   bindingCounts: Record<string, number> | null;
+  /** Why current bindings were not bound or were kept off routing, by status and reason. */
+  bindingReasons?: Array<{ status: string; reason: string; situations: number; effects: number }>;
   graph: {
     generation: string | null;
     status: "ready" | "partial" | "missing" | "unknown";
@@ -227,8 +230,7 @@ export interface RightsEvidence {
   name?: string;
   commercialUse: CoveragePermission;
   redistribution: RedistributionPermissions;
-  license?: string;
-  licenseUrl?: string;
+  licensing?: Licensing;
   termsUrl?: string;
   attribution?: string;
   usageConditions: string[];

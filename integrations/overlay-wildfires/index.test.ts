@@ -142,6 +142,7 @@ describe("GET /wildfires", () => {
       since: "2026-10-08T12:00:00.000Z",
       instrument: "viirs",
       limit: 20_000,
+      excludeLowConfidence: true,
     });
     expect(sent.status).toBe(200);
     expect(sent.headers).toMatchObject({
@@ -169,6 +170,8 @@ describe("GET /wildfires", () => {
             acqTime: "0930",
             dayNight: "D",
             ageMs: 2.5 * 3_600_000,
+            sources: ["nasa-firms-viirs-fires"],
+            contributors: [],
             instrument: "viirs",
           },
         },
@@ -176,7 +179,7 @@ describe("GET /wildfires", () => {
     });
   });
 
-  it("labels MODIS confidence as a percentage and keeps a detection without optional values", async () => {
+  it("labels MODIS confidence as a percentage and keeps a detection without optional values when low confidence is asked for", async () => {
     const getFirePixels = vi.fn<HazardsProvider["getFirePixels"]>(async () => ({
       pixels: [
         pixel({
@@ -194,11 +197,13 @@ describe("GET /wildfires", () => {
       zoom: "7",
       dayRange: "3",
       instrument: "modis",
+      lowConfidence: "1",
     });
 
     expect(getFirePixels.mock.calls[0]?.[1]).toMatchObject({
       since: "2026-10-06T12:00:00.000Z",
       instrument: "modis",
+      excludeLowConfidence: false,
     });
     expect((sent.body as Body).features[0]?.properties).toMatchObject({
       confidence: "20",
@@ -206,6 +211,35 @@ describe("GET /wildfires", () => {
       satellite: null,
       dayNight: null,
       instrument: "modis",
+    });
+  });
+
+  it("reads SLSTR detections and labels their confidence with the class", async () => {
+    const getFirePixels = vi.fn<HazardsProvider["getFirePixels"]>(async () => ({
+      pixels: [
+        pixel({
+          instrument: "slstr",
+          confidence: { level: "high", percent: 76 },
+          satellite: "S3A",
+          sources: ["eumetsat-slstr-fires"],
+        }),
+      ],
+    }));
+    const sent = await call("/wildfires", [provider({ getFirePixels })], {
+      ...VIEW,
+      zoom: "7",
+      instrument: "slstr",
+    });
+
+    expect(getFirePixels.mock.calls[0]?.[1]).toMatchObject({
+      instrument: "slstr",
+      excludeLowConfidence: true,
+    });
+    expect(sent.headers["X-OpenMapX-Sources"]).toBe("eumetsat-slstr-fires");
+    expect((sent.body as Body).features[0]?.properties).toMatchObject({
+      confidence: "high",
+      satellite: "S3A",
+      instrument: "slstr",
     });
   });
 
@@ -277,6 +311,75 @@ describe("GET /wildfires", () => {
     expect(new Set(keys).size).toBe(1);
   });
 
+  it("leaves out low-confidence detections a provider returned unless they are asked for", async () => {
+    const getFirePixels = async () => ({
+      pixels: [
+        pixel(),
+        pixel({ id: "viirs-low", confidence: { level: "low" } }),
+        pixel({ id: "modis-29", instrument: "modis", confidence: { percent: 29 } }),
+        pixel({ id: "modis-30", instrument: "modis", confidence: { percent: 30 } }),
+        pixel({ id: "slstr-low", instrument: "slstr", confidence: { level: "low", percent: 97 } }),
+        pixel({
+          id: "slstr-nominal",
+          instrument: "slstr",
+          confidence: { level: "nominal", percent: 25 },
+        }),
+        pixel({ id: "unrated", confidence: undefined }),
+      ],
+    });
+    const ids = async (query: Record<string, string>) =>
+      (
+        (await call("/wildfires", [provider({ getFirePixels })], { ...VIEW, zoom: "8", ...query }))
+          .body as Body
+      ).features.map((f) => f.id);
+
+    expect(await ids({})).toEqual(["N20:38.1234,-120.4567:2026-10-09T0930", "unrated"]);
+    expect(await ids({ instrument: "modis" })).toEqual(["modis-30"]);
+    expect(await ids({ lowConfidence: "1" })).toEqual([
+      "N20:38.1234,-120.4567:2026-10-09T0930",
+      "viirs-low",
+      "unrated",
+    ]);
+    expect(await ids({ instrument: "modis", lowConfidence: "1" })).toEqual([
+      "modis-29",
+      "modis-30",
+    ]);
+    // SLSTR's class decides, whatever its percentage says.
+    expect(await ids({ instrument: "slstr" })).toEqual(["slstr-nominal"]);
+    expect(await ids({ instrument: "slstr", lowConfidence: "1" })).toEqual([
+      "slstr-low",
+      "slstr-nominal",
+    ]);
+  });
+
+  it("rejects a lowConfidence other than 0 or 1", async () => {
+    for (const lowConfidence of ["true", "2", ""]) {
+      const sent = await call("/wildfires", [provider()], { ...VIEW, zoom: "8", lowConfidence });
+      expect(sent.status, lowConfidence).toBe(400);
+    }
+  });
+
+  it("caches the read with and without low-confidence detections apart", async () => {
+    const keys: string[] = [];
+    const cache = {
+      ...createMockIntegrationContext().cache,
+      withCache: async <T>(key: string, _ttl: number, fn: () => Promise<T>) => {
+        keys.push(key);
+        return fn();
+      },
+    };
+    for (const path of ["/wildfires", "/wildfires/density"]) {
+      const zoom = path === "/wildfires" ? "8" : "4";
+      await call(path, [provider()], { ...VIEW, zoom }, cache);
+      await call(path, [provider()], { ...VIEW, zoom, lowConfidence: "0" }, cache);
+      await call(path, [provider()], { ...VIEW, zoom, lowConfidence: "1" }, cache);
+    }
+    expect(keys[0]).toBe(keys[1]);
+    expect(keys[2]).not.toBe(keys[0]);
+    expect(keys[3]).toBe(keys[4]);
+    expect(keys[5]).not.toBe(keys[3]);
+  });
+
   it("answers 503 when every provider failed", async () => {
     const getFirePixels = async () => {
       throw new Error("upstream down");
@@ -305,6 +408,7 @@ describe("GET /wildfires/density", () => {
       since: "2026-10-07T12:00:00.000Z",
       instrument: "viirs",
       cellDeg: 1,
+      excludeLowConfidence: true,
     });
     expect(sent.status).toBe(200);
     expect(sent.headers["Cache-Control"]).toBe("public, max-age=300, s-maxage=300");
@@ -314,7 +418,7 @@ describe("GET /wildfires/density", () => {
         {
           type: "Feature",
           geometry: { type: "Point", coordinates: [11.25, -0.75] },
-          properties: { count: 3, frpSum: 9.5, frpMax: 6.1 },
+          properties: { count: 3, frpSum: 9.5, frpMax: 6.1, sources: [], contributors: [] },
         },
       ],
       sources: ["nasa-firms-viirs-fires"],
@@ -402,6 +506,8 @@ describe("GET /perimeters/nifc", () => {
             id: "nifc:oc:situation:us-nifc-fires:{ABC-123}",
             kind: "reported-perimeter",
             provider: "us-nifc-fires",
+            sources: ["us-nifc-fires"],
+            contributors: [],
             name: "Pine Fire",
             areaAcres: 100,
             observedAt: "2026-10-09T08:00:00.000Z",
@@ -548,6 +654,8 @@ describe("GET /smoke/noaa", () => {
           id: "noaa-hms:oc:situation:us-noaa-hms-smoke:2026282_17",
           kind: "observed-smoke",
           provider: "us-noaa-hms-smoke",
+          sources: ["us-noaa-hms-smoke"],
+          contributors: [],
           density: "medium",
           satellite: "GOES-EAST",
           startedAt: "2026-10-09T13:10:00.000Z",
@@ -564,5 +672,39 @@ describe("GET /smoke/noaa", () => {
     const sent = await call("/smoke/noaa", [provider({ getNaturalHazards })]);
     expect(sent.status).toBe(503);
     expect(sent.body).toEqual({ code: "noaa_hms_unavailable" });
+  });
+});
+
+it("preserves known partial cell receipts and lineage diagnostics without expanding whole-grid suppliers", async () => {
+  const a = { sourceId: "parent-a", name: "Captured A" };
+  const sent = await call(
+    "/wildfires/density",
+    [
+      provider({
+        getFireDensity: async () => ({
+          cells: [
+            {
+              point: [-120.5, 38.5],
+              count: 2,
+              frpSumMW: 30,
+              frpMaxMW: 20,
+              sources: ["parent-a"],
+              nativeSources: ["child-a", "historic-unknown"],
+              contributors: [a],
+              lineageComplete: false,
+            },
+          ],
+          sources: ["child-a", "historic-unknown", "other-cell-supplier"],
+        }),
+      }),
+    ],
+    { ...VIEW, zoom: "4" },
+  );
+  expect(sent.status).toBe(200);
+  expect(sent.body).toMatchObject({
+    features: [
+      { properties: { contributors: [a], sources: ["parent-a"], lineageComplete: false } },
+    ],
+    sources: ["child-a", "historic-unknown"],
   });
 });

@@ -1,3 +1,5 @@
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { withContributors } from "@openmapx/mobility-core/contributors";
 /**
  * NRW Mobidrom bundled E-Scooter Sharing feed.
  *
@@ -185,6 +187,7 @@ function prettifyOperator(systemId: string): string {
 async function loadAllFeeds(
   transport: MobilityHttpTransport,
   state: ClientState,
+  contributors?: readonly Attribution[],
 ): Promise<FeedCache> {
   if (state.feedCache && Date.now() - state.feedCache.fetchedAt < FEED_CACHE_MS) {
     return state.feedCache;
@@ -281,7 +284,15 @@ async function loadAllFeeds(
       }
     }
 
-    state.feedCache = { stations, vehicles, fetchedAt: Date.now() };
+    state.feedCache = {
+      stations: stations.map((item) =>
+        contributors === undefined ? item : withContributors(item, contributors),
+      ),
+      vehicles: vehicles.map((item) =>
+        contributors === undefined ? item : withContributors(item, contributors),
+      ),
+      fetchedAt: Date.now(),
+    };
     return state.feedCache;
   })().finally(() => {
     state.inflightFeed = null;
@@ -301,6 +312,7 @@ export function createDeNwMobidromScooterClient(options: {
   clientId?: string;
   clientSecret?: string;
   transport: MobilityHttpTransport;
+  contributors?: readonly Attribution[];
 }): (
   bbox: BoundingBox,
 ) => Promise<{ stations: SharedMobilityStation[]; vehicles: SharedMobilityVehicle[] }> {
@@ -314,7 +326,7 @@ export function createDeNwMobidromScooterClient(options: {
   };
   return async (bbox) => {
     if (!bboxOverlaps(bbox, COVERAGE_BBOX)) return { stations: [], vehicles: [] };
-    const feed = await loadAllFeeds(options.transport, state);
+    const feed = await loadAllFeeds(options.transport, state, options.contributors);
     return {
       stations: feed.stations.filter((station) =>
         bboxContains(bbox, station.coordinates[1], station.coordinates[0]),

@@ -85,6 +85,14 @@ const sampleProviders: ProviderHealthResponse = {
   providers: [
     {
       id: "transitous",
+      schema: 2,
+      state: "healthy",
+      successCount: 99,
+      failureCount: 1,
+      countedFailureCount: 1,
+      consecutiveSuccesses: 1,
+      consecutiveFailures: 0,
+      reopenCount: 0,
       success: 99,
       failure: 1,
       emaLatencyMs: 120,

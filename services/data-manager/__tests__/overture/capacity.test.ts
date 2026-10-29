@@ -58,6 +58,11 @@ describe("Overture capacity preflight", () => {
     ) as { container?: { containerName?: string } };
     expect(manifest.container?.containerName).toBe(POSTGIS_CONTAINER);
   });
+  it("includes captured catalogue row storage and WAL in ingestion admission", () => {
+    expect(estimateOvertureIngestBytes(3_000_000_000, 2_000_000_000, 1_000_000_000)).toBe(
+      15_000_000_000,
+    );
+  });
 
   it("waits for PostGIS health before startup recovery runs", () => {
     const here = dirname(fileURLToPath(import.meta.url));

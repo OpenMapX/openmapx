@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import {
@@ -13,9 +13,17 @@ import {
   monitorPosixProcessGroup,
   services,
 } from "@openmapx/core/server";
+import { openAnchoredDirectory } from "./anchored-directory";
 import { createUnavailableRuntime, type OpsRuntime } from "./runtime";
 
+const TRAFFIC_MAINTENANCE_FENCE = ".traffic-maintenance.json";
+const TRAFFIC_GENERATIONS_MANIFEST = "traffic-generations.json";
+// Valhalla's watchdog withdraws the manifest here at an uncoordinated start and
+// restores it once the tiles it then serves still hash to its generation.
+const TRAFFIC_GENERATIONS_UNVERIFIED = "traffic-generations.unverified.json";
+
 const DEFAULT_TIMEOUT_MS = 120_000;
+const LIFECYCLE_TIMEOUT_MS = 10 * 60_000;
 const PULL_TIMEOUT_MS = 10 * 60_000;
 const MAX_OUTPUT_BYTES = 1024 * 1024;
 const KILL_GRACE_MS = 2_000;
@@ -63,6 +71,8 @@ export interface DockerRuntimeOptions {
   dataMountOwner?: { uid: number; gid: number };
   /** Host-side data root shared with data-manager and Valhalla. */
   trafficDataRoot?: string;
+  /** Descriptor anchor for writes under the data root; see anchored-directory.ts. */
+  descriptorAnchorRoot?: string | null;
 }
 
 export interface ContainedProcessOptions {
@@ -70,6 +80,8 @@ export interface ContainedProcessOptions {
   timeout: number;
   maxBuffer: number;
   killGraceMs?: number;
+  /** The child's environment; the agent's own when omitted. */
+  env?: NodeJS.ProcessEnv;
 }
 
 // The agent runs as the data-owning user, so its own identity is the default
@@ -123,6 +135,7 @@ export function runContainedProcess(
     const child = spawn(file, [...args], {
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
+      ...(options.env ? { env: options.env } : {}),
     });
     const group = monitorPosixProcessGroup(child, {
       killGraceMs: options.killGraceMs ?? KILL_GRACE_MS,
@@ -296,23 +309,21 @@ export function runContainedLogProcess(
 }
 
 function parseStackStatus(stdout: string): OpsResultFor<"stack.status"> {
-  if (!stdout.trim()) return { services: [] };
+  let entries: services.ComposePsEntry[];
   try {
-    const parsed = JSON.parse(stdout) as unknown;
-    const values = Array.isArray(parsed) ? parsed : [parsed];
-    return {
-      services: values.slice(0, 256).map((value) => {
-        const item = value as Record<string, unknown>;
-        const rawState = String(item.State ?? "unknown").toLowerCase();
-        const state = ["running", "stopped", "created", "restarting", "paused"].includes(rawState)
-          ? (rawState as "running" | "stopped" | "created" | "restarting" | "paused")
-          : "unknown";
-        return { serviceId: String(item.Service ?? item.Name ?? "unknown"), state };
-      }),
-    };
+    entries = services.parseComposePsJson(stdout);
   } catch {
     throw new Error("Contained process failed");
   }
+  return {
+    services: entries.slice(0, 256).map((item) => {
+      const rawState = String(item.State ?? "unknown").toLowerCase();
+      const state = ["running", "stopped", "created", "restarting", "paused"].includes(rawState)
+        ? (rawState as "running" | "stopped" | "created" | "restarting" | "paused")
+        : "unknown";
+      return { serviceId: String(item.Service ?? item.Name ?? "unknown"), state };
+    }),
+  };
 }
 
 export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
@@ -328,6 +339,42 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     await run(args, signal, timeout);
     return { changed: true } as const;
   };
+  const motisState = async (name: "motis" | "motis-staging", signal: AbortSignal) => {
+    const result = await run(
+      [
+        "container",
+        "ls",
+        "-a",
+        "--filter",
+        `name=^/${name}$`,
+        "--format",
+        "{{.Names}}\t{{.State}}",
+      ],
+      signal,
+      5_000,
+    );
+    const rows = result.stdout.trim().split(/\r?\n/).filter(Boolean);
+    if (rows.length === 0) return "absent" as const;
+    if (rows.length !== 1) throw new Error("MOTIS stop confirmation returned multiple containers");
+    const fields = rows[0]?.split("\t");
+    if (fields?.length !== 2 || fields[0] !== name) {
+      throw new Error("MOTIS stop confirmation returned an unexpected container");
+    }
+    if (fields[1] === "running") return "running" as const;
+    if (["created", "exited", "dead"].includes(fields[1] ?? "")) return "stopped" as const;
+    throw new Error("MOTIS container state cannot be confirmed stopped");
+  };
+  const stopMotis = async (
+    name: "motis" | "motis-staging",
+    signal: AbortSignal,
+  ): Promise<OpsResultFor<"motis.primary.stop">> => {
+    const before = await motisState(name, signal);
+    if (before !== "running") return { changed: false, state: before };
+    await run(["stop", name], signal);
+    const after = await motisState(name, signal);
+    if (after === "running") throw new Error("MOTIS container remains running after stop");
+    return { changed: true, state: after };
+  };
   const runtime = createUnavailableRuntime();
   const followLogs: FollowLogs = options.followLogs ?? runContainedLogProcess;
 
@@ -340,27 +387,45 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     return parseStackStatus(result.stdout);
   };
   runtime["stack.start"] = (_operation, context) =>
-    changed([...composePrefix(), "up", "-d"], context.signal);
+    changed([...composePrefix(), "up", "-d"], context.signal, LIFECYCLE_TIMEOUT_MS);
   runtime["service.start"] = (operation, context) =>
-    changed([...composePrefix(), "up", "-d", operation.serviceId], context.signal);
+    changed(
+      [...composePrefix(), "up", "-d", operation.serviceId],
+      context.signal,
+      LIFECYCLE_TIMEOUT_MS,
+    );
   runtime["service.stop"] = (operation, context) =>
-    changed([...composePrefix(), "stop", operation.serviceId], context.signal);
+    changed(
+      [...composePrefix(), "stop", operation.serviceId],
+      context.signal,
+      LIFECYCLE_TIMEOUT_MS,
+    );
   runtime["service.restart"] = (operation, context) =>
-    changed([...composePrefix(), "restart", operation.serviceId], context.signal);
+    changed(
+      [...composePrefix(), "restart", operation.serviceId],
+      context.signal,
+      LIFECYCLE_TIMEOUT_MS,
+    );
   runtime["service.recreate"] = (operation, context) =>
     changed(
       [...composePrefix(), "up", "-d", "--force-recreate", operation.serviceId],
       context.signal,
+      LIFECYCLE_TIMEOUT_MS,
     );
   runtime["service.recreateIsolated"] = (operation, context) =>
     changed(
       [...composePrefix(), "up", "-d", "--force-recreate", "--no-deps", operation.serviceId],
       context.signal,
+      LIFECYCLE_TIMEOUT_MS,
     );
   runtime["service.pull"] = (operation, context) =>
     changed([...composePrefix(), "pull", operation.serviceId], context.signal, PULL_TIMEOUT_MS);
   runtime["service.remove"] = (operation, context) =>
-    changed([...composePrefix(), "rm", "-sf", operation.serviceId], context.signal);
+    changed(
+      [...composePrefix(), "rm", "-sf", operation.serviceId],
+      context.signal,
+      LIFECYCLE_TIMEOUT_MS,
+    );
   runtime["service.logs"] = async (operation, context) => {
     const result = await run(
       [...composePrefix(), "logs", "--no-color", `--tail=${operation.tail}`, operation.serviceId],
@@ -485,12 +550,17 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   runtime["valhalla.traffic.inspect"] = async (_operation, context) => {
     if (options.trafficDataRoot) {
       const sharedDir = join(options.trafficDataRoot, "valhalla", "osm-pbf");
-      if (existsSync(join(sharedDir, ".traffic-maintenance.json"))) {
+      // Maintenance, or the watchdog re-checking a withdrawn manifest, settles
+      // the generation; a rebuild requested meanwhile would only stop serving.
+      if (
+        existsSync(join(sharedDir, TRAFFIC_MAINTENANCE_FENCE)) ||
+        existsSync(join(sharedDir, TRAFFIC_GENERATIONS_UNVERIFIED))
+      ) {
         return { state: "unknown" as const };
       }
       try {
         const value = JSON.parse(
-          await readFile(join(sharedDir, "traffic-generations.json"), "utf8"),
+          await readFile(join(sharedDir, TRAFFIC_GENERATIONS_MANIFEST), "utf8"),
         ) as Record<string, unknown>;
         const generation = value.graphGeneration;
         if (
@@ -522,9 +592,6 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   runtime["valhalla.traffic.maintain"] = async (operation, context) => {
     const dataRoot = options.trafficDataRoot;
     if (!dataRoot) throw new Error("Valhalla traffic maintenance data root is not configured");
-    const sharedDir = join(dataRoot, "valhalla", "osm-pbf");
-    const fencePath = join(sharedDir, ".traffic-maintenance.json");
-    const generationsPath = join(sharedDir, "traffic-generations.json");
     const writerLockPath = join(dataRoot, "traffic", "live-state.json.lock");
     const operationId = context.claim.fingerprint;
     const startedAt = new Date().toISOString();
@@ -543,20 +610,33 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     );
     if (stopped.stdout.trim() !== "false") throw new Error("Valhalla serving could not be fenced");
 
-    await mkdir(sharedDir, { recursive: true });
-    await writeFile(
-      fencePath,
-      `${JSON.stringify({
-        schemaVersion: 1,
-        operationId,
-        plan: operation.plan,
-        ...(operation.preparedGeneration
-          ? { preparedGeneration: operation.preparedGeneration }
-          : {}),
-        startedAt,
-      })}\n`,
-      { encoding: "utf8", flag: "wx" },
-    );
+    // data-manager can rewrite everything under the data root, so the agent
+    // writes this directory only through descriptors opened without
+    // following a symlink, never by a path it re-resolves.
+    const shared = openAnchoredDirectory(dataRoot, ["valhalla", "osm-pbf"], {
+      create: true,
+      ...(options.descriptorAnchorRoot !== undefined
+        ? { descriptorAnchorRoot: options.descriptorAnchorRoot }
+        : {}),
+    });
+    try {
+      shared.createFile(
+        TRAFFIC_MAINTENANCE_FENCE,
+        `${JSON.stringify({
+          schemaVersion: 1,
+          operationId,
+          plan: operation.plan,
+          ...(operation.preparedGeneration
+            ? { preparedGeneration: operation.preparedGeneration }
+            : {}),
+          startedAt,
+        })}\n`,
+        0o644,
+      );
+    } catch (error) {
+      shared.close();
+      throw error;
+    }
 
     try {
       const writerDeadline = Date.now() + 15_000;
@@ -630,9 +710,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
         waysToEdgesGeneration: generation,
         completedAt: new Date().toISOString(),
       };
-      const temporaryManifest = `${generationsPath}.${operationId}.tmp`;
-      await writeFile(temporaryManifest, `${JSON.stringify(manifest)}\n`, "utf8");
-      await rename(temporaryManifest, generationsPath);
+      shared.replaceFile(TRAFFIC_GENERATIONS_MANIFEST, `${JSON.stringify(manifest)}\n`, 0o644);
 
       await run(["start", VALHALLA_CONTAINER], context.signal, 30_000);
       const healthDeadline = Date.now() + 60_000;
@@ -647,7 +725,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
 
-      await rm(fencePath, { force: true });
+      shared.removeFile(TRAFFIC_MAINTENANCE_FENCE);
       return {
         changed: true,
         graphGeneration: generation,
@@ -689,6 +767,8 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
         );
       }
       throw error;
+    } finally {
+      shared.close();
     }
   };
 
@@ -713,7 +793,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   runtime["motis.staging.restart"] = (_operation, context) =>
     changed(["restart", "motis-staging"], context.signal);
   runtime["motis.staging.stop"] = (_operation, context) =>
-    changed(["stop", "motis-staging"], context.signal);
+    stopMotis("motis-staging", context.signal);
   runtime["motis.primary.restart"] = (_operation, context) =>
     changed(["restart", "motis"], context.signal);
   runtime["motis.primary.promote"] = async (operation, context) => {
@@ -730,7 +810,6 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     // The caller performed the data swap; the agent reports the run it activated.
     return { activeRunId: operation.preparedRunId };
   };
-  runtime["motis.primary.stop"] = (_operation, context) =>
-    changed(["stop", "motis"], context.signal);
+  runtime["motis.primary.stop"] = (_operation, context) => stopMotis("motis", context.signal);
   return runtime;
 }

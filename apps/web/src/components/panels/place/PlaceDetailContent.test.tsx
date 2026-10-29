@@ -1,4 +1,5 @@
-import { createPlace, type Place, usePlaceStore } from "@openmapx/core";
+import { createPlace, type Place, type PlacePhoto, usePlaceStore } from "@openmapx/core";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type { MergedDeparture } from "@openmapx/mobility-core/transit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
@@ -14,8 +15,9 @@ vi.mock("next-intl", () => ({
   useLocale: () => "en",
 }));
 
+const aggregateState = vi.hoisted(() => ({ data: undefined as unknown }));
 vi.mock("@openmapx/mangrove-react", () => ({
-  useReviewAggregate: () => ({ data: undefined, isLoading: false }),
+  useReviewAggregate: () => ({ data: aggregateState.data, isLoading: false }),
 }));
 
 // useBrandDetail is the only hook here that hits the network; stub it so
@@ -24,16 +26,20 @@ vi.mock("@openmapx/mangrove-react", () => ({
 // untouched — in particular firstBrandIdentity, which PlaceDetailContent
 // itself now calls to resolve a place's brand identity from its osmTags.
 const mockUseBrandDetail = vi.fn();
+const mockUseBrandLogoAttribution = vi.fn();
 vi.mock("@openmapx/core", async () => {
   const actual = await vi.importActual<typeof import("@openmapx/core")>("@openmapx/core");
   return {
     ...actual,
     useBrandDetail: (qid: string | null) => mockUseBrandDetail(qid),
+    useBrandLogoAttribution: () => mockUseBrandLogoAttribution(),
   };
 });
 
 beforeEach(() => {
+  aggregateState.data = undefined;
   mockUseBrandDetail.mockReturnValue({ data: undefined });
+  mockUseBrandLogoAttribution.mockReturnValue({ data: undefined });
 });
 
 vi.mock("./PlacePhotoGallery", () => ({
@@ -277,7 +283,7 @@ const placeWithPhoto = {
   id: "p2",
   name: "Photo Place",
   coordinates: [6.0839, 50.7753],
-  photos: [{ url: "https://example.com/photo.jpg" }],
+  photos: [{ url: "https://example.com/photo.jpg", source: "test-photos" } satisfies PlacePhoto],
 } as unknown as Place;
 
 function renderPhotoPlaceAtDetent(detent: "peek" | "mid" | "full") {
@@ -434,6 +440,19 @@ describe("PlaceDetailContent brand header", () => {
   // brand:>network:>operator: precedence the pin and the list row use.
   it("shows a logo for a place whose only identity is operator:wikidata (no Overture place.brand)", () => {
     mockUseBrandDetail.mockReturnValue({ data: { logoFile: "Q-Park logo.svg" } });
+    mockUseBrandLogoAttribution.mockReturnValue({
+      data: {
+        logoFile: "Q-Park logo.svg",
+        url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Logo.svg",
+        source: "wikimedia-commons",
+        author: "Logo creator",
+        licensing: licensingFromDeclaration(
+          "CC BY 4.0",
+          "https://creativecommons.org/licenses/by/4.0/",
+        ),
+        pageUrl: "https://commons.wikimedia.org/wiki/File:Logo.svg",
+      },
+    });
     const osmPlace = {
       id: "p-op",
       name: "Q-Park Neumarkt",
@@ -443,11 +462,28 @@ describe("PlaceDetailContent brand header", () => {
 
     renderPlace(osmPlace);
 
-    expect(screen.getByAltText("Q-Park Neumarkt")).toBeInTheDocument();
+    const logo = screen.getByAltText("Q-Park Neumarkt");
+    const title = screen.getByRole("heading", { name: "Q-Park Neumarkt" });
+    expect(logo.parentElement?.contains(title)).toBe(true);
+    expect(logo.parentElement).not.toHaveTextContent("Logo creator");
+    expect(logo.parentElement?.parentElement).toHaveTextContent("Logo creator");
   });
 
   it("shows a logo for a place whose only identity is network:wikidata (EV charging)", () => {
     mockUseBrandDetail.mockReturnValue({ data: { logoFile: "Ionity logo.svg" } });
+    mockUseBrandLogoAttribution.mockReturnValue({
+      data: {
+        logoFile: "Ionity logo.svg",
+        url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Logo.svg",
+        source: "wikimedia-commons",
+        author: "Logo creator",
+        licensing: licensingFromDeclaration(
+          "CC BY 4.0",
+          "https://creativecommons.org/licenses/by/4.0/",
+        ),
+        pageUrl: "https://commons.wikimedia.org/wiki/File:Logo.svg",
+      },
+    });
     const osmPlace = {
       id: "p-net",
       name: "Ionity Charger",
@@ -464,5 +500,57 @@ describe("PlaceDetailContent brand header", () => {
     renderPlace(place);
     expect(screen.getByText("Test Place")).toBeInTheDocument();
     expect(screen.queryByRole("img")).toBeNull();
+  });
+});
+
+describe("persistent header attribution", () => {
+  const receipt = (name: string) => ({ sourceId: name, name, url: `https://example.com/${name}` });
+  const headerPlace = {
+    ...place,
+    category: "Cafe",
+    rating: 4,
+    reviewCount: 2,
+    openingHoursInfo: { status: { isOpen: true }, isAlwaysOpen: true, weekBitmap: "" },
+    fieldContributors: {
+      name: [receipt("Name supplier")],
+      category: [receipt("Category supplier")],
+      openingHoursInfo: [receipt("Hours supplier")],
+      rating: [receipt("Fallback rating")],
+      reviewCount: [receipt("Fallback count")],
+    },
+  } as Place;
+
+  it("keeps aggregate and header field receipts available outside Reviews", () => {
+    aggregateState.data = { stars: 1.25, count: 1, contributors: [receipt("Mangrove capture")] };
+    renderAtDetent("mid", headerPlace);
+    fireEvent.click(screen.getByRole("tab", { name: "info" }));
+    const footer = screen.getByRole("contentinfo", { name: "Data sources" });
+    expect(footer.closest("[data-omx-peek]")).toBeNull();
+    expect(screen.getAllByRole("button", { name: "attributions" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+    const dialog = screen.getByRole("dialog");
+    for (const name of ["Name supplier", "Category supplier", "Hours supplier", "Mangrove capture"])
+      expect(within(dialog).getByText(name)).toBeVisible();
+    expect(within(dialog).queryByText("Fallback rating")).toBeNull();
+  });
+
+  it("credits fallback rating fields only when those values are displayed", () => {
+    renderAtDetent("mid", headerPlace);
+    fireEvent.click(screen.getByRole("tab", { name: "info" }));
+    fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Fallback rating")).toBeVisible();
+    expect(within(dialog).getByText("Fallback count")).toBeVisible();
+  });
+
+  it("does not add hidden rating receipts at peek", () => {
+    aggregateState.data = { stars: 1.25, count: 1, contributors: [receipt("Hidden aggregate")] };
+    renderAtDetent("peek", headerPlace);
+    fireEvent.click(screen.getByRole("tab", { name: "info" }));
+    fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Name supplier")).toBeVisible();
+    expect(within(dialog).queryByText("Hidden aggregate")).toBeNull();
+    expect(within(dialog).queryByText("Fallback rating")).toBeNull();
   });
 });

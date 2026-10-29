@@ -63,7 +63,7 @@ function evidence(id: string, update: Partial<AirQualityEvidence> = {}): AirQual
         name: "Source",
         url: "https://example.test",
         owner: "Agency",
-        license: null,
+        licensing: null,
         methodologyUrl: null,
         attribution: "Agency",
       },

@@ -1,3 +1,4 @@
+import { readCapturedContributors, withContributors } from "@openmapx/mobility-core/contributors";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
@@ -18,16 +19,36 @@ export function useIsochrone({ origin, mode, contourMinutes, enabled = true }: U
   return useQuery({
     queryKey: ["isochrone", origin, mode, sorted],
     queryFn: ({ signal }) =>
-      apiClient.get<IsochroneResult>(
-        API_ENDPOINTS.isochrone,
-        {
-          lat: String(origin?.[1]),
-          lng: String(origin?.[0]),
-          mode,
-          contours: sorted.join(","),
-        },
-        apiQueryRequestOptions(signal, MAP_QUERY_POLICY),
-      ),
+      apiClient
+        .get<IsochroneResult>(
+          API_ENDPOINTS.isochrone,
+          {
+            lat: String(origin?.[1]),
+            lng: String(origin?.[0]),
+            mode,
+            contours: sorted.join(","),
+          },
+          apiQueryRequestOptions(signal, MAP_QUERY_POLICY),
+        )
+        .then((result) => {
+          const contributors =
+            readCapturedContributors((result as { contributors?: unknown }).contributors) ??
+            result.attributions ??
+            [];
+          return withContributors(
+            {
+              ...result,
+              contours: result.contours.map((contour) =>
+                withContributors(
+                  contour,
+                  readCapturedContributors((contour as { contributors?: unknown }).contributors) ??
+                    contributors,
+                ),
+              ),
+            },
+            contributors,
+          );
+        }),
     enabled: enabled && origin !== null && contourMinutes.length > 0,
     staleTime: 120_000,
     gcTime: MAP_QUERY_POLICY.gcTime,

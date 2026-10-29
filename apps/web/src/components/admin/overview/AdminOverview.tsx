@@ -22,66 +22,18 @@ import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import { useIntegrationAdmin, useIntegrationReload } from "@/lib/admin/integrationAdmin";
+import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
 import { CompactAlert } from "../shared/CompactAlert";
 import { CompactAlertList } from "../shared/CompactAlertList";
 import { jobStatusColor } from "../shared/jobStatus";
 
-// Types
-
-interface AttentionItem {
-  type: string;
-  severity: "warning" | "error" | "info";
-  message: string;
-  target?: string;
-}
-
-interface AuditEntry {
-  id: string;
-  action: string;
-  targetType?: string;
-  targetId?: string;
-  details?: Record<string, unknown>;
-  createdAt: string;
-}
-
-interface JobEntry {
-  source: "application" | "data-manager";
-  id: string;
-  type: string;
-  status: string;
-  progress?: number;
-  createdAt: string;
-  finishedAt?: string;
-  error?: string;
-}
-
-interface OverviewData {
-  systemHealth: { status: "pass" | "degraded" | "down"; unhealthyCount: number };
-  users: { total: number; active24h: number; banned: number };
-  integrations: { total: number; enabled: number; unhealthy: number; unconfigured: number };
-  services: { running: number; stopped: number; unhealthy: number } | null;
-  attention: AttentionItem[];
-  recentActivity: AuditEntry[];
-  activeJobs: JobEntry[];
-}
-
-interface CredentialsOverviewData {
-  credentials: Array<{
-    integrationId: string;
-    name: string;
-    enabled: boolean;
-    secretFields: number;
-    vaultStored: number;
-    missingCredentials: number;
-  }>;
-  secretsConfigured: boolean;
-}
+type AttentionItem = import("@openmapx/core/api-contracts").AdminOverview["attention"][number];
 
 // Components
 
@@ -161,64 +113,31 @@ function attentionHref(item: AttentionItem): string {
 // Main
 
 export function AdminOverview() {
-  const env = useEnv();
-  const apiUrl = env.apiUrl;
-  const qc = useQueryClient();
+  const admin = useIntegrationAdmin();
+  const owner = useAdminMutationOwner(admin.client);
   const showToast = useAdminToast();
   const [attentionExpanded, setAttentionExpanded] = useState(false);
   const [credentialsExpanded, setCredentialsExpanded] = useState(false);
 
-  const { data, isLoading } = useQuery<OverviewData>({
-    queryKey: ["admin", "overview"],
-    queryFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/overview`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load overview");
-      return res.json();
-    },
-    refetchInterval: 60_000,
-  });
-
-  const credentialsOverview = useQuery<CredentialsOverviewData>({
-    queryKey: ["admin", "credentials", "overview"],
-    queryFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/credentials`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load credentials overview");
-      return res.json();
-    },
-    refetchInterval: 60_000,
-  });
+  const { data, isLoading } = useQuery({ ...admin.queries.overview(), refetchInterval: 60_000 });
+  const credentialsOverview = useQuery({ ...admin.queries.credentials(), refetchInterval: 60_000 });
 
   const healthSweep = useMutation({
+    mutationKey: ["integration-health-sweep", admin.apiUrl],
+    retry: false,
     mutationFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/integrations/health/run`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Health check failed");
-      return res.json();
+      try {
+        await admin.healthSweep();
+        void admin.refresh();
+        if (owner.active) showToast("Health checks complete");
+      } catch (err) {
+        if (owner.active) showToast("Health check sweep failed", "error");
+        throw err;
+      }
     },
-    onSuccess: () => {
-      showToast("Health checks complete");
-      void qc.invalidateQueries({ queryKey: ["admin", "overview"] });
-    },
-    onError: () => showToast("Health check sweep failed", "error"),
   });
 
-  const reloadMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`${apiUrl}/api/admin/integrations/reload`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Reload failed");
-      return res.json();
-    },
-    onSuccess: () => {
-      showToast("Reload job queued");
-      void qc.invalidateQueries({ queryKey: ["admin", "overview"] });
-    },
-    onError: () => showToast("Reload failed", "error"),
-  });
+  const reloadMutation = useIntegrationReload();
 
   if (isLoading) {
     return (
@@ -280,7 +199,16 @@ export function AdminOverview() {
             <Button
               variant="outlined"
               startIcon={<RefreshIcon />}
-              onClick={() => reloadMutation.mutate()}
+              onClick={() =>
+                reloadMutation.mutate(undefined, {
+                  onSuccess: () => {
+                    if (owner.active) showToast("Reload job queued", "info");
+                  },
+                  onError: () => {
+                    if (owner.active) showToast("Reload failed", "error");
+                  },
+                })
+              }
               disabled={isBusy}
             >
               {reloadMutation.isPending ? "Reloading…" : "Reload"}

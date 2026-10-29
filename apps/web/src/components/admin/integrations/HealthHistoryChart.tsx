@@ -1,5 +1,6 @@
 "use client";
 
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
@@ -17,21 +18,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
 
-interface HealthBucket {
-  hour: string;
-  total: number;
-  healthy: number;
-  uptimePercent: number;
-  avgResponseTime: number | null;
-}
-
-interface HealthHistoryResponse {
-  integrationId: string;
-  hours: number;
-  timeline: HealthBucket[];
-}
+type HealthBucket =
+  import("@openmapx/core/api-contracts").AdminIntegrationHealthHistory["timeline"][number];
 
 type HoursWindow = 24 | 168;
 
@@ -91,24 +81,11 @@ interface HealthHistoryChartProps {
 }
 
 export function HealthHistoryChart({ integrationId }: HealthHistoryChartProps) {
-  const env = useEnv();
-  const apiUrl = env.apiUrl;
+  const admin = useIntegrationAdmin();
   const [hours, setHours] = useState<HoursWindow>(24);
 
-  const { data, isLoading } = useQuery<HealthBucket[]>({
-    queryKey: ["admin", "integrations", integrationId, "health-history", hours],
-    queryFn: async () => {
-      const res = await fetch(
-        `${apiUrl}/api/admin/integrations/${integrationId}/health/history?hours=${hours}`,
-        { credentials: "include" },
-      );
-      if (!res.ok) throw new Error("Failed to load health history");
-      const body: HealthHistoryResponse = await res.json();
-      return body.timeline ?? [];
-    },
-  });
-
-  const buckets = data ?? [];
+  const { data, isLoading, isError } = useQuery(admin.queries.healthHistory(integrationId, hours));
+  const buckets = data?.timeline ?? [];
 
   return (
     <Stack sx={{ gap: 1.5 }}>
@@ -136,7 +113,9 @@ export function HealthHistoryChart({ integrationId }: HealthHistoryChartProps) {
           </ToggleButton>
         </ToggleButtonGroup>
       </Stack>
-      {isLoading ? (
+      {isError ? (
+        <Alert severity="error">Failed to load health history</Alert>
+      ) : isLoading ? (
         <Skeleton variant="rounded" height={220} />
       ) : buckets.length === 0 ? (
         <Typography variant="body2" sx={{ color: "text.secondary", py: 4, textAlign: "center" }}>

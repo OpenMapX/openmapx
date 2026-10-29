@@ -15,6 +15,7 @@ import { join } from "node:path";
 import {
   OPS_TRUSTED_CONFIG_QUEUE_MAX_BYTES,
   sealTrustedConfigurationSnapshot,
+  type TrustedConfigurationPayload,
 } from "@openmapx/core/ops";
 import { afterEach, describe, expect, it } from "vitest";
 import { initializeTrustedSnapshotDirectory } from "../../../ops-agent/src/trusted-config-source";
@@ -38,25 +39,39 @@ function directory(): string {
   return root;
 }
 
-function seedSnapshot(directory: string, index: number) {
+/**
+ * Writes the exact sealed ready file a successful publish would leave behind,
+ * without the per-publish queue lock, fsyncs and full directory scan. Bulk
+ * fixtures use it so only the boundary-crossing publishes pay the durable path.
+ */
+function seedReadySnapshot(
+  target: string,
+  index: number,
+  payload: TrustedConfigurationPayload = {
+    domain: "maps.example.test",
+    selectedRoots: [],
+    serviceConfigs: [],
+    integrationConfigs: [],
+    serviceSecrets: [],
+  },
+) {
   const sealed = sealTrustedConfigurationSnapshot({
     role: "api",
     operationKey: "opk1_0123456789abcdef",
-    operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
-    payload: {
-      domain: "maps.example.test",
-      selectedRoots: [],
-      serviceConfigs: [],
-      integrationConfigs: [],
-      serviceSecrets: [],
-    },
+    operationForRevision: (revisionId) => ({
+      expectedCurrentRevisionId: null,
+      kind: "stack.render",
+      revisionId,
+    }),
+    payload,
     token,
     issuedAtMs: Date.parse("2026-08-24T08:00:00.000Z"),
     nonce: `nonce_${index.toString().padStart(16, "0")}`,
   });
-  const path = join(directory, `${sealed.revisionId}.json`);
-  writeFileSync(path, sealed.bytes, { mode: 0o600 });
-  chmodSync(path, 0o600);
+  writeFileSync(join(target, `${sealed.revisionId}.json`), sealed.bytes, {
+    mode: 0o600,
+    flag: "wx",
+  });
   return sealed;
 }
 
@@ -69,7 +84,11 @@ describe("trusted configuration snapshot publisher", () => {
       ownerUid: statSync(root).uid,
       ownerGid: statSync(root).gid,
       operationKey: "opk1_0123456789abcdef",
-      operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+      operationForRevision: (revisionId) => ({
+        expectedCurrentRevisionId: null,
+        kind: "stack.render",
+        revisionId,
+      }),
       payload: {
         domain: "maps.example.test",
         selectedRoots: ["redis"],
@@ -84,10 +103,15 @@ describe("trusted configuration snapshot publisher", () => {
     expect(readFileSync(join(root, `${published.revisionId}.json`))).toEqual(published.bytes);
     expect(published.mode).toBe(0o600);
     expect(published.operation).toEqual({
+      expectedCurrentRevisionId: null,
       kind: "stack.render",
       revisionId: published.revisionId,
     });
-    expect(Object.keys(published.operation).sort()).toEqual(["kind", "revisionId"]);
+    expect(Object.keys(published.operation).sort()).toEqual([
+      "expectedCurrentRevisionId",
+      "kind",
+      "revisionId",
+    ]);
   });
 
   it("never exposes a final snapshot when interrupted before atomic rename", async () => {
@@ -105,7 +129,11 @@ describe("trusted configuration snapshot publisher", () => {
           ownerUid: statSync(root).uid,
           ownerGid: statSync(root).gid,
           operationKey: "opk1_0123456789abcdef",
-          operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+          operationForRevision: (revisionId) => ({
+            expectedCurrentRevisionId: null,
+            kind: "stack.render",
+            revisionId,
+          }),
           payload: {
             domain: "maps.example.test",
             selectedRoots: [],
@@ -129,7 +157,11 @@ describe("trusted configuration snapshot publisher", () => {
       ownerUid: statSync(root).uid,
       ownerGid: statSync(root).gid,
       operationKey: "opk1_0123456789abcdef",
-      operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+      operationForRevision: (revisionId) => ({
+        expectedCurrentRevisionId: null,
+        kind: "stack.render",
+        revisionId,
+      }),
       payload: {
         domain: "maps.example.test",
         selectedRoots: [],
@@ -156,7 +188,11 @@ describe("trusted configuration snapshot publisher", () => {
         ownerUid: statSync(root).uid,
         ownerGid: statSync(root).gid,
         operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+        operationForRevision: (revisionId) => ({
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId,
+        }),
         payload: {
           domain: "maps.example.test",
           selectedRoots: [],
@@ -167,11 +203,11 @@ describe("trusted configuration snapshot publisher", () => {
         now: () => Date.parse("2026-08-24T08:00:00.000Z"),
         nonce: () => `nonce_${index.toString().padStart(16, "0")}`,
       });
-    for (let index = 0; index < 127; index += 1) seedSnapshot(root, index);
+    for (let index = 0; index < 127; index += 1) seedReadySnapshot(root, index);
     await make(127);
     await expect(make(128)).rejects.toThrow("Trusted configuration snapshot publish failed");
     expect(readdirSync(root)).toHaveLength(128);
-  }, 60_000);
+  });
 
   it("shares the exact claimed-plus-ready entry boundary with restart", async () => {
     const root = directory();
@@ -184,7 +220,11 @@ describe("trusted configuration snapshot publisher", () => {
         ownerUid: statSync(root).uid,
         ownerGid: statSync(root).gid,
         operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+        operationForRevision: (revisionId) => ({
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId,
+        }),
         payload: {
           domain: "maps.example.test",
           selectedRoots: [],
@@ -200,10 +240,8 @@ describe("trusted configuration snapshot publisher", () => {
       state: "running";
     }> = [];
     for (let index = 0; index < 127; index += 1) {
-      const published = seedSnapshot(index < 4 ? claimed : root, index);
-      if (index < 4) {
-        journalRecords.push({ operation: published.operation, state: "running" });
-      }
+      const seeded = seedReadySnapshot(index < 4 ? claimed : root, index);
+      if (index < 4) journalRecords.push({ operation: seeded.operation, state: "running" });
     }
     await make(127);
 
@@ -216,7 +254,11 @@ describe("trusted configuration snapshot publisher", () => {
         ownerUid: statSync(root).uid,
         ownerGid: statSync(root).gid,
         operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+        operationForRevision: (revisionId) => ({
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId,
+        }),
         payload: {
           domain: "maps.example.test",
           selectedRoots: [],
@@ -244,7 +286,7 @@ describe("trusted configuration snapshot publisher", () => {
         journalRecords,
       }),
     ).resolves.toBeUndefined();
-  }, 60_000);
+  });
 
   it("shares the exact active-claimed-plus-ready byte boundary with restart", async () => {
     const root = directory();
@@ -257,6 +299,13 @@ describe("trusted configuration snapshot publisher", () => {
     const secretValues = Object.fromEntries(
       Array.from({ length: 7 }, (_, index) => [`SECRET_${index}`, "x".repeat(60_000)]),
     );
+    const payload: TrustedConfigurationPayload = {
+      domain: "maps.example.test",
+      selectedRoots: ["redis"],
+      serviceConfigs: [{ serviceId: "redis", values: {} }],
+      integrationConfigs: [],
+      serviceSecrets: [{ serviceId: "redis", values: secretValues }],
+    };
     async function make(index: number) {
       return publishTrustedConfigurationSnapshot({
         directory: root,
@@ -264,39 +313,34 @@ describe("trusted configuration snapshot publisher", () => {
         ownerUid: statSync(root).uid,
         ownerGid: statSync(root).gid,
         operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
-        payload: {
-          domain: "maps.example.test",
-          selectedRoots: ["redis"],
-          serviceConfigs: [{ serviceId: "redis", values: {} }],
-          integrationConfigs: [],
-          serviceSecrets: [{ serviceId: "redis", values: secretValues }],
-        },
+        operationForRevision: (revisionId) => ({
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId,
+        }),
+        payload,
         now: () => Date.parse("2026-08-24T08:00:00.000Z"),
         nonce: () => `nonce_${index.toString().padStart(16, "0")}`,
       });
     }
+    // Seed until exactly one more equal-sized snapshot still fits the byte cap.
     let next = 0;
+    let seededBytes = 0;
     let snapshotBytes = 0;
-    while (next < 64) {
-      try {
-        const published = await make(next);
-        snapshotBytes = published.bytes.byteLength;
-        if (next < 4) {
-          renameSync(
-            join(root, `${published.revisionId}.json`),
-            join(claimed, `${published.revisionId}.json`),
-          );
-          journalRecords.push({ operation: published.operation, state: "running" });
-        }
-        next += 1;
-      } catch (error) {
-        expect((error as Error).message).toBe("Trusted configuration snapshot publish failed");
-        break;
-      }
+    while (
+      snapshotBytes === 0 ||
+      seededBytes + 2 * snapshotBytes <= OPS_TRUSTED_CONFIG_QUEUE_MAX_BYTES
+    ) {
+      const seeded = seedReadySnapshot(next < 4 ? claimed : root, next, payload);
+      snapshotBytes = seeded.bytes.byteLength;
+      seededBytes += snapshotBytes;
+      if (next < 4) journalRecords.push({ operation: seeded.operation, state: "running" });
+      next += 1;
     }
     expect(next).toBeGreaterThan(4);
     expect(next).toBeLessThan(64);
+    expect((await make(next)).bytes.byteLength).toBe(snapshotBytes);
+    await expect(make(next + 1)).rejects.toThrow("Trusted configuration snapshot publish failed");
     const retainedBytes = [
       ...readdirSync(root)
         .filter((name) => name.endsWith(".json"))
@@ -314,7 +358,7 @@ describe("trusted configuration snapshot publisher", () => {
         journalRecords,
       }),
     ).resolves.toBeUndefined();
-  }, 60_000);
+  });
 
   it("removes an exact unpublished candidate after transport failure and permits an exact retry", async () => {
     const root = directory();
@@ -325,7 +369,11 @@ describe("trusted configuration snapshot publisher", () => {
         ownerUid: statSync(root).uid,
         ownerGid: statSync(root).gid,
         operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+        operationForRevision: (revisionId) => ({
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId,
+        }),
         payload: {
           domain: "maps.example.test",
           selectedRoots: [],
@@ -341,26 +389,39 @@ describe("trusted configuration snapshot publisher", () => {
       consumePublishedTrustedConfiguration(first, async () => {
         throw new Error("transport unavailable");
       }),
-    ).rejects.toThrow("transport unavailable");
+    ).resolves.toMatchObject({
+      submission: { status: "rejected", reason: new Error("transport unavailable") },
+      cleanupFailed: false,
+    });
     expect(readdirSync(root)).toEqual([]);
 
     const retry = await make();
     await expect(
       consumePublishedTrustedConfiguration(retry, async () => ({ revisionId: retry.revisionId })),
-    ).resolves.toEqual({ revisionId: retry.revisionId });
+    ).resolves.toEqual({
+      submission: { status: "fulfilled", value: { revisionId: retry.revisionId } },
+      cleanupFailed: false,
+    });
     expect(readdirSync(root)).toEqual([]);
   });
 
-  it("does not accumulate ready snapshots across 129 simulated network failures", async () => {
+  it("does not accumulate ready snapshots across simulated network failures at the entry cap", async () => {
     const root = directory();
-    for (let index = 0; index < 129; index += 1) {
+    // One free entry: any failed submission that leaked its candidate would
+    // make the following publish exceed the cap.
+    const seeded = Array.from({ length: 127 }, (_, index) => seedReadySnapshot(root, index));
+    for (let index = 127; index < 130; index += 1) {
       const published = await publishTrustedConfigurationSnapshot({
         directory: root,
         token,
         ownerUid: statSync(root).uid,
         ownerGid: statSync(root).gid,
         operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+        operationForRevision: (revisionId) => ({
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId,
+        }),
         payload: {
           domain: "maps.example.test",
           selectedRoots: [],
@@ -375,10 +436,15 @@ describe("trusted configuration snapshot publisher", () => {
         consumePublishedTrustedConfiguration(published, async () => {
           throw new Error("agent unavailable");
         }),
-      ).rejects.toThrow("agent unavailable");
+      ).resolves.toMatchObject({
+        submission: { status: "rejected", reason: new Error("agent unavailable") },
+        cleanupFailed: false,
+      });
     }
-    expect(readdirSync(root)).toEqual([]);
-  }, 60_000);
+    expect(readdirSync(root).sort()).toEqual(
+      seeded.map((snapshot) => `${snapshot.revisionId}.json`).sort(),
+    );
+  });
 
   it("preserves a replacement raced into the candidate path instead of deleting it", async () => {
     const root = directory();
@@ -392,7 +458,11 @@ describe("trusted configuration snapshot publisher", () => {
         ownerUid: statSync(root).uid,
         ownerGid: statSync(root).gid,
         operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+        operationForRevision: (revisionId) => ({
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId,
+        }),
         payload: {
           domain: "maps.example.test",
           selectedRoots: [],
@@ -426,7 +496,11 @@ describe("trusted configuration snapshot publisher", () => {
       ownerUid: statSync(root).uid,
       ownerGid: statSync(root).gid,
       operationKey: "opk1_0123456789abcdef",
-      operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+      operationForRevision: (revisionId) => ({
+        expectedCurrentRevisionId: null,
+        kind: "stack.render",
+        revisionId,
+      }),
       payload: {
         domain: "maps.example.test",
         selectedRoots: [],
@@ -465,7 +539,11 @@ describe("trusted configuration snapshot publisher", () => {
         ownerUid: statSync(root).uid,
         ownerGid: statSync(root).gid,
         operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+        operationForRevision: (revisionId) => ({
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId,
+        }),
         payload: {
           domain: "maps.example.test",
           selectedRoots: [],
@@ -499,7 +577,11 @@ describe("trusted configuration snapshot publisher", () => {
       ownerUid: statSync(root).uid,
       ownerGid: statSync(root).gid,
       operationKey: "opk1_0123456789abcdef",
-      operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+      operationForRevision: (revisionId) => ({
+        expectedCurrentRevisionId: null,
+        kind: "stack.render",
+        revisionId,
+      }),
       payload: {
         domain: "maps.example.test",
         selectedRoots: [],
@@ -528,7 +610,11 @@ describe("trusted configuration snapshot publisher", () => {
         ownerUid: statSync(root).uid,
         ownerGid: statSync(root).gid,
         operationKey: "opk1_0123456789abcdef",
-        operationForRevision: (revisionId) => ({ kind: "stack.render", revisionId }),
+        operationForRevision: (revisionId) => ({
+          expectedCurrentRevisionId: null,
+          kind: "stack.render",
+          revisionId,
+        }),
         payload: {
           domain: "maps.example.test",
           selectedRoots: [],

@@ -1,11 +1,14 @@
-import type { DataSourceAttribution } from "@openmapx/mobility-core/attribution";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
 import type { OsmFilter } from "../utils/overpass.service";
 import type { LngLat } from "./geometry";
 import type { I18nToken, Translatable } from "./i18nToken";
+import type { OpeningHoursInfo } from "./openingHoursInfo";
 
-export type { DataSourceAttribution } from "@openmapx/mobility-core/attribution";
+export type { Attribution } from "@openmapx/mobility-core/attribution";
 
-export interface DataSourceBranding {
+export interface DataSourceBranding extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   name?: string;
   legalName?: string;
   logoUrl?: string;
@@ -33,7 +36,7 @@ export type DataSourceGeoJsonGeometry =
       coordinates: number[][][][];
     };
 
-export interface DataSourceGeoJsonFeature {
+export interface DataSourceGeoJsonFeature extends ContributingRecord {
   type: "Feature";
   geometry: DataSourceGeoJsonGeometry;
   properties: Record<string, unknown> | null;
@@ -44,7 +47,7 @@ export interface DataSourceGeoJsonFeatureCollection {
   features: DataSourceGeoJsonFeature[];
 }
 
-export interface DataSourceMapContext {
+export interface DataSourceMapContext extends ContributingRecord {
   geojson: DataSourceGeoJsonFeatureCollection;
 }
 
@@ -90,17 +93,23 @@ export interface DataSourceFilterDef {
   clientSide?: boolean;
 }
 
-export interface DataSourceResult {
+export interface DataSourceResult extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   id: string;
   name: string;
   /** The title shown, translated, when `name` is empty: what the item is (e.g. "Fuel station"). */
   fallbackName?: I18nToken;
   coordinates: LngLat;
+  /**
+   * Where a moving item has just been, oldest first and ending at
+   * `coordinates`; the map draws it as a short line behind the marker.
+   */
+  track?: LngLat[];
   source: string;
   /** All contributing source ids when a result merges records from multiple providers. */
   sources?: string[];
   /** Per-result attribution used by map/source attribution controls when a provider varies by item. */
-  attributions?: DataSourceAttribution[];
+  attributions?: Attribution[];
   /**
    * Distinguishes fixed installations from free-floating items so the place
    * resolver can decide whether to snap to an OSM POI (via `osmFilters`) or
@@ -137,7 +146,7 @@ export interface PricingPlanEntry {
   free?: boolean;
 }
 
-export interface DataSourceDetailSection {
+export interface DataSourceDetailSection extends ContributingRecord {
   title: I18nToken;
   /** Optional subtitle rendered beneath the section header (e.g. live availability). */
   caption?: Translatable;
@@ -228,7 +237,9 @@ export interface DataSourceDetailSection {
     | "eco"
     | "open_in_new"
     | "videocam"
-    | "warning";
+    | "warning"
+    | "thermostat"
+    | "construction";
   /** Structured pricing plans for type "pricing". */
   pricingPlans?: PricingPlanEntry[];
   /**
@@ -257,7 +268,8 @@ export interface OsmIdentity {
   brand?: string;
 }
 
-export interface DataSourceDetail {
+export interface DataSourceDetail extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   id: string;
   sources: string[];
   /**
@@ -286,11 +298,13 @@ export interface DataSourceDetail {
   /** The place's own website (http(s) only), when it is not already the operator's link. */
   website?: string;
   /** Per-record attribution that cannot be expressed statically in the integration manifest. */
-  attributions?: DataSourceAttribution[];
+  attributions?: Attribution[];
   branding?: DataSourceBranding;
   usageInfo?: { type: Translatable; cost?: Translatable; membershipRequired?: boolean };
   /** OSM-format opening hours string (e.g., "Mo-Fr 06:00-20:00; Sa-Su 08:00-20:00"). */
   openingHours?: string;
+  /** `openingHours` evaluated at the item's location, stamped by the host's data-source route. */
+  openingHoursInfo?: OpeningHoursInfo;
   actions?: {
     primaryRental?: {
       label: I18nToken;

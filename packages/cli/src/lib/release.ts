@@ -1,26 +1,14 @@
-import {
-  closeSync,
-  constants,
-  existsSync,
-  fsyncSync,
-  lstatSync,
-  mkdirSync,
-  mkdtempSync,
-  openSync,
-  readFileSync,
-  rmSync,
-  type Stats,
-  unlinkSync,
-} from "node:fs";
+import { lstatSync, mkdtempSync, readFileSync, rmSync, type Stats, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
+import { fsyncDirectory } from "@openmapx/core/release-files";
 import { services as coreServices } from "@openmapx/core/server";
 import { execa } from "execa";
 import { repoPaths } from "./paths";
 
 const {
   RELEASE_MANIFEST_CONTAINER_PATH,
-  RELEASE_MANIFEST_IMAGE_ENV,
+  RELEASE_SELECTOR_ENV,
   RELEASE_PINNED_SERVICE_IDS,
   parseReleaseManifest,
   releaseChannel,
@@ -28,6 +16,20 @@ const {
 } = coreServices;
 
 export type ReleaseManifest = coreServices.ReleaseManifest;
+
+/**
+ * Where the release selection lives: the agent's release state under
+ * `infra/docker`, shared with the host CLI, which runs as the agent's user.
+ * `uid` is the owner that state must have; tests inject another.
+ */
+export interface ReleaseStateLocation {
+  infraDir?: string;
+  uid?: number;
+}
+
+function releaseState(opts: ReleaseStateLocation) {
+  return coreServices.releaseStatePaths(opts.infraDir ?? repoPaths().infraDir);
+}
 
 export type ReleaseDockerRunner = (
   args: string[],
@@ -54,11 +56,24 @@ export async function resolveReleaseManifest(
 ): Promise<ReleaseManifest> {
   const channel = releaseChannel();
   if (channel.kind === "disabled") {
-    throw new Error(`release resolution is disabled (${RELEASE_MANIFEST_IMAGE_ENV} is empty)`);
+    throw new Error(`release resolution is disabled (${RELEASE_SELECTOR_ENV}=local)`);
   }
   const manifestImage = channel.manifestImage;
-  expectOk(await docker(["pull", manifestImage]), `docker pull ${manifestImage}`);
-  const created = await docker(["create", manifestImage, "true"]);
+  const pulled = await docker(["pull", manifestImage]);
+  expectOk(pulled, `docker pull ${manifestImage}`);
+  const digest = coreServices.releaseDigestFromPull(`${pulled.stdout}\n${pulled.stderr}`);
+  const inspected = await docker([
+    "image",
+    "inspect",
+    "--format",
+    "{{.Id}}",
+    `${channel.selection.manifestRepository}@${digest}`,
+  ]);
+  expectOk(inspected, "docker image inspect release-manifest");
+  const imageId = inspected.stdout.trim();
+  if (!/^sha256:[a-f0-9]{64}$/.test(imageId))
+    throw new Error("Docker returned an invalid release-manifest image id");
+  const created = await docker(["create", imageId, "true"]);
   expectOk(created, "docker create release-manifest");
   const containerId = created.stdout.trim();
   if (!/^[a-f0-9]{64}$/.test(containerId)) {
@@ -71,7 +86,8 @@ export async function resolveReleaseManifest(
       await docker(["cp", `${containerId}:${RELEASE_MANIFEST_CONTAINER_PATH}`, manifestPath]),
       "docker cp release-manifest.json",
     );
-    const manifest = parseReleaseManifest(readFileSync(manifestPath, "utf8"));
+    const manifest = parseReleaseManifest(readFileSync(manifestPath, "utf8"), channel.imagePrefix);
+    coreServices.validateResolvedSelection(channel.selection, manifest, digest);
     expectOk(
       await docker(["pull", manifest.images["privacy-backup"]]),
       `docker pull ${manifest.images["privacy-backup"]}`,
@@ -83,12 +99,11 @@ export async function resolveReleaseManifest(
   }
 }
 
-/** Write the overlay atomically next to the generated compose file. */
-export function writeReleaseOverlay(
-  manifest: ReleaseManifest,
-  path = repoPaths().composeReleasePath,
-) {
-  return writeReleaseComposeArtifacts(manifest, path).overlayPath;
+/** Write the overlay and its evidence atomically into the agent's release state. */
+export function writeReleaseOverlay(manifest: ReleaseManifest, opts: ReleaseStateLocation = {}) {
+  return writeReleaseComposeArtifacts(manifest, opts.infraDir ?? repoPaths().infraDir, {
+    uid: opts.uid,
+  }).overlayPath;
 }
 
 export function touchesReleasePinnedServices(serviceIds: readonly string[]): boolean {
@@ -99,7 +114,8 @@ export type ReleaseOverlayState =
   | { status: "present"; path: string }
   | { status: "resolved"; path: string; release: string }
   | { status: "disabled" }
-  | { status: "unpinned"; reason: string };
+  | { status: "unpinned"; reason: string }
+  | { status: "held"; reason: string };
 
 /**
  * Make sure `docker-compose.release.yml` exists before a command that would
@@ -109,16 +125,37 @@ export type ReleaseOverlayState =
  * own deliberate release changes.
  */
 export async function ensureReleaseOverlay(
-  opts: { docker?: ReleaseDockerRunner; path?: string } = {},
+  opts: { docker?: ReleaseDockerRunner } & ReleaseStateLocation = {},
 ): Promise<ReleaseOverlayState> {
-  const path = opts.path ?? repoPaths().composeReleasePath;
-  if (existsSync(path)) return { status: "present", path };
+  const infraDir = opts.infraDir ?? repoPaths().infraDir;
+  // An earlier release's selection is carried over first, if it can be.
+  await coreServices.migrateLegacyReleaseState(infraDir, { uid: opts.uid });
+  const path = releaseState(opts).overlay;
+  const selected = readSelection(path, opts);
+  if (selected) {
+    const channel = releaseChannel();
+    const prefix =
+      channel.kind === "enabled" ? channel.imagePrefix : selected?.images.api?.split("/api@")[0];
+    if (
+      !selected?.release ||
+      !prefix ||
+      !coreServices.RELEASE_IMAGE_NAMES.every((name) =>
+        selected.images[name]?.startsWith(`${prefix}/${name}@`),
+      )
+    )
+      throw new Error(
+        "Existing release overlay is malformed or belongs to another configured repository; explicitly reselect or clear it",
+      );
+    return { status: "present", path };
+  }
   // An operator running local images opts out once instead of paying a
   // failed registry pull (and a warning) on every start.
   if (releaseChannel().kind === "disabled") return { status: "disabled" };
+  const held = coreServices.releaseSelectionHold(infraDir, { uid: opts.uid });
+  if (held) return { status: "held", reason: held };
   try {
     const manifest = await resolveReleaseManifest(opts.docker);
-    writeReleaseOverlay(manifest, path);
+    writeReleaseOverlay(manifest, opts);
     return { status: "resolved", path, release: manifest.release };
   } catch (error) {
     return { status: "unpinned", reason: (error as Error).message };
@@ -130,19 +167,25 @@ export function unpinnedReleaseWarning(reason: string): string {
     `No ${repoPaths().composeReleasePath} and the release lockfile could not be resolved (${reason}). ` +
     "Refusing to start release runtime images without atomic release selection. " +
     "Run `pnpm openmapx compose release` once the registry is reachable, or set " +
-    `${RELEASE_MANIFEST_IMAGE_ENV}="" to run local images deliberately.`
+    `${RELEASE_SELECTOR_ENV}=local to run local images deliberately.`
   );
 }
 
-function readSelection(path: string): coreServices.ReleaseComposeSelection | null {
-  return existsSync(path)
-    ? coreServices.parseReleaseComposeSelection(readFileSync(path, "utf8"))
-    : null;
+/** The overlay's selection; an overlay anyone but the agent's user could write is refused. */
+function readSelection(
+  path: string,
+  opts: ReleaseStateLocation,
+): coreServices.ReleaseComposeSelection | null {
+  const raw = coreServices.readReleaseOverlayFile(path, { uid: opts.uid });
+  return raw === null ? null : coreServices.parseReleaseComposeSelection(raw);
 }
 
 /** Read-only local status; an existing overlay still applies when resolution is disabled. */
-export function releaseStatusLines(path = repoPaths().composeReleasePath): string[] {
-  const selected = readSelection(path);
+export function releaseStatusLines(
+  path = repoPaths().composeReleasePath,
+  opts: Pick<ReleaseStateLocation, "uid"> = {},
+): string[] {
+  const selected = readSelection(path, opts);
   const disabled = releaseChannel().kind === "disabled";
   if (!selected)
     return [
@@ -151,6 +194,7 @@ export function releaseStatusLines(path = repoPaths().composeReleasePath): strin
         : "No release lockfile selected locally. Run `pnpm openmapx compose release`.",
     ];
   return [
+    `Configured selection: ${process.env.OPENMAPX_RELEASE ?? "main"}; existing pins remain selected until explicit reselection.`,
     ...(disabled ? ["Release resolution disabled; existing overlay still applies."] : []),
     `Selected release: ${selected.release ?? "unknown (legacy or modified overlay)"}`,
     ...coreServices.RELEASE_IMAGE_NAMES.map(
@@ -162,13 +206,12 @@ export function releaseStatusLines(path = repoPaths().composeReleasePath): strin
 
 export async function selectRelease(
   opts: {
-    path?: string;
     resolve?: () => Promise<ReleaseManifest>;
     report?: (line: string) => void;
-  } = {},
+  } & ReleaseStateLocation = {},
 ): Promise<{ path: string; release: string }> {
-  const path = opts.path ?? repoPaths().composeReleasePath;
-  const previous = readSelection(path);
+  const path = releaseState(opts).overlay;
+  const previous = readSelection(path, opts);
   const manifest = await (opts.resolve ?? resolveReleaseManifest)();
   const report = opts.report ?? (() => undefined);
   report(
@@ -182,30 +225,21 @@ export async function selectRelease(
       `${name}: ${before ? (before === after ? "reused" : "changed") : "previous digest unknown"} (${before ?? "unknown"} → ${after})`,
     );
   }
-  writeReleaseOverlay(manifest, path);
+  writeReleaseOverlay(manifest, opts);
   return { path, release: manifest.release };
 }
 
-/** Clear only local Compose selection; preserve evidence still mounted by running services. */
+/**
+ * Clear only local Compose selection, the overlay in the agent's release state;
+ * preserve evidence still mounted by running services. An overlay of an
+ * earlier release in `infra/docker` is left alone: nothing reads it any more.
+ */
 export async function clearReleaseSelection(
-  opts: { path?: string } = {},
+  opts: ReleaseStateLocation = {},
 ): Promise<{ path: string; cleared: boolean }> {
-  const path = opts.path ?? repoPaths().composeReleasePath;
-  const parent = dirname(path);
-  const assertDirectory = (directory: string) => {
-    const stat = lstatSync(directory);
-    if (!stat.isDirectory() || stat.isSymbolicLink()) {
-      throw new Error("Release selection directory is unsafe");
-    }
-  };
-  assertDirectory(parent);
-  const store = join(parent, ".ops-agent-releases");
-  try {
-    mkdirSync(store, { mode: 0o700 });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-  }
-  assertDirectory(store);
+  const { directory, store, overlay: path } = releaseState(opts);
+  coreServices.ensureReleaseStateDirectory(directory, { uid: opts.uid });
+  coreServices.ensureReleaseStateDirectory(store, { uid: opts.uid });
   const lock = await coreServices.acquireReleaseStoreLock(store, {}, { failIfBusy: true });
   try {
     try {
@@ -216,6 +250,10 @@ export async function clearReleaseSelection(
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
+    // Clearing is a decision too: an earlier release's selection no longer holds.
+    coreServices.supersedeLegacyReleaseOverlay(opts.infraDir ?? repoPaths().infraDir, {
+      uid: opts.uid,
+    });
     let selected: Stats;
     try {
       selected = lstatSync(path);
@@ -223,19 +261,14 @@ export async function clearReleaseSelection(
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return { path, cleared: false };
       throw error;
     }
-    if (!selected.isFile() || selected.isSymbolicLink() || selected.nlink !== 1) {
-      throw new Error("Release selection overlay is unsafe");
-    }
-    unlinkSync(path);
-    const descriptor = openSync(
-      parent,
-      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+    const problem = coreServices.releaseStateFileProblem(
+      selected,
+      coreServices.RELEASE_STORE_LIMITS.manifestBytes,
+      { uid: opts.uid },
     );
-    try {
-      fsyncSync(descriptor);
-    } finally {
-      closeSync(descriptor);
-    }
+    if (problem) throw new Error(`Release selection overlay is unsafe: ${path} ${problem}`);
+    unlinkSync(path);
+    fsyncDirectory(directory);
     return { path, cleared: true };
   } finally {
     lock.release();

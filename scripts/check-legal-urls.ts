@@ -28,6 +28,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import pMap from "p-map";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const INTEGRATIONS_DIR = join(REPO_ROOT, "integrations");
@@ -196,19 +197,6 @@ async function checkUrl(url: string): Promise<UrlResult> {
   return classify(url, status, err);
 }
 
-async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let next = 0;
-  async function worker() {
-    while (next < items.length) {
-      const i = next++;
-      results[i] = await fn(items[i]);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return results;
-}
-
 const reason = (r: UrlResult): string =>
   r.status != null ? `HTTP ${r.status}${r.error ? `; ${r.error}` : ""}` : `unreachable: ${r.error}`;
 
@@ -230,7 +218,7 @@ async function main(): Promise<void> {
   }
 
   console.log(`Checking ${urls.length} unique legal URL(s) (source, privacy, license, DPA)…`);
-  const results = await mapPool(urls, CONCURRENCY, checkUrl);
+  const results = await pMap(urls, checkUrl, { concurrency: CONCURRENCY });
   const dead = results.filter((r) => r.verdict === "dead");
   const unverified = results.filter((r) => r.verdict === "unverified");
 

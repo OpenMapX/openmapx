@@ -2,6 +2,7 @@
 
 import Box from "@mui/material/Box";
 import { useCallback, useState } from "react";
+import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
 import { useHydrated } from "@/lib/useHydrated";
 import { AdminSidebar } from "./AdminSidebar";
 import { AdminTopBar } from "./AdminTopBar";
@@ -32,47 +33,49 @@ export function AdminLayout({ children, user, selfHosted = false }: AdminLayoutP
   return (
     <AdminThemeProvider>
       <AdminToastProvider>
-        <Box
-          className="omx-admin"
-          sx={{ display: "flex", height: "100dvh", bgcolor: "background.default" }}
-        >
-          <AdminSidebar
-            open={sidebarOpen}
-            onClose={() => setSidebarOpen(false)}
-            selfHosted={selfHosted}
-            role={user.role}
-          />
+        <AdminJobEffectsProvider>
           <Box
-            component="main"
-            sx={{
-              display: "flex",
-              flexDirection: "column",
-              flexGrow: 1,
-              minWidth: 0,
-            }}
+            className="omx-admin"
+            sx={{ display: "flex", height: "100dvh", bgcolor: "background.default" }}
           >
-            <AdminTopBar user={user} sidebarOpen={sidebarOpen} onToggleSidebar={toggleSidebar} />
+            <AdminSidebar
+              open={sidebarOpen}
+              onClose={() => setSidebarOpen(false)}
+              selfHosted={selfHosted}
+              role={user.role}
+            />
             <Box
+              component="main"
               sx={{
+                display: "flex",
+                flexDirection: "column",
                 flexGrow: 1,
-                mt: `${TOPBAR_HEIGHT}px`,
-                overflowY: "auto",
+                minWidth: 0,
               }}
             >
+              <AdminTopBar user={user} sidebarOpen={sidebarOpen} onToggleSidebar={toggleSidebar} />
               <Box
                 sx={{
-                  width: "100%",
-                  maxWidth: 1536,
-                  mx: "auto",
-                  px: { xs: 1.5, sm: 2, lg: 3 },
-                  py: { xs: 2, lg: 2.5 },
+                  flexGrow: 1,
+                  mt: `${TOPBAR_HEIGHT}px`,
+                  overflowY: "auto",
                 }}
               >
-                {children}
+                <Box
+                  sx={{
+                    width: "100%",
+                    maxWidth: 1536,
+                    mx: "auto",
+                    px: { xs: 1.5, sm: 2, lg: 3 },
+                    py: { xs: 2, lg: 2.5 },
+                  }}
+                >
+                  {children}
+                </Box>
               </Box>
             </Box>
           </Box>
-        </Box>
+        </AdminJobEffectsProvider>
       </AdminToastProvider>
     </AdminThemeProvider>
   );

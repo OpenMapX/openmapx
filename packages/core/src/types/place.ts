@@ -1,24 +1,34 @@
+import type { ContributingRecord, FieldContributors } from "@openmapx/mobility-core/contributors";
+import type { Licensing } from "@openmapx/mobility-core/licensing";
 import type { OpeningHoursSource } from "../utils/openingHoursSource";
+import type { AddressEvidence, DirectOsmReference } from "./address";
 import type { DataSourceDetail } from "./dataSource";
 import type { AreaGeometry, BBox, LngLat } from "./geometry";
 import type { Identified, Ids } from "./identified";
 import type { OpeningHoursInfo } from "./openingHoursInfo";
 
-export interface PlacePhoto {
+export interface PlacePhoto extends ContributingRecord {
   url: string;
   thumbnailUrl?: string;
   source: string;
   author?: string;
   authorUrl?: string;
-  license?: string;
-  licenseUrl?: string;
+  licensing?: Licensing;
   pageUrl?: string;
+  /** File-specific credit/copyright/restriction notices from the metadata acquisition. */
+  attributionText?: string;
+  /** Source/acquisition description, separate from required permission and copyright notices. */
+  sourceDescription?: string;
+  attributionLinks?: { label: string; url: string }[];
+  attributionRequired?: boolean;
+  /** Commons custom credit explicitly replaces Artist + Credit. */
+  attributionOverride?: string;
   capturedAt?: string;
   /** Photo-specific coordinates [lng, lat] — used for minimap in gallery. */
   coordinates?: LngLat;
 }
 
-export interface PlaceFact {
+export interface PlaceFact extends ContributingRecord {
   label: string;
   value: string;
 }
@@ -114,9 +124,13 @@ export interface PlaceReviewLink {
  */
 export type PlaceIds = Ids;
 
-export interface Place extends Identified {
+export interface Place extends Identified, ContributingRecord {
+  /** Captured suppliers of individually displayed fields. */
+  fieldContributors?: FieldContributors;
   name: string;
   address: string;
+  addressEvidence?: AddressEvidence;
+  directOsmReference?: DirectOsmReference;
   city?: string;
   /** ISO 3166-1 alpha-2 country code (e.g. "de", "us"). */
   countryCode?: string;

@@ -1,10 +1,16 @@
 import { fetchJson as coreFetchJson, createPlace, type Place } from "@openmapx/core";
 import {
+  type ContributingRecord,
+  contributorsForFields,
   createTidesIntegration,
   type IntegrationContext,
+  resolveIntegrationContributors,
+  snapshotContributors,
   type TideCurvePoint,
   type TideEvent,
   type TidesResponse,
+  type WaterLevelObservation,
+  withContributors,
 } from "@openmapx/integration-framework";
 
 /**
@@ -49,7 +55,7 @@ interface IwlsStationRaw {
   timeSeries: IwlsTimeSeries[];
 }
 
-interface CachedStation {
+interface CachedStation extends ContributingRecord {
   id: string;
   code: string;
   name: string;
@@ -85,8 +91,9 @@ async function fetchJson<T>(url: string): Promise<T | null> {
 }
 
 async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
-  const cached = await ctx.cache.get<CachedStation[]>("catalog");
+  const cached = await ctx.cache.get<CachedStation[]>("catalog:contributors-v1");
   if (cached) return cached;
+  const captured = resolveIntegrationContributors(ctx, ["dfo-iwls"]);
   // Pull every station that exposes water-level predictions. The IWLS catalog
   // is ~700 stations; `max=2000` covers the entire active set comfortably.
   const raw = await fetchJson<IwlsStationRaw[]>(
@@ -111,8 +118,9 @@ async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
         hasWlo: codes.has("wlo"),
       };
     });
-  await ctx.cache.set("catalog", stations, CATALOG_TTL);
-  return stations;
+  const acquired = stations.map((station) => withContributors(station, captured));
+  await ctx.cache.set("catalog:contributors-v1", acquired, CATALOG_TTL);
+  return acquired;
 }
 
 export async function fetchHiloEvents(stationId: string): Promise<TideEvent[]> {
@@ -197,20 +205,43 @@ export async function fetchLatestObservation(
  * expires the prediction response would pin a stale level for the full
  * TIDES_TTL.
  */
+type CapturedObservation = WaterLevelObservation & ContributingRecord;
+
 async function refreshCurrentLevel(
   ctx: IntegrationContext,
   stationId: string,
   hasWlo: boolean,
-): Promise<{ time: string; valueFt: number } | undefined> {
+): Promise<CapturedObservation | undefined> {
   if (!hasWlo) return undefined;
-  const obsKey = `obs:${stationId}`;
-  const cached = await ctx.cache.get<{ time: string; valueFt: number } | { notFound: true }>(
-    obsKey,
-  );
+  const obsKey = `obs:contributors-v1:${stationId}`;
+  const cached = await ctx.cache.get<CapturedObservation | { notFound: true }>(obsKey);
   if (cached) return "notFound" in cached ? undefined : cached;
+  const captured = resolveIntegrationContributors(ctx, ["dfo-iwls"]);
   const fetched = await fetchLatestObservation(stationId);
-  await ctx.cache.set(obsKey, fetched ?? ({ notFound: true } as const), OBSERVATION_TTL);
-  return fetched ?? undefined;
+  const observed = fetched ? withContributors(fetched, captured) : undefined;
+  await ctx.cache.set(obsKey, observed ?? ({ notFound: true } as const), OBSERVATION_TTL);
+  return observed;
+}
+
+/** Replace only the live observation and its ownership, retaining prediction snapshots. */
+function withCurrentLevel(
+  payload: TidesResponse,
+  observation: CapturedObservation | undefined,
+): TidesResponse {
+  const fieldContributors = {
+    ...payload.fieldContributors,
+    currentLevel: snapshotContributors(observation?.contributors ?? []),
+  };
+  return withContributors(
+    {
+      ...payload,
+      currentLevel: observation
+        ? { time: observation.time, valueFt: observation.valueFt }
+        : undefined,
+      fieldContributors,
+    },
+    contributorsForFields(fieldContributors, Object.keys(fieldContributors)),
+  );
 }
 
 async function buildTidesResponse(
@@ -220,19 +251,27 @@ async function buildTidesResponse(
 ): Promise<TidesResponse | null> {
   const dayKey = new Date().toISOString().slice(0, 10);
   // High/low events + curve are deterministic; cache 6h.
-  const cacheKey = `tides:${station.id}:${dayKey}`;
+  const cacheKey = `tides:contributors-v1:${station.id}:${dayKey}`;
   const cached = await ctx.cache.get<TidesResponse>(cacheKey);
   if (cached) {
-    cached.currentLevel = await refreshCurrentLevel(ctx, station.id, station.hasWlo);
-    return cached;
+    return station.hasWlo
+      ? withCurrentLevel(cached, await refreshCurrentLevel(ctx, station.id, true))
+      : withContributors(cached, cached.contributors ?? []);
   }
 
+  const captured = resolveIntegrationContributors(ctx, ["dfo-iwls"]);
   const [events, curve] = await Promise.all([fetchHiloEvents(station.id), fetchCurve(station.id)]);
   if (events.length === 0 && curve.length === 0) return null;
 
   const currentLevel = await refreshCurrentLevel(ctx, station.id, station.hasWlo);
 
   const result: TidesResponse = {
+    contributors: snapshotContributors(station.contributors ?? [], captured),
+    fieldContributors: {
+      station: snapshotContributors(station.contributors ?? []),
+      events: snapshotContributors(captured),
+      curve: snapshotContributors(captured),
+    },
     station: {
       id: station.id,
       name: station.name,
@@ -247,13 +286,15 @@ async function buildTidesResponse(
     timeZone: "lst_ldt",
     currentLevel,
   };
-  await ctx.cache.set(cacheKey, result, TIDES_TTL);
-  return result;
+  const acquired = station.hasWlo ? withCurrentLevel(result, currentLevel) : result;
+  await ctx.cache.set(cacheKey, acquired, TIDES_TTL);
+  return acquired;
 }
 
 export function setup(ctx: IntegrationContext): void {
   createTidesIntegration<CachedStation>(ctx, {
     scheme: "ca-iwls",
+    sourceId: "dfo-iwls",
     loadStations,
     findStationById: (stations, id) => stations.find((s) => s.id === id || s.code === id),
     createPlace: (station, resolveCtx): Place => {
@@ -261,6 +302,7 @@ export function setup(ctx: IntegrationContext): void {
         primaryScheme: "ca-iwls",
         ids: { "ca-iwls": station.id },
         name: station.name,
+        contributors: snapshotContributors(station.contributors ?? []),
         address: "",
         countryCode: "ca",
         coordinates: [station.lng, station.lat],
@@ -276,14 +318,13 @@ export function setup(ctx: IntegrationContext): void {
     cacheControlMaxAge: 3600,
     unavailableMessage: "Tide predictions unavailable",
     onWarmNearestHit: async (hookCtx, cached) => {
-      // The `nearest:` fast path bypasses `buildTidesResponse`, so its
-      // canonical 5-min `obs:` refresh is skipped. Re-fetch the current
-      // water level here so warm hits don't pin a stale `currentLevel`
-      // for the full 6-hour TIDES_TTL. We treat the previously-cached
-      // `currentLevel` as proof the station supports WLO; stations that
-      // had no obs at build time stay live-free.
-      if (cached.currentLevel !== undefined) {
-        cached.currentLevel = await refreshCurrentLevel(hookCtx, cached.station.id, true);
+      // An owned currentLevel key records observation support even when the
+      // latest request returned no reading. A future refresh may restore it.
+      if (cached.fieldContributors && Object.hasOwn(cached.fieldContributors, "currentLevel")) {
+        Object.assign(
+          cached,
+          withCurrentLevel(cached, await refreshCurrentLevel(hookCtx, cached.station.id, true)),
+        );
       }
     },
   });

@@ -15,21 +15,22 @@ import { writeAuditLog } from "../utils/audit-log.js";
 import { serviceActionLimit } from "../utils/rate-limit.js";
 import { getAdminSession, requireAdmin } from "../utils/require-admin.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
+import { registerServiceAdminRoute } from "./admin-service-contract";
 
 const ROTATION_CONFIRMATION = "ROTATE DAWARICH OIDC SECRET";
 
 const EXPECTED_BUNDLE = [
   {
     id: DAWARICH_APP_SERVICE_ID,
-    version: "1.15.2",
+    version: "1.15.3",
     image: "freikin/dawarich",
-    tag: "1.15.2",
+    tag: "1.15.3",
   },
   {
     id: DAWARICH_WORKER_SERVICE_ID,
-    version: "1.15.2",
+    version: "1.15.3",
     image: "freikin/dawarich",
-    tag: "1.15.2",
+    tag: "1.15.3",
   },
   {
     id: DAWARICH_POSTGIS_SERVICE_ID,
@@ -106,12 +107,13 @@ async function auditFailure(request: FastifyRequest, action: string, code: strin
 
 export async function adminDawarichRoute(app: FastifyInstance): Promise<void> {
   declareRouteAuth(app, "admin");
+  const actionLimit = serviceActionLimit.preHandler();
 
   app.addHook("preHandler", async (request) => {
     request.adminSession = await requireAdmin(request);
   });
 
-  app.get("/admin/dawarich", async (request, reply) => {
+  registerServiceAdminRoute(app, "getAdminDawarich", async (request, reply) => {
     try {
       return await inspectManagedDawarichProvisioning(requestInput(request));
     } catch (error) {
@@ -124,19 +126,11 @@ export async function adminDawarichRoute(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.post<{ Body: { publicHost?: unknown } }>(
-    "/admin/dawarich/provision",
-    { preHandler: [serviceActionLimit.preHandler()] },
+  registerServiceAdminRoute(
+    app,
+    "provisionAdminDawarich",
     async (request, reply) => {
-      if (!hasExactManagedBundle()) {
-        reply.status(409);
-        return { code: "DAWARICH_BUNDLE_NOT_INSTALLED" };
-      }
       const publicHost = request.body?.publicHost;
-      if (publicHost !== undefined && typeof publicHost !== "string") {
-        reply.status(422);
-        return { code: "DAWARICH_INVALID_PUBLIC_HOST" };
-      }
       try {
         const result = await provisionManagedDawarich(requestInput(request, publicHost));
         await writeAuditLog({
@@ -158,20 +152,23 @@ export async function adminDawarichRoute(app: FastifyInstance): Promise<void> {
         return { code: safeError.code };
       }
     },
+    {
+      beforeValidation: async (request, reply) => {
+        await actionLimit(request, reply);
+        if (reply.sent) return;
+        if (!hasExactManagedBundle())
+          return reply.code(409).send({ code: "DAWARICH_BUNDLE_NOT_INSTALLED" });
+        const publicHost = (request.body as { publicHost?: unknown } | undefined)?.publicHost;
+        if (publicHost !== undefined && typeof publicHost !== "string")
+          return reply.code(422).send({ code: "DAWARICH_INVALID_PUBLIC_HOST" });
+      },
+    },
   );
 
-  app.post<{ Body: { confirmation?: unknown } }>(
-    "/admin/dawarich/rotate-oidc-secret",
-    { preHandler: [serviceActionLimit.preHandler()] },
+  registerServiceAdminRoute(
+    app,
+    "rotateAdminDawarichOidcSecret",
     async (request, reply) => {
-      if (!hasExactManagedBundle()) {
-        reply.status(409);
-        return { code: "DAWARICH_BUNDLE_NOT_INSTALLED" };
-      }
-      if (request.body?.confirmation !== ROTATION_CONFIRMATION) {
-        reply.status(400);
-        return { code: "DAWARICH_ROTATION_CONFIRMATION_REQUIRED" };
-      }
       try {
         const result = await rotateManagedDawarichOidcSecret(requestInput(request));
         await writeAuditLog({
@@ -192,6 +189,19 @@ export async function adminDawarichRoute(app: FastifyInstance): Promise<void> {
         reply.status(statusForError(safeError));
         return { code: safeError.code };
       }
+    },
+    {
+      beforeValidation: async (request, reply) => {
+        await actionLimit(request, reply);
+        if (reply.sent) return;
+        if (!hasExactManagedBundle())
+          return reply.code(409).send({ code: "DAWARICH_BUNDLE_NOT_INSTALLED" });
+        if (
+          (request.body as { confirmation?: unknown } | undefined)?.confirmation !==
+          ROTATION_CONFIRMATION
+        )
+          return reply.code(400).send({ code: "DAWARICH_ROTATION_CONFIRMATION_REQUIRED" });
+      },
     },
   );
 }

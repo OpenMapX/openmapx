@@ -28,8 +28,9 @@
       "boundaryCountry": {
         "type": "string",
         "title": "Boundary country",
-        "description": "Optional ISO 3166-1 alpha-3 country filter applied to stop search requests. Defaults to NOR.",
-        "default": "NOR"
+        "description": "One lowercase ISO 3166-1 alpha-2 country filter. Defaults to no; an explicit empty string disables country scoping.",
+        "default": "no",
+        "oneOf": [{ "const": "" }, { "type": "string", "pattern": "^[a-z][a-z]$" }]
       },
       "multiModal": {
         "type": "string",
@@ -41,7 +42,7 @@
       "geocoderEndpoint": {
         "type": "string",
         "title": "Geocoder endpoint",
-        "description": "Base URL of the Entur geocoder API. Defaults to the public Entur endpoint.",
+        "description": "Unversioned Entur Geocoder service base URL, for example https://api.entur.io/geocoder. Native /v3 operation paths are appended.",
         "format": "url"
       },
       "journeyPlannerEndpoint": {
@@ -67,33 +68,104 @@
   "backend": {
     "routes": false
   },
-  "healthCheck": [
-    {
-      "name": "Entur Journey Planner",
-      "type": "ping",
-      "url": "https://api.entur.io/journey-planner/v3/graphql",
-      "urlTemplate": "${journeyPlannerEndpoint}"
-    },
-    {
-      "name": "Entur Vehicle Positions",
-      "type": "ping",
-      "url": "https://api.entur.io/realtime/v2/vehicles/graphql",
-      "urlTemplate": "${vehiclesEndpoint}"
-    },
-    {
-      "name": "Entur National Stop Register",
-      "type": "ping",
-      "url": "https://api.entur.io/stop-places/v1/read/stop-places/NSR:StopPlace:337",
-      "urlTemplate": "${nsrEndpoint}/stop-places/NSR:StopPlace:337"
-    }
-  ],
+  "healthCheck": {
+    "name": "Entur transit APIs",
+    "type": "ping",
+    "url": "https://api.entur.io/journey-planner/v3/graphql",
+    "urlTemplate": "${journeyPlannerEndpoint}"
+  },
   "dataSources": [
+    {
+      "commercialUse": "yes",
+      "providerCountry": "NO",
+      "providerPrivacyUrl": "https://om.entur.no/personvern/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false,
+      "reviewedAt": "2026-10-19",
+      "sourceId": "entur-geocoder",
+      "name": "Entur Geocoder API",
+      "url": "https://developer.entur.no/docs/open-services/geocoder",
+      "attribution": "Geocoder service provided by Entur",
+      "owner": "Entur AS",
+      "termsUrl": "https://developer.entur.no/terms-of-service",
+      "dataUseClass": "attribution",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "service",
+            "subject": "Entur Geocoder API access",
+            "license": {
+              "kind": "custom",
+              "namespace": "openmapx:entur",
+              "id": "LicenseRef-Entur-API-Terms",
+              "name": "Entur API terms",
+              "url": "https://developer.entur.no/terms-of-service"
+            },
+            "conditions": [
+              "Identify the application with ET-Client-Name and comply with fair use and service rate limits."
+            ],
+            "attribution": {
+              "placement": "details",
+              "surfaces": ["map", "content", "image"],
+              "basis": "provider-terms",
+              "reviewedAt": "2026-10-19",
+              "evidenceUrls": ["https://developer.entur.no/terms-of-service"],
+              "reason": "Entur's API terms require application identification and compliance with fair use and rate limits, not end-user display of API access instructions. Keep these service conditions and terms in directly accessible details on map, content and image surfaces; supplier data attribution remains governed by each separate data binding."
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Entur API terms",
+            "url": "https://developer.entur.no/terms-of-service"
+          }
+        ]
+      }
+    },
+    {
+      "commercialUse": "yes",
+      "providerCountry": "NO",
+      "providerPrivacyUrl": "https://om.entur.no/personvern/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false,
+      "reviewedAt": "2026-10-19",
+      "sourceId": "entur-geocoder-nsr",
+      "name": "Entur National Stop Register geocoder data",
+      "url": "https://developer.entur.no/docs/open-services/geocoder",
+      "attribution": "Inneholder data under Norsk lisens for offentlige data (NLOD) tilgjengeliggjort av Entur AS.",
+      "owner": "Entur AS",
+      "termsUrl": "https://data.norge.no/nlod/en/2.0",
+      "dataUseClass": "attribution",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Entur National Stop Register geocoder data dataset",
+            "license": {
+              "kind": "spdx",
+              "expression": "NLOD-2.0",
+              "url": "https://data.norge.no/nlod/en/2.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "NLOD-2.0",
+            "url": "https://data.norge.no/nlod/en/2.0"
+          }
+        ]
+      }
+    },
     {
       "sourceId": "entur-journey-planner",
       "name": "Entur Journey Planner v3",
       "url": "https://developer.entur.org/pages-journeyplanner-journeyplanner/",
-      "license": "NLOD 2.0",
-      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
       "attribution": "Data made available by Entur",
       "commercialUse": "yes",
       "providerCountry": "NO",
@@ -101,14 +173,32 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Entur Journey Planner v3 material",
+            "license": {
+              "kind": "spdx",
+              "expression": "NLOD-2.0",
+              "url": "https://data.norge.no/nlod/en/2.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "NLOD-2.0",
+            "url": "https://data.norge.no/nlod/en/2.0"
+          }
+        ]
+      }
     },
     {
       "sourceId": "entur-vehicles",
       "name": "Entur Vehicle Positions v2",
       "url": "https://developer.entur.org/pages-real-time-vehicle/",
-      "license": "NLOD 2.0",
-      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
       "attribution": "Data made available by Entur",
       "commercialUse": "yes",
       "providerCountry": "NO",
@@ -116,14 +206,32 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Entur Vehicle Positions v2 material",
+            "license": {
+              "kind": "spdx",
+              "expression": "NLOD-2.0",
+              "url": "https://data.norge.no/nlod/en/2.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "NLOD-2.0",
+            "url": "https://data.norge.no/nlod/en/2.0"
+          }
+        ]
+      }
     },
     {
       "sourceId": "entur-nsr",
       "name": "Entur National Stop Register",
       "url": "https://developer.entur.org/stop-places-v1-read/",
-      "license": "NLOD 2.0",
-      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
       "attribution": "Data made available by Entur",
       "commercialUse": "yes",
       "providerCountry": "NO",
@@ -131,7 +239,27 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Entur National Stop Register material",
+            "license": {
+              "kind": "spdx",
+              "expression": "NLOD-2.0",
+              "url": "https://data.norge.no/nlod/en/2.0"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "NLOD-2.0",
+            "url": "https://data.norge.no/nlod/en/2.0"
+          }
+        ]
+      }
     }
   ],
   "dependencies": ["transit"]

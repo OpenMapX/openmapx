@@ -13,14 +13,7 @@
  *   ```
  */
 
-export { fetchCapabilities, isServiceAvailable } from "./api/capabilities";
-export {
-  type AiCloudProcessor,
-  type AiSearchDisclosure,
-  type Disclosure,
-  fetchDisclosures,
-  fetchIntegrations,
-} from "./api/integrations";
+export { fetchIntegrationMetadata } from "./api/integrations";
 export { fetchLegalConfig, type PublicLegalConfig } from "./api/legal-config";
 export { serverApiUrl } from "./api/server-url";
 // Git clone helpers (shared by community service repos + community integrations)
@@ -55,9 +48,17 @@ export {
 } from "./posix-process-group";
 // Repo path resolution (shared by CLI + apps/api runtime code)
 export { findRepoRoot, type RepoPaths, repoPaths } from "./repo-paths";
+export {
+  RollingStreamBudget,
+  type RollingStreamBudgetAdmission,
+  type RollingStreamBudgetLease,
+  type RollingStreamBudgetOptions,
+  type RollingStreamBudgetRejection,
+  type RollingStreamBudgetRejectionReason,
+} from "./rolling-stream-budget";
 // Service plugin system (manifest loader, compose renderer — all uses node:fs)
 export * as services from "./services";
-export type { DataManagerCoverageEvidencePage } from "./services/data-manager-client";
+export type { DataManagerCoverageEvidencePage } from "./services/data-manager/contracts";
 // Subprocess helper used by git-clone and the community-integration build step
 export {
   redactProcessOutput,
@@ -77,11 +78,7 @@ export {
   idsFromPrimary,
   idsFromPrimaryOrCoords,
 } from "./types/placeIds";
-export {
-  buildAttributionHtml,
-  buildIntegrationAttribution,
-  combineAttributions,
-} from "./utils/attribution";
+export { buildAttributionHtml } from "./utils/attribution";
 export {
   type BoundedBinaryProxy,
   type BoundedBinaryResponseOptions,
@@ -118,14 +115,20 @@ export {
 // Safe downloader (DNS-aware SSRF protection for server-side fetches).
 export {
   assertResolvesToPublicIp,
+  resolvePublicConnectionAddresses,
   type SafeDownloadOptions,
   type SafeDownloadResult,
   SafeFetchHttpError,
   type SafeFetchJsonOptions,
+  type SafeFetchStatusOptions,
   type SafeJsonResponse,
+  type SafeStatusResponse,
+  type SafeTextResponse,
   safeDownload,
   safeFetchJson,
   safeFetchJsonResponse,
+  safeFetchStatus,
   safeFetchText,
+  safeFetchTextResponse,
 } from "./utils/safe-download";
 export { sectionSlug } from "./utils/sectionSlug";

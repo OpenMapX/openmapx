@@ -1,3 +1,8 @@
+import {
+  type ContributingRecord,
+  type FieldContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { PoiSearchOutcome } from "../types/category";
 import type { BoundingBox } from "../types/geometry";
 import type { PlaceProvenance } from "../types/place";
@@ -28,7 +33,8 @@ export const OVERPASS_FETCH_LIMIT = 1000;
 
 export type { BoundingBox };
 
-export interface CategoryPlaceResult {
+export interface CategoryPlaceResult extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   id: string;
   name: string;
   coordinates: [number, number];
@@ -66,7 +72,13 @@ export async function overpassPoiSearch(query: string): Promise<PoiSearchOutcome
   if (isOverpassRuntimeLimit(data.remark)) throw new OverpassTimeoutError();
   const truncated = data.elements.length > OVERPASS_FETCH_LIMIT;
   const elements = truncated ? data.elements.slice(0, OVERPASS_FETCH_LIMIT) : data.elements;
-  return { results: mapOverpassElements(elements), truncated };
+  return {
+    results: mapOverpassElements(elements).map((result) => ({
+      ...result,
+      contributors: snapshotContributors(data.contributors ?? []),
+    })),
+    truncated,
+  };
 }
 
 function buildCategoryQuery(filters: OsmFilter[], bbox: BoundingBox): string {

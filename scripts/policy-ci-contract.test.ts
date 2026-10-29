@@ -28,12 +28,18 @@ describe("repository policy gate", () => {
       "pnpm check-image-size-dos",
       "pnpm check-docker-context-secrets",
       "pnpm check-ops-authority",
+      "pnpm check-entur-graphql",
+      "pnpm check-entur-geocoder",
+      "pnpm check-mbta",
+      "pnpm check-otp",
+      "pnpm check-api-sdk",
+      "pnpm check-data-manager-openapi",
+      "pnpm check-data-manager-sdk",
     ]);
   });
 
-  it("runs the same policy gate in required CI and the local hook", () => {
+  it("runs the policy gate in required CI with its standalone docs dependencies", () => {
     const workflow = read(".github/workflows/ci.yml");
-    const preCommit = read(".husky/pre-commit");
 
     expect(workflow).toMatch(
       /- name: Check repository policy invariants\n(?:\s+#.*\n)*\s+run: pnpm check:policy/,
@@ -51,36 +57,28 @@ describe("repository policy gate", () => {
     const policyGate = workflow.indexOf("run: pnpm check:policy");
     expect(docsInstall).toBeGreaterThan(-1);
     expect(docsInstall).toBeLessThan(policyGate);
-    expect(preCommit).toContain("pnpm check:policy || exit 1");
+    expect(workflow).toMatch(/OPENMAPX_POLICY_BASE:.*github\.event\.pull_request\.base\.sha/);
   });
 
-  it("clears Git hook-local paths before tests create temporary repositories", () => {
-    const prePush = read(".husky/pre-push");
-    const cleanup = prePush.indexOf("unset \\");
-    const checks = prePush.indexOf("pnpm check-types");
+  it("runs the live production audit in CI without adding network access to local hooks", () => {
+    const rootPackage = JSON.parse(read("package.json")) as {
+      scripts: Record<string, string>;
+    };
+    const workflow = read(".github/workflows/ci.yml");
+    const preCommit = read(".husky/pre-commit");
 
-    expect(cleanup).toBeGreaterThan(-1);
-    expect(cleanup).toBeLessThan(checks);
-    const cleanupBlock = prePush.slice(cleanup, checks);
-    for (const variable of [
-      "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-      "GIT_COMMON_DIR",
-      "GIT_CONFIG",
-      "GIT_CONFIG_COUNT",
-      "GIT_CONFIG_PARAMETERS",
-      "GIT_DIR",
-      "GIT_GRAFT_FILE",
-      "GIT_IMPLICIT_WORK_TREE",
-      "GIT_INDEX_FILE",
-      "GIT_NO_REPLACE_OBJECTS",
-      "GIT_OBJECT_DIRECTORY",
-      "GIT_PREFIX",
-      "GIT_REPLACE_REF_BASE",
-      "GIT_SHALLOW_FILE",
-      "GIT_WORK_TREE",
-    ]) {
-      expect(cleanupBlock).toContain(variable);
-    }
+    expect(rootPackage.scripts["check-production-audits"]).toBe(
+      "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/check-production-audits.ts",
+    );
+    expect(rootPackage.scripts["check:policy"]).not.toContain("check-production-audits");
+    expect(preCommit).not.toContain("check-production-audits");
+    expect(workflow).toMatch(
+      /- name: Audit production dependencies\n(?:\s+#.*\n)*\s+run: pnpm check-production-audits/,
+    );
+    const docsInstall = workflow.indexOf("- run: pnpm -C docs install --frozen-lockfile");
+    const auditGate = workflow.indexOf("run: pnpm check-production-audits");
+    expect(docsInstall).toBeGreaterThan(-1);
+    expect(auditGate).toBeGreaterThan(docsInstall);
   });
 
   it("regenerates ignored native projects before auditing their release surface", () => {

@@ -13,9 +13,29 @@
       "types": "./src/cache.ts",
       "default": "./src/cache.ts"
     },
+    "./contributors": {
+      "types": "./src/contributors.ts",
+      "default": "./src/contributors.ts"
+    },
     "./camera": {
       "types": "./src/types/camera.ts",
       "default": "./src/types/camera.ts"
+    },
+    "./message-sign": {
+      "types": "./src/types/message-sign.ts",
+      "default": "./src/types/message-sign.ts"
+    },
+    "./road-weather": {
+      "types": "./src/types/road-weather.ts",
+      "default": "./src/types/road-weather.ts"
+    },
+    "./service-vehicle": {
+      "types": "./src/types/service-vehicle.ts",
+      "default": "./src/types/service-vehicle.ts"
+    },
+    "./border-crossing": {
+      "types": "./src/types/border-crossing.ts",
+      "default": "./src/types/border-crossing.ts"
     },
     "./hazards": {
       "types": "./src/types/hazards.ts",
@@ -28,6 +48,10 @@
     "./detail-store": {
       "types": "./src/detail-store.ts",
       "default": "./src/detail-store.ts"
+    },
+    "./duration": {
+      "types": "./src/duration.ts",
+      "default": "./src/duration.ts"
     },
     "./entur-mobility": {
       "types": "./src/entur-mobility.ts",
@@ -80,10 +104,6 @@
     "./json-transport": {
       "types": "./src/json-transport.ts",
       "default": "./src/json-transport.ts"
-    },
-    "./license": {
-      "types": "./src/license.ts",
-      "default": "./src/license.ts"
     },
     "./mercator": {
       "types": "./src/mercator.ts",
@@ -160,6 +180,38 @@
     "./transit-reachability": {
       "types": "./src/types/transit-reachability.ts",
       "default": "./src/types/transit-reachability.ts"
+    },
+    "./contribution-merge": {
+      "types": "./src/contribution-merge.ts",
+      "default": "./src/contribution-merge.ts"
+    },
+    "./transit-contributors": {
+      "types": "./src/transit-contributors.ts",
+      "default": "./src/transit-contributors.ts"
+    },
+    "./motis-contributors": {
+      "types": "./src/motis-contributors.ts",
+      "default": "./src/motis-contributors.ts"
+    },
+    "./motis-route-pattern-id": {
+      "types": "./src/motis-route-pattern-id.ts",
+      "default": "./src/motis-route-pattern-id.ts"
+    },
+    "./raster-contributors": {
+      "types": "./src/raster-contributors.ts",
+      "default": "./src/raster-contributors.ts"
+    },
+    "./geometry-contributors": {
+      "types": "./src/geometry-contributors.ts",
+      "default": "./src/geometry-contributors.ts"
+    },
+    "./licensing": {
+      "types": "./src/licensing.ts",
+      "default": "./src/licensing.ts"
+    },
+    "./attribution-placement": {
+      "types": "./src/attribution-placement.ts",
+      "default": "./src/attribution-placement.ts"
     }
   },
   "dependencies": {
@@ -167,6 +219,12 @@
     "@motis-project/motis-client": "^2.11.3",
     "@openmapx/mobility-formats": "workspace:^",
     "@openmapx/transitous-core": "workspace:^",
-    "spdx-license-list": "^6.12.0"
+    "spdx-expression-parse": "5.0.0",
+    "@openmapx/extension-contracts": "workspace:^",
+    "lru-cache": "11.5.3",
+    "p-map": "7.1.1"
+  },
+  "devDependencies": {
+    "@types/spdx-expression-parse": "4.0.0"
   }
 }

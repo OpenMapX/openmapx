@@ -3,10 +3,12 @@ import { brandSuggestionRows, presetSuggestionRows, rankAutocompleteRows } from 
 import type { IntegrationContext, RouteHandler } from "@openmapx/integration-framework";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index";
+import manifest from "../manifest.json";
 
 async function response(path: string, query: Record<string, string>): Promise<unknown> {
   const routes = new Map<string, RouteHandler>();
   setup({
+    manifest,
     registerRoute: (_method: string, route: string, handler: RouteHandler) =>
       routes.set(route, handler),
     getIntegrationsByDomain: () => [],

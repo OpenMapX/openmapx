@@ -1,5 +1,6 @@
 import type { AttributionIndexHandle } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type { TransitStop, TripItinerary } from "@openmapx/mobility-core/transit";
 import { describe, expect, it } from "vitest";
 import { attribution } from "../attributions.js";
@@ -13,7 +14,10 @@ attribution.set([
     sourceId: "motis",
     name: "MOTIS (self-hosted)",
     url: "https://github.com/motis-project/motis",
-    license: "MIT",
+    licensing: {
+      version: 1,
+      bindings: [{ scope: "data", subject: "Data", license: { kind: "spdx", expression: "MIT" } }],
+    } as const,
     providerCountry: "DE",
     providerPrivacyUrl: "https://github.com/motis-project/motis",
   },
@@ -21,7 +25,7 @@ attribution.set([
     sourceId: "transitous",
     name: "Transitous",
     url: "https://api.transitous.org/",
-    license: "AGPL-3.0-or-later",
+    licensing: licensingFromDeclaration("AGPL-3.0-or-later", undefined, "Transitous"),
     providerCountry: "DE",
     providerPrivacyUrl: "https://transitous.org/",
   },
@@ -36,16 +40,31 @@ const ATTR_BY_ID: Record<string, Attribution> = {
     name: "DELFI Germany",
     publisher: { name: "DELFI e.V.", url: "https://delfi.de/" },
     url: "https://delfi.de/",
-    spdxLicense: "CC0-1.0",
-    licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/",
+    licensing: {
+      version: 1,
+      bindings: [
+        {
+          scope: "data",
+          subject: "Data",
+          license: {
+            kind: "spdx",
+            expression: "CC0-1.0",
+            url: "https://creativecommons.org/publicdomain/zero/1.0/",
+          },
+        },
+      ],
+    } as const,
   },
   ch_SBB: {
     sourceId: "ch_SBB",
     name: "SBB Switzerland",
     publisher: { name: "SBB", url: "https://www.sbb.ch/" },
     url: "https://www.sbb.ch/",
-    spdxLicense: "OPEN-DATA-CH",
-    licenseUrl: "https://opentransportdata.swiss/license",
+    licensing: licensingFromDeclaration(
+      "OPEN-DATA-CH",
+      "https://opentransportdata.swiss/license",
+      "SBB Switzerland",
+    ),
   },
 };
 
@@ -115,7 +134,7 @@ describe("transit-motis feed attribution", () => {
     expect(wrapped.freshness.hasRealtimeData).toBe(true);
   });
 
-  it("falls back to ATTRIBUTION_LOCAL when the feed tag is not in the index", () => {
+  it("keeps unknown feed references explicitly unattributed", () => {
     const stop: TransitStop = {
       id: "ms:unknown_feed_X_some-stop",
       name: "Mystery Stop",
@@ -125,11 +144,11 @@ describe("transit-motis feed attribution", () => {
       provider: "ms",
     };
     const wrapped = __testing.wrapLocal(stop, fakeIndex);
-    expect(wrapped.attributions).toEqual(__testing.attributionLocal());
-    expect(wrapped.attributions[0].sourceId).toBe("motis");
+    expect(wrapped.attributions).toEqual([]);
+    expect(wrapped.data.contributors).toEqual([]);
   });
 
-  it("falls back to ATTRIBUTION_LOCAL when no index is supplied", () => {
+  it("does not invent a feed supplier without an index", () => {
     const stop: TransitStop = {
       id: "ms:de_DELFI_de:08111:6118:0:3",
       name: "Stuttgart Hbf",
@@ -139,7 +158,8 @@ describe("transit-motis feed attribution", () => {
       provider: "ms",
     };
     const wrapped = __testing.wrapLocal(stop, undefined);
-    expect(wrapped.attributions).toEqual(__testing.attributionLocal());
+    expect(wrapped.attributions).toEqual([]);
+    expect(wrapped.data.contributors).toEqual([]);
   });
 
   it("extractFeedTags walks nested trip-plan shapes (legs with from/to stop ids)", () => {

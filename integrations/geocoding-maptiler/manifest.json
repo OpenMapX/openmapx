@@ -54,8 +54,6 @@
       "sourceId": "maptiler",
       "name": "MapTiler",
       "url": "https://api.maptiler.com/",
-      "license": "Proprietary",
-      "licenseUrl": "https://www.maptiler.com/terms/cloud/",
       "attribution": "© <a href=\"https://www.maptiler.com/copyright/\">MapTiler</a> © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "commercialUse": "conditional",
       "providerCountry": "CH",
@@ -64,7 +62,44 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": true,
-      "dpaUrl": "https://explore.openli.com/privacy/maptiler-cloud/data-processing-agreements"
+      "dpaUrl": "https://explore.openli.com/privacy/maptiler-cloud/data-processing-agreements",
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "MapTiler material",
+            "license": {
+              "kind": "unknown"
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "MapTiler access/account contract",
+            "license": {
+              "kind": "unknown",
+              "url": "https://www.maptiler.com/terms/cloud/"
+            },
+            "attribution": {
+              "placement": "details",
+              "surfaces": ["content"],
+              "basis": "provider-terms",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://www.maptiler.com/terms/",
+                "https://www.maptiler.com/terms/cloud/"
+              ],
+              "reason": "Only separately scoped search results/database; not map content; Normal hosted map attribution always visible/readable; Small-mobile map permits attribution-only contextual one-tap popup; Free map account logo required; keep visible conservatively"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "Proprietary",
+            "url": "https://www.maptiler.com/terms/cloud/"
+          }
+        ]
+      }
     }
   ]
 }

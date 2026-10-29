@@ -10,7 +10,7 @@ describe("useTransitRoute", () => {
   it("unwraps the mobility envelope into data/attributions/freshness", async () => {
     const envelope = {
       data: { id: "r1", shortName: "U6" },
-      attributions: [{ name: "MOTIS" }],
+      attributions: [{ sourceId: "motis", name: "MOTIS" }],
       freshness: { fetchedAt: "2026-06-14T00:00:00Z" },
     };
     const spy = vi.spyOn(apiClient, "get").mockResolvedValue(envelope as never);
@@ -20,7 +20,7 @@ describe("useTransitRoute", () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual(envelope.data);
+    expect(result.current.data).toEqual({ ...envelope.data, contributors: envelope.attributions });
     expect(result.current.attributions).toEqual(envelope.attributions);
     expect(result.current.freshness).toEqual(envelope.freshness);
     expect(spy).toHaveBeenCalledWith("/api/integrations/transit/routes/ms%3Aroute%201");

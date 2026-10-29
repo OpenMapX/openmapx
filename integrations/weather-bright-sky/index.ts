@@ -2,6 +2,7 @@ import type {
   DailyForecastPoint,
   HourlyForecastPoint,
   LngLat,
+  WeatherForecastResponse,
   WeatherOptions,
   WeatherResponse,
 } from "@openmapx/core";
@@ -113,7 +114,7 @@ const brightSkyProvider: WeatherProvider = {
     coords: LngLat,
     hours: number,
     options?: WeatherOptions,
-  ): Promise<HourlyForecastPoint[]> {
+  ): Promise<WeatherForecastResponse<HourlyForecastPoint>> {
     const lat = round4(coords[1]);
     const lon = round4(coords[0]);
     const now = new Date();
@@ -127,7 +128,7 @@ const brightSkyProvider: WeatherProvider = {
 
     const isImperial = options?.units === "imperial";
 
-    return data.weather.slice(0, hours).map((h) => ({
+    const points = data.weather.slice(0, hours).map((h) => ({
       time: h.timestamp,
       temperature: isImperial ? ((h.temperature ?? 0) * 9) / 5 + 32 : (h.temperature ?? 0),
       weatherCode: iconToWmo(h.icon, h.cloud_cover),
@@ -138,13 +139,14 @@ const brightSkyProvider: WeatherProvider = {
       cloudCover: h.cloud_cover ?? 0,
       pressure: h.pressure_msl ?? 0,
     }));
+    return { source: "bright-sky", points };
   },
 
   async getDailyForecast(
     coords: LngLat,
     days: number,
     options?: WeatherOptions,
-  ): Promise<DailyForecastPoint[]> {
+  ): Promise<WeatherForecastResponse<DailyForecastPoint>> {
     const lat = round4(coords[1]);
     const lon = round4(coords[0]);
     const now = new Date();
@@ -196,7 +198,7 @@ const brightSkyProvider: WeatherProvider = {
       });
     }
 
-    return results;
+    return { source: "bright-sky", points: results };
   },
 };
 

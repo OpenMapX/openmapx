@@ -245,6 +245,7 @@ export function WildfireLegend() {
   const showEffisBurnedAreas = useWildfireStore((state) => state.showEffisBurnedAreas);
   const showNoaaSmoke = useWildfireStore((state) => state.showNoaaSmoke);
   const showHeatmap = useWildfireStore((state) => state.showHeatmap);
+  const showLowConfidence = useWildfireStore((state) => state.showLowConfidence);
   const statuses = useWildfireStore((state) => state.statuses);
   const setLayerVisible = useOverlayVisibilitySetter("wildfires");
   const setDayRange = useWildfireStore((state) => state.setDayRange);
@@ -254,6 +255,7 @@ export function WildfireLegend() {
   const setShowEffisBurnedAreas = useWildfireStore((state) => state.setShowEffisBurnedAreas);
   const setShowNoaaSmoke = useWildfireStore((state) => state.setShowNoaaSmoke);
   const setShowHeatmap = useWildfireStore((state) => state.setShowHeatmap);
+  const setShowLowConfidence = useWildfireStore((state) => state.setShowLowConfidence);
   const loading =
     layerVisible &&
     ((showHotspots && statuses.firms.loading) ||
@@ -336,6 +338,12 @@ export function WildfireLegend() {
                   >
                     {t("modis1km")}
                   </ToggleButton>
+                  <ToggleButton
+                    value="slstr"
+                    sx={{ fontSize: 10, px: 0.9, py: 0, textTransform: "none", minWidth: 0 }}
+                  >
+                    {t("slstr1km")}
+                  </ToggleButton>
                 </ToggleButtonGroup>
               </Box>
 
@@ -350,7 +358,21 @@ export function WildfireLegend() {
                 }
                 sx={{ m: 0, height: 26 }}
               />
+
+              <FormControlLabel
+                label={<Typography sx={{ fontSize: 10 }}>{t("lowConfidence")}</Typography>}
+                control={
+                  <Switch
+                    size="small"
+                    checked={showLowConfidence}
+                    onChange={(event) => setShowLowConfidence(event.target.checked)}
+                    slotProps={{ input: { "aria-label": t("showLowConfidence") } }}
+                  />
+                }
+                sx={{ m: 0, height: 26 }}
+              />
             </Box>
+            {showLowConfidence ? <Caveat>{t("lowConfidenceCaveat")}</Caveat> : null}
 
             <Box
               sx={{

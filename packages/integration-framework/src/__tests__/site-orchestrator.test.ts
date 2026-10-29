@@ -148,14 +148,12 @@ describe("site orchestrator", () => {
       sourceId: "s",
       name: "A",
       url: "javascript:alert(1)",
-      licenseUrl: "data:text/html,x",
       publisher: { name: "P", url: "javascript:alert(2)" },
     };
     const safe = {
       sourceId: "t",
       name: "B",
       url: "https://example.org",
-      licenseUrl: "http://example.org/licence",
       publisher: { name: "Q", url: "https://example.org/q" },
     };
 
@@ -168,4 +166,28 @@ describe("site orchestrator", () => {
       safe,
     ]);
   });
+});
+
+test("preserves distinct required notices from one source while sanitizing captured credit URLs", () => {
+  const first = {
+    sourceId: "same",
+    name: "Publisher",
+    attributionText: "First required notice",
+    url: "javascript:alert(1)",
+  };
+  const second = {
+    sourceId: "same",
+    name: "Publisher",
+    attributionText: "Second required notice",
+    publisher: { name: "Network", url: "data:text/html,x" },
+  };
+  expect(siteAttributions([{ attributions: [first, first, second] }])).toEqual([
+    { sourceId: "same", name: "Publisher", attributionText: "First required notice" },
+    {
+      sourceId: "same",
+      name: "Publisher",
+      attributionText: "Second required notice",
+      publisher: { name: "Network" },
+    },
+  ]);
 });

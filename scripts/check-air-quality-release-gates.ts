@@ -2,59 +2,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-type ReleaseStatus = "shipped" | "blocked" | "deferred";
-
-interface MatrixRow {
-  label: string;
-  status: ReleaseStatus;
-  recordPath: string;
-}
-
-function parseFrontmatter(path: string): Record<string, string> {
-  const text = readFileSync(path, "utf8");
-  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text);
-  if (!match) return {};
-  const result: Record<string, string> = {};
-  for (const line of (match[1] ?? "").split(/\r?\n/)) {
-    const field = /^([a-z][a-z0-9_]*):\s*(.*)$/.exec(line);
-    if (!field) continue;
-    const raw = field[2]?.trim() ?? "";
-    try {
-      const parsed = JSON.parse(raw);
-      result[field[1] ?? ""] = typeof parsed === "string" ? parsed : String(parsed);
-    } catch {
-      result[field[1] ?? ""] = raw.replace(/^['"]|['"]$/g, "");
-    }
-  }
-  return result;
-}
-
 function list(value: string | undefined): string[] {
   if (!value || value === "none") return [];
   return value
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
-}
-
-function matrixRows(path: string): MatrixRow[] {
-  const rows: MatrixRow[] = [];
-  for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
-    const cells = line
-      .split("|")
-      .slice(1, -1)
-      .map((cell) => cell.trim());
-    if (cells.length !== 3) continue;
-    const status = cells[1];
-    const link = /\((\.\/air-quality-status\/[^)]+\.md)\)/.exec(cells[2] ?? "");
-    if (!link || !["shipped", "blocked", "deferred"].includes(status ?? "")) continue;
-    rows.push({
-      label: cells[0] ?? "unknown",
-      status: status as ReleaseStatus,
-      recordPath: link[1] ?? "",
-    });
-  }
-  return rows;
 }
 
 function containsKey(value: unknown, keys: ReadonlySet<string>): boolean {
@@ -112,32 +65,36 @@ const REQUIRED_FIELDS = [
 
 export function checkAirQualityReleaseGates(repositoryRoot: string, now = new Date()): string[] {
   const errors: string[] = [];
-  const matrixPath = resolve(
-    repositoryRoot,
-    "docs/docs/administration/air-quality-release-status.md",
-  );
-  if (!existsSync(matrixPath)) return [`release matrix does not exist: ${matrixPath}`];
-  const rows = matrixRows(matrixPath);
-  if (rows.length === 0) return ["release matrix has no machine-readable component rows"];
+  const statusPath = resolve(repositoryRoot, "scripts/air-quality-release-status.json");
+  if (!existsSync(statusPath)) return [`release status data does not exist: ${statusPath}`];
+  let records: Record<string, string>[];
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(statusPath, "utf8"));
+    if (
+      !Array.isArray(parsed) ||
+      parsed.length === 0 ||
+      !parsed.every(
+        (record) =>
+          record !== null &&
+          typeof record === "object" &&
+          !Array.isArray(record) &&
+          Object.values(record).every((value) => typeof value === "string"),
+      )
+    )
+      return ["release status data must contain a non-empty array of string-valued records"];
+    records = parsed;
+  } catch {
+    return [`release status data is not valid JSON: ${statusPath}`];
+  }
   const componentIds = new Set<string>();
 
-  for (const row of rows) {
-    const absoluteRecord = resolve(dirname(matrixPath), row.recordPath);
-    if (!existsSync(absoluteRecord)) {
-      errors.push(`${row.label}: status record does not exist: ${row.recordPath}`);
-      continue;
-    }
-    const record = parseFrontmatter(absoluteRecord);
-    const label = record.air_quality_component || row.label;
+  for (const record of records) {
+    const label = record.air_quality_component || "unknown";
     for (const field of REQUIRED_FIELDS) {
       if (!record[field]?.trim()) errors.push(`${label}: missing ${field}`);
     }
     if (componentIds.has(label)) errors.push(`${label}: duplicate component record`);
     componentIds.add(label);
-    if (record.status !== row.status)
-      errors.push(
-        `${label}: matrix status ${row.status} differs from record status ${record.status}`,
-      );
     if (!["shipped", "blocked", "deferred"].includes(record.status ?? ""))
       errors.push(`${label}: invalid status ${record.status ?? "missing"}`);
 
@@ -148,7 +105,7 @@ export function checkAirQualityReleaseGates(repositoryRoot: string, now = new Da
     else if (ageDays > 120)
       errors.push(`${label}: contract review is stale (${Math.floor(ageDays)} days)`);
 
-    if (row.status === "shipped") {
+    if (record.status === "shipped") {
       const codePaths = list(record.code_path);
       if (codePaths.length === 0) errors.push(`${label}: shipped record has no code path`);
       for (const path of codePaths) {
@@ -188,9 +145,9 @@ export function checkAirQualityReleaseGates(repositoryRoot: string, now = new Da
         errors.push(`${label}: shipped record must declare blocker as none`);
     } else {
       if (record.code_path !== "none")
-        errors.push(`${label}: ${row.status} optional provider must not claim a code path`);
+        errors.push(`${label}: ${record.status} optional provider must not claim a code path`);
       if (!record.blocker || record.blocker === "none")
-        errors.push(`${label}: ${row.status} record must state its blocker`);
+        errors.push(`${label}: ${record.status} record must state its blocker`);
     }
   }
 

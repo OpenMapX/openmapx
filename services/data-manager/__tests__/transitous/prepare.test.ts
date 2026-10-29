@@ -68,6 +68,7 @@ describe("prepare stage", () => {
 
     expect(result.stage).toBe("prepare");
     expect(result.status).toBe("ok");
+    expect(ctx.state.transitousLock).toEqual(PINNED_LOCK);
     expect(existsSync(dataDir)).toBe(true);
     expect(existsSync(catalogDir)).toBe(true);
     expect(calls.some((c) => c.includes("clone"))).toBe(true);
@@ -208,6 +209,8 @@ describe("prepare stage", () => {
     expect(result.status).toBe("ok");
     expect(calls.some((c) => c.includes(`checkout --force ${PROPOSED}`))).toBe(true);
     expect(calls.some((c) => c.includes(ACTIVE))).toBe(false);
+    // The capability snapshot later records the lock this run enforced.
+    expect(ctx.state.transitousLock?.ref).toBe(`main@${PROPOSED}`);
   });
 
   it("resets to the ACTIVE lock by default (no proposal enforcement)", async () => {

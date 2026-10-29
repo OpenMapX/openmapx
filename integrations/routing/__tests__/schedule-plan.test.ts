@@ -536,3 +536,27 @@ describe("runSchedulePlan", () => {
     expect(result.routes[0].legs).toHaveLength(2);
   });
 });
+
+describe("retained scheduled route contributor snapshots", () => {
+  it("keeps both successful suppliers despite the singular last-provider label", async () => {
+    const receipt = (sourceId: string) => ({
+      sourceId,
+      name: sourceId,
+      attributionText: `${sourceId} notice`,
+    });
+    const first = provider({ id: "a", temporal: NATIVE_DWELL }, async (waypoints) => {
+      if (waypoints[0][0] === BONN[0]) throw new Error("fallback");
+      const result = resultOf(waypoints);
+      result.routes[0].contributors = [receipt("a")];
+      return result;
+    });
+    const second = provider({ id: "b", temporal: NATIVE_DWELL }, async (waypoints) => {
+      const result = resultOf(waypoints);
+      result.routes[0].contributors = [receipt("b")];
+      return result;
+    });
+    const result = await runSchedulePlan(windowedRequest(), [first, second]);
+    expect(result.provider).toBe("b");
+    expect(result.routes[0].contributors).toEqual([receipt("a"), receipt("b")]);
+  });
+});

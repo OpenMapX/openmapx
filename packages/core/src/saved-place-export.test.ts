@@ -1,0 +1,197 @@
+import { describe, expect, it } from "vitest";
+import {
+  type ExportPlace,
+  exportFilename,
+  placesToGeoJson,
+  placesToGpx,
+  placesToKml,
+} from "./saved-place-export";
+
+const TWO_PLACES: ExportPlace[] = [
+  {
+    name: "Brandenburg Gate",
+    lat: 52.5163,
+    lng: 13.3777,
+    address: "Pariser Platz, Berlin",
+    note: "Meet at the columns",
+    placeId: "p-1",
+  },
+  { name: "Eiffel Tower", lat: 48.8584, lng: 2.2945 },
+];
+
+describe("placesToGeoJson", () => {
+  it("test 1: serializes two places into a FeatureCollection with [lng, lat] order", () => {
+    const fc = placesToGeoJson(TWO_PLACES);
+    expect(fc.type).toBe("FeatureCollection");
+    expect(fc.features).toHaveLength(2);
+
+    const [first, second] = fc.features;
+    // GeoJSON coordinates MUST be [lng, lat] — guard against a silent swap.
+    expect(first.geometry).toEqual({ type: "Point", coordinates: [13.3777, 52.5163] });
+    expect(first.properties).toEqual({
+      name: "Brandenburg Gate",
+      address: "Pariser Platz, Berlin",
+      note: "Meet at the columns",
+      placeId: "p-1",
+    });
+    expect(second.geometry).toEqual({ type: "Point", coordinates: [2.2945, 48.8584] });
+    // Optional fields absent → not emitted.
+    expect(second.properties).toEqual({ name: "Eiffel Tower" });
+  });
+
+  it("test 2: empty input yields a valid empty FeatureCollection", () => {
+    expect(placesToGeoJson([])).toEqual({ type: "FeatureCollection", features: [] });
+  });
+});
+
+describe("placesToGpx", () => {
+  it("test 3: round-trips two places to the exact expected GPX with lat/lon attributes", () => {
+    const gpx = placesToGpx(TWO_PLACES);
+    const expected = [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<gpx version="1.1" creator="OpenMapX" xmlns="http://www.topografix.com/GPX/1/1" xmlns:omx="https://openmapx.org/ns/saved-place/1">',
+      '  <wpt lat="52.5163" lon="13.3777">',
+      "    <name>Brandenburg Gate</name>",
+      "    <desc>Meet at the columns\nPariser Platz, Berlin</desc>",
+      "    <extensions>",
+      "      <omx:address>Pariser Platz, Berlin</omx:address>",
+      "    </extensions>",
+      "  </wpt>",
+      '  <wpt lat="48.8584" lon="2.2945">',
+      "    <name>Eiffel Tower</name>",
+      "  </wpt>",
+      "</gpx>",
+      "",
+    ].join("\n");
+    expect(gpx).toBe(expected);
+  });
+
+  it("test 4: empty input yields a valid <gpx> with no waypoints", () => {
+    const gpx = placesToGpx([]);
+    expect(gpx).toContain("<gpx");
+    expect(gpx).toContain("</gpx>");
+    expect(gpx).not.toContain("<wpt");
+  });
+});
+
+describe("placesToKml", () => {
+  it("test 5: round-trips two places to the exact expected KML with lng,lat coordinates", () => {
+    const kml = placesToKml(TWO_PLACES);
+    const expected = [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<kml xmlns="http://www.opengis.net/kml/2.2">',
+      "  <Document>",
+      "    <Placemark>",
+      "      <name>Brandenburg Gate</name>",
+      "      <address>Pariser Platz, Berlin</address>",
+      "      <description>Meet at the columns\nPariser Platz, Berlin</description>",
+      '      <ExtendedData><Data name="openmapx:savedPlace"><value>1</value></Data>',
+      "      </ExtendedData>",
+      "      <Point>",
+      "        <coordinates>13.3777,52.5163</coordinates>",
+      "      </Point>",
+      "    </Placemark>",
+      "    <Placemark>",
+      "      <name>Eiffel Tower</name>",
+      '      <ExtendedData><Data name="openmapx:savedPlace"><value>1</value></Data>',
+      "      </ExtendedData>",
+      "      <Point>",
+      "        <coordinates>2.2945,48.8584</coordinates>",
+      "      </Point>",
+      "    </Placemark>",
+      "  </Document>",
+      "</kml>",
+      "",
+    ].join("\n");
+    expect(kml).toBe(expected);
+  });
+
+  it("test 6: empty input yields a valid <kml><Document> with no placemarks", () => {
+    const kml = placesToKml([]);
+    expect(kml).toContain("<kml");
+    expect(kml).toContain("<Document>");
+    expect(kml).toContain("</Document>");
+    expect(kml).not.toContain("<Placemark>");
+  });
+});
+
+describe("XML escaping", () => {
+  const tricky: ExportPlace[] = [
+    { name: 'Café & <bar> "x"', lat: 1.5, lng: -2.5, note: "a < b & c > d" },
+  ];
+
+  it("test 7: GPX escapes & < > \" ' in name and desc, never emitting raw specials", () => {
+    const gpx = placesToGpx(tricky);
+    expect(gpx).toContain("<name>Café &amp; &lt;bar&gt; &quot;x&quot;</name>");
+    expect(gpx).toContain("<desc>a &lt; b &amp; c &gt; d</desc>");
+    // No raw special chars leak into element text.
+    expect(gpx).not.toContain("<bar>");
+    expect(gpx).not.toContain("& <");
+  });
+
+  it("test 8: KML escapes the same characters in name and description", () => {
+    const kml = placesToKml(tricky);
+    expect(kml).toContain("<name>Café &amp; &lt;bar&gt; &quot;x&quot;</name>");
+    expect(kml).toContain("<description>a &amp;lt; b &amp;amp; c &amp;gt; d</description>");
+    expect(kml).not.toContain("<bar>");
+  });
+});
+
+describe("exportFilename", () => {
+  it("maps sentinel default lists to fixed slugs", () => {
+    expect(exportFilename("$favorites", "gpx")).toBe("favorites.gpx");
+    expect(exportFilename("$wantToGo", "geojson")).toBe("want-to-go.geojson");
+    expect(exportFilename("$starredPlaces", "kml")).toBe("starred-places.kml");
+  });
+  it("slugifies a user list name", () => {
+    expect(exportFilename("My Trip 2026!", "gpx")).toBe("my-trip-2026.gpx");
+  });
+  it("falls back to 'list' when the name slugifies to empty", () => {
+    expect(exportFilename("!!!", "kml")).toBe("list.kml");
+  });
+});
+
+it("exports complete acquired notices and durable links with structured field receipts", () => {
+  const receipt = {
+    sourceId: "provider",
+    name: "Original publisher",
+    url: "https://source.example/data",
+    attributionText: '<a href="https://rights.example/license">Original notice</a>',
+    notes: "Special restriction",
+  };
+  const place = {
+    name: "Original place",
+    lat: 50,
+    lng: 8,
+    fieldContributors: { name: [receipt], address: [], lat: [receipt], lng: [receipt] },
+  };
+  const feature = placesToGeoJson([place]).features[0];
+  expect(feature.properties?.fieldContributors).toEqual(place.fieldContributors);
+  expect(JSON.stringify(feature.properties?.attribution)).toContain("Original notice");
+  for (const output of [placesToGpx([place]), placesToKml([place])]) {
+    expect(output).toContain("Original notice");
+    expect(output).toContain("https://rights.example/license");
+    expect(output).toContain("Special restriction");
+    expect(output).toContain("fieldContributors");
+  }
+});
+
+it("keeps required notices inert in KML's HTML description after XML decoding", () => {
+  const place = {
+    name: "Place",
+    lat: 50,
+    lng: 8,
+    fieldContributors: {
+      name: [
+        {
+          sourceId: "source",
+          name: "Publisher",
+          attributionText: "Literal &lt;img src=x onerror=alert(1)&gt; notice",
+        },
+      ],
+    },
+  };
+  const kml = placesToKml([place]);
+  expect(kml).toContain("Literal &amp;lt;img src=x onerror=alert(1)&amp;gt; notice");
+  expect(kml).not.toContain("<img");
+});

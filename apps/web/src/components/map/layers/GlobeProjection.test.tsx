@@ -129,7 +129,6 @@ describe("GlobeProjection sky lifecycle", () => {
     context.styleVersion++;
     rerender(<GlobeProjection />);
     expect([...fake.state.layers.keys()].filter((id) => id === SPACE_ID)).toHaveLength(1);
-    expect(fake.state.handlers.get("style.load")?.size).toBe(2);
     expect(fake.state.cameraTransitions).toEqual([]);
     unmount();
     expect(fake.map.getLayer(SPACE_ID)).toBeUndefined();

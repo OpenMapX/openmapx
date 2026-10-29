@@ -1,10 +1,4 @@
-import {
-  API_ENDPOINTS,
-  apiClient,
-  createPlace,
-  type SavedList,
-  type SavedPlace,
-} from "@openmapx/core";
+import { API_ENDPOINTS, createPlace, type SavedList, type SavedPlace } from "@openmapx/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -39,19 +33,31 @@ const row = {
 const clients: QueryClient[] = [];
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   clients.splice(0).forEach((c) => {
     c.clear();
   });
 });
-function setup(initial = false) {
+function setup(initial = false, savedPlace = place) {
   const rows: SavedPlace[] = initial ? [row] : [];
-  const lists = [{ id: "l1", name: "Trip", icon: null, isPrivate: true }] as SavedList[];
+  const lists: SavedList[] = [
+    {
+      id: "l1",
+      name: "Trip",
+      icon: null,
+      isPrivate: true,
+      sortOrder: 0,
+      placeCount: 0,
+      createdAt: "2026-10-03T00:00:00Z",
+      updatedAt: "2026-10-03T00:00:00Z",
+    },
+  ];
   let finishCreate: () => void = () => {};
   let rejectCreate: (error: Error) => void = () => {};
   let rejectPost: (error: Error) => void = () => {};
   let finishPost: () => void = () => {};
   let finishDelete: () => void = () => {};
-  const post = vi.spyOn(apiClient, "post").mockImplementation((url, data) => {
+  const post = vi.fn((url: unknown, data: unknown): Promise<unknown> => {
     if (url === API_ENDPOINTS.savedLists)
       return new Promise((resolve, reject) => {
         rejectCreate = reject;
@@ -61,7 +67,11 @@ function setup(initial = false) {
             name: (data as { name: string }).name,
             icon: null,
             isPrivate: true,
-          } as SavedList;
+            sortOrder: 0,
+            placeCount: 0,
+            createdAt: "2026-10-03T00:00:00Z",
+            updatedAt: "2026-10-03T00:00:00Z",
+          } satisfies SavedList;
           lists.push(list);
           resolve(list);
         };
@@ -80,7 +90,7 @@ function setup(initial = false) {
       };
     });
   });
-  const remove = vi.spyOn(apiClient, "delete").mockImplementation(async () => {
+  const remove = vi.fn().mockImplementation(async () => {
     rows.splice(0);
     return {};
   });
@@ -100,14 +110,38 @@ function setup(initial = false) {
       };
     return { places: [...rows] };
   };
-  const get = vi.spyOn(apiClient, "get").mockImplementation(read);
+  const get = vi.fn(read);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation(async (input: unknown, options: unknown) => {
+      const init = options as RequestInit;
+      const url = new URL(String(input));
+      if (init.method === "POST") {
+        const value = (await post(url.pathname, JSON.parse(String(init.body)))) as Record<
+          string,
+          unknown
+        >;
+        if (url.pathname === API_ENDPOINTS.savedLists) {
+          const { id, name, icon, isPrivate } = value;
+          return Response.json({ id, name, icon, isPrivate });
+        }
+        const { sortOrder: _sortOrder, createdAt: _createdAt, ...receipt } = value;
+        return Response.json(receipt);
+      }
+      if (init.method === "DELETE") {
+        await remove();
+        return Response.json({ ok: true });
+      }
+      return Response.json(await get(url.pathname, Object.fromEntries(url.searchParams)));
+    }),
+  );
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   clients.push(client);
   const view = render(
     <QueryClientProvider client={client}>
-      <SavePlaceDialog open onClose={() => {}} place={place} />
+      <SavePlaceDialog open onClose={() => {}} place={savedPlace} />
     </QueryClientProvider>,
   );
   return {
@@ -377,4 +411,28 @@ describe("saved-place failure and creation reconciliation", () => {
     await reopen(fixture);
     await waitFor(() => expect(screen.getByRole("checkbox")).toBeChecked());
   });
+});
+
+it("captures immutable name/address/coordinate field winners at the save action", async () => {
+  const name = { sourceId: "names", name: "Original name supplier" };
+  const geometry = { sourceId: "geometry", name: "Original coordinate supplier" };
+  const sourced = {
+    ...place,
+    fieldContributors: { name: [name], address: [], coordinates: [geometry], phone: [name] },
+  };
+  const fixture = setup(false, sourced);
+  await waitFor(() => expect(screen.getByText("Trip")).toBeInTheDocument());
+  await userEvent.click(screen.getByText("Trip"));
+  await waitFor(() => expect(fixture.post).toHaveBeenCalled());
+  expect(fixture.post.mock.calls[0][1]).toEqual(
+    expect.objectContaining({
+      fieldContributors: { name: [name], address: [], lat: [geometry], lng: [geometry] },
+    }),
+  );
+  name.name = "Changed catalogue";
+  expect(
+    (fixture.post.mock.calls[0][1] as { fieldContributors: { name: { name: string }[] } })
+      .fieldContributors.name[0].name,
+  ).toBe("Original name supplier");
+  await act(async () => fixture.finishPost());
 });

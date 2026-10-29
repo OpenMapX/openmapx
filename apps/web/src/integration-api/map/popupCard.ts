@@ -1,4 +1,9 @@
 import { escapeHtml } from "@openmapx/core";
+import {
+  DISPLAY_LICENSE_SCOPES,
+  formatLicensing,
+  parseLicensing,
+} from "@openmapx/mobility-core/licensing";
 
 /**
  * A single row in an overlay popup card. `format: "label"` humanizes enum-ish
@@ -52,6 +57,7 @@ const SEVERITY_STYLE: Record<string, { bg: string; fg: string }> = {
   major: { bg: "#cc0033", fg: "#ffffff" },
   moderate: { bg: "#ff9933", fg: "#3a2a00" },
   minor: { bg: "#ffde33", fg: "#3a2a00" },
+  none: { bg: "#1a7a63", fg: "#ffffff" },
   unknown: { bg: "#8a8a8a", fg: "#ffffff" },
 };
 
@@ -92,7 +98,8 @@ function attributionText(raw: unknown): string {
   if (raw != null && typeof raw === "object") {
     const o = raw as Record<string, unknown>;
     const provider = typeof o.provider === "string" ? o.provider : "";
-    const license = typeof o.license === "string" ? o.license : "";
+    const licensing = parseLicensing(o.licensing);
+    const license = licensing ? formatLicensing(licensing, { scopes: DISPLAY_LICENSE_SCOPES }) : "";
     return provider && license ? `${provider} · ${license}` : provider || license;
   }
   return "";

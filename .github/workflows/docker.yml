@@ -15,7 +15,7 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ghcr.io/openmapx
-  # Distinguish security refreshes and retries of the same source commit.
+  # Each producer attempt has its own immutable identity; successful input artifacts remain reusable.
   RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
 
 permissions:
@@ -73,9 +73,13 @@ jobs:
         with:
           ref: ${{ needs.gate.outputs.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
+          cache: pnpm
+      # The planner parses pnpm-lock.yaml with the workspace's `yaml` package.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Log in to read the previous complete release
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -90,11 +94,12 @@ jobs:
           FORCE_REBUILD: ${{ vars.OPENMAPX_FORCE_IMAGE_REBUILD == 'true' }}
         run: node scripts/docker-release-plan.mjs plan release-plan
       - name: Preserve the complete build selection
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: docker-release-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          name: docker-release-plan-${{ github.run_id }}
           path: release-plan/release-plan.json
           if-no-files-found: error
+          overwrite: true
           retention-days: 1
 
   build:
@@ -139,14 +144,14 @@ jobs:
           ref: ${{ needs.gate.outputs.sha }}
           persist-credentials: false
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           package-manager-cache: false
       - name: Download the complete build selection
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: docker-release-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          name: docker-release-plan-${{ github.run_id }}
           # Keep CI artifacts outside Docker build contexts.
           path: ${{ runner.temp }}/release-plan
       - name: Select build or reuse for this image
@@ -187,13 +192,18 @@ jobs:
           platforms: linux/amd64
           pull: true
           no-cache: ${{ steps.selection.outputs.refresh == 'true' }}
-          build-args: ${{ matrix.app == 'web' && format('SW_BUILD_ID={0}', needs.gate.outputs.sha) || '' }}
+          # A bundled image must contain the bundle the release plan fingerprinted.
+          build-args: ${{ matrix.app == 'web' && format('SW_BUILD_ID={0}', needs.gate.outputs.sha) || steps.selection.outputs.bundle_digest && format('EXPECTED_BUNDLE_DIGEST={0}', steps.selection.outputs.bundle_digest) || '' }}
           outputs: type=image,name=${{ env.IMAGE_PREFIX }}/${{ matrix.app }},push-by-digest=true,name-canonical=true,push=true
           labels: |
             org.opencontainers.image.revision=${{ needs.gate.outputs.sha }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          cache-from: type=gha,scope=${{ matrix.app }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+          # Releases keep their layer cache in the registry. The shared Actions
+          # cache is capped at 10 GB and evicted these blobs between releases,
+          # so every rebuild produced new layers that hosts downloaded again.
+          # A cache failure only costs a cold build, never the release.
+          cache-from: type=registry,ref=${{ env.IMAGE_PREFIX }}/${{ matrix.app }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE_PREFIX }}/${{ matrix.app }}:buildcache,mode=${{ matrix.app == 'api' && 'min' || 'max' }},image-manifest=true,oci-mediatypes=true,ignore-error=true
           provenance: mode=max
           sbom: true
 
@@ -220,6 +230,7 @@ jobs:
       - name: Audit exact candidate digest with Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.75.0
           image-ref: ${{ env.IMAGE_PREFIX }}/${{ matrix.app }}@${{ steps.candidate.outputs.digest }}
           format: sarif
           output: trivy-${{ matrix.app }}.sarif
@@ -237,6 +248,7 @@ jobs:
       - name: Gate exact candidate digest with Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.75.0
           image-ref: ${{ env.IMAGE_PREFIX }}/${{ matrix.app }}@${{ steps.candidate.outputs.digest }}
           format: table
           scanners: vuln
@@ -251,7 +263,7 @@ jobs:
       # actionable-finding gate is fail-closed.
       - name: Upload Trivy results
         if: always() && (github.event.repository.visibility == 'public' || vars.ENABLE_CODE_SCANNING == 'true')
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: trivy-${{ matrix.app }}.sarif
           category: trivy-${{ matrix.app }}
@@ -268,11 +280,12 @@ jobs:
           touch "digest/${DIGEST#sha256:}"
 
       - name: Preserve approved digest for aggregate promotion
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: docker-digest-${{ matrix.app }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: docker-digest-${{ matrix.app }}-${{ github.run_id }}
           path: digest/*
           if-no-files-found: error
+          overwrite: true
           retention-days: 1
 
   validate-privacy-release:
@@ -291,7 +304,7 @@ jobs:
 
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -305,11 +318,12 @@ jobs:
         run: pnpm validate:privacy-release "$RUNNER_TEMP/privacy-release-validation.json"
 
       - name: Preserve exact-checkout privacy validation evidence
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: privacy-release-validation-${{ needs.gate.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: privacy-release-validation-${{ needs.gate.outputs.sha }}-${{ github.run_id }}
           path: ${{ runner.temp }}/privacy-release-validation.json
           if-no-files-found: error
+          overwrite: true
           retention-days: 1
 
   promote:
@@ -323,20 +337,20 @@ jobs:
       packages: write
     steps:
       - name: Download the complete build selection
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: docker-release-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          name: docker-release-plan-${{ github.run_id }}
           path: release-plan
       - name: Download every approved digest
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: docker-digest-*-${{ github.run_id }}-${{ github.run_attempt }}
+          pattern: docker-digest-*-${{ github.run_id }}
           path: digests
 
       - name: Download exact-checkout privacy validation evidence
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: privacy-release-validation-${{ needs.gate.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: privacy-release-validation-${{ needs.gate.outputs.sha }}-${{ github.run_id }}
           path: privacy-release-validation
 
       - name: Set up Docker Buildx
@@ -396,7 +410,7 @@ jobs:
           image_lines=""
           for app in api web data-manager ops-agent privacy-backup transitous-runner transitous-tools; do
             shopt -s nullglob
-            digest_files=("digests/docker-digest-${app}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"/*)
+            digest_files=("digests/docker-digest-${app}-${GITHUB_RUN_ID}"/*)
             if [ "${#digest_files[@]}" -ne 1 ] || [ ! -f "${digest_files[0]}" ]; then
               echo "Expected exactly one approved digest artifact for ${app}" >&2
               exit 1
@@ -414,7 +428,8 @@ jobs:
               --tag "${IMAGE}:${RELEASE_SHA}" \
               --tag "${IMAGE}:${RELEASE_ID}" \
               "${IMAGE}@${DIGEST}"
-            docker buildx imagetools inspect "${IMAGE}:${RELEASE_SHA}"
+            published_digest=$(docker buildx imagetools inspect "${IMAGE}:${RELEASE_SHA}" --format '{{.Manifest.Digest}}')
+            if [ "$published_digest" != "$DIGEST" ]; then echo "Published digest mismatch for ${IMAGE}:${RELEASE_SHA}" >&2; exit 1; fi
 
             if [ "$first" = true ]; then
               first=false
@@ -441,7 +456,10 @@ jobs:
           const path = "release-manifest/release-manifest.json";
           const manifest = JSON.parse(readFileSync(path, "utf8"));
           const plan = JSON.parse(readFileSync("release-plan/release-plan.json", "utf8"));
-          if (plan.version !== 1 || plan.release !== manifest.release || plan.sourceRevision !== process.env.RELEASE_SHA ||
+          const planned = /^([a-f0-9]{40}-[1-9][0-9]*)-([1-9][0-9]*)$/.exec(plan.release ?? "");
+          const current = /^([a-f0-9]{40}-[1-9][0-9]*)-([1-9][0-9]*)$/.exec(manifest.release);
+          const samePlan = planned && current && planned[1] === current[1] && BigInt(planned[2]) <= BigInt(current[2]);
+          if (plan.version !== 1 || !samePlan || plan.sourceRevision !== process.env.RELEASE_SHA ||
               plan.privacyFingerprint !== manifest.privacyReleaseValidation.sourceBuildFingerprint ||
               plan.buildMetadata?.version !== 1) {
             throw new Error("Release plan does not match the validated release");
@@ -454,6 +472,12 @@ jobs:
               throw new Error(`Approved digest does not match the release plan for ${app}`);
             }
           }
+          const runId = Number(process.env.GITHUB_RUN_ID);
+          const runAttempt = Number(process.env.GITHUB_RUN_ATTEMPT);
+          if (!Number.isSafeInteger(runId) || runId < 1 || !Number.isSafeInteger(runAttempt) || runAttempt < 1 ||
+              !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(process.env.GITHUB_REPOSITORY ?? "") ||
+              !["push", "schedule"].includes(process.env.GITHUB_EVENT_NAME)) throw new Error("Invalid trusted producer identity");
+          manifest.producer = {repository: process.env.GITHUB_REPOSITORY, workflowPath: ".github/workflows/ci.yml", sourceRevision: process.env.RELEASE_SHA, runId, runAttempt, event: process.env.GITHUB_EVENT_NAME};
           manifest.buildMetadata = plan.buildMetadata;
           writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
           NODE
@@ -479,13 +503,13 @@ jobs:
       # Maintain the manifest-tag fallback only from a complete, scanned set.
       # These aliases move independently; production uses the release pointer.
       # Retag directly so existing consumers never hit a delete/recreate gap.
-      - name: Advance and verify application latest aliases
+      - name: Advance and verify application main aliases
         env:
           IMAGE_PREFIX: ${{ env.IMAGE_PREFIX }}
         run: |
           for app in api web data-manager ops-agent privacy-backup transitous-runner transitous-tools; do
             shopt -s nullglob
-            digest_files=("digests/docker-digest-${app}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"/*)
+            digest_files=("digests/docker-digest-${app}-${GITHUB_RUN_ID}"/*)
             if [ "${#digest_files[@]}" -ne 1 ] || [ ! -f "${digest_files[0]}" ]; then
               echo "Expected exactly one approved digest artifact for ${app}" >&2
               exit 1
@@ -500,11 +524,11 @@ jobs:
             IMAGE="${IMAGE_PREFIX}/${app}"
             docker buildx imagetools create \
               --prefer-index=false \
-              --tag "${IMAGE}:latest" \
+              --tag "${IMAGE}:main" \
               "${IMAGE}@${DIGEST}"
-            published_digest=$(docker buildx imagetools inspect "${IMAGE}:latest" --format '{{.Manifest.Digest}}')
+            published_digest=$(docker buildx imagetools inspect "${IMAGE}:main" --format '{{.Manifest.Digest}}')
             if [ "$published_digest" != "$DIGEST" ]; then
-              echo "Published digest mismatch for ${IMAGE}:latest: expected ${DIGEST}, got ${published_digest}" >&2
+              echo "Published digest mismatch for ${IMAGE}:main: expected ${DIGEST}, got ${published_digest}" >&2
               exit 1
             fi
           done
@@ -517,7 +541,11 @@ jobs:
           RELEASE_MANIFEST_IMAGE: ${{ env.IMAGE_PREFIX }}/release-manifest
           RELEASE_SHA: ${{ needs.gate.outputs.sha }}
         run: |
+          manifest_digest=$(docker buildx imagetools inspect "${RELEASE_MANIFEST_IMAGE}:${RELEASE_ID}" --format '{{.Manifest.Digest}}')
+          if [[ ! "$manifest_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then echo "Invalid immutable manifest digest" >&2; exit 1; fi
           docker buildx imagetools create \
-            --tag "${RELEASE_MANIFEST_IMAGE}:latest" \
-            "${RELEASE_MANIFEST_IMAGE}:${RELEASE_ID}"
-          docker buildx imagetools inspect "${RELEASE_MANIFEST_IMAGE}:latest"
+            --prefer-index=false \
+            --tag "${RELEASE_MANIFEST_IMAGE}:main" \
+            "${RELEASE_MANIFEST_IMAGE}@${manifest_digest}"
+          published_digest=$(docker buildx imagetools inspect "${RELEASE_MANIFEST_IMAGE}:main" --format '{{.Manifest.Digest}}')
+          if [ "$published_digest" != "$manifest_digest" ]; then echo "Published main manifest digest mismatch" >&2; exit 1; fi

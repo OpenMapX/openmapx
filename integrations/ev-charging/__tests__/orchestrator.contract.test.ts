@@ -229,8 +229,20 @@ describe("ev-charging orchestrator", () => {
           sourceId: "src-c",
           name: "MobiData BW",
           url: "https://mobidata-bw.de",
-          spdxLicense: "DL-DE-BY-2.0",
-          licenseUrl: "https://www.govdata.de/dl-de/by-2-0",
+          licensing: {
+            version: 1,
+            bindings: [
+              {
+                scope: "data",
+                subject: "Data",
+                license: {
+                  kind: "spdx",
+                  expression: "DL-DE-BY-2.0",
+                  url: "https://www.govdata.de/dl-de/by-2-0",
+                },
+              },
+            ],
+          } as const,
         },
       ],
     });
@@ -246,10 +258,23 @@ describe("ev-charging orchestrator", () => {
     expect(result.attributions.map((a) => a.sourceId)).toEqual(["src-a", "src-c"]);
     expect(result.data[2].attributions).toEqual([
       {
-        text: "MobiData BW",
+        sourceId: "src-c",
+        name: "MobiData BW",
         url: "https://mobidata-bw.de",
-        license: "DL-DE-BY-2.0",
-        licenseUrl: "https://www.govdata.de/dl-de/by-2-0",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Data",
+              license: {
+                kind: "spdx",
+                expression: "DL-DE-BY-2.0",
+                url: "https://www.govdata.de/dl-de/by-2-0",
+              },
+            },
+          ],
+        } as const,
       },
     ]);
   });

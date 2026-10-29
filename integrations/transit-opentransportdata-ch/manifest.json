@@ -213,8 +213,6 @@
       "sourceId": "opentransportdata-ch-ojp",
       "name": "Open data platform mobility Switzerland – Open Journey Planner",
       "url": "https://opentransportdata.swiss/en/cookbook/open-journey-planner-ojp/",
-      "license": "Open data platform mobility Switzerland terms of use",
-      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
       "attribution": "Source: opentransportdata.swiss",
       "commercialUse": "conditional",
       "providerCountry": "CH",
@@ -222,14 +220,45 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Open data platform mobility Switzerland – Open Journey Planner supplied material",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:opentransportdata-ch-ojp",
+              "id": "LicenseRef-opentransportdata-swiss-ToU",
+              "name": "opentransportdata.swiss General Terms and Conditions of Use",
+              "url": "https://opentransportdata.swiss/en/terms-of-use/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://opentransportdata.swiss/de/terms-of-use/",
+                "https://opentransportdata.swiss/en/authorised-databases/"
+              ],
+              "reason": "source-per-publication; indirect-list-exception-requires-SBB-approval"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "LicenseRef-opentransportdata-swiss-ToU",
+            "url": "https://opentransportdata.swiss/en/terms-of-use/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "opentransportdata-ch-ojp-geometry-osm",
       "name": "OpenStreetMap geometry used by Swiss OJP routing outputs",
       "url": "https://www.openstreetmap.org/copyright",
-      "license": "ODbL 1.0",
-      "licenseUrl": "https://opendatacommons.org/licenses/odbl/",
       "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a> (<a href=\"https://opendatacommons.org/licenses/odbl/\">ODbL</a>) — geometry used by Swiss OJP routing",
       "commercialUse": "yes",
       "providerCountry": "GB",
@@ -237,14 +266,32 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "OpenStreetMap geometry used by Swiss OJP routing outputs material",
+            "license": {
+              "kind": "spdx",
+              "expression": "ODbL-1.0",
+              "url": "https://opendatacommons.org/licenses/odbl/"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "ODbL-1.0",
+            "url": "https://opendatacommons.org/licenses/odbl/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "opentransportdata-ch-gtfs-static",
       "name": "Open data platform mobility Switzerland – GTFS static timetable",
       "url": "https://opentransportdata.swiss/en/cookbook/timetable-cookbook/gtfs/",
-      "license": "Open data platform mobility Switzerland terms of use",
-      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
       "attribution": "Source: opentransportdata.swiss",
       "commercialUse": "conditional",
       "providerCountry": "CH",
@@ -252,14 +299,45 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Open data platform mobility Switzerland – GTFS static timetable supplied material",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:opentransportdata-ch-gtfs-static",
+              "id": "LicenseRef-opentransportdata-swiss-ToU",
+              "name": "opentransportdata.swiss General Terms and Conditions of Use",
+              "url": "https://opentransportdata.swiss/en/terms-of-use/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://opentransportdata.swiss/de/terms-of-use/",
+                "https://opentransportdata.swiss/en/authorised-databases/"
+              ],
+              "reason": "source-per-publication; indirect-list-exception-requires-SBB-approval"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "LicenseRef-opentransportdata-swiss-ToU",
+            "url": "https://opentransportdata.swiss/en/terms-of-use/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "opentransportdata-ch-gtfs-sa",
       "name": "Open data platform mobility Switzerland – GTFS Realtime Service Alerts",
       "url": "https://opentransportdata.swiss/en/cookbook/event-cookbook/gtfs-sa/",
-      "license": "Open data platform mobility Switzerland terms of use",
-      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
       "attribution": "Source: opentransportdata.swiss",
       "commercialUse": "conditional",
       "providerCountry": "CH",
@@ -267,14 +345,45 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Open data platform mobility Switzerland – GTFS Realtime Service Alerts supplied material",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:opentransportdata-ch-gtfs-sa",
+              "id": "LicenseRef-opentransportdata-swiss-ToU",
+              "name": "opentransportdata.swiss General Terms and Conditions of Use",
+              "url": "https://opentransportdata.swiss/en/terms-of-use/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://opentransportdata.swiss/de/terms-of-use/",
+                "https://opentransportdata.swiss/en/authorised-databases/"
+              ],
+              "reason": "source-per-publication; indirect-list-exception-requires-SBB-approval"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "LicenseRef-opentransportdata-swiss-ToU",
+            "url": "https://opentransportdata.swiss/en/terms-of-use/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "opentransportdata-ch-gtfs-rt",
       "name": "Open data platform mobility Switzerland – GTFS Realtime Trip Updates",
       "url": "https://opentransportdata.swiss/en/cookbook/realtime-prediction-cookbook/gtfs-rt/",
-      "license": "Open data platform mobility Switzerland terms of use",
-      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
       "attribution": "Source: opentransportdata.swiss",
       "commercialUse": "conditional",
       "providerCountry": "CH",
@@ -282,14 +391,45 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Open data platform mobility Switzerland – GTFS Realtime Trip Updates supplied material",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:opentransportdata-ch-gtfs-rt",
+              "id": "LicenseRef-opentransportdata-swiss-ToU",
+              "name": "opentransportdata.swiss General Terms and Conditions of Use",
+              "url": "https://opentransportdata.swiss/en/terms-of-use/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://opentransportdata.swiss/de/terms-of-use/",
+                "https://opentransportdata.swiss/en/authorised-databases/"
+              ],
+              "reason": "source-per-publication; indirect-list-exception-requires-SBB-approval"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "LicenseRef-opentransportdata-swiss-ToU",
+            "url": "https://opentransportdata.swiss/en/terms-of-use/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "opentransportdata-ch-siri-sx",
       "name": "Open data platform mobility Switzerland – SIRI Situation Exchange",
       "url": "https://opentransportdata.swiss/en/cookbook/event-cookbook/siri-sx/",
-      "license": "Open data platform mobility Switzerland terms of use",
-      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
       "attribution": "Source: opentransportdata.swiss",
       "commercialUse": "conditional",
       "providerCountry": "CH",
@@ -297,14 +437,45 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Open data platform mobility Switzerland – SIRI Situation Exchange supplied material",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:opentransportdata-ch-siri-sx",
+              "id": "LicenseRef-opentransportdata-swiss-ToU",
+              "name": "opentransportdata.swiss General Terms and Conditions of Use",
+              "url": "https://opentransportdata.swiss/en/terms-of-use/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://opentransportdata.swiss/de/terms-of-use/",
+                "https://opentransportdata.swiss/en/authorised-databases/"
+              ],
+              "reason": "source-per-publication; indirect-list-exception-requires-SBB-approval"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "LicenseRef-opentransportdata-swiss-ToU",
+            "url": "https://opentransportdata.swiss/en/terms-of-use/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "opentransportdata-ch-ojp-fare",
       "name": "Open data platform mobility Switzerland – OJP Fare",
       "url": "https://opentransportdata.swiss/en/cookbook/open-journey-planner-ojp-landing-page/ojp-fare/",
-      "license": "Open data platform mobility Switzerland terms of use",
-      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
       "attribution": "Source: opentransportdata.swiss",
       "commercialUse": "conditional",
       "providerCountry": "CH",
@@ -312,14 +483,45 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Open data platform mobility Switzerland – OJP Fare supplied material",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:opentransportdata-ch-ojp-fare",
+              "id": "LicenseRef-opentransportdata-swiss-ToU",
+              "name": "opentransportdata.swiss General Terms and Conditions of Use",
+              "url": "https://opentransportdata.swiss/en/terms-of-use/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://opentransportdata.swiss/de/terms-of-use/",
+                "https://opentransportdata.swiss/en/authorised-databases/"
+              ],
+              "reason": "source-per-publication; indirect-list-exception-requires-SBB-approval"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "LicenseRef-opentransportdata-swiss-ToU",
+            "url": "https://opentransportdata.swiss/en/terms-of-use/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "opentransportdata-ch-formation",
       "name": "Open data platform mobility Switzerland – Train formation service",
       "url": "https://opentransportdata.swiss/en/cookbook/formationsdaten/",
-      "license": "Open data platform mobility Switzerland terms of use",
-      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
       "attribution": "Source: opentransportdata.swiss",
       "commercialUse": "conditional",
       "providerCountry": "CH",
@@ -327,14 +529,45 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Open data platform mobility Switzerland – Train formation service supplied material",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:opentransportdata-ch-formation",
+              "id": "LicenseRef-opentransportdata-swiss-ToU",
+              "name": "opentransportdata.swiss General Terms and Conditions of Use",
+              "url": "https://opentransportdata.swiss/en/terms-of-use/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://opentransportdata.swiss/de/terms-of-use/",
+                "https://opentransportdata.swiss/en/authorised-databases/"
+              ],
+              "reason": "source-per-publication; indirect-list-exception-requires-SBB-approval"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "LicenseRef-opentransportdata-swiss-ToU",
+            "url": "https://opentransportdata.swiss/en/terms-of-use/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "opentransportdata-ch-occupancy-forecast",
       "name": "Open data platform mobility Switzerland – Occupancy forecast JSON dataset",
       "url": "https://data.opentransportdata.swiss/en/dataset/occupancy-forecast-json-dataset",
-      "license": "Open data platform mobility Switzerland terms of use",
-      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
       "attribution": "Source: opentransportdata.swiss",
       "commercialUse": "conditional",
       "providerCountry": "CH",
@@ -342,14 +575,45 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Open data platform mobility Switzerland – Occupancy forecast JSON dataset supplied material",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:opentransportdata-ch-occupancy-forecast",
+              "id": "LicenseRef-opentransportdata-swiss-ToU",
+              "name": "opentransportdata.swiss General Terms and Conditions of Use",
+              "url": "https://opentransportdata.swiss/en/terms-of-use/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://opentransportdata.swiss/de/terms-of-use/",
+                "https://opentransportdata.swiss/en/authorised-databases/"
+              ],
+              "reason": "source-per-publication; indirect-list-exception-requires-SBB-approval"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "LicenseRef-opentransportdata-swiss-ToU",
+            "url": "https://opentransportdata.swiss/en/terms-of-use/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "opentransportdata-ch-go-realtime",
       "name": "Open data platform mobility Switzerland – Business organisations with realtime data",
       "url": "https://data.opentransportdata.swiss/en/dataset/go-realtime",
-      "license": "Open data platform mobility Switzerland terms of use",
-      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
       "attribution": "Source: opentransportdata.swiss",
       "commercialUse": "conditional",
       "providerCountry": "CH",
@@ -357,14 +621,45 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Open data platform mobility Switzerland – Business organisations with realtime data supplied material",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:opentransportdata-ch-go-realtime",
+              "id": "LicenseRef-opentransportdata-swiss-ToU",
+              "name": "opentransportdata.swiss General Terms and Conditions of Use",
+              "url": "https://opentransportdata.swiss/en/terms-of-use/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://opentransportdata.swiss/de/terms-of-use/",
+                "https://opentransportdata.swiss/en/authorised-databases/"
+              ],
+              "reason": "source-per-publication; indirect-list-exception-requires-SBB-approval"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "LicenseRef-opentransportdata-swiss-ToU",
+            "url": "https://opentransportdata.swiss/en/terms-of-use/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "opentransportdata-ch-go-siri-sx",
       "name": "Open data platform mobility Switzerland – Business organisations with SIRI-SX data",
       "url": "https://data.opentransportdata.swiss/",
-      "license": "Open data platform mobility Switzerland terms of use",
-      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
       "attribution": "Source: opentransportdata.swiss",
       "commercialUse": "conditional",
       "providerCountry": "CH",
@@ -372,14 +667,45 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Open data platform mobility Switzerland – Business organisations with SIRI-SX data supplied material",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:opentransportdata-ch-go-siri-sx",
+              "id": "LicenseRef-opentransportdata-swiss-ToU",
+              "name": "opentransportdata.swiss General Terms and Conditions of Use",
+              "url": "https://opentransportdata.swiss/en/terms-of-use/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://opentransportdata.swiss/de/terms-of-use/",
+                "https://opentransportdata.swiss/en/authorised-databases/"
+              ],
+              "reason": "source-per-publication; indirect-list-exception-requires-SBB-approval"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "LicenseRef-opentransportdata-swiss-ToU",
+            "url": "https://opentransportdata.swiss/en/terms-of-use/"
+          }
+        ]
+      }
     },
     {
       "sourceId": "opentransportdata-ch-master-data",
       "name": "Open data platform mobility Switzerland – Service and traffic points",
       "url": "https://opentransportdata.swiss/en/cookbook/masterdata-cookbook/",
-      "license": "Open data platform mobility Switzerland terms of use",
-      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
       "attribution": "Source: opentransportdata.swiss",
       "commercialUse": "conditional",
       "providerCountry": "CH",
@@ -387,7 +713,40 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Open data platform mobility Switzerland – Service and traffic points supplied material",
+            "license": {
+              "kind": "custom",
+              "namespace": "publisher:opentransportdata-ch-master-data",
+              "id": "LicenseRef-opentransportdata-swiss-ToU",
+              "name": "opentransportdata.swiss General Terms and Conditions of Use",
+              "url": "https://opentransportdata.swiss/en/terms-of-use/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content", "image"],
+              "basis": "recommendation",
+              "reviewedAt": "2026-10-14",
+              "evidenceUrls": [
+                "https://opentransportdata.swiss/de/terms-of-use/",
+                "https://opentransportdata.swiss/en/authorised-databases/"
+              ],
+              "reason": "source-per-publication; indirect-list-exception-requires-SBB-approval"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "LicenseRef-opentransportdata-swiss-ToU",
+            "url": "https://opentransportdata.swiss/en/terms-of-use/"
+          }
+        ]
+      }
     }
   ],
   "dependencies": ["transit"]

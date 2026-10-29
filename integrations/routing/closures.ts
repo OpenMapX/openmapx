@@ -9,11 +9,13 @@ import type {
 import {
   closesRoadForCars,
   effectInForceAt,
+  effectStatusInForce,
   haversineDistance,
   isLocalAccessClosure,
 } from "@openmapx/core";
 import type { IntegrationContext, RoadConditionsProvider } from "@openmapx/integration-framework";
 import { assessRoadConditionForRoute } from "./road-condition-routing.js";
+import { rightsPolicyOf } from "./traffic-application.js";
 
 export interface ClosureExclusions {
   points: LngLat[];
@@ -95,11 +97,25 @@ function isCrowdNonRoutable(event: Pick<RoadConditionEvent, "origin" | "evidence
  * active only inside recurring windows; without this check the router would
  * detour around a closure that hasn't started, has ended, or is only active at
  * night. `at` is the chosen departure/arrival instant, or "now" for an
- * immediate trip. The effect's own validity wins over its situation's; an
- * unparseable travel time never suppresses a closure.
+ * immediate trip. The effect's own validity wins over its situation's.
+ *
+ * Its status is weighed at the wall clock `now`: an active lifecycle with any
+ * operator action in place closes the road inside its window. A planned one,
+ * or an approved action, closes it for a trip inside the window only while
+ * the declared start is still ahead of `now`: its publisher has rightly not
+ * activated it yet. A planned closure whose start has passed, or that
+ * declares none, closes nothing, nor does a suspended, cancelled, ended or
+ * unknown one, or a requested or rejected action. An unparseable travel time
+ * never suppresses a closure in force now.
  */
-function inForceAt(event: RoadConditionEvent, effect: RoadConditionEffect, at: Date): boolean {
-  return Number.isNaN(at.getTime()) || effectInForceAt(event, effect, at);
+function inForceAt(
+  event: RoadConditionEvent,
+  effect: RoadConditionEffect,
+  at: Date,
+  now: Date,
+): boolean {
+  if (Number.isNaN(at.getTime())) return effectStatusInForce(event, effect);
+  return effectInForceAt(event, effect, at, now);
 }
 
 /** The place an effect closes: its own location when it has one, else its situation's. */
@@ -292,6 +308,9 @@ export async function activeClosuresForBbox(
   const settled = await Promise.allSettled(providers.map((p) => p.getEvents(bbox, {})));
 
   const disallowed = (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
+  // Only an authoritative policy may admit unclear or non-commercial rights.
+  const policy = await ctx.getRoadConditionsPolicySnapshot?.().catch(() => undefined);
+  const rightsPolicy = rightsPolicyOf(policy?.authoritative ? policy : undefined);
   const points: LngLat[] = [];
   const polygons: LngLat[][] = [];
   const localAccessLines: LngLat[][] = [];
@@ -330,6 +349,7 @@ export async function activeClosuresForBbox(
           sharedTrafficApplied: false,
           allowLegacyGeometry: true,
           disallowedSources: disallowed,
+          rightsPolicy,
         });
         for (const reason of routeDecision.reasons) assessmentReasons.add(reason);
         if (routeDecision.validUntil) {
@@ -347,6 +367,7 @@ export async function activeClosuresForBbox(
               mode,
               sharedTrafficApplied: true,
               disallowedSources: disallowed,
+              rightsPolicy,
             }).disposition === "shared-traffic"
           ) {
             const geometry = effectGeometry(event, effect);
@@ -361,7 +382,7 @@ export async function activeClosuresForBbox(
         sawLegacyGeometry = true;
         if (isCrowdNonRoutable(event)) continue;
         if (!closesRoadForCars(effect)) continue;
-        if (!inForceAt(event, effect, refTime)) continue;
+        if (!inForceAt(event, effect, refTime, evaluatedAt)) continue;
         const geometry = effectGeometry(event, effect);
         if (!geometry || excluded.has(geometry)) continue;
         excluded.add(geometry);

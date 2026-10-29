@@ -1,5 +1,6 @@
 import { copyFileSync, existsSync, linkSync, readdirSync, statSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
+import { services as coreServices } from "@openmapx/core/server";
 import { execa } from "execa";
 import { withStagedBuildDir } from "./build-staging";
 import { resolveOsmPbf } from "./osm-pbf";
@@ -112,7 +113,12 @@ export async function buildOtpGraph(opts: BuildOtpGraphOptions): Promise<BuildOt
     process.env[OTP_BUILD_JAVA_TOOL_OPTIONS_ENV]?.trim() ||
     DEFAULT_OTP_BUILD_JAVA_TOOL_OPTIONS;
   const runner = opts.runner ?? defaultRunner;
-  const buildConfigPath = join(paths.root, "services", "otp", "config", "build-config.json");
+  // The release's copy (or the operator's override) the applied generation mounts.
+  const buildConfigPath = coreServices.appliedServiceFile(
+    paths.infraDir,
+    "otp",
+    "config/build-config.json",
+  );
 
   const gtfsFeeds = await withStagedBuildDir(graphDir, async (nextDir) => {
     linkOrCopy(sourcePbf, join(nextDir, basename(sourcePbf)));

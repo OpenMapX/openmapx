@@ -1,22 +1,45 @@
-import { USER_AGENT } from "@openmapx/core";
+import { readBoundedJsonResponse, USER_AGENT } from "@openmapx/core";
+import {
+  createBoundedBinaryProxyStream,
+  MAX_RASTER_TILE_BYTES,
+  MAX_VECTOR_TILE_BYTES,
+  VECTOR_TILE_MEDIA_TYPES,
+} from "@openmapx/core/server";
 import { envString } from "@openmapx/core/server-env";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { loadMapSettings } from "../utils/map-settings.js";
+import { bindRequestAbort, withDeadline } from "../utils/request-abort.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
 import { safeErrorClass, summarizeExternalUrl } from "../utils/safe-log-fields.js";
+import { parseWebMercatorTileCoordinates } from "../utils/tile-coordinates.js";
+import {
+  discardUpstreamResponse,
+  normalizeUpstreamResponseStream,
+} from "../utils/upstream-response.js";
 
 const MAPTILER_ORIGIN = "https://api.maptiler.com";
+const MAPTILER_MAX_ZOOM = 22;
+const MAPTILER_TIMEOUT_MS = 15_000;
+const JSON_MEDIA_TYPES = ["application/json"] as const;
 
 const STYLE_RE = /^maps\/[a-z0-9_-]+\/style\.json$/i;
 const SPRITE_RE = /^maps\/[a-z0-9_-]+\/sprite(?:(?:@2x)?\.(?:json|png))?$/i;
 const TILEJSON_RE = /^tiles\/[a-z0-9_-]+\/tiles\.json$/i;
-const TILE_RE = /^tiles\/[a-z0-9_-]+\/\d{1,2}\/\d+\/\d+\.(?:pbf|mvt|png|jpe?g|webp)$/i;
+const TILE_RE =
+  /^tiles\/[a-z0-9_-]+\/(?<z>\d{1,2})\/(?<x>\d+)\/(?<y>\d+)\.(?<format>pbf|mvt|png|jpe?g|webp)$/i;
 const FONT_RE = /^fonts\/[^/]+\/\d+-\d+\.pbf$/i;
 const TILE_TEMPLATE_RE =
   /^tiles\/[a-z0-9_-]+\/(?:\{z\}|\d{1,2})\/(?:\{x\}|\d+)\/(?:\{y\}|\d+)\.(?:pbf|mvt|png|jpe?g|webp)$/i;
 const FONT_TEMPLATE_RE = /^fonts\/(?:\{fontstack\}|[^/]+)\/(?:\{range\}|\d+-\d+)\.pbf$/i;
 
 type JsonRecord = Record<string, unknown>;
+
+interface MaptilerTileMatch {
+  z: string;
+  x: string;
+  y: string;
+  format: string;
+}
 
 function maptilerKey(): string {
   return envString("MAPTILER_KEY", envString("NEXT_PUBLIC_MAPTILER_KEY", "")).trim();
@@ -34,6 +57,68 @@ function isAllowedMaptilerPath(path: string): boolean {
 
 function isRewritableMaptilerPath(path: string): boolean {
   return isAllowedMaptilerPath(path) || TILE_TEMPLATE_RE.test(path) || FONT_TEMPLATE_RE.test(path);
+}
+
+function maptilerTileMatch(path: string): MaptilerTileMatch | null {
+  const groups = TILE_RE.exec(path)?.groups;
+  if (!groups?.z || !groups.x || !groups.y || !groups.format) return null;
+  return { z: groups.z, x: groups.x, y: groups.y, format: groups.format.toLowerCase() };
+}
+
+function binaryResponseOptions(path: string): {
+  maxBytes: number;
+  allowedContentTypes: readonly string[];
+  label: string;
+} {
+  const tile = maptilerTileMatch(path);
+  const extension = tile?.format ?? path.split(".").at(-1)?.toLowerCase();
+  if (extension === "pbf" || extension === "mvt" || FONT_RE.test(path)) {
+    return {
+      maxBytes: MAX_VECTOR_TILE_BYTES,
+      allowedContentTypes: VECTOR_TILE_MEDIA_TYPES,
+      label: "MapTiler vector asset",
+    };
+  }
+  if (extension === "json") {
+    return {
+      maxBytes: MAX_VECTOR_TILE_BYTES,
+      allowedContentTypes: JSON_MEDIA_TYPES,
+      label: "MapTiler sprite JSON",
+    };
+  }
+  if (extension === "jpg" || extension === "jpeg") {
+    return {
+      maxBytes: MAX_RASTER_TILE_BYTES,
+      allowedContentTypes: ["image/jpeg"],
+      label: "MapTiler raster asset",
+    };
+  }
+  if (extension === "webp") {
+    return {
+      maxBytes: MAX_RASTER_TILE_BYTES,
+      allowedContentTypes: ["image/webp"],
+      label: "MapTiler raster asset",
+    };
+  }
+  if (extension === "png") {
+    return {
+      maxBytes: MAX_RASTER_TILE_BYTES,
+      allowedContentTypes: ["image/png"],
+      label: "MapTiler raster asset",
+    };
+  }
+  return {
+    maxBytes: MAX_RASTER_TILE_BYTES,
+    allowedContentTypes: ["application/json", "image/png"],
+    label: "MapTiler sprite asset",
+  };
+}
+
+function requireMaptilerJsonContentType(response: Response, label: string): void {
+  const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+  if (contentType === "application/json") return;
+  discardUpstreamResponse(response);
+  throw new Error(`${label} did not declare application/json`);
 }
 
 /**
@@ -158,14 +243,19 @@ export const maptilerRoute: FastifyPluginAsync = async (fastify) => {
   declareRouteAuth(fastify, "public");
 
   fastify.get("/maptiler/*", async (req, reply) => {
-    const key = maptilerKey() || (await loadMapSettings()).maptilerApiKey;
-    if (!key) {
-      return reply.status(503).send({ message: "MapTiler API key is not configured" });
-    }
-
     const path = getRequestedMaptilerPath(req);
     if (!path || !isAllowedMaptilerPath(path)) {
       return reply.status(400).send({ message: "Unsupported MapTiler asset path" });
+    }
+    const tile = maptilerTileMatch(path);
+    if (tile && !parseWebMercatorTileCoordinates(tile.z, tile.x, tile.y, MAPTILER_MAX_ZOOM)) {
+      return reply.status(400).send({ message: "Invalid tile coordinates" });
+    }
+    reply.header("Cache-Control", "no-store");
+
+    const key = maptilerKey() || (await loadMapSettings()).maptilerApiKey;
+    if (!key) {
+      return reply.status(503).send({ message: "MapTiler API key is not configured" });
     }
 
     // MapTiler serves high-density sprites at a literal @2x path and returns
@@ -175,11 +265,14 @@ export const maptilerRoute: FastifyPluginAsync = async (fastify) => {
     const upstreamUrl = new URL(`${MAPTILER_ORIGIN}/${upstreamPath}`);
     upstreamUrl.searchParams.set("key", key);
 
+    const requestAbort = bindRequestAbort(req, reply);
+    const signal = withDeadline(requestAbort.signal, MAPTILER_TIMEOUT_MS);
     let upstream: Response;
     try {
       upstream = await fetch(upstreamUrl, {
         headers: { "User-Agent": USER_AGENT },
-        signal: AbortSignal.timeout(15_000),
+        redirect: "error",
+        signal,
       });
     } catch (error) {
       req.log.warn(
@@ -190,24 +283,55 @@ export const maptilerRoute: FastifyPluginAsync = async (fastify) => {
     }
 
     if (!upstream.ok) {
+      discardUpstreamResponse(upstream);
       return reply.status(upstream.status).send({ message: "MapTiler upstream error" });
+    }
+
+    if (upstream.status === 204) {
+      return reply.status(204).send();
     }
 
     reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
     reply.header("Cross-Origin-Resource-Policy", "cross-origin");
 
-    const base = proxyBase(req);
-    if (STYLE_RE.test(path)) {
-      const style = (await upstream.json()) as JsonRecord;
-      return reply.type("application/json").send(rewriteStyle(style, base));
-    }
-    if (TILEJSON_RE.test(path)) {
-      const tileJson = (await upstream.json()) as JsonRecord;
-      return reply.type("application/json").send(rewriteTileJson(tileJson, base));
-    }
+    try {
+      const base = proxyBase(req);
+      if (STYLE_RE.test(path)) {
+        requireMaptilerJsonContentType(upstream, "MapTiler style JSON");
+        const style = await readBoundedJsonResponse<JsonRecord>(upstream, {
+          maxBytes: MAX_VECTOR_TILE_BYTES,
+          label: "MapTiler style JSON",
+          signal,
+        });
+        return reply.type("application/json").send(rewriteStyle(style, base));
+      }
+      if (TILEJSON_RE.test(path)) {
+        requireMaptilerJsonContentType(upstream, "MapTiler TileJSON");
+        const tileJson = await readBoundedJsonResponse<JsonRecord>(upstream, {
+          maxBytes: MAX_VECTOR_TILE_BYTES,
+          label: "MapTiler TileJSON",
+          signal,
+        });
+        return reply.type("application/json").send(rewriteTileJson(tileJson, base));
+      }
 
-    const contentType = upstream.headers.get("content-type");
-    if (contentType) reply.type(contentType);
-    return reply.send(Buffer.from(await upstream.arrayBuffer()));
+      const proxy = createBoundedBinaryProxyStream(upstream, binaryResponseOptions(path));
+      reply.type(proxy.contentType);
+      return reply.send(
+        normalizeUpstreamResponseStream(
+          proxy.body,
+          "MapTiler provider returned an invalid response",
+        ),
+      );
+    } catch (error) {
+      req.log.warn(
+        { upstream: summarizeExternalUrl(upstreamUrl.href), errorClass: safeErrorClass(error) },
+        "MapTiler proxy response rejected",
+      );
+      return reply
+        .header("Cache-Control", "no-store")
+        .status(502)
+        .send({ message: "MapTiler provider returned an invalid response" });
+    }
   });
 };

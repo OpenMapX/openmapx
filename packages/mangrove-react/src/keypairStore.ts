@@ -1,111 +1,144 @@
-/**
- * Session-scoped in-memory cache for the logged-in user's Mangrove keypair.
- *
- * Three distinct layers live here:
- *
- *  - **Public identity** (`publicPem`): derived from the server-stored public
- *    JWK, which is public information by design. Retained for the whole
- *    session so "is this my review?" checks, fingerprint display, etc. keep
- *    working even when the private key is locked.
- *  - **Unlocked keypair** (`keypair` + `privateJwk`): the sensitive half. Set
- *    after a successful unlock; cleared by {@link KeypairState.lock}
- *    automatically after `UNLOCK_TTL_MS` of inactivity (encrypted mode only).
- *    `privateJwk` is kept alongside so we can re-encrypt the envelope on
- *    add/remove-wrap without a second unlock ceremony.
- *  - **Session-level clear** ({@link KeypairState.clear}): called on
- *    regenerate / full keypair delete / sign-out. Wipes everything, including
- *    the public identity.
- *
- * Intentionally NOT persisted to storage — the server is the source of truth
- * for the envelope.
- */
-
+/** Session-only private material. Never persist this store or its snapshots. */
 import type { MangroveKeypair } from "@openmapx/mangrove-client";
 import { create } from "zustand";
+import type { MangroveCurrentUser } from "./transport";
 
-/** After this much inactivity, auto-lock the private half of an encrypted keypair. */
 export const UNLOCK_TTL_MS = 15 * 60 * 1000;
-
+export function keypairOwner(user: MangroveCurrentUser | null): string | null {
+  return user ? JSON.stringify([user.id, user.authorityId ?? null]) : null;
+}
+export interface KeypairBinding {
+  owner: string;
+  generation: number;
+  revision: string;
+}
+export interface KeypairSigningSnapshot extends KeypairBinding {
+  signal: AbortSignal;
+  keypair: MangroveKeypair;
+  privateJwk: JsonWebKey;
+  publicPem: string;
+}
 interface KeypairState {
+  owner: string | null;
+  generation: number;
+  revision: string | null;
   keypair: MangroveKeypair | null;
   publicPem: string | null;
-  /**
-   * Cleartext private JWK — retained while unlocked so we can re-encrypt the
-   * envelope after add/remove-wrap operations without a second unlock.
-   */
   privateJwk: JsonWebKey | null;
-  /** True iff the user's envelope is encrypted (triggers idle auto-lock). */
-  encrypted: boolean;
-  /** Timestamp of last touch (unlock, sign, or explicit set). */
   lastAccessAt: number;
-  /**
-   * Publish only the public identity (no private material). Safe to call
-   * whenever the envelope is fetched from the server — lets UI checks like
-   * "is this my review?" work without requiring an unlock.
-   */
-  setPublicIdentity(publicPem: string): void;
-  /** Publish a full unlocked keypair. */
+  bindOwner(owner: string | null): void;
+  setPublicIdentity(publicPem: string, binding: KeypairBinding): boolean;
   setKeypair(
     kp: MangroveKeypair,
     publicPem: string,
-    encrypted: boolean,
-    privateJwk: JsonWebKey | null,
-  ): void;
-  /** Refresh the inactivity timer — call before any signing op. */
-  touch(): void;
-  /** Drop the private half (idle lock). Retains `publicPem`. */
+    privateJwk: JsonWebKey,
+    binding: KeypairBinding,
+  ): boolean;
+  getSigningSnapshot(owner: string | null): KeypairSigningSnapshot | null;
+  isCurrent(binding: KeypairBinding): boolean;
+  advanceRevision(binding: KeypairBinding, revision: string): boolean;
+  touch(binding: KeypairBinding): boolean;
   lock(): void;
-  /** Wipe everything, including the public identity. */
   clear(): void;
 }
-
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
-
-function scheduleIdleLock(lock: () => void) {
+let signingAuthority = new AbortController();
+function invalidateSigningAuthority() {
+  const previous = signingAuthority;
+  signingAuthority = new AbortController();
+  previous.abort();
+}
+function cancelIdleTimer() {
   if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = null;
+}
+function scheduleIdleLock(lock: () => void) {
+  cancelIdleTimer();
   idleTimer = setTimeout(lock, UNLOCK_TTL_MS);
 }
-
-function cancelIdleTimer() {
-  if (idleTimer) {
-    clearTimeout(idleTimer);
-    idleTimer = null;
-  }
-}
-
+const empty = { keypair: null, publicPem: null, privateJwk: null, revision: null, lastAccessAt: 0 };
 export const useKeypairStore = create<KeypairState>((set, get) => ({
-  keypair: null,
-  publicPem: null,
-  privateJwk: null,
-  encrypted: false,
-  lastAccessAt: 0,
-  setPublicIdentity(publicPem) {
-    const current = get().publicPem;
-    if (current === publicPem) return;
-    set({ publicPem });
+  ...empty,
+  owner: null,
+  generation: 0,
+  bindOwner(owner) {
+    if (get().owner === owner) return;
+    invalidateSigningAuthority();
+    cancelIdleTimer();
+    set({ ...empty, owner, generation: get().generation + 1 });
   },
-  setKeypair(kp, publicPem, encrypted, privateJwk) {
-    set({ keypair: kp, publicPem, encrypted, privateJwk, lastAccessAt: Date.now() });
-    if (encrypted) scheduleIdleLock(() => get().lock());
+  setPublicIdentity(publicPem, binding) {
+    const state = get();
+    if (state.owner !== binding.owner || state.generation !== binding.generation) return false;
+    if (state.revision && state.revision !== binding.revision) {
+      invalidateSigningAuthority();
+      cancelIdleTimer();
+      set({ keypair: null, privateJwk: null, lastAccessAt: 0, generation: state.generation + 1 });
+    }
+    set({ publicPem, revision: binding.revision });
+    return true;
   },
-  touch() {
-    const { encrypted, keypair } = get();
-    if (!keypair) return;
+  setKeypair(keypair, publicPem, privateJwk, binding) {
+    const state = get();
+    if (
+      state.owner !== binding.owner ||
+      state.generation !== binding.generation ||
+      (state.revision !== null && state.revision !== binding.revision)
+    )
+      return false;
+    set({ keypair, publicPem, privateJwk, revision: binding.revision, lastAccessAt: Date.now() });
+    scheduleIdleLock(() => get().lock());
+    return true;
+  },
+  getSigningSnapshot(owner) {
+    const state = get();
+    if (
+      !owner ||
+      state.owner !== owner ||
+      !state.keypair ||
+      !state.privateJwk ||
+      !state.publicPem ||
+      !state.revision
+    )
+      return null;
+    return {
+      signal: signingAuthority.signal,
+      owner,
+      generation: state.generation,
+      revision: state.revision,
+      keypair: state.keypair,
+      privateJwk: state.privateJwk,
+      publicPem: state.publicPem,
+    };
+  },
+  isCurrent(binding) {
+    const state = get();
+    return (
+      state.owner === binding.owner &&
+      state.generation === binding.generation &&
+      state.revision === binding.revision
+    );
+  },
+  advanceRevision(binding, revision) {
+    if (!get().isCurrent(binding)) return false;
+    invalidateSigningAuthority();
+    set({ revision, generation: get().generation + 1 });
+    return true;
+  },
+  touch(binding) {
+    if (!get().isCurrent(binding) || !get().keypair) return false;
     set({ lastAccessAt: Date.now() });
-    if (encrypted) scheduleIdleLock(() => get().lock());
+    scheduleIdleLock(() => get().lock());
+    return true;
   },
   lock() {
+    invalidateSigningAuthority();
     cancelIdleTimer();
-    set({ keypair: null, privateJwk: null, lastAccessAt: 0 });
+    set({ keypair: null, privateJwk: null, lastAccessAt: 0, generation: get().generation + 1 });
   },
   clear() {
+    invalidateSigningAuthority();
     cancelIdleTimer();
-    set({
-      keypair: null,
-      publicPem: null,
-      privateJwk: null,
-      encrypted: false,
-      lastAccessAt: 0,
-    });
+    set({ ...empty, generation: get().generation + 1 });
   },
 }));

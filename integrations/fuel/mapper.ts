@@ -1,22 +1,26 @@
-import { resolveBrandByName } from "@openmapx/brands";
+import { getBrandByQid, resolveBrandByName } from "@openmapx/brands";
 import {
-  type DataSourceAttribution,
+  type Attribution,
   type DataSourceBranding,
   type DataSourceDetail,
   type DataSourceDetailSection,
   type DataSourceResult,
   gapFillBranding,
-  isSafeHttpUrl,
   type OsmIdentity,
   validObservedAt,
+  withBrandingContributors,
 } from "@openmapx/core";
 import { parseOpeningHours } from "@openmapx/core/server";
+import { siteAttributions } from "@openmapx/integration-framework";
 import {
   type I18nToken,
   money,
+  sharedT,
   type Translatable,
   token,
+  vocabularyLabels,
 } from "@openmapx/integration-framework/strings";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import type { FuelProduct, FuelStation } from "@openmapx/mobility-core/fuel";
 import strings from "./strings/en.json" with { type: "json" };
 
@@ -25,6 +29,9 @@ const SUMMARY_GRADES = ["diesel", "e5", "e10", "sp98", "e85", "lpg"];
 
 /** Every grade `summary.grade.<grade>` has a label for; any other is shown by its code. */
 const LABELLED_GRADES = new Set(Object.keys(strings.summary.grade));
+
+/** Every grade `fuel.<grade>` names in full; any other is shown by its code. */
+const NAMED_GRADES = new Set(Object.keys(strings.fuel));
 
 const UNIT_LABEL: Record<FuelProduct["per"], string> = { L: "L", kg: "kg", m3: "m³" };
 
@@ -82,11 +89,21 @@ interface SummaryPrice {
   amount: number;
 }
 
+/** A grade's code as it is shown where no label names it: "new_fuel" as "NEW FUEL". */
+function gradeCode(grade: string): string {
+  return grade.replaceAll("_", " ").toUpperCase();
+}
+
 /** A grade's short label on the card: translated, or for an unknown grade its code. */
 function summaryLabel(grade: string): I18nToken | string {
-  return LABELLED_GRADES.has(grade)
-    ? token(`summary.grade.${grade}`)
-    : grade.replaceAll("_", " ").toUpperCase();
+  return LABELLED_GRADES.has(grade) ? token(`summary.grade.${grade}`) : gradeCode(grade);
+}
+
+/** A grade's full name in the price table: translated, or for an unknown grade its code. */
+function gradeLabel(grade: string): I18nToken {
+  return NAMED_GRADES.has(grade)
+    ? token(`fuel.${grade}`)
+    : token("literal", { value: gradeCode(grade) });
 }
 
 /** Where a grade sorts on the card: the summary grades in their order, then the rest. */
@@ -163,16 +180,19 @@ function openVariant(station: FuelStation): string {
 }
 
 /**
- * The brand's catalogued logo, gap-filled from a plain-name match. Feeds
- * publish a brand name and no Wikidata identity, so the match is exact and
- * scoped to fuel stations in the station's country; an ambiguous name gives
- * no logo rather than a wrong one.
+ * The brand's catalogued logo, gap-filled from the brand's Wikidata item when
+ * the source names one (OpenStreetMap's `brand:wikidata`). Otherwise the
+ * plain-name match is exact and scoped to fuel stations in the station's
+ * country; an ambiguous name gives no logo rather than a wrong one.
  */
 function stationBranding(station: FuelStation): DataSourceBranding | undefined {
   const brand = station.brand;
-  if (!brand) return undefined;
-  const entry = resolveBrandByName(brand, { tagSet: "amenity=fuel", country: station.country });
-  return gapFillBranding(undefined, undefined, () => entry);
+  const entry =
+    (station.brandWikidata ? getBrandByQid(station.brandWikidata) : undefined) ??
+    (brand
+      ? resolveBrandByName(brand, { tagSet: "amenity=fuel", country: station.country })
+      : undefined);
+  return entry ? gapFillBranding(undefined, undefined, () => entry) : undefined;
 }
 
 /**
@@ -181,14 +201,9 @@ function stationBranding(station: FuelStation): DataSourceBranding | undefined {
  * each result and detail carries the credits of the sources it was built from.
  * Their links come from upstream data, so only http(s) ones are kept.
  */
-function stationCredits(station: FuelStation): DataSourceAttribution[] | undefined {
+function stationCredits(station: FuelStation): Attribution[] | undefined {
   if (station.attributions.length === 0) return undefined;
-  return station.attributions.map((a) => ({
-    text: a.name,
-    url: isSafeHttpUrl(a.url) ? a.url : "",
-    ...(a.spdxLicense ? { license: a.spdxLicense } : {}),
-    ...(isSafeHttpUrl(a.licenseUrl) ? { licenseUrl: a.licenseUrl } : {}),
-  }));
+  return snapshotContributors(station.attributions);
 }
 
 /** A station's title when its sources name it nothing, not even by its brand. */
@@ -212,7 +227,8 @@ export function mapFuelStationToResult(station: FuelStation): DataSourceResult {
     ...fallbackNameOf(station),
     coordinates: station.coordinates,
     source: station.sources[0] ?? "unknown",
-    sources: station.sources,
+    sources: [...station.sources],
+    contributors: siteAttributions([station]),
     variant,
     status: variant,
     summary,
@@ -225,7 +241,7 @@ export function mapFuelStationToResult(station: FuelStation): DataSourceResult {
   if (attributions) result.attributions = attributions;
   const branding = stationBranding(station);
   if (branding) result.branding = branding;
-  return result;
+  return withBrandingContributors(result);
 }
 
 function priceCell(product: FuelProduct): Translatable {
@@ -265,8 +281,8 @@ function buildProductTable(station: FuelStation): DataSourceDetailSection | null
     columns: [token("column.fuelType"), token("column.price")],
     rows: station.products.map((product) => [
       product.vehicleScope === "hgv"
-        ? token("fuelHgv", { grade: token(`fuel.${product.grade}`) })
-        : token(`fuel.${product.grade}`),
+        ? token("fuelHgv", { grade: gradeLabel(product.grade) })
+        : gradeLabel(product.grade),
       priceCell(product),
       productCaption(product),
     ]),
@@ -275,11 +291,30 @@ function buildProductTable(station: FuelStation): DataSourceDetailSection | null
   };
 }
 
+/** How a driver pays, whether lorries can fill up and what else the station offers. */
+function buildServicesSection(station: FuelStation): DataSourceDetailSection | null {
+  const rows: [I18nToken, Translatable | Translatable[]][] = [];
+  const payment = vocabularyLabels("payment", station.payment ?? []);
+  if (payment.length > 0) rows.push([sharedT.row.payment, payment]);
+  if (station.truckSuitable !== undefined) {
+    rows.push([
+      token("row.truckSuitable"),
+      station.truckSuitable ? sharedT.value.yes : sharedT.value.no,
+    ]);
+  }
+  const amenities = vocabularyLabels("amenity", station.amenities ?? []);
+  if (amenities.length > 0) rows.push([sharedT.row.amenities, amenities]);
+  if (rows.length === 0) return null;
+  return { title: token("section.services"), type: "table", rows, sectionIcon: "info" };
+}
+
 export function mapFuelStationToDetail(station: FuelStation): DataSourceDetail {
   const table = buildProductTable(station);
+  const services = buildServicesSection(station);
   const detail: DataSourceDetail = {
     id: station.id,
-    sources: station.sources,
+    sources: [...station.sources],
+    contributors: siteAttributions([station]),
     name: station.name,
     ...fallbackNameOf(station),
     coordinates: station.coordinates,
@@ -287,11 +322,11 @@ export function mapFuelStationToDetail(station: FuelStation): DataSourceDetail {
     address: station.address ? { line1: station.address } : undefined,
     operator: station.brand ? { name: station.brand } : undefined,
     openingHours: station.openingHours,
-    sections: table ? [table] : [],
+    sections: [table, services].filter((s): s is DataSourceDetailSection => s !== null),
   };
   const attributions = stationCredits(station);
   if (attributions) detail.attributions = attributions;
   const branding = stationBranding(station);
   if (branding) detail.branding = branding;
-  return detail;
+  return withBrandingContributors(detail);
 }

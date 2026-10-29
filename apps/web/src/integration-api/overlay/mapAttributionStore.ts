@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  type AttributionPresentation,
+  type AttributionPresentationGroup,
+  projectAttributionPresentations,
+} from "@openmapx/core/attribution";
 import { useMemo } from "react";
 import { create } from "zustand";
 
@@ -8,22 +13,23 @@ import { create } from "zustand";
  *
  * The main map runs with MapLibre's built-in AttributionControl disabled — the
  * credits are rendered by `<MapFooter>` instead, so they can share one bar with
- * the legal links (and merge with them on narrow viewports). Layers register
- * their credits through `useMapAttributions`, keyed by layer, and this store is
- * the single place the footer reads them from.
+ * the legal links (and merge with them on narrow viewports). The shared rendered
+ * tracker registers captured visible layer receipts; `useMapAttributions` owns
+ * already projected popup/custom content. Each instance has a separate owner,
+ * and this store is the single place the footer reads the resulting presentations.
  *
- * Entries are pre-rendered, sanitized HTML strings (see `useMapAttributions`),
- * which keeps the substring dedup below working the way MapLibre's control did:
- * identical credits contributed by different layers collapse into one.
+ * Entries retain separate complete/permanent notices and reviewed branding,
+ * identical notices contributed by different layers collapse into one while
+ * preserving every publisher and licence link.
  */
 type MapAttributionState = {
-  byLayer: Record<string, string[]>;
-  setLayer: (layerKey: string, html: string[]) => void;
+  byLayer: Record<string, AttributionPresentation[]>;
+  setLayer: (layerKey: string, entries: AttributionPresentation[]) => void;
   clearLayer: (layerKey: string) => void;
 };
 
-function sameList(a: string[] | undefined, b: string[]): boolean {
-  return a !== undefined && a.length === b.length && a.every((item, i) => item === b[i]);
+function sameList(a: AttributionPresentation[] | undefined, b: AttributionPresentation[]): boolean {
+  return a !== undefined && JSON.stringify(a) === JSON.stringify(b);
 }
 
 export const useMapAttributionStore = create<MapAttributionState>((set) => ({
@@ -43,39 +49,26 @@ export const useMapAttributionStore = create<MapAttributionState>((set) => ({
     }),
 }));
 
-/**
- * MapLibre's AttributionControl dedup, reimplemented: drop any credit that is
- * contained in another one, keeping the longest form. Exact duplicates keep
- * their first occurrence. This is what lets a base style and an overlay both
- * credit OpenStreetMap without the strip saying it twice.
- */
-export function dedupeAttributionHtml(items: string[]): string[] {
-  return items.filter(
-    (html, i) =>
-      html.length > 0 &&
-      !items.some(
-        (other, j) =>
-          j !== i &&
-          other.includes(html) &&
-          // Between two equal strings, the earlier index wins.
-          (other.length > html.length || j < i),
-      ),
-  );
-}
+export {
+  dedupeAttributionHtml,
+  projectAttributionPresentations as projectMapAttributions,
+} from "@openmapx/core/attribution";
 
 // Base-map credits lead the strip — the imagery/map data the whole view rests
 // on comes first, then per-layer credits in registration order.
 const BASE_LAYER_KEY = "base";
+const isBaseOwner = (key: string) =>
+  key === BASE_LAYER_KEY || key.startsWith(`${BASE_LAYER_KEY}::`);
 
 /** Deduped credits for the current map, in display order. */
-export function useMapAttributionHtml(): string[] {
+export function useMapAttributionPresentation(): AttributionPresentationGroup {
   const byLayer = useMapAttributionStore((s) => s.byLayer);
   return useMemo(() => {
     const keys = Object.keys(byLayer).sort((a, b) => {
-      if (a === BASE_LAYER_KEY) return -1;
-      if (b === BASE_LAYER_KEY) return 1;
+      if (isBaseOwner(a) && !isBaseOwner(b)) return -1;
+      if (isBaseOwner(b) && !isBaseOwner(a)) return 1;
       return 0;
     });
-    return dedupeAttributionHtml(keys.flatMap((key) => byLayer[key] ?? []));
+    return projectAttributionPresentations(keys.flatMap((key) => byLayer[key] ?? []));
   }, [byLayer]);
 }

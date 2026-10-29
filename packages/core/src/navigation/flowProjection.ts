@@ -1,3 +1,4 @@
+import { readCapturedFieldContributors } from "@openmapx/mobility-core/contributors";
 import type { LngLat } from "../types/geometry";
 import type { RoadFlowSegment, RouteFlowSpan } from "../types/roadConditions";
 import { haversineDistance } from "../utils/coordinates";
@@ -153,6 +154,9 @@ function segmentSpans(
       startMeters: Math.min(...alongs),
       endMeters: Math.max(...alongs),
       los: segment.los,
+      ...(segment.fieldContributors === undefined
+        ? {}
+        : { fieldContributors: readCapturedFieldContributors(segment.fieldContributors) }),
       confidence: segment.confidence,
       rank,
       ...(segment.speedRatio !== undefined && { speedRatio: segment.speedRatio }),
@@ -204,6 +208,8 @@ function segmentSpans(
 /** Whether two spans describe the same condition closely enough to merge. */
 function sameCondition(a: RankedFlowSpan, b: RankedFlowSpan): boolean {
   if (a.los !== b.los) return false;
+  // Passing one section must not keep another section's supplier credited.
+  if (JSON.stringify(a.fieldContributors) !== JSON.stringify(b.fieldContributors)) return false;
   const ratioA = a.speedRatio ?? -1;
   const ratioB = b.speedRatio ?? -1;
   return Math.abs(ratioA - ratioB) < 0.05;

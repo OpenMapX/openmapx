@@ -1,4 +1,10 @@
-import { MOBILE_PROTOCOL_MAX, type WebToNativeMessage } from "@openmapx/core/navigation";
+import {
+  MOBILE_PROTOCOL_MAX,
+  readRouteMatcherCounters,
+  resetRouteMatcherCounters,
+  setRouteMatcherCounting,
+  type WebToNativeMessage,
+} from "@openmapx/core/navigation";
 import type { ApiClient } from "@openmapx/core/navigation/api";
 import type { RawLocation } from "../../location/sanitiseFixes";
 import type { Database } from "../../storage/database";
@@ -268,6 +274,92 @@ async function drive(context: Harness, from: number, to: number) {
     });
   }
 }
+
+describe("ground navigation route index reuse across durable reloads", () => {
+  beforeEach(() => {
+    resetRouteMatcherCounters();
+    setRouteMatcherCounting(true);
+  });
+  afterEach(() => {
+    setRouteMatcherCounting(false);
+    resetRouteMatcherCounters();
+  });
+
+  const preparations = () => readRouteMatcherCounters().preparations;
+
+  async function progressAlong(context: Harness): Promise<number> {
+    const session = await context.repository.loadActive(context.now());
+    const progress = session?.kind === "ground" ? session.payload.progress : null;
+    return (progress as { alongMeters: number } | null)?.alongMeters ?? Number.NaN;
+  }
+
+  it("prepares the route index once across separately persisted callbacks", async () => {
+    const context = await harness();
+    await begin(context);
+    const startRevision = (await context.repository.loadActive(context.now()))?.revision ?? 0;
+    resetRouteMatcherCounters();
+
+    let previous = -1;
+    for (let index = 0; index < 10; index += 1) {
+      context.advance(1_000);
+      await context.coordinator.handleLocationBatch({
+        locations: [locationAt(index, context.now())],
+      });
+      // Every callback reloads the session from SQLite and commits through the
+      // revision check; reuse must not skip either.
+      const session = await context.repository.loadActive(context.now());
+      expect(session?.revision).toBe(startRevision + index + 1);
+      const along = await progressAlong(context);
+      expect(along).toBeGreaterThanOrEqual(previous);
+      previous = along;
+    }
+
+    expect(previous).toBeGreaterThan(600);
+    expect(preparations()).toBe(1);
+    await context.database.closeAsync();
+  });
+
+  it("prepares afresh after a process restart and keeps guiding correctly", async () => {
+    let context = await harness();
+    await begin(context);
+    resetRouteMatcherCounters();
+    await drive(context, 0, 5);
+    expect(preparations()).toBe(1);
+    const before = await progressAlong(context);
+
+    context = context.restart();
+    await drive(context, 5, 10);
+
+    expect(preparations()).toBe(2);
+    expect(await progressAlong(context)).toBeGreaterThan(before);
+    await context.database.closeAsync();
+  });
+
+  it("prepares afresh after a route replacement and resets progress to the new road", async () => {
+    const context = await harness();
+    await begin(context);
+    await drive(context, 0, 20);
+
+    const shorter = {
+      ...START_PACKAGE,
+      route: { ...START_PACKAGE.route, geometry: GEOMETRY.slice(0, 100) },
+    };
+    await context.coordinator.dispatch(
+      cmd("session.replace", { startPackage: shorter }, { sessionId: "journey-1" }),
+    );
+    resetRouteMatcherCounters();
+
+    await drive(context, 20, 25);
+
+    expect(preparations()).toBe(1);
+    const session = await context.repository.loadActive(context.now());
+    expect(session?.kind === "ground" && session.payload.startPackage.route.geometry).toHaveLength(
+      100,
+    );
+    expect(await progressAlong(context)).toBeGreaterThan(1_500);
+    await context.database.closeAsync();
+  });
+});
 
 describe("ground navigation end to end", () => {
   it("starts one location stream and reports the session as active", async () => {

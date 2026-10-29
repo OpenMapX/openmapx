@@ -1,180 +1,153 @@
 ---
 title: Requirements
-description: Software prerequisites and hardware sizing for self-hosting OpenMapX, from the lightweight core to full self-hosted routing, geocoding, and transit.
+description: Host tools, deployment boundaries, and capacity planning for OpenMapX.
 sidebar_position: 1
 ---
 
 # Requirements
 
-OpenMapX runs as a set of Docker containers driven by the `openmapx` CLI, all
-from a single cloned copy of the monorepo. This page lists what the host needs
-before you start, and how the hardware requirements scale with the backend
-engines you choose to enable.
-
-The most important thing to know up front: **OpenMapX is modular.** The core
-application — the web frontend, the API, the database, the cache, and the data
-manager — is lightweight. Everything heavy (self-hosted routing, geocoding,
-transit, OSM queries, tiles) is an optional [service](../overview/how-it-works.md)
-you opt into. You only pay the RAM and disk cost of the services you actually
-run, and any one of them can be left out in favor of a hosted endpoint.
+OpenMapX runs a generated Docker Compose stack from a repository checkout. Start
+with the default application services and add routing, geocoding, transit, and
+tile services as needed. Each engine adds its own data preparation and storage
+requirements.
 
 ## Software prerequisites
 
-Everything is run from a clone of the repository; there is nothing to install
-globally beyond the host tooling below.
+| Software       | Requirement                                                         |
+| -------------- | ------------------------------------------------------------------- |
+| Docker Engine  | A current supported release with access to the local Docker socket  |
+| Docker Compose | Compose v2 (`docker compose`)                                       |
+| Node.js        | `>=24.22.1`, as declared in the root `package.json`                 |
+| pnpm           | The version in the root `packageManager` field, currently `12.11.2` |
+| Git            | Needed for the checkout and community service repositories          |
+| OpenSSL        | Used in the setup examples to generate random secrets               |
 
-| Software           | Version            | Why it's needed                                                           |
-| ------------------ | ------------------ | ------------------------------------------------------------------------- |
-| **Docker Engine**  | recent (27+)       | Runs every OpenMapX service as a container                                |
-| **Docker Compose** | v2                 | Orchestrates the generated stack (`docker compose`, not `docker-compose`) |
-| **Node.js**        | 24 or newer        | Runs the `openmapx` CLI directly off TypeScript — no build step           |
-| **pnpm**           | 11 (`pnpm@latest`) | Workspace package manager for the monorepo                                |
-| **git**            | any                | Cloning the repo and any community extensions that ship a service         |
+Install the locked workspace dependencies with `pnpm install --frozen-lockfile`.
+Run the CLI as `pnpm openmapx <command>` from the repository root. It loads
+`infra/docker/.env`; existing shell variables take precedence.
 
-A few notes:
-
-- The CLI is invoked as `pnpm openmapx <command>` from the repo root. It auto-loads
-  `infra/docker/.env`, the single environment file a Docker deployment reads.
-- The required Node and pnpm versions are pinned in the repo's root `package.json`
-  (`engines.node` and `packageManager`). Use `pnpm install` once after cloning to
-  set up the workspace.
-- OSM and GTFS downloads, PBF conversion, and the heavy build steps all run inside
-  Docker helper images. You do **not** need `osmium`, `jq`, `unzip`, or similar
-  tools installed on the host.
-
-:::note[`docker compose`, not `docker-compose`]
-OpenMapX uses Compose v2, which ships as the `docker compose` subcommand of the
-Docker CLI. The standalone v1 `docker-compose` binary is
-[deprecated](https://docs.docker.com/compose/releases/migrate/) and is not
-supported. See the [Docker install docs](https://docs.docker.com/engine/install/)
-to set up Engine and the Compose plugin.
-:::
+Docker helper images provide the OSM conversion and engine build tools. You do
+not need to install `osmium` on the host. Artifact export and import use host
+`tar`; streaming to another host also needs SSH. Diagnostic examples use `curl`
+and, where shown, `jq`.
 
 ### Operating system
 
-A 64-bit Linux host (Ubuntu, Debian, and similar) is the supported and
-recommended platform — it gives the most predictable Docker experience and is
-what production deployments run on. Docker Desktop on macOS or Windows works for
-local exploration, but the heavy backend builds are demanding enough that a Linux
-server is the right home for anything beyond the lightweight core.
+Use a 64-bit Linux host for the managed deployment. The ops-agent needs a local
+Docker socket, a writable checkout mounted at the same absolute host path, and
+Unix file ownership and permissions. A remote Docker context, Kubernetes, or a
+split-host deployment is not the managed Compose workflow described here.
+
+Docker Desktop can be useful for exploration, but check image support for the
+host architecture and allocate memory and disk to its Linux VM. Do not assume
+that successful local startup establishes production readiness on Linux.
+
+The stack's own containers run as the checkout's owner: the first render writes
+that account's IDs into `infra/docker/.env` as `UID` and `GID`, and renders and
+stack commands run as it. Any uid other than root works. That user also needs to
+read the registry credentials directory if private images are used.
+
+Only the operator's account may write the checkout: services mount
+configuration files from it, `services build` uses its build contexts, and
+`infra/docker/.env` and the release overlay live in it. A private group per
+user, the Debian and Ubuntu default, meets this even with their umask of `002`.
+Where the account's group has other members, clone and pull with umask `022`.
 
 ## Hardware
 
-There is no single hardware figure for OpenMapX, because the requirements depend
-almost entirely on which services you enable and how large a geographic area you
-cover. Two variables dominate:
-
-- **Which engines you run.** A few of them — Nominatim, Overpass, Valhalla, MOTIS
-  — are genuinely heavy. The core app and the lightweight engines are not.
-- **The data scale.** A single country is modest; a continent is several times
-  larger; the full planet is an order of magnitude more in both RAM and disk.
+Size for the services that run together, including temporary build containers.
+Container memory limits are ceilings, not measured usage, minimum RAM, or a
+promise that an import will fit. A regional extract can still need substantial
+memory, depending on its density and the enabled features.
 
 ### Baseline: the core app
 
-The always-on core — `traefik`, `well-known`, `app-api`, `app-web`, `postgis`,
-`redis`, `data-manager`, and `ops-agent` — is what you get with the default service selection.
-It needs only modest resources:
+The default roots are `traefik`, `well-known`, `app-api`, `app-web`, `postgis`,
+`redis`, and `data-manager`. Their dependencies also select `ops-agent` and
+`transitous-runner`. The current memory limits add up to about 18 GiB, principally
+because data-manager has an 8 GiB limit and transitous-runner has a 4 GiB limit.
+Idle use can be lower. These limits do not establish a tested 4 GiB deployment.
 
-| Resource | Baseline (core only)          |
-| -------- | ----------------------------- |
-| RAM      | ~4 GB                         |
-| CPU      | 2 cores                       |
-| Disk     | ~20 GB (plus downloaded data) |
-
-On its own, the core renders maps and serves the app, but the self-hosted
-search/routing/transit features come from the optional engines below. With every
-heavy engine disabled, you can run OpenMapX against hosted endpoints (a hosted
-tile provider, a public Valhalla, etc.) and stay close to this baseline.
+Hosted backends can reduce local engine costs. They still need appropriate
+credentials, permitted usage, connectivity, and a review of which requests leave
+your infrastructure. See [Cost optimization](../guides/cost-optimization.md).
 
 ### Engine sizing
 
-Each optional service declares a memory ceiling in its manifest
-(`services/<id>/service.json`). The table below lists those ceilings along with
-the rough disk footprint of the data each engine builds. **The heavy engines are
-called out** — running one or two of them at once is what pushes a host into the
-16–64 GB range.
+Current defaults in `services/<id>/service.json`:
 
-| Engine                             | Capability                               | RAM (manifest ceiling) | Disk (approx.)          | Weight                             |
-| ---------------------------------- | ---------------------------------------- | ---------------------- | ----------------------- | ---------------------------------- |
-| **Nominatim**                      | Full geocoding + reverse + enrichment    | 64 GB                  | ~330 GB (planet)        | **Heavy** — peak RAM during import |
-| **Overpass**                       | OSM category/feature queries             | 32 GB                  | ~200–300 GB (planet)    | **Heavy**                          |
-| **Valhalla**                       | Planet-scale routing                     | 16 GB                  | ~50–100 GB (planet)     | **Heavy**                          |
-| **MOTIS**                          | Planet-scale transit routing             | 16 GB                  | ~50 GB                  | **Heavy**                          |
-| **OTP**                            | Region-scale transit routing             | 16 GB                  | ~10 GB (region)         | Region-only                        |
-| **Photon**                         | Lightweight search-as-you-type geocoding | 8 GB                   | ~200 GB (planet index)  | Moderate                           |
-| **Local AI** (Ollama)              | Natural-language query embeddings        | 8 GB                   | ~10–20 GB (models)      | Moderate                           |
-| **OSRM**                           | Region-scale routing                     | 8 GB                   | ~30 GB (region)         | Region-only                        |
-| **Elasticsearch** (Pelias backend) | Composite geocoding store                | 4 GB                   | ~100 GB (planet)        | Moderate                           |
-| **Dawarich** (App + Sidekiq)       | Personal timeline history                | ~2 GB                  | ~5 GB                   | Light                              |
-| **TileServer GL**                  | Self-hosted vector/raster tiles          | 2 GB                   | ~80 GB (planet MBTiles) | Moderate                           |
-| **Transitous Runner**              | Automated GTFS schedule updates          | 512 MB                 | ~5 GB                   | Light                              |
-| **Martin**                         | PostGIS dynamic vector tiles             | —                      | shares PostGIS          | Light                              |
+| Service or bundle | Container memory ceiling | Capacity considerations                                              |
+| ----------------- | ------------------------ | -------------------------------------------------------------------- |
+| Nominatim         | 64 GiB                   | Initial OSM import, database, flat-node storage, and replication     |
+| Overpass          | 32 GiB                   | Converted OSM input, database, and update working space              |
+| Valhalla          | 16 GiB                   | Routing tiles, elevation, administrative and time-zone data          |
+| MOTIS             | 16 GiB **per slot**      | Active and candidate imports, rollback generations, feed-proxy cache |
+| OTP               | 16 GiB runtime           | Separate build helper defaults to a 24 GiB Java heap                 |
+| Photon            | 8 GiB                    | Prebuilt index; parallel refresh needs old and new indexes together  |
+| OSRM              | 8 GiB runtime            | Extract, graph, and preprocessing working files                      |
+| Local AI          | 8 GiB                    | Model files and model-dependent inference memory                     |
+| Elasticsearch     | 4 GiB                    | Pelias also needs its API, Placeholder, PIP, and build workspace     |
+| BRouter           | 2 GiB                    | Selected `.rd5` segments plus a replacement generation               |
+| TileServer GL     | 2 GiB runtime            | Separate Planetiler build, MBTiles, glyphs, and temporary files      |
+| Managed Dawarich  | 8.5 GiB total            | App 4 GiB, worker 2 GiB, database 2 GiB, queue 512 MiB               |
 
-A few patterns worth knowing:
+Pelias API, Placeholder, PIP, and Martin do not all have fixed manifest memory
+limits. Include them in the host budget. See the individual
+[guides](../guides/supporting-infrastructure.md) for preparation and diagnostics.
 
-- **Nominatim is the single biggest cost** — its 64 GB ceiling is the import-time
-  peak; steady-state runtime use is far lower, but the import won't complete on a
-  host that can't reach it (swap helps, slowly). It also produces the largest
-  database (~330 GB at planet scale).
-- **OSRM and OTP are region-scale only.** They load their graph fully into memory
-  and don't fit a planet. For worldwide routing and transit, use **Valhalla** and
-  **MOTIS** instead.
-- **You usually want one geocoder, not three.** Photon (lightest, auto-downloads
-  a prebuilt index), Nominatim (full-featured), and Pelias (composite, backed by
-  Elasticsearch) overlap in purpose — pick the one that matches your needs.
-- **Tiles are optional too.** If you point the web app at a hosted tile provider,
-  you can skip TileServer GL and Martin entirely.
+OSRM and OTP preparation refuse `planet` input. MOTIS planet operation is
+experimental and requires an explicit profile and capacity confirmation; its
+regional 16 GiB slot limit is not a worldwide sizing recommendation. See
+[MOTIS operations profiles](../administration/motis-operations-profiles.md).
 
 ### Sizing by geographic scale
 
-As a rough planning guide, once you account for the engines you've chosen:
+Choose the smallest region covering the routes and searches you need. Before
+starting a large import, allow space for:
 
-| Scale          | RAM      | Disk              | CPU      |
-| -------------- | -------- | ----------------- | -------- |
-| Single country | 16 GB    | 200–500 GB SSD    | 4 cores  |
-| Continent      | 32–64 GB | 500 GB – 1 TB SSD | 8 cores  |
-| Planet         | 64+ GB   | 2+ TB NVMe SSD    | 16 cores |
+- raw downloads and secondary formats, such as Overpass's OSM XML bzip2 input;
+- active indexes and complete staged replacements;
+- build work directories and retained rollback generations;
+- database growth, attachments, logs, and local backups;
+- independent off-host backups of state you cannot regenerate.
 
-These are starting points for a host running the common set of engines at that
-scale, not hard minimums. Trim the engine list and the numbers come down quickly.
+Use SSD or NVMe storage with Unix permissions. A planet dataset can require
+hundreds of gigabytes per engine and much more during preparation. Disk use
+changes with upstream datasets and build settings; the repository does not
+provide a measured country/continent/planet hardware guarantee.
 
-:::tip[Build once, run leaner]
-Several engines need far more RAM to build their indexes than to serve queries
-afterward (Nominatim and Overpass especially). If you're tight on memory, bring
-the heavy engines up one at a time and let each finish its initial import before
-starting the next, rather than building them all in parallel.
-:::
+Start heavy initial imports one at a time. MOTIS refresh is an exception to a
+single-engine budget: the active engine and its staging candidate can coexist.
+Build helpers can also exceed the runtime container's memory limit.
 
-:::caution[Disk is SSD, and headroom matters]
-The import and build phases are I/O-heavy and can briefly use far more disk than
-the steady-state figures suggest (Nominatim's import peak is well above its final
-~330 GB). Use SSD/NVMe storage on a filesystem with proper Unix ownership and
-permissions, and leave generous free space before starting a planet build.
+:::caution[Keep shared data on one filesystem]
+Hardlinks work only within one filesystem. Keep the producer and consumer paths
+under `infra/docker/data/` on the same filesystem. Hardlinks save duplicate input
+bytes; they do not reduce the space required for derived indexes or replacement
+builds.
 :::
 
 ## What the operator must provide
 
-Beyond the host tooling, a production deployment needs a handful of values set in
-`infra/docker/.env` (copied from `infra/docker/.env.example`). Compose refuses to
-start until the required ones are present, so it's worth knowing them up front:
+Copy `infra/docker/.env.example` to `infra/docker/.env` and configure:
 
-- **A domain and ACME email** (`DOMAIN`, `ACME_EMAIL`) for Traefik's automatic
-  Let's Encrypt TLS.
-- **Secrets** — `POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET`, `OPENMAPX_SECRETS_KEY`,
-  `DATA_MANAGER_AUTH_TOKEN`, and `OPENMAPX_LOCAL_ADMIN_TOKEN`. The
-  `.env.example` file documents how to generate each.
-- **Host wiring** — `OPENMAPX_HOST_DIR` (the absolute path of the repo checkout)
-  and `DOCKER_GID` (the host's docker-socket group id), required so the dedicated
-  `ops-agent` broker container can manage Docker containers on behalf of the stack
-  without exposing the Docker socket to web or API services.
+- a public `DOMAIN` and `ACME_EMAIL`, with DNS and inbound TCP 80/443 reaching
+  Traefik; publish an AAAA record only if IPv6 works end to end;
+- unique `POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET`, `OPENMAPX_SECRETS_KEY`,
+  `DATA_MANAGER_AUTH_TOKEN`, and `OPENMAPX_LOCAL_ADMIN_TOKEN` values;
+- `OPENMAPX_HOST_DIR` as the absolute checkout path and `DOCKER_GID` as the local
+  Docker socket's group ID;
+- explicit `TRANSITOUS_COUNTRIES` or a MOTIS feed allow-list for the default
+  regional profile, even if you do not enable a transit engine.
 
-External API keys for individual features (tiles, traffic, street-level imagery,
-transit feeds) are mostly managed from the admin panel after the stack is up, not
-in `.env`.
+The renderer creates additional files in `infra/docker/secrets/`. Protect these
+and the deployment configuration separately from ordinary volume backups.
+Per-integration provider credentials are usually configured after startup in
+the admin panel. An external endpoint being configured does not establish that
+its terms permit your workload.
 
 ## Where to go next
 
-- **[How it works](../overview/how-it-works.md)** — the service/integration model
-  and how a deployment is wired together, so the engine choices above make sense.
-- **[Getting started](./getting-started.md)** — the step-by-step deployment
-  walkthrough.
+Follow [Getting started](./getting-started.md) for the first deployment, then
+[Managing services](./managing-services.md) and [Preparing data](./preparing-data.md)
+for optional engines.

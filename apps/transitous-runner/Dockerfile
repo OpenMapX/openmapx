@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.20
 #
 # The private Transitous runner.
 #
@@ -16,57 +16,85 @@
 # Build command (from repo root):
 #   docker build -t openmapx-transitous-runner -f apps/transitous-runner/Dockerfile .
 
-FROM docker.io/golang:1.27.2@sha256:5bc7f572bbaa98885a3a1fd9c0aa76b59e3e14e8628bfc316bbfd0c701e4818c AS build-gtfsclean
+FROM docker.io/golang:1.27.3@sha256:f20d83a83e18dbd2a4714b8ffd4b30b287b6243962dd75608e86abcc63ba4efc AS build-gtfsclean
 # Pin gtfsclean to a commit (the project only publishes rolling snapshot-N tags)
 # instead of @latest so the build is reproducible and can't silently pull new code.
 WORKDIR /tmp/gtfsclean-build
-RUN GOPROXY=direct go mod init openmapx.local/gtfsclean-build && \
-    GOPROXY=direct go get github.com/public-transport/gtfsclean@013af793337b759e782c3f8919e0b535cb702944 && \
-    GOPROXY=direct go get golang.org/x/text@v0.39.0 && \
-    GOPROXY=direct go build -trimpath -o /usr/local/bin/gtfsclean github.com/public-transport/gtfsclean
+COPY --chmod=0755 services/motis/tools/transitous/build-gtfsclean.sh /usr/local/bin/build-gtfsclean
+RUN build-gtfsclean
 
-FROM node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS base
+FROM node:24.22.1-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS base
 COPY package.json /tmp/package.json
-RUN corepack enable && corepack prepare "$(node -e "console.log(require('/tmp/package.json').packageManager)")" --activate
+RUN corepack enable && \
+    corepack prepare "$(node -e "console.log(require('/tmp/package.json').packageManager)")" --activate && \
+    pnpm --version
 
 FROM base AS deps
 WORKDIR /app
 ENV HUSKY=0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
-COPY packages/ packages/
+# Only the workspace packages the runner reaches. Manifests stay separate from
+# source, so a source edit keeps the dependency install cached.
+COPY --parents \
+    packages/air-quality/package.json \
+    packages/core/package.json \
+    packages/extension-contracts/package.json \
+    packages/hey-api-client-fetch/package.json \
+    packages/mobility-core/package.json \
+    packages/mobility-formats/package.json \
+    packages/transitous-core/package.json \
+    ./
 COPY apps/transitous-runner/package.json apps/transitous-runner/
 RUN pnpm install --frozen-lockfile
 
-FROM base AS prod-deps
+# Bundles the runner and the workspace code it reaches into dist/. The release
+# planner fingerprints this bundle; release builds pass its digest so a
+# different bundle fails the build instead of shipping under the plan's name.
+FROM deps AS bundle
 WORKDIR /app
-ENV HUSKY=0
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
-COPY packages/ packages/
-COPY apps/transitous-runner/package.json apps/transitous-runner/
-RUN pnpm install --frozen-lockfile --prod --ignore-scripts && \
-    rm -rf node_modules/.pnpm/image-size@*
-# image-size belongs to Metro's mobile build toolchain, not this runtime. Do not
-# copy that unused, currently vulnerable package into the production image
-# merely because pnpm uses a shared workspace virtual store.
-
-FROM deps AS builder
-WORKDIR /app
-COPY packages/core/ packages/core/
+COPY --parents \
+    packages/air-quality/ \
+    packages/core/ \
+    packages/extension-contracts/ \
+    packages/hey-api-client-fetch/ \
+    packages/mobility-core/ \
+    packages/mobility-formats/ \
+    packages/transitous-core/ \
+    ./
 COPY apps/transitous-runner/ apps/transitous-runner/
-COPY tsconfig.base.json ./
-WORKDIR /app/apps/transitous-runner
-RUN pnpm build
+COPY scripts/build-runtime-bundles.mjs scripts/module-specifiers.mjs scripts/
+ARG EXPECTED_BUNDLE_DIGEST=
+RUN node scripts/build-runtime-bundles.mjs transitous-runner --expect "$EXPECTED_BUNDLE_DIGEST"
 
-FROM base AS runner
+# Only the installed package directories the bundles load, with the
+# node_modules links between them. The bundle build lists them from this same
+# install, so a dependency's production or development classification does
+# not matter here.
+FROM deps AS runtime-packages
+COPY scripts/copy-runtime-packages.mjs scripts/
+COPY --from=bundle /app/apps/transitous-runner/dist/runtime-packages.json /tmp/runtime-packages.json
+RUN node scripts/copy-runtime-packages.mjs /tmp/runtime-packages.json /app /runtime
+
+# The runner needs no package manager: starting from the plain Node image keeps
+# the pnpm that corepack prepared for the build stages, and its bundled
+# dependencies, out of the shipped image.
+FROM node:24.22.1-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS runner
 WORKDIR /app
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # git is required because the upstream attribution script reads the catalog's
 # submodule metadata; there is no credential helper and no remote configured.
-# Explicitly upgrade PCRE2 inherited from the pinned base to its security fix.
+# Explicitly upgrade PCRE2 and Expat inherited from the pinned base, and
+# libssl3 and openssl (3.0.22-1~deb12u2 fixes CVE-2026-84782) that curl, git,
+# Python and ca-certificates pull in, to their security fixes. The version
+# checks fail a stale mirror and, when raised, invalidate this layer in the
+# registry build cache.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-      ca-certificates curl git python3 python3-pip python3-venv age libpcre2-8-0 \
+      ca-certificates curl git python3 python3-pip python3-venv age libpcre2-8-0 libexpat1 libssl3 openssl \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libexpat1)" ge 2.5.0-1+deb12u5 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3)" ge 3.0.22-1~deb12u2 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' openssl)" ge 3.0.22-1~deb12u2 \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED
@@ -80,14 +108,6 @@ ENV NODE_ENV=production
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV TRANSITOUS_RUNNER_PORT=4400
 
-COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=prod-deps /app/apps/transitous-runner/node_modules ./apps/transitous-runner/node_modules
-COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
-COPY packages/core/ ./packages/core/
-COPY --from=builder /app/apps/transitous-runner/dist ./apps/transitous-runner/dist
-COPY apps/transitous-runner/package.json ./apps/transitous-runner/
-COPY pnpm-workspace.yaml tsconfig.base.json ./
-
 # Run as a dedicated non-root user. Upstream Python runs under this identity and
 # has no route to escalate: the catalog is mounted read-only apart from its
 # output directory, and nothing else in the image is writable.
@@ -95,11 +115,21 @@ RUN groupadd --system --gid 1001 transitous \
     && useradd --system --uid 1001 --gid transitous --create-home --home-dir /home/transitous transitous \
     && rm -rf /usr/local/lib/node_modules/npm \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx \
-    && chown -R transitous:transitous /app /home/transitous
+    && chown transitous:transitous /app
+
+# The bundle imports its npm dependencies by path from the pnpm store, so the
+# runner needs the bundle and the store packages it loads, and no workspace
+# source.
+# Assign ownership while copying: a recursive chown afterwards would store a
+# second copy of every file in its own layer.
+COPY --chown=transitous:transitous --from=runtime-packages /runtime/node_modules ./node_modules
+COPY --chown=transitous:transitous --from=bundle /app/apps/transitous-runner/dist ./apps/transitous-runner/dist
+# Every dependency file the bundle pins must exist among the copied packages.
+RUN node -e 'const fs=require("node:fs"),p=require("node:path");const d="/app/apps/transitous-runner/dist";const missing=JSON.parse(fs.readFileSync(p.join(d,"runtime-externals.json"),"utf8")).filter((f)=>!fs.existsSync(p.join(d,f)));if(missing.length){console.error("Missing bundle dependencies:",missing);process.exit(1)}'
 
 USER transitous:transitous
 
 WORKDIR /app/apps/transitous-runner
 EXPOSE 4400
 HEALTHCHECK --interval=15s --timeout=3s --retries=5 CMD ["curl", "-fsS", "http://127.0.0.1:4400/health"]
-CMD ["node", "--import", "tsx/esm", "dist/index.js"]
+CMD ["node", "dist/index.mjs"]

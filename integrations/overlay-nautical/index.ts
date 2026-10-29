@@ -4,18 +4,28 @@ import {
   RASTER_IMAGE_MEDIA_TYPES,
   readBoundedBinaryResponse,
 } from "@openmapx/core/server";
-import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
+import {
+  dataSourceToAttribution,
+  type IntegrationContext,
+  scalarQueries,
+  serializeContributors,
+  snapshotContributors,
+} from "@openmapx/integration-framework";
+import { OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
+import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
 import {
   findNearestStation,
   loadStations as loadNoaaStations,
   type NoaaStationType,
 } from "@openmapx/noaa-coops-data";
 import { registerPlaceResolver } from "@openmapx/place-ids";
+import manifest from "./manifest.json";
 import {
   dedupTideStations,
   loadAllTideStations,
   type MergedTideStation,
   stationsInBbox as queryMergedInBbox,
+  stationContributors,
   type TideNetwork,
   type TideStationCapability,
 } from "./stations";
@@ -56,6 +66,7 @@ const _STATION_TYPE_RANK: Record<NoaaStationType, number> = {
  * legend color markers by network.
  */
 interface StationFeatureProperties {
+  _mapAttributions?: string;
   network: TideNetwork;
   id: string;
   name: string;
@@ -122,7 +133,7 @@ interface HarborCollection {
   features: HarborFeature[];
 }
 
-interface HarborDetail {
+interface HarborDetail extends ContributingRecord {
   harbor: HarborFeature["properties"];
   facilities: Array<{
     osmId: string;
@@ -558,7 +569,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
     const k4 = (n: number) => Math.round(n * 1000) / 1000;
-    const cacheKey = `harbors:${k4(south)},${k4(west)},${k4(north)},${k4(east)}:z${zoom}`;
+    const cacheKey = `harbors:contributors-v1:${k4(south)},${k4(west)},${k4(north)},${k4(east)}:z${zoom}`;
     const cached = await ctx.cache.get<HarborCollection>(cacheKey);
     if (cached) {
       reply.header("Cache-Control", "public, max-age=1800");
@@ -587,7 +598,13 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(502).send({ message: "Harbour list fetch failed" });
       return;
     }
-    const features = parseHarbourJsonp(text);
+    const receipts = snapshotContributors(
+      manifest.dataSources.filter((s) => s.sourceId === "openseamap").map(dataSourceToAttribution),
+    );
+    const features = parseHarbourJsonp(text).map((f) => ({
+      ...f,
+      properties: { ...f.properties, _mapAttributions: serializeContributors(receipts) },
+    }));
     const collection: HarborCollection = { type: "FeatureCollection", features };
     await ctx.cache.set(cacheKey, collection, HARBORS_CACHE_TTL);
     reply.header("Cache-Control", "public, max-age=1800");
@@ -606,7 +623,8 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const cacheKey = `harbor:${id}`;
+    const nearbyCredits = stationContributors("noaa");
+    const cacheKey = `harbor:contributors-v1:${id}`;
     const cached = await ctx.cache.get<HarborDetail>(cacheKey);
     if (cached) {
       reply.header("Cache-Control", "public, max-age=3600");
@@ -620,13 +638,19 @@ export function setup(ctx: IntegrationContext): void {
       fetchHarborFacilities(ctx, lat, lng),
       (async () => {
         try {
-          const stations = await loadNoaaStations(ctx.cache, ctx.log);
+          const stations = await loadNoaaStations(
+            ctx.cache,
+            ctx.log,
+            undefined,
+            stationContributors("noaa"),
+          );
           const hit = findNearestStation(stations, lat, lng, 5, "tide-predictions");
           if (!hit) return undefined;
           return {
             id: hit.station.id,
             name: hit.station.name,
             distanceKm: Number(hit.distanceKm.toFixed(2)),
+            contributors: snapshotContributors(hit.station.contributors ?? nearbyCredits),
           };
         } catch {
           return undefined;
@@ -648,6 +672,10 @@ export function setup(ctx: IntegrationContext): void {
       },
       facilities,
       nearestTideStation,
+      contributors: snapshotContributors(
+        facilities.length ? [OPENSTREETMAP_ATTRIBUTION] : [],
+        nearestTideStation?.contributors ?? [],
+      ),
     };
 
     await ctx.cache.set(cacheKey, detail, HARBOR_DETAIL_CACHE_TTL);
@@ -692,7 +720,7 @@ export function setup(ctx: IntegrationContext): void {
     const networkFilter = parseNetworks(scalarQueries(req.query).networks);
     const k4 = (n: number) => Math.round(n * 10000) / 10000;
     const cacheKey = [
-      "stations:bbox-merged-v2",
+      "stations:bbox-merged-contributors-v1",
       k4(west),
       k4(south),
       k4(east),
@@ -711,7 +739,7 @@ export function setup(ctx: IntegrationContext): void {
     // Load NOAA via the existing typed loader; load non-NOAA networks via the
     // new merger module. Each catalog is Redis-cached for 7d behind its own key.
     const [noaaRaw, extraRaw] = await Promise.all([
-      loadNoaaStations(ctx.cache, ctx.log).catch(() => []),
+      loadNoaaStations(ctx.cache, ctx.log, undefined, stationContributors("noaa")).catch(() => []),
       loadAllTideStations(ctx.cache, ctx.log, USER_AGENT).catch(() => []),
     ]);
 
@@ -724,6 +752,7 @@ export function setup(ctx: IntegrationContext): void {
         types.push("currents");
       }
       return {
+        contributors: snapshotContributors(s.contributors ?? []),
         network: "noaa",
         id: s.id,
         name: s.name,
@@ -766,6 +795,7 @@ export function setup(ctx: IntegrationContext): void {
           type: "Feature",
           geometry: { type: "Point", coordinates: [s.lng, s.lat] },
           properties: {
+            _mapAttributions: serializeContributors(s.contributors ?? []),
             network: s.network,
             id: s.id,
             name: s.name,

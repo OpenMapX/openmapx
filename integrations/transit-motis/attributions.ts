@@ -9,8 +9,8 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
  * Manifest declares two sources:
  *   - `transitous` — used by the Transitous provider (cloud.ts) and as the
  *     wrapper when the data comes from Transitous via local fallback.
- *   - `motis` — used by the self-hosted MOTIS instance (local.ts) when the
- *     host hasn't indexed a more specific feed-tag attribution.
+ *   - `motis` — software metadata for the self-hosted instance; it does not
+ *     certify an unknown timetable, street graph or duration supplier.
  */
 export const attribution = createManifestAttribution();
 

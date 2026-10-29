@@ -1,6 +1,6 @@
 "use client";
 
-import type { AiSearchDisclosure, Disclosure } from "@openmapx/integration-framework";
+import type { AiSearchDisclosure, Disclosure } from "@openmapx/core/api-contracts";
 import { createContext, useContext } from "react";
 
 const IntegrationDisclosuresContext = createContext<Disclosure[] | undefined>([]);

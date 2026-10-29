@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -20,6 +20,10 @@
       "!infra/docker/data",
       "!docs",
       "!apps/api/openapi.json",
+      "!services/data-manager/openapi.json",
+      "!packages/entur-client/schema/geocoder.openapi.json",
+      "!packages/otp-client/schema/*.graphql",
+      "!integrations/transit-mbta/schema/swagger.json",
       "!packages/brands/src/data/brands-index.json",
       "!integrations/overlay-sun-time/data/timezones.simplified.json"
     ]

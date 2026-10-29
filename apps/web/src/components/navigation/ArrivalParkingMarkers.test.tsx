@@ -65,6 +65,11 @@ vi.mock("@/integration-api/map/MapContext", () => ({
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
+const receipts = vi.hoisted(() => ({ subscribe: vi.fn(), unsubscribe: vi.fn() }));
+vi.mock("@/integration-api/overlay/renderedMapAttributionTracker", () => ({
+  renderedMapAttributionTracker: () => ({ subscribe: receipts.subscribe }),
+}));
+
 import { ArrivalParkingMarkers } from "./ArrivalParkingMarkers";
 
 const samplePlaces: CategoryPlace[] = [
@@ -88,6 +93,7 @@ describe("ArrivalParkingMarkers", () => {
   beforeEach(() => {
     useParkingStore.getState().reset();
     createdMarkers.length = 0;
+    receipts.subscribe.mockReset().mockReturnValue(receipts.unsubscribe);
     mapContainer = document.createElement("div");
     mockMapContext.current = null;
   });
@@ -95,6 +101,39 @@ describe("ArrivalParkingMarkers", () => {
   afterEach(() => {
     useParkingStore.getState().reset();
     vi.clearAllMocks();
+  });
+
+  it("registers only painted coordinate receipts and withdraws them with removed markers", () => {
+    document.body.append(mapContainer);
+    const bounds = () =>
+      ({ left: 10, top: 10, right: 100, bottom: 100, width: 90, height: 90 }) as DOMRect;
+    mapContainer.getBoundingClientRect = bounds;
+    const map = { container: mapContainer, getContainer: () => mapContainer };
+    mockMapContext.current = { mapRef: { current: map } };
+    const coordinate = { sourceId: "coords", name: "Parking coordinates" };
+    const hidden = { sourceId: "name", name: "Hidden name" };
+    const place = {
+      ...samplePlaces[0],
+      contributors: [hidden],
+      fieldContributors: { coordinates: [coordinate], name: [hidden] },
+    };
+    const { unmount } = render(
+      <ArrivalParkingMarkers places={[place]} selectedPlace={null} onSelectPlace={vi.fn()} />,
+    );
+    const marker = mapContainer.querySelector<HTMLElement>(".omx-arrival-parking-marker");
+    if (!marker) throw new Error("Expected a painted arrival marker");
+    marker.getBoundingClientRect = bounds;
+    const subscription = receipts.subscribe.mock.calls.at(-1)?.[1] as
+      | { resolveCustomContributors: () => unknown }
+      | undefined;
+    expect(subscription?.resolveCustomContributors()).toEqual([coordinate]);
+    marker.style.display = "none";
+    expect(subscription?.resolveCustomContributors()).toEqual([]);
+    marker.style.display = "flex";
+    unmount();
+    expect(receipts.unsubscribe).toHaveBeenCalled();
+    expect(subscription?.resolveCustomContributors()).toEqual([]);
+    mapContainer.remove();
   });
 
   it("suppresses an arrival marker pointer while picking and keeps keyboard activation", () => {

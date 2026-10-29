@@ -1,5 +1,6 @@
 import type { ProviderEvidence } from "@openmapx/air-quality";
 import { indexId, observationId } from "@openmapx/air-quality/ids";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it } from "vitest";
 
 import { normalizeProviderEvidence, ProviderNormalizationError } from "./normalize.js";
@@ -70,7 +71,10 @@ function providerEvidence(update: Partial<ProviderEvidence> = {}): ProviderEvide
         name: "Fixture source",
         url: "https://example.test/data",
         owner: "Fixture owner",
-        license: { name: "CC BY 4.0", url: "https://creativecommons.org/licenses/by/4.0/" },
+        licensing: licensingFromDeclaration(
+          "CC BY 4.0",
+          "https://creativecommons.org/licenses/by/4.0/" ?? undefined,
+        ),
         methodologyUrl: "https://example.test/method",
         attribution: "Fixture owner",
       },

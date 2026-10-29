@@ -13,11 +13,18 @@ import {
   useCountryFromCoordinates,
   useNavigationStore,
 } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  contributorsForNestedRecordFields,
+  contributorsForRecordFields,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { ElevationProfile } from "@/components/elevation/ElevationProfile";
 import { DirectionsDetailHeader } from "@/components/panels/directions/DirectionsDetailHeader";
 import { StepRow } from "@/components/panels/directions/StepRow";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 
 /**
  * The sign-palette country for each step, where the step's maneuver sits
@@ -41,6 +48,7 @@ function stepCountries(
 
 export function DetailsView({
   route,
+  attributions,
   originLabel,
   destinationLabel,
   waypointLabels,
@@ -48,6 +56,7 @@ export function DetailsView({
   onBack,
 }: {
   route: Route;
+  attributions?: readonly Attribution[];
   originLabel: string;
   destinationLabel: string;
   waypointLabels?: string[];
@@ -56,6 +65,60 @@ export function DetailsView({
 }) {
   const t = useTranslations("directions");
   const hasLegs = route.legs && route.legs.length > 1;
+  const [expandedLegs, setExpandedLegs] = useState<Set<number>>(
+    () => new Set(route.legs.map((_, i) => i)),
+  );
+  const toggleLeg = (index: number) =>
+    setExpandedLegs((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  const creditRoot = { ...route, contributors: route.contributors ?? attributions ?? [] };
+  const headerCredits = contributorsForRecordFields(creditRoot, [
+    "distance",
+    "duration",
+    ...(route.summary ? ["summary"] : []),
+  ]);
+  const stepCredits = (steps: readonly RouteStep[], legIndex?: number) =>
+    snapshotContributors(
+      ...steps.map((step, index) =>
+        contributorsForNestedRecordFields(
+          creditRoot,
+          [
+            ...(legIndex === undefined
+              ? []
+              : [{ field: `legs.${legIndex}`, record: route.legs[legIndex] }]),
+            { field: `steps.${index}`, record: step },
+          ],
+          [
+            "instruction",
+            "distance",
+            "duration",
+            ...(step.lanes?.length ? ["lanes", ...(step.maneuver ? ["maneuver"] : [])] : []),
+            ...(step.sign ? ["sign"] : []),
+          ],
+        ),
+      ),
+    );
+  const routeCredits = snapshotContributors(
+    headerCredits,
+    hasLegs
+      ? snapshotContributors(
+          ...route.legs.map((leg, index) =>
+            snapshotContributors(
+              contributorsForNestedRecordFields(
+                creditRoot,
+                [{ field: `legs.${index}`, record: leg }],
+                ["distance", "duration"],
+              ),
+              expandedLegs.has(index) ? stepCredits(leg.steps, index) : [],
+            ),
+          ),
+        )
+      : stepCredits(route.steps),
+  );
   const dist =
     units === "imperial"
       ? `${(route.distance / 1609.34).toFixed(1)} mi`
@@ -78,6 +141,7 @@ export function DetailsView({
         viaLabels={intermediateLabels}
         onBack={onBack}
       />
+      <AttributionStrip attributions={routeCredits} variant="panel-header" />
       <Divider />
       <Box sx={{ px: 2, py: 1.5 }}>
         <Typography
@@ -115,6 +179,8 @@ export function DetailsView({
       {hasLegs ? (
         <LegByLegView
           route={route}
+          expandedLegs={expandedLegs}
+          toggleLeg={toggleLeg}
           waypointLabels={waypointLabels ?? [originLabel, destinationLabel]}
           units={units}
           country={country}
@@ -166,6 +232,8 @@ export function DetailsView({
 
 function LegByLegView({
   route,
+  expandedLegs,
+  toggleLeg,
   waypointLabels,
   units,
   country,
@@ -173,25 +241,14 @@ function LegByLegView({
   t,
 }: {
   route: Route;
+  expandedLegs: ReadonlySet<number>;
+  toggleLeg: (index: number) => void;
   waypointLabels: string[];
   units: "metric" | "imperial";
   country: string | null | undefined;
   routeCountries: RouteCountrySpan[] | null;
   t: ReturnType<typeof useTranslations>;
 }) {
-  const [expandedLegs, setExpandedLegs] = useState<Set<number>>(
-    () => new Set(route.legs.map((_, i) => i)),
-  );
-
-  const toggleLeg = (index: number) => {
-    setExpandedLegs((prev) => {
-      const next = new Set(prev);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
-      return next;
-    });
-  };
-
   return (
     <>
       {route.legs.map((leg, i) => {

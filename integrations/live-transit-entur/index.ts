@@ -1,8 +1,11 @@
-import { type BBox, fetchJson } from "@openmapx/core";
+import type { BBox } from "@openmapx/core";
+import { createEnturClient } from "@openmapx/entur-client";
 import {
-  createManifestAttribution,
+  captureTransitContributors,
   type IntegrationContext,
   type RealtimeProvider,
+  resolveIntegrationContributors,
+  snapshotContributors,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
@@ -13,174 +16,24 @@ import type {
   ServiceAlert,
   TransportMode,
 } from "@openmapx/mobility-core/transit";
+import {
+  NationalSituationsDocument,
+  type SituationFieldsFragment,
+} from "@openmapx/mobility-formats/entur/journey-planner.generated.js";
+import { affectedLineIds, affectedStops } from "@openmapx/mobility-formats/entur/situations.js";
+import {
+  type VehicleFieldsFragment,
+  VehicleHealthCheckDocument,
+  VehiclesByBoundingBoxDocument,
+} from "@openmapx/mobility-formats/entur/vehicles.generated.js";
 
-interface GraphQlResponse<T> {
-  data?: T;
-  errors?: Array<{ message?: string }>;
-}
-
-interface EnturVehicle {
-  vehicleId?: string | null;
-  lastUpdated?: string | null;
-  bearing?: number | null;
-  speed?: number | null;
-  monitored?: boolean | null;
-  mode?: string | null;
-  line?: {
-    lineRef?: string | null;
-    lineName?: string | null;
-    publicCode?: string | null;
-  } | null;
-  serviceJourney?: {
-    id?: string | null;
-    date?: string | null;
-  } | null;
-  operator?: {
-    name?: string | null;
-  } | null;
-  location?: {
-    latitude?: number | null;
-    longitude?: number | null;
-  } | null;
-  monitoredCall?: {
-    stopPointRef?: string | null;
-    order?: number | null;
-  } | null;
-}
-
-interface EnturMultilingualText {
-  value?: string | null;
-  language?: string | null;
-}
-
-interface EnturSituation {
-  id: string;
-  summary?: EnturMultilingualText[] | null;
-  description?: EnturMultilingualText[] | null;
-  reportType?: string | null;
-  severity?: string | null;
-  validityPeriod?: {
-    startTime?: string | null;
-    endTime?: string | null;
-  } | null;
-  lines?: Array<{ id?: string | null } | null> | null;
-  stopPlaces?: Array<{
-    id?: string | null;
-    latitude?: number | null;
-    longitude?: number | null;
-  } | null> | null;
-  quays?: Array<{
-    id?: string | null;
-    latitude?: number | null;
-    longitude?: number | null;
-    stopPlace?: {
-      id?: string | null;
-      latitude?: number | null;
-      longitude?: number | null;
-    } | null;
-  } | null> | null;
-}
-
-const DEFAULT_CLIENT_NAME = "openmapx-server";
-const DEFAULT_JOURNEY_PLANNER_ENDPOINT = "https://api.entur.io/journey-planner/v3/graphql";
-const DEFAULT_VEHICLES_ENDPOINT = "https://api.entur.io/realtime/v2/vehicles/graphql";
 const NORWAY_BBOX: BBox = [4.0, 57.0, 32.0, 71.5];
 const ENTUR_PREFIX = "entur:";
 const VEHICLE_SOURCE_ID = "entur-live-vehicles";
 
-const VEHICLES_BY_BBOX_QUERY = `
-query VehiclesByBoundingBox(
-  $minLat: Float!
-  $minLon: Float!
-  $maxLat: Float!
-  $maxLon: Float!
-  $maxDataAge: Duration!
-) {
-  vehicles(
-    boundingBox: { minLat: $minLat, minLon: $minLon, maxLat: $maxLat, maxLon: $maxLon }
-    maxDataAge: $maxDataAge
-    monitored: true
-  ) {
-    vehicleId
-    lastUpdated
-    bearing
-    speed
-    monitored
-    mode
-    line { lineRef lineName publicCode }
-    serviceJourney { id date }
-    operator { name }
-    location { latitude longitude }
-    monitoredCall { stopPointRef order }
-  }
-}`;
-
-const HEALTHCHECK_QUERY = `
-query HealthCheck {
-  vehicles(codespaceId: "RUT", maxDataAge: "PT1H", monitored: true) {
-    lastUpdated
-  }
-}`;
-
-const NATIONAL_SITUATIONS_QUERY = `
-{
-  situations {
-    id
-    summary { value language }
-    description { value language }
-    reportType
-    severity
-    validityPeriod { startTime endTime }
-    lines { id }
-    stopPlaces { id latitude longitude }
-    quays {
-      id
-      latitude
-      longitude
-      stopPlace { id latitude longitude }
-    }
-  }
-}`;
-
-let clientName = DEFAULT_CLIENT_NAME;
-let journeyPlannerEndpoint = DEFAULT_JOURNEY_PLANNER_ENDPOINT;
-let vehiclesEndpoint = DEFAULT_VEHICLES_ENDPOINT;
-
-// Combined cache budget: national snapshot 15 s + bbox 30 s + HTTP 15 s.
-const SITUATIONS_CACHE_MS = 15_000;
 interface SituationSnapshot {
-  situations: EnturSituation[];
+  situations: SituationFieldsFragment[];
   fetchedAt: string;
-  expiresAt: number;
-}
-let situationCache: { snapshot?: SituationSnapshot; pending?: Promise<SituationSnapshot> } = {};
-
-function getSituationSnapshot(): Promise<SituationSnapshot> {
-  const cache = situationCache;
-  if (cache.snapshot && Date.now() < cache.snapshot.expiresAt)
-    return Promise.resolve(cache.snapshot);
-  if (cache.pending) return cache.pending;
-  cache.pending = (async () => {
-    try {
-      const data = await fetchGraphQl<{ situations?: EnturSituation[] | null }>(
-        journeyPlannerEndpoint,
-        NATIONAL_SITUATIONS_QUERY,
-      );
-      const now = Date.now();
-      const snapshot = {
-        situations: data.situations ?? [],
-        fetchedAt: new Date(now).toISOString(),
-        expiresAt: now + SITUATIONS_CACHE_MS,
-      };
-      // An old activation owns a different cache object and cannot refill
-      // the current activation's snapshot after its request finishes.
-      cache.snapshot = snapshot;
-      return snapshot;
-    } finally {
-      cache.pending = undefined;
-    }
-  })();
-  return cache.pending;
 }
 
 function withEnturPrefix(id: string): string {
@@ -222,7 +75,9 @@ function toTransportMode(raw: string | null | undefined): TransportMode {
   return "bus";
 }
 
-function pickLocalizedText(values: EnturMultilingualText[] | null | undefined): string | undefined {
+function pickLocalizedText(
+  values: SituationFieldsFragment["summary"][number][] | null | undefined,
+): string | undefined {
   if (!values?.length) return undefined;
   const english = values.find((entry) => entry.language?.toLowerCase() === "en" && entry.value);
   if (english?.value) return english.value;
@@ -246,36 +101,9 @@ function isInsideBbox(bbox: BBox, longitude: number, latitude: number): boolean 
   return longitude >= bbox[0] && longitude <= bbox[2] && latitude >= bbox[1] && latitude <= bbox[3];
 }
 
-async function fetchGraphQl<T>(
-  endpoint: string,
-  query: string,
-  variables?: Record<string, unknown>,
-): Promise<T> {
-  const payload = await fetchJson<GraphQlResponse<T>>(endpoint, {
-    timeoutMs: 8_000,
-    userAgent: null,
-    headers: { "Content-Type": "application/json", "ET-Client-Name": clientName },
-    errorMessage: ({ status, statusText }) =>
-      `Entur GraphQL request failed: ${status} ${statusText}`,
-    init: { method: "POST", body: JSON.stringify({ query, variables }) },
-  });
-  if (payload.errors?.length) {
-    throw new Error(
-      payload.errors
-        .map((entry) => entry.message)
-        .filter(Boolean)
-        .join("; "),
-    );
-  }
-  if (!payload.data) {
-    throw new Error("Entur GraphQL response missing data");
-  }
-  return payload.data;
-}
-
-function toLiveVehicle(vehicle: EnturVehicle): LiveTransitVehicle | null {
+function toLiveVehicle(vehicle: VehicleFieldsFragment | null): LiveTransitVehicle | null {
   if (
-    typeof vehicle.location?.latitude !== "number" ||
+    typeof vehicle?.location?.latitude !== "number" ||
     typeof vehicle.location?.longitude !== "number" ||
     !isTruthyString(vehicle.lastUpdated)
   ) {
@@ -324,22 +152,14 @@ function toLiveVehicle(vehicle: EnturVehicle): LiveTransitVehicle | null {
   };
 }
 
-function toAlert(situation: EnturSituation): ServiceAlert | null {
+function toAlert(situation: SituationFieldsFragment): ServiceAlert | null {
   if (!situation.id) return null;
 
   const affectedRouteIds = new Set<string>();
   const affectedStopIds = new Set<string>();
 
-  for (const line of situation.lines ?? []) {
-    if (line?.id) affectedRouteIds.add(withEnturPrefix(line.id));
-  }
-  for (const stopPlace of situation.stopPlaces ?? []) {
-    if (stopPlace?.id) affectedStopIds.add(withEnturPrefix(stopPlace.id));
-  }
-  for (const quay of situation.quays ?? []) {
-    if (quay?.id) affectedStopIds.add(withEnturPrefix(quay.id));
-    if (quay?.stopPlace?.id) affectedStopIds.add(withEnturPrefix(quay.stopPlace.id));
-  }
+  for (const id of affectedLineIds(situation)) affectedRouteIds.add(withEnturPrefix(id));
+  for (const stop of affectedStops(situation)) affectedStopIds.add(withEnturPrefix(stop.id));
 
   return {
     id: withEnturPrefix(situation.id),
@@ -353,130 +173,124 @@ function toAlert(situation: EnturSituation): ServiceAlert | null {
     description: pickLocalizedText(situation.description),
     affectedRouteIds: [...affectedRouteIds],
     affectedStopIds: [...affectedStopIds],
-    activePeriods: situation.validityPeriod?.startTime
-      ? [
-          {
-            start: situation.validityPeriod.startTime,
-            end: situation.validityPeriod.endTime ?? undefined,
-          },
-        ]
-      : [],
+    activePeriods: situation.validityPeriods.map((period) => ({
+      start: period.startTime ?? undefined,
+      end: period.endTime ?? undefined,
+    })),
   };
 }
 
-function situationTouchesBbox(situation: EnturSituation, bbox: BBox): boolean {
-  for (const stopPlace of situation.stopPlaces ?? []) {
-    if (
-      typeof stopPlace?.latitude === "number" &&
-      typeof stopPlace.longitude === "number" &&
-      isInsideBbox(bbox, stopPlace.longitude, stopPlace.latitude)
-    ) {
-      return true;
-    }
-  }
-
-  for (const quay of situation.quays ?? []) {
-    if (
-      typeof quay?.latitude === "number" &&
-      typeof quay.longitude === "number" &&
-      isInsideBbox(bbox, quay.longitude, quay.latitude)
-    ) {
-      return true;
-    }
-    if (
-      typeof quay?.stopPlace?.latitude === "number" &&
-      typeof quay.stopPlace.longitude === "number" &&
-      isInsideBbox(bbox, quay.stopPlace.longitude, quay.stopPlace.latitude)
-    ) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-async function getEnturVehicles(bbox: BBox): Promise<LiveTransitVehicle[]> {
-  const data = await fetchGraphQl<{ vehicles?: EnturVehicle[] | null }>(
-    vehiclesEndpoint,
-    VEHICLES_BY_BBOX_QUERY,
-    {
-      minLat: bbox[1],
-      minLon: bbox[0],
-      maxLat: bbox[3],
-      maxLon: bbox[2],
-      maxDataAge: "PT30M",
-    },
+function situationTouchesBbox(situation: SituationFieldsFragment, bbox: BBox): boolean {
+  return affectedStops(situation).some(
+    (stop) =>
+      typeof stop.latitude === "number" &&
+      typeof stop.longitude === "number" &&
+      isInsideBbox(bbox, stop.longitude, stop.latitude),
   );
-
-  return (data.vehicles ?? [])
-    .map((vehicle) => toLiveVehicle(vehicle))
-    .filter((vehicle): vehicle is LiveTransitVehicle => vehicle !== null);
-}
-
-async function getEnturAlerts(bbox: BBox): Promise<{ data: ServiceAlert[]; fetchedAt: string }> {
-  const snapshot = await getSituationSnapshot();
-  const byId = new Map<string, ServiceAlert>();
-  for (const situation of snapshot.situations) {
-    if (!situationTouchesBbox(situation, bbox)) continue;
-    const alert = toAlert(situation);
-    if (!alert) continue;
-    byId.set(alert.id, alert);
-  }
-  return { data: [...byId.values()], fetchedAt: snapshot.fetchedAt };
-}
-
-async function isEnturLiveTransitAvailable(): Promise<boolean> {
-  try {
-    await fetchGraphQl<{ vehicles?: Array<{ lastUpdated?: string | null }> | null }>(
-      vehiclesEndpoint,
-      HEALTHCHECK_QUERY,
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// Attribution metadata for the two sub-feeds (vehicles + situations) is
-// declared in the manifest's dataSources; we look each up by sourceId so
-// per-method calls credit only the feed that actually served them.
-const attribution = createManifestAttribution();
-function attributionFor(sourceId: string): Attribution[] {
-  const attr = attribution.bySource(sourceId);
-  return attr ? [attr] : [];
 }
 
 export function setup(ctx: IntegrationContext): void {
-  ctx.onActivate(() => {
-    situationCache = {};
-    attribution.set(ctx.manifest.dataSources ?? []);
-    clientName =
-      ctx.config.clientName && String(ctx.config.clientName).trim().length > 0
-        ? String(ctx.config.clientName).trim()
-        : DEFAULT_CLIENT_NAME;
-    journeyPlannerEndpoint =
-      ctx.config.journeyPlannerEndpoint &&
-      String(ctx.config.journeyPlannerEndpoint).trim().length > 0
-        ? String(ctx.config.journeyPlannerEndpoint).trim()
-        : DEFAULT_JOURNEY_PLANNER_ENDPOINT;
-    vehiclesEndpoint =
-      ctx.config.vehiclesEndpoint && String(ctx.config.vehiclesEndpoint).trim().length > 0
-        ? String(ctx.config.vehiclesEndpoint).trim()
-        : DEFAULT_VEHICLES_ENDPOINT;
+  const { id, http, cache, upstreamRuntime } = ctx;
+  const generation = new AbortController();
+  const sourceIds = {
+    vehicles: "entur-live-vehicles",
+    journeyPlanner: "entur-live-situations",
+  } as const;
+  const client = createEnturClient({
+    http,
+    upstreamRuntime,
+    config: { ...ctx.config },
+    sourceIds,
+    contributors: Object.fromEntries(
+      Object.values(sourceIds).map((sourceId) => [
+        sourceId,
+        resolveIntegrationContributors(ctx, [sourceId]),
+      ]),
+    ),
+    isSourceAllowed: async (sourceId) => {
+      const denied = await ctx.getDisallowedSourceIds?.();
+      return !denied?.has(sourceId) && !denied?.has(id);
+    },
   });
+  ctx.onShutdown(async () => {
+    generation.abort(new Error("Entur live generation retired"));
+  });
+  const attributionFor = (sourceId: string): Attribution[] =>
+    snapshotContributors(client.contributors[sourceId] ?? []);
+  // The host owns the shared fill lifetime; generation retirement cancels only this waiter.
+  const snapshotKey = `national-situations:v1:${client.identity}`;
+  async function getSituationSnapshot(): Promise<SituationSnapshot> {
+    await client.assertSourceAllowed("journeyPlanner", generation.signal);
+    const snapshot = await cache.withCache(
+      snapshotKey,
+      15,
+      async (operationSignal) => {
+        const data = await client.graphQl(
+          "journeyPlanner",
+          NationalSituationsDocument,
+          {},
+          operationSignal,
+        );
+        return { situations: data.situations ?? [], fetchedAt: new Date().toISOString() };
+      },
+      generation.signal,
+    );
+    await client.assertSourceAllowed("journeyPlanner", generation.signal);
+    return snapshot;
+  }
+  async function getEnturVehicles(bbox: BBox): Promise<LiveTransitVehicle[]> {
+    const data = await client.graphQl(
+      "vehicles",
+      VehiclesByBoundingBoxDocument,
+      {
+        minLat: bbox[1],
+        minLon: bbox[0],
+        maxLat: bbox[3],
+        maxLon: bbox[2],
+        maxDataAge: "PT30M",
+      },
+      generation.signal,
+    );
 
-  ctx.registerHealthCheck(async () => {
-    const available = await isEnturLiveTransitAvailable();
-    return available
+    return (data.vehicles ?? [])
+      .map((vehicle) => toLiveVehicle(vehicle))
+      .filter((vehicle): vehicle is LiveTransitVehicle => vehicle !== null);
+  }
+
+  async function getEnturAlerts(bbox: BBox): Promise<{ data: ServiceAlert[]; fetchedAt: string }> {
+    const snapshot = await getSituationSnapshot();
+    const byId = new Map<string, ServiceAlert>();
+    for (const situation of snapshot.situations) {
+      if (!situationTouchesBbox(situation, bbox)) continue;
+      const alert = toAlert(situation);
+      if (!alert) continue;
+      byId.set(alert.id, alert);
+    }
+    return { data: [...byId.values()], fetchedAt: snapshot.fetchedAt };
+  }
+
+  async function isEnturLiveTransitAvailable(): Promise<boolean> {
+    try {
+      await Promise.all([
+        client.graphQl("vehicles", VehicleHealthCheckDocument, {}, generation.signal),
+        client.graphQl("journeyPlanner", NationalSituationsDocument, {}, generation.signal),
+      ]);
+      return true;
+    } catch (error) {
+      if (generation.signal.aborted) throw error;
+      return false;
+    }
+  }
+  ctx.registerHealthCheck(async () =>
+    (await isEnturLiveTransitAvailable())
       ? { status: "up" as const }
-      : { status: "down" as const, error: "Entur realtime vehicle probe failed" };
-  });
-
+      : { status: "down" as const, error: "Entur realtime API probe failed" },
+  );
   const provider: RealtimeProvider = {
     id: "live-transit-entur",
     coverage: { bbox: NORWAY_BBOX },
     priority: 10,
-    attribution: attribution.all(),
+    attribution: Object.values(sourceIds).flatMap(attributionFor),
     capabilities: {
       vehiclePositions: true,
       alerts: { byStop: false, byRoute: false, byBbox: true },
@@ -484,20 +298,25 @@ export function setup(ctx: IntegrationContext): void {
     },
     async getVehiclePositions(bbox: BBox) {
       const data = await getEnturVehicles(bbox);
+      await client.assertSourceAllowed("vehicles", generation.signal);
       return withAttribution(
-        data,
-        attributionFor("entur-live-vehicles"),
+        captureTransitContributors(data, attributionFor(sourceIds.vehicles)),
+        attributionFor(sourceIds.vehicles),
         freshnessNow({ hasRealtimeData: true }),
       );
     },
     async getAlertsForBbox(bbox: BBox) {
       const snapshot = await getEnturAlerts(bbox);
-      return withAttribution(snapshot.data, attributionFor("entur-live-situations"), {
-        ...freshnessNow({ hasRealtimeData: true }),
-        fetchedAt: snapshot.fetchedAt,
-      });
+      await client.assertSourceAllowed("journeyPlanner", generation.signal);
+      return withAttribution(
+        captureTransitContributors(snapshot.data, attributionFor(sourceIds.journeyPlanner)),
+        attributionFor(sourceIds.journeyPlanner),
+        {
+          ...freshnessNow({ hasRealtimeData: true }),
+          fetchedAt: snapshot.fetchedAt,
+        },
+      );
     },
   };
-
   ctx.registerRealtimeProvider(provider);
 }

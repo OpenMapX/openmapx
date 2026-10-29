@@ -12,8 +12,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** A real response, which the client reads as text before parsing it as JSON. */
 function mockOk(data: unknown) {
-  return { ok: true, json: async () => data } as Response;
+  return new Response(JSON.stringify(data), { status: 200 });
 }
 
 function mockNotOk() {
@@ -279,4 +280,13 @@ describe("overpass provider", () => {
       expect(stops[0].modes).toContain("funicular");
     });
   });
+});
+
+it("preserves the actual Overpass response supplier on converted transit stops", async () => {
+  mockFetch.mockResolvedValueOnce(
+    mockOk({ elements: [{ id: 1, lat: 50, lon: 8, tags: { name: "Stop" } }] }),
+  );
+  const { getStops } = await loadModule();
+  const stops = await getStops([7, 49, 9, 51]);
+  expect(stops[0].contributors?.map((receipt) => receipt.sourceId)).toContain("openstreetmap");
 });

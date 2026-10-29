@@ -44,6 +44,24 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe("generated request boundary", () => {
+  it.each([
+    new Headers({ "X-Request": "headers" }),
+    [["X-Request", "headers"]] as [string, string][],
+  ])("preserves every HeadersInit form and interceptor precedence", async (headers) => {
+    mockFetch(() => jsonResponse({ ok: true }));
+    const client = createApiClient({
+      baseUrl: "https://api.example/",
+      headerInterceptor: () => ({ "x-auth": "interceptor" }),
+    });
+    await client.get("/headers", undefined, { headers });
+    const sent = new Headers(calls[0].init.headers);
+    expect(sent.get("x-request")).toBe("headers");
+    expect(sent.get("x-auth")).toBe("interceptor");
+    expect(sent.get("accept")).toBe("application/json");
+  });
+});
+
 describe("instance isolation", () => {
   it("uses its own origin and credentials, not the singleton's", async () => {
     mockFetch(() => jsonResponse({ ok: true }));
@@ -358,4 +376,41 @@ describe("requests", () => {
     await new ApiClient().get("/fallback");
     expect(calls[0].url).toBe("https://web.example/fallback");
   });
+});
+
+describe("SDK response-consumer cancellation", () => {
+  it.each(["timeout", "aborted"] as const)(
+    "passes its effective signal to bounded consumers for %s",
+    async (mode) => {
+      vi.useFakeTimers();
+      let canceled = false;
+      const body = new ReadableStream<Uint8Array>({
+        cancel() {
+          canceled = true;
+        },
+      });
+      mockFetch(() => new Response(body, { headers: { "content-type": "application/json" } }));
+      const observer = new AbortController();
+      const client = createApiClient({ baseUrl: "https://api.example", credentials: "include" });
+      const outcome = client
+        .request(
+          "/api/control",
+          {},
+          async (response, signal) => {
+            expect(signal).toBeInstanceOf(AbortSignal);
+            const { readBoundedJsonResponse } = await import("../utils/fetchJson");
+            return readBoundedJsonResponse(response, { signal, maxBytes: 1024 });
+          },
+          { signal: observer.signal, ...(mode === "timeout" ? { timeoutMs: 10 } : {}) },
+        )
+        .catch((error) => error);
+      await vi.advanceTimersByTimeAsync(0);
+      if (mode === "timeout") await vi.advanceTimersByTimeAsync(11);
+      else observer.abort();
+      expect(await outcome).toMatchObject({ name: "ApiRequestAbortedError", code: mode });
+      expect(canceled).toBe(true);
+      expect(body.locked).toBe(false);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
 });

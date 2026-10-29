@@ -14,7 +14,8 @@ import { decryptHandoffToken, encryptHandoffToken } from "./mobileAuthHandoffCry
  * The installed app never holds a session. When a sign-in has to happen in the
  * system browser, the browser establishes it and hands back one opaque code.
  * That code is only useful to whoever started the attempt, because redeeming it
- * requires the PKCE verifier, and the verifier never left the app's memory.
+ * requires the PKCE verifier. The native helper passes it through `auth.result`
+ * to the WebView, which sends it with the code and state to this API exchange.
  *
  * Three properties do all the work here.
  *

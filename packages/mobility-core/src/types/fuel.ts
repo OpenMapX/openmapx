@@ -1,3 +1,4 @@
+import type { ContributingRecord } from "../contributors.js";
 import type { Attribution } from "./attribution.js";
 
 /**
@@ -6,7 +7,7 @@ import type { Attribution } from "./attribution.js";
  * cubic metre. Each product carries its own price and the time that price was
  * reported, because grades at one station are rarely updated together.
  */
-export interface FuelProduct {
+export interface FuelProduct extends ContributingRecord {
   /**
    * Unique within the station: the grade code, plus `:self`/`:served` where
    * both are priced, or `:hgv` for a lorries-only product.
@@ -30,6 +31,8 @@ export interface FuelStation {
   name: string;
   /** Plain brand name as the source publishes it. */
   brand?: string;
+  /** The brand's Wikidata item (`Q<digits>`), when the source names it. */
+  brandWikidata?: string;
   /** ISO 3166-1 alpha-2 code of the station's country, when known. */
   country?: string;
   coordinates: [number, number];
@@ -39,6 +42,12 @@ export interface FuelStation {
   products: FuelProduct[];
   /** True when the source lists every product: a missing product is then not sold. */
   productsComplete: boolean;
+  /** Payment methods the station takes, as OpenConditions codes (`cash`, `card`, `app`). */
+  payment?: string[];
+  /** What else the station offers, as OpenConditions amenity codes (`shop`, `car_wash`). */
+  amenities?: string[];
+  /** Whether lorries can fill up there: a lane or pump for heavy goods vehicles. */
+  truckSuitable?: boolean;
   /** Every source id that contributed to this station, most authoritative first. */
   sources: string[];
   attributions: Attribution[];

@@ -22,7 +22,6 @@ vi.mock("@openmapx/core", async (importOriginal) => {
     useCapabilities: () => ({
       isAvailable: () => true,
       services: {},
-      getCapability: () => undefined,
     }),
   };
 });

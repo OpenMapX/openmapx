@@ -35,7 +35,7 @@ export function extractTrafficSignals(match: MatchResult): LngLat[] {
 }
 
 export interface GeometryWindow {
-  /** The slice to map-match (≤ maxPoints points). */
+  /** The slice to map-match (≤ maxPoints points, bounded by distance when supplied). */
   trace: LngLat[];
   /** Start index for the next window (overlaps this window's last point). */
   nextStart: number;
@@ -46,30 +46,34 @@ export interface GeometryWindow {
 }
 
 /**
- * Slice `geometry` into a map-matchable window of at most `maxPoints` points,
- * starting at `startIndex`. Windows overlap by one point so a signal on a cut
- * isn't dropped. `endMeters` is the cumulative geometric distance from the
- * route start to the window's last point — the hook fetches the next window
- * once the driver nears it. Pass `cum` (a pre-computed `cumulativeDistances(geometry)`)
- * to avoid the O(N) recompute on repeated window advances.
+ * Slice `geometry` into a map-matchable window of at most `maxPoints` points
+ * and `maxMeters` along-route metres, starting at `startIndex`. Always retain
+ * two points to advance even if one sparse segment exceeds the distance budget.
+ * Windows overlap by one point so a signal on a cut isn't dropped. `endMeters`
+ * is the cumulative distance from the route start to the window's last point —
+ * the hook fetches the next window once the driver nears it. Pass `cum` (a
+ * pre-computed `cumulativeDistances(geometry)`) to avoid the O(N) recompute on
+ * repeated window advances.
  */
 export function windowGeometry(
   geometry: LngLat[],
   startIndex: number,
   maxPoints: number,
   cum?: number[],
+  maxMeters = Number.POSITIVE_INFINITY,
 ): GeometryWindow {
   if (geometry.length < 2 || startIndex >= geometry.length - 1) {
     return { trace: [], nextStart: geometry.length, done: true, endMeters: 0 };
   }
-  const end = Math.min(startIndex + maxPoints, geometry.length);
+  const distances = cum ?? cumulativeDistances(geometry);
+  let end = Math.min(startIndex + maxPoints, geometry.length);
+  while (end > startIndex + 2 && distances[end - 1] - distances[startIndex] > maxMeters) {
+    end--;
+  }
   const trace = geometry.slice(startIndex, end);
   const done = end >= geometry.length;
   // Overlap by one point unless we've reached the end.
   const nextStart = done ? geometry.length : end - 1;
-  // Cumulative distances may be passed in to avoid recomputing the full-route
-  // O(N) walk on every window advance.
-  const distances = cum ?? cumulativeDistances(geometry);
   const endMeters = distances[end - 1];
   return { trace, nextStart, done, endMeters };
 }

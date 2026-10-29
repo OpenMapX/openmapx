@@ -1,5 +1,13 @@
 import type { AirportType } from "@openmapx/core";
-import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
+import {
+  dataSourceToAttribution,
+  type IntegrationContext,
+  scalarQueries,
+} from "@openmapx/integration-framework";
+import {
+  snapshotContributors,
+  withFeatureContributors,
+} from "@openmapx/mobility-core/contributors";
 import { queryAirportsInBbox, startBackgroundLoad } from "@openmapx/ourairports-data";
 
 const DEFAULT_BBOX_LIMIT = 1500;
@@ -32,6 +40,7 @@ interface AirportFeatureProperties {
   /** Importance rank (0 = large, 6 = closed) — exposed so the map style can
    * zoom-filter and size markers without re-deriving it client-side. */
   rank: number;
+  _mapAttributions?: string;
 }
 
 interface AirportFeature {
@@ -91,6 +100,8 @@ function parseTypes(raw: string | undefined): AirportType[] | undefined {
 }
 
 export function setup(ctx: IntegrationContext): void {
+  const source = ctx.manifest.dataSources?.find((source) => source.sourceId === "ourairports");
+  const contributors = snapshotContributors(source ? [dataSourceToAttribution(source)] : []);
   // Start loading the airport catalog in the background. The shared package
   // dedupes against any other integration (knowledge-ourairports) that may
   // already have started a load.
@@ -113,7 +124,7 @@ export function setup(ctx: IntegrationContext): void {
         : DEFAULT_BBOX_LIMIT;
 
     const cacheKey = [
-      "bbox",
+      "bbox:contributors-v1",
       round4(bbox.west),
       round4(bbox.south),
       round4(bbox.east),
@@ -133,23 +144,28 @@ export function setup(ctx: IntegrationContext): void {
 
       const featureCollection: AirportFeatureCollection = {
         type: "FeatureCollection",
-        features: records.map((r) => ({
-          type: "Feature",
-          geometry: { type: "Point", coordinates: [r.lng, r.lat] },
-          properties: {
-            id: r.id,
-            ident: r.ident,
-            name: r.name,
-            type: r.type,
-            iata: r.iata,
-            icao: r.icao,
-            scheduledService: r.scheduledService,
-            elevationFt: r.elevationFt,
-            municipality: r.municipality,
-            isoCountry: r.isoCountry,
-            rank: TYPE_RANK[r.type] ?? 99,
-          },
-        })),
+        features: records.map((r) =>
+          withFeatureContributors(
+            {
+              type: "Feature",
+              geometry: { type: "Point", coordinates: [r.lng, r.lat] },
+              properties: {
+                id: r.id,
+                ident: r.ident,
+                name: r.name,
+                type: r.type,
+                iata: r.iata,
+                icao: r.icao,
+                scheduledService: r.scheduledService,
+                elevationFt: r.elevationFt,
+                municipality: r.municipality,
+                isoCountry: r.isoCountry,
+                rank: TYPE_RANK[r.type] ?? 99,
+              },
+            } satisfies AirportFeature,
+            contributors,
+          ),
+        ),
       };
       return featureCollection;
     });

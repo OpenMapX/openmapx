@@ -2,10 +2,13 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { IntegrationContext, ProviderCallContext } from "@openmapx/integration-framework";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it, vi } from "vitest";
+import { OPENAQ_METADATA_TTL, OPENAQ_SERIES_TTL } from "./cache-policy.js";
 import type { OpenAQClient } from "./openaq-client.js";
 import { buildOpenAQEvidence, createOpenAQProvider } from "./provider.js";
 import type { OpenAQHour, OpenAQLocation } from "./schemas.js";
+import { MemoryUpstreamRuntime } from "./test-helpers.js";
 
 const fixtureDir = fileURLToPath(new URL("./__fixtures__/", import.meta.url));
 const fixture = <T>(name: string): T => JSON.parse(readFileSync(`${fixtureDir}${name}`, "utf8"));
@@ -39,10 +42,122 @@ describe("OpenAQ provider normalization", () => {
     });
     expect(evidence?.sources[0]).toMatchObject({
       sourceId: "openaq",
-      owner: "Unknown Governmental Organization",
-      license: { name: "US Public Domain", url: null },
+      owner: null,
+      attribution: "AirNow",
+      licensing: licensingFromDeclaration("US Public Domain", null ?? undefined),
     });
     expect(evidence?.qualityStatus).toBe("preliminary");
+  });
+
+  it("credits the named provider from captured metadata without inventing a station owner", () => {
+    const captured = fixture<{ results: OpenAQLocation[] }>("location-detail.json").results[0];
+    const original = structuredClone(captured);
+    const evidence = buildOpenAQEvidence(captured, [{ sensor: captured.sensors[0], hours }]);
+    expect(evidence?.sources[0]).toMatchObject({
+      name: "OpenAQ via AirNow",
+      owner: null,
+      attribution: "AirNow",
+      licensing: licensingFromDeclaration("US Public Domain"),
+    });
+    expect(captured).toEqual(original);
+    expect(captured.owner.name).toBe("Unknown Governmental Organization");
+    expect(captured.licenses?.[0].attribution.name).toBe("Unknown Governmental Organization");
+  });
+
+  it("retains a distinct real owner, provider, supplied notice and attribution link", () => {
+    const named = structuredClone(location);
+    named.owner = { id: 101, name: "Station operator" };
+    named.provider = { id: 102, name: "Data network" };
+    named.licenses = [
+      {
+        id: 41,
+        name: "CC BY 4.0",
+        attribution: {
+          name: "Copyright Measurement contributors",
+          url: "https://example.test/credit",
+        },
+        dateFrom: "2025-01-01",
+        dateTo: null,
+      },
+    ];
+    const evidence = buildOpenAQEvidence(named, [{ sensor: named.sensors[1], hours }], {
+      licenseUrls: new Map([[41, "https://creativecommons.org/licenses/by/4.0/"]]),
+    });
+    expect(evidence?.sources[0]).toMatchObject({
+      name: "OpenAQ via Data network",
+      owner: "Station operator",
+      attribution: "Copyright Measurement contributors",
+      url: "https://example.test/credit",
+      licensing: licensingFromDeclaration(
+        "CC BY 4.0",
+        "https://creativecommons.org/licenses/by/4.0/",
+      ),
+    });
+  });
+
+  it("prefers a known owner when the licence credit is the verified placeholder", () => {
+    const named = structuredClone(location);
+    named.owner.name = "Station operator";
+    expect(
+      buildOpenAQEvidence(named, [{ sensor: named.sensors[1], hours }])?.sources[0],
+    ).toMatchObject({
+      owner: "Station operator",
+      attribution: "Station operator",
+      name: "OpenAQ via AirNow",
+    });
+  });
+
+  it("uses OpenAQ when no actual contributor is known without filtering names by a broad unknown pattern", () => {
+    const unnamed = structuredClone(location);
+    unnamed.provider.name = "Unknown Governmental Organization";
+    expect(
+      buildOpenAQEvidence(unnamed, [{ sensor: unnamed.sensors[1], hours }])?.sources[0],
+    ).toMatchObject({ owner: null, attribution: "OpenAQ", name: "OpenAQ" });
+    unnamed.owner.name = "Unknown Air Research Association";
+    expect(
+      buildOpenAQEvidence(unnamed, [{ sensor: unnamed.sensors[1], hours }])?.sources[0],
+    ).toMatchObject({
+      owner: "Unknown Air Research Association",
+      attribution: "Unknown Air Research Association",
+    });
+  });
+
+  it("normalizes already persisted raw station metadata without waiting for upstream refresh", async () => {
+    const runtime = new MemoryUpstreamRuntime();
+    const prefix = "openaq:openaq-v3-openapi-3.0.0:openmapx-openaq-series-v1:";
+    await runtime.write(
+      `${prefix}locations:bbox:-107.0000,35.0000,-106.0000,36.0000:pm25`,
+      {
+        items: [location],
+        pages: 1,
+        truncated: false,
+      },
+      OPENAQ_METADATA_TTL,
+    );
+    await runtime.write(
+      `${prefix}licenses`,
+      { items: [], pages: 1, truncated: false },
+      OPENAQ_METADATA_TTL,
+    );
+    await runtime.write(
+      `${prefix}latest:2178`,
+      {
+        items: fixture<{ results: unknown[] }>("latest.json").results,
+        pages: 1,
+        truncated: false,
+      },
+      OPENAQ_SERIES_TTL,
+    );
+    const provider = createOpenAQProvider(
+      { ...createMockIntegrationContext(), upstreamRuntime: runtime },
+      {} as OpenAQClient,
+    );
+    const page = await provider.getStations?.(
+      { south: 35, west: -107, north: 36, east: -106, zoom: 8, pollutant: "pm25", limit: 20 },
+      call,
+    );
+    expect(page?.evidence).toHaveLength(1);
+    expect(page?.evidence[0].sources[0]).toMatchObject({ owner: null, attribution: "AirNow" });
   });
 
   it("keeps low-cost and mobile metadata raw-only instead of upgrading it", () => {

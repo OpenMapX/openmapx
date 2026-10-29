@@ -1,15 +1,14 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useRef } from "react";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import type { BrandDetail } from "../types/brand";
+import type { PlacePhoto } from "../types/place";
+import { isDisplayablePhoto } from "../utils/commons-metadata";
 
 /** Author + licence for the one Commons logo a brand header card renders at size. */
-export interface BrandLogoAttribution {
-  author?: string;
-  authorUrl?: string;
-  license?: string;
-  licenseUrl?: string;
+export interface BrandLogoAttribution extends PlacePhoto {
+  logoFile: string;
 }
 
 /**
@@ -19,8 +18,9 @@ export interface BrandLogoAttribution {
  */
 function brandDetailQueryOptions(qid: string | null) {
   return {
-    queryKey: ["brand-detail", qid] as const,
-    queryFn: () => apiClient.get<BrandDetail>(`${API_ENDPOINTS.brandDetail}/${qid}`),
+    queryKey: ["brand-detail-v2", qid] as const,
+    queryFn: () =>
+      apiClient.get<BrandDetail>(`${API_ENDPOINTS.brandDetail}/${qid}`, { catalogue: "2" }),
     staleTime: 24 * 60 * 60 * 1000,
   };
 }
@@ -34,7 +34,7 @@ export function useBrandDetail(qid: string | null) {
 }
 
 /**
- * Logo filenames for a set of distinct brand QIDs, resolved with one hook
+ * Captured catalogue records for a set of distinct brand QIDs, resolved with one hook
  * call regardless of how many QIDs are passed in.
  *
  * A result list can carry any number of distinct brands, and calling
@@ -42,25 +42,31 @@ export function useBrandDetail(qid: string | null) {
  * length — a rules-of-hooks violation the moment the list changes size.
  * `useQueries` sidesteps that: it is always exactly one hook call here, and
  * each query still shares its cache entry with `useBrandDetail` (same
- * `["brand-detail", qid]` key), so a brand already resolved elsewhere (e.g.
+ * `["brand-detail-v2", qid]` key), so a brand already resolved elsewhere (e.g.
  * the active-brand header) is free.
  */
-export function useBrandLogos(qids: string[]): Map<string, string | undefined> {
-  const results = useQueries({
-    queries: qids.map((qid) => brandDetailQueryOptions(qid)),
-  });
-
-  // `results` is a fresh array identity from `useQueries` on every render
-  // (React Query does not stabilize it), so memoizing on `results` directly
-  // rebuilds the Map every render even when no query's data actually
-  // changed. Memoize on the resolved logo files instead, joined into one
-  // string so the memo body only reads values already listed in its
-  // dependency array, not `results` itself.
-  const logoFilesKey = results.map((r) => r?.data?.logoFile ?? "").join("|");
-  return useMemo(() => {
-    const logoFiles = logoFilesKey.split("|");
-    return new Map(qids.map((qid, i) => [qid, logoFiles[i] || undefined]));
-  }, [qids, logoFilesKey]);
+export function useBrandLogos(qids: string[]): Map<string, BrandDetail | undefined> {
+  const results = useQueries({ queries: qids.map((qid) => brandDetailQueryOptions(qid)) });
+  const stable = useRef<{
+    qids: string[];
+    data: Array<BrandDetail | undefined>;
+    map: Map<string, BrandDetail | undefined>;
+  }>({ qids: [], data: [], map: new Map() });
+  const data = results.map((result) => result.data);
+  if (
+    qids.length !== stable.current.qids.length ||
+    qids.some(
+      (qid, index) =>
+        qid !== stable.current.qids[index] || data[index] !== stable.current.data[index],
+    )
+  ) {
+    stable.current = {
+      qids: [...qids],
+      data,
+      map: new Map(qids.map((qid, index) => [qid, data[index]])),
+    };
+  }
+  return stable.current.map;
 }
 
 /**
@@ -72,14 +78,16 @@ export function useBrandLogos(qids: string[]): Map<string, string | undefined> {
  * callers only read `data`, never `error`.
  */
 export function useBrandLogoAttribution(qid: string | null, hasLogo: boolean) {
-  return useQuery<BrandLogoAttribution>({
-    queryKey: ["brand-logo-attribution", qid] as const,
+  return useQuery<BrandLogoAttribution, Error, BrandLogoAttribution | undefined>({
+    queryKey: ["brand-logo-attribution-v3", qid] as const,
     queryFn: () =>
       apiClient.get<BrandLogoAttribution>(
         `${API_ENDPOINTS.brandLogoAttribution}/${qid}/logo-attribution`,
+        { fileMetadata: "3" },
       ),
     enabled: Boolean(qid) && hasLogo,
     staleTime: 24 * 60 * 60 * 1000,
-    retry: false,
+    retry: 1,
+    select: (photo) => (isDisplayablePhoto(photo) ? photo : undefined),
   });
 }

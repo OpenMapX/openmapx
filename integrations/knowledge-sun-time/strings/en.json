@@ -6,6 +6,11 @@
       "purpose": "Sunrise, sunset, and twilight times for place details",
       "dataSent": "Coordinates (latitude, longitude rounded to 4 decimal places), date, timezone ID (auto-detected from coordinates)",
       "dataReceived": "Sunrise, sunset, solar noon, day length, civil/nautical/astronomical twilight times"
+    },
+    "timezone-boundary-builder": {
+      "purpose": "Coordinate-to-timezone lookup using bundled boundary data",
+      "dataSent": "None; lookup runs locally on the server",
+      "dataReceived": "Timezone boundaries distributed with geo-tz at build time"
     }
   }
 }

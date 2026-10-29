@@ -1,27 +1,34 @@
 import { resolveBrandByName } from "@openmapx/brands";
 import {
-  type DataSourceAttribution,
+  type Attribution,
   type DataSourceBranding,
   type DataSourceDetail,
   type DataSourceDetailSection,
   type DataSourceResult,
-  formatPaymentMethods,
   gapFillBranding,
+  isoWithOffsetInZone,
   isSafeHttpUrl,
   type OsmIdentity,
+  tzOffsetMinutes,
   validObservedAt,
+  withBrandingContributors,
 } from "@openmapx/core";
+import { siteAttributions } from "@openmapx/integration-framework";
 import {
   type I18nToken,
   money,
   sharedT,
   type Translatable,
   token,
+  vocabularyLabels,
+  wallClock,
 } from "@openmapx/integration-framework/strings";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import {
   availabilityOf,
   type ChargingConnector,
   type ChargingSite,
+  type EnergyMix,
   type EnergyTariff,
   type EnergyTariffRestrictions,
   type EvseStatus,
@@ -29,12 +36,19 @@ import {
 } from "@openmapx/mobility-core/ev-charging";
 import strings from "./strings/en.json" with { type: "json" };
 
-type Row = [I18nToken, Translatable];
+type Row = [I18nToken, Translatable | Translatable[]];
 type Component = EnergyTariff["elements"][number]["components"][number];
 type Day = NonNullable<EnergyTariffRestrictions["days"]>[number];
 
 /** Every connector standard the strings label; any other is shown as it is written. */
 const LABELLED_STANDARDS = new Set(Object.keys(strings.connector));
+
+/** The codes of these vocabularies the strings label; any other is shown in words. */
+const PARKING_RESTRICTIONS = new Set(Object.keys(strings.parkingRestriction));
+const PARKING_TYPES = new Set(Object.keys(strings.parkingType));
+const ENERGY_SOURCES = new Set(Object.keys(strings.energySource));
+const ENERGY_IMPACTS = new Set(Object.keys(strings.energyImpact));
+const BOOKINGS = new Set(Object.keys(strings.qualifier.booking));
 
 const WEEK: readonly Day[] = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
 
@@ -189,14 +203,9 @@ function siteBranding(site: ChargingSite): DataSourceBranding | undefined {
  * each result and detail carries the credits of the sources it was built from.
  * Their links come from upstream data, so only http(s) ones are kept.
  */
-function siteCredits(site: ChargingSite): DataSourceAttribution[] | undefined {
+function siteCredits(site: ChargingSite): Attribution[] | undefined {
   if (site.attributions.length === 0) return undefined;
-  return site.attributions.map((a) => ({
-    text: a.name,
-    url: isSafeHttpUrl(a.url) ? a.url : "",
-    ...(a.spdxLicense ? { license: a.spdxLicense } : {}),
-    ...(isSafeHttpUrl(a.licenseUrl) ? { licenseUrl: a.licenseUrl } : {}),
-  }));
+  return snapshotContributors(site.attributions);
 }
 
 /** A site's title when its sources name it nothing. */
@@ -223,7 +232,8 @@ export function mapChargingSiteToResult(site: ChargingSite): DataSourceResult {
     ...fallbackNameOf(site),
     coordinates: site.coordinates,
     source: site.sources[0] ?? "unknown",
-    sources: site.sources,
+    sources: [...site.sources],
+    contributors: siteAttributions([site]),
     variant: variantOf(site),
     status: statusOf(site),
     ...(availability
@@ -237,7 +247,7 @@ export function mapChargingSiteToResult(site: ChargingSite): DataSourceResult {
   if (attributions) result.attributions = attributions;
   const branding = siteBranding(site);
   if (branding) result.branding = branding;
-  return result;
+  return withBrandingContributors(result);
 }
 
 interface ConnectorGroup {
@@ -329,18 +339,181 @@ function connectorsSection(site: ChargingSite): DataSourceDetailSection | null {
   };
 }
 
+/** A code no catalog names, in words: "drive_through" as "drive through". */
+function literal(code: string): I18nToken {
+  return token("literal", { value: code.replaceAll("_", " ") });
+}
+
+/**
+ * Who may park at the charge points, each restriction once: a restriction
+ * only some charge points have says so.
+ */
+function parkingRestrictions(site: ChargingSite): Translatable[] {
+  const restrictions = [...new Set(site.evses.flatMap((evse) => evse.parkingRestrictions))];
+  return restrictions.map((restriction) => {
+    const label = PARKING_RESTRICTIONS.has(restriction)
+      ? token(`parkingRestriction.${restriction}`)
+      : literal(restriction);
+    return site.evses.every((evse) => evse.parkingRestrictions.includes(restriction))
+      ? label
+      : token("parkingRestrictionSome", { restriction: label });
+  });
+}
+
 function usageSection(site: ChargingSite): DataSourceDetailSection | null {
   const rows: Row[] = [];
   const audience = site.audience && AUDIENCE_TOKEN[site.audience];
   if (audience) rows.push([sharedT.row.access, audience]);
-  if (site.payment.length > 0) {
-    rows.push([token("row.payment"), formatPaymentMethods(site.payment)]);
-  }
-  if (site.authentication.length > 0) {
-    rows.push([token("row.authentication"), formatPaymentMethods(site.authentication)]);
+  const payment = vocabularyLabels("payment", site.payment);
+  if (payment.length > 0) rows.push([token("row.payment"), payment]);
+  const authentication = vocabularyLabels("authentication", site.authentication);
+  if (authentication.length > 0) rows.push([token("row.authentication"), authentication]);
+  const restrictions = parkingRestrictions(site);
+  if (restrictions.length > 0) rows.push([token("row.parkingRestrictions"), restrictions]);
+  // Whether one may charge while the site is closed matters only where it closes.
+  if (site.chargingWhenClosed !== undefined && site.openingHours && site.openingHours !== "24/7") {
+    rows.push([
+      token("row.whenClosed"),
+      token(site.chargingWhenClosed ? "value.chargingWhenClosed" : "value.noChargingWhenClosed"),
+    ]);
   }
   if (rows.length === 0) return null;
   return { title: token("section.usage"), type: "table", rows, sectionIcon: "payments" };
+}
+
+/** Where vehicles stand while they charge, and what is at or near the site. */
+function siteSection(site: ChargingSite): DataSourceDetailSection | null {
+  const rows: Row[] = [];
+  if (site.parkingType) {
+    rows.push([
+      token("row.parkingType"),
+      PARKING_TYPES.has(site.parkingType)
+        ? token(`parkingType.${site.parkingType}`)
+        : literal(site.parkingType),
+    ]);
+  }
+  const amenities = vocabularyLabels("amenity", site.amenities ?? []);
+  if (amenities.length > 0) rows.push([sharedT.row.amenities, amenities]);
+  if (rows.length === 0) return null;
+  return { title: sharedT.section.facility, type: "table", rows, sectionIcon: "info" };
+}
+
+/** The most exceptions to the opening hours the details list, the soonest first. */
+const MAX_HOURS_EXCEPTIONS = 10;
+
+const ISO_WALL_CLOCK = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/;
+
+/**
+ * An instant as the clock at the site reads it, `YYYY-MM-DDTHH:mm`: in the
+ * site's time zone, else in the offset the instant was written with.
+ */
+function siteWallClock(instant: string, timeZone: string | undefined): string | undefined {
+  const at = new Date(instant);
+  if (!Number.isFinite(at.getTime())) return undefined;
+  const written =
+    timeZone !== undefined && tzOffsetMinutes(at, timeZone) !== null
+      ? isoWithOffsetInZone(at, timeZone)
+      : instant;
+  const match = ISO_WALL_CLOCK.exec(written);
+  return match ? `${match[1]}T${match[2]}` : undefined;
+}
+
+/** The calendar day before a `YYYY-MM-DD` date. */
+function dayBefore(date: string): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * A period as the site's clock reads it. One from midnight to midnight is
+ * whole days, named by its first and last day; one within a day names the
+ * day once ("Oct 25, 2026, 5:00 PM – 11:00 PM"); any other its start and
+ * end times.
+ */
+function periodToken(
+  exception: NonNullable<ChargingSite["openingHoursExceptions"]>[number],
+  timeZone: string | undefined,
+): I18nToken | undefined {
+  const start = siteWallClock(exception.start, timeZone);
+  const end = siteWallClock(exception.end, timeZone);
+  if (!start || !end) return undefined;
+  if (start.endsWith("T00:00") && end.endsWith("T00:00")) {
+    const first = start.slice(0, 10);
+    const last = dayBefore(end.slice(0, 10));
+    return last <= first
+      ? token("hours.day", { date: wallClock(first) })
+      : token("hours.days", { start: wallClock(first), end: wallClock(last) });
+  }
+  const sameDay = start.slice(0, 10) === end.slice(0, 10);
+  return token("hours.period", {
+    start: wallClock(start),
+    end: wallClock(sameDay ? end.slice(11) : end),
+  });
+}
+
+/**
+ * The periods, current or to come, the opening hours do not describe, and
+ * whether the site is open then: the soonest ones, in the site's own time.
+ * The rows use the pricing layout, which wraps a long period beside its
+ * open or closed state rather than pushing the state out of the panel.
+ */
+function hoursExceptionsSection(site: ChargingSite): DataSourceDetailSection | null {
+  const rows = (site.openingHoursExceptions ?? []).flatMap(
+    (exception): [Translatable, Translatable, Translatable][] => {
+      const period = periodToken(exception, site.timeZone);
+      const state = exception.open ? sharedT.value.open : sharedT.value.closed;
+      return period ? [[period, state, ""]] : [];
+    },
+  );
+  if (rows.length === 0) return null;
+  return {
+    title: token("section.hoursExceptions"),
+    type: "table",
+    rowLayout: "pricing",
+    rows: rows.slice(0, MAX_HOURS_EXCEPTIONS),
+    sectionIcon: "access_time",
+  };
+}
+
+/**
+ * The energy mix the place details show: the site's own, else the tariffs'
+ * when every tariff states the same one. Where some tariff states another
+ * mix or none, no tariff's mix speaks for the site: a green tariff beside a
+ * regular one does not make the site's energy green.
+ */
+function energyMixOf(site: ChargingSite): EnergyMix | undefined {
+  if (site.energyMix) return site.energyMix;
+  const [first, ...rest] = site.tariffs;
+  if (!first?.energyMix) return undefined;
+  const mix = JSON.stringify(first.energyMix);
+  return rest.every((tariff) => tariff.energyMix && JSON.stringify(tariff.energyMix) === mix)
+    ? first.energyMix
+    : undefined;
+}
+
+/** Whether the energy is renewable, who supplies it, its sources, largest first, and its impact. */
+function energyMixSection(site: ChargingSite): DataSourceDetailSection | null {
+  const mix = energyMixOf(site);
+  if (!mix) return null;
+  const rows: Row[] = [];
+  if (mix.isGreen !== undefined) {
+    rows.push([token("energyMix.green"), mix.isGreen ? sharedT.value.yes : sharedT.value.no]);
+  }
+  if (mix.supplierName) rows.push([token("energyMix.supplier"), mix.supplierName]);
+  if (mix.productName) rows.push([token("energyMix.product"), mix.productName]);
+  for (const { source, pct } of mix.sources.toSorted((a, b) => b.pct - a.pct)) {
+    rows.push([
+      ENERGY_SOURCES.has(source) ? token(`energySource.${source}`) : literal(source),
+      token("energyMix.share", { pct }),
+    ]);
+  }
+  for (const { category, gPerKwh } of mix.impacts) {
+    rows.push([
+      ENERGY_IMPACTS.has(category) ? token(`energyImpact.${category}`) : literal(category),
+      token("energyMix.gPerKwh", { value: gPerKwh }),
+    ]);
+  }
+  if (rows.length === 0) return null;
+  return { title: token("section.energyMix"), type: "table", rows, sectionIcon: "eco" };
 }
 
 /** A component's price with its unit; the client formats the amount in the reader's locale. */
@@ -431,6 +604,11 @@ function qualifierOf(
   if (duration) parts.push(duration);
   if (r?.reservation === "reservation") parts.push(token("qualifier.reservation"));
   if (r?.reservation === "reservation_expires") parts.push(token("qualifier.reservationExpires"));
+  if (r?.booking) {
+    parts.push(
+      BOOKINGS.has(r.booking) ? token(`qualifier.booking.${r.booking}`) : literal(r.booking),
+    );
+  }
   if (exclVat) parts.push(token("qualifier.exclVat"));
   return joinParts(parts, "qualifier.and");
 }
@@ -634,6 +812,12 @@ export function mapChargingSiteToDetail(site: ChargingSite): DataSourceDetail {
       sectionIcon: "access_time",
     });
   }
+  const hoursExceptions = hoursExceptionsSection(site);
+  if (hoursExceptions) sections.push(hoursExceptions);
+  const energyMix = energyMixSection(site);
+  if (energyMix) sections.push(energyMix);
+  const facility = siteSection(site);
+  if (facility) sections.push(facility);
   if (site.notes) {
     sections.push({
       title: sharedT.section.notes,
@@ -650,7 +834,8 @@ export function mapChargingSiteToDetail(site: ChargingSite): DataSourceDetail {
   const website = !operatorWebsite && isSafeHttpUrl(site.website) ? site.website : undefined;
   const detail: DataSourceDetail = {
     id: site.id,
-    sources: site.sources,
+    sources: [...site.sources],
+    contributors: siteAttributions([site]),
     name: site.name,
     ...fallbackNameOf(site),
     coordinates: site.coordinates,
@@ -668,5 +853,5 @@ export function mapChargingSiteToDetail(site: ChargingSite): DataSourceDetail {
   if (attributions) detail.attributions = attributions;
   const branding = siteBranding(site);
   if (branding) detail.branding = branding;
-  return detail;
+  return withBrandingContributors(detail);
 }

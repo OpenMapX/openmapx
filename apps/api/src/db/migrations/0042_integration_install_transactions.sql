@@ -1,0 +1,1 @@
+ALTER TABLE "installed_integration" ADD COLUMN "last_transaction_id" text;

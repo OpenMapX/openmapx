@@ -1,3 +1,5 @@
+import type { ContributingRecord } from "@openmapx/integration-framework";
+
 /** What the station publishes, derived from the MDAPI `type=` filter we asked for. */
 export type NoaaStationType =
   | "tide-predictions"
@@ -10,7 +12,7 @@ export type NoaaStationType =
  * response carries many more fields (sensors, datums, harmonics, …) but
  * those are looked up on demand per-station, not cached in the catalog.
  */
-export interface NoaaStation {
+export interface NoaaStation extends ContributingRecord {
   id: string;
   name: string;
   lat: number;

@@ -69,6 +69,10 @@ describe("POST /data-manager/transit/bump-transitous-ref", () => {
         JSON.stringify({
           ok: true,
           unchanged: false,
+          proposed: true,
+          submoduleSha: "deadbeef",
+          lockedAt: "2026-10-19T00:00:00.000Z",
+          lockedBy: "admin-1",
           ref: "main@deadbeef",
           previousRef: "main@cafef00d",
         }),
@@ -120,6 +124,17 @@ describe("POST /data-manager/transit/bump-transitous-ref", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("keeps token denial before malformed mutation shape validation", async () => {
+    tryAdminSessionMock.mockResolvedValue(null);
+    const response = await app.inject({
+      method: "POST",
+      url: "/data-manager/transit/bump-transitous-ref",
+      headers: { authorization: "Bearer service-token" },
+      payload: { force: "yes" },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
   it("returns 401 when neither bearer nor admin session is present", async () => {
     tryAdminSessionMock.mockResolvedValue(null);
 

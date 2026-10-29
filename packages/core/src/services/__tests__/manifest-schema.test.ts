@@ -31,6 +31,25 @@ describe("service manifest ownsSchema field", () => {
   });
 });
 
+describe("service manifest stop grace period", () => {
+  const withGrace = (stopGracePeriod: string) => ({
+    ...minimalManifest,
+    container: { ...minimalManifest.container, stopGracePeriod },
+  });
+
+  it("accepts a Compose duration", () => {
+    for (const period of ["30s", "5m", "1m30s", "1h"]) {
+      expect(validateServiceManifest(withGrace(period), { firstParty: false }).valid).toBe(true);
+    }
+  });
+
+  it("rejects anything that is not one", () => {
+    for (const period of ["5", "5 minutes", "-1m", "${GRACE}"]) {
+      expect(validateServiceManifest(withGrace(period), { firstParty: false }).valid).toBe(false);
+    }
+  });
+});
+
 describe("service manifest secret field names", () => {
   it("accepts a normal secret key", () => {
     const result = validateServiceManifest(

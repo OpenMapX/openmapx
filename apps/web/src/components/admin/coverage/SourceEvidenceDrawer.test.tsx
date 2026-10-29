@@ -137,3 +137,49 @@ it("shows binding buckets and an actionable missing-graph explanation in the exi
   expect(screen.getByText("adminCoverage.roadConditions.binding.ambiguous")).toBeInTheDocument();
   expect(screen.getByText("adminCoverage.roadConditions.binding.noCoverage")).toBeInTheDocument();
 });
+
+it("names why bindings were not routed, labelling an unknown reason plainly", () => {
+  useCoverageSource.mockReturnValue({
+    data: {
+      ...detail,
+      evidence: {
+        ...detail.evidence,
+        roadConditions: {
+          status: "validated",
+          action: null,
+          changedCount: 0,
+          rejectedCount: 0,
+          consecutiveFailures: 0,
+          bindingCounts: { ambiguous: 4 },
+          bindingReasons: [
+            { status: "ambiguous", reason: "direction_undecided", situations: 4, effects: 9 },
+            { status: "unresolved", reason: "a_reason_from_tomorrow", situations: 0, effects: 2 },
+          ],
+          graph: { status: "ready", generation: "g1", regions: ["NL"] },
+        },
+      },
+    },
+    isLoading: false,
+    isError: false,
+  });
+  render(
+    <SourceEvidenceDrawer
+      source={null}
+      sourceKey="road-feed"
+      regionId="extract:first"
+      assessment="operational"
+      onClose={() => undefined}
+    />,
+  );
+  expect(screen.getByText("adminCoverage.roadConditions.bindingReasons")).toBeInTheDocument();
+  expect(screen.getByText("roadConditions.binding.ambiguous")).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "RoadConditions.bindingReason.direction_undecided · adminCoverage.roadConditions.reasonCounts",
+    ),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("A reason from tomorrow · adminCoverage.roadConditions.reasonCounts"),
+  ).toBeInTheDocument();
+  expect(screen.queryByText(/bindingReason\.a_reason_from_tomorrow/)).toBeNull();
+});

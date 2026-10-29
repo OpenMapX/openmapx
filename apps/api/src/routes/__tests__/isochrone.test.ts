@@ -35,7 +35,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await app.close();
+  await app?.close();
 });
 
 afterEach(() => {
@@ -217,4 +217,36 @@ describe("GET /isochrone", () => {
 
     expect(mockIsochrone).toHaveBeenCalledWith(expect.anything(), expect.anything(), [5, 10]);
   });
+});
+
+it("preserves canonical contour receipts in the client-visible response", async () => {
+  const contributors = [
+    { sourceId: "captured", name: "Captured", attributionText: "before cache" },
+  ];
+  const payload = {
+    origin: [13.37, 52.52],
+    mode: "driving",
+    contributors,
+    attributions: contributors,
+    contours: [
+      {
+        time: 5,
+        contributors,
+        geometry: {
+          type: "Polygon",
+          coordinates: [
+            [
+              [13, 52],
+              [14, 52],
+              [13, 52],
+            ],
+          ],
+        },
+      },
+    ],
+  };
+  mockIsochrone.mockResolvedValue(payload);
+  const res = await app.inject({ method: "GET", url: `/isochrone?${qs(VALID_PARAMS)}` });
+  expect(res.statusCode).toBe(200);
+  expect(res.json()).toEqual(payload);
 });

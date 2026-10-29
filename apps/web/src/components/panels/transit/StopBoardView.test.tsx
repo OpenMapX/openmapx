@@ -4,6 +4,7 @@ import { StopBoardView } from "./StopBoardView";
 
 const departures = [
   {
+    contributors: [{ sourceId: "row-a", name: "Row A" }],
     tripId: "entur:2026-04-22|VYG:ServiceJourney:1",
     route: {
       id: "entur:VYG:Line:R14",
@@ -31,7 +32,17 @@ const alerts = [
 ];
 
 const sharedAttributions = [
-  { sourceId: "entur", name: "Entur", url: "https://entur.no", spdxLicense: "CC-BY-4.0" },
+  {
+    sourceId: "entur",
+    name: "Entur",
+    url: "https://entur.no",
+    licensing: {
+      version: 1,
+      bindings: [
+        { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+      ],
+    } as const,
+  },
 ];
 
 vi.mock("next-intl", () => ({
@@ -54,7 +65,11 @@ vi.mock("@openmapx/core", () => ({
     isLoading: false,
     attributions: sharedAttributions,
   }),
-  useArrivals: () => ({ data: [], isLoading: false, attributions: [] }),
+  useArrivals: () => ({
+    data: [],
+    isLoading: false,
+    attributions: [{ sourceId: "b", name: "Hidden B" }],
+  }),
   useStopAlerts: () => ({ data: alerts, attributions: [] }),
 }));
 
@@ -62,10 +77,6 @@ vi.mock("@/components/ui/AttributionStrip", () => ({
   AttributionStrip: ({ attributions }: { attributions: Array<{ name: string }> }) => (
     <div data-testid="attribution-strip">{attributions.map((a) => a.name).join(" · ")}</div>
   ),
-}));
-
-vi.mock("@/integration-api/overlay/useAttributionFromHooks", () => ({
-  useAttributionFromHooks: () => sharedAttributions,
 }));
 
 vi.mock("./DepartureRow", () => ({
@@ -98,6 +109,8 @@ describe("StopBoardView", () => {
     expect(markup).toContain("Platform change");
     expect(markup).toContain("Kongsvinger:alert");
     // AttributionStrip mock renders source names — confirms strip is wired.
-    expect(markup).toContain("Entur");
+    expect(markup).toContain("Row A");
+    expect(markup).not.toContain("Entur");
+    expect(markup).not.toContain("Hidden B");
   });
 });

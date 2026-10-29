@@ -27,15 +27,16 @@
   },
   "dependencies": {
     "@turf/boolean-point-in-polygon": "^7.4.0",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7",
+    "@openmapx/mobility-core": "workspace:*"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
-    "@types/node": "^26.6.2",
+    "@types/node": "^26.6.5",
     "esbuild": "^0.28.2",
     "shapefile": "0.6.6",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.3"
   }
 }

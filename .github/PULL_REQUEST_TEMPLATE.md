@@ -1,41 +1,32 @@
-<!--
-Thanks for the PR!
+<!-- Use a Conventional Commits title. See CONTRIBUTING.md, CLA.md and LICENSING.md.
+For security fixes, follow SECURITY.md before opening a public PR.
+Keep this concise; combine or omit sections that add nothing for a small change. -->
 
-Title: Conventional Commits format (e.g. `feat(transit-hafas): add DB long-distance`).
-The `pr-title` GitHub Action will reject non-conformant titles.
+## What changed and why
 
-For anything non-trivial, please open an issue first so we can align on approach.
-Mark the PR as a Draft if it isn't ready for review yet.
--->
+<!-- Explain the problem and what someone can do or observe after this change.
+A concrete before/after example often helps. Include relevant scope or trade-offs. -->
 
-## Summary
+<!-- For changes that visibly affect the OpenMapX application UI, put real, inspected
+screenshots beside the explanation: labeled comparable before/after views for existing
+behavior, or contextual after views for a new surface. Cover affected states/viewports.
+Documentation-only changes do not require screenshots. See CONTRIBUTING.md for guidance. -->
 
-<!-- What does this change, and why? 1–3 bullets. -->
+## Related work
 
--
+<!-- Link relevant issues, discussions or designs. Use a closing keyword such as
+"Fixes #123" only if this PR completes the issue. Omit this section if unnecessary. -->
 
-## Related issues
+## Verification
 
-<!-- Link issues this addresses. "Fixes #123" auto-closes them on merge. -->
+<!-- List the checks you ran and their results. For behavior changes, include steps and
+relevant setup so a reviewer can repeat the manual checks. Note material checks not performed. -->
 
-Fixes #
+## Release and upgrade impact
 
-## How was this tested?
-
-<!--
-- `pnpm lint && pnpm check-types && pnpm test` locally
-- Manual verification (which feature, browser, dataset, service/integration)?
-- New tests added under which path?
--->
-
--
-
-## Checklist
-
-- [ ] Conventional Commits title (the `pr-title` check enforces this)
-- [ ] `pnpm lint && pnpm check-types && pnpm test` pass locally
-- [ ] Added / updated a [changeset](https://github.com/changesets/changesets) if a publishable package changed
-- [ ] Docs updated if behavior is user-visible (README and/or [docs.openmapx.org](https://docs.openmapx.org) sources under `docs/`)
-- [ ] New code carries the right license header / lands in the correct license tier (see [LICENSING.md](../LICENSING.md))
-- [ ] No secrets, real API keys, or `.env` files committed
-- [ ] I agree to the [Contributor License Agreement](../CLA.md) (the CLA bot will prompt on your first PR)
+<!-- State any breaking changes, migrations or operator action, including what users need to do.
+For qualified package edits without a Changeset, write `No package release: <specific reason>`.
+For important product changes, write `Product impact: migration, operator-action` (use the
+applicable categories) and commit a release-notes fragment. Ordinary product/internal work
+needs no bookkeeping note. Generated version PRs use `Package release: version` and receive
+canonical validation. Follow CONTRIBUTING.md for details. -->

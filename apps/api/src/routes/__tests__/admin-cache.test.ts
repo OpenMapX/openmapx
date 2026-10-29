@@ -45,6 +45,20 @@ const fakeRedis = {
   scanStream: mockScanStream,
   unlink: mockUnlink,
   flushdb: mockFlushdb,
+  incr: async (key: string) => {
+    const value = Number(cacheStore.get(key) ?? 0) + 1;
+    cacheStore.set(key, String(value));
+    return value;
+  },
+  publish: async () => 0,
+  eval: async (script: string, _keyCount: number, epochKey: string) => {
+    if (script.startsWith("-- begin-clear")) {
+      cacheStore.set(epochKey, String(Number(cacheStore.get(epochKey) ?? 0) + 1));
+    } else if (script.startsWith("-- finish-clear")) {
+      cacheStore.set(epochKey, String(Number(cacheStore.get(epochKey) ?? 0) + 1));
+    }
+    return 1;
+  },
 };
 
 vi.mock("../../redis.js", () => ({ redis: fakeRedis }));
@@ -56,7 +70,7 @@ beforeAll(async () => {
   app = await createAdminTestApp(adminCacheRoute);
 });
 
-afterAll(() => app.close());
+afterAll(() => app?.close());
 afterEach(() => {
   vi.clearAllMocks();
   // Restore the store between tests so destructive tests don't leak.
@@ -94,6 +108,22 @@ describe("GET /admin/cache", () => {
 });
 
 describe("POST /admin/cache/clear", () => {
+  it("invalidates the targeted local cache around Redis deletion", async () => {
+    const { cacheInvalidation } = await import("../../services/cache-invalidation");
+    const events: boolean[] = [];
+    const unsubscribe = cacheInvalidation.subscribe("int:geocoding:", () => {
+      events.push(cacheStore.has("int:geocoding:a"));
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/admin/cache/clear",
+      payload: { namespace: "geocoding" },
+    });
+    unsubscribe();
+    expect(response.statusCode).toBe(200);
+    expect(events).toEqual([true, true, false]);
+  });
+
   it("clears a single namespace and audit-logs it", async () => {
     const res = await app.inject({
       method: "POST",
@@ -181,12 +211,19 @@ describe("when Redis is disabled", () => {
     const listRes = await nullApp.inject({ method: "GET", url: "/admin/cache" });
     expect(listRes.json()).toEqual({ namespaces: [] });
 
+    const { cacheInvalidation } = await import("../../services/cache-invalidation");
+    const events: boolean[] = [];
+    const unsubscribe = cacheInvalidation.subscribe("int:geocoding:", (event) =>
+      events.push(event.available),
+    );
     const clearRes = await nullApp.inject({
       method: "POST",
       url: "/admin/cache/clear",
       payload: {},
     });
     expect(clearRes.json()).toEqual({ deleted: 0 });
+    unsubscribe();
+    expect(events).toEqual([true, true, true]);
 
     await nullApp.close();
     vi.doUnmock("../../redis.js");

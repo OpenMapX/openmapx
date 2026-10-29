@@ -13,7 +13,12 @@ import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 import type { User } from "@openmapx/core";
 import { authClient, getInitials, proxyImageUrl } from "@openmapx/core";
-import { MANGROVE_KEYPAIR_QUERY_KEY, useKeypairStore } from "@openmapx/mangrove-react";
+import {
+  clearMangroveSignerStorage,
+  MANGROVE_KEYPAIR_QUERY_KEY,
+  useKeypairStore,
+  useMangroveSigner,
+} from "@openmapx/mangrove-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -30,6 +35,7 @@ export function AccountMenu({ anchorEl, onClose, user, onOpenSettings }: Account
   const t = useTranslations("account");
   const router = useRouter();
   const queryClient = useQueryClient();
+  const signer = useMangroveSigner();
   const isAdmin = user.role === "admin";
 
   const handleSignOut = async () => {
@@ -41,6 +47,21 @@ export function AccountMenu({ anchorEl, onClose, user, onOpenSettings }: Account
     // live.
     useKeypairStore.getState().clear();
     queryClient.removeQueries({ queryKey: MANGROVE_KEYPAIR_QUERY_KEY });
+    const revocation = signer.controller?.disconnect();
+    clearMangroveSignerStorage(window.sessionStorage);
+    if (revocation) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          revocation.catch(() => undefined),
+          new Promise<void>((resolve) => {
+            timer = setTimeout(resolve, 500);
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
     await authClient.signOut();
   };
 

@@ -6,10 +6,14 @@ import {
   type Place,
 } from "@openmapx/core";
 import {
+  type ContributingRecord,
   createTidesIntegration,
   type IntegrationContext,
+  resolveIntegrationContributors,
+  snapshotContributors,
   type TideEvent,
   type TidesResponse,
+  withContributors,
 } from "@openmapx/integration-framework";
 
 /**
@@ -52,7 +56,7 @@ interface PegelMeasurement {
   value: number; // cm
 }
 
-interface CachedStation {
+interface CachedStation extends ContributingRecord {
   uuid: string;
   name: string;
   lat: number;
@@ -79,8 +83,9 @@ async function fetchJson<T>(url: string): Promise<T | null> {
 }
 
 async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
-  const cached = await ctx.cache.get<CachedStation[]>("catalog");
+  const cached = await ctx.cache.get<CachedStation[]>("catalog:contributors-v1");
   if (cached) return cached;
+  const captured = resolveIntegrationContributors(ctx, ["wsv-pegelonline"]);
 
   const raw = await fetchJson<PegelStationRaw[]>(`${BASE}/stations.json?waters=NORDSEE,OSTSEE`);
   if (!raw) {
@@ -95,8 +100,9 @@ async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
       lat: s.latitude,
       lng: s.longitude,
     }));
-  await ctx.cache.set("catalog", stations, CATALOG_TTL);
-  return stations;
+  const acquired = stations.map((station) => withContributors(station, captured));
+  await ctx.cache.set("catalog:contributors-v1", acquired, CATALOG_TTL);
+  return acquired;
 }
 
 export async function fetchMeasurements(uuid: string): Promise<PegelMeasurement[]> {
@@ -130,9 +136,10 @@ async function buildTidesResponse(
   distanceKm: number,
 ): Promise<TidesResponse | null> {
   const quarterKey = Math.floor(Date.now() / (TIDES_TTL * 1000));
-  const cacheKey = `tides:${station.uuid}:${quarterKey}`;
+  const cacheKey = `tides:contributors-v1:${station.uuid}:${quarterKey}`;
   const cached = await ctx.cache.get<TidesResponse>(cacheKey);
   if (cached) return cached;
+  const captured = resolveIntegrationContributors(ctx, ["wsv-pegelonline"]);
 
   const obs = await fetchMeasurements(station.uuid);
   if (obs.length === 0) return null;
@@ -151,6 +158,13 @@ async function buildTidesResponse(
   const last = curveRaw[curveRaw.length - 1];
 
   const result: TidesResponse = {
+    contributors: snapshotContributors(station.contributors ?? [], captured),
+    fieldContributors: {
+      station: snapshotContributors(station.contributors ?? []),
+      events: snapshotContributors(captured),
+      curve: snapshotContributors(captured),
+      currentLevel: snapshotContributors(captured),
+    },
     station: {
       id: station.uuid,
       name: station.name,
@@ -175,6 +189,7 @@ async function buildTidesResponse(
 export function setup(ctx: IntegrationContext): void {
   createTidesIntegration<CachedStation>(ctx, {
     scheme: "pegel",
+    sourceId: "wsv-pegelonline",
     loadStations,
     findStationById: (stations, id) => stations.find((s) => s.uuid === id),
     createPlace: (station): Place =>
@@ -182,6 +197,7 @@ export function setup(ctx: IntegrationContext): void {
         primaryScheme: "pegel",
         ids: { pegel: station.uuid },
         name: station.name,
+        contributors: snapshotContributors(station.contributors ?? []),
         address: "",
         countryCode: "de",
         coordinates: [station.lng, station.lat],

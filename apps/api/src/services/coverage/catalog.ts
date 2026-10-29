@@ -423,8 +423,7 @@ function rightsAssertionSignature(record: RightsEvidence): string {
   return JSON.stringify({
     commercialUse: record.commercialUse,
     redistribution: record.redistribution,
-    license: record.license ?? null,
-    licenseUrl: record.licenseUrl ?? null,
+    licensing: record.licensing ?? null,
     termsUrl: record.termsUrl ?? null,
     attribution: record.attribution ?? null,
     usageConditions: record.usageConditions,
@@ -447,8 +446,7 @@ export function rightsForSource(
       sourceData: permission(source.redistribution?.sourceData),
       derivedData: permission(source.redistribution?.derivedData),
     },
-    license: source.license.slice(0, 512),
-    ...(safeUrl(source.licenseUrl) ? { licenseUrl: safeUrl(source.licenseUrl) } : {}),
+    licensing: source.licensing,
     ...(safeUrl(source.termsUrl) ? { termsUrl: safeUrl(source.termsUrl) } : {}),
     ...(typeof source.attribution === "string"
       ? { attribution: source.attribution.slice(0, 1_000) }

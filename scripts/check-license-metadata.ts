@@ -45,6 +45,7 @@ const APACHE_PACKAGES = new Set([
   "integration-framework",
   "air-quality", // reusable evidence, standards, jurisdiction, and selection foundation
   "core", // Nearly all integrations depend on it; it is the shared foundation
+  "extension-contracts", // portable Apache-2.0 authoring contracts
   "extension-cli", // standalone Apache-2.0 authoring CLI (scaffold / package / validate)
   "presets", // integration-poi-search depends on it
   "brands", // brand/chain catalog distilled from NSI, mirrors presets
@@ -67,8 +68,11 @@ const VENDORED: Record<string, string> = {
   "hey-api-client-fetch": MIT,
 };
 
-/** Packages currently meant to be published to npm (not `private`). */
-const PUBLIC_PACKAGES = new Set(["core", "extension-cli"]);
+const PUBLIC_PACKAGE_DIRECTORIES = new Set<string>(
+  JSON.parse(readFileSync(join(HERE, "public-packages.json"), "utf8")).packages.map(
+    (item: { directory: string }) => item.directory,
+  ),
+);
 
 type Plan = { spdx: string; keepPrivate: boolean };
 
@@ -76,11 +80,10 @@ function planFor(
   dir: "packages" | "integrations" | "apps" | "services",
   name: string,
 ): Plan | null {
-  const keepPrivate = dir !== "packages" || !PUBLIC_PACKAGES.has(name);
+  const keepPrivate = dir !== "packages" || !PUBLIC_PACKAGE_DIRECTORIES.has(`${dir}/${name}`);
   if (dir === "packages") {
     if (VENDORED[name]) return { spdx: VENDORED[name], keepPrivate };
-    // Reusable libs are Apache-2.0 but kept `private` for now (except `core`,
-    // which is already published); add to PUBLIC_PACKAGES when ready to publish.
+    // A permissive license does not qualify a library for publication.
     if (APACHE_PACKAGES.has(name)) return { spdx: APACHE, keepPrivate };
     return { spdx: AGPL, keepPrivate };
   }

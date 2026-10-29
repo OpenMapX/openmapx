@@ -242,3 +242,40 @@ describe("resolveSharedMobilitySourcePolicy", () => {
     expect(resolveSharedMobilitySourcePolicy("fanout")).toBe("fanout");
   });
 });
+
+it("keeps duplicate no-op supplements uncredited but credits retained gap fills", () => {
+  const a = { sourceId: "a", name: "A" };
+  const b = { sourceId: "b", name: "B" };
+  const primary = station({
+    sources: ["a"],
+    contributors: [a],
+    address: { street: "Known" },
+    capacity: 10,
+    branding: { name: "Known" },
+    rentalApps: {},
+    rentalUris: {},
+    website: "https://a.example",
+    vehicleTypeDetails: [],
+    vehicleClassNames: [],
+    pricingSummary: "Known",
+    pricingDetails: [],
+    crossStreet: "Known",
+  });
+  const duplicate = {
+    ...structuredClone(primary),
+    sources: ["b"],
+    contributors: [b],
+    availableVehicles: 99,
+  };
+  const noOp = mergeMotisFirstInventory({ stations: [primary], vehicles: [] }, [
+    { stations: [duplicate], vehicles: [] },
+  ]);
+  expect(noOp.stations[0].sources).toEqual(["a"]);
+  expect(noOp.stations[0].contributors).toEqual([a]);
+  const gap = station({ sources: ["a"], contributors: [a] });
+  const filled = mergeMotisFirstInventory({ stations: [gap], vehicles: [] }, [
+    { stations: [duplicate], vehicles: [] },
+  ]);
+  expect(filled.stations[0].address).toEqual({ street: "Known" });
+  expect(filled.stations[0].contributors).toEqual([a, b]);
+});

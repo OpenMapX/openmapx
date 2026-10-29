@@ -1,6 +1,13 @@
+---
+title: MOTIS operations profiles
+description: Choose a transit acquisition profile, validate capacity and promote or recover a MOTIS dataset.
+---
+
 # MOTIS operations profiles
 
-OpenMapX runs MOTIS regionally by default. The selected profile is an explicit safety and sovereignty contract; an empty country list never means “planet”.
+Choose a profile before acquiring transit data. The default is regional;
+an empty country list never means planet. Use a full administrator account for
+web operations and the deployment checkout for host CLI commands.
 
 ## Profiles
 
@@ -26,7 +33,10 @@ MOTIS is the only runtime that compiles and serves static schedules. Postgres
 holds operational source, job, validation, and promotion metadata only; no GTFS
 schedule tables are populated.
 
-Sovereign mode also requires `TRANSIT_SOURCE=build` and disables the Transitous runtime provider. Do not set a Transitous artifact URL. Preflight rejects sources without an origin URL or declared license. The build writes a redacted `sovereign-source-manifest.json` before acquisition, then records the local archive hash, size, retrieval time, and declared transformations after acquisition; it is included in the candidate integrity manifest.
+For sovereign mode, set `TRANSIT_SOURCE=build` and disable the `transit-motis`
+integration's `hostedRuntimeFallback` option. Acquisition profile selection alone
+is not proof that all outbound access is blocked. Do not configure a Transitous
+artifact URL. Preflight rejects sources without an origin URL or declared license. The build writes a redacted `sovereign-source-manifest.json` before acquisition, then records the local archive hash, size, retrieval time, and declared transformations after acquisition; it is included in the candidate integrity manifest.
 
 Route origin downloads through the local feed proxy and enforce the deployment egress allow-list outside the application process. OpenMapX additionally rejects known Transitous/Triptix runtime URLs in generated sovereign configs, but that application check is not a substitute for a host/firewall egress policy.
 
@@ -34,7 +44,7 @@ Route origin downloads through the local feed proxy and enforce the deployment e
 
 The pipeline runs `preflight` after catalog filtering and before any feed/GBFS download. It conservatively estimates compressed feeds, expanded GTFS, MOTIS indexes, OSM, proxy cache, the active dataset, a full candidate, retained rollback generations, and 20% headroom. It blocks on disk, inode, memory, CPU, file-descriptor, scope, feed-count, sovereign OSM, or sovereign-host violations.
 
-`POST /transit/preflight` returns the same result without downloading. The admin data workflow shows the last estimate and measured free disk. Size estimates remain labeled `conservative-defaults` until historical files exist.
+`POST /transit/preflight` on the internal Data Manager API returns the same result without downloading. Use the configured service authentication; this is not a public web endpoint. The admin data workflow shows the last estimate and measured free disk. Size estimates remain labeled `conservative-defaults` until historical files exist.
 
 Planet mode additionally requires operator-provided capacity at or above the experimental floor (64 GB RAM, 8 CPUs, 500 GB free disk). These are admission floors, not performance promises.
 
@@ -60,8 +70,7 @@ recorded post-probe state wins over an uncommitted candidate selection. A backup
 before an update is optional because the previous healthy slot is retained for
 rollback. When policy requires a separate backup, include `slot-state.json`,
 candidate manifests, capability snapshots, configs, attribution/license files,
-locks, and any approved sidecar database—never treat an unprobed directory copy
-as restored.
+locks, and any approved sidecar database. Test activation and rollback before treating the copy as recoverable.
 
 Recovery drill:
 
@@ -73,21 +82,26 @@ Recovery drill:
 
 ## Pin upgrades
 
-`openmapx transitous bump` and `POST /transit/bump` write `*.proposed.json`; they do not mutate active pins. Review catalog/feed/license diffs, build the inactive slot, and run the timetable, rental, planner, attribution, and response-contract canaries. API activation requires typing the exact proposed ref at `/transit/bump/approve`. Keep previous pins with the previous healthy slot.
+`openmapx transitous bump` and `POST /transit/bump` write a proposal into the operations agent's state (`infra/docker/state/ops-agent/transitous/proposed.json`); they do not change the pin in effect. Approval records the pin in the same directory, never in the tracked `infra/docker/transitous.lock.json`. An approved pin holds until a release ships a different one; that release's pin then takes over, the agent logs the approval it retired, and the auto-bump proposes again through its canary. The GBFS registry pin is the release's and changes only with a release. Review catalog/feed/license diffs, build the inactive slot, and run the timetable, rental, planner, attribution, and response-contract canaries. API activation requires typing the exact proposed ref at `/transit/bump/approve`. Keep previous pins with the previous healthy slot.
 
 Mutable tags such as `latest` are prohibited. MOTIS currently uses the repository-wide pinned release.
 
 The real-container lifecycle canary is a required MOTIS-upgrade and release
 gate. With Docker running and the pinned MOTIS and nginx images available, run
-it from the repository root exactly as follows:
+it from the repository root after pulling the test images:
 
 ```bash
+docker pull ghcr.io/motis-project/motis:2.11.3
+docker pull nginx:1.31.6-alpine
 OPENMAPX_E9_LIVE_MOTIS=true pnpm exec vitest run pipeline-live-motis
 ```
 
-The same command runs weekly and on demand in
-`.github/workflows/e9-live-motis.yml`, which pre-pulls the images so a missing
-image fails the workflow. The canary imports deterministic GTFS fixtures,
+The workflow `.github/workflows/e9-live-motis.yml` runs weekly, on demand and
+for changes to the MOTIS constants pin. Inspect its actual image preparation:
+the current workflow pre-pulls MOTIS `2.10.2` and nginx `1.27-alpine`, while the
+canary uses MOTIS `2.11.3` and nginx `1.31.6-alpine`. The MOTIS source pin in
+`packages/transitous-core/src/constants.ts` is also `2.11.3`. A successful pull of the
+older image does not qualify the current pin. The canary can skip when its exact MOTIS image is missing. Confirm it actually ran with the intended images, with no prerequisite skip, and record their digests before treating the gate as passed. The canary imports deterministic GTFS fixtures,
 queries stops, departures, route details, geometry, platforms, and a local
 civil-day timetable, verifies epoch rollover and stale-ID rejection, and proves
 a failed candidate preserves the active epoch and source manifest.
@@ -114,6 +128,6 @@ Planet stays experimental until a dated benchmark records host specs, pinned inp
 
 ## Crowdsource decision
 
-Crowdsource sidecars are intentionally absent. The audited Transitous deployment referenced opaque/mutable binaries without an authoritative pinned source/release chain, and the protocol/governance evidence did not establish a license, controller, authentication, abuse/moderation, retention/deletion, consent, or takedown contract. This is a hard rejection for packaging—not a feature flag waiting to be switched on.
+Crowdsource sidecars are intentionally absent. The audited Transitous deployment referenced opaque/mutable binaries without an authoritative pinned source/release chain, and the protocol/governance evidence did not establish a license, controller, authentication, abuse/moderation, retention/deletion, consent, or takedown contract. Packaging remains blocked pending a new source and governance review.
 
 Do not accept crowdsource submissions until a new review supplies all missing evidence and security, legal/privacy, and maintainer owners approve it. A future prototype must be isolated, non-root, read-only except for its own database/outbox, egress-allow-listed, rate-limited, consented, moderated, and deletion-tested.

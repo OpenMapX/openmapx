@@ -10,8 +10,9 @@ set -e
 
 # Idempotency marker so container restarts skip the find/sed walk after the
 # first run. The marker records the substituted URL so a runtime URL change
-# triggers a re-substitution against the still-baked placeholder.
-MARKER_FILE=/app/.api-url-substituted
+# triggers a re-substitution against the still-baked placeholder. It lives
+# beside the files it covers: the image's user owns .next, not /app.
+MARKER_FILE=/app/apps/web/.next/.api-url-substituted
 WANT_MARKER="${NEXT_PUBLIC_API_URL:-__placeholder__}"
 CURRENT_MARKER=""
 if [ -f "$MARKER_FILE" ]; then

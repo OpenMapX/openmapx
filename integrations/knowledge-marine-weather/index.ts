@@ -1,5 +1,11 @@
 import { fetchJson } from "@openmapx/core";
-import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
+import {
+  type IntegrationContext,
+  resolveIntegrationContributors,
+  scalarQueries,
+  snapshotContributors,
+} from "@openmapx/integration-framework";
+import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
 
 const BASE = "https://marine-api.open-meteo.com/v1/marine";
 const FETCH_TIMEOUT_MS = 12_000;
@@ -89,7 +95,7 @@ interface MarineCurrent {
   seaState: DouglasState;
 }
 
-interface MarineResponse {
+interface MarineResponse extends ContributingRecord {
   location: { lat: number; lng: number };
   current: MarineCurrent;
   hourly: MarineHourlyPoint[];
@@ -191,7 +197,8 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const cacheKey = `marine:${round2(lat)},${round2(lng)}`;
+    const captured = resolveIntegrationContributors(ctx, ["open-meteo-marine"]);
+    const cacheKey = `marine:contributors-v1:${round2(lat)},${round2(lng)}`;
     const cached = await ctx.cache.get<MarineResponse | { notFound: true }>(cacheKey);
     if (cached) {
       if ("notFound" in cached) {
@@ -239,6 +246,7 @@ export function setup(ctx: IntegrationContext): void {
       current,
       hourly: hourly.slice(0, 48),
       source: "open-meteo-marine",
+      contributors: snapshotContributors(captured),
     };
     await ctx.cache.set(cacheKey, result, CACHE_TTL);
     reply.header("Cache-Control", "public, max-age=1800");

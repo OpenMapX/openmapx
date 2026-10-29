@@ -15,7 +15,7 @@ import {
   type TripSchedule,
   worstSupport,
 } from "@openmapx/core";
-import type { ResolvedProvider } from "./orchestrator.js";
+import { captureRoutingResult, type ResolvedProvider } from "./orchestrator.js";
 import { concatenateRoutes } from "./route-concat.js";
 import type { ParsedScheduleRequest } from "./schedule-request.js";
 import type { Route, RoutingOptions } from "./types.js";
@@ -111,7 +111,10 @@ export async function runSchedulePlan(
       const candidate = entry.resolved;
       const startedAt = performance.now();
       try {
-        const result = await candidate.provider.getRoute(waypoints, request.travelMode, options);
+        const result = captureRoutingResult(
+          await candidate.provider.getRoute(waypoints, request.travelMode, options),
+          candidate,
+        );
         const route = result.routes[result.activeRouteIndex] ?? result.routes[0];
         if (!route) throw new Error("provider returned no route");
         hooks.onProviderCall?.(candidate.integrationId, "ok", performance.now() - startedAt);

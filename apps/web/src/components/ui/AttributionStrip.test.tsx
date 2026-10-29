@@ -1,7 +1,8 @@
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 // @vitest-environment jsdom
 
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { AttributionStrip } from "./AttributionStrip";
@@ -18,12 +19,22 @@ const delfi: Attribution = {
   sourceId: "delfi-de",
   name: "DELFI",
   url: "https://www.delfi.de/",
-  spdxLicense: "CC-BY-4.0",
+  licensing: {
+    version: 1,
+    bindings: [
+      { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+    ],
+  } as const,
 };
 const tfl: Attribution = {
   sourceId: "tfl",
   name: "Transport for London",
-  spdxLicense: "OGL-UK-3.0",
+  licensing: {
+    version: 1,
+    bindings: [
+      { scope: "data", subject: "Data", license: { kind: "spdx", expression: "OGL-UK-3.0" } },
+    ],
+  } as const,
 };
 
 describe("AttributionStrip", () => {
@@ -60,6 +71,17 @@ describe("AttributionStrip", () => {
     expect(markup.match(/data-source-id=/g)?.length).toBe(1);
     expect(markup).toContain('data-source-id="dyn:de/db-regio"');
     expect(markup).not.toContain('data-source-id="dyn:de/db-smartrbl"');
+  });
+
+  it("preserves distinct required notices and links even when source and label match", () => {
+    const credits: Attribution[] = [
+      { sourceId: "agency", name: "Agency", attributionText: "Required notice A" },
+      { sourceId: "agency", name: "Agency", attributionText: "Required notice B" },
+      { sourceId: "other-feed", name: "Agency", url: "https://other.example" },
+    ];
+    const markup = renderToStaticMarkup(<AttributionStrip attributions={credits} />);
+    expect(markup.match(/data-source-id=/g)?.length).toBe(3);
+    expect(markup).toContain('href="https://other.example"');
   });
 
   it("falls back to /licenses anchor when attribution has no url", () => {
@@ -127,13 +149,19 @@ describe("AttributionStrip", () => {
     const transitous: Attribution = {
       sourceId: "transitous",
       name: "Transitous",
-      spdxLicense: "Mixed (per upstream GTFS/GBFS feed; mostly open data)",
+      licensing: licensingFromDeclaration(
+        "Mixed (per upstream GTFS/GBFS feed; mostly open data)",
+        undefined,
+        "Transitous",
+      ),
       attributionText: "Public transport data via Transitous",
     };
     const { container } = render(
       <AttributionStrip attributions={[transitous]} variant="panel-header" label="Data sources" />,
     );
-    expect(container.querySelector("[data-source-id]")?.textContent).toBe("Transitous");
+    expect(container.querySelector("[data-source-id]")?.textContent).toContain(
+      "Public transport data via Transitous",
+    );
 
     fireEvent.mouseOver(container.querySelector("[data-idx]") as HTMLElement);
     const tooltip = await screen.findByRole("tooltip");
@@ -144,18 +172,24 @@ describe("AttributionStrip", () => {
   it("keeps a short license label on the chip", () => {
     const markup = renderToStaticMarkup(
       <AttributionStrip
-        attributions={[{ sourceId: "entur", name: "Entur", spdxLicense: "NLOD 2.0" }]}
+        attributions={[
+          {
+            sourceId: "entur",
+            name: "Entur",
+            licensing: licensingFromDeclaration("NLOD 2.0", undefined, "Entur"),
+          },
+        ]}
       />,
     );
-    expect(markup).toContain("Entur · NLOD 2.0");
+    expect(markup).toContain("Entur · NLOD-2.0");
   });
 
   it("collapses to maxVisible with a toggle that expands and collapses", () => {
     const items: Attribution[] = [
-      { sourceId: "a", name: "Alpha" },
-      { sourceId: "b", name: "Bravo" },
-      { sourceId: "c", name: "Charlie" },
-      { sourceId: "d", name: "Delta" },
+      { sourceId: "a", name: "Alpha", licensing: licensingFromDeclaration("CC0-1.0") },
+      { sourceId: "b", name: "Bravo", licensing: licensingFromDeclaration("CC0-1.0") },
+      { sourceId: "c", name: "Charlie", licensing: licensingFromDeclaration("CC0-1.0") },
+      { sourceId: "d", name: "Delta", licensing: licensingFromDeclaration("CC0-1.0") },
     ];
     const { container } = render(<AttributionStrip attributions={items} maxVisible={2} />);
     expect(container.querySelectorAll("[data-source-id]").length).toBe(2);
@@ -172,7 +206,239 @@ describe("AttributionStrip", () => {
 
   it("renders no toggle when item count is within maxVisible", () => {
     const { container } = render(<AttributionStrip attributions={[delfi, tfl]} maxVisible={3} />);
-    expect(container.querySelector("button")).toBeNull();
+    expect(screen.getByRole("button", { name: "attributions" })).not.toBeNull();
     expect(container.querySelectorAll("[data-source-id]").length).toBe(2);
   });
+});
+
+it("never puts required notices behind maxVisible or a hover-only tooltip", () => {
+  const items = [
+    { sourceId: "eligible", name: "Eligible", licensing: licensingFromDeclaration("CC-BY-4.0") },
+    { sourceId: "a", name: "A", attributionText: "Exact required notice A" },
+    { sourceId: "b", name: "B", attributionText: "Exact required notice B" },
+  ];
+  const { container } = render(<AttributionStrip attributions={items} maxVisible={1} />);
+  expect(container.textContent).toContain("Exact required notice A");
+  expect(container.textContent).toContain("Exact required notice B");
+  expect(container.querySelectorAll("[data-source-id]")).toHaveLength(3);
+});
+
+it("makes every full licence, notice and software subject reachable in one touch action", () => {
+  const { container } = render(<AttributionStrip attributions={[delfi]} />);
+  fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+  expect(screen.getByRole("dialog").textContent).toContain("CC-BY-4.0");
+  expect(
+    screen.getByRole("dialog").querySelector('a[href="https://www.delfi.de/"]'),
+  ).not.toBeNull();
+  expect(container.querySelector("[data-source-id]")).not.toBeNull();
+});
+
+it("opens details without triggering an enclosing image/map action", () => {
+  const parent = vi.fn();
+  render(
+    // biome-ignore lint/a11y/noStaticElementInteractions: Simulates an enclosing image click listener, not a product control.
+    <div role="presentation" onClick={parent}>
+      <AttributionStrip
+        attributions={[
+          { sourceId: "cc", name: "Author", licensing: licensingFromDeclaration("CC-BY-4.0") },
+        ]}
+        maxVisible={0}
+      />
+    </div>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+  expect(parent).not.toHaveBeenCalled();
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+});
+
+it("keeps gallery navigation shortcuts from reaching the window while attribution details has focus", async () => {
+  const shortcuts = vi.fn();
+  window.addEventListener("keydown", shortcuts);
+  try {
+    render(<AttributionStrip attributions={[delfi]} />);
+    fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "ArrowRight" });
+    expect(shortcuts).not.toHaveBeenCalled();
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  } finally {
+    window.removeEventListener("keydown", shortcuts);
+  }
+});
+
+it("moves focus before hiding the background and restores it after the dialog exits", async () => {
+  render(<AttributionStrip attributions={[delfi]} />);
+  const trigger = screen.getByRole("button", { name: "attributions" });
+  trigger.focus();
+  const hiddenFocusedElements: string[] = [];
+  const setAttribute = Element.prototype.setAttribute;
+  const spy = vi.spyOn(Element.prototype, "setAttribute").mockImplementation(function (
+    this: Element,
+    ...args: unknown[]
+  ) {
+    const [name, value] = args;
+    if (
+      name === "aria-hidden" &&
+      value === "true" &&
+      document.activeElement !== document.body &&
+      this.contains(document.activeElement)
+    ) {
+      hiddenFocusedElements.push(this.tagName);
+    }
+    Reflect.apply(setAttribute, this, args);
+  });
+  try {
+    fireEvent.click(trigger);
+    expect(hiddenFocusedElements).toEqual([]);
+    expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(trigger).toHaveFocus());
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+it("retains mandatory branding in the details dialog even if the dialog covers the image or map footer", () => {
+  render(
+    <AttributionStrip
+      attributions={[
+        {
+          sourceId: "mapillary",
+          name: "Mapillary",
+          licensing: {
+            version: 1,
+            bindings: [
+              {
+                scope: "service",
+                subject: "API",
+                license: { kind: "unknown" },
+                attribution: {
+                  placement: "visible",
+                  surfaces: ["image"],
+                  basis: "provider-terms",
+                  reviewedAt: "2026-10-14",
+                  evidenceUrls: ["https://www.mapillary.com/terms"],
+                  reason: "Linked visible logo",
+                  logo: "mapillary",
+                  compactText: "Mapillary",
+                },
+              },
+            ],
+          },
+        },
+      ]}
+      surface="image"
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+  expect(screen.getByRole("dialog").querySelector('img[alt="Mapillary"]')).not.toBeNull();
+  expect(
+    screen.getByRole("dialog").querySelector('a[href="https://www.mapillary.com/"]'),
+  ).not.toBeNull();
+});
+
+it("keeps optional provenance in details while required image notices stay adjacent and wrap", () => {
+  const notice =
+    "The complete supplied image notice must remain readable even in a narrow navigation panel";
+  const required: Attribution = {
+    sourceId: "image-service",
+    name: "Image service",
+    publisher: { name: "Captured photographer", url: "https://image.test/author" },
+    url: "https://image.test/page",
+    licensing: {
+      version: 1,
+      bindings: [
+        {
+          scope: "imagery",
+          subject: "Captured photo",
+          license: { kind: "spdx", expression: "CC-BY-SA-4.0" },
+          notice,
+          conditions: ["Keep the supplied embedded notice"],
+          attribution: {
+            placement: "visible",
+            surfaces: ["image"],
+            basis: "provider-terms",
+            reviewedAt: "2026-10-14",
+            evidenceUrls: ["https://image.test/terms"],
+            reason: "Required image notice and logo",
+            logo: "mapillary",
+          },
+        },
+      ],
+    },
+  };
+  const { container } = render(
+    <AttributionStrip
+      attributions={[delfi, required]}
+      variant="plain"
+      surface="image"
+      provenanceDisplay="details"
+      maxVisible={0}
+    />,
+  );
+  expect(container.textContent).toContain(notice);
+  expect(container.querySelector('[data-source-id="delfi-de"]')).toBeNull();
+  expect(screen.queryByText(/more/)).toBeNull();
+  expect(screen.getAllByRole("button")).toHaveLength(1);
+  expect(container.querySelector('img[alt="Mapillary"]')).not.toBeNull();
+  const visible = container.querySelector('[data-source-id="image-service"]');
+  expect(visible).toHaveStyle({ whiteSpace: "normal", overflowWrap: "anywhere" });
+  expect(visible).not.toHaveStyle({ textOverflow: "ellipsis" });
+  fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+  const dialog = screen.getByRole("dialog");
+  expect(dialog.textContent).toContain("DELFI");
+  expect(dialog.textContent).toContain("Captured photographer");
+  expect(dialog.textContent).toContain("CC-BY-SA-4.0");
+  expect(dialog.textContent).toContain(notice);
+  expect(dialog.textContent).toContain("Keep the supplied embedded notice");
+  expect(dialog.querySelector('a[href="https://image.test/page"]')).not.toBeNull();
+  expect(dialog.querySelector('img[alt="Mapillary"]')).not.toBeNull();
+});
+
+it("renders a shared mandatory notice once while retaining every captured grant in details", () => {
+  const first: Attribution = {
+    sourceId: "one",
+    name: "Agency",
+    attributionText: "Shared credit",
+    licensing: licensingFromDeclaration("ODbL-1.0"),
+  };
+  const second: Attribution = {
+    ...first,
+    sourceId: "two",
+    licensing: {
+      version: 1,
+      bindings: [
+        ...(first.licensing?.bindings ?? []),
+        { scope: "software", subject: "Engine", license: { kind: "spdx", expression: "MIT" } },
+      ],
+    },
+  };
+  const { container } = render(<AttributionStrip attributions={[first, second]} variant="plain" />);
+  expect(container.textContent?.match(/Shared credit/g)).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+  const dialog = screen.getByRole("dialog");
+  expect(dialog.textContent).toContain("ODbL-1.0");
+  expect(dialog.textContent).toContain("MIT");
+  expect(dialog.textContent).toContain("Engine");
+});
+
+it("shares identical optional source labels without dropping distinct software grants", () => {
+  const first = { ...delfi, sourceId: "first" };
+  const second: Attribution = {
+    ...delfi,
+    sourceId: "second",
+    licensing: {
+      version: 1,
+      bindings: [
+        ...(delfi.licensing?.bindings ?? []),
+        { scope: "software", subject: "Engine", license: { kind: "spdx", expression: "MIT" } },
+      ],
+    },
+  };
+  const { container } = render(<AttributionStrip attributions={[first, second]} variant="plain" />);
+  expect(container.textContent?.match(/DELFI/g)).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+  expect(screen.getByRole("dialog").textContent).toContain("CC-BY-4.0");
+  expect(screen.getByRole("dialog").textContent).toContain("MIT");
 });

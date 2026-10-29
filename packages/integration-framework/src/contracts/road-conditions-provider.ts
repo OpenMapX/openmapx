@@ -1,6 +1,7 @@
 import type {
   BBox,
   RoadConditionAttribution,
+  RoadConditionBindingDetail,
   RoadConditionEvent,
   RoadConditionsQuery,
   RoadFlowQuery,
@@ -11,6 +12,8 @@ import type { OperationalEvidence } from "./operational-evidence.js";
 export type {
   LocalizedText,
   RoadConditionAttribution,
+  RoadConditionBinding,
+  RoadConditionBindingDetail,
   RoadConditionEffect,
   RoadConditionEvent,
   RoadConditionRoadRef,
@@ -47,4 +50,14 @@ export interface RoadConditionsProvider {
 
   /** Optional live speed/congestion segments for the traffic-flow overlay. */
   getFlow?(bbox: BBox, opts?: RoadFlowQuery): Promise<RoadFlowSegment[]>;
+
+  /**
+   * The graph bindings of one of this provider's situations, with why each
+   * stands as it does; null when the situation is unknown, withdrawn or of a
+   * source in `excludedSourceIds`.
+   */
+  getBindings?(
+    eventId: string,
+    opts?: { excludedSourceIds?: string[] },
+  ): Promise<RoadConditionBindingDetail | null>;
 }

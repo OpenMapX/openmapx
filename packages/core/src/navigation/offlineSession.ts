@@ -1,3 +1,12 @@
+import {
+  type ContributingRecord,
+  type FieldContributors,
+  parseContributors,
+  readCapturedFieldContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
+import { parseGeometryContributors } from "@openmapx/mobility-core/geometry-contributors";
+import { validBikeRoutingOptions } from "../routing/bicycleOptions";
 import type { NavigationRouteOptions, RouteSelectionIntent } from "../stores/navigationStore";
 import type { LngLat } from "../types/geometry";
 import type { ManeuverLane, ManeuverSign, Route, RouteLeg, RouteStep } from "../types/routing";
@@ -53,8 +62,33 @@ function copyLngLat(value: LngLat): LngLat {
   return [value[0], value[1]];
 }
 
+function copyReceipts(record: ContributingRecord & { fieldContributors?: FieldContributors }) {
+  if (!validateReceipts(record)) throw new Error("invalid contributor receipts");
+  return {
+    ...(record.contributors === undefined
+      ? {}
+      : { contributors: snapshotContributors(record.contributors) }),
+    ...(record.fieldContributors === undefined
+      ? {}
+      : { fieldContributors: readCapturedFieldContributors(record.fieldContributors) }),
+  };
+}
+
+function validateReceipts(
+  record: ContributingRecord & { fieldContributors?: FieldContributors },
+): boolean {
+  if (record.contributors !== undefined && parseContributors(record.contributors) === undefined)
+    return false;
+  if (record.fieldContributors === undefined) return true;
+  if (!isPlainObject(record.fieldContributors)) return false;
+  return Object.values(record.fieldContributors).every(
+    (receipts) => parseContributors(receipts) !== undefined,
+  );
+}
+
 function copyStep(step: RouteStep): RouteStep {
   return {
+    ...copyReceipts(step),
     instruction: step.instruction,
     distance: step.distance,
     duration: step.duration,
@@ -93,6 +127,7 @@ function copyStep(step: RouteStep): RouteStep {
 
 function copyLeg(leg: RouteLeg): RouteLeg {
   return {
+    ...copyReceipts(leg),
     distance: leg.distance,
     duration: leg.duration,
     geometry: leg.geometry.map(copyLngLat),
@@ -102,7 +137,19 @@ function copyLeg(leg: RouteLeg): RouteLeg {
 }
 
 function copyRoute(route: Route): Route {
+  if (
+    route.geometryContributors !== undefined &&
+    parseGeometryContributors(route.geometryContributors, route.geometry.length) === undefined
+  )
+    throw new Error("invalid geometry contributor spans");
   return {
+    ...(route.geometryContributors === undefined
+      ? {}
+      : {
+          geometryContributors:
+            parseGeometryContributors(route.geometryContributors, route.geometry.length) ?? [],
+        }),
+    ...copyReceipts(route),
     distance: route.distance,
     duration: route.duration,
     ...(route.baselineDuration !== undefined && { baselineDuration: route.baselineDuration }),
@@ -159,6 +206,7 @@ function validateSign(value: unknown): value is ManeuverSign {
 function validateStep(step: unknown): step is RouteStep {
   if (!step || typeof step !== "object") return false;
   const value = step as RouteStep;
+  if (!validateReceipts(value)) return false;
   if (
     typeof value.instruction !== "string" ||
     !isFiniteNumber(value.distance) ||
@@ -220,6 +268,7 @@ function validateStep(step: unknown): step is RouteStep {
 function validateLeg(leg: unknown): leg is RouteLeg {
   if (!leg || typeof leg !== "object") return false;
   const value = leg as RouteLeg;
+  if (!validateReceipts(value)) return false;
   return (
     isFiniteNumber(value.distance) &&
     value.distance >= 0 &&
@@ -237,6 +286,7 @@ function validateLeg(leg: unknown): leg is RouteLeg {
 function validateRoute(value: unknown): value is Route {
   if (!value || typeof value !== "object") return false;
   const route = value as Route;
+  if (!validateReceipts(route)) return false;
   if (
     !GROUND_MODES.has(route.mode) ||
     !isFiniteNumber(route.distance) ||
@@ -253,6 +303,11 @@ function validateRoute(value: unknown): value is Route {
   ) {
     return false;
   }
+  if (
+    route.geometryContributors !== undefined &&
+    parseGeometryContributors(route.geometryContributors, route.geometry.length) === undefined
+  )
+    return false;
   if (!route.legs.every(validateLeg)) return false;
   if (
     route.segmentSpeedLimits &&
@@ -313,12 +368,11 @@ function validateProgress(value: unknown): value is NavProgress | null {
 function validateRouteOptions(value: unknown): value is NavigationRouteOptions {
   if (!value || typeof value !== "object") return false;
   const options = value as NavigationRouteOptions;
-  return [
-    options.avoidHighways,
-    options.avoidTolls,
-    options.avoidFerries,
-    options.avoidClosures,
-  ].every((entry) => typeof entry === "boolean");
+  return (
+    [options.avoidHighways, options.avoidTolls, options.avoidFerries, options.avoidClosures].every(
+      (entry) => typeof entry === "boolean",
+    ) && validBikeRoutingOptions(value as Record<string, unknown>)
+  );
 }
 
 function equivalentRoute(a: Route, b: Route): boolean {

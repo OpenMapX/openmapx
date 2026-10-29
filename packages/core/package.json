@@ -1,14 +1,22 @@
 {
   "name": "@openmapx/core",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Platform-agnostic business logic for OpenMapX",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
+    "./api-contracts": {
+      "types": "./src/api/contracts/index.ts",
+      "default": "./src/api/contracts/index.ts"
+    },
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./release-files": {
+      "types": "./src/release-files.ts",
+      "default": "./src/release-files.ts"
     },
     "./server": {
       "types": "./src/server.ts",
@@ -90,6 +98,18 @@
       "types": "./src/types/placeIds.ts",
       "default": "./src/types/placeIds.ts"
     },
+    "./saved-place-export": {
+      "types": "./src/saved-place-export.ts",
+      "default": "./src/saved-place-export.ts"
+    },
+    "./saved-place-description": {
+      "types": "./src/saved-place-description.ts",
+      "default": "./src/saved-place-description.ts"
+    },
+    "./saved-place-contributors": {
+      "types": "./src/saved-place-contributors.ts",
+      "default": "./src/saved-place-contributors.ts"
+    },
     "./saved-lists": {
       "types": "./src/utils/savedLists.ts",
       "default": "./src/utils/savedLists.ts"
@@ -101,6 +121,14 @@
     "./services/secret-key": {
       "types": "./src/services/secret-key.ts",
       "default": "./src/services/secret-key.ts"
+    },
+    "./services/configuration-schema": {
+      "types": "./src/services/configuration-schema.ts",
+      "default": "./src/services/configuration-schema.ts"
+    },
+    "./services/trusted-integration-schemas": {
+      "types": "./src/services/trusted-integration-schemas.ts",
+      "default": "./src/services/trusted-integration-schemas.ts"
     },
     "./utils/brandFilter": {
       "types": "./src/utils/brandFilter.ts",
@@ -149,6 +177,36 @@
     "./ambient-places-server": {
       "types": "./src/server/ambient-places.ts",
       "default": "./src/server/ambient-places.ts"
+    },
+    "./attribution": {
+      "types": "./src/utils/attribution-api.ts",
+      "default": "./src/utils/attribution-api.ts"
+    },
+    "./api-sdk": {
+      "types": "./src/api/generated/runtime-metadata.generated.ts",
+      "default": "./src/api/generated/runtime-metadata.generated.ts"
+    },
+    "./data-manager-contracts": {
+      "types": "./src/services/data-manager/contracts/index.ts",
+      "default": "./src/services/data-manager/contracts/index.ts"
+    },
+    "./data-manager-sdk": {
+      "types": "./src/services/data-manager/index.ts",
+      "default": "./src/services/data-manager/index.ts"
+    },
+    "./api-schema": {
+      "types": "./src/api/schema.ts",
+      "default": "./src/api/schema.ts"
+    },
+    "./garage-sdk": "./src/api/garage-sdk.ts",
+    "./sharing-sdk": "./src/api/sharing-sdk.ts",
+    "./saved-places-sdk": {
+      "types": "./src/api/saved-sdk.ts",
+      "default": "./src/api/saved-sdk.ts"
+    },
+    "./api-admin-sdk": {
+      "types": "./src/api/admin-sdk.ts",
+      "default": "./src/api/admin-sdk.ts"
     }
   },
   "scripts": {
@@ -159,14 +217,15 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@testing-library/react": "^16.3.3",
-    "@types/node": "^26.6.2",
+    "@types/escape-html": "1.0.4",
+    "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "esbuild": "^0.28.2",
+    "postgres": "^3.4.9",
     "react-dom": "19.3.0",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.1",
-    "postgres": "^3.4.9"
+    "vitest": "^5.0.3"
   },
   "peerDependencies": {
     "esbuild": "^0.28.0",
@@ -181,23 +240,27 @@
     }
   },
   "dependencies": {
-    "@better-auth/core": "1.7.5",
-    "@better-auth/oauth-provider": "1.7.5",
-    "@better-auth/passkey": "1.7.5",
+    "@better-auth/core": "1.7.7",
+    "@better-auth/oauth-provider": "1.7.7",
+    "@better-auth/passkey": "1.7.7",
     "@openmapx/air-quality": "workspace:*",
     "@openmapx/mobility-core": "workspace:^",
-    "@tanstack/react-query": "^5.103.2",
+    "@tanstack/react-query": "^5.104.1",
     "@turf/helpers": "^7.4.0",
     "@turf/nearest-point-on-line": "^7.4.0",
     "@types/geojson": "^7946.0.16",
     "@types/tz-lookup": "^6.1.2",
-    "better-auth": "1.7.5",
+    "better-auth": "1.7.7",
+    "escape-html": "1.0.3",
     "js-yaml": "^5.4.2",
-    "opening_hours": "^3.14.0",
+    "opening_hours": "^3.15.0",
+    "parse5": "8.0.1",
     "react": "19.3.0",
     "tz-lookup": "^6.1.25",
-    "undici": "8.10.2",
-    "zod": "^4.6.5",
-    "zustand": "^5.0.15"
-  }
+    "undici": "8.12.3",
+    "zod": "^4.6.7",
+    "zustand": "^5.0.15",
+    "@openmapx/extension-contracts": "workspace:^"
+  },
+  "private": true
 }

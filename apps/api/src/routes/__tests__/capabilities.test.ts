@@ -1,8 +1,12 @@
+import type { LoadedIntegration } from "@openmapx/integration-framework";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../integration-host.js", () => ({ getAllIntegrations: () => [] }));
-vi.mock("../../services/integration-health.js", () => ({ isIntegrationHealthy: () => true }));
+const runtime = vi.hoisted(() => ({ integrations: [] as LoadedIntegration[], healthy: true }));
+vi.mock("../../integration-host.js", () => ({ getAllIntegrations: () => runtime.integrations }));
+vi.mock("../../services/integration-health.js", () => ({
+  isIntegrationHealthy: () => runtime.healthy,
+}));
 
 const { buildTestApp } = await import("../../test/app.js");
 const { capabilitiesRoute } = await import("../capabilities.js");
@@ -30,9 +34,37 @@ async function capabilities(env: Record<string, string | undefined>) {
 
 afterEach(async () => {
   await app?.close();
+  runtime.integrations = [];
+  runtime.healthy = true;
 });
 
 describe("GET /api/capabilities", () => {
+  it("serializes every loaded service's complete public contract, including disabled services", async () => {
+    const row: LoadedIntegration = {
+      id: "fixture",
+      manifest: {
+        id: "fixture",
+        domains: ["transit"],
+        healthCheck: { type: "http", url: "https://private.test" },
+      },
+      enabled: true,
+      isBuiltIn: true,
+      strings: {},
+      config: { apiKey: "private-secret" },
+      directory: "private-directory",
+      providers: new Map(),
+      shutdownHandlers: [],
+    };
+    runtime.integrations = [row, { ...row, id: "disabled", enabled: false }];
+    runtime.healthy = false;
+    const response = await capabilities({});
+    expect(response.json().services).toEqual({
+      fixture: { enabled: true, healthy: false, available: false, domains: ["transit"] },
+      disabled: { enabled: false, healthy: false, available: false, domains: ["transit"] },
+    });
+    expect(response.body).not.toContain("private-");
+    expect(response.body).not.toContain("configured");
+  });
   it("preserves the services map and its cache header", async () => {
     const response = await capabilities({});
     expect(response.statusCode).toBe(200);

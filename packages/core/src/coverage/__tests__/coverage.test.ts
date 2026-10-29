@@ -253,7 +253,16 @@ describe("coverage wire schema", () => {
     expect(
       rightsEvidenceSchema.safeParse({
         ...baseRights,
-        licenseUrl: "https://example.test/license",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Data",
+              license: { kind: "unknown", url: "https://example.test/license" },
+            },
+          ],
+        },
         termsUrl: "http://example.test/terms",
         reviewedAt: "2026-09-10",
       }).success,
@@ -261,7 +270,16 @@ describe("coverage wire schema", () => {
     expect(
       rightsEvidenceSchema.safeParse({
         ...baseRights,
-        licenseUrl: "https://example.test/license?token=secret",
+        licensing: {
+          version: 1,
+          bindings: [
+            {
+              scope: "data",
+              subject: "Data",
+              license: { kind: "unknown", url: "https://example.test/license?token=secret" },
+            },
+          ],
+        },
       }).success,
     ).toBe(false);
     expect(

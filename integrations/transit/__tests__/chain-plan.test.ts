@@ -1,4 +1,5 @@
 import type { TemporalCapabilities, TripPlanRequest } from "@openmapx/integration-framework";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
 import type { TripItinerary, TripPlan } from "@openmapx/mobility-core/transit";
 import { describe, expect, it, vi } from "vitest";
@@ -533,5 +534,57 @@ describe("backward actual transit times", () => {
     expect(plan.schedule.totalTravelSeconds).toBe(1800);
     expect(plan.schedule.departure).toBe("2026-09-01T10:15:00+00:00");
     expect(plan.schedule.arrival).toBe("2026-09-01T10:45:00+00:00");
+  });
+});
+
+describe("chain contributor receipts", () => {
+  it("credits chosen timing suppliers while keeping unused alternatives independent", async () => {
+    const a = {
+      sourceId: "feed-a",
+      name: "A",
+      url: "https://a.test",
+      licensing: licensingFromDeclaration("CC0", undefined, "A"),
+    };
+    const b = {
+      sourceId: "feed-b",
+      name: "B",
+      url: "https://b.test",
+      licensing: licensingFromDeclaration("CC0", undefined, "B"),
+    };
+    const c = {
+      sourceId: "feed-c",
+      name: "C",
+      url: "https://c.test",
+      licensing: licensingFromDeclaration("CC0", undefined, "C"),
+    };
+    const selectedA = itinerary("2026-09-01T09:10:00Z", "2026-09-01T09:30:00Z", {
+      contributors: [a],
+    });
+    const unusedB = itinerary("2026-09-01T09:15:00Z", "2026-09-01T09:40:00Z", {
+      contributors: [b],
+    });
+    const selectedC = itinerary("2026-09-01T09:45:00Z", "2026-09-01T10:00:00Z", {
+      contributors: [c],
+    });
+    const planTrip = vi
+      .fn()
+      .mockResolvedValueOnce(result([selectedA, unusedB]))
+      .mockResolvedValueOnce(result([selectedC]));
+    const plan = await planTransitChain({
+      waypoints: [COLOGNE, BONN, AACHEN],
+      schedules: [null, null, null],
+      anchor: { kind: "departAt", wallClock: "2026-09-01T09:00" },
+      baseRequest: {},
+      capabilities: CAPABILITIES,
+      planTrip,
+    });
+    expect(plan.contributors?.map((x) => x.sourceId)).toEqual(["feed-a", "feed-c"]);
+    expect(plan.segments[0].contributors?.map((x) => x.sourceId)).toEqual(["feed-a"]);
+    expect(plan.segments[0].alternatives[0].contributors).toEqual([b]);
+    expect(plan.segments[1].fieldContributors?.boardingWaitSeconds?.map((x) => x.sourceId)).toEqual(
+      ["feed-c", "feed-a"],
+    );
+    expect(plan.fieldContributors?.schedule?.map((x) => x.sourceId)).toEqual(["feed-a", "feed-c"]);
+    expect(selectedA).not.toHaveProperty("fieldContributors");
   });
 });

@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchDirections } from "../api/directions";
+import { type BikeRoutingOptions, bicycleOptions } from "../routing/bicycleOptions";
 import type { LngLat } from "../types/geometry";
 import type { TravelMode } from "../types/routing";
 import { useRoadConditionLease } from "./useRoadConditionLease";
 
-interface UseDirectionsParams {
+interface UseDirectionsParams extends BikeRoutingOptions {
   waypoints: LngLat[];
   mode?: TravelMode;
   avoidHighways?: boolean;
@@ -48,7 +49,12 @@ export function directionsQueryKey({
   lang,
   departAt,
   arriveBy,
-}: UseDirectionsParams): (string | boolean | undefined)[] {
+  bikeProfile,
+  bikeHillPreference,
+  bikePreferQuietRoads,
+  bikePreferSmoothSurfaces,
+  bikeSpeedKmh,
+}: UseDirectionsParams): (string | number | boolean | undefined)[] {
   const waypointsStr = waypoints.map(([lng, lat]) => `${lng},${lat}`).join(";");
   const eff = effectiveAvoid(mode, avoidHighways, avoidTolls);
   return [
@@ -63,6 +69,17 @@ export function directionsQueryKey({
     lang,
     departAt,
     arriveBy,
+    ...(mode === "cycling"
+      ? Object.values(
+          bicycleOptions(mode, {
+            bikeProfile,
+            bikeHillPreference,
+            bikePreferQuietRoads,
+            bikePreferSmoothSurfaces,
+            bikeSpeedKmh,
+          }),
+        )
+      : []),
   ];
 }
 
@@ -95,6 +112,7 @@ export function useDirections(params: UseDirectionsParams) {
         lang,
         departAt,
         arriveBy,
+        ...bicycleOptions(mode, params),
       }),
     enabled: waypoints.length >= 2,
     staleTime: mode === "driving" || mode === "motorcycle" || avoidClosures ? 0 : 120_000,

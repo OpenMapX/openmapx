@@ -8,10 +8,10 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { routeColor, useRouteAlerts, useVehicleJourney } from "@openmapx/core";
+import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import type { MergedDeparture, TripRemark } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
-import { useAttributionFromHooks } from "@/integration-api/overlay/useAttributionFromHooks";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
@@ -34,13 +34,19 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
   const { data: journey, isLoading, isError, refetch } = journeyQuery;
   const alertsQuery = useRouteAlerts(departure.route.id);
   const { data: alerts } = alertsQuery;
-  const mergedAttributions = useAttributionFromHooks(journeyQuery, alertsQuery);
 
   const isDelayed = (departure.delaySeconds ?? 0) > 60;
   const isCanceled = departure.canceled === true;
   const lineColor = routeColor(departure.route, BRAND);
   const serviceInfo = journey?.serviceInfo;
   const formationDetails = journey?.formationDetails;
+  const mergedAttributions = contributorsForRecords([
+    departure,
+    serviceInfo,
+    formationDetails,
+    ...(journey?.stops ?? []),
+    ...(alerts ?? []),
+  ]);
 
   return (
     <Box>

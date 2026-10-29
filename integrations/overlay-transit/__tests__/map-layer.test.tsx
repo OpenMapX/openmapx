@@ -23,7 +23,7 @@ vi.mock("@/integration-api/overlay/useMapAttributions", () => ({
   useMapAttributions: () => undefined,
 }));
 
-import { TransitLayer } from "../map-layer";
+import { networkRouteFeatures, TransitLayer } from "../map-layer";
 
 const SOURCE_ID = "openmapx-transit-motis-source";
 const MOTIS_LINE_ID = "openmapx-transit-motis-line";
@@ -69,11 +69,31 @@ describe("TransitLayer", () => {
     act(() => {
       useTransitStore.setState({ panelOpen: false, layerVisible: false });
     });
+    expect(fake.state.sources.has(SOURCE_ID)).toBe(false);
+    expect(fake.state.layers.has(MOTIS_LINE_ID)).toBe(false);
 
+    act(() => {
+      useTransitStore.setState({ panelOpen: true, layerVisible: true });
+    });
     expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual({
       type: "FeatureCollection",
       features: [],
     });
+  });
+
+  it("keeps the receded network across a style rebuild", () => {
+    useDirectionsStore.setState({
+      mode: "transit",
+      transitItineraries: [ITINERARY],
+      activeItineraryIndex: 0,
+    });
+    render(<TransitLayer />);
+    expect(fake.state.paint.get(MOTIS_LINE_ID)?.["line-opacity"]).toBe(0.25);
+
+    act(() => {
+      fake.map.setStyle({});
+    });
+    expect(fake.state.paint.get(MOTIS_LINE_ID)?.["line-opacity"]).toBe(0.25);
   });
 
   it("recedes the operated network while a chosen itinerary is on the map", () => {
@@ -94,4 +114,29 @@ describe("TransitLayer", () => {
     });
     expect(fake.state.paint.get(MOTIS_LINE_ID)?.["line-opacity"]).toBe(0.9);
   });
+});
+
+it("narrows network feature credits to drawable route snapshots", () => {
+  const a = { sourceId: "a", name: "A" };
+  const b = { sourceId: "b", name: "B" };
+  const features = networkRouteFeatures([
+    {
+      id: "a",
+      contributors: [a],
+      shortName: "A",
+      longName: "",
+      mode: "rail",
+      operatorName: "",
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [8, 50],
+          [8.1, 50.1],
+        ],
+      },
+    },
+    { id: "b", contributors: [b], shortName: "B", longName: "", mode: "rail", operatorName: "" },
+  ]);
+  expect(features).toHaveLength(1);
+  expect(JSON.parse(String(features[0].properties?._mapAttributions))).toEqual([a]);
 });

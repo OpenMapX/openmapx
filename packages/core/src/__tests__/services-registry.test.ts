@@ -63,9 +63,18 @@ describe("ServiceRegistry.load", () => {
     expect(registry.list().map((s) => s.manifest.id)).toEqual(["good"]);
   });
 
-  it("marks community services discovered under services/.community/", async () => {
+  it("marks community services discovered in the agent's community store", async () => {
     writeManifest("alpha", { ...baseManifest, id: "alpha" });
-    const communityDir = join(tmp, "services", ".community", "abc123", "extra");
+    const communityDir = join(
+      tmp,
+      "infra",
+      "docker",
+      "state",
+      "ops-agent",
+      "community",
+      "abc123",
+      "extra",
+    );
     mkdirSync(communityDir, { recursive: true });
     writeFileSync(
       join(communityDir, "service.json"),
@@ -81,7 +90,16 @@ describe("ServiceRegistry.load", () => {
 
   it("skips a community manifest that claims the built-in quality tier", async () => {
     writeManifest("alpha", { ...baseManifest, id: "alpha" });
-    const communityDir = join(tmp, "services", ".community", "abc123", "spoof");
+    const communityDir = join(
+      tmp,
+      "infra",
+      "docker",
+      "state",
+      "ops-agent",
+      "community",
+      "abc123",
+      "spoof",
+    );
     mkdirSync(communityDir, { recursive: true });
     writeFileSync(
       join(communityDir, "service.json"),
@@ -104,7 +122,16 @@ describe("ServiceRegistry.load", () => {
   });
 
   it("does not load manifests from an in-flight dot-prefixed clone", async () => {
-    const tmpCloneServiceDir = join(tmp, "services", ".community", ".tmp-clone-abc123", "svc");
+    const tmpCloneServiceDir = join(
+      tmp,
+      "infra",
+      "docker",
+      "state",
+      "ops-agent",
+      "community",
+      ".tmp-clone-abc123",
+      "svc",
+    );
     mkdirSync(tmpCloneServiceDir, { recursive: true });
     writeFileSync(
       join(tmpCloneServiceDir, "service.json"),
@@ -120,7 +147,17 @@ describe("ServiceRegistry.load", () => {
   it("discovers a community manifest nested next to its service", async () => {
     // Manifest shipped at <repo>/services/ingest/service.json (two levels deep),
     // not at the repo root — the scanner walks the clone to find it.
-    const svcDir = join(tmp, "services", ".community", "def456", "services", "ingest");
+    const svcDir = join(
+      tmp,
+      "infra",
+      "docker",
+      "state",
+      "ops-agent",
+      "community",
+      "def456",
+      "services",
+      "ingest",
+    );
     mkdirSync(svcDir, { recursive: true });
     writeFileSync(
       join(svcDir, "service.json"),

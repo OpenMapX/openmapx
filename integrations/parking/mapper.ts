@@ -1,6 +1,6 @@
 import { resolveBrandByName } from "@openmapx/brands";
 import {
-  type DataSourceAttribution,
+  type Attribution,
   type DataSourceBranding,
   type DataSourceDetail,
   type DataSourceDetailSection,
@@ -8,14 +8,19 @@ import {
   gapFillBranding,
   isSafeHttpUrl,
   type OsmIdentity,
+  withBrandingContributors,
 } from "@openmapx/core";
+import { siteAttributions } from "@openmapx/integration-framework";
 import {
   type I18nToken,
   money,
   sharedT,
   type Translatable,
   token,
+  vocabularyLabels,
+  wallClock,
 } from "@openmapx/integration-framework/strings";
+import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import type {
   ParkingArea,
   ParkingRate,
@@ -26,7 +31,7 @@ import type {
 } from "@openmapx/mobility-core/parking";
 import strings from "./strings/en.json" with { type: "json" };
 
-type Row = [I18nToken, Translatable];
+type Row = [I18nToken, Translatable | Translatable[]];
 type RateRow = ParkingRate["rows"][number];
 
 /** Every vehicle type and user group the strings label; any other is shown as it is written. */
@@ -45,6 +50,7 @@ const LAYOUT_TOKEN: Partial<Record<NonNullable<ParkingSite["layout"]>, I18nToken
   single_level: token("value.singleLevel"),
   multi_storey: token("value.parkingGarage"),
   underground: token("value.undergroundGarage"),
+  underground_and_multi_storey: token("value.undergroundAndMultiStorey"),
   surface: token("value.surfaceLot"),
   automated: token("value.automated"),
   covered: token("value.covered"),
@@ -144,14 +150,9 @@ function siteBranding(site: ParkingSite): DataSourceBranding | undefined {
  * each result and detail carries the credits of the sources it was built from.
  * Their links come from upstream data, so only http(s) ones are kept.
  */
-function siteCredits(site: ParkingSite): DataSourceAttribution[] | undefined {
+function siteCredits(site: ParkingSite): Attribution[] | undefined {
   if (site.attributions.length === 0) return undefined;
-  return site.attributions.map((a) => ({
-    text: a.name,
-    url: isSafeHttpUrl(a.url) ? a.url : "",
-    ...(a.spdxLicense ? { license: a.spdxLicense } : {}),
-    ...(isSafeHttpUrl(a.licenseUrl) ? { licenseUrl: a.licenseUrl } : {}),
-  }));
+  return snapshotContributors(site.attributions);
 }
 
 /** A site's title when its sources name it nothing. */
@@ -171,7 +172,8 @@ export function mapParkingSiteToResult(site: ParkingSite): DataSourceResult {
     ...fallbackNameOf(site),
     coordinates: site.coordinates,
     source: site.sources[0] ?? "unknown",
-    sources: site.sources,
+    sources: [...site.sources],
+    contributors: siteAttributions([site]),
     variant: variantOf(site),
     status: isClosed(site) ? "non-operational" : undefined,
     summary: summaryOf(site),
@@ -182,7 +184,7 @@ export function mapParkingSiteToResult(site: ParkingSite): DataSourceResult {
   if (attributions) result.attributions = attributions;
   const branding = siteBranding(site);
   if (branding) result.branding = branding;
-  return result;
+  return withBrandingContributors(result);
 }
 
 function formatTimestamp(value: string | undefined): string | undefined {
@@ -231,23 +233,60 @@ function repeatsSite(area: ParkingArea, site: ParkingSite): boolean {
     area.userGroup === "any" &&
     (area.vehicleType === "car" || area.vehicleType === "any") &&
     area.capacity === site.capacity &&
-    area.available === site.available
+    area.available === site.available &&
+    area.hours === undefined &&
+    area.maxStayMin === undefined
   );
 }
 
-/** Areas with a fresh count go to availability; the rest show their capacity, or that they exist. */
+const DAILY_HOURS = /^(?:Mo-Su )?(\d{2}:\d{2})-(\d{2}:\d{2})$/;
+
+/**
+ * When an area's spaces apply: around the clock, or the same span every day
+ * in the reader's clock format. Other OpenStreetMap hours stay as written.
+ */
+function areaHours(hours: string): I18nToken {
+  const value = hours.trim();
+  if (value === "24/7") return token("area.allDay");
+  const daily = DAILY_HOURS.exec(value);
+  if (!daily) return token("area.hours", { hours: value });
+  const [, from = "", to = ""] = daily;
+  if (from === "00:00" && to === "24:00") return token("area.allDay");
+  return token("area.daily", { from: wallClock(from), to: wallClock(to) });
+}
+
+/** An area's limits: how long a vehicle may stay, and when its restriction holds. */
+function areaLimits(area: ParkingArea): I18nToken[] {
+  const limits: I18nToken[] = [];
+  if (area.maxStayMin) {
+    limits.push(token("area.maxStay", { duration: durationToken(area.maxStayMin) }));
+  }
+  if (area.hours) limits.push(areaHours(area.hours));
+  return limits;
+}
+
+/**
+ * Areas with a fresh count go to availability; the rest show their capacity,
+ * or that they exist. Each is followed by its limits, its capacity then
+ * naming its unit so the count does not run into them.
+ */
 function areaRows(site: ParkingSite): { live: Row[]; facility: Row[] } {
   const live: Row[] = [];
   const facility: Row[] = [];
   for (const area of site.areas) {
     if (repeatsSite(area, site)) continue;
     const label = areaLabel(area);
+    const limits = areaLimits(area);
+    const withLimits = (value: Translatable): Translatable | Translatable[] =>
+      limits.length > 0 ? [value, ...limits] : value;
     if (area.available !== undefined && !area.stale) {
-      live.push([label, countOf(area.available, area.capacity)]);
+      live.push([label, withLimits(countOf(area.available, area.capacity))]);
     } else if (area.capacity !== undefined) {
-      facility.push([label, `${area.capacity}`]);
+      const capacity =
+        limits.length > 0 ? token("area.spaces", { count: area.capacity }) : `${area.capacity}`;
+      facility.push([label, withLimits(capacity)]);
     } else {
-      facility.push([label, token("value.available")]);
+      facility.push([label, withLimits(token("value.available"))]);
     }
   }
   return { live, facility };
@@ -287,9 +326,15 @@ function facilitySection(site: ParkingSite, areaFacility: Row[]): DataSourceDeta
   if (site.heightLimitCm) {
     rows.push([token("row.maxHeight"), `${(site.heightLimitCm / 100).toFixed(2)} m`]);
   }
+  if (site.maxStayMin) rows.push([token("row.maxStay"), durationToken(site.maxStayMin)]);
   rows.push(...areaFacility);
   const audience = site.audience && AUDIENCE_TOKEN[site.audience];
   if (audience) rows.push([sharedT.row.access, audience]);
+  if (site.reservation !== undefined) {
+    rows.push([token("row.reservation"), site.reservation ? sharedT.value.yes : sharedT.value.no]);
+  }
+  const amenities = vocabularyLabels("amenity", site.amenities ?? []);
+  if (amenities.length > 0) rows.push([sharedT.row.amenities, amenities]);
   if (rows.length === 0) return null;
   return { title: token("section.facility"), type: "table", rows, sectionIcon: "info" };
 }
@@ -405,7 +450,8 @@ export function mapParkingSiteToDetail(site: ParkingSite): DataSourceDetail {
 
   const detail: DataSourceDetail = {
     id: site.id,
-    sources: site.sources,
+    sources: [...site.sources],
+    contributors: siteAttributions([site]),
     name: site.name,
     ...fallbackNameOf(site),
     coordinates: site.coordinates,
@@ -425,5 +471,5 @@ export function mapParkingSiteToDetail(site: ParkingSite): DataSourceDetail {
   if (attributions) detail.attributions = attributions;
   const branding = siteBranding(site);
   if (branding) detail.branding = branding;
-  return detail;
+  return withBrandingContributors(detail);
 }

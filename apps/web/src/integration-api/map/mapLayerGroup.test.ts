@@ -60,12 +60,9 @@ describe("applyGroup", () => {
     expect(fake.state.sources.get("g-src")?.data).toBe("sentinel");
   });
 
-  it("re-adds a layer whose spec changed", () => {
-    const fake = createFakeMap({ styleLoaded: true });
-    const first = group(EMPTY_FC);
-    const applied = applyGroup(fake.map, first, emptyApplied());
-    const changed: MapLayerGroup = {
-      ...first,
+  function withLayer(layer: Record<string, unknown>): MapLayerGroup {
+    return {
+      sources: { "g-src": { type: "geojson", data: EMPTY_FC } as never },
       layers: [
         {
           id: "g-layer",
@@ -73,12 +70,55 @@ describe("applyGroup", () => {
           source: "g-src",
           slot: "overlay-points",
           order: 0,
-          paint: { "circle-radius": 12 },
+          ...layer,
         } as never,
       ],
     };
-    applyGroup(fake.map, changed, applied);
-    expect(fake.state.layers.get("g-layer")).toMatchObject({ paint: { "circle-radius": 12 } });
+  }
+
+  it("re-adds a layer whose structure changed", () => {
+    const fake = createFakeMap({ styleLoaded: true });
+    const applied = applyGroup(fake.map, withLayer({}), emptyApplied());
+    applyGroup(fake.map, withLayer({ type: "heatmap" }), applied);
+    expect(fake.state.layers.get("g-layer")).toMatchObject({ type: "heatmap" });
+    expect(fake.state.counts.addLayer.get("g-layer")).toBe(2);
+  });
+
+  it("updates paint, layout, filter and zoom range on the live layer", () => {
+    const fake = createFakeMap({ styleLoaded: true });
+    const applied = applyGroup(
+      fake.map,
+      withLayer({ paint: { "circle-radius": 4, "circle-color": "#000" }, minzoom: 4 }),
+      emptyApplied(),
+    );
+    applyGroup(
+      fake.map,
+      withLayer({
+        paint: { "circle-radius": 12 },
+        layout: { visibility: "none" },
+        filter: ["==", ["get", "kind"], "a"],
+        minzoom: 6,
+      }),
+      applied,
+    );
+
+    expect(fake.state.counts.addLayer.get("g-layer")).toBe(1);
+    expect(fake.state.counts.removeLayer.get("g-layer") ?? 0).toBe(0);
+    expect(fake.map.getPaintProperty("g-layer", "circle-radius")).toBe(12);
+    expect(fake.map.getPaintProperty("g-layer", "circle-color")).toBeUndefined();
+    expect(fake.map.getLayoutProperty("g-layer", "visibility")).toBe("none");
+    expect(fake.state.filters.get("g-layer")).toEqual(["==", ["get", "kind"], "a"]);
+    expect(fake.state.layers.get("g-layer")).toMatchObject({ minzoom: 6, maxzoom: 24 });
+  });
+
+  it("leaves an unchanged layer untouched", () => {
+    const fake = createFakeMap({ styleLoaded: true });
+    const spec = { paint: { "circle-radius": 4 }, filter: ["has", "id"] };
+    const applied = applyGroup(fake.map, withLayer(spec), emptyApplied());
+    applyGroup(fake.map, withLayer(structuredClone(spec)), applied);
+    expect(fake.state.counts.setPaintProperty.get("g-layer") ?? 0).toBe(0);
+    expect(fake.state.counts.setFilter.get("g-layer") ?? 0).toBe(0);
+    expect(fake.state.counts.addLayer.get("g-layer")).toBe(1);
   });
 
   it("rebuilds everything, with data, from an empty applied record", () => {
@@ -144,5 +184,19 @@ describe("applyGroup", () => {
     const applied = applyGroup(fake.map, withImage, emptyApplied());
     applyGroup(fake.map, withImage, applied);
     expect(calls).toBe(1);
+  });
+
+  it("starts a pending image load once per style, not once per pass", () => {
+    const fake = createFakeMap({ styleLoaded: true });
+    let calls = 0;
+    const pending: MapLayerGroup = { ...group(EMPTY_FC), images: { icon: () => calls++ } };
+    let applied = applyGroup(fake.map, pending, emptyApplied());
+    applied = applyGroup(fake.map, pending, applied);
+    applyGroup(fake.map, pending, applied);
+    expect(calls).toBe(1);
+
+    // A style change drops images; the rebuild starts from an empty record.
+    applyGroup(fake.map, pending, emptyApplied());
+    expect(calls).toBe(2);
   });
 });

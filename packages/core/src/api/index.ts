@@ -1,4 +1,3 @@
-export { fetchCapabilities, isServiceAvailable } from "./capabilities";
 export {
   ApiClient,
   type ApiClientConfig,
@@ -7,6 +6,7 @@ export {
   apiClient,
   apiUrl,
   configureApiClient,
+  createApiClient,
   isApiClientError,
   isApiRequestAbortedError,
   proxyImageUrl,

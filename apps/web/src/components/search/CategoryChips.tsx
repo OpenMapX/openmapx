@@ -106,7 +106,19 @@ export function CategoryChips() {
   const { activeSource, toggleSource, setActiveSource } = useDataSourceStore();
   const { data: sourcesData } = useDataSources();
   const registry = useIntegrationRegistry();
-  const chips = discoveryChips(sourcesData?.sources ?? []);
+  // A data source can stay out of the bar (shown elsewhere, such as in an
+  // overlay) while search still finds it.
+  const chipBarSources = (sourcesData?.sources ?? []).filter(
+    (source) =>
+      registry
+        .getAll()
+        .find(
+          (i) =>
+            i.frontend?.searchCategory &&
+            (i.frontend.searchCategory as { id: string }).id === source.id,
+        )?.frontend?.searchCategory?.showInChipBar !== false,
+  );
+  const chips = discoveryChips(chipBarSources);
 
   // Build icon path lookup from data source integration manifests
   const dataSourceIcons = useCallback(

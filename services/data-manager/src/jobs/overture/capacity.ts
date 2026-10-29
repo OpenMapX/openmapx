@@ -107,8 +107,11 @@ export function estimateOverturePullBytes(dataDir: string, regionSlug: string): 
 export function estimateOvertureIngestBytes(
   parquetBytes: number,
   activeSchemaBytes: number,
+  capturedCatalogueBytes = 0,
 ): number {
-  return Math.ceil(Math.max(4 * GIB, parquetBytes * 4, activeSchemaBytes * 1.5));
+  return Math.ceil(
+    Math.max(4 * GIB, parquetBytes * 4, activeSchemaBytes * 1.5) + capturedCatalogueBytes * 3,
+  );
 }
 
 /** Candidate/component/link workspaces are bounded separately from ingest. */

@@ -112,6 +112,16 @@ export function useDataSourceSearch(
   return { ...wrapMobilityEnvelope(query), partial: query.data?.partial ?? null };
 }
 
+/**
+ * A detail's evaluated hours hold for a minute (see `currentOpeningHoursInfo`);
+ * refetch while they are shown so the open or closed verdict stays current.
+ */
+export function refetchWhileHoursShown(query: {
+  state: { data?: MobilityEnvelope<DataSourceDetail | null> };
+}): number | false {
+  return query.state.data?.data?.openingHoursInfo ? 60_000 : false;
+}
+
 export function useDataSourceDetail(
   sourceId: string | null,
   itemId: string | null,
@@ -127,6 +137,7 @@ export function useDataSourceDetail(
       ),
     enabled: sourceId !== null && itemId !== null,
     staleTime: 5 * 60 * 1000,
+    refetchInterval: refetchWhileHoursShown,
     gcTime: DETAIL_QUERY_POLICY.gcTime,
   });
   return wrapMobilityEnvelope(query);

@@ -20,6 +20,7 @@ vi.mock("geo-tz", async (importOriginal) => {
 });
 
 import { setup } from "./index.js";
+import manifest from "./manifest.json";
 
 // The /times route resolves the IANA zone from the coordinate (geo-tz), then
 // queries sunrise-sunset.org with `formatted=0` (ISO output). These tests pin
@@ -64,7 +65,7 @@ function mockOk(data: unknown) {
 // Collects handlers by path so both /times and /timezone can be exercised
 // from the same harness.
 function getHandler(path: string, overrides: MockContextOverrides = {}): RouteHandler {
-  const ctx = createMockIntegrationContext(overrides);
+  const ctx = createMockIntegrationContext({ manifest, ...overrides });
   setup(ctx);
   const route = ctx.registered.routes.find((r) => r.path === path);
   if (!route) throw new Error(`${path} route was not registered`);
@@ -155,7 +156,14 @@ describe("GET /times sunrise-sunset route", () => {
       astronomicalTwilightBegin: "2026-06-14T00:00:00+00:00",
       astronomicalTwilightEnd: "2026-06-14T22:00:00+00:00",
       timezone: "Europe/Berlin",
-      attribution: { name: "Sunrise-Sunset.org", url: "https://sunrise-sunset.org/" },
+      contributors: expect.arrayContaining([
+        expect.objectContaining({ sourceId: "sunrise-sunset" }),
+        expect.objectContaining({
+          sourceId: "timezone-boundary-builder",
+          licensing: expect.objectContaining({ version: 1 }),
+        }),
+        expect.objectContaining({ sourceId: "openstreetmap" }),
+      ]),
     });
     expect(reply.headers["Cache-Control"]).toBe("public, max-age=3600");
   });

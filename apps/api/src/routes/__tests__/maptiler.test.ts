@@ -1,8 +1,10 @@
+import { get } from "node:http";
+import type { AddressInfo } from "node:net";
 import { Writable } from "node:stream";
 import Fastify, { type FastifyInstance } from "fastify";
 import pino from "pino";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { controlledRequestLoggingOptions } from "../../server-wiring.js";
+import { controlledRequestLoggingOptions, uniformErrorHandler } from "../../server-wiring.js";
 import { createSafePinoOptions } from "../../utils/safe-log-fields.js";
 
 const databaseState = vi.hoisted(() => ({ rows: [] as { key: string; value: unknown }[] }));
@@ -18,22 +20,59 @@ let app: FastifyInstance;
 beforeAll(async () => {
   const { maptilerRoute } = await import("../maptiler.js");
   app = Fastify({ logger: false });
+  app.setErrorHandler(uniformErrorHandler);
   await app.register(maptilerRoute);
   await app.ready();
 });
 
 afterAll(async () => {
-  await app.close();
+  await app?.close();
 });
 
 afterEach(() => {
   databaseState.rows = [];
   invalidateMapSettings();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
 describe("GET /maptiler/*", () => {
+  it.each([
+    ["x outside the zoom world", "/maptiler/tiles/v3/2/4/0.pbf"],
+    ["y outside the zoom world", "/maptiler/tiles/v3/2/0/4.pbf"],
+    ["zoom above the provider ceiling", "/maptiler/tiles/v3/23/0/0.pbf"],
+  ])("rejects %s before provider acquisition", async (_label, url) => {
+    vi.stubEnv("MAPTILER_KEY", "test-key");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await app.inject({ method: "GET", url });
+
+    expect(res.statusCode).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("accepts the exact zoom-22 maximum tile", async () => {
+    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(new Uint8Array([1]), {
+            headers: { "Content-Type": "application/vnd.mapbox-vector-tile" },
+          }),
+      ),
+    );
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/maptiler/tiles/v3/22/4194303/4194303.pbf",
+    });
+
+    expect(res.statusCode).toBe(200);
+  });
+
   it.each([
     ["terrain-rgb-v2", "webp"],
     ["contours-v2", "pbf"],
@@ -124,6 +163,196 @@ describe("GET /maptiler/*", () => {
       new URL("https://api.maptiler.com/tiles/satellite-v2/4/8/5.jpg?key=test-key"),
       expect.any(Object),
     );
+  });
+
+  it.each([
+    ["missing MIME", {}],
+    ["wrong MIME", { "Content-Type": "text/html" }],
+    [
+      "oversized declared length",
+      {
+        "Content-Type": "image/png",
+        "Content-Length": String(8 * 1024 * 1024 + 1),
+      },
+    ],
+  ])("rejects a raster tile with %s", async (_label, headers) => {
+    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(new Uint8Array([1]), { headers })),
+    );
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/maptiler/tiles/satellite-v2/4/8/5.png",
+    });
+
+    expect(res.statusCode).toBe(502);
+    expect(res.headers["cache-control"]).toBe("no-store");
+  });
+
+  it("returns a fixed no-store 502 when a streamed tile exceeds its byte limit", async () => {
+    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(new Uint8Array(2 * 1024 * 1024 + 1));
+                controller.close();
+              },
+            }),
+            { headers: { "Content-Type": "application/vnd.mapbox-vector-tile" } },
+          ),
+      ),
+    );
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/maptiler/tiles/v3/4/8/5.pbf",
+    });
+
+    expect(res.statusCode).toBe(502);
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(res.json()).toEqual({ error: "Internal Server Error" });
+  });
+
+  it("cancels a stalled provider stream when the client disconnects after the first chunk", async () => {
+    vi.stubEnv("MAPTILER_KEY", "test-key");
+    let cancelled = false;
+    let fetchSignal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: URL, init?: RequestInit) => {
+        fetchSignal = init?.signal ?? undefined;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array([1]));
+            },
+            cancel() {
+              cancelled = true;
+            },
+          }),
+          { headers: { "Content-Type": "application/vnd.mapbox-vector-tile" } },
+        );
+      }),
+    );
+    if (!app.server.listening) await app.listen({ host: "127.0.0.1", port: 0 });
+    const address = app.server.address() as AddressInfo;
+
+    await new Promise<void>((resolve, reject) => {
+      const request = get(
+        `http://127.0.0.1:${address.port}/maptiler/tiles/v3/2/1/1.pbf`,
+        (response) => {
+          response.once("data", () => {
+            response.destroy();
+            request.destroy();
+            resolve();
+          });
+          response.on("error", () => {});
+        },
+      );
+      request.on("error", reject);
+    });
+
+    await vi.waitFor(() => {
+      expect(fetchSignal?.aborted).toBe(true);
+      expect(cancelled).toBe(true);
+    });
+  });
+
+  it("rejects a bodyless binary success response", async () => {
+    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { headers: { "Content-Type": "image/png" } })),
+    );
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/maptiler/tiles/satellite-v2/4/8/5.png",
+    });
+
+    expect(res.statusCode).toBe(502);
+  });
+
+  it.each([
+    ["missing MIME", {}],
+    ["wrong MIME", { "Content-Type": "text/html" }],
+    [
+      "oversized declared length",
+      {
+        "Content-Type": "application/json",
+        "Content-Length": String(2 * 1024 * 1024 + 1),
+      },
+    ],
+  ])("rejects style JSON with %s", async (_label, headers) => {
+    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("{}", { headers })),
+    );
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/maptiler/maps/bright-v2/style.json",
+    });
+
+    expect(res.statusCode).toBe(502);
+    expect(res.headers["cache-control"]).toBe("no-store");
+  });
+
+  it("returns a no-store 502 for malformed style JSON", async () => {
+    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () => new Response("{not-json", { headers: { "Content-Type": "application/json" } }),
+      ),
+    );
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/maptiler/maps/bright-v2/style.json",
+    });
+
+    expect(res.statusCode).toBe(502);
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(res.json()).toEqual({ message: "MapTiler provider returned an invalid response" });
+  });
+
+  it("cancels a rejected upstream error body", async () => {
+    vi.stubEnv("MAPTILER_KEY", "test-key");
+    let cancelled = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(new Uint8Array([1]));
+              },
+              cancel() {
+                cancelled = true;
+              },
+            }),
+            { status: 502, headers: { "Content-Type": "text/plain" } },
+          ),
+      ),
+    );
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/maptiler/tiles/satellite-v2/4/8/5.png",
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(res.statusCode).toBe(502);
+    expect(cancelled).toBe(true);
   });
 
   it.each([

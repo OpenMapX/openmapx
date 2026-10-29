@@ -237,6 +237,7 @@ describe("@hey-api/client-fetch runtime integrations", () => {
     expect(reversed).toEqual({
       address: "Europaplatz 1",
       city: "Berlin",
+      sourceIds: ["motis"],
     });
   });
 
@@ -360,7 +361,7 @@ describe("@hey-api/client-fetch runtime integrations", () => {
           capacity: 8,
           isRenting: true,
           isReturning: true,
-          sources: ["gbfs/nextbike"],
+          sources: ["gbfs/nextbike", "transitous"],
         },
       ],
       vehicles: [
@@ -369,10 +370,29 @@ describe("@hey-api/client-fetch runtime integrations", () => {
           formFactor: "bicycle",
           propulsion: "human",
           returnConstraint: "any_station",
-          sources: ["gbfs/nextbike"],
+          sources: ["gbfs/nextbike", "transitous"],
         },
       ],
       zones: [],
+    });
+    // Raw serving IDs remain available without inventing attribution metadata.
+    expect(rentals.stations[0].contributors).toBeUndefined();
+    expect(rentals.vehicles[0].contributors).toBeUndefined();
+    const feed = {
+      sourceId: "gbfs/nextbike",
+      name: "Known nextbike feed",
+      notes: "Original feed notice",
+    };
+    const captured = await client.fetchMotisRentals([13.3, 52.4, 13.5, 52.6], ["bicycle"], (ids) =>
+      ids.includes(feed.sourceId) ? [feed] : [],
+    );
+    expect(captured.stations[0].contributors).toEqual([feed]);
+    expect(captured.vehicles[0].contributors).toEqual([feed]);
+    expect(captured.providers[0].contributors).toEqual([feed]);
+    feed.name = "Changed catalogue";
+    expect(captured.stations[0].contributors?.[0]).toMatchObject({
+      name: "Known nextbike feed",
+      notes: "Original feed notice",
     });
   });
 });

@@ -1,5 +1,4 @@
 import Box from "@mui/material/Box";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { Suspense } from "react";
 import { GlobalKeybindings } from "@/components/command-palette/GlobalKeybindings";
 import { ElevationHoverProvider } from "@/components/elevation/ElevationHoverContext";
@@ -64,26 +63,10 @@ import { CategoryFilterBar } from "@/components/search/CategoryFilterBar";
 import { SearchBar } from "@/components/search/SearchBar";
 import { WeatherWidget } from "@/components/weather/WeatherWidget";
 import { MapProvider } from "@/integration-api/map/MapContext";
+import { MAPTILER_ATTRIBUTION } from "@/lib/baseMapAttributions";
 
-// Raster base layers register each Attribution as its own atomic side-channel
-// source via `useMapAttributions`, so identical credits (notably "© OSM"
-// shared with the always-loaded vector basemap) collapse automatically
-// through MapLibre's substring dedup.
-const SATELLITE_ATTRIBUTIONS: Attribution[] = [
-  {
-    sourceId: "maptiler",
-    name: "© MapTiler",
-    url: "https://www.maptiler.com/copyright/",
-    licenseUrl: "https://www.maptiler.com/copyright/",
-  },
-  {
-    sourceId: "openstreetmap",
-    name: "© OpenStreetMap contributors",
-    url: "https://www.openstreetmap.org/copyright",
-    spdxLicense: "ODbL-1.0",
-    licenseUrl: "https://opendatacommons.org/licenses/odbl/",
-  },
-];
+// Satellite supplies imagery; installed native layers own their separate receipts.
+const SATELLITE_ATTRIBUTIONS = [MAPTILER_ATTRIBUTION];
 
 function apiRoute(path: string): string {
   const apiBase = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");

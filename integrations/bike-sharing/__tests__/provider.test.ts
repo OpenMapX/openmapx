@@ -173,8 +173,8 @@ describe("bikeSharingProvider.search", () => {
 
     const results = (await bikeSharingProvider.search(makeBbox())).data;
 
-    expect(mapVehicleToResult).toHaveBeenCalledWith(dbVehicle);
-    expect(mapVehicleToResult).toHaveBeenCalledWith(motisVehicle);
+    expect(mapVehicleToResult).toHaveBeenCalledWith(expect.objectContaining(dbVehicle));
+    expect(mapVehicleToResult).toHaveBeenCalledWith(expect.objectContaining(motisVehicle));
     expect(results).toHaveLength(3);
   });
 });

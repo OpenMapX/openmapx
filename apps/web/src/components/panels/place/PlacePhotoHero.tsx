@@ -6,7 +6,7 @@ import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
-import { type PlacePhoto, proxyImageUrl } from "@openmapx/core";
+import { isDisplayablePhoto, type PlacePhoto, proxyImageUrl } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { PhotoAttribution } from "./PhotoAttribution";
 
@@ -34,7 +34,7 @@ export function PlacePhotoHero({
 }: Props) {
   const tc = useTranslations("common");
   const tp = useTranslations("photoGallery");
-  const photo = photos[0];
+  const photo = photos.find(isDisplayablePhoto);
   if (!photo) return null;
 
   const photoUrl = proxyImageUrl(photo.url);
@@ -45,7 +45,8 @@ export function PlacePhotoHero({
     <Box
       data-testid="place-photo-hero"
       sx={{
-        height: 220,
+        minHeight: 220,
+        display: "grid",
         position: "relative",
         flexShrink: 0,
         overflow: "hidden",
@@ -58,7 +59,9 @@ export function PlacePhotoHero({
       <ButtonBase
         onClick={onViewPhotos}
         sx={{
+          gridArea: "1 / 1",
           width: "100%",
+          minHeight: 220,
           height: "100%",
           display: "block",
           "&:focus-visible": {
@@ -74,7 +77,14 @@ export function PlacePhotoHero({
           src={photoUrl}
           alt={placeName}
           onError={() => onPhotoError?.(photo.url)}
-          sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          sx={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
         />
 
         <Box
@@ -114,20 +124,23 @@ export function PlacePhotoHero({
       <Box
         onClick={(e) => e.stopPropagation()}
         sx={{
-          position: "absolute",
-          bottom: 4,
-          right: 6,
-          bgcolor: "rgba(0,0,0,0.72)",
+          gridArea: "1 / 1",
+          alignSelf: "end",
+          justifySelf: "end",
+          zIndex: 1,
+          m: 0.75,
+          bgcolor: "rgba(0,0,0,0.6)",
           borderRadius: 0.5,
-          px: 0.75,
-          py: 0.25,
-          fontSize: 10,
+          px: 0.5,
+          py: 0.125,
+          maxWidth: "calc(100% - 12px)",
+          fontSize: "0.625rem",
           color: "#fff",
-          lineHeight: 1,
+          lineHeight: 1.3,
           "& a": { fontSize: "inherit" },
         }}
       >
-        <PhotoAttribution photo={photo} color="#fff" />
+        <PhotoAttribution photo={photo} color="#fff" compact />
       </Box>
       {/* Close button */}
       {onClose && (

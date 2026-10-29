@@ -7,8 +7,7 @@ description: Official preliminary UK station DAQI evidence in OpenMapX.
 
 For a location in the United Kingdom, OpenMapX can use the nearest UK-AIR
 monitor's official current DAQI when that monitor is within 25 km. The value is
-the agency's published 1–10 station index—not a new calculation from partial
-pollutant data—and includes the station name, distance, observation time,
+the agency's published station index from 1 to 10. The evidence includes the station name, distance, observation time,
 freshness, source, licence, and methodology.
 
 Station conditions may differ from the requested location, especially near
