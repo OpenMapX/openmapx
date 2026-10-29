@@ -111,8 +111,11 @@ export function sampleSpan(geometry: readonly LngLat[]): DirectedSample[] {
   return samples;
 }
 
-function inBox(s: DirectedSample, [west, south, east, north]: readonly number[]): boolean {
-  return s.lon >= west! && s.lon <= east! && s.lat >= south! && s.lat <= north!;
+function inBox(
+  s: DirectedSample,
+  [west, south, east, north]: readonly [number, number, number, number],
+): boolean {
+  return s.lon >= west && s.lon <= east && s.lat >= south && s.lat <= north;
 }
 
 /**
