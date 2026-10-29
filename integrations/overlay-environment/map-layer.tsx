@@ -13,12 +13,13 @@ import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { EMPTY_FEATURE_COLLECTION, type MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
+import { buildPopupCreditsHtml } from "@/integration-api/map/popupCredits";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
-import { attributionToHtml } from "@/integration-api/overlay/useMapAttributions";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import { usePopupCreditOptions } from "@/integration-api/runtime/usePopupCreditOptions";
 import { type EnvironmentSensorType, useEnvironmentStore } from "./store";
 
 const ENV_SOURCE_ID = "opensensemap-env";
@@ -211,6 +212,11 @@ export function EnvironmentLayer() {
   useOverlayExclusion("environment", layerVisible);
 
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const creditOptions = usePopupCreditOptions();
+  const creditOptionsRef = useRef(creditOptions);
+  useEffect(() => {
+    creditOptionsRef.current = creditOptions;
+  }, [creditOptions]);
   const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
     mapRef,
     mapReady,
@@ -334,7 +340,10 @@ export function EnvironmentLayer() {
           <div style="font-size:12px;margin-bottom:4px">${sensorsHtml}</div>
           ${lastUp ? `<div style="font-size:11px;color:#999;margin-bottom:4px">${lastUp}</div>` : ""}
           <div style="font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:4px">
-            ${(readCapturedContributors(p._mapAttributions) ?? []).map(attributionToHtml).join(" · ")}
+            ${buildPopupCreditsHtml(readCapturedContributors(p._mapAttributions) ?? [], {
+              ...creditOptionsRef.current,
+              dark: document.documentElement.classList.contains("dark"),
+            })}
           </div>
         </div>`;
 

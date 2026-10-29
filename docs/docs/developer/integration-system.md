@@ -1147,6 +1147,18 @@ are not reused across owners, layers, refreshes or option updates, and every hit
 still passes its evaluated paint visibility checks before grouping. Remote
 records or community payloads cannot supply these callbacks.
 
+A popup that names the sources of the record it shows renders them with
+`buildPopupCreditsHtml(receipts, options)` from
+`@/integration-api/map/popupCredits`, never with hand-built credit text. It
+behaves like a panel's credit strip: notices a licence requires beside the
+content stay visible with their links and branding; every other source reads
+"Source · Licence", linked to the source or to its entry on the licenses page;
+and the complete credits, including any change notice, sit one action away in
+a disclosure. Read the viewer's wording with `usePopupCreditOptions()` from
+`@/integration-api/runtime/usePopupCreditOptions`, keep it in a ref for
+imperative map handlers, and pass the same captured receipts the layer credits
+on the map.
+
 Dense traffic-flow tiles deliberately use **conservative tile coverage**, rather
 than per-road viewport hit testing. The trusted host factory
 `createVectorTileCoverageContributorResolver` in

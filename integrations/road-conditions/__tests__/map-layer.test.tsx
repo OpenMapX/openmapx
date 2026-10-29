@@ -62,9 +62,9 @@ vi.mock("maplibre-gl", () => ({
 }));
 
 import type { RoadConditionEvent } from "@openmapx/core";
-import { clearRoadConditionBindings } from "../bindings";
 import { eventsToFeatureCollection } from "../eventsToGeojson";
-import { buildRoadConditionPopupGroups, buildSources, RoadConditionsLayer } from "../map-layer";
+import { buildSources, RoadConditionsLayer } from "../map-layer";
+import { buildIncidentCard, type RoadConditionPopupInput } from "../popup";
 import { effect, situation, text } from "./fixtures";
 
 const SOURCE = "omx-road-conditions";
@@ -93,6 +93,16 @@ const creditRegistry = new IntegrationRegistry([
 ]);
 
 const fetchMock = vi.fn();
+
+const cardInput: RoadConditionPopupInput = {
+  hits: [],
+  fallbackCoordinates: [0, 0],
+  eventsByDisplayId: new Map(),
+  formatDateTime: String,
+  formatDate: String,
+  translate: (key) => key,
+  locale: "en",
+};
 
 function inDays(d: number): string {
   return new Date(Date.now() + d * 86_400_000).toISOString();
@@ -542,19 +552,15 @@ describe("road-condition display grouping", () => {
         .get("group:road-conditions-openconditions:duesseldorf:works-42")
         ?.map((event) => event.id),
     ).toEqual(["oc:1", "oc:2", "oc:3"]);
-    const [popupGroup] = buildRoadConditionPopupGroups(
-      "group:road-conditions-openconditions:duesseldorf:works-42",
+    const popupCard = buildIncidentCard(
       eventsByDisplayId.get("group:road-conditions-openconditions:duesseldorf:works-42") ?? [],
+      cardInput,
+      Date.now(),
     );
-    expect(popupGroup?.sourceRecords.map((entry) => entry.recordId)).toEqual([
-      "oc:1",
-      "oc:2",
-      "oc:3",
-    ]);
-    expect(popupGroup?.summary).toMatchObject({
-      headline: "Lane closure (3 related records)",
-      classification: "roadworks.works",
-      sourceRecordCount: 3,
+    expect(popupCard).toMatchObject({
+      title: "type.works",
+      severity: "major",
+      headline: "Lane closure",
     });
   });
 
@@ -606,7 +612,7 @@ describe("road-condition display grouping", () => {
     ).toHaveLength(1);
   });
 
-  it("aggregates mixed grouped source records into one summary and keeps every record in details", () => {
+  it("reads mixed grouped source records as one condition on every road they name", () => {
     const validity = {
       status: "active" as const,
       start: "2026-06-22T05:00:00.000Z",
@@ -641,25 +647,14 @@ describe("road-condition display grouping", () => {
       });
     });
 
-    const [group] = buildRoadConditionPopupGroups("group:situation-42", events);
+    const popupCard = buildIncidentCard(events, cardInput, Date.parse("2026-07-01T00:00:00Z"));
 
-    expect(group?.summary).toMatchObject({
-      headline: "Road works (6 related records)",
-      classification: "roadworks.works,other.other",
-      roads: "2922, 1002, 2119",
-      sourceRecordCount: 6,
+    expect(popupCard).toMatchObject({
+      title: "type.works",
+      where: "2922, 1002, 2119",
+      headline: "Road works",
+      when: "when.until",
     });
-    // Every record agrees on what it does and when, so the summary may say it.
-    expect(group?.summary).not.toHaveProperty("_summaryOnly");
-    expect(group?.sourceRecords).toHaveLength(6);
-    expect(group?.sourceRecords.map((entry) => entry.recordId)).toEqual([
-      "road-1",
-      "road-2",
-      "road-3",
-      "info-1",
-      "info-2",
-      "info-3",
-    ]);
   });
 
   it("keeps endpoint-only MultiPoint records as endpoint markers", () => {
@@ -758,7 +753,7 @@ describe("RoadConditionsLayer viewport scheduler", () => {
     });
     expect(popupHtml).toHaveBeenCalledTimes(1);
     expect(popupHtml.mock.lastCall![0]).toContain("roadConditions.effect.dimension_limit");
-    expect(popupHtml.mock.lastCall![0]).toContain("roadConditions.state.active");
+    expect(popupHtml.mock.lastCall![0]).toContain("roadConditions.vehicle.truck");
 
     fetchMock.mockRejectedValueOnce(new Error("temporary outage"));
     await flush(FRESHNESS_DEADLINE_MS);
@@ -767,56 +762,12 @@ describe("RoadConditionsLayer viewport scheduler", () => {
     const ended = { ...current, validity: { ...current.validity, status: "ended" as const } };
     respondWith(eventsToFeatureCollection([ended]).features);
     await flush(FRESHNESS_DEADLINE_MS);
-    expect(popupHtml.mock.lastCall![0]).toContain("roadConditions.state.ended");
+    expect(popupHtml.mock.lastCall![0]).toContain("roadConditions.validityStatus.ended");
     expect(popupHtml.mock.lastCall![0]).not.toContain("roadConditions.freshness.needsRefresh");
 
     respondWith([]);
     await flush(FRESHNESS_DEADLINE_MS);
     expect(popupRemove).toHaveBeenCalledTimes(1);
-  });
-
-  it("reads an open popup's bindings and says why one was kept off routing", async () => {
-    clearRoadConditionBindings();
-    const current = situation({
-      id: "oc:situation:nl-ndw:bound",
-      geometry: { type: "Point", coordinates: [10.5, 45.5] },
-    });
-    const features = eventsToFeatureCollection([current]).features;
-    fetchMock.mockImplementation(async (url: string) =>
-      url.includes("/road-conditions/bindings?")
-        ? {
-            ok: true,
-            status: 200,
-            json: async () => ({
-              situation: { status: "ambiguous", reason: "direction_undecided" },
-              effects: {},
-            }),
-          }
-        : { ok: true, status: 200, json: async () => ({ type: "FeatureCollection", features }) },
-    );
-    render(<RoadConditionsLayer />);
-    await flush();
-    const marker = sourceFeatures("Point")[0]!;
-    fake.setRenderedFeatures(MARKER_LAYER, [
-      {
-        ...marker,
-        layer: { id: MARKER_LAYER, type: "symbol" },
-        source: SOURCE,
-        state: {},
-      } as unknown as import("maplibre-gl").MapGeoJSONFeature,
-    ]);
-    await act(async () => {
-      fake.emit("click", { point: { x: 10, y: 20 }, lngLat: { lng: 10.5, lat: 45.5 } });
-    });
-    await flush();
-    const asked = fetchMock.mock.calls
-      .map(([url]) => String(url))
-      .find((url) => url.includes("/bindings?"));
-    expect(asked).toContain("provider=road-conditions-openconditions");
-    expect(asked).toContain(`id=${encodeURIComponent(current.id)}`);
-    expect(popupHtml.mock.lastCall![0]).toContain(
-      "roadConditions.binding.ambiguous: roadConditions.bindingReason.direction_undecided",
-    );
   });
 
   it("bounds getBounds() reads and network requests under a 60Hz moveend burst that stays in the padded viewport", async () => {

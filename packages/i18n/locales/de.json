@@ -593,29 +593,8 @@
       "other": "Sonstiges"
     },
     "panel": {
-      "type": "Typ",
-      "effects": "Auswirkungen",
-      "direction": "Richtung",
-      "roads": "Betroffene Straßen",
-      "validity": "Status",
-      "startsAt": "Beginnt am",
-      "description": "Details",
-      "sourceRecord": "Quelleneintrag",
-      "sourceRecordCount": "{count, plural, one {# Quelleneintrag} other {# Quelleneinträge}}",
-      "sourceDetails": "Quelldetails ({count, plural, one {# Eintrag} other {# Einträge}})",
-      "relatedRecords": "{headline} ({count} zugehörige Einträge)",
       "conditionsHere": "{count, plural, one {# Meldung hier} other {# Meldungen hier}}",
-      "source": "Quelle",
-      "license": "Lizenz",
-      "updatedAt": "Quelle aktualisiert (UTC)",
-      "checkedAt": "Zuletzt geprüft (UTC)",
-      "freshness": "Aktualität",
-      "interpretation": "Auswertung",
-      "report": "Meldung",
-      "binding": "Straßenzuordnung",
-      "routing": "Routenwirkung",
-      "routingCandidate": "Geeignet; Anwendung hängt von der Route ab",
-      "routingDisplayOnly": "Auf der Karte sichtbar; nicht für Routing angewendet"
+      "updated": "Aktualisiert {time}"
     },
     "binding": {
       "exact": "Exakt",
@@ -643,15 +622,7 @@
       "location_not_exact": "der Ort ist nicht genau genug angegeben"
     },
     "direction": {
-      "positive": "Aufsteigende Straßenreferenz",
-      "negative": "Absteigende Straßenreferenz",
       "both": "Beide Richtungen",
-      "unknown": "Richtung unbekannt",
-      "geometry": {
-        "positive": "In Zeichnungsrichtung der betroffenen Straße",
-        "negative": "Gegen die Zeichnungsrichtung der betroffenen Straße"
-      },
-      "oneWay": "Nur eine Richtung (nicht angegeben)",
       "loop": {
         "inner": "Innerer Ring",
         "outer": "Äußerer Ring"
@@ -788,26 +759,32 @@
       "cancelled": "Abgesagt",
       "unknown": "Status unbekannt"
     },
-    "endedReason": {
-      "source_ended": "von der Quelle beendet",
-      "withdrawn_from_feed": "aus dem Datenstrom entfernt",
-      "expired": "abgelaufen",
-      "superseded": "ersetzt",
-      "cancelled": "abgesagt",
-      "stale": "nicht mehr bestätigt"
-    },
     "compliance": {
       "advisory": "Empfehlung"
     },
-    "interpretation": {
-      "partial": "Einige Regeln konnten nicht vollständig ausgewertet werden; sie werden angezeigt, aber nicht für das Routing verwendet"
-    },
     "freshness": {
-      "stale": "Quelldaten sind möglicherweise veraltet",
-      "needsRefresh": "Aktualisierung erforderlich"
+      "stale": "Diese Angaben sind möglicherweise nicht mehr aktuell",
+      "needsRefresh": "Aktualisierung fehlgeschlagen; diese Angaben sind möglicherweise nicht mehr aktuell"
     },
     "report": {
       "unconfirmed": "Unbestätigte Nutzermeldung"
+    },
+    "impact": {
+      "closed": "{scope} gesperrt"
+    },
+    "impactLevel": {
+      "none": "Keine Auswirkung",
+      "minor": "Geringe Auswirkung",
+      "moderate": "Mittlere Auswirkung",
+      "major": "Starke Auswirkung",
+      "critical": "Sehr starke Auswirkung"
+    },
+    "when": {
+      "until": "Bis {date}",
+      "expectedUntil": "Voraussichtlich bis {date}",
+      "since": "Seit {date}",
+      "starts": "Beginnt {date}",
+      "range": "{start} – {end}"
     }
   },
   "trafficFlow": {

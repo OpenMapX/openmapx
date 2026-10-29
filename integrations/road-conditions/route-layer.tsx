@@ -18,8 +18,8 @@ import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
+import { usePopupCreditOptions } from "@/integration-api/runtime/usePopupCreditOptions";
 import { roadConditionAttributions } from "./attributions";
-import { loadRoadConditionBindings } from "./bindings";
 import { buildRoadConditionDisplayGroups, buildRoadConditionFeatures } from "./display";
 import {
   closeIncidentPopup,
@@ -29,7 +29,7 @@ import {
   openIncidentPopup,
 } from "./incident-layers";
 import { useIncidentsVisible } from "./incidents-visible";
-import { buildRoadConditionPopupHtml, popupEvents, type RoadConditionPopupInput } from "./popup";
+import { buildRoadConditionPopupHtml, type RoadConditionPopupInput } from "./popup";
 import { useRoadConditionsStore } from "./store";
 
 const OVERLAY_ID = "road-conditions";
@@ -103,6 +103,11 @@ export function RouteConditionsLayer() {
   const viewNeedsRefreshRef = useRef(false);
   const dtf = useDateTimeFormat();
   const dtfRef = useRef(dtf);
+  const creditOptions = usePopupCreditOptions();
+  const creditOptionsRef = useRef(creditOptions);
+  useEffect(() => {
+    creditOptionsRef.current = creditOptions;
+  }, [creditOptions]);
   useEffect(() => {
     dtfRef.current = dtf;
   }, [dtf]);
@@ -297,24 +302,13 @@ export function RouteConditionsLayer() {
           eventsByDisplayId,
           formatDateTime: dtfRef.current.dateTime,
           formatDate: dtfRef.current.date,
+          formatRelative: dtfRef.current.relative,
+          creditOptions: creditOptionsRef.current,
           translate: (key, values) => tRef.current(key, values),
           locale,
         };
         popupInputRef.current = input;
-        if (!openIncidentPopup(map, popupRef, input)) return;
-        // The situation lists carry no bindings; read them for the cards shown.
-        void loadRoadConditionBindings(popupEvents(input)).then((bindings) => {
-          const popup = popupRef.current;
-          if (popupInputRef.current !== input || !popup || bindings.size === 0) return;
-          popupInputRef.current = { ...input, bindings };
-          popup.setHTML(
-            buildRoadConditionPopupHtml({
-              ...popupInputRef.current,
-              atMs: Date.now(),
-              needsRefresh: viewNeedsRefreshRef.current,
-            }).html,
-          );
-        });
+        openIncidentPopup(map, popupRef, input);
       },
     });
 

@@ -6,28 +6,14 @@ import { useTheme } from "@mui/material/styles";
 import { safeHref } from "@openmapx/core";
 import type { VisibleAttribution } from "@openmapx/core/attribution";
 import type { AttributionLogo } from "@openmapx/mobility-core/licensing";
+import { ATTRIBUTION_LOGO_ASSETS } from "@/lib/attributionCredits";
 import { AttributionText } from "./AttributionText";
-
-const LOGOS: Record<AttributionLogo, { src: string; name: string; href: string }> = {
-  openweather: {
-    src: "/attribution/openweather.png",
-    name: "OpenWeather",
-    href: "https://openweathermap.org/",
-  },
-  mapillary: { src: "/mapillary-logo.svg", name: "Mapillary", href: "https://www.mapillary.com/" },
-  maptiler: {
-    src: "/attribution/maptiler.svg",
-    name: "MapTiler",
-    href: "https://www.maptiler.com/",
-  },
-  tdx: { src: "/attribution/tdx.png", name: "TDX", href: "https://tdx.transportdata.tw/" },
-};
 
 /** Required branding comes from reviewed local assets, never provider image URLs. */
 export function AttributionLogos({ logos }: { logos: readonly AttributionLogo[] }) {
   const theme = useTheme();
   return [...new Set(logos)].map((id) => {
-    const logo = LOGOS[id];
+    const logo = ATTRIBUTION_LOGO_ASSETS[id];
     return (
       <Link
         key={id}
@@ -39,11 +25,7 @@ export function AttributionLogos({ logos }: { logos: readonly AttributionLogo[] 
       >
         <Box
           component="img"
-          src={
-            id === "openweather" && theme.palette.mode === "dark"
-              ? "/attribution/openweather-white.png"
-              : logo.src
-          }
+          src={theme.palette.mode === "dark" ? (logo.darkSrc ?? logo.src) : logo.src}
           alt={logo.name}
           sx={{ height: "18px", width: "auto", maxWidth: "100%", objectFit: "contain" }}
         />

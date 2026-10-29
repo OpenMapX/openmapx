@@ -265,6 +265,20 @@ const ACTIONS_NOT_IN_PLACE = new Set(["requested", "approved", "rejected"]);
 /** Lifecycles that keep an effect out of force inside its window, each with its own text. */
 const LIFECYCLES_NOT_IN_FORCE = new Set(["planned", "suspended", "unknown"]);
 
+/** Whether an effect has ended, been cancelled or run past its end by `at`. */
+function effectIsOver(
+  event: Pick<RoadConditionEvent, "validity">,
+  effect: RoadConditionEffect,
+  at: Date,
+): boolean {
+  const validity = effectValidity(event, effect);
+  return (
+    validity.status === "ended" ||
+    validity.status === "cancelled" ||
+    (validity.end !== undefined && Date.parse(validity.end) <= at.getTime())
+  );
+}
+
 /**
  * The effect's state at `at`: in force, over, an operator action not yet (or
  * never) in place, starting later, held out of force by its lifecycle, or
@@ -278,13 +292,7 @@ export function effectStateText(
 ): string {
   const validity = effectValidity(event, effect);
   if (effectInForceAt(event, effect, at, at)) return translate("state.active");
-  if (
-    validity.status === "ended" ||
-    validity.status === "cancelled" ||
-    (validity.end && Date.parse(validity.end) <= at.getTime())
-  ) {
-    return translate("state.ended");
-  }
+  if (effectIsOver(event, effect, at)) return translate("state.ended");
   if (effect.actionStatus && ACTIONS_NOT_IN_PLACE.has(effect.actionStatus)) {
     return translate(`state.action.${effect.actionStatus}`);
   }
@@ -297,26 +305,93 @@ export function effectStateText(
   return translate("state.inactive");
 }
 
+/** The order a driver reads impacts in: what stops them first, advice last. */
+const IMPACT_ORDER: RoadConditionEffect["kind"][] = [
+  "closure",
+  "lane_restriction",
+  "access",
+  "hazmat",
+  "dimension_limit",
+  "speed_limit",
+  "contraflow",
+  "delay",
+  "detour",
+  "advisory",
+  "unsupported",
+];
+
+function capitalize(value: string): string {
+  return value.length === 0 ? value : value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+/** What one effect does, worded for a driver; undefined when it tells them nothing. */
+function impactText(effect: RoadConditionEffect, options: EffectFormatOptions): string | undefined {
+  const { translate } = options;
+  switch (effect.kind) {
+    case "closure":
+      return translate("impact.closed", {
+        scope: CLOSURE_SCOPES.has(effect.scope)
+          ? translate(`scope.${effect.scope}`)
+          : humanizeToken(effect.scope),
+      });
+    case "lane_restriction": {
+      // A source may list every lane open ("0 of 2 lanes closed"); that restricts nothing.
+      if (
+        effect.vehicleImpact === "all_lanes_open" &&
+        !effect.lanesClosed &&
+        !effect.lanesRestricted
+      ) {
+        return undefined;
+      }
+      const lanes = laneCountsText(effect, translate);
+      return lanes ? capitalize(lanes) : humanizeToken(effect.vehicleImpact);
+    }
+    case "unsupported": {
+      const summary = localizedTextFor(effect.summary, options.locale);
+      return summary ? `${translate("effect.unsupported")}: ${summary}` : undefined;
+    }
+    default: {
+      const { label, value } = describe(effect, options);
+      return value ? `${label}: ${value}` : label;
+    }
+  }
+}
+
 /**
- * One display line per effect: what it does, which vehicles it binds, its
- * state at the instant shown, and — for restriction evidence — that it was not
- * fully interpreted.
+ * The situation's impacts as a driver reads them: one line per distinct
+ * effect, most disruptive first, naming the vehicles it binds (in the
+ * source's words where it could not be read, never widened to all). Effects that
+ * are over are left out. An effect that is not in force while the situation
+ * is says when it is; a situation that has not started says so once, in its
+ * own time line, not on every effect.
  */
-export function effectLines(event: RoadConditionEvent, options: EffectFormatOptions): string[] {
-  return event.effects.map((effect) => {
-    const { label, value } = describe(effect, options);
-    const qualifiers = [
-      applicabilityText(effect.applicability, options.translate),
-      effectStateText(event, effect, options),
-      effect.compliance === "advisory" && effect.kind !== "advisory"
-        ? options.translate("compliance.advisory")
-        : undefined,
-      isRestrictionEvidence(effect) && effect.kind !== "unsupported"
-        ? options.translate("effect.partial")
-        : undefined,
-    ].filter(Boolean);
-    return [value ? `${label}: ${value}` : label, ...qualifiers].join(" · ");
-  });
+export function impactLines(event: RoadConditionEvent, options: EffectFormatOptions): string[] {
+  const at = options.at.getTime();
+  const start = event.validity.start ? Date.parse(event.validity.start) : Number.NaN;
+  const situationStarted =
+    event.validity.status === "active" && !(Number.isFinite(start) && start > at);
+  const lines = [...event.effects]
+    .sort((a, b) => IMPACT_ORDER.indexOf(a.kind) - IMPACT_ORDER.indexOf(b.kind))
+    .flatMap((effect) => {
+      const text = impactText(effect, options);
+      if (!text) return [];
+      if (effectIsOver(event, effect, options.at)) return [];
+      const inForce = effectInForceAt(event, effect, options.at, options.at);
+      const state = inForce ? undefined : effectStateText(event, effect, options);
+      const vehicles =
+        effect.applicability.kind === "unknown" && effect.applicability.raw?.length
+          ? effect.applicability.raw.join(", ")
+          : applicabilityText(effect.applicability, options.translate);
+      const qualifiers = [
+        vehicles,
+        state && situationStarted ? state : undefined,
+        effect.compliance === "advisory" && effect.kind !== "advisory" && effect.kind !== "detour"
+          ? options.translate("compliance.advisory")
+          : undefined,
+      ].filter(Boolean);
+      return [[text, ...qualifiers].join(" · ")];
+    });
+  return [...new Set(lines)];
 }
 
 /** Whether any rule of the situation is restriction evidence: shown, never routed. */

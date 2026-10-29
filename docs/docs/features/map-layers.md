@@ -119,9 +119,12 @@ plots traffic incidents, roadworks, hazards, and closures. It features an
 interactive, filterable legend allowing users to filter by incident
 type (roadworks, closures, lane closures, accidents, congestion, detours, hazards,
 obstructions) and minimum severity (low, medium, high, critical). Clicking an
-incident displays a localized popup showing affected roads, descriptions, and
-structured validity times (including recurring schedule windows in the source's
-local timezone). Overlapping markers are automatically grouped into a single scrollable
+incident displays a localized card: what it is and the road and direction it
+affects, how much it affects traffic, until when it holds (or when it starts,
+including recurring schedule windows in the source's local timezone), what it
+does to traffic (closed roads and lanes, vehicle limits, delays, detours), the
+source's own description, and one credit line per source with when it was last
+updated. Overlapping markers are automatically grouped into a single scrollable
 popup (ordered most-severe first) so all incidents at the same spot stay reachable, and
 linear events (such as segment closures) render as line segments directly on the map.
 Where a feed provides measured speed, an incident popup also estimates the delay
