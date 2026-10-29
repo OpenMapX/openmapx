@@ -148,6 +148,10 @@
       "path": "/traffic/conditions/applied"
     },
     {
+      "method": "GET",
+      "path": "/traffic/conditions/closures"
+    },
+    {
       "method": "POST",
       "path": "/traffic/predicted/bake"
     },

@@ -80,6 +80,7 @@ registerApi(app, {
     // Routes are registered before the cron handles exist, so read them
     // lazily. Until the first successful live cycle the handles are absent
     // and the empty set is the truthful answer: nothing is baked in yet.
+    getPlannedClosures: (bbox, travelAt) => cronHandles?.getPlannedClosures(bbox, travelAt) ?? null,
     getTrafficConditionsApplied: () =>
       cronHandles?.getTrafficConditionsApplied() ?? {
         schemaVersion: 1,

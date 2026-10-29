@@ -6,6 +6,7 @@ import {
   parseOfflinePackageRequest,
   type TrafficApplicationSnapshot,
 } from "@openmapx/core";
+import type { PlannedTrafficClosures } from "@openmapx/core/data-manager-contracts";
 import { RollingStreamBudget } from "@openmapx/core/server";
 import { feedState } from "@openmapx/db-schema";
 import { parseTransitSource } from "@openmapx/transitous-core";
@@ -121,6 +122,11 @@ export interface ApiOptions {
   bakePredicted?: () => Promise<BakePredictedResult>;
   /** Latest committed actuation evidence, matched to the actual serving route response. */
   getTrafficConditionsApplied?: () => TrafficApplicationSnapshot;
+  /** Bound closures a planned car trip must route around; null while the evidence is stale. */
+  getPlannedClosures?: (
+    bbox: readonly [number, number, number, number],
+    travelAt: number,
+  ) => PlannedTrafficClosures | null;
   /** Offline package generator initialized by the process entrypoint. */
   offlinePackages?: OfflinePackageGenerator;
   /** Process-local offline archive delivery budget; tests inject deterministic limits. */
@@ -859,6 +865,22 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     }
     reply.header("Cache-Control", "no-store");
     return opts.getTrafficConditionsApplied();
+  });
+
+  // Authenticated, uncached: closures a planned trip excludes per request.
+  registerDataManagerRoute(app, "getPlannedTrafficClosures", async (req, reply) => {
+    if (!opts.getPlannedClosures) {
+      reply.code(501);
+      return { error: "live traffic not configured" };
+    }
+    const { west, south, east, north, at } = req.query;
+    const planned = opts.getPlannedClosures([west, south, east, north], Date.parse(at));
+    reply.header("Cache-Control", "no-store");
+    if (!planned) {
+      reply.code(503);
+      return { error: "road-condition evidence or policy unavailable" };
+    }
+    return planned;
   });
 
   registerDataManagerRoute(app, "downloadOsm", async (req, reply) => {

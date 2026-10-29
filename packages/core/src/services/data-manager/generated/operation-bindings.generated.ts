@@ -184,6 +184,13 @@ export async function getOvertureStatusRequest<T>(
 ): Promise<T> {
   return getOvertureStatusBound<T>(url, options);
 }
+const getPlannedTrafficClosuresBound = bindDataManagerOperation("getPlannedTrafficClosures");
+export async function getPlannedTrafficClosuresRequest<T>(
+  url: string,
+  options?: DataManagerRequestOptions,
+): Promise<T> {
+  return getPlannedTrafficClosuresBound<T>(url, options);
+}
 const getSearchIndexStatusBound = bindDataManagerOperation("getSearchIndexStatus");
 export async function getSearchIndexStatusRequest<T>(
   url: string,

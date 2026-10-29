@@ -23,9 +23,34 @@ Wait for the disposable service's `/status` response before running the probe. I
 
 Image binary: `valhalla 3.8.3-49cd28bc5`, exact digest above. Baseline 1.919 km / 230.388 seconds; forward closure caused a 3.162 km detour for depart-now auto and motorcycle. Pedestrian and bicycle, requests without a routing time, and requests without `current` did not consume the closure. Reverse travel remained unaffected. Expiry restored the baseline through the same running engine mmap. A standalone cap with no measured/base reference was unapplied and did not increase speed.
 
-Future departure **and arrival** requests that include `current` consumed today's closure. OpenMapX therefore removes that source for these temporal modes; future condition protection remains explicitly unsupported where directed restrictions cannot be represented. An actuation receipt is not proof that a specific route request consumed that graph.
+Future departure **and arrival** requests that include `current` consumed today's closure. OpenMapX therefore removes that source for these temporal modes. An actuation receipt is not proof that a specific route request consumed that graph.
 
 Fault recovery measured 888 ms (killed writer), 490 ms (hung writer after forced stale-lock age), and 2167 ms for the two-second lease. Corrupt-journal recovery passed. These are fixture results, not a production SLO measurement. The supervising process checks every five seconds, fences its own writer after twenty seconds of lock ownership, and requests a verified stop of the fixed Valhalla service if clear/recovery fails. Deployment acceptance must separately measure the full 120-second lease plus cleanup bound under its filesystem, graph size and ops-agent permissions. Docker Desktop mmap propagation required bounded polling (maximum five seconds) rather than assuming an immediate read after a host write.
+
+## Closures for a planned trip
+
+A trip with a departure or arrival time gets no live-traffic closures. Instead,
+`GET /traffic/conditions/closures?west=&south=&east=&north=&at=` lists the bound
+closures in force at that instant, from the last good conditions set under the
+last policy lease. Each closure comes as directed samples along its spans: at
+most 100 m apart, at least 15 m from either end of a span, each with the heading
+of the span's travel direction. The endpoint answers 503 while the conditions
+set or the policy lease is stale. Its `mode` is the live-traffic cycle's: in
+`shadow`, the routing integration evaluates the closures without excluding them.
+
+The routing integration plans the trip, finds the closures a returned route
+travels (a route vertex within 12 m of a sample and heading within 45° of it),
+and plans again with those samples as `exclude_locations` carrying `heading` and
+`heading_tolerance: 45`. It repeats up to three times and stays within 40
+directed points, so the engine's limit of 50 keeps room for undirected
+points. A route still on a closure afterwards is reported as
+`planned_closure_on_route`, with `limited` availability.
+
+Verified against the production engine (`valhalla-scripted:3.9.1`) on
+2026-10-29, on a two-way section of the B19 near 49.216 N, 9.677 E. The baseline
+was 3.14 km northbound and 3.09 km southbound. A heading-0 exclusion lengthened
+only the northbound route, to 5.44 km. A heading-180 exclusion lengthened only
+the southbound route, to 5.37 km. Without a heading, both directions detoured.
 
 ## Engine-owned watchdog and container loss
 

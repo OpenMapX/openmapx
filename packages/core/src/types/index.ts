@@ -232,6 +232,7 @@ export {
   ROAD_CONDITION_SEVERITY_LABELS,
 } from "./roadConditions";
 export type {
+  DirectedExclusion,
   DirectionsResult,
   EvChargeStop,
   EvDirectionsRequest,

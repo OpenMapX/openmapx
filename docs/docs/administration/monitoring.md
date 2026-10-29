@@ -358,6 +358,23 @@ produced no edge under one `skipped` cause:
 `endingBeforeRenewal` counts conditions left out because they end before the
 next lease renewal.
 
+### Closures on a planned trip
+
+A car trip with a departure or arrival time cannot use the live-traffic
+closures, which hold only for now. With closure avoidance on, the routing
+integration asks Data Manager's `GET /traffic/conditions/closures` for the
+bound closures in force at the trip's time, and plans again around those the
+route travels, closing only the closed direction. The route's road-condition
+reasons then say what happened:
+
+- `planned_closures_avoided`: the route was planned around one or more of them.
+- `planned_closure_on_route`: a route still travels one (availability
+  `limited`), for example when the exclusion budget ran out.
+- `planned_closures_unrepresentable`: a closure had no geometry to exclude.
+- `planned_closures_unavailable`: Data Manager answered no current set.
+- `planned_closures_shadow`: in shadow mode a route travels one; nothing was
+  excluded.
+
 For upstream failures, inspect the configured stale window
 `TRAFFIC_CONDITIONS_STALE_MS` and the source/policy expiry. Old conditions are
 not permitted to extend expired routing evidence. Repeated missing ways,
