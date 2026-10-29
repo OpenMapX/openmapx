@@ -52,7 +52,40 @@ export interface ConditionsToEdgesResult {
   edgeExactSpans: number;
   /** Spans that fell back to every edge of the way in the bound direction. */
   wholeWaySpans: number;
-  skipped: { notRelevant: number; crowdNotEligible: number; noEffect: number };
+  skipped: ConditionSkips;
+  /**
+   * How often each reason of core's routing decision refused a condition that
+   * would otherwise close or cap a car's edges; one condition counts once per
+   * reason it carries, so the counts can sum to more than `skipped.ineligible`.
+   */
+  ineligibleReasons: Record<string, number>;
+}
+
+/** Why conditions produced no override, one count per condition. */
+export interface ConditionSkips {
+  /** Binding status other than `exact`/`likely`: display-only. */
+  binding: number;
+  /** A crowd or federated report not yet corroborated for routing. */
+  crowdNotEligible: number;
+  /** An effect a car's edge costing cannot carry (advisory, lorry rule, delay). */
+  noEffect: number;
+  /** Refused by the routing decision; `ineligibleReasons` says why. */
+  ineligible: number;
+  /** A span with no way in the map or no proven edges: the whole condition stays unapplied. */
+  incompleteSpans: number;
+}
+
+/** A result with nothing classified, for a cycle that classifies nothing. */
+export function emptyConditionsToEdges(): ConditionsToEdgesResult {
+  return {
+    overrides: new Map(),
+    appliedObservationIds: new Set(),
+    missingWayIds: new Set(),
+    edgeExactSpans: 0,
+    wholeWaySpans: 0,
+    skipped: { binding: 0, crowdNotEligible: 0, noEffect: 0, ineligible: 0, incompleteSpans: 0 },
+    ineligibleReasons: {},
+  };
 }
 
 export function edgeKey(e: { level: number; tile: number; index: number }): string {
@@ -275,17 +308,13 @@ export function conditionsToEdges(
   resolvedEdges?: ReadonlyMap<string, WayEdge[]>,
   options: { evaluatedAt?: number; disallowedSources?: ReadonlySet<string> } = {},
 ): ConditionsToEdgesResult {
-  const overrides = new Map<string, EdgeOverride & { edge: WayEdge }>();
-  const appliedObservationIds = new Set<string>();
-  const missingWayIds = new Set<number>();
-  let edgeExactSpans = 0;
-  let wholeWaySpans = 0;
-  const skipped = { notRelevant: 0, crowdNotEligible: 0, noEffect: 0 };
+  const result = emptyConditionsToEdges();
+  const { overrides, appliedObservationIds, missingWayIds, skipped, ineligibleReasons } = result;
 
   for (const condition of conditions) {
     // The emitter also publishes `ambiguous` bindings; those are display-only.
     if (!isRoutingRelevantBinding(condition.bindingStatus)) {
-      skipped.notRelevant++;
+      skipped.binding++;
       continue;
     }
     if (!originRoutes(condition)) {
@@ -301,8 +330,12 @@ export function conditionsToEdges(
       skipped.noEffect++;
       continue;
     }
-    if (!conditionRoutingDecision(condition, options).eligible) {
-      skipped.notRelevant++;
+    const decision = conditionRoutingDecision(condition, options);
+    if (!decision.eligible) {
+      skipped.ineligible++;
+      // An eligible-looking decision without any deadline is refused too.
+      for (const reason of decision.reasons.length ? decision.reasons : ["no_deadline"])
+        ineligibleReasons[reason] = (ineligibleReasons[reason] ?? 0) + 1;
       continue;
     }
 
@@ -330,12 +363,12 @@ export function conditionsToEdges(
       complete.push({ edges, exact: isEdgeExact });
     }
     if (complete.length !== condition.segments.length || complete.length === 0) {
-      skipped.notRelevant++;
+      skipped.incompleteSpans++;
       continue;
     }
     for (const { edges, exact: isEdgeExact } of complete) {
-      if (isEdgeExact) edgeExactSpans++;
-      else wholeWaySpans++;
+      if (isEdgeExact) result.edgeExactSpans++;
+      else result.wholeWaySpans++;
 
       let touched = false;
       for (const edge of edges) {
@@ -369,12 +402,5 @@ export function conditionsToEdges(
     }
   }
 
-  return {
-    overrides,
-    appliedObservationIds,
-    missingWayIds,
-    edgeExactSpans,
-    wholeWaySpans,
-    skipped,
-  };
+  return result;
 }

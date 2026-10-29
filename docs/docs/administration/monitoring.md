@@ -324,6 +324,7 @@ Open Data Manager's **Logs** drawer or run
 | Message or field                                                     | Check                                                                                                                             |
 | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `traffic-live: conditions applied`                                   | `mode`, candidate/written edges, unresolved edges and applied-condition counts; shadow candidates do not prove active application |
+| `skipped`, `ineligibleReasons`, `withheld`                           | Why conditions produced no edge: see [Why a closure is not applied](#why-a-closure-is-not-applied)                                |
 | `traffic-live: span tracing`                                         | `unanswered`, `negative`, `skippedBudget`, cache hits and exact/full-way counts                                                   |
 | `graph generations unavailable or changed; withholding live effects` | Engine identity and graph/map maintenance state                                                                                   |
 | `span tracing failed; partial spans remain unapplied`                | Valhalla reachability and trace responses; partial spans stay unapplied                                                           |
@@ -331,6 +332,31 @@ Open Data Manager's **Logs** drawer or run
 | `conditions classification failed, writing no overrides`             | Classification failure; do not infer closures from live-speed success                                                             |
 | `span cache save failed`                                             | Persistence permissions; a restart will lose unsaved cache state                                                                  |
 | `skipped out-of-range edges (traffic.tar/waysToEdges mismatch)`      | Rebuild the graph-associated traffic/map artifacts through the normal maintenance workflow                                        |
+
+### Why a closure is not applied
+
+Each `traffic-live: conditions applied` line counts every condition that
+produced no edge under one `skipped` cause:
+
+- `binding`: the binding is not `exact` or `likely`; it stays display-only.
+- `crowdNotEligible`: a crowd or federated report not yet corroborated.
+- `noEffect`: nothing a car's edge costing carries, such as a lorry rule,
+  an advisory limit or a width limit.
+- `ineligible`: the routing decision refused it. `ineligibleReasons` counts
+  each reason, so one condition can appear under several. `unverified_rights`
+  means the source's catalogue entry records no rights review
+  (`terms.reviewedAt` in OpenConditions) or no evidence link;
+  `action_not_routable` means the publisher marks the action requested,
+  rejected or approved but not yet carried out.
+- `incompleteSpans`: a span whose way is missing from the way→edge map (it is
+  also counted in `missingWays` and schedules a refresh) or whose partial span
+  traced to no edges.
+
+`withheld` names why no condition was classified at all this cycle:
+`policy_unavailable`, `policy_lease_ending`, `conditions_unavailable` or
+`conditions_stale`; it is `null` when classification ran.
+`endingBeforeRenewal` counts conditions left out because they end before the
+next lease renewal.
 
 For upstream failures, inspect the configured stale window
 `TRAFFIC_CONDITIONS_STALE_MS` and the source/policy expiry. Old conditions are
