@@ -178,12 +178,13 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
     `  taxonomy.primary AS taxonomy_primary,`,
     `  taxonomy.hierarchy AS taxonomy_hierarchy,`,
     `  taxonomy.alternates AS taxonomy_alternates,`,
-    // Overture GeoParquet exposes a single `geometry` (WKB) column, not
-    // longitude/latitude. Emit it as hex-WKB so the Postgres COPY parses it
-    // into the geometry column (a raw binary transfer is rejected); DuckDB
-    // carries no SRID, so the ALTER below stamps SRID 4326 + the POINT typmod
-    // Postgres-side before the swap.
-    `  ST_AsHEXWKB(geometry) AS geom,`,
+    // Overture GeoParquet exposes a single `geometry` column, not
+    // longitude/latitude, which DuckDB reads as its GEOMETRY type. The postgres
+    // extension writes that type into the PostGIS geometry column directly;
+    // a hex-WKB string is parsed as text there and rejected. The written
+    // geometry carries no SRID, so the ALTER below stamps SRID 4326 + the
+    // POINT typmod Postgres-side before the swap.
+    `  geometry AS geom,`,
     `  NULL::TEXT AS h3_r8,`,
     `  to_json(addresses) AS addresses,`,
     `  addresses[1].country AS country_code,`,
