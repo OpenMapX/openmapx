@@ -66,8 +66,8 @@ const round = (v: number, places: number) => Math.round(v * 10 ** places) / 10 *
 
 /**
  * Directed samples along one span's geometry, in travel direction: at most
- * `SAMPLE_SPACING_M` apart, none nearer than `END_MARGIN_M` to either end. A
- * span too short for that margin gets one sample at its middle.
+ * the sample spacing apart, none within the end margin of either end. A span
+ * too short for that margin gets one sample at its middle.
  */
 export function sampleSpan(geometry: readonly LngLat[]): DirectedSample[] {
   const lengths: number[] = [];
