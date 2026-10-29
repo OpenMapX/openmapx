@@ -5,9 +5,9 @@ import de from "../../../packages/i18n/locales/de.json";
 import en from "../../../packages/i18n/locales/en.json";
 import {
   applicabilityText,
-  effectLines,
   effectStateText,
   hasRestrictionEvidence,
+  impactLines,
 } from "../effects";
 import { effect, situation } from "./fixtures";
 
@@ -47,10 +47,10 @@ const DELAY_BAND_CODES = [
 const AT = new Date("2026-09-11T12:00:00Z");
 const options = { translate, locale: "en", at: AT };
 const lines = (effects: RoadConditionEffect[], over = {}) =>
-  effectLines(situation({ effects, ...over }), options);
+  impactLines(situation({ effects, ...over }), options);
 
-describe("effectLines", () => {
-  it("phrases each effect kind in plain words", () => {
+describe("impactLines", () => {
+  it("phrases each effect kind in plain words, most disruptive first", () => {
     expect(
       lines([
         effect("1", "closure", { scope: "ramp" }),
@@ -72,16 +72,16 @@ describe("effectLines", () => {
         effect("10", "contraflow"),
       ]),
     ).toEqual([
-      "Closed: Ramp · in force",
-      "Lanes: 2 of 3 lanes closed · in force",
-      "Lanes: 1 closed · in force",
-      "Lanes: Single lane alternating · in force",
-      "Speed limit: 60 km/h (advisory) · in force",
-      "Delay: +15 min, queue 3 km · in force",
-      "Access: Permit only R2 · in force",
-      "Dangerous goods: prohibited, ADR tunnel category C, UN classes 1, 7 · in force",
-      "Detour: via B 9, signposted · in force",
-      "Contraflow · in force",
+      "Ramp closed",
+      "2 of 3 lanes closed",
+      "1 closed",
+      "Single lane alternating",
+      "Access: Permit only R2",
+      "Dangerous goods: prohibited, ADR tunnel category C, UN classes 1, 7",
+      "Speed limit: 60 km/h (advisory)",
+      "Contraflow",
+      "Delay: +15 min, queue 3 km",
+      "Detour: via B 9, signposted",
     ]);
   });
 
@@ -89,15 +89,15 @@ describe("effectLines", () => {
     const lanes = (fields: Record<string, unknown>) =>
       lines([effect("l", "lane_restriction", { vehicleImpact: "some_lanes_closed", ...fields })]);
     expect(lanes({ lanesRestricted: 2, lanesTotal: 3, lanesOperational: 1 })).toEqual([
-      "Lanes: 2 of 3 lanes restricted, 1 open · in force",
+      "2 of 3 lanes restricted, 1 open",
     ]);
     expect(lanes({ lanesRestricted: 2, lanesClosed: 1, lanesTotal: 3 })).toEqual([
-      "Lanes: 2 of 3 lanes restricted, 1 closed · in force",
+      "2 of 3 lanes restricted, 1 closed",
     ]);
     expect(lanes({ lanesRestricted: 1, lanesClosed: 1, lanesTotal: 3 })).toEqual([
-      "Lanes: 1 of 3 lanes closed · in force",
+      "1 of 3 lanes closed",
     ]);
-    expect(lanes({ lanesRestricted: 1 })).toEqual(["Lanes: 1 restricted · in force"]);
+    expect(lanes({ lanesRestricted: 1 })).toEqual(["1 restricted"]);
     expect(
       lanes({
         lanes: [
@@ -106,27 +106,27 @@ describe("effectLines", () => {
           { index: 3, status: "open" },
         ],
       }),
-    ).toEqual(["Lanes: 2 restricted, 1 closed · in force"]);
+    ).toEqual(["2 restricted, 1 closed"]);
   });
 
   it("gives a delay's band or description where its length is not known", () => {
     const delay = (fields: Record<string, unknown>) => lines([effect("d", "delay", fields)]);
     expect(delay({ delayBand: "between_ten_minutes_and_thirty_minutes" })).toEqual([
-      "Delay: 10–30 min · in force",
+      "Delay: 10–30 min",
     ]);
     expect(
       delay({ delayBand: "between_one_hour_and_three_hours", delayType: "long_delays" }),
-    ).toEqual(["Delay: 1–3 h, long · in force"]);
+    ).toEqual(["Delay: 1–3 h, long"]);
     expect(delay({ delayType: "delays_of_uncertain_duration" })).toEqual([
-      "Delay: duration uncertain · in force",
+      "Delay: duration uncertain",
     ]);
-    expect(delay({ delayType: "delays" })).toEqual(["Delay · in force"]);
+    expect(delay({ delayType: "delays" })).toEqual(["Delay"]);
     // An exact delay wins over its band; a band or description this host does not know reads plainly.
     expect(delay({ delay: { value: 600, unit: "s" }, delayBand: "longer_than_six_hours" })).toEqual(
-      ["Delay: +10 min · in force"],
+      ["Delay: +10 min"],
     );
     expect(delay({ delayBand: "a_fortnight", delayType: "glacial_delays" })).toEqual([
-      "Delay: A fortnight, Glacial delays · in force",
+      "Delay: A fortnight, Glacial delays",
     ]);
   });
 
@@ -147,12 +147,12 @@ describe("effectLines", () => {
         }),
       ]),
     ).toEqual([
-      "Vehicle limit: Height less than 4.5 m (physical limit) · in force",
-      "Vehicle limit: Gross weight at most 26 t · in force",
+      "Vehicle limit: Height less than 4.5 m (physical limit)",
+      "Vehicle limit: Gross weight at most 26 t",
     ]);
   });
 
-  it("states each effect's own window at the instant shown", () => {
+  it("says when an effect of a running situation is not in force, and drops ended ones", () => {
     const base = { validity: { status: "active" as const, start: "2026-09-01T00:00:00Z" } };
     expect(
       lines(
@@ -173,11 +173,9 @@ describe("effectLines", () => {
         base,
       ),
     ).toEqual([
-      "Closed: Road · in force",
-      "Closed: Road · from 2026-09-12T20:00:00Z",
-      "Closed: Road · ended",
-      "Closed: Road · ended",
-      "Closed: Road · not in force now",
+      "Road closed",
+      "Road closed · from 2026-09-12T20:00:00Z",
+      "Road closed · not in force now",
     ]);
   });
 
@@ -195,13 +193,13 @@ describe("effectLines", () => {
         effect("3", "closure", { applicability: { kind: "unknown", raw: ["LKW > 7,5 t"] } }),
       ]),
     ).toEqual([
-      "Closed: Road · Heavy goods vehicles, Buses (with conditions) except Emergency vehicles · in force",
-      "Closed: Road · except Buses · in force",
-      "Closed: Road · Vehicles not specified: LKW > 7,5 t · in force · partly interpreted",
+      "Road closed · Heavy goods vehicles, Buses (with conditions) except Emergency vehicles",
+      "Road closed · except Buses",
+      "Road closed · LKW > 7,5 t",
     ]);
   });
 
-  it("marks advice and partly read rules, and says when a rule could not be read", () => {
+  it("marks advice, and leaves out a rule that could not be read", () => {
     expect(
       lines([
         effect("1", "speed_limit", { limit: { value: 80, unit: "km/h" }, compliance: "advisory" }),
@@ -209,12 +207,7 @@ describe("effectLines", () => {
         effect("3", "unsupported", { normalization: "unsupported" }),
         effect("4", "advisory", { text: [{ lang: "en", text: "Expect delays" }] }),
       ]),
-    ).toEqual([
-      "Speed limit: 80 km/h · in force · advisory",
-      "Closed: Road · in force · partly interpreted",
-      "Restriction: details could not be interpreted · in force",
-      "Advice: Expect delays · in force",
-    ]);
+    ).toEqual(["Road closed", "Speed limit: 80 km/h · advisory", "Advice: Expect delays"]);
   });
 
   it("asks only for strings the German catalog has too", () => {
@@ -247,7 +240,7 @@ describe("effectLines", () => {
       effect("11", "delay", { delayType: "delays_of_uncertain_duration" }),
     ];
     expect(() =>
-      effectLines(situation({ effects: every }), { ...options, translate: german }),
+      impactLines(situation({ effects: every }), { ...options, translate: german }),
     ).not.toThrow();
   });
 });
@@ -350,7 +343,7 @@ describe("producer contract goldens", () => {
       const raw = (golden.conditions ?? []).map((condition) => condition.effect);
       const effects = readRoadConditionEffects(raw);
       expect(effects.map((e) => e.kind)).toEqual(raw.map((e) => e?.kind));
-      expect(() => effectLines(situation({ effects }), options)).not.toThrow();
+      expect(() => impactLines(situation({ effects }), options)).not.toThrow();
     });
   }
 });

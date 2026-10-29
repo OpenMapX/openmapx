@@ -593,29 +593,8 @@
       "other": "Other"
     },
     "panel": {
-      "type": "Type",
-      "effects": "Effects",
-      "direction": "Direction",
-      "roads": "Roads affected",
-      "validity": "Status",
-      "startsAt": "Starts at",
-      "description": "Details",
-      "sourceRecord": "Source record",
-      "sourceRecordCount": "{count, plural, one {# source record} other {# source records}}",
-      "sourceDetails": "Source details ({count, plural, one {# record} other {# records}})",
-      "relatedRecords": "{headline} ({count} related records)",
       "conditionsHere": "{count, plural, one {# condition here} other {# conditions here}}",
-      "source": "Source",
-      "license": "Licence",
-      "updatedAt": "Source updated (UTC)",
-      "checkedAt": "Last checked (UTC)",
-      "freshness": "Freshness",
-      "interpretation": "Interpretation",
-      "report": "Report",
-      "binding": "Road binding",
-      "routing": "Route effect",
-      "routingCandidate": "Eligible; application depends on the route",
-      "routingDisplayOnly": "Shown on map; not applied to routing"
+      "updated": "Updated {time}"
     },
     "binding": {
       "exact": "Exact",
@@ -643,15 +622,7 @@
       "location_not_exact": "its location is not precise enough"
     },
     "direction": {
-      "positive": "Increasing road reference",
-      "negative": "Decreasing road reference",
       "both": "Both directions",
-      "unknown": "Direction unknown",
-      "geometry": {
-        "positive": "In the direction the affected road is drawn",
-        "negative": "Against the direction the affected road is drawn"
-      },
-      "oneWay": "One direction only (not identified)",
       "loop": {
         "inner": "Inner loop",
         "outer": "Outer loop"
@@ -788,26 +759,32 @@
       "cancelled": "Cancelled",
       "unknown": "Unknown status"
     },
-    "endedReason": {
-      "source_ended": "ended by the source",
-      "withdrawn_from_feed": "withdrawn from the feed",
-      "expired": "expired",
-      "superseded": "superseded",
-      "cancelled": "cancelled",
-      "stale": "no longer confirmed"
-    },
     "compliance": {
       "advisory": "advisory"
     },
-    "interpretation": {
-      "partial": "Some rules could not be fully interpreted; they are shown but not used for routing"
-    },
     "freshness": {
-      "stale": "Source data may be outdated",
-      "needsRefresh": "Needs refresh"
+      "stale": "This information may be out of date",
+      "needsRefresh": "Couldn't refresh; this information may be out of date"
     },
     "report": {
       "unconfirmed": "Unconfirmed user report"
+    },
+    "impact": {
+      "closed": "{scope} closed"
+    },
+    "impactLevel": {
+      "none": "No impact",
+      "minor": "Minor impact",
+      "moderate": "Moderate impact",
+      "major": "Major impact",
+      "critical": "Severe impact"
+    },
+    "when": {
+      "until": "Until {date}",
+      "expectedUntil": "Expected until {date}",
+      "since": "Since {date}",
+      "starts": "Starts {date}",
+      "range": "{start} – {end}"
     }
   },
   "trafficFlow": {
