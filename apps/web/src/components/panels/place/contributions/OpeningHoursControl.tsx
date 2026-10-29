@@ -963,7 +963,10 @@ function TimePointEditor({
   // Only a closing time strictly after 24:00 is on the next day; 24:00 itself ends this one.
   const clockMinutes = point.kind === "clock" ? point.hours * 60 + point.minutes : 0;
   const afterMidnight = allowExtended && clockMinutes > 24 * 60;
-  const isEndOfDay = clockMinutes === 24 * 60;
+  // A span past midnight needs no checkbox: 18:00-02:00 means the same as 18:00-26:00.
+  // Times past 24:00 only matter for spans over 24 hours, so the checkbox is offered
+  // only to keep such a time from an existing tag editable; new ones go in OSM syntax.
+  const showNextDay = afterMidnight;
 
   return (
     <Stack spacing={1} sx={{ flex: 1, width: "100%" }}>
@@ -1054,13 +1057,13 @@ function TimePointEditor({
         )}
       </Stack>
 
-      {point.kind === "clock" && allowExtended && (
+      {point.kind === "clock" && showNextDay && (
         <FormControlLabel
           control={
             <Checkbox
               size="small"
               checked={afterMidnight}
-              disabled={disabled || isEndOfDay}
+              disabled={disabled}
               onChange={(e) => {
                 const nextHours = e.target.checked
                   ? Math.min(48, point.hours + 24)
