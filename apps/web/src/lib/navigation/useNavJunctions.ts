@@ -7,6 +7,7 @@ import {
   type JunctionLookupPoint,
   type JunctionLookupResult,
   junctionLookupPoints,
+  laneDestinationsAt,
   mergeExitPanel,
   parseLaneTags,
   proxyImageUrl,
@@ -183,6 +184,7 @@ function carryOver(
   const accepted = [...decisionPoints];
   const carried: CarriedJunctionState = {
     gantryByStep: new Map(),
+    laneDestinationsByStep: new Map(),
     fullLanesByStep: new Map(),
     photoByStep: new Map(),
   };
@@ -206,6 +208,8 @@ function carryOver(
     }
     const gantry = store.gantryByStep.get(oldStep);
     if (gantry) carried.gantryByStep.set(newStep, gantry);
+    const laneDestinations = store.laneDestinationsByStep.get(oldStep);
+    if (laneDestinations) carried.laneDestinationsByStep.set(newStep, laneDestinations);
     const fullLanes = store.fullLanesByStep.get(oldStep);
     if (fullLanes !== undefined) carried.fullLanesByStep.set(newStep, fullLanes);
     const photo = store.photoByStep.get(oldStep);
@@ -436,6 +440,8 @@ async function fetchGantries(generation: number, batch: LookupEntry[]): Promise<
     }
     const model = buildGantry(result, point);
     if (model) store.setGantry(point.stepIndex, model);
+    const laneDestinations = laneDestinationsAt(result, point);
+    if (laneDestinations) store.setLaneDestinations(point.stepIndex, laneDestinations);
   }
 }
 

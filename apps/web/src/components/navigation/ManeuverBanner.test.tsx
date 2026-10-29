@@ -17,7 +17,7 @@ vi.mock("@openmapx/core", () => ({
   formatMeasurementDistance: (m: number, sys: string) =>
     sys === "imperial" ? `${m} ft` : `${m} m`,
   // Passthrough: the lanes already carry valid/active flags in these tests.
-  resolveRecommendedLanes: (lanes?: unknown[]) => lanes ?? [],
+  resolveGuidanceLanes: (lanes?: unknown[]) => lanes ?? [],
   visibleToward: (list: string[], max = 3) => list.slice(0, max),
   signHeadline: (sign?: { exitToward?: string[]; exitNames?: string[] }) =>
     sign?.exitToward?.length ? sign.exitToward : (sign?.exitNames ?? []),

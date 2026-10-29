@@ -1,4 +1,5 @@
-import type { ManeuverLane, TravelMode } from "../types/routing";
+import type { LaneDestinations } from "../types/junction";
+import type { ManeuverLane, ManeuverSign, TravelMode } from "../types/routing";
 import { navOptionsForMode } from "./options";
 
 export interface LaneManeuver {
@@ -120,4 +121,88 @@ export function resolveRecommendedLanes(
 
   // Last resort: an unrestricted lane is usable for any maneuver.
   return lanes.map((l) => markIfMatch(l, (i) => i === "none" || i === ""));
+}
+
+/** What else is known about where the lanes lead, beyond the engine's arrows. */
+export interface LaneGuidanceEvidence {
+  /** The maneuver's signage: the branch refs and places the route heads for. */
+  sign?: ManeuverSign;
+  /** OSM destinations per lane on the approach, left to right. */
+  laneDestinations?: LaneDestinations[];
+}
+
+/**
+ * The lanes to highlight in turn-lane guidance. The engine's own choice wins.
+ * Without it, lanes whose OSM destinations name the maneuver's sign come next:
+ * at a split tagged `through` on every lane, they are the only thing telling
+ * the branches apart. Then `resolveRecommendedLanes`, except where it lights
+ * every lane for a maneuver to one side through arrows that do not point that
+ * way: all four `through` lanes before a split say nothing about which two
+ * keep left, so none is highlighted rather than all. Pure.
+ */
+export function resolveGuidanceLanes(
+  lanes: ManeuverLane[] | undefined,
+  maneuver: LaneManeuver | undefined,
+  evidence: LaneGuidanceEvidence = {},
+): ManeuverLane[] {
+  if (!lanes || lanes.length === 0) return lanes ?? [];
+  if (lanes.some((l) => l.valid)) return lanes;
+
+  const side = sideOf(maneuver);
+  const signed = lanesTowardSign(lanes, side, evidence);
+  if (signed) return signed;
+
+  const resolved = resolveRecommendedLanes(lanes, maneuver);
+  const uninformative =
+    side !== null &&
+    resolved.every((l) => l.valid) &&
+    !resolved.some((l) => l.active !== undefined && norm(l.active).includes(side));
+  return uninformative ? lanes : resolved;
+}
+
+function sideOf(maneuver: LaneManeuver | undefined): "left" | "right" | null {
+  const mod = maneuver?.modifier ? norm(maneuver.modifier) : "";
+  return mod.includes("left") ? "left" : mod.includes("right") ? "right" : null;
+}
+
+/**
+ * Mark the lanes whose OSM destinations name the sign's places, else those
+ * whose refs name its branches. `null` when the evidence does not fit the
+ * lanes or does not tell them apart: no lane matches, or every lane does.
+ */
+function lanesTowardSign(
+  lanes: ManeuverLane[],
+  side: "left" | "right" | null,
+  { sign, laneDestinations }: LaneGuidanceEvidence,
+): ManeuverLane[] | null {
+  if (!sign || !laneDestinations || laneDestinations.length !== lanes.length) return null;
+  // Places first: a split's lanes often share the road ref ("A 44" on every
+  // lane) and differ only in the towns they serve.
+  const places = new Set((sign.exitToward ?? []).map(placeKey));
+  const refs = new Set((sign.exitBranches ?? []).map(refKey));
+  const hits =
+    distinguishing(
+      laneDestinations.map((l) => l.destinations.some((p) => places.has(placeKey(p)))),
+    ) ?? distinguishing(laneDestinations.map((l) => l.refs.some((r) => refs.has(refKey(r)))));
+  if (!hits) return null;
+  return lanes.map((lane, i) => {
+    if (!hits[i]) return { ...lane, valid: false };
+    const toward = side ? lane.indications.find((ind) => norm(ind).includes(side)) : undefined;
+    return { ...lane, valid: true, ...(toward ? { active: toward } : {}) };
+  });
+}
+
+/** The per-lane matches, unless they match no lane or every lane. */
+function distinguishing(hits: boolean[]): boolean[] | null {
+  const count = hits.filter(Boolean).length;
+  return count === 0 || count === hits.length ? null : hits;
+}
+
+function placeKey(place: string): string {
+  return place.normalize("NFC").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** "A44" and "A 44" name the same road. */
+function refKey(ref: string): string {
+  return ref.normalize("NFC").toLowerCase().replace(/\s+/g, "");
 }

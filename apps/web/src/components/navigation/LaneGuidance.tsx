@@ -1,7 +1,12 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import { type ManeuverLane, resolveRecommendedLanes } from "@openmapx/core";
+import {
+  type LaneDestinations,
+  type ManeuverLane,
+  type ManeuverSign,
+  resolveGuidanceLanes,
+} from "@openmapx/core";
 import {
   laneArrowStemShiftEm,
   laneIndicationIcon,
@@ -19,11 +24,17 @@ import {
 export function LaneGuidance({
   lanes,
   maneuver,
+  sign,
+  laneDestinations,
   variant = "standalone",
   size = "regular",
 }: {
   lanes?: ManeuverLane[];
   maneuver?: Maneuver;
+  /** The maneuver's signage, matched against `laneDestinations`. */
+  sign?: ManeuverSign;
+  /** OSM destinations per lane on the approach, when the junction lookup found them. */
+  laneDestinations?: LaneDestinations[];
   /**
    * "standalone" = its own light card. "banner" = embedded in the maneuver
    * banner's darkened sub-row: transparent, white arrows keyed by opacity.
@@ -33,8 +44,9 @@ export function LaneGuidance({
   size?: "regular" | "compact";
 }) {
   // Trust the engine's valid/active lanes; otherwise recommend them from the
-  // maneuver (exact → same-side → unrestricted) so under-tagged lanes still light up.
-  const resolved = resolveRecommendedLanes(lanes, maneuver);
+  // lanes' signed destinations, then from the maneuver (exact → same-side →
+  // unrestricted) so under-tagged lanes still light up.
+  const resolved = resolveGuidanceLanes(lanes, maneuver, { sign, laneDestinations });
   if (resolved.length === 0) return null;
   const banner = variant === "banner";
   const cell = size === "compact" ? 28 : banner ? 38 : 36;

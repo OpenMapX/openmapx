@@ -4,6 +4,7 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import {
   formatMeasurementDistance,
+  type LaneDestinations,
   type ManeuverLane,
   type ManeuverSign,
   signHeadline,
@@ -64,6 +65,8 @@ export interface ManeuverBannerProps {
    * banner's sub-row, replacing the "Then …" preview.
    */
   lanes?: ManeuverLane[];
+  /** OSM destinations per lane on the approach, to pick the lanes toward the sign. */
+  laneDestinations?: LaneDestinations[];
   /** Interchange signage for the upcoming maneuver, when the engine supplies it. */
   sign?: ManeuverSign;
   /** Country of the route origin, for the sign palette. */
@@ -78,6 +81,7 @@ export function ManeuverBanner({
   nextInstruction,
   nextManeuver,
   lanes,
+  laneDestinations,
   sign,
   country,
   units,
@@ -92,7 +96,13 @@ export function ManeuverBanner({
   // top-right of the main line (its arrow still shows which way it goes). With no
   // lanes, the preview keeps the full sub-row line.
   const secondary = hasLanes ? (
-    <LaneGuidance variant="banner" lanes={lanes} maneuver={maneuver} />
+    <LaneGuidance
+      variant="banner"
+      lanes={lanes}
+      maneuver={maneuver}
+      sign={sign}
+      laneDestinations={laneDestinations}
+    />
   ) : hasNext ? (
     <>
       <NextIcon sx={{ fontSize: 20, opacity: 0.85 }} />

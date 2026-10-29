@@ -109,6 +109,12 @@ export interface GantryPanel {
   isExit: boolean;
 }
 
+/** Where one lane leads, as its OSM `destination:lanes`/`destination:ref:lanes` name it. */
+export interface LaneDestinations {
+  destinations: string[];
+  refs: string[];
+}
+
 export interface GantryModel {
   laneCount: number;
   panels: GantryPanel[];
