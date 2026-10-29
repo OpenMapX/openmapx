@@ -109,7 +109,11 @@ vi.mock("../../src/ops-client.js", () => ({
           await run("docker", ["restart", "motis-staging"], { stdio: "pipe" });
           return { changed: true };
         case "motis.staging.stop":
-          await run("docker", ["stop", "motis-staging"], { reject: false, stdio: "pipe" });
+          return stopFixtureMotis("motis-staging");
+        case "motis.primary.stop":
+          return stopFixtureMotis("motis");
+        case "motis.primary.restart":
+          await run("docker", ["restart", "motis"], { stdio: "pipe" });
           return { changed: true };
         case "motis.primary.promote":
           await run("docker", ["restart", "motis"], { stdio: "pipe" });
@@ -126,6 +130,20 @@ vi.mock("../../src/ops-client.js", () => ({
     },
   ),
 }));
+
+// Mirrors the agent's confirmed stop: report whether the container was running
+// and that it is stopped afterwards.
+async function stopFixtureMotis(name: string): Promise<{ changed: boolean; state: "stopped" }> {
+  const { execa: run } = await import("execa");
+  const inspect = async () =>
+    (
+      await run("docker", ["inspect", "-f", "{{.State.Running}}", name], { stdio: "pipe" })
+    ).stdout.trim();
+  if ((await inspect()) !== "true") return { changed: false, state: "stopped" };
+  await run("docker", ["stop", name], { stdio: "pipe" });
+  if ((await inspect()) === "true") throw new Error(`${name} remains running after stop`);
+  return { changed: true, state: "stopped" };
+}
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STUB_SCRIPTS_DIR = resolve(HERE, "fixtures", "stub-catalog-scripts");
