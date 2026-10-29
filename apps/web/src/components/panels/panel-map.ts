@@ -1,6 +1,6 @@
-import type { SxProps, Theme } from "@mui/material/styles";
 import type { ComponentType } from "react";
 import { lazy } from "react";
+import type { SearchBarClearance } from "./searchBarClearance";
 import {
   type DetentConfig,
   DIRECTIONS_DETENTS,
@@ -41,19 +41,24 @@ const PlaceDetailCard = lazy(() =>
 
 interface PanelEntry {
   component: ComponentType;
-  contentSx?: SxProps<Theme>;
+  /** How the panel stays clear of the floating search bar. Falls back to "shell" in SidebarShell when unset. */
+  searchBarClearance?: SearchBarClearance;
   /** Mobile sheet detents for this surface. Falls back to LIST_DETENTS in SidebarShell when unset. */
   detents?: DetentConfig;
 }
 
 export const SIDEBAR_PANELS: Record<string, PanelEntry> = {
-  place: { component: PlacePanelContent, detents: PLACE_DETENTS },
+  place: { component: PlacePanelContent, detents: PLACE_DETENTS, searchBarClearance: "content" },
   category: { component: CategoryResultsContent },
   datasource: { component: DataSourceFilterContent },
-  directions: { component: DirectionsPanelContent, detents: DIRECTIONS_DETENTS },
-  saved: { component: SavedPlacesContent, contentSx: { pt: { xs: 0, sm: "72px" } } },
+  directions: {
+    component: DirectionsPanelContent,
+    detents: DIRECTIONS_DETENTS,
+    searchBarClearance: "none",
+  },
+  saved: { component: SavedPlacesContent },
   parking: { component: ParkingPanelContent, detents: PARKING_DETENTS },
-  timeline: { component: TimelinePanelContent, contentSx: { pt: { xs: 0, sm: "72px" } } },
+  timeline: { component: TimelinePanelContent },
 };
 
 export const DETAIL_PANELS: Record<string, ComponentType> = {

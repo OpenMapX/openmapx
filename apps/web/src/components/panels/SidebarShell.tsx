@@ -1,16 +1,16 @@
 "use client";
 
 import Paper from "@mui/material/Paper";
-import type { SxProps, Theme } from "@mui/material/styles";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useSidebarStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { lazy, type ReactNode, Suspense, useState } from "react";
 import { SidebarCollapseToggle } from "@/components/ui/SidebarCollapseToggle";
-import { PANEL_WIDTH } from "@/lib/layout";
+import { PANEL_WIDTH, SEARCH_BAR_CLEARANCE } from "@/lib/layout";
 import { useMapObstruction } from "@/lib/mapObstructions";
 import { useMobilePanelHeightTracker } from "@/lib/mobilePanelHeight";
+import { type SearchBarClearance, SearchBarClearanceContext } from "./searchBarClearance";
 import { type DetentConfig, LIST_DETENTS } from "./sheet/detents";
 
 const MobileBottomSheet = lazy(() =>
@@ -19,8 +19,8 @@ const MobileBottomSheet = lazy(() =>
 
 interface SidebarShellProps {
   children: ReactNode;
-  /** Optional sx overrides merged onto the Paper (e.g. extra top padding). */
-  contentSx?: SxProps<Theme>;
+  /** How the content stays clear of the floating search bar on desktop. Defaults to "shell". */
+  searchBarClearance?: SearchBarClearance;
   /** Mobile sheet detents for the surface rendered inside. Defaults to LIST_DETENTS. */
   detents?: DetentConfig;
   /**
@@ -33,7 +33,7 @@ interface SidebarShellProps {
 
 export function SidebarShell({
   children,
-  contentSx,
+  searchBarClearance = "shell",
   detents = LIST_DETENTS,
   obscured,
 }: SidebarShellProps) {
@@ -48,7 +48,6 @@ export function SidebarShell({
           id="sidebar"
           zIndex={11}
           detents={detents}
-          contentSx={contentSx}
           obscured={obscured}
           ariaLabel={t("resultsPanelAriaLabel")}
         >
@@ -57,10 +56,16 @@ export function SidebarShell({
       </Suspense>
     );
   }
-  return <DesktopSidebar contentSx={contentSx}>{children}</DesktopSidebar>;
+  return <DesktopSidebar searchBarClearance={searchBarClearance}>{children}</DesktopSidebar>;
 }
 
-function DesktopSidebar({ children, contentSx }: SidebarShellProps) {
+function DesktopSidebar({
+  children,
+  searchBarClearance,
+}: {
+  children: ReactNode;
+  searchBarClearance: SearchBarClearance;
+}) {
   const collapsed = useSidebarStore((s) => s.collapsed);
   const toggleCollapsed = useSidebarStore((s) => s.toggleCollapsed);
   const [el, setEl] = useState<HTMLDivElement | null>(null);
@@ -73,29 +78,31 @@ function DesktopSidebar({ children, contentSx }: SidebarShellProps) {
       <Paper
         ref={setEl}
         elevation={0}
-        sx={[
-          (theme) => ({
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: PANEL_WIDTH,
-            height: "100dvh",
-            // Light mode: keep the side rail on background.paper (#fff) —
-            // light mode already looks correct flat.
-            // Dark mode: switch to background.default (#1c1c1c) so the
-            // floating DetailShell card on #2d2d2d visibly elevates off it.
-            ...theme.applyStyles("dark", { bgcolor: "background.default" }),
-            overflowY: "auto",
-            borderRadius: 0,
-            boxShadow: "4px 0 12px var(--omx-shadow-soft)",
-            zIndex: 9,
-            transform: collapsed ? "translateX(-100%)" : "translateX(0)",
-            transition: "transform 0.25s ease",
-          }),
-          ...(Array.isArray(contentSx) ? contentSx : contentSx ? [contentSx] : []),
-        ]}
+        sx={(theme) => ({
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: PANEL_WIDTH,
+          height: "100dvh",
+          // Light mode: keep the side rail on background.paper (#fff) —
+          // light mode already looks correct flat.
+          // Dark mode: switch to background.default (#1c1c1c) so the
+          // floating DetailShell card on #2d2d2d visibly elevates off it.
+          ...theme.applyStyles("dark", { bgcolor: "background.default" }),
+          overflowY: "auto",
+          borderRadius: 0,
+          boxShadow: "4px 0 12px var(--omx-shadow-soft)",
+          zIndex: 9,
+          transform: collapsed ? "translateX(-100%)" : "translateX(0)",
+          transition: "transform 0.25s ease",
+          ...(searchBarClearance === "shell" && { pt: SEARCH_BAR_CLEARANCE }),
+        })}
       >
-        {children}
+        <SearchBarClearanceContext.Provider
+          value={searchBarClearance === "content" ? SEARCH_BAR_CLEARANCE : null}
+        >
+          {children}
+        </SearchBarClearanceContext.Provider>
       </Paper>
     </>
   );

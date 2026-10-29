@@ -1,6 +1,7 @@
 import { useSidebarStore } from "@openmapx/core";
 import { act } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { SEARCH_BAR_CLEARANCE } from "@/lib/layout";
 import { getMapObstructionInsets, publishMapObstruction } from "@/lib/mapObstructions";
 import { render, screen } from "@/test";
 
@@ -24,7 +25,12 @@ vi.mock("./sheet/MobileBottomSheet", () => ({
 }));
 
 import { SidebarShell } from "./SidebarShell";
+import { useSearchBarClearance } from "./searchBarClearance";
 import { DIRECTIONS_DETENTS, LIST_DETENTS } from "./sheet/detents";
+
+function ClearanceProbe() {
+  return <span data-testid="probe">{useSearchBarClearance() ?? "none"}</span>;
+}
 
 describe("SidebarShell on mobile", () => {
   it("defaults to LIST_DETENTS when no detents prop is passed", async () => {
@@ -37,6 +43,15 @@ describe("SidebarShell on mobile", () => {
     render(<SidebarShell detents={DIRECTIONS_DETENTS}>content</SidebarShell>);
     const sheet = await screen.findByTestId("sheet");
     expect(sheet.dataset.mid).toBe(DIRECTIONS_DETENTS.mid);
+  });
+
+  it("gives content no search-bar clearance, since the sheet sits below the bar", async () => {
+    render(
+      <SidebarShell searchBarClearance="content">
+        <ClearanceProbe />
+      </SidebarShell>,
+    );
+    expect((await screen.findByTestId("probe")).textContent).toBe("none");
   });
 });
 
@@ -60,5 +75,43 @@ describe("SidebarShell on desktop", () => {
     expect(getMapObstructionInsets().left).toBe(400);
     unmount();
     expect(getMapObstructionInsets().left).toBe(0);
+  });
+
+  describe("search-bar clearance", () => {
+    it("pads the rail below the bar by default, leaving content nothing to offset", () => {
+      isMobileRef.current = false;
+      render(
+        <SidebarShell>
+          <ClearanceProbe />
+        </SidebarShell>,
+      );
+      const probe = screen.getByTestId("probe");
+      expect(probe.textContent).toBe("none");
+      expect(probe.parentElement).toHaveStyle({ paddingTop: SEARCH_BAR_CLEARANCE });
+    });
+
+    it("hands the inset to content that lays itself out under the bar", () => {
+      isMobileRef.current = false;
+      render(
+        <SidebarShell searchBarClearance="content">
+          <ClearanceProbe />
+        </SidebarShell>,
+      );
+      const probe = screen.getByTestId("probe");
+      expect(probe.textContent).toBe(SEARCH_BAR_CLEARANCE);
+      expect(probe.parentElement).not.toHaveStyle({ paddingTop: SEARCH_BAR_CLEARANCE });
+    });
+
+    it("reserves nothing for a panel that hides the bar", () => {
+      isMobileRef.current = false;
+      render(
+        <SidebarShell searchBarClearance="none">
+          <ClearanceProbe />
+        </SidebarShell>,
+      );
+      const probe = screen.getByTestId("probe");
+      expect(probe.textContent).toBe("none");
+      expect(probe.parentElement).not.toHaveStyle({ paddingTop: SEARCH_BAR_CLEARANCE });
+    });
   });
 });
