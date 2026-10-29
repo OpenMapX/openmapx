@@ -195,6 +195,80 @@ class TrafficWatchdogTest(unittest.TestCase):
             path.unlink()
             self.assertFalse(watchdog.lease_allows_serving(path, 1000))
 
+    def test_lease_state_separates_a_lapsed_lease_from_an_invalid_journal(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = pathlib.Path(root) / "journal.json"
+            value = {
+                "schemaVersion": 1,
+                "graphGeneration": "g",
+                "phase": "committed",
+                "validUntil": 2000,
+                "identities": [{"level": 2, "tile": 1, "index": 0}],
+            }
+            path.write_text(json.dumps(value))
+            self.assertEqual(watchdog.lease_state(path, 1000), "serve")
+            self.assertEqual(watchdog.lease_state(path, 2000), "expired")
+            path.write_text(json.dumps({**value, "phase": "pending"}))
+            self.assertEqual(watchdog.lease_state(path, 3000), "expired")
+            path.write_text(json.dumps({**value, "uncertain": True}))
+            self.assertEqual(watchdog.lease_state(path, 1000), "expired")
+            path.write_text(json.dumps({**value, "validUntil": 10_000_000}))
+            self.assertEqual(watchdog.lease_state(path, 1000), "invalid")
+            path.write_text("{broken")
+            self.assertEqual(watchdog.lease_state(path, 1000), "invalid")
+            path.unlink()
+            self.assertEqual(watchdog.lease_state(path, 1000), "invalid")
+
+    def test_a_lapsed_lease_is_cleared_in_place_while_the_engine_serves(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = pathlib.Path(root)
+            tar = root / "traffic.tar"
+            tar.write_bytes(fixture())
+            inode = tar.stat().st_ino
+            state = root / "live-state.json"
+            journal = pathlib.Path(str(state) + ".journal.json")
+            state.write_text(json.dumps([{"level": 2, "tile": 1, "index": 0}]))
+            lapsed = {
+                "schemaVersion": 1,
+                "graphGeneration": "g",
+                "phase": "committed",
+                "validUntil": 1000,
+                "identities": [{"level": 2, "tile": 1, "index": 0}],
+            }
+            journal.write_text(json.dumps(lapsed))
+            self.assertEqual(watchdog.clear_expired(root, state, journal, 5000), "cleared")
+            self.assertEqual(tar.stat().st_ino, inode)
+            self.assertEqual(
+                struct.unpack_from("<Q", tar.read_bytes(), 1568)[0], 127 | (127 << 7)
+            )
+            self.assertEqual(json.loads(state.read_text()), [])
+            cleared = json.loads(journal.read_text())
+            self.assertEqual((cleared["phase"], cleared["identities"]), ("committed", []))
+            self.assertTrue(watchdog.lease_allows_serving(journal))
+            self.assertFalse(pathlib.Path(str(state) + ".lock").exists())
+
+    def test_a_renewed_lease_or_an_invalid_journal_is_left_alone(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = pathlib.Path(root)
+            tar = root / "traffic.tar"
+            tar.write_bytes(fixture())
+            state = root / "live-state.json"
+            journal = pathlib.Path(str(state) + ".journal.json")
+            renewed = {
+                "schemaVersion": 1,
+                "graphGeneration": "g",
+                "phase": "committed",
+                "validUntil": 9000,
+                "identities": [{"level": 2, "tile": 1, "index": 0}],
+            }
+            journal.write_text(json.dumps(renewed))
+            self.assertEqual(watchdog.clear_expired(root, state, journal, 5000), "renewed")
+            self.assertEqual(tar.read_bytes(), bytes(fixture()))
+            journal.write_text("{broken")
+            self.assertEqual(watchdog.clear_expired(root, state, journal, 5000), "invalid")
+            self.assertEqual(tar.read_bytes(), bytes(fixture()))
+            self.assertEqual(journal.read_text(), "{broken")
+
     def test_lease_outlasts_the_two_minute_write_cadence(self):
         with tempfile.TemporaryDirectory() as root:
             path = pathlib.Path(root) / "journal.json"

@@ -54,9 +54,9 @@ the southbound route, to 5.37 km. Without a heading, both directions detoured.
 
 ## Engine-owned watchdog and container loss
 
-The pinned image already contains Python 3; `services/valhalla/scripts/traffic-watchdog.py` uses only its standard library. It is the engine container's PID 1 and owns the original image entrypoint process group. It takes the shared writer lock, validates every index/tile bound and clears retained records **before** starting Valhalla, preserving the tar inode. During serving it checks the journal every two seconds. Expired nonempty effect sets, a missing/corrupt journal or an impossible lease stop the engine group; container restart clears offline before serving again. This protects against losing the entire data-manager container, in addition to DM's independent worker supervisor.
+The pinned image already contains Python 3; `services/valhalla/scripts/traffic-watchdog.py` uses only its standard library. It is the engine container's PID 1 and owns the original image entrypoint process group. It takes the shared writer lock, validates every index/tile bound and clears retained records **before** starting Valhalla, preserving the tar inode. During serving it checks the journal every two seconds. A lapsed lease (expired nonempty effects, an abandoned pending write, an uncertain journal) is cleared in place under the writer lock while the engine keeps serving: every record is bounds-checked and cleared, and the state and journal say nothing is written, so the next data-manager write starts from a known empty extract. A lease renewed while the lock was awaited is left alone. Only a missing, corrupt or impossible journal, or a clear that fails, stops the engine group; container restart clears offline before serving again. This protects against losing the entire data-manager container, in addition to DM's independent worker supervisor, without taking routing down while data-manager restarts.
 
-The real pinned-container test applied an eight-second closure lease and performed no DM cleanup. The engine stopped at lease + 3261 ms (HTTP detection) with exit code 78. Restart restored the 1.919 km / 230.388-second baseline. This test uses the same `supervise` function, with a direct `valhalla_service` command so it can reuse the tiny synthetic graph rather than run the image's OSM bootstrap.
+The real pinned-container test applies an eight-second closure lease and performs no DM cleanup. On 2026-10-29 the closure reached the running engine, then the watchdog cleared it in place: the route was back to the 1.919 km baseline 532 ms after the deadline, every request was answered throughout, and the container kept running (exit code 0). Before 2026-10-29 the watchdog stopped the engine here instead (lease + 3261 ms, exit code 78), which took routing down for minutes whenever data-manager was restarted for longer than its lease. This test uses the same `supervise` function, with a direct `valhalla_service` command so it can reuse the tiny synthetic graph rather than run the image's OSM bootstrap.
 
 After the earlier engine probe has generated `probe-overrides.json` and its container has been removed:
 
@@ -64,8 +64,7 @@ After the earlier engine probe has generated `probe-overrides.json` and its cont
 docker run -d --name openmapx-watchdog-probe -p 127.0.0.1:51869:8002 -v "$probe_dir:/probe" -v "$PWD/services/valhalla/scripts/traffic-watchdog.py:/guard.py:ro" --entrypoint python3 "$probe_image" -c 'import runpy,sys; from pathlib import Path; guard=runpy.run_path("/guard.py"); sys.exit(guard["supervise"](["valhalla_service","/probe/valhalla.json","2"],Path("/probe"),Path("/probe/watchdog-state")))'
 pnpm --filter @openmapx/data-manager exec tsx scripts/verify-engine-watchdog.ts http://127.0.0.1:51869 "$probe_dir"
 docker inspect openmapx-watchdog-probe --format '{{.State.Status}} {{.State.ExitCode}}'
-docker start openmapx-watchdog-probe
-# Verify the baseline route again, then clean up the disposable container.
+# Expect "running 0", then clean up the disposable container.
 docker rm -f openmapx-watchdog-probe
 python3 -B -m unittest discover -s services/valhalla/tests
 ```
