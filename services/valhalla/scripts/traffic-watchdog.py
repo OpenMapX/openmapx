@@ -71,7 +71,12 @@ def atomic_json(path, value):
 
 
 def clear_offline(path):
-    """Only called before this process launches an engine; never replace its tar."""
+    """Clears every live record in place, bounds-checked first; never replaces the tar.
+
+    Called before this process launches an engine, and while it serves to clear
+    a lapsed lease (see ``clear_expired``): Valhalla maps the tar, so records
+    written in place reach it at once, as every data-manager write does.
+    """
     path = Path(path)
     if not path.exists():
         return
@@ -130,6 +135,13 @@ def clear_offline(path):
 
 
 def lease_allows_serving(path, now_ms=None):
+    return lease_state(path, now_ms) == "serve"
+
+
+def lease_state(path, now_ms=None):
+    """``serve`` while the journal's lease holds; ``expired`` when a well-formed
+    journal's lease has lapsed (a clear of every record resolves it); ``invalid``
+    for a missing, unreadable, malformed or impossible journal."""
     now_ms = time.time() * 1000 if now_ms is None else now_ms
     try:
         with open(path, "rb") as source:
@@ -150,20 +162,53 @@ def lease_allows_serving(path, now_ms=None):
             or not journal.get("graphGeneration")
             or not isinstance(uncertain, bool)
         ):
-            return False
+            return "invalid"
         if not (0 <= deadline <= now_ms + MAX_LEASE_MS):
-            return False
+            return "invalid"
         if phase == "pending":
             # An uncertain pending journal is the writer clearing every record
             # it cannot account for, after each engine start or graph change.
             # Its deadline bounds that write like any other; only an abandoned
             # one fences serving.
-            return deadline > now_ms
+            return "serve" if deadline > now_ms else "expired"
         if uncertain:
-            return False
-        return not identities or deadline > now_ms
+            return "expired"
+        return "serve" if not identities or deadline > now_ms else "expired"
     except (OSError, ValueError, TypeError, KeyError):
-        return False
+        return "invalid"
+
+
+def clear_expired(graph_dir, state_path, journal_path, now_ms=None):
+    """Clears a lapsed lease's records in place while the engine serves.
+
+    A lease lapses whenever its writer is away longer than it lasts: a restart,
+    a crash, a stalled cycle. Its records must stop applying; the engine need
+    not stop. Under the writer lock, a lease renewed meanwhile is left alone;
+    otherwise every record is cleared, bounds-checked first, and the state and
+    journal say nothing is written. Returns ``renewed``, ``cleared``, or
+    ``invalid`` for a journal a clear does not resolve (missing, malformed,
+    impossible), which fences serving.
+    """
+    graph_dir = Path(graph_dir)
+    with writer_lock(state_path):
+        state = lease_state(journal_path, now_ms)
+        if state == "serve":
+            return "renewed"
+        if state == "invalid":
+            return "invalid"
+        clear_offline(graph_dir / "traffic.tar")
+        atomic_json(state_path, [])
+        atomic_json(
+            journal_path,
+            {
+                "schemaVersion": 1,
+                "graphGeneration": "lease-expiry-clear",
+                "phase": "committed",
+                "validUntil": int(time.time() * 1000) + 120_000,
+                "identities": [],
+            },
+        )
+    return "cleared"
 
 
 def read_json(path, maximum=MAX_EVIDENCE_BYTES):
@@ -692,13 +737,29 @@ def supervise(
                 stop_group(child)
                 return 78
             if not lease_allows_serving(journal_path):
-                print(
-                    "Traffic lease expired or journal invalid; stopping engine before restart",
-                    file=sys.stderr,
-                    flush=True,
-                )
-                stop_group(child)
-                return 78
+                try:
+                    outcome = clear_expired(graph_dir, state_path, journal_path)
+                except Exception as error:
+                    print(
+                        "Traffic lease clear failed: " + type(error).__name__,
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    outcome = "invalid"
+                if outcome == "cleared":
+                    print(
+                        "Traffic lease expired; cleared its records in place, engine keeps serving",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                elif outcome == "invalid":
+                    print(
+                        "Traffic journal invalid; stopping engine before restart",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    stop_group(child)
+                    return 78
             time.sleep(2)
         return child.returncode if child.poll() is not None else 0
     finally:
