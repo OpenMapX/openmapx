@@ -78,6 +78,7 @@ describe("service-vehicles-openconditions", () => {
     expect(sanding.attributions).toEqual([
       {
         sourceId: FEED,
+        modified: true,
         name: "Fintraffic Digitraffic road maintenance tracking",
         url: "https://www.digitraffic.fi/en/road-traffic/",
         licensing: expect.objectContaining({ version: 1 }),
@@ -85,6 +86,7 @@ describe("service-vehicles-openconditions", () => {
       },
       expect.objectContaining({
         sourceId: FEED,
+        modified: true,
         name: "Fintraffic Digitraffic road maintenance tracking – Harja/Väylävirasto",
         publisher: { name: "Harja/Väylävirasto" },
       }),

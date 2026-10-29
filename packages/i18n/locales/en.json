@@ -273,7 +273,8 @@
     "showLess": "Show less",
     "panelAriaLabel": "Panel",
     "resultsPanelAriaLabel": "Search results",
-    "detailsPanelAriaLabel": "Place details"
+    "detailsPanelAriaLabel": "Place details",
+    "dataModified": "data modified"
   },
   "timePicker": {
     "select": "Select time",

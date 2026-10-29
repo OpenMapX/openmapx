@@ -400,3 +400,36 @@ it("keeps independently captured licence-reference URLs available in full detail
   expect(shown.fullHtml).not.toContain(">https://old.example/original-terms<");
   expect(shown.visibleHtml).not.toContain("original-terms");
 });
+
+it("says beside a changed source's credit that its data was modified, in the viewer's words", () => {
+  const receipt = {
+    sourceId: "de-autobahn-events",
+    name: "Quelle: Die Autobahn GmbH des Bundes",
+    modified: true as const,
+    licensing: {
+      version: 1 as const,
+      bindings: [
+        {
+          scope: "data" as const,
+          subject: "Autobahn GmbH",
+          license: { kind: "spdx" as const, expression: "CC-BY-4.0" },
+          attribution: {
+            placement: "visible" as const,
+            surfaces: ["map" as const],
+            basis: "licence" as const,
+            reviewedAt: "2026-10-29",
+            evidenceUrls: ["https://creativecommons.org/licenses/by/4.0/legalcode"],
+            reason: "test",
+          },
+        },
+      ],
+    },
+  };
+  const shown = buildAttributionPresentation(receipt, "map", { modified: "Daten verändert" });
+  expect(shown.visibleHtml).toMatch(/Die Autobahn GmbH des Bundes.* — Daten verändert$/);
+  expect(shown.fullHtml).toContain("Daten verändert");
+  expect(buildAttributionPresentation(receipt, "map").visibleHtml).toMatch(/ — data modified$/);
+  const unchanged = buildAttributionPresentation({ ...receipt, modified: undefined }, "map");
+  expect(unchanged.visibleHtml).not.toContain("modified");
+  expect(unchanged.fullHtml).not.toContain("modified");
+});

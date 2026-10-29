@@ -17,6 +17,7 @@ const receipt = z.strictObject({
   publisher: z.strictObject({ name: z.string(), url: z.string().optional() }).optional(),
   retrievedAt: z.string().optional(),
   notes: z.string().optional(),
+  modified: z.literal(true).optional(),
 });
 /** Explicit wire structure plus the established semantic/byte-budget boundary. */
 export const savedFieldContributorsSchema = z

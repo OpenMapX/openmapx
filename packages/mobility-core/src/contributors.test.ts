@@ -281,3 +281,22 @@ it("keeps operator source notes out of captured credits while preserving actual 
   expect(captured.licensing?.bindings[0]?.notice).toBe("Data adapted");
   expect(captured.licensing?.bindings[0]?.conditions).toEqual(["Preserve this supplied condition"]);
 });
+
+describe("a modified receipt", () => {
+  it("keeps the change notice apart from the same source's unchanged credit", () => {
+    const receipt = { sourceId: "feed", name: "Feed" };
+    const changed = { ...receipt, modified: true as const };
+    expect(parseContributors([changed])).toEqual([changed]);
+    expect(contributorKey(changed)).not.toBe(contributorKey(receipt));
+    expect(snapshotContributors([receipt], [changed])).toHaveLength(2);
+  });
+
+  it("refuses a malformed change flag rather than dropping it", () => {
+    expect(
+      parseContributors([{ sourceId: "feed", name: "Feed", modified: false }]),
+    ).toBeUndefined();
+    expect(
+      parseContributors([{ sourceId: "feed", name: "Feed", modified: "yes" }]),
+    ).toBeUndefined();
+  });
+});

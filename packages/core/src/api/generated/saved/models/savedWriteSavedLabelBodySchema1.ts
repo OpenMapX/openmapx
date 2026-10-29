@@ -14,4 +14,5 @@ export interface SavedWriteSavedLabelBodySchema1 {
   publisher?: SavedWriteSavedLabelBodySchema1Publisher;
   retrievedAt?: string;
   notes?: string;
+  modified?: true;
 }

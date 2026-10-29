@@ -791,6 +791,7 @@ describe("situationToRoadConditionEvent", () => {
       contributors: [
         {
           sourceId: "fi-digitraffic-events",
+          modified: true,
           name: "Fintraffic / Digitraffic",
           attributionText: "Fintraffic / Digitraffic",
           licensing: licensingFromDeclaration(
@@ -991,6 +992,7 @@ describe("situationToRoadConditionEvent", () => {
         declarations: [{ text: "CC-BY-4.0" }],
       },
       attributionText: BAST,
+      modified: true,
     };
 
     const event = situationToRoadConditionEvent(placed())!;
@@ -1271,7 +1273,7 @@ describe("situation acquisition receipts", () => {
     release();
     const result = await read;
     expect(result[0]?.contributors).toEqual([
-      { sourceId: "parent", name: "Child", attributionText: "Child" },
+      { sourceId: "parent", name: "Child", attributionText: "Child", modified: true },
       { sourceId: "parent", name: "Record notice" },
     ]);
     expect(result[1]?.contributors).toEqual([]);

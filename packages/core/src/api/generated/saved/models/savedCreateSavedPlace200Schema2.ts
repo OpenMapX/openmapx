@@ -14,4 +14,5 @@ export interface SavedCreateSavedPlace200Schema2 {
   publisher?: SavedCreateSavedPlace200Schema2Publisher;
   retrievedAt?: string;
   notes?: string;
+  modified?: true;
 }

@@ -102,6 +102,7 @@ describe("road-weather-openconditions", () => {
     expect(nupuri.attributions).toEqual([
       {
         sourceId: "fi-digitraffic-weather",
+        modified: true,
         name: "Fintraffic Digitraffic road weather stations",
         url: "https://www.digitraffic.fi/en/",
         licensing: expect.objectContaining({ version: 1 }),
