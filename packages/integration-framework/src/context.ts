@@ -635,6 +635,10 @@ export interface IntegrationContext {
     revision: string;
     validUntil: string | null;
     disallowedSourceIds: string[];
+    /** Whether a source whose rights are unclear (a permission `unknown`) may be used. */
+    allowGreyArea?: boolean;
+    /** Whether a source whose licence forbids commercial use may be used. */
+    allowNonCommercial?: boolean;
   }>;
 
   /**

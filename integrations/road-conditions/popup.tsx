@@ -461,8 +461,15 @@ function popupProperties(
   const evidence = Object.values(event.routingEvidence ?? {});
   if (evidence.length > 0) {
     properties.bindingStatus = distinctNonEmpty(evidence.map((e) => e.binding_status)).join(",");
+    // A candidate, not an application: the deployment's data-use policy for
+    // unclear or non-commercial rights is the server's to apply, so the card
+    // judges the effect as if the policy admitted them.
     properties.applicationReason = event.effects.some(
-      (effect) => getRoadConditionRoutingDecision(event, effect, { evaluatedAt: atMs }).eligible,
+      (effect) =>
+        getRoadConditionRoutingDecision(event, effect, {
+          evaluatedAt: atMs,
+          rightsPolicy: { allowGreyArea: true, allowNonCommercial: true },
+        }).eligible,
     )
       ? "candidate"
       : "display_only";

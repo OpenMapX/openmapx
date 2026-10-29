@@ -297,5 +297,7 @@ export async function getRoadConditionsPolicySnapshot() {
     validUntil: current.authoritative ? new Date(current.at + 150_000).toISOString() : null,
     revision,
     disallowedSourceIds,
+    allowGreyArea: current.value.allowGreyArea,
+    allowNonCommercial: current.value.allowNonCommercial,
   };
 }

@@ -3,6 +3,7 @@ import {
   getRoadConditionRoutingDecision,
   type RoadConditionEffect,
   type RoadConditionEvent,
+  type RoadConditionRightsPolicy,
   type RoadConditionRouteImpact,
   type Route,
   type RoutingTrafficProof,
@@ -30,6 +31,19 @@ export function engineEffectOf(
   return speedCapKph(effect) !== undefined ? "speed_cap" : null;
 }
 
+/**
+ * The operator's data-use policy for routing, from an authoritative policy
+ * snapshot; a snapshot that does not state a flag grants nothing by it.
+ */
+export function rightsPolicyOf(
+  policy: { allowGreyArea?: boolean; allowNonCommercial?: boolean } | undefined,
+): RoadConditionRightsPolicy {
+  return {
+    allowGreyArea: policy?.allowGreyArea === true,
+    allowNonCommercial: policy?.allowNonCommercial === true,
+  };
+}
+
 /** A receipt names one effect of one situation: `<situationId>#<effectId>`, as the wire does. */
 export function receiptObservationId(
   event: Pick<RoadConditionEvent, "id">,
@@ -45,6 +59,7 @@ export function receiptCoversEffect(
   proof: RoutingTrafficProof,
   disallowed: ReadonlySet<string>,
   now: number,
+  rightsPolicy?: RoadConditionRightsPolicy,
 ): boolean {
   const e = event.routingEvidence?.[effect.id];
   const applied = engineEffectOf(effect);
@@ -56,6 +71,7 @@ export function receiptCoversEffect(
       travelAt: now,
       disallowedSources: disallowed,
       sharedTraffic: true,
+      ...(rightsPolicy ? { rightsPolicy } : {}),
     }).eligible
   )
     return false;
@@ -189,6 +205,7 @@ async function reconcileRouteTraffic(
     ...policy.disallowedSourceIds,
     ...((await ctx.getDisallowedSourceIds?.()) ?? []),
   ]);
+  const rightsPolicy = rightsPolicyOf(policy);
   if (
     snapshot.receipts.some(
       (r) => disallowed.has(r.sourceId) || r.policyRevision !== policy.revision,
@@ -236,6 +253,7 @@ async function reconcileRouteTraffic(
           travelAt: now,
           disallowedSources: disallowed,
           sharedTraffic: true,
+          rightsPolicy,
         });
         if (!decision.eligible) {
           for (const reason of decision.reasons) reasons.add(reason);
@@ -246,7 +264,7 @@ async function reconcileRouteTraffic(
         const effectReceipts = receiptsById.get(receiptObservationId(event, effect)) ?? [];
         const effectSnapshot = { ...snapshot, receipts: effectReceipts };
         const covered = proofs.every((p) =>
-          receiptCoversEffect(event, effect, effectSnapshot, p, disallowed, now),
+          receiptCoversEffect(event, effect, effectSnapshot, p, disallowed, now, rightsPolicy),
         );
         if (!covered) reasons.add("incomplete_engine_application");
         for (const route of routes) {
@@ -256,6 +274,7 @@ async function reconcileRouteTraffic(
             mode: route.mode,
             sharedTrafficApplied: covered,
             disallowedSources: disallowed,
+            rightsPolicy,
           });
           for (const reason of assessment.reasons) reasons.add(reason);
         }

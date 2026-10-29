@@ -279,4 +279,16 @@ describe("road-condition writer policy authority", () => {
     await refreshDataUsePolicy();
     expect((await getRoadConditionsPolicySnapshot()).revision).toBe(first.revision);
   });
+  it("states the operator's policy for unclear and non-commercial rights", async () => {
+    expect(await getRoadConditionsPolicySnapshot()).toMatchObject({
+      allowGreyArea: true,
+      allowNonCommercial: true,
+    });
+    vi.stubEnv("OPENMAPX_ALLOW_GREY_AREA", "false");
+    invalidateDataUsePolicy();
+    expect(await getRoadConditionsPolicySnapshot()).toMatchObject({
+      allowGreyArea: false,
+      allowNonCommercial: true,
+    });
+  });
 });

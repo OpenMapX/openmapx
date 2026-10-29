@@ -6,6 +6,7 @@ import {
   isRoutingRelevantBinding,
   type RoadConditionEffect,
   type RoadConditionEvent,
+  type RoadConditionRightsPolicy,
   type RoadConditionRoutingEvidence,
   readRoadConditionEffects,
   speedCapKph,
@@ -306,7 +307,11 @@ export function conditionsToEdges(
   conditions: BoundCondition[],
   waysToEdges: Map<number, WayEdge[]>,
   resolvedEdges?: ReadonlyMap<string, WayEdge[]>,
-  options: { evaluatedAt?: number; disallowedSources?: ReadonlySet<string> } = {},
+  options: {
+    evaluatedAt?: number;
+    disallowedSources?: ReadonlySet<string>;
+    rightsPolicy?: RoadConditionRightsPolicy;
+  } = {},
 ): ConditionsToEdgesResult {
   const result = emptyConditionsToEdges();
   const { overrides, appliedObservationIds, missingWayIds, skipped, ineligibleReasons } = result;

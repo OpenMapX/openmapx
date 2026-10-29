@@ -827,7 +827,14 @@ function buildIntegrationContext(args: {
     async getRoadConditionsPolicySnapshot() {
       return roadConditionsPolicyResolver
         ? roadConditionsPolicyResolver()
-        : { authoritative: false, revision: "", validUntil: null, disallowedSourceIds: [] };
+        : {
+            authoritative: false,
+            revision: "",
+            validUntil: null,
+            disallowedSourceIds: [],
+            allowGreyArea: false,
+            allowNonCommercial: false,
+          };
     },
     getDisallowedIntegrationIds() {
       return disallowedIntegrationResolver

@@ -349,6 +349,8 @@ export {
   getRoadConditionRoutingDecision,
   isRoadConditionRoutingEvidence,
   isRoutingRelevantBinding,
+  type RoadConditionRightsPolicy,
+  routingRightsReasons,
 } from "./roadConditionRouting";
 export { isSystemSavedList } from "./savedLists";
 export {
