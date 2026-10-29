@@ -1,4 +1,6 @@
 // @vitest-environment node
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import type { Map as MapLibreMap, RasterDEMTileSource } from "maplibre-gl";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -142,8 +144,14 @@ it("uses the installed terrain manager's cached parent covering the currently re
 });
 
 it("uses the installed native elevation expression and decoded DEMs to exclude transparent relief", async () => {
-  const styleSpecPath =
-    "../../../../../node_modules/.pnpm/maplibre-gl@6.13.0/node_modules/@maplibre/maplibre-gl-style-spec/dist/index.mjs";
+  // The style spec MapLibre itself resolves, whichever version is installed.
+  const maplibreRequire = createRequire(
+    createRequire(import.meta.url).resolve("maplibre-gl/package.json"),
+  );
+  const styleSpecPath = join(
+    dirname(maplibreRequire.resolve("@maplibre/maplibre-gl-style-spec/package.json")),
+    "dist/index.mjs",
+  );
   const demPath = "../../../../../node_modules/maplibre-gl/src/data/dem_data.ts";
   const imagePath = "../../../../../node_modules/maplibre-gl/src/util/image.ts";
   const [

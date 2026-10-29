@@ -143,7 +143,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     });
 
     it("runs the production-pinned runtime and atomically edits/publishes with the original payloads", async () => {
-      expect(await fixture.client.info("server")).toMatch(/valkey_version:9\.1\.2\r?\n/);
+      expect(await fixture.client.info("server")).toMatch(/valkey_version:9\.1\.3\r?\n/);
       await fixture.client.set(keys.catalog, "old");
       await editExtensionSources(fixture.client, keys, null, "[]");
       expect(await fixture.client.get(keys.catalog)).toBeNull();
