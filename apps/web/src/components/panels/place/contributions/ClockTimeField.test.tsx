@@ -95,6 +95,29 @@ describe("ClockTimeField", () => {
     expect(onChange).toHaveBeenCalledWith(7, 45);
   });
 
+  it("reads 24 at the top of a closing-time dial and gives midnight as 24:00", async () => {
+    useSettingsStore.setState({ timeFormat: "24h" });
+    const onChange = vi.fn();
+    render(
+      <ClockTimeField
+        label="Closes"
+        hours={23}
+        minutes={0}
+        disabled={false}
+        endOfDay
+        onChange={onChange}
+      />,
+    );
+
+    await openPicker();
+    expect(screen.getByRole("dialog").textContent).toContain("24");
+    screen.getByRole("slider").focus();
+    await userEvent.keyboard("{ArrowUp}");
+    expect(screen.getByRole("slider").getAttribute("aria-valuenow")).toBe("24");
+    await userEvent.click(screen.getByRole("button", { name: "osmContributions.ohTimePickerOk" }));
+    expect(onChange).toHaveBeenCalledWith(24, 0);
+  });
+
   it("switches between AM and PM in 12-hour format", async () => {
     useSettingsStore.setState({ timeFormat: "12h" });
     const onChange = renderField(9, 0);

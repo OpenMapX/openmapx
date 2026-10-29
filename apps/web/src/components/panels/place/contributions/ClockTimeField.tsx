@@ -62,11 +62,16 @@ type View = "hours" | "minutes";
 
 export interface ClockTimeFieldProps {
   label: string;
-  /** Time of day on the dial, 0..23. */
+  /** Time of day on the dial, 0..23, or 24 for the end of the day. */
   hours: number;
   /** 0..59 */
   minutes: number;
   disabled: boolean;
+  /**
+   * For closing times: the top of the dial reads 24, and midnight is given
+   * as 24:00, the end of the day.
+   */
+  endOfDay?: boolean;
   onChange: (hours: number, minutes: number) => void;
 }
 
@@ -74,13 +79,21 @@ export interface ClockTimeFieldProps {
  * A time-of-day field that opens the Material 3 time picker: a clock dial
  * with a text-input mode, as in Android's own time picker.
  */
-export function ClockTimeField({ label, hours, minutes, disabled, onChange }: ClockTimeFieldProps) {
+export function ClockTimeField({
+  label,
+  hours,
+  minutes,
+  disabled,
+  endOfDay = false,
+  onChange,
+}: ClockTimeFieldProps) {
   const t = useTranslations("osmContributions");
   const locale = useLocale();
   const timeFormat = useSettingsStore((s) => s.timeFormat);
   const ampm = usesTwelveHourClock(locale, timeFormat);
   const [open, setOpen] = useState(false);
-  const formatted = formatTime(locale, ampm, hours, minutes);
+  const formatted =
+    hours === 24 && !ampm ? `24:${pad(minutes)}` : formatTime(locale, ampm, hours, minutes);
 
   return (
     <>
@@ -117,6 +130,7 @@ export function ClockTimeField({ label, hours, minutes, disabled, onChange }: Cl
           hours={hours}
           minutes={minutes}
           ampm={ampm}
+          endOfDay={endOfDay}
           locale={locale}
           onCancel={() => setOpen(false)}
           onConfirm={(h, m) => {
@@ -133,6 +147,7 @@ interface TimePickerDialogProps {
   hours: number;
   minutes: number;
   ampm: boolean;
+  endOfDay: boolean;
   locale: string;
   onCancel: () => void;
   onConfirm: (hours: number, minutes: number) => void;
@@ -142,6 +157,7 @@ function TimePickerDialog({
   hours,
   minutes,
   ampm,
+  endOfDay,
   locale,
   onCancel,
   onConfirm,
@@ -156,17 +172,28 @@ function TimePickerDialog({
   const [minuteText, setMinuteText] = useState("");
 
   const displayHours = ampm ? draftHours % 12 || 12 : draftHours;
-  const isPm = draftHours >= 12;
+  const isPm = draftHours % 24 >= 12;
+
+  // A closing time at exactly midnight is the end of the day, 24:00.
+  const normalize = (h: number, m: number) => (endOfDay && h % 24 === 0 ? (m === 0 ? 24 : 0) : h);
+  const setHours = (h: number) => setDraftHours(normalize(h, draftMinutes));
+  const setMinutes = (m: number) => {
+    setDraftMinutes(m);
+    setDraftHours((h) => normalize(h, m));
+  };
 
   const hourValid =
     /^\d{1,2}$/.test(hourText) &&
-    (ampm ? Number(hourText) >= 1 && Number(hourText) <= 12 : Number(hourText) <= 23);
+    (ampm
+      ? Number(hourText) >= 1 && Number(hourText) <= 12
+      : Number(hourText) <= (endOfDay ? 24 : 23));
   const minuteValid = /^\d{1,2}$/.test(minuteText) && Number(minuteText) <= 59;
 
   function parsedKeyboardTime(): { hours: number; minutes: number } | null {
     if (!hourValid || !minuteValid) return null;
     const h = Number(hourText);
-    return { hours: ampm ? (h % 12) + (isPm ? 12 : 0) : h, minutes: Number(minuteText) };
+    const m = Number(minuteText);
+    return { hours: normalize(ampm ? (h % 12) + (isPm ? 12 : 0) : h, m), minutes: m };
   }
 
   function switchMode() {
@@ -185,7 +212,7 @@ function TimePickerDialog({
   }
 
   function setPeriod(pm: boolean) {
-    if (pm !== isPm) setDraftHours((draftHours + 12) % 24);
+    if (pm !== isPm) setHours(((draftHours % 24) + 12) % 24);
   }
 
   const keyboardTime = mode === "keyboard" ? parsedKeyboardTime() : null;
@@ -284,9 +311,10 @@ function TimePickerDialog({
             hours={draftHours}
             minutes={draftMinutes}
             ampm={ampm}
+            endOfDay={endOfDay}
             label={view === "hours" ? t("ohTimePickerHours") : t("ohTimePickerMinutes")}
-            onHoursChange={setDraftHours}
-            onMinutesChange={setDraftMinutes}
+            onHoursChange={setHours}
+            onMinutesChange={setMinutes}
             onHoursSettled={() => setView("minutes")}
           />
         </Box>
@@ -469,6 +497,7 @@ interface TimeDialProps {
   hours: number;
   minutes: number;
   ampm: boolean;
+  endOfDay: boolean;
   label: string;
   onHoursChange: (hours: number) => void;
   onMinutesChange: (minutes: number) => void;
@@ -485,6 +514,7 @@ function TimeDial({
   hours,
   minutes,
   ampm,
+  endOfDay,
   label,
   onHoursChange,
   onMinutesChange,
@@ -494,7 +524,7 @@ function TimeDial({
   const dragging = useRef(false);
 
   // In 24-hour mode the outer ring holds 0–11 and the inner ring 12–23.
-  const handleOnInnerRing = view === "hours" && !ampm && hours >= 12;
+  const handleOnInnerRing = view === "hours" && !ampm && hours % 24 >= 12;
   const handleRadius = handleOnInnerRing ? INNER_RADIUS : OUTER_RADIUS;
   const handleStep = view === "hours" ? hours % 12 : minutes;
   const handleSteps = view === "hours" ? 12 : 60;
@@ -504,12 +534,10 @@ function TimeDial({
   const labels =
     view === "hours"
       ? [
-          ...Array.from({ length: 12 }, (_, i) => ({
-            value: ampm ? i || 12 : i,
-            text: String(ampm ? i || 12 : i),
-            ...polar(OUTER_RADIUS, i, 12),
-            inner: false,
-          })),
+          ...Array.from({ length: 12 }, (_, i) => {
+            const value = ampm ? i || 12 : i || (endOfDay ? 24 : 0);
+            return { value, text: String(value), ...polar(OUTER_RADIUS, i, 12), inner: false };
+          }),
           ...(ampm
             ? []
             : Array.from({ length: 12 }, (_, i) => ({
@@ -527,7 +555,11 @@ function TimeDial({
         }));
 
   const selectedLabel = (value: number) =>
-    view === "hours" ? (ampm ? (hours % 12 || 12) === value : hours === value) : minutes === value;
+    view === "hours"
+      ? ampm
+        ? (hours % 12 || 12) === value
+        : hours % 24 === value % 24
+      : minutes === value;
 
   function pick(clientX: number, clientY: number) {
     const rect = dialRef.current?.getBoundingClientRect();
@@ -582,7 +614,7 @@ function TimeDial({
       tabIndex={0}
       aria-label={label}
       aria-valuemin={0}
-      aria-valuemax={view === "hours" ? 23 : 59}
+      aria-valuemax={view === "hours" ? (endOfDay ? 24 : 23) : 59}
       aria-valuenow={view === "hours" ? hours : minutes}
       onPointerDown={handlePointerDown}
       onPointerMove={(e) => dragging.current && pick(e.clientX, e.clientY)}

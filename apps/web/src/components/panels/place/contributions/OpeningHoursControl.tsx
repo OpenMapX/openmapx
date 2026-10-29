@@ -960,6 +960,10 @@ function TimePointEditor({
   onChange,
 }: TimePointEditorProps) {
   const t = useTranslations("osmContributions");
+  // Only a closing time strictly after 24:00 is on the next day; 24:00 itself ends this one.
+  const clockMinutes = point.kind === "clock" ? point.hours * 60 + point.minutes : 0;
+  const afterMidnight = allowExtended && clockMinutes > 24 * 60;
+  const isEndOfDay = clockMinutes === 24 * 60;
 
   return (
     <Stack spacing={1} sx={{ flex: 1, width: "100%" }}>
@@ -987,14 +991,18 @@ function TimePointEditor({
         {point.kind === "clock" ? (
           <ClockTimeField
             label={label}
-            hours={point.hours % 24}
+            hours={
+              allowExtended ? (afterMidnight ? point.hours - 24 : point.hours) : point.hours % 24
+            }
             minutes={point.minutes}
             disabled={disabled}
+            endOfDay={allowExtended}
             onChange={(hours, minutes) =>
               onChange({
                 kind: "clock",
                 // The dial shows the time of day; the next-day checkbox keeps the +24 h.
-                hours: allowExtended && point.hours >= 24 ? hours + 24 : hours,
+                // 24:00 is the end of this day, so it clears the checkbox.
+                hours: afterMidnight && hours < 24 ? hours + 24 : hours,
                 minutes,
               })
             }
@@ -1051,8 +1059,8 @@ function TimePointEditor({
           control={
             <Checkbox
               size="small"
-              checked={point.hours >= 24}
-              disabled={disabled}
+              checked={afterMidnight}
+              disabled={disabled || isEndOfDay}
               onChange={(e) => {
                 const nextHours = e.target.checked
                   ? Math.min(48, point.hours + 24)
