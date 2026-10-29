@@ -2,7 +2,9 @@ import type {
   GantryModel,
   GantryPanel,
   JunctionDecisionPoint,
+  JunctionLookupResult,
   JunctionWay,
+  LaneDestinations,
   OsmLaneTags,
 } from "../types/junction";
 import { angularDifference } from "./bearing";
@@ -271,6 +273,42 @@ export function selectApproachWay(
   return pool.reduce((best, candidate) =>
     candidate.endDistanceMeters < best.endDistanceMeters ? candidate : best,
   );
+}
+
+/**
+ * Where each of the route's lanes leads per OSM, read off the way carrying
+ * them into the split. Unlike the gantry's approach way this may be a ramp:
+ * a two-way split on a slip road happens on a `_link`. The way must head the
+ * route's way, end at or before the point, and have exactly the engine's lane
+ * count, so its `:lanes` values line up with the engine's lanes one to one.
+ * `undefined` when no such way tags per-lane destinations.
+ */
+export function laneDestinationsAt(
+  result: Pick<JunctionLookupResult, "approach" | "ramps">,
+  point: JunctionDecisionPoint,
+): LaneDestinations[] | undefined {
+  const laneCount = point.laneCount;
+  if (!laneCount) return undefined;
+  const way = [...result.approach, ...result.ramps]
+    .filter(
+      (candidate) =>
+        candidate.tags.lanes === laneCount &&
+        angularDifference(candidate.bearing, point.approachBearing) <= 35 &&
+        candidate.endDistanceMeters >= 0 &&
+        candidate.endDistanceMeters <= 450,
+    )
+    .sort((a, b) => a.endDistanceMeters - b.endDistanceMeters)[0];
+  if (!way) return undefined;
+  const destinationLanes = laneValues(splitLaneValues(way.tags.destinationLanes), laneCount);
+  const destinationRefLanes = laneValues(splitLaneValues(way.tags.destinationRefLanes), laneCount);
+  if (!destinationLanes && !destinationRefLanes) return undefined;
+  return Array.from({ length: laneCount }, (_, lane) => {
+    const tagged = splitRefParts(splitParts(destinationRefLanes?.[lane] ?? ""));
+    return {
+      destinations: union(splitParts(destinationLanes?.[lane] ?? ""), tagged.places),
+      refs: tagged.refs,
+    };
+  });
 }
 
 /** How far from the decision point a ramp may begin and still be this exit's ramp. */

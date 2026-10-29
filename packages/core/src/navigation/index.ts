@@ -61,10 +61,17 @@ export { buildJunctionSchematic } from "./junctionSchematic";
 export {
   guidanceApproachMeters,
   junctionPhotoApproachMeters,
+  resolveGuidanceLanes,
   resolveRecommendedLanes,
   shouldPreviewNextStep,
 } from "./lanes";
-export { mergeExitPanel, parseLaneTags, selectApproachWay, selectRampWay } from "./laneTags";
+export {
+  laneDestinationsAt,
+  mergeExitPanel,
+  parseLaneTags,
+  selectApproachWay,
+  selectRampWay,
+} from "./laneTags";
 export { isLiveNavigationStatus } from "./liveStatus";
 export {
   type ManeuverArrowSpans,

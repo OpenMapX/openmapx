@@ -102,6 +102,7 @@ export type {
   JunctionLookupResult,
   JunctionSchematic,
   JunctionWay,
+  LaneDestinations,
   OsmLaneTags,
 } from "./junction";
 export type { NeighborhoodCard, NeighborhoodsResponse } from "./neighborhood";

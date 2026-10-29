@@ -1,4 +1,9 @@
-import type { GantryModel, JunctionDecisionPoint, StreetLevelImage } from "@openmapx/core";
+import type {
+  GantryModel,
+  JunctionDecisionPoint,
+  LaneDestinations,
+  StreetLevelImage,
+} from "@openmapx/core";
 import { create } from "zustand";
 
 /**
@@ -16,6 +21,7 @@ export interface JunctionPhotoState {
 /** Junction state kept across a route change, keyed by the new route's step indices. */
 export interface CarriedJunctionState {
   gantryByStep: Map<number, GantryModel>;
+  laneDestinationsByStep: Map<number, LaneDestinations[]>;
   fullLanesByStep: Map<number, number>;
   photoByStep: Map<number, JunctionPhotoState>;
 }
@@ -30,6 +36,8 @@ interface NavJunctionState {
   decisionPoints: JunctionDecisionPoint[];
   byStep: Map<number, JunctionDecisionPoint>;
   gantryByStep: Map<number, GantryModel>;
+  /** Where each of the route's lanes leads per OSM, for the lane guidance. */
+  laneDestinationsByStep: Map<number, LaneDestinations[]>;
   /** Metres before the split from which OSM has the exit lanes in place. */
   fullLanesByStep: Map<number, number>;
   photoByStep: Map<number, JunctionPhotoState>;
@@ -43,6 +51,7 @@ interface NavJunctionState {
   /** Add points confirmed after route start (candidates OSM promoted), keeping gantries and photos. */
   addDecisionPoints: (points: JunctionDecisionPoint[]) => void;
   setGantry: (stepIndex: number, model: GantryModel) => void;
+  setLaneDestinations: (stepIndex: number, lanes: LaneDestinations[]) => void;
   setFullLanesFrom: (stepIndex: number, meters: number) => void;
   setPhoto: (stepIndex: number, photo: JunctionPhotoState) => void;
 }
@@ -52,6 +61,7 @@ export const useNavJunctionStore = create<NavJunctionState>((set) => ({
   decisionPoints: [],
   byStep: new Map(),
   gantryByStep: new Map(),
+  laneDestinationsByStep: new Map(),
   fullLanesByStep: new Map(),
   photoByStep: new Map(),
   reset: () =>
@@ -60,6 +70,7 @@ export const useNavJunctionStore = create<NavJunctionState>((set) => ({
       decisionPoints: [],
       byStep: new Map(),
       gantryByStep: new Map(),
+      laneDestinationsByStep: new Map(),
       fullLanesByStep: new Map(),
       photoByStep: new Map(),
     }),
@@ -69,6 +80,7 @@ export const useNavJunctionStore = create<NavJunctionState>((set) => ({
       decisionPoints: points,
       byStep: new Map(points.map((p) => [p.stepIndex, p])),
       gantryByStep: carried?.gantryByStep ?? new Map(),
+      laneDestinationsByStep: carried?.laneDestinationsByStep ?? new Map(),
       fullLanesByStep: carried?.fullLanesByStep ?? new Map(),
       photoByStep: carried?.photoByStep ?? new Map(),
     }),
@@ -82,6 +94,10 @@ export const useNavJunctionStore = create<NavJunctionState>((set) => ({
     }),
   setGantry: (stepIndex, model) =>
     set((state) => ({ gantryByStep: new Map(state.gantryByStep).set(stepIndex, model) })),
+  setLaneDestinations: (stepIndex, lanes) =>
+    set((state) => ({
+      laneDestinationsByStep: new Map(state.laneDestinationsByStep).set(stepIndex, lanes),
+    })),
   setFullLanesFrom: (stepIndex, meters) =>
     set((state) => ({ fullLanesByStep: new Map(state.fullLanesByStep).set(stepIndex, meters) })),
   setPhoto: (stepIndex, photo) =>

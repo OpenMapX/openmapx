@@ -3,6 +3,7 @@ import type { ManeuverLane } from "../../types/routing";
 import {
   guidanceApproachMeters,
   junctionPhotoApproachMeters,
+  resolveGuidanceLanes,
   resolveRecommendedLanes,
   shouldPreviewNextStep,
 } from "../lanes";
@@ -42,6 +43,91 @@ describe("resolveRecommendedLanes", () => {
     const lanes = [lane(["through"]), lane(["through"]), lane(["slight_right"])];
     const out = resolveRecommendedLanes(lanes, { type: "keep", modifier: "left" });
     expect(out.map((l) => l.valid)).toEqual([true, true, false]);
+  });
+});
+
+describe("resolveGuidanceLanes", () => {
+  // Kreuz Aachen, the 4-lane link toward A 44: every lane `through`, the left
+  // two signed Düsseldorf and the right two Liège, all four "A 44".
+  const kreuzAachen = [lane(["through"]), lane(["through"]), lane(["through"]), lane(["through"])];
+  const keepLeft = { type: "keep", modifier: "left" };
+  const toDuesseldorf = { exitBranches: ["A 44"], exitToward: ["Düsseldorf"] };
+  const splitDestinations = [
+    { destinations: ["Düsseldorf"], refs: ["A 44"] },
+    { destinations: ["Düsseldorf"], refs: ["A 44"] },
+    { destinations: ["Liège"], refs: ["A 44"] },
+    { destinations: ["Liège"], refs: ["A 44"] },
+  ];
+
+  it("highlights no lane when every through lane would light up for a keep left", () => {
+    const out = resolveGuidanceLanes(kreuzAachen, keepLeft);
+    expect(out.map((l) => l.valid)).toEqual([false, false, false, false]);
+  });
+
+  it("highlights the lanes whose OSM destinations name the sign", () => {
+    const out = resolveGuidanceLanes(kreuzAachen, keepLeft, {
+      sign: toDuesseldorf,
+      laneDestinations: splitDestinations,
+    });
+    expect(out.map((l) => l.valid)).toEqual([true, true, false, false]);
+  });
+
+  it("falls back to refs when the places do not tell the lanes apart", () => {
+    const out = resolveGuidanceLanes(
+      [lane(["through"]), lane(["through"]), lane(["through"])],
+      { type: "keep", modifier: "right" },
+      {
+        sign: { exitBranches: ["A44"], exitToward: ["Köln"] },
+        laneDestinations: [
+          { destinations: ["Köln"], refs: ["A 4"] },
+          { destinations: ["Köln"], refs: ["A 44"] },
+          { destinations: ["Köln"], refs: ["A 44"] },
+        ],
+      },
+    );
+    expect(out.map((l) => l.valid)).toEqual([false, true, true]);
+  });
+
+  it("ignores lane destinations that do not line up with the engine's lanes", () => {
+    const out = resolveGuidanceLanes(kreuzAachen, keepLeft, {
+      sign: toDuesseldorf,
+      laneDestinations: splitDestinations.slice(0, 3),
+    });
+    expect(out.map((l) => l.valid)).toEqual([false, false, false, false]);
+  });
+
+  it("still trusts the engine over the lane destinations", () => {
+    const lanes = [
+      lane(["through"]),
+      lane(["through"]),
+      lane(["through"]),
+      lane(["through"], true),
+    ];
+    const out = resolveGuidanceLanes(lanes, keepLeft, {
+      sign: toDuesseldorf,
+      laneDestinations: splitDestinations,
+    });
+    expect(out).toBe(lanes);
+  });
+
+  it("keeps the through lanes for a keep left when an exit peels away on the right", () => {
+    const lanes = [lane(["through"]), lane(["through"]), lane(["slight_right"])];
+    const out = resolveGuidanceLanes(lanes, keepLeft);
+    expect(out.map((l) => l.valid)).toEqual([true, true, false]);
+  });
+
+  it("keeps every lane lit when each one turns the maneuver's way", () => {
+    const lanes = [lane(["left"]), lane(["left", "through"])];
+    const out = resolveGuidanceLanes(lanes, { type: "turn", modifier: "left" });
+    expect(out.map((l) => l.valid)).toEqual([true, true]);
+  });
+
+  it("keeps every through lane lit for a straight maneuver", () => {
+    const out = resolveGuidanceLanes([lane(["through"]), lane(["through"])], {
+      type: "continue",
+      modifier: "straight",
+    });
+    expect(out.map((l) => l.valid)).toEqual([true, true]);
   });
 });
 

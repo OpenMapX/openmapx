@@ -246,7 +246,10 @@ time:
   switches to green motorway signs at the border), and the toward destinations in the banner and directions list, using the engine's sign
   data;
 - **lane guidance** at junctions that have it, dimming the lanes you should not
-  take and brightening the one to follow;
+  take and brightening the one to follow. Where every lane points straight on
+  before a split, OpenStreetMap's per-lane destinations pick the lanes toward
+  the signed destination; when nothing tells the lanes apart, none is
+  highlighted;
 - a **speed-limit badge** when the road's limit is known;
 - an **arrival card** with the remaining distance and estimated time of arrival.
 

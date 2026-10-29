@@ -19,6 +19,28 @@ describe("LaneGuidance", () => {
     expect(html).toContain('data-valid="false"');
   });
 
+  it("lights the lanes the OSM destinations send toward the sign at an all-through split", () => {
+    const through = { indications: ["through"], valid: false };
+    const lanes = [through, through, through, through];
+    const keepLeft = { type: "keep", modifier: "left" };
+    const unlit = renderToStaticMarkup(<LaneGuidance lanes={lanes} maneuver={keepLeft} />);
+    expect(unlit).not.toContain('data-valid="true"');
+    const lit = renderToStaticMarkup(
+      <LaneGuidance
+        lanes={lanes}
+        maneuver={keepLeft}
+        sign={{ exitBranches: ["A 44"], exitToward: ["Düsseldorf"] }}
+        laneDestinations={[
+          { destinations: ["Düsseldorf"], refs: ["A 44"] },
+          { destinations: ["Düsseldorf"], refs: ["A 44"] },
+          { destinations: ["Liège"], refs: ["A 44"] },
+          { destinations: ["Liège"], refs: ["A 44"] },
+        ]}
+      />,
+    );
+    expect(lit.match(/data-valid="true"/g)).toHaveLength(2);
+  });
+
   it("renders a blank cell for a 'none' lane", () => {
     const html = renderToStaticMarkup(
       <LaneGuidance lanes={[{ indications: ["none"], valid: false }]} />,
