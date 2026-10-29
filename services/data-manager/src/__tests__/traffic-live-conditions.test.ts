@@ -472,6 +472,25 @@ describe("traffic-live conditions merge", () => {
     handles.stop();
   });
 
+  it("names an unattested graph, not the policy, when the engine's graph cannot be read", async () => {
+    const infoLog = vi.fn();
+    const handles = setupCronWithSeams({
+      readTrafficGraphState: async () => {
+        throw new Error("traffic-generations.json missing");
+      },
+      logger: { info: infoLog, warn: () => {}, error: () => {} },
+    });
+
+    await handles.runTrafficLiveNow();
+
+    expect(infoLog).toHaveBeenCalledWith(
+      "traffic-live: conditions applied",
+      expect.objectContaining({ withheld: "graph_unattested", candidateEdges: 0 }),
+    );
+
+    handles.stop();
+  });
+
   it("says why it classified nothing when the policy authority is unavailable", async () => {
     const infoLog = vi.fn();
     const writeLive = vi.fn<(deps: WriteLiveTrafficDeps) => Promise<WriteLiveTrafficResult>>(
