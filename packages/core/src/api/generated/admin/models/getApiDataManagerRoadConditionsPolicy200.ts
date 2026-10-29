@@ -10,4 +10,6 @@ export type GetApiDataManagerRoadConditionsPolicy200 = {
   validUntil: string | null;
   revision: string;
   disallowedSourceIds: string[];
+  allowGreyArea: boolean;
+  allowNonCommercial: boolean;
 };
