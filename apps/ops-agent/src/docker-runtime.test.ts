@@ -1530,6 +1530,34 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       rmSync(dataRoot, { recursive: true, force: true });
     });
 
+    it("reports a manifest the watchdog is re-checking as inconclusive, not as a rebuild", async () => {
+      const dataRoot = mkdtempSync(join(tmpdir(), "valhalla-generation-unverified-"));
+      const sharedDir = join(dataRoot, "valhalla", "osm-pbf");
+      mkdirSync(sharedDir, { recursive: true });
+      const calls: string[][] = [];
+      const runtime = createDockerRuntime({
+        stack: {
+          infraDir: "/trusted",
+          composePath: "/trusted/compose.yml",
+          composeReleasePath: "/trusted/release.yml",
+        },
+        fileExists: () => false,
+        trafficDataRoot: dataRoot,
+        execFile: async (_file, args) => {
+          calls.push([...args]);
+          return { stdout: "100\n", stderr: "" };
+        },
+      });
+      writeFileSync(join(sharedDir, "traffic-generations.unverified.json"), "{}");
+
+      await expect(
+        dispatchOpsOperation(runtime, { kind: "valhalla.traffic.inspect" }, context()),
+      ).resolves.toEqual({ state: "unknown" });
+      expect(calls).toEqual([]);
+
+      rmSync(dataRoot, { recursive: true, force: true });
+    });
+
     it("produces way_edges.txt on the shared mount and hands it to the data owner", async () => {
       const calls: string[][] = [];
       const timeouts: number[] = [];

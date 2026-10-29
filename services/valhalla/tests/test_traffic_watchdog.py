@@ -3,8 +3,11 @@ import http.client
 import http.server
 import json
 import pathlib
+import shutil
+import signal
 import socket
 import struct
+import subprocess
 import tempfile
 import threading
 import time
@@ -18,6 +21,10 @@ spec.loader.exec_module(watchdog)
 
 
 class QuietThreadingHTTPServer(http.server.ThreadingHTTPServer):
+    # server_close() then waits for in-flight handlers: one the proxy timed out
+    # on may still write evidence into the test's directory as it is removed.
+    daemon_threads = False
+
     def handle_error(self, _request, _client_address):
         pass
 
@@ -154,6 +161,29 @@ def fixture():
     struct.pack_into("<QQIIII", data, 1536, 10, 0, 1, 3, 0, 0)
     struct.pack_into("<Q", data, 1568, (255 << 28) | (255 << 36))
     return data
+
+
+def graph_tiles(root):
+    tiles = pathlib.Path(root) / "valhalla_tiles"
+    for name, payload in (
+        ("2/000/519/120.gph", b"level two"),
+        ("0/003/196.gph", b"level zero"),
+        ("1/051/305.gph", b"level one"),
+        ("way_edges.txt", b"1,2\n"),
+    ):
+        (tiles / name).parent.mkdir(parents=True, exist_ok=True)
+        (tiles / name).write_bytes(payload)
+    return tiles
+
+
+def manifest(generation):
+    return {
+        "schemaVersion": 1,
+        "graphGeneration": generation,
+        "extractGeneration": generation,
+        "waysToEdgesGeneration": generation,
+        "completedAt": "2026-10-29T13:28:57.011Z",
+    }
 
 
 class TrafficWatchdogTest(unittest.TestCase):
@@ -796,6 +826,141 @@ class TrafficWatchdogTest(unittest.TestCase):
                     self.assertIn(b" 400 ", response)
             finally:
                 fixture.close()
+
+    @unittest.skipUnless(
+        all(shutil.which(tool) for tool in ("find", "sort", "xargs", "sha256sum")),
+        "needs the maintenance authority's tools",
+    )
+    def test_tile_generation_matches_the_maintenance_authority(self):
+        with tempfile.TemporaryDirectory() as root:
+            tiles = graph_tiles(root)
+            (tiles / "2" / "000" / "way_edges.txt").write_bytes(b"nested map")
+            (tiles / "0" / "link.gph").symlink_to(tiles / "0" / "003" / "196.gph")
+            authority = subprocess.run(
+                [
+                    "sh",
+                    "-ceu",
+                    'find "$1" -type f ! -name way_edges.txt -print0 | sort -z'
+                    " | xargs -0 sha256sum | sha256sum | cut -d ' ' -f1",
+                    "sh",
+                    str(tiles),
+                ],
+                capture_output=True,
+                check=True,
+                env={"PATH": "/usr/bin:/bin:/usr/sbin:/sbin"},
+            ).stdout.decode().strip()
+            self.assertRegex(authority, "^[0-9a-f]{64}$")
+            self.assertEqual(watchdog.tile_generation(tiles), authority)
+
+    def test_tile_generation_refuses_what_it_cannot_compare(self):
+        with tempfile.TemporaryDirectory() as root:
+            tiles = pathlib.Path(root) / "valhalla_tiles"
+            tiles.mkdir()
+            with self.assertRaises(ValueError):
+                watchdog.tile_generation(tiles)
+            (tiles / "back\\slash.gph").write_bytes(b"x")
+            with self.assertRaises(ValueError):
+                watchdog.tile_generation(tiles)
+
+    def test_an_uncoordinated_start_restores_the_manifest_of_unchanged_tiles(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = pathlib.Path(root)
+            generation = watchdog.tile_generation(graph_tiles(root))
+            generations = root / "traffic-generations.json"
+            generations.write_text(json.dumps(manifest(generation)))
+            raw = generations.read_bytes()
+            self.assertTrue(watchdog.set_aside_generations(root))
+            self.assertFalse(generations.exists())
+            polls = iter([False, False, True])
+            self.assertEqual(
+                watchdog.reattest_generations(
+                    root, lambda: next(polls), lambda: True, poll_seconds=0
+                ),
+                "restored",
+            )
+            self.assertEqual(generations.read_bytes(), raw)
+            self.assertFalse((root / watchdog.UNVERIFIED_GENERATIONS).exists())
+
+    def test_rebuilt_tiles_or_a_bad_manifest_drop_the_withdrawn_proof(self):
+        for case in ("changed", "invalid", "unverifiable"):
+            with tempfile.TemporaryDirectory() as root:
+                root = pathlib.Path(root)
+                tiles = graph_tiles(root)
+                generation = watchdog.tile_generation(tiles)
+                value = manifest(generation)
+                if case == "changed":
+                    (tiles / "0" / "003" / "196.gph").write_bytes(b"rebuilt")
+                elif case == "invalid":
+                    value["extractGeneration"] = "c" * 64
+                else:
+                    shutil.rmtree(tiles)
+                (root / "traffic-generations.json").write_text(json.dumps(value))
+                self.assertTrue(watchdog.set_aside_generations(root))
+                self.assertEqual(
+                    watchdog.reattest_generations(root, lambda: True, lambda: True), case
+                )
+                self.assertFalse((root / "traffic-generations.json").exists())
+                self.assertFalse((root / watchdog.UNVERIFIED_GENERATIONS).exists())
+
+    def test_a_stopped_engine_or_maintenance_leaves_the_withdrawn_proof_to_the_next_start(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as root:
+            root = pathlib.Path(root)
+            generation = watchdog.tile_generation(graph_tiles(root))
+            (root / "traffic-generations.json").write_text(json.dumps(manifest(generation)))
+            self.assertTrue(watchdog.set_aside_generations(root))
+            unverified = root / watchdog.UNVERIFIED_GENERATIONS
+            self.assertEqual(
+                watchdog.reattest_generations(root, lambda: False, lambda: False), "stopped"
+            )
+            self.assertTrue(unverified.exists())
+            (root / ".traffic-maintenance.json").write_text("{}")
+            self.assertEqual(
+                watchdog.reattest_generations(root, lambda: True, lambda: True), "stopped"
+            )
+            self.assertTrue(unverified.exists())
+            self.assertFalse((root / "traffic-generations.json").exists())
+            # An interrupted start's withdrawn manifest is checked by the next one.
+            (root / ".traffic-maintenance.json").unlink()
+            self.assertTrue(watchdog.set_aside_generations(root))
+            self.assertEqual(
+                watchdog.reattest_generations(root, lambda: True, lambda: True), "restored"
+            )
+
+    def test_supervise_withdraws_the_manifest_only_on_an_uncoordinated_start(self):
+        handlers = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
+        try:
+            for coordinated in (False, True):
+                with tempfile.TemporaryDirectory() as root:
+                    root = pathlib.Path(root)
+                    graph, state = root / "graph", root / "state"
+                    graph.mkdir()
+                    state.mkdir()
+                    generation = watchdog.tile_generation(graph_tiles(graph))
+                    generations = graph / "traffic-generations.json"
+                    generations.write_text(json.dumps(manifest(generation)))
+                    unverified = graph / watchdog.UNVERIFIED_GENERATIONS
+                    if coordinated:
+                        (graph / ".traffic-maintenance.json").write_text("{}")
+                        unverified.write_text(json.dumps(manifest("d" * 64)))
+                    probe = "test -e {} && echo present || echo absent".format(generations)
+                    seen = root / "seen"
+                    code = watchdog.supervise(
+                        ["sh", "-c", "{ " + probe + "; } > " + str(seen)],
+                        graph_dir=graph,
+                        state_dir=state,
+                    )
+                    self.assertEqual(code, 0)
+                    # The engine never starts beside the old proof unless authority attested it.
+                    self.assertEqual(
+                        seen.read_text().strip(), "present" if coordinated else "absent"
+                    )
+                    self.assertEqual(generations.exists(), coordinated)
+                    self.assertEqual(unverified.exists(), not coordinated)
+        finally:
+            for sig, handler in handlers.items():
+                signal.signal(sig, handler)
 
     def test_only_exact_route_paths_can_receive_proof(self):
         body = json.dumps(

@@ -12,6 +12,7 @@ import re
 import shutil
 import signal
 import socket
+import stat
 import struct
 import subprocess
 import sys
@@ -45,6 +46,10 @@ HOP_BY_HOP_HEADERS = {
     "upgrade",
 }
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+MAINTENANCE_FENCE = ".traffic-maintenance.json"
+GENERATIONS_MANIFEST = "traffic-generations.json"
+# A manifest withdrawn at an uncoordinated start, until the served tiles are hashed.
+UNVERIFIED_GENERATIONS = "traffic-generations.unverified.json"
 
 
 def atomic_json(path, value):
@@ -60,14 +65,18 @@ def atomic_json(path, value):
                 os.fchown(output.fileno(), owner.st_uid, owner.st_gid)
             os.fsync(output.fileno())
         os.replace(temporary, path)
-        directory = os.open(path.parent, os.O_RDONLY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        fsync_directory(path.parent)
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
+
+
+def fsync_directory(path):
+    directory = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
 
 
 def clear_offline(path):
@@ -221,7 +230,7 @@ def read_json(path, maximum=MAX_EVIDENCE_BYTES):
 
 def graph_metadata_snapshot(graph_dir):
     graph_dir = Path(graph_dir)
-    maintenance = graph_dir / ".traffic-maintenance.json"
+    maintenance = graph_dir / MAINTENANCE_FENCE
     try:
         maintenance.stat()
         return None
@@ -230,7 +239,7 @@ def graph_metadata_snapshot(graph_dir):
     except OSError:
         return None
     try:
-        generations_path = graph_dir / "traffic-generations.json"
+        generations_path = graph_dir / GENERATIONS_MANIFEST
         engine_path = graph_dir / "traffic-engine.json"
         with generations_path.open("rb") as source:
             generations_raw = source.read(MAX_EVIDENCE_BYTES + 1)
@@ -243,20 +252,11 @@ def graph_metadata_snapshot(graph_dir):
             return None
         generations = json.loads(generations_raw)
         engine = json.loads(engine_raw)
-        if not isinstance(generations, dict) or not isinstance(engine, dict):
+        if not isinstance(engine, dict):
             return None
-        generation = generations.get("graphGeneration")
-        completed_at = generations.get("completedAt")
+        generation = valid_generations(generations)
         if (
-            generations.get("schemaVersion") != 1
-            or not isinstance(generation, str)
-            or SHA256_PATTERN.fullmatch(generation) is None
-            or generations.get("extractGeneration") != generation
-            or generations.get("waysToEdgesGeneration") != generation
-            or not isinstance(completed_at, str)
-            or not completed_at.endswith(("Z", "z"))
-            or datetime.datetime.fromisoformat(completed_at[:-1] + "+00:00").tzinfo
-            is None
+            generation is None
             or engine.get("schemaVersion") != 1
             or not valid_uuid(engine.get("bootId"))
         ):
@@ -276,6 +276,124 @@ def graph_metadata_snapshot(graph_dir):
         }
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
         return None
+
+
+def valid_generations(generations):
+    """The graph generation a coherent maintenance manifest names, else None."""
+    if not isinstance(generations, dict):
+        return None
+    generation = generations.get("graphGeneration")
+    completed_at = generations.get("completedAt")
+    if (
+        generations.get("schemaVersion") != 1
+        or not isinstance(generation, str)
+        or SHA256_PATTERN.fullmatch(generation) is None
+        or generations.get("extractGeneration") != generation
+        or generations.get("waysToEdgesGeneration") != generation
+        or not isinstance(completed_at, str)
+        or not completed_at.endswith(("Z", "z"))
+        or datetime.datetime.fromisoformat(completed_at[:-1] + "+00:00").tzinfo
+        is None
+    ):
+        return None
+    return generation
+
+
+def tile_generation(tile_dir):
+    """The graph generation the maintenance authority computes, recomputed here.
+
+    That authority runs ``find <tile_dir> -type f ! -name way_edges.txt -print0
+    | sort -z | xargs -0 sha256sum | sha256sum``: one ``sha256sum`` line per
+    regular file, in byte order of its path, hashed again. A path ``sha256sum``
+    would escape, or an empty directory, has no comparable generation.
+    """
+    root = os.fspath(tile_dir)
+    paths = []
+    for directory, _directories, files in os.walk(root):
+        for name in files:
+            path = os.path.join(directory, name)
+            if name != "way_edges.txt" and stat.S_ISREG(os.lstat(path).st_mode):
+                paths.append(os.fsencode(path))
+    if not paths:
+        raise ValueError("No graph tiles to hash")
+    listing = hashlib.sha256()
+    for path in sorted(paths):
+        if any(character in path for character in (b"\\", b"\n", b"\r")):
+            raise ValueError("Tile path cannot be compared")
+        digest = hashlib.sha256()
+        with open(path, "rb") as tile:
+            while block := tile.read(1024 * 1024):
+                digest.update(block)
+        listing.update(digest.hexdigest().encode() + b"  " + path + b"\n")
+    return listing.hexdigest()
+
+
+def set_aside_generations(graph_dir):
+    """Withdraws the graph manifest before an uncoordinated engine start.
+
+    The scripted image may rebuild base tiles on such a start, so the manifest
+    attests nothing until ``reattest_generations`` has hashed what the engine
+    then serves. Returns whether a manifest awaits that check, including one an
+    interrupted earlier start left behind.
+    """
+    graph_dir = Path(graph_dir)
+    manifest = graph_dir / GENERATIONS_MANIFEST
+    unverified = graph_dir / UNVERIFIED_GENERATIONS
+    if manifest.exists():
+        os.replace(manifest, unverified)
+        fsync_directory(graph_dir)
+    return unverified.exists()
+
+
+def reattest_generations(graph_dir, serving, alive, poll_seconds=2):
+    """Restores the withdrawn manifest once the started engine serves its tiles.
+
+    The base build, when the image runs one, finishes before the engine serves.
+    If the tiles still hash to the withdrawn generation, the graph, extract and
+    way map it names are the ones being served and the manifest is restored;
+    otherwise it is dropped, and the data-manager's extract guard rebuilds and
+    attests them through coordinated maintenance.
+    """
+    graph_dir = Path(graph_dir)
+    unverified = graph_dir / UNVERIFIED_GENERATIONS
+    while not serving():
+        if not alive():
+            return "stopped"
+        time.sleep(poll_seconds)
+    try:
+        expected = valid_generations(read_json(unverified))
+        if expected is None:
+            outcome = "invalid"
+        elif tile_generation(graph_dir / "valhalla_tiles") != expected:
+            outcome = "changed"
+        else:
+            outcome = "restored"
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        outcome = "unverifiable"
+    if not alive() or (graph_dir / MAINTENANCE_FENCE).exists():
+        # Maintenance stops the engine before replacing the graph and writes
+        # its own manifest; the next start settles the withdrawn one.
+        return "stopped"
+    if outcome == "restored" and not (graph_dir / GENERATIONS_MANIFEST).exists():
+        os.replace(unverified, graph_dir / GENERATIONS_MANIFEST)
+    else:
+        unverified.unlink(missing_ok=True)
+        if outcome == "restored":
+            outcome = "superseded"
+    fsync_directory(graph_dir)
+    return outcome
+
+
+def backend_serving(address):
+    try:
+        connection = http.client.HTTPConnection(*address, timeout=2)
+        try:
+            connection.request("GET", "/status")
+            return connection.getresponse().status == 200
+        finally:
+            connection.close()
+    except (OSError, http.client.HTTPException):
+        return False
 
 
 def valid_uuid(value):
@@ -673,6 +791,15 @@ def supervise(
 ):
     state_path = Path(state_dir) / "live-state.json"
     journal_path = Path(str(state_path) + ".journal.json")
+    coordinated = (Path(graph_dir) / MAINTENANCE_FENCE).exists()
+    if coordinated:
+        # The authority's fresh manifest supersedes any withdrawn one.
+        (Path(graph_dir) / UNVERIFIED_GENERATIONS).unlink(missing_ok=True)
+        withdrawn = False
+    else:
+        # Withdrawn before the new boot is announced, so no writer pairs the
+        # old graph proof with an engine that may still rebuild its tiles.
+        withdrawn = set_aside_generations(graph_dir)
     # A restart can never serve unverified bytes retained from a prior container.
     with writer_lock(state_path):
         clear_offline(Path(graph_dir) / "traffic.tar")
@@ -696,17 +823,33 @@ def supervise(
             },
         )
     child_env = dict(os.environ)
-    if (Path(graph_dir) / ".traffic-maintenance.json").exists():
+    if coordinated:
         # Offline authority just attested these tiles. Startup may not rebuild them.
         child_env["use_tiles_ignore_pbf"] = "True"
-    else:
-        # An uncoordinated scripted-image restart may rebuild base OSM tiles.
-        # Its old extract/map proof cannot authorize another live write.
-        (Path(graph_dir) / "traffic-generations.json").unlink(missing_ok=True)
     child = subprocess.Popen(command, start_new_session=True, env=child_env)
     proxy = None
     proxy_thread = None
     stopping = False
+
+    def settle_withdrawn_manifest():
+        try:
+            outcome = reattest_generations(
+                graph_dir,
+                lambda: backend_serving(backend_address),
+                lambda: child.poll() is None and not stopping,
+            )
+        except Exception as error:
+            outcome = "failed: " + type(error).__name__
+        print(
+            "Traffic graph manifest after uncoordinated start: " + outcome,
+            file=sys.stderr,
+            flush=True,
+        )
+
+    if withdrawn:
+        threading.Thread(
+            target=settle_withdrawn_manifest, name="traffic-graph-reattest", daemon=True
+        ).start()
 
     def request_stop(_number, _frame):
         nonlocal stopping
