@@ -207,6 +207,18 @@ data. Mixed-source integrations need source-level handling; these controls are
 not a general licence validator or proof that no upstream traffic occurred.
 Sources marked `conditional` still require review of their conditions.
 
+OpenConditions states a permission per use for each of its feeds (display,
+redistribution, derived products, retention, commercial use): `yes` only where
+the licence grants it and someone has checked the publisher's own statement of
+that licence, `no` where it is denied, `unknown` otherwise. A feed whose
+display is denied is not shown at all. A feed whose display or commercial use
+is unknown counts as grey area. Routing builds a product from the data, so a
+road closure or speed limit shapes routes only when its derived use,
+retention and commercial use are permitted. The same two controls decide the
+rest: grey-area rights route only while grey-area sources are allowed, and a
+non-commercial source only while non-commercial sources are. A denied derived
+use or retention never routes.
+
 :::note[Disclosure tables still list every source]
 Disabling a source removes its _data_ from results, but the `/privacy` and
 `/terms` source-disclosure tables continue to list every source the build ships,

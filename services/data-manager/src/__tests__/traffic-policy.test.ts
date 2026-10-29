@@ -43,7 +43,29 @@ describe("traffic policy client", () => {
       },
     });
     expect(policy.disallowedSourceIds).toEqual(["us-wzdx"]);
+    // An authority that states no flag grants nothing by it.
+    expect(policy.rightsPolicy).toEqual({ allowGreyArea: false, allowNonCommercial: false });
     expect(sent?.redirect).toBe("error");
     expect(sent?.headers).toEqual({ Authorization: "Bearer test" });
+  });
+  it("carries the operator's policy for unclear and non-commercial rights", async () => {
+    const policy = await fetchTrafficPolicy({
+      baseUrl: "http://app-api:3001",
+      token: "test",
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            schemaVersion: 1,
+            authoritative: true,
+            revision: "v2",
+            evaluatedAt: new Date().toISOString(),
+            validUntil: new Date(Date.now() + 120_000).toISOString(),
+            disallowedSourceIds: [],
+            allowGreyArea: true,
+            allowNonCommercial: "yes",
+          }),
+        ),
+    });
+    expect(policy.rightsPolicy).toEqual({ allowGreyArea: true, allowNonCommercial: false });
   });
 });

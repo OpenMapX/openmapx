@@ -344,10 +344,14 @@ produced no edge under one `skipped` cause:
   an advisory limit or a width limit.
 - `ineligible`: the routing decision refused it. `ineligibleReasons` counts
   each reason, so one condition can appear under several. `unverified_rights`
-  means the source's catalogue entry records no rights review
-  (`terms.reviewedAt` in OpenConditions) or no evidence link;
-  `action_not_routable` means the publisher marks the action requested,
-  rejected or approved but not yet carried out.
+  means a needed permission (derived use, retention, commercial use) is
+  `unknown`, for example because no one has checked the publisher's licence
+  statement, while the data-use policy excludes grey-area sources;
+  `non_commercial_source` means the licence forbids commercial use while the
+  policy excludes non-commercial sources; `rights_denied` means the licence
+  forbids derived use or retention; `missing_attribution` means the credit the
+  licence asks for is missing; `action_not_routable` means the publisher marks
+  the action requested, rejected or approved but not yet carried out.
 - `incompleteSpans`: a span whose way is missing from the way→edge map (it is
   also counted in `missingWays` and schedules a refresh) or whose partial span
   traced to no edges.

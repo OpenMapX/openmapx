@@ -12,6 +12,8 @@ const policySnapshot = vi.hoisted(() =>
     evaluatedAt: "2026-09-11T12:00:00Z",
     validUntil: "2026-09-11T12:02:30Z",
     disallowedSourceIds: ["denied"],
+    allowGreyArea: true,
+    allowNonCommercial: false,
   })),
 );
 vi.mock("../../services/data-use-policy.js", () => ({
@@ -265,6 +267,8 @@ describe("GET /data-manager/road-conditions/policy", () => {
       authoritative: true,
       revision: "p1",
       disallowedSourceIds: ["denied"],
+      allowGreyArea: true,
+      allowNonCommercial: false,
     });
     expect(fakeDb.callIndex).toBe(0);
   });

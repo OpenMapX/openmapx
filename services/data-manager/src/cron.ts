@@ -1403,6 +1403,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       try {
         mapped = conditionsToEdges(withheld === null ? lasting : [], waysToEdges, spans?.resolved, {
           disallowedSources: new Set(policy?.disallowedSourceIds ?? []),
+          ...(policy?.rightsPolicy ? { rightsPolicy: policy.rightsPolicy } : {}),
         });
       } catch (err) {
         log.warn("traffic-live: conditions classification failed, writing no overrides", {
@@ -1439,7 +1440,10 @@ export function setupCron(options: CronSetupOptions): CronHandles {
               ...conditions
                 .filter((c) => contributors.has(c.id))
                 .flatMap((c) => {
-                  const decision = conditionRoutingDecision(c);
+                  const decision = conditionRoutingDecision(
+                    c,
+                    policy?.rightsPolicy ? { rightsPolicy: policy.rightsPolicy } : {},
+                  );
                   return decision.eligible && decision.validUntil
                     ? [Date.parse(decision.validUntil)]
                     : [];
@@ -1497,6 +1501,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
               appliedObservationIds: result.appliedObservationIds,
               graphGeneration: hostGraphGeneration,
               policyRevision: policy.revision,
+              rightsPolicy: policy.rightsPolicy,
               validUntil,
             })
           : [],
@@ -1720,6 +1725,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         travelAt,
         evaluatedAt: now,
         disallowedSources: new Set(lastPolicy.disallowedSourceIds),
+        ...(lastPolicy.rightsPolicy ? { rightsPolicy: lastPolicy.rightsPolicy } : {}),
       });
       const validUntil = Math.min(
         conditionsUntil,

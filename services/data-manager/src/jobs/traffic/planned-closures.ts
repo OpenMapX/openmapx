@@ -5,6 +5,7 @@ import {
   isLocalAccessClosure,
   isRoutingRelevantBinding,
   type LngLat,
+  type RoadConditionRightsPolicy,
 } from "@openmapx/core";
 import { type BoundCondition, conditionRoutingDecision } from "./conditions-to-edges.js";
 
@@ -137,6 +138,7 @@ export function plannedClosures(
     travelAt: number;
     evaluatedAt: number;
     disallowedSources?: ReadonlySet<string>;
+    rightsPolicy?: RoadConditionRightsPolicy;
   },
 ): PlannedClosuresResult {
   const closures: PlannedClosure[] = [];
@@ -150,6 +152,7 @@ export function plannedClosures(
       evaluatedAt: options.evaluatedAt,
       travelAt: options.travelAt,
       disallowedSources: options.disallowedSources,
+      ...(options.rightsPolicy ? { rightsPolicy: options.rightsPolicy } : {}),
     });
     if (!decision.eligible || decision.validUntil === null) continue;
     const e = condition.routingEvidence;

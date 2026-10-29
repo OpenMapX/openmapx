@@ -46,7 +46,9 @@ export interface OcSource {
   coverage?: { countries?: string[]; bbox?: [number, number, number, number] };
   /** The hosts a camera feed's stills come from, which a consumer may proxy. */
   imageHosts?: string[];
+  /** What the licence and terms declare; `display` is absent from producers before it. */
   rights: {
+    display?: Right;
     redistribution: Right;
     derivedRedistribution: Right;
     commercialUse: Right;
@@ -54,7 +56,16 @@ export interface OcSource {
     retention: Right;
     shareAlike: boolean;
   };
+  /**
+   * Each use's permission: a grant counts only when it rests on the
+   * publisher's checked statement. Absent from producers before it, whose
+   * declared rights then stand in.
+   */
+  permissions?: Partial<Record<OcUse, Permission>>;
 }
+
+type Permission = "yes" | "no" | "unknown";
+type OcUse = "display" | "redistribute" | "derive" | "retain" | "commercial";
 
 /** The OpenMapX domain each OpenConditions domain is served under. */
 const DOMAINS: Readonly<Record<string, string>> = {
@@ -81,15 +92,47 @@ export const SOURCE_SYNC_INTERVAL_MS = 300_000;
 export const SOURCE_SYNC_RETRY_MS = 30_000;
 const SOURCE_READ_TIMEOUT_MS = 10_000;
 
-const permission = (right: Right): "yes" | "no" | "unknown" =>
+const permission = (right: Right): Permission =>
   right === true ? "yes" : right === false ? "no" : "unknown";
 
-/** A redistribution right; share-alike attaches a condition to a granted one. */
+const PERMISSIONS: ReadonlySet<string> = new Set(["yes", "no", "unknown"]);
+
+/**
+ * The permission OpenConditions states for a use, or the declared right in
+ * its place from a producer that states none. A malformed value is unknown.
+ */
+export function permissionOf(source: OcSource, use: OcUse, declared: Right): Permission {
+  if (!source.permissions) return permission(declared);
+  const stated = source.permissions[use];
+  return typeof stated === "string" && PERMISSIONS.has(stated) ? stated : "unknown";
+}
+
+/** A redistribution permission; share-alike attaches a condition to a granted one. */
 function redistributionOf(
-  right: Right,
+  granted: Permission,
   shareAlike: boolean,
 ): "yes" | "no" | "conditional" | "unknown" {
-  return right === true && shareAlike ? "conditional" : permission(right);
+  return granted === "yes" && shareAlike ? "conditional" : granted;
+}
+
+/**
+ * Whether OpenMapX may show the source's data at all: OpenConditions states
+ * that its display is not permitted. Such a source is not listed, so none of
+ * its records reach a reader.
+ */
+export function displayDenied(source: OcSource): boolean {
+  return permissionOf(source, "display", source.rights.display ?? null) === "no";
+}
+
+/**
+ * The commercial-use permission the data-use policy gates on. A source whose
+ * display is unclear is grey area even where commercial use is granted: the
+ * operator's policy for unclear rights then decides whether it is shown.
+ */
+function commercialUseOf(source: OcSource): Permission {
+  const commercial = permissionOf(source, "commercial", source.rights.commercialUse);
+  const display = permissionOf(source, "display", source.rights.display ?? true);
+  return commercial === "yes" && display === "unknown" ? "unknown" : commercial;
 }
 
 /** The usage condition of a share-alike licence. */
@@ -141,10 +184,16 @@ export function toDataSource(source: OcSource): IntegrationDataSource | undefine
     ...(usageConditions.length > 0 ? { usageConditions } : {}),
     providerCountry: providerCountryOf(source),
     providerPrivacyUrl: source.privacyUrl,
-    commercialUse: permission(source.rights.commercialUse),
+    commercialUse: commercialUseOf(source),
     redistribution: {
-      sourceData: redistributionOf(source.rights.redistribution, source.rights.shareAlike),
-      derivedData: redistributionOf(source.rights.derivedRedistribution, source.rights.shareAlike),
+      sourceData: redistributionOf(
+        permissionOf(source, "redistribute", source.rights.redistribution),
+        source.rights.shareAlike,
+      ),
+      derivedData: redistributionOf(
+        permissionOf(source, "derive", source.rights.derivedRedistribution),
+        source.rights.shareAlike,
+      ),
     },
     ...(mediaHosts.length > 0 ? { mediaHosts } : {}),
     endUserExposure: MIXED_EXPOSURE.has(domain) ? "mixed" : "server-only",
@@ -215,7 +264,8 @@ export interface OcSourceList {
  * a restricted source is left out: its records are never served to
  * OpenMapX. The scope is OpenConditions' own, not whether OpenMapX sent a
  * token: an instance that holds no token answers a bearer read in public.
- * The crowd's credit is read beside the feeds.
+ * A source whose display OpenConditions does not permit is left out in every
+ * scope. The crowd's credit is read beside the feeds.
  */
 function dataSourcesOf(answer: unknown): ReadList {
   const sources = isRecord(answer) ? answer.sources : undefined;
@@ -245,7 +295,8 @@ function dataSourcesOf(answer: unknown): ReadList {
       out.invalid.push(id);
       continue;
     }
-    if (source.restricted && !operator) {
+    // Display denied: nothing of the source may be shown, in any scope.
+    if ((source.restricted && !operator) || displayDenied(source as unknown as OcSource)) {
       out.withheld.push(id);
       continue;
     }

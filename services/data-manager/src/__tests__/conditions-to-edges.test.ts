@@ -326,6 +326,18 @@ describe("conditionsToEdges", () => {
     expect(r.ineligibleReasons).toEqual({ unverified_rights: 1 });
     expect(r.missingWayIds).toEqual(new Set([99]));
   });
+  it("routes a source of unclear rights only when the operator's policy admits it", () => {
+    const unclear = cond({}, effect(), "unclear");
+    unclear.routingEvidence = {
+      ...unclear.routingEvidence,
+      rights: { ...unclear.routingEvidence.rights, derived_redistribution: "unknown" },
+    };
+    expect(conditionsToEdges([unclear], W2E).overrides.size).toBe(0);
+    const admitted = conditionsToEdges([unclear], W2E, undefined, {
+      rightsPolicy: { allowGreyArea: true, allowNonCommercial: false },
+    });
+    expect(admitted.overrides.get("0:1:5")).toMatchObject({ closed: true });
+  });
   // The same table pins the OpenConditions Valhalla exclusions
   // (publishers valhalla.ts): both must close the road for the same applicability.
   const under35t = [

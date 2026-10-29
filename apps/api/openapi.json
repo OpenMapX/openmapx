@@ -54076,6 +54076,12 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "allowGreyArea": {
+                      "type": "boolean"
+                    },
+                    "allowNonCommercial": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -54084,7 +54090,9 @@
                     "evaluatedAt",
                     "validUntil",
                     "revision",
-                    "disallowedSourceIds"
+                    "disallowedSourceIds",
+                    "allowGreyArea",
+                    "allowNonCommercial"
                   ],
                   "additionalProperties": false
                 }
