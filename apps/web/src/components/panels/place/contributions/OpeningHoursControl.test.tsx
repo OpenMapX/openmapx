@@ -1,4 +1,4 @@
-import type { OsmContributionContext } from "@openmapx/core";
+import { type OsmContributionContext, useSettingsStore } from "@openmapx/core";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useReducer } from "react";
@@ -77,6 +77,14 @@ function Harness({
       <output data-testid="draft-error">{state.draft.errors.openingHours ?? ""}</output>
     </div>
   );
+}
+
+async function nudgeHour(field: HTMLElement | undefined, key: string) {
+  if (!field) throw new Error("expected a time field");
+  await userEvent.click(field);
+  screen.getByRole("slider").focus();
+  await userEvent.keyboard(key);
+  await userEvent.click(screen.getByRole("button", { name: "osmContributions.ohTimePickerOk" }));
 }
 
 describe("OpeningHoursControl", () => {
@@ -214,6 +222,46 @@ describe("OpeningHoursControl", () => {
     expect(screen.getByTestId("opening-hours-live-preview").textContent).toBe(
       "easter -2 days-easter +1 day: 10:00-18:00",
     );
+  });
+
+  it("edits times on the clock field and keeps a past-midnight end on the next day", async () => {
+    render(<Harness currentOpeningHours="Fr 18:00-26:30" />);
+    const [opens, closes] = screen.getAllByRole("textbox", { name: /ohTimePickerOpen/ });
+
+    await nudgeHour(closes, "{ArrowUp}");
+    expect(screen.getByTestId("opening-hours-live-preview").textContent).toBe("Fr 18:00-27:30");
+
+    await nudgeHour(opens, "{ArrowDown}");
+    expect(screen.getByTestId("opening-hours-live-preview").textContent).toBe("Fr 17:00-27:30");
+  });
+
+  it("closes at 24:00 when the closing time reaches midnight", async () => {
+    useSettingsStore.setState({ timeFormat: "24h" });
+    try {
+      render(<Harness currentOpeningHours="Mo-Su 10:00-23:00" />);
+      const closes = () => screen.getAllByRole("textbox", { name: /ohTimePickerOpen/ })[1];
+      const nextDay = () =>
+        screen.getByRole("checkbox", { name: "osmContributions.ohNextDayHint" });
+
+      await nudgeHour(closes(), "{ArrowUp}");
+      expect(screen.getByTestId("opening-hours-live-preview").textContent).toBe(
+        "Mo-Su 10:00-24:00",
+      );
+      expect(screen.getByDisplayValue("24:00")).toBeTruthy();
+      expect((nextDay() as HTMLInputElement).checked).toBe(false);
+      expect(nextDay().hasAttribute("disabled")).toBe(true);
+
+      await nudgeHour(closes(), "{ArrowUp}");
+      expect(screen.getByTestId("opening-hours-live-preview").textContent).toBe(
+        "Mo-Su 10:00-01:00",
+      );
+      await userEvent.click(nextDay());
+      expect(screen.getByTestId("opening-hours-live-preview").textContent).toBe(
+        "Mo-Su 10:00-25:00",
+      );
+    } finally {
+      useSettingsStore.setState({ timeFormat: "auto" });
+    }
   });
 
   it("supports explicit removal and undo via RemoveToggle", async () => {
