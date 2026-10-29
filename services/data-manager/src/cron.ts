@@ -32,6 +32,7 @@ import {
   type ConditionsToEdgesResult,
   conditionRoutingDecision,
   conditionsToEdges,
+  emptyConditionsToEdges,
   parseConditionsJson,
   spanKey,
 } from "./jobs/traffic/conditions-to-edges.js";
@@ -1365,14 +1366,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       // Guarded separately from tracing: classification must never abort the
       // cycle, because skipping `writeLive` would leave the previous cycle's
       // overrides alive in `traffic.tar` with no live speeds refreshed.
-      let mapped: ConditionsToEdgesResult = {
-        overrides: new Map(),
-        appliedObservationIds: new Set(),
-        missingWayIds: new Set(),
-        edgeExactSpans: 0,
-        wholeWaySpans: 0,
-        skipped: { notRelevant: 0, crowdNotEligible: 0, noEffect: 0 },
-      };
+      let mapped: ConditionsToEdgesResult = emptyConditionsToEdges();
       // Anything ending before a renewal could replace it is left out now, so
       // no lease this write grants can lapse before the next write.
       const renewBy = Date.now() + TRAFFIC_LEASE_RENEWAL_MS;
@@ -1380,20 +1374,21 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         const until = conditionRoutingDecision(c).validUntil;
         return until === null || Date.parse(until) > renewBy;
       });
+      // Why no condition was classified at all this cycle, so a quiet cycle
+      // never reads as "nothing to close".
+      const withheld = !policy
+        ? "policy_unavailable"
+        : !(Date.parse(policy.validUntil) > renewBy)
+          ? "policy_lease_ending"
+          : conditionsDeadline === null
+            ? "conditions_unavailable"
+            : !(conditionsDeadline > renewBy)
+              ? "conditions_stale"
+              : null;
       try {
-        mapped = conditionsToEdges(
-          policy &&
-            Date.parse(policy.validUntil) > renewBy &&
-            conditionsDeadline !== null &&
-            conditionsDeadline > renewBy
-            ? lasting
-            : [],
-          waysToEdges,
-          spans?.resolved,
-          {
-            disallowedSources: new Set(policy?.disallowedSourceIds ?? []),
-          },
-        );
+        mapped = conditionsToEdges(withheld === null ? lasting : [], waysToEdges, spans?.resolved, {
+          disallowedSources: new Set(policy?.disallowedSourceIds ?? []),
+        });
       } catch (err) {
         log.warn("traffic-live: conditions classification failed, writing no overrides", {
           err: (err as Error).message,
@@ -1506,6 +1501,9 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         wholeWaySpans: mapped.wholeWaySpans,
         missingWays: mapped.missingWayIds.size,
         skipped: mapped.skipped,
+        ineligibleReasons: mapped.ineligibleReasons,
+        endingBeforeRenewal: conditions.length - lasting.length,
+        withheld,
       });
       if (spans && spanEdgeCache) {
         // An empty set because the FEED is down is not the same as a set with

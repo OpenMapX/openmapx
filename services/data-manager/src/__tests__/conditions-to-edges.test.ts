@@ -298,7 +298,33 @@ describe("conditionsToEdges", () => {
       W2E,
     );
     expect(r.overrides.size).toBe(0);
-    expect(r.skipped).toEqual({ notRelevant: 1, crowdNotEligible: 1, noEffect: 4 });
+    expect(r.skipped).toEqual({
+      binding: 1,
+      crowdNotEligible: 1,
+      noEffect: 4,
+      ineligible: 0,
+      incompleteSpans: 0,
+    });
+    expect(r.ineligibleReasons).toEqual({});
+  });
+  it("names the routing decision's reasons and separates spans it cannot map", () => {
+    const unreviewed = cond({}, effect(), "unreviewed");
+    unreviewed.routingEvidence = {
+      ...unreviewed.routingEvidence,
+      rights: { ...unreviewed.routingEvidence.rights, reviewed_at: null },
+    };
+    const r = conditionsToEdges(
+      [
+        unreviewed,
+        cond({ segments: [{ ...SPAN, wayId: 99 }] }, effect(), "unmapped"),
+        cond({ segments: [{ ...SPAN, startFraction: 0.5 }] }, effect(), "untraced"),
+      ],
+      W2E,
+    );
+    expect(r.overrides.size).toBe(0);
+    expect(r.skipped).toMatchObject({ ineligible: 1, incompleteSpans: 2 });
+    expect(r.ineligibleReasons).toEqual({ unverified_rights: 1 });
+    expect(r.missingWayIds).toEqual(new Set([99]));
   });
   // The same table pins the OpenConditions Valhalla exclusions
   // (publishers valhalla.ts): both must close the road for the same applicability.
