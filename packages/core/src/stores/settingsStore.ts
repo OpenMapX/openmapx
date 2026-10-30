@@ -3,6 +3,11 @@ import { getStorage } from "../platform/storage";
 import type { UnitSystem } from "../types/geometry";
 import type { DateFormat, TimeFormat } from "../utils/dateTimeFormat";
 import { useDirectionsStore } from "./directionsStore";
+import {
+  LAST_MAP_VIEW_STORAGE_KEY,
+  REMEMBER_MAP_VIEW_STORAGE_KEY,
+  readRememberMapView,
+} from "./lastMapView";
 
 const UNITS_STORAGE_KEY = "openmapx:unitSystem";
 const TIME_FORMAT_STORAGE_KEY = "openmapx:timeFormat";
@@ -227,6 +232,9 @@ interface SettingsState {
   /** Show the map's zoom buttons on touch screens too (off by default; always shown with a mouse). */
   touchZoomButtons: boolean;
   setTouchZoomButtons: (v: boolean) => void;
+  /** Reopen the map where it was last left (on by default). */
+  rememberMapView: boolean;
+  setRememberMapView: (v: boolean) => void;
   /** Last-chosen EV vehicle preset key; null = no vehicle picked yet. */
   evVehicleId: string | null;
   setEvVehicleId: (v: string | null) => void;
@@ -343,6 +351,13 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     getStorage().setString(TOUCH_ZOOM_BUTTONS_STORAGE_KEY, String(touchZoomButtons));
     set({ touchZoomButtons });
   },
+  rememberMapView: readRememberMapView(),
+  setRememberMapView: (rememberMapView) => {
+    const storage = getStorage();
+    storage.setString(REMEMBER_MAP_VIEW_STORAGE_KEY, String(rememberMapView));
+    if (!rememberMapView) storage.remove(LAST_MAP_VIEW_STORAGE_KEY);
+    set({ rememberMapView });
+  },
   evVehicleId: readEvVehicleId(),
   setEvVehicleId: (evVehicleId) => {
     getStorage().setString(EV_VEHICLE_ID_STORAGE_KEY, evVehicleId ?? "");
@@ -408,6 +423,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       voiceName: readVoiceName(),
       mapNorthUp: readMapNorthUp(),
       touchZoomButtons: readTouchZoomButtons(),
+      rememberMapView: readRememberMapView(),
       evVehicleId: readEvVehicleId(),
       evSocTargetPct: readEvSocTargetPct(),
       evPreferredNetworks: readStringArray(EV_PREFERRED_NETWORKS_STORAGE_KEY),

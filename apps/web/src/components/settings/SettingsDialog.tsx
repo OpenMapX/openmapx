@@ -71,6 +71,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const setSearchHistoryEnabled = useSettingsStore((s) => s.setSearchHistoryEnabled);
   const touchZoomButtons = useSettingsStore((s) => s.touchZoomButtons);
   const setTouchZoomButtons = useSettingsStore((s) => s.setTouchZoomButtons);
+  const rememberMapView = useSettingsStore((s) => s.rememberMapView);
+  const setRememberMapView = useSettingsStore((s) => s.setRememberMapView);
   const coarsePointer = useMediaQuery("(pointer: coarse)", { noSsr: true });
   const fullScreen = useFullScreenOnMobile();
   const [navSettingsOpen, setNavSettingsOpen] = useState(false);
@@ -120,6 +122,19 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
               </Typography>
             </>
           )}
+        </Section>
+
+        <Section title={ts("mapSection")}>
+          <SettingRow label={ts("rememberMapView")}>
+            <Switch
+              checked={rememberMapView}
+              onChange={(e) => setRememberMapView(e.target.checked)}
+              slotProps={{ input: { "aria-label": ts("rememberMapView") } }}
+            />
+          </SettingRow>
+          <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
+            {ts("rememberMapViewHint")}
+          </Typography>
         </Section>
 
         <Section title={ts("languageAndRegion")}>
